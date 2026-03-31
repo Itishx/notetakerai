@@ -30,6 +30,13 @@ async function startCapture(streamId) {
     },
   });
 
+  // Play the audio back so the user can still hear it
+  const audio = document.createElement("audio");
+  audio.srcObject = stream;
+  audio.autoplay = true;
+  audio.id = "playback";
+  document.body.appendChild(audio);
+
   audioChunks = [];
   mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
 
@@ -52,6 +59,10 @@ async function stopCapture() {
       mediaRecorder.stream.getTracks().forEach((t) => t.stop());
       mediaRecorder = null;
       audioChunks = [];
+
+      // Remove playback element
+      const playback = document.getElementById("playback");
+      if (playback) playback.remove();
 
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result.split(",")[1]);
