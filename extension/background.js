@@ -1,6 +1,16 @@
 // Background service worker for LectureSnap (MV3)
 let isRecording = false;
 
+function doCapture(windowId, sendResponse) {
+  chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
+    if (chrome.runtime.lastError) {
+      sendResponse({ error: chrome.runtime.lastError.message });
+    } else {
+      sendResponse({ dataUrl });
+    }
+  });
+}
+
 // Open side panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   // Store tab ID asynchronously — don't await before opening side panel
