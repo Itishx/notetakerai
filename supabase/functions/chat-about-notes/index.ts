@@ -43,11 +43,12 @@ Important rules:
 - Do not duplicate, remove, or rewrite existing image placeholders unless the user explicitly asks.
 - Insert only one {{IMAGE_PLACEHOLDER}} for the new image.
 - Do not wrap the response in markdown code fences.
+- Return ONLY the updated markdown prefixed with [[UPDATED_NOTES]] on its own line.
+- Do not include explanations, JSON, or any extra text.
 
-Also provide a brief reply explaining what you did (where you placed the image and why).
-
-Return your response in this exact JSON format:
-{"reply": "your explanation here", "updatedNotes": "the full updated markdown notes with {{IMAGE_PLACEHOLDER}} inserted at the right location"}
+Return your response in this exact format:
+[[UPDATED_NOTES]]
+the full updated markdown notes with {{IMAGE_PLACEHOLDER}} inserted at the right location
 
 Current notes:
 ${notes || "(no notes yet)"}`
@@ -118,28 +119,78 @@ ${notes || "(no notes yet)"}`;
     const rawContent = aiData.choices?.[0]?.message?.content || "";
 
     const parseImageResponse = (content: string) => {
-      const trimmed = content.trim();
-      const withoutFence = trimmed.replace(/^```json\s*/i, "").replace(/^```/i, "").replace(/```$/i, "").trim();
+      const trimmed = String(content || "").trim();
+      if (!trimmed) return null;
+
+      const withoutFence = trimmed
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+
+      const markerMatch = withoutFence.match(/\[\[UPDATED_NOTES\]\]\s*([\s\S]+)/i);
+      if (markerMatch?.[1]) {
+        return { reply: "Done.", updatedNotes: markerMatch[1].trim() };
+      }
 
       try {
-        return JSON.parse(withoutFence);
+        const parsed = JSON.parse(withoutFence);
+        if (parsed?.updatedNotes) {
+          return parsed;
+        }
       } catch {
-        const jsonMatch = withoutFence.match(/\{[\s\S]*"reply"[\s\S]*"updatedNotes"[\s\S]*\}/);
-        if (!jsonMatch) return null;
+        // Fall through to tolerant parsing.
+      }
 
+      const jsonMatch = withoutFence.match(/\{[\s\S]*"updatedNotes"[\s\S]*\}/);
+      if (jsonMatch) {
         try {
-          return JSON.parse(jsonMatch[0]);
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed?.updatedNotes) {
+            return parsed;
+          }
         } catch {
-          return null;
+          // Fall through to tolerant parsing.
         }
       }
+
+      const decodeLooseJsonValue = (value: string) => value
+        .replace(/\\"/g, '"')
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\r")
+        .replace(/\\t/g, "\t")
+        .replace(/\\\\/g, "\\")
+        .trim();
+
+      const looseUpdatedNotesMatch = withoutFence.match(/"updatedNotes"\s*:\s*"([\s\S]*)"\s*}\s*$/);
+      if (looseUpdatedNotesMatch?.[1]) {
+        return {
+          reply: "Done.",
+          updatedNotes: decodeLooseJsonValue(looseUpdatedNotesMatch[1]),
+        };
+      }
+
+      if (withoutFence.includes("{{IMAGE_PLACEHOLDER}}")) {
+        return { reply: "Done.", updatedNotes: withoutFence };
+      }
+
+      return null;
     };
 
     const restoreExistingImages = (markdown: string) => {
       let restored = markdown;
+      const missingImages: string[] = [];
 
       for (const [placeholder, imageTag] of Object.entries(existingImageMap)) {
-        restored = restored.split(placeholder).join(String(imageTag));
+        if (restored.includes(placeholder)) {
+          restored = restored.split(placeholder).join(String(imageTag));
+        } else {
+          missingImages.push(String(imageTag));
+        }
+      }
+
+      if (missingImages.length > 0) {
+        restored = `${restored.trim()}\n\n${missingImages.join("\n\n")}`;
       }
 
       return restored;
@@ -151,7 +202,10 @@ ${notes || "(no notes yet)"}`;
 
       if (parsed?.updatedNotes) {
         const imgTag = `<img src="data:image/png;base64,${imageBase64}" alt="Lecture diagram" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
-        const updatedNotesWithNewImage = String(parsed.updatedNotes).replace(/\{\{IMAGE_PLACEHOLDER\}\}/g, imgTag);
+        const notesWithPlaceholder = String(parsed.updatedNotes).includes("{{IMAGE_PLACEHOLDER}}")
+          ? String(parsed.updatedNotes)
+          : `${String(parsed.updatedNotes).trim()}\n\n{{IMAGE_PLACEHOLDER}}`;
+        const updatedNotesWithNewImage = notesWithPlaceholder.replace(/\{\{IMAGE_PLACEHOLDER\}\}/g, imgTag);
         const updatedNotes = restoreExistingImages(updatedNotesWithNewImage);
 
         return new Response(JSON.stringify({ reply: "Done.", updatedNotes }), {
