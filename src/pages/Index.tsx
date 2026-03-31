@@ -53,9 +53,33 @@ const Index = () => {
     <div className="min-h-screen bg-background selection:bg-primary/20">
       {/* Hero */}
       <section className="relative overflow-hidden">
-        {/* Subtle zen circle */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full border border-border/40 animate-breathe pointer-events-none" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full border border-border/30 animate-breathe pointer-events-none" style={{ animationDelay: "2s" }} />
+        {/* Glowing orb */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+          {/* Outer glow */}
+          <div
+            className="absolute top-1/2 left-1/2 w-[500px] h-[500px] rounded-full animate-breathe"
+            style={{
+              background: 'radial-gradient(circle, hsl(160 25% 38% / 0.12) 0%, hsl(160 25% 38% / 0.04) 50%, transparent 70%)',
+            }}
+          />
+          {/* Mid ring */}
+          <div
+            className="absolute top-1/2 left-1/2 w-[300px] h-[300px] rounded-full animate-breathe"
+            style={{
+              animationDelay: '1.5s',
+              background: 'radial-gradient(circle, hsl(160 25% 38% / 0.15) 0%, hsl(160 25% 38% / 0.05) 60%, transparent 75%)',
+            }}
+          />
+          {/* Core orb */}
+          <div
+            className="absolute top-1/2 left-1/2 w-[140px] h-[140px] rounded-full animate-breathe"
+            style={{
+              animationDelay: '0.8s',
+              background: 'radial-gradient(circle, hsl(160 25% 38% / 0.25) 0%, hsl(160 25% 38% / 0.08) 60%, transparent 80%)',
+              boxShadow: '0 0 60px 20px hsl(160 25% 38% / 0.1)',
+            }}
+          />
+        </div>
 
         <div className="container relative mx-auto px-6 pt-28 pb-24 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-5 py-2 text-sm text-muted-foreground mb-8 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
