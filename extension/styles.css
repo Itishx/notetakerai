@@ -244,7 +244,7 @@ h1 {
   border: 1px solid var(--border-light);
   border-radius: 8px;
   padding: 14px;
-  max-height: 280px;
+  max-height: 400px;
   overflow-y: auto;
   font-size: 13px;
   line-height: 1.7;
