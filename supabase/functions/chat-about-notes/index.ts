@@ -64,7 +64,10 @@ ${notes || "(no notes yet)"}`;
     if (hasImage) {
       messages.push({
         role: "user",
-        content: message || "Please insert this diagram/image into my notes at the most appropriate location.",
+        content: [
+          { type: "text", text: message || "Please insert this diagram/image into my notes at the most appropriate location." },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${imageBase64}` } },
+        ],
       });
     } else {
       messages.push({ role: "user", content: message });
