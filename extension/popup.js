@@ -9,6 +9,7 @@ let notesMarkdown = "";
 let currentSessionId = null;
 let chatMessages = [];
 let pendingImageBase64 = null;
+let notionConnectionPoller = null;
 
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
@@ -249,29 +250,128 @@ function getNotionUserId() {
   });
 }
 
-function checkNotionConnection() {
-  chrome.storage.local.get("notionConnected", (data) => {
-    if (data.notionConnected) {
-      if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
-    } else {
-      if (syncNotionLabel) syncNotionLabel.textContent = "Connect Notion";
-    }
+function getStorage(keys) {
+  return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
+}
+
+function setStorage(values) {
+  return new Promise((resolve) => chrome.storage.local.set(values, resolve));
+}
+
+function setNotionButtonLabel(label) {
+  if (syncNotionLabel) syncNotionLabel.textContent = label;
+}
+
+async function fetchNotionConnectionStatus(userIdentifier) {
+  const res = await fetch(`${API_BASE}/notion-connection-status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userIdentifier }),
   });
+
+  if (!res.ok) {
+    throw new Error("Failed to check Notion connection");
+  }
+
+  return res.json();
+}
+
+async function getSessionNotionPageId(sessionId = currentSessionId) {
+  const data = await getStorage(["notionSyncedPages", "notionSyncedPageId"]);
+  if (sessionId && data.notionSyncedPages?.[String(sessionId)]) {
+    return data.notionSyncedPages[String(sessionId)];
+  }
+
+  return data.notionSyncedPageId || null;
+}
+
+async function setSessionNotionPageId(pageId, sessionId = currentSessionId) {
+  if (!pageId) return;
+
+  const data = await getStorage("notionSyncedPages");
+  const notionSyncedPages = data.notionSyncedPages || {};
+
+  if (sessionId) {
+    notionSyncedPages[String(sessionId)] = pageId;
+  }
+
+  await setStorage({ notionSyncedPages, notionSyncedPageId: pageId });
+}
+
+function stopNotionConnectionPolling() {
+  if (notionConnectionPoller) {
+    clearInterval(notionConnectionPoller);
+    notionConnectionPoller = null;
+  }
+}
+
+async function checkNotionConnection() {
+  const userId = await getNotionUserId();
+
+  try {
+    const status = await fetchNotionConnectionStatus(userId);
+    await setStorage({ notionConnected: Boolean(status.connected) });
+    setNotionButtonLabel(status.connected ? "Sync to Notion" : "Connect Notion");
+    return Boolean(status.connected);
+  } catch {
+    await setStorage({ notionConnected: false });
+    setNotionButtonLabel("Connect Notion");
+    return false;
+  }
+}
+
+function startNotionConnectionPolling(userId) {
+  stopNotionConnectionPolling();
+  let attempts = 0;
+
+  notionConnectionPoller = setInterval(async () => {
+    attempts += 1;
+
+    try {
+      const status = await fetchNotionConnectionStatus(userId);
+      if (status.connected) {
+        stopNotionConnectionPolling();
+        await setStorage({ notionConnected: true });
+        setNotionButtonLabel("Sync to Notion");
+        syncNotionBtn.disabled = false;
+        statusEl.className = "status idle";
+        statusEl.querySelector("span").textContent = "Notion connected";
+        return;
+      }
+    } catch {
+      // Keep polling quietly until timeout.
+    }
+
+    if (attempts >= 60) {
+      stopNotionConnectionPolling();
+      syncNotionBtn.disabled = false;
+      setNotionButtonLabel("Connect Notion");
+    }
+  }, 2000);
 }
 
 checkNotionConnection();
+window.addEventListener("focus", () => {
+  checkNotionConnection();
+});
 
 syncNotionBtn?.addEventListener("click", async () => {
   const userId = await getNotionUserId();
-  
-  // Check if connected
-  const data = await new Promise((resolve) => chrome.storage.local.get("notionConnected", resolve));
-  
-  if (!data.notionConnected) {
+
+  let connected = false;
+  try {
+    const status = await fetchNotionConnectionStatus(userId);
+    connected = Boolean(status.connected);
+    await setStorage({ notionConnected: connected });
+  } catch {
+    connected = false;
+  }
+
+  if (!connected) {
     // Start OAuth flow
     syncNotionBtn.disabled = true;
-    if (syncNotionLabel) syncNotionLabel.textContent = "Connecting...";
-    
+    setNotionButtonLabel("Finish in Notion…");
+
     try {
       const res = await fetch(`${API_BASE}/notion-oauth-start`, {
         method: "POST",
@@ -281,16 +381,12 @@ syncNotionBtn?.addEventListener("click", async () => {
       
       if (!res.ok) throw new Error("Failed to start OAuth");
       const { authUrl } = await res.json();
-      
+
       chrome.tabs.create({ url: authUrl });
-      chrome.storage.local.set({ notionConnected: true });
-      setTimeout(() => {
-        if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
-        syncNotionBtn.disabled = false;
-      }, 2000);
+      startNotionConnectionPolling(userId);
     } catch (e) {
       alert("Failed to connect Notion: " + e.message);
-      if (syncNotionLabel) syncNotionLabel.textContent = "Connect Notion";
+      setNotionButtonLabel("Connect Notion");
       syncNotionBtn.disabled = false;
     }
     return;
@@ -303,7 +399,7 @@ syncNotionBtn?.addEventListener("click", async () => {
   }
   
   syncNotionBtn.disabled = true;
-  if (syncNotionLabel) syncNotionLabel.textContent = "Syncing...";
+  setNotionButtonLabel("Syncing...");
   
   try {
     const titleMatch = notesMarkdown.match(/^#\s+(.+)$/m);
@@ -321,7 +417,7 @@ syncNotionBtn?.addEventListener("click", async () => {
       const base64 = dataUrl.split(",")[1];
       if (base64) {
         const id = `img_${Date.now()}_${imgIndex++}`;
-        images.push({ id, base64 });
+        images.push({ id, base64, source: dataUrl });
       }
     }
     while ((imgMatch = htmlImgRegex.exec(notesMarkdown)) !== null) {
@@ -329,13 +425,11 @@ syncNotionBtn?.addEventListener("click", async () => {
       const base64 = dataUrl.split(",")[1];
       if (base64) {
         const id = `img_${Date.now()}_${imgIndex++}`;
-        images.push({ id, base64 });
+        images.push({ id, base64, source: dataUrl });
       }
     }
     
-    // Check for existing synced page ID
-    const storageData = await new Promise((resolve) => chrome.storage.local.get("notionSyncedPageId", resolve));
-    const notionPageId = storageData.notionSyncedPageId || null;
+    const notionPageId = await getSessionNotionPageId();
     
     const res = await fetch(`${API_BASE}/sync-to-notion`, {
       method: "POST",
@@ -365,22 +459,19 @@ syncNotionBtn?.addEventListener("click", async () => {
     
     // Store the page ID for future updates
     if (result.pageId) {
-      chrome.storage.local.set({ notionSyncedPageId: result.pageId });
+      await setSessionNotionPageId(result.pageId);
     }
     
-    if (syncNotionLabel) syncNotionLabel.textContent = "Synced! ✓";
-    
-    // Only open Notion page on first sync (when no prior pageId existed)
-    if (!notionPageId && result.url) {
-      chrome.tabs.create({ url: result.url });
-    }
+    setNotionButtonLabel("Synced! ✓");
+    statusEl.className = "status idle";
+    statusEl.querySelector("span").textContent = "Synced to Notion";
     
     setTimeout(() => {
-      if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
+      setNotionButtonLabel("Sync to Notion");
     }, 2500);
   } catch (e) {
     alert("Sync failed: " + e.message);
-    if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
+    setNotionButtonLabel("Sync to Notion");
   } finally {
     syncNotionBtn.disabled = false;
   }

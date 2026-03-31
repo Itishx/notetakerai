@@ -62,6 +62,11 @@ serve(async (req) => {
             const { data: urlData } = supabase.storage.from("note-images").getPublicUrl(filePath);
             if (urlData?.publicUrl) {
               imageUrlMap[img.id] = urlData.publicUrl;
+              imageUrlMap[img.base64] = urlData.publicUrl;
+              imageUrlMap[`data:image/png;base64,${img.base64}`] = urlData.publicUrl;
+              if (typeof img.source === "string" && img.source) {
+                imageUrlMap[img.source] = urlData.publicUrl;
+              }
             }
           } catch (e) {
             console.error("Image upload error:", e);
@@ -75,118 +80,37 @@ serve(async (req) => {
 
     // If we have an existing page ID, update it instead of creating new
     if (notionPageId) {
-      // Delete existing children first
-      const childrenRes = await fetch(`https://api.notion.com/v1/blocks/${notionPageId}/children?page_size=100`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Notion-Version": "2022-06-28",
-        },
-      });
-
-      if (childrenRes.ok) {
-        const childrenData = await childrenRes.json();
-        // Delete each existing block
-        for (const block of childrenData.results || []) {
-          await fetch(`https://api.notion.com/v1/blocks/${block.id}`, {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Notion-Version": "2022-06-28",
-            },
-          });
-        }
-      }
-
-      // Append new blocks in chunks of 100
-      for (let i = 0; i < blocks.length; i += 100) {
-        const chunk = blocks.slice(i, i + 100);
-        await fetch(`https://api.notion.com/v1/blocks/${notionPageId}/children`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ children: chunk }),
-        });
-      }
-
-      // Update title
-      try {
-        await fetch(`https://api.notion.com/v1/pages/${notionPageId}`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            properties: {
-              title: { title: [{ text: { content: title || "LectureSnap Notes" } }] },
-            },
-          }),
-        });
-      } catch {
-        // Title update is best-effort
-      }
+      await replacePageContent(notionPageId, blocks, accessToken);
+      await updatePageTitle(notionPageId, title, accessToken);
 
       return new Response(JSON.stringify({ success: true, pageId: notionPageId, message: "Notes updated in Notion" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // First sync: find parent and create new page
-    const searchRes = await fetch("https://api.notion.com/v1/search", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ filter: { property: "object", value: "page" }, page_size: 1 }),
-    });
+    const accessiblePageId = await searchFirstAccessibleObject(accessToken, "page");
 
-    let parentId: string | null = null;
-    let parentType: "page_id" | "database_id" = "page_id";
+    if (accessiblePageId) {
+      await replacePageContent(accessiblePageId, blocks, accessToken);
+      await updatePageTitle(accessiblePageId, title, accessToken);
 
-    if (searchRes.ok) {
-      const searchData = await searchRes.json();
-      if (searchData.results?.length > 0) {
-        parentId = searchData.results[0].id;
-      }
-    }
-
-    if (!parentId) {
-      const dbSearchRes = await fetch("https://api.notion.com/v1/search", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Notion-Version": "2022-06-28",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ filter: { property: "object", value: "database" }, page_size: 1 }),
+      return new Response(JSON.stringify({ success: true, pageId: accessiblePageId, message: "Notes synced to Notion" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-      if (dbSearchRes.ok) {
-        const dbData = await dbSearchRes.json();
-        if (dbData.results?.length > 0) {
-          parentId = dbData.results[0].id;
-          parentType = "database_id";
-        }
-      }
     }
 
+    const parentId = await searchFirstAccessibleObject(accessToken, "database");
+
     if (!parentId) {
-      return new Response(JSON.stringify({ error: "No accessible Notion pages found. Share at least one page with the integration." }), {
+      return new Response(JSON.stringify({ error: "No accessible Notion pages or databases found. Share at least one page with the integration." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const pagePayload: any = {
-      parent: { [parentType]: parentId },
-      properties: parentType === "page_id"
-        ? { title: { title: [{ text: { content: title || "LectureSnap Notes" } }] } }
-        : { Name: { title: [{ text: { content: title || "LectureSnap Notes" } }] } },
+      parent: { database_id: parentId },
+      properties: { Name: { title: [{ text: { content: title || "LectureSnap Notes" } }] } },
       children: blocks.slice(0, 100),
     };
 
@@ -204,7 +128,7 @@ serve(async (req) => {
       const errText = await createRes.text();
       console.error("Notion create page error:", errText);
 
-      if (parentType === "database_id" && errText.includes("Name")) {
+      if (errText.includes("Name")) {
         pagePayload.properties = { title: { title: [{ text: { content: title || "LectureSnap Notes" } }] } };
         const retryRes = await fetch("https://api.notion.com/v1/pages", {
           method: "POST",
@@ -264,6 +188,96 @@ async function appendRemainingBlocks(pageId: string, blocks: any[], accessToken:
   }
 }
 
+async function replacePageContent(pageId: string, blocks: any[], accessToken: string) {
+  const existingBlockIds: string[] = [];
+  let nextCursor: string | null = null;
+  let hasMore = true;
+
+  while (hasMore) {
+    const params = new URLSearchParams({ page_size: "100" });
+    if (nextCursor) params.set("start_cursor", nextCursor);
+
+    const childrenRes = await fetch(`https://api.notion.com/v1/blocks/${pageId}/children?${params.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Notion-Version": "2022-06-28",
+      },
+    });
+
+    if (!childrenRes.ok) {
+      break;
+    }
+
+    const childrenData = await childrenRes.json();
+    for (const block of childrenData.results || []) {
+      if (block?.id) existingBlockIds.push(block.id);
+    }
+
+    hasMore = Boolean(childrenData.has_more);
+    nextCursor = childrenData.next_cursor ?? null;
+  }
+
+  for (const blockId of existingBlockIds) {
+    await fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Notion-Version": "2022-06-28",
+      },
+    });
+  }
+
+  for (let i = 0; i < blocks.length; i += 100) {
+    const chunk = blocks.slice(i, i + 100);
+    await fetch(`https://api.notion.com/v1/blocks/${pageId}/children`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ children: chunk }),
+    });
+  }
+}
+
+async function updatePageTitle(pageId: string, title: string | undefined, accessToken: string) {
+  try {
+    await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        properties: {
+          title: { title: [{ text: { content: title || "LectureSnap Notes" } }] },
+        },
+      }),
+    });
+  } catch {
+    // Title update is best-effort.
+  }
+}
+
+async function searchFirstAccessibleObject(accessToken: string, objectType: "page" | "database") {
+  const searchRes = await fetch("https://api.notion.com/v1/search", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ filter: { property: "object", value: objectType }, page_size: 1 }),
+  });
+
+  if (!searchRes.ok) return null;
+
+  const searchData = await searchRes.json();
+  return searchData.results?.[0]?.id ?? null;
+}
+
 function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>): any[] {
   const blocks: any[] = [];
   const lines = md.split("\n");
@@ -276,19 +290,17 @@ function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>)
     const imgMatch = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
     if (imgMatch) {
       let imgUrl = imgMatch[2];
-      // Check if it's a base64 data URL - look up in imageUrlMap
       if (imgUrl.startsWith("data:")) {
-        // Try to find a matching public URL from our uploaded images
-        const matchingUrl = Object.values(imageUrlMap).find(u => u);
+        const base64Key = imgUrl.split(",")[1];
+        const matchingUrl = imageUrlMap[imgUrl] || (base64Key ? imageUrlMap[base64Key] : undefined);
         if (matchingUrl) {
           imgUrl = matchingUrl;
         } else {
           continue; // Skip base64 images we couldn't upload
         }
       }
-      // Check if it matches an image ID in the map
       for (const [id, url] of Object.entries(imageUrlMap)) {
-        if (imgUrl.includes(id)) {
+        if (!id.startsWith("data:") && imgUrl.includes(id)) {
           imgUrl = url;
           break;
         }
@@ -310,7 +322,8 @@ function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>)
       if (srcMatch) {
         let imgUrl = srcMatch[1];
         if (imgUrl.startsWith("data:")) {
-          const matchingUrl = Object.values(imageUrlMap).find(u => u);
+          const base64Key = imgUrl.split(",")[1];
+          const matchingUrl = imageUrlMap[imgUrl] || (base64Key ? imageUrlMap[base64Key] : undefined);
           if (matchingUrl) {
             blocks.push({
               object: "block",

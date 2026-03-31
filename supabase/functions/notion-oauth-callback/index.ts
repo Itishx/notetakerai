@@ -110,6 +110,7 @@ function renderHTML(success: boolean, message: string): string {
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Notion Connection</title>
   <style>
     body { font-family: Georgia, serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f0e8; color: #2c3e2d; }
@@ -118,6 +119,7 @@ function renderHTML(success: boolean, message: string): string {
     h1 { font-size: 20px; font-weight: 400; margin-bottom: 8px; }
     p { font-size: 14px; color: #6b7c6b; }
     .hint { margin-top: 16px; font-size: 12px; color: #8a9a8a; font-style: italic; }
+    .button { display: inline-block; margin-top: 18px; padding: 10px 14px; border-radius: 999px; background: #2c3e2d; color: #f5f0e8; text-decoration: none; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -125,8 +127,14 @@ function renderHTML(success: boolean, message: string): string {
     <div class="icon">${success ? "✅" : "❌"}</div>
     <h1>${success ? "Connected!" : "Connection Failed"}</h1>
     <p>${message}</p>
-    <p class="hint">You can close this tab and return to LectureSnap.</p>
+    <p class="hint">${success ? "You can return to LectureSnap now. This tab will try to close automatically." : "Please return to LectureSnap and try again."}</p>
+    <a href="#" class="button" onclick="window.close(); return false;">Return to LectureSnap</a>
   </div>
+  <script>
+    if (${success ? "true" : "false"}) {
+      setTimeout(() => window.close(), 1200);
+    }
+  </script>
 </body>
 </html>`;
 }
