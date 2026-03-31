@@ -6,6 +6,7 @@ let timerInterval = null;
 let seconds = 0;
 let totalRecordedSeconds = 0; // Total across all segments
 let notesMarkdown = "";
+let currentSessionId = null;
 
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
