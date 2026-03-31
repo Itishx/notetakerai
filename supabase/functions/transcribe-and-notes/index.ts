@@ -20,16 +20,7 @@ serve(async (req) => {
       });
     }
 
-    const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-
-    if (!ELEVENLABS_API_KEY) {
-      return new Response(JSON.stringify({ error: "ElevenLabs API key not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "Lovable API key not configured" }), {
         status: 500,
@@ -37,34 +28,64 @@ serve(async (req) => {
       });
     }
 
-    // Step 1: Transcribe audio using ElevenLabs
-    const audioBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-    const audioBlob = new Blob([audioBytes], { type: "audio/webm" });
-
-    const transcribeForm = new FormData();
-    transcribeForm.append("file", audioBlob, "recording.webm");
-    transcribeForm.append("model_id", "scribe_v2");
-    transcribeForm.append("tag_audio_events", "false");
-    transcribeForm.append("diarize", "true");
-
-    console.log("Transcribing audio...");
-    const transcribeRes = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+    // Step 1: Transcribe audio using Gemini (supports audio input natively)
+    console.log("Transcribing audio with AI...");
+    const transcribeRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: { "xi-api-key": ELEVENLABS_API_KEY },
-      body: transcribeForm,
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: "You are a precise transcription assistant. Transcribe the audio exactly as spoken. Include speaker labels if multiple speakers are detected (e.g., Speaker 1:, Speaker 2:). Output ONLY the transcript text, nothing else.",
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_audio",
+                input_audio: {
+                  data: audioBase64,
+                  format: "webm",
+                },
+              },
+              {
+                type: "text",
+                text: "Transcribe this audio precisely. Include speaker labels if there are multiple speakers.",
+              },
+            ],
+          },
+        ],
+      }),
     });
 
     if (!transcribeRes.ok) {
       const errText = await transcribeRes.text();
-      console.error("ElevenLabs error:", transcribeRes.status, errText);
+      console.error("Transcription error:", transcribeRes.status, errText);
+      if (transcribeRes.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (transcribeRes.status === 402) {
+        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify({ error: "Transcription failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const transcription = await transcribeRes.json();
-    const transcript = transcription.text;
+    const transcribeData = await transcribeRes.json();
+    const transcript = transcribeData.choices?.[0]?.message?.content;
     console.log("Transcript length:", transcript?.length);
 
     if (!transcript || transcript.trim().length === 0) {
@@ -74,7 +95,7 @@ serve(async (req) => {
       });
     }
 
-    // Step 2: Convert transcript to notes using Lovable AI
+    // Step 2: Convert transcript to notes
     console.log("Generating notes...");
     const notesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -123,7 +144,7 @@ Rules:
         });
       }
       const errText = await notesRes.text();
-      console.error("AI gateway error:", notesRes.status, errText);
+      console.error("Notes generation error:", notesRes.status, errText);
       return new Response(JSON.stringify({ error: "Note generation failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
