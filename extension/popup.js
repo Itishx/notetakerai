@@ -436,6 +436,20 @@ function renderChatMessages() {
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
 
+function buildNotesContextForAI(markdown) {
+  const existingImages = {};
+  let imageIndex = 0;
+
+  const sanitizedNotes = markdown.replace(/<img\b[^>]*src=["']data:image\/[^"']+["'][^>]*>/gi, (match) => {
+    imageIndex += 1;
+    const placeholder = `{{EXISTING_IMAGE_${imageIndex}}}`;
+    existingImages[placeholder] = match;
+    return `\n\n${placeholder}\n\n`;
+  });
+
+  return { sanitizedNotes, existingImages };
+}
+
 async function sendChatMessage(text, imageBase64) {
   if (!text && !imageBase64) return;
   if (!notesMarkdown) return;
@@ -457,11 +471,18 @@ async function sendChatMessage(text, imageBase64) {
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 
   try {
+    const { sanitizedNotes, existingImages } = buildNotesContextForAI(notesMarkdown);
     const body = {
-      notes: notesMarkdown,
-      chatHistory: chatMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
+      notes: sanitizedNotes,
       message: text || "Please insert this diagram/image into my notes at the most appropriate location.",
     };
+
+    if (imageBase64) {
+      body.existingImages = existingImages;
+    } else {
+      body.chatHistory = chatMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
+    }
+
     if (imageBase64) {
       body.imageBase64 = imageBase64;
     }

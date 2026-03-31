@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { notes, chatHistory, message, imageBase64 } = await req.json();
+    const { notes, chatHistory, message, imageBase64, existingImages } = await req.json();
 
     if (!message && !imageBase64) {
       return new Response(JSON.stringify({ error: "No message or image provided" }), {
@@ -30,11 +30,19 @@ serve(async (req) => {
     }
 
     const hasImage = !!imageBase64;
+    const existingImageMap = existingImages && typeof existingImages === "object" ? existingImages : {};
+    const existingImageKeys = Object.keys(existingImageMap);
 
     const systemPrompt = hasImage
       ? `You are a helpful lecture notes assistant. The user has lecture notes and is sharing a diagram/image screenshot from the lecture.
 
-Your task: Analyze the image and integrate it into the existing notes at the most contextually appropriate location. Return the COMPLETE updated notes in markdown with the placeholder {{IMAGE_PLACEHOLDER}} inserted at the right spot where the image should appear.
+Your task: Analyze the image and integrate it into the existing notes at the most contextually appropriate location. Return the COMPLETE updated notes in markdown with the placeholder {{IMAGE_PLACEHOLDER}} inserted at the right spot where the NEW image should appear.
+
+Important rules:
+- Preserve any existing image placeholders exactly as they appear, such as ${existingImageKeys.length > 0 ? existingImageKeys.join(", ") : "{{EXISTING_IMAGE_1}}"}.
+- Do not duplicate, remove, or rewrite existing image placeholders unless the user explicitly asks.
+- Insert only one {{IMAGE_PLACEHOLDER}} for the new image.
+- Do not wrap the response in markdown code fences.
 
 Also provide a brief reply explaining what you did (where you placed the image and why).
 
@@ -109,23 +117,51 @@ ${notes || "(no notes yet)"}`;
     const aiData = await aiRes.json();
     const rawContent = aiData.choices?.[0]?.message?.content || "";
 
+    const parseImageResponse = (content: string) => {
+      const trimmed = content.trim();
+      const withoutFence = trimmed.replace(/^```json\s*/i, "").replace(/^```/i, "").replace(/```$/i, "").trim();
+
+      try {
+        return JSON.parse(withoutFence);
+      } catch {
+        const jsonMatch = withoutFence.match(/\{[\s\S]*"reply"[\s\S]*"updatedNotes"[\s\S]*\}/);
+        if (!jsonMatch) return null;
+
+        try {
+          return JSON.parse(jsonMatch[0]);
+        } catch {
+          return null;
+        }
+      }
+    };
+
+    const restoreExistingImages = (markdown: string) => {
+      let restored = markdown;
+
+      for (const [placeholder, imageTag] of Object.entries(existingImageMap)) {
+        restored = restored.split(placeholder).join(String(imageTag));
+      }
+
+      return restored;
+    };
+
     // If image was sent, try to parse JSON response for updatedNotes
     if (hasImage) {
-      try {
-        const jsonMatch = rawContent.match(/\{[\s\S]*"reply"[\s\S]*"updatedNotes"[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          // Replace placeholder with actual image tag
-          const imgTag = `<img src="data:image/png;base64,${imageBase64}" alt="Lecture diagram" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
-          const updatedNotes = parsed.updatedNotes.replace(/\{\{IMAGE_PLACEHOLDER\}\}/g, imgTag);
-          return new Response(JSON.stringify({ reply: "Done! Image inserted into your notes.", updatedNotes }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-      } catch (e) {
-        console.log("Could not parse JSON from image response, using raw content");
+      const parsed = parseImageResponse(rawContent);
+
+      if (parsed?.updatedNotes) {
+        const imgTag = `<img src="data:image/png;base64,${imageBase64}" alt="Lecture diagram" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
+        const updatedNotesWithNewImage = String(parsed.updatedNotes).replace(/\{\{IMAGE_PLACEHOLDER\}\}/g, imgTag);
+        const updatedNotes = restoreExistingImages(updatedNotesWithNewImage);
+
+        return new Response(JSON.stringify({ reply: "Done.", updatedNotes }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-      return new Response(JSON.stringify({ reply: rawContent }), {
+
+      console.error("Could not parse image update response:", rawContent);
+      return new Response(JSON.stringify({ error: "Could not update notes from the image response" }), {
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
