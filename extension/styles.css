@@ -147,7 +147,7 @@ body.sidepanel .notes-content {
 .recording-hero-controls {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
   width: 100%;
   padding: 0 8px;
 }
