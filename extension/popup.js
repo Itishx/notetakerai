@@ -218,7 +218,7 @@ newSessionBtn?.addEventListener("click", () => {
   currentSessionId = null;
   chatMessages = [];
   pendingImageBase64 = null;
-  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId", "currentNotes"]);
+  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId", "currentNotes", "notionSyncedPageId"]);
   notesSection.classList.add("hidden");
   chatSection.classList.add("hidden");
   chatMessagesEl.innerHTML = "";
