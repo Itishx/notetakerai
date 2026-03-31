@@ -12,8 +12,16 @@ serve(async (req) => {
   }
 
   try {
-    const { audioBase64 } = await req.json();
-    if (!audioBase64) {
+    const body = await req.json();
+    // Support both single audioBase64 (legacy) and audioSegments array
+    let segments: string[] = [];
+    if (body.audioSegments && Array.isArray(body.audioSegments)) {
+      segments = body.audioSegments;
+    } else if (body.audioBase64) {
+      segments = [body.audioBase64];
+    }
+
+    if (segments.length === 0) {
       return new Response(JSON.stringify({ error: "No audio data provided" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -28,72 +36,86 @@ serve(async (req) => {
       });
     }
 
-    // Step 1: Transcribe audio using Gemini (supports audio input natively)
-    console.log("Transcribing audio with AI...");
-    const transcribeRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: "You are a precise transcription assistant. Transcribe the audio exactly as spoken. Include speaker labels if multiple speakers are detected (e.g., Speaker 1:, Speaker 2:). Output ONLY the transcript text, nothing else.",
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_audio",
-                input_audio: {
-                  data: audioBase64,
-                  format: "webm",
-                },
-              },
-              {
-                type: "text",
-                text: "Transcribe this audio precisely. Include speaker labels if there are multiple speakers.",
-              },
-            ],
-          },
-        ],
-      }),
-    });
+    // Step 1: Transcribe each audio segment
+    console.log(`Transcribing ${segments.length} audio segment(s)...`);
+    const transcripts: string[] = [];
 
-    if (!transcribeRes.ok) {
-      const errText = await transcribeRes.text();
-      console.error("Transcription error:", transcribeRes.status, errText);
-      if (transcribeRes.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (transcribeRes.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ error: "Transcription failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    for (let i = 0; i < segments.length; i++) {
+      console.log(`Transcribing segment ${i + 1}/${segments.length}...`);
+      const transcribeRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "system",
+              content: "You are a precise transcription assistant. Transcribe the audio exactly as spoken. Include speaker labels if multiple speakers are detected (e.g., Speaker 1:, Speaker 2:). Output ONLY the transcript text, nothing else.",
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_audio",
+                  input_audio: {
+                    data: segments[i],
+                    format: "webm",
+                  },
+                },
+                {
+                  type: "text",
+                  text: "Transcribe this audio precisely. Include speaker labels if there are multiple speakers.",
+                },
+              ],
+            },
+          ],
+        }),
       });
+
+      if (!transcribeRes.ok) {
+        const errText = await transcribeRes.text();
+        console.error("Transcription error:", transcribeRes.status, errText);
+        if (transcribeRes.status === 429) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (transcribeRes.status === 402) {
+          return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ error: `Transcription failed for segment ${i + 1}` }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const transcribeData = await transcribeRes.json();
+      const transcript = transcribeData.choices?.[0]?.message?.content;
+      if (transcript && transcript.trim().length > 0) {
+        transcripts.push(transcript.trim());
+      }
     }
 
-    const transcribeData = await transcribeRes.json();
-    const transcript = transcribeData.choices?.[0]?.message?.content;
-    console.log("Transcript length:", transcript?.length);
-
-    if (!transcript || transcript.trim().length === 0) {
-      return new Response(JSON.stringify({ error: "No speech detected in audio" }), {
+    if (transcripts.length === 0) {
+      return new Response(JSON.stringify({ error: "No speech detected in any audio segment" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Combine all transcripts with segment markers
+    const combinedTranscript = transcripts.length === 1
+      ? transcripts[0]
+      : transcripts.map((t, i) => `[Segment ${i + 1}]\n${t}`).join("\n\n");
+
+    console.log("Combined transcript length:", combinedTranscript.length);
 
     // Step 2: Convert transcript to notes
     console.log("Generating notes...");
@@ -112,6 +134,8 @@ serve(async (req) => {
 
 CRITICAL RULE: Only include information that was EXPLICITLY stated in the transcript. Do NOT add, infer, elaborate, or expand on anything. If something was said in one sentence, it should be one bullet point — not a paragraph. The notes should be a faithful, condensed reflection of ONLY what was spoken.
 
+The transcript may contain multiple segments recorded at different times from the same lecture. Treat them as one continuous lecture and produce unified, cohesive notes — do NOT separate by segment.
+
 Rules:
 - Use clear headings (## and ###) to organize by topic
 - Use bullet points for key concepts
@@ -125,7 +149,7 @@ Rules:
           },
           {
             role: "user",
-            content: `Convert this lecture transcript into well-structured study notes:\n\n${transcript}`,
+            content: `Convert this lecture transcript into well-structured study notes:\n\n${combinedTranscript}`,
           },
         ],
       }),
@@ -155,7 +179,7 @@ Rules:
     const notesData = await notesRes.json();
     const notes = notesData.choices?.[0]?.message?.content || "No notes generated";
 
-    return new Response(JSON.stringify({ notes, transcript }), {
+    return new Response(JSON.stringify({ notes, transcript: combinedTranscript }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
