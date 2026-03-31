@@ -16,12 +16,47 @@ const timerEl = document.getElementById("timer");
 const loadingEl = document.getElementById("loading");
 const notesSection = document.getElementById("notesSection");
 const notesContent = document.getElementById("notesContent");
+const historySection = document.getElementById("historySection");
+const historyList = document.getElementById("historyList");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+
+// Simple markdown to HTML converter
+function renderMarkdown(md) {
+  let html = md
+    // Headings
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Horizontal rules
+    .replace(/^---$/gm, '<hr>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Unordered lists
+    .replace(/^\*\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/^-\s+(.+)$/gm, '<li>$1</li>')
+    // Blockquotes
+    .replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>')
+    // Line breaks
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+
+  // Wrap consecutive <li> in <ul>
+  html = html.replace(/((?:<li>.*<\/li>(?:<br>)?)+)/g, (match) => {
+    return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
+  });
+
+  return '<p>' + html + '</p>';
+}
+
+// Load saved notes history on popup open
+loadHistory();
 
 // Check initial status
 chrome.runtime.sendMessage({ action: "getStatus" }, (res) => {
   if (res?.isRecording) {
     setRecordingUI();
-    // Restore timer from storage
     chrome.storage.local.get("startTime", (data) => {
       if (data.startTime) {
         seconds = Math.floor((Date.now() - data.startTime) / 1000);
@@ -82,8 +117,11 @@ convertBtn.addEventListener("click", async () => {
 
     const data = await response.json();
     notesMarkdown = data.notes;
-    notesContent.textContent = notesMarkdown;
+    notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
+
+    // Save to history
+    saveToHistory(notesMarkdown);
 
     statusEl.className = "status idle";
     statusEl.querySelector("span").textContent = "Notes ready!";
@@ -105,10 +143,15 @@ copyBtn.addEventListener("click", () => {
 });
 
 copyNotionBtn.addEventListener("click", () => {
-  // Copy as clean markdown that Notion can parse when pasted
   navigator.clipboard.writeText(notesMarkdown).then(() => {
     copyNotionBtn.textContent = "Copied for Notion!";
     setTimeout(() => { copyNotionBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M9 4v16"/><path d="M14 10l-5 4"/></svg> Copy for Notion'; }, 1500);
+  });
+});
+
+clearHistoryBtn?.addEventListener("click", () => {
+  chrome.storage.local.remove("notesHistory", () => {
+    loadHistory();
   });
 });
 
@@ -144,4 +187,52 @@ function updateTimer() {
   const m = String(Math.floor(seconds / 60)).padStart(2, "0");
   const s = String(seconds % 60).padStart(2, "0");
   timerEl.textContent = `${m}:${s}`;
+}
+
+// History functions
+function saveToHistory(markdown) {
+  chrome.storage.local.get("notesHistory", (data) => {
+    const history = data.notesHistory || [];
+    history.unshift({
+      notes: markdown,
+      date: new Date().toISOString(),
+      id: Date.now(),
+    });
+    // Keep max 20 entries
+    if (history.length > 20) history.pop();
+    chrome.storage.local.set({ notesHistory: history }, () => {
+      loadHistory();
+    });
+  });
+}
+
+function loadHistory() {
+  chrome.storage.local.get("notesHistory", (data) => {
+    const history = data.notesHistory || [];
+    if (history.length === 0) {
+      historySection.classList.add("hidden");
+      return;
+    }
+    historySection.classList.remove("hidden");
+    historyList.innerHTML = "";
+    history.forEach((entry) => {
+      const item = document.createElement("div");
+      item.className = "history-item";
+      const date = new Date(entry.date);
+      const dateStr = date.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      // Get first heading or first line as preview
+      const preview = (entry.notes.match(/^##?\s+(.+)$/m) || ["", entry.notes.substring(0, 60)])[1];
+      item.innerHTML = `
+        <div class="history-meta">${dateStr}</div>
+        <div class="history-preview">${preview}...</div>
+      `;
+      item.addEventListener("click", () => {
+        notesMarkdown = entry.notes;
+        notesContent.innerHTML = renderMarkdown(notesMarkdown);
+        notesSection.classList.remove("hidden");
+        notesSection.scrollIntoView({ behavior: "smooth" });
+      });
+      historyList.appendChild(item);
+    });
+  });
 }
