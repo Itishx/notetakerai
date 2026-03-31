@@ -19,7 +19,6 @@ let playbackEl = null;
 const CONVERT_BUTTON_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>';
 
 const recordBtn = document.getElementById("recordBtn");
-const stopBtn = document.getElementById("stopBtn");
 const convertBtn = document.getElementById("convertBtn");
 const copyBtn = document.getElementById("copyBtn");
 const syncNotionBtn = document.getElementById("syncNotionBtn");
@@ -33,6 +32,17 @@ const continueBtn = document.getElementById("continueBtn");
 const newSessionBtn = document.getElementById("newSessionBtn");
 const segmentCount = document.getElementById("segmentCount");
 
+// Layout sections
+const headerSection = document.getElementById("headerSection");
+const idleStatusBlock = document.getElementById("idleStatusBlock");
+const idleControls = document.getElementById("idleControls");
+const recordingHero = document.getElementById("recordingHero");
+const heroTimer = document.getElementById("heroTimer");
+const heroSegment = document.getElementById("heroSegment");
+const heroStopBtn = document.getElementById("heroStopBtn");
+const heroConvertBtn = document.getElementById("heroConvertBtn");
+const orbContainer = recordingHero?.querySelector(".orb-container");
+
 // History overlay elements
 const historyOverlay = document.getElementById("historyOverlay");
 const historyList = document.getElementById("historyList");
@@ -45,8 +55,6 @@ const chatSection = document.getElementById("chatSection");
 const chatMessagesEl = document.getElementById("chatMessages");
 const chatInput = document.getElementById("chatInput");
 const chatSendBtn = document.getElementById("chatSendBtn");
-const chatAttachBtn = document.getElementById("chatAttachBtn");
-const chatFileInput = document.getElementById("chatFileInput");
 const chatImagePreview = document.getElementById("chatImagePreview");
 const chatPreviewImg = document.getElementById("chatPreviewImg");
 const chatRemoveImage = document.getElementById("chatRemoveImage");
@@ -63,12 +71,10 @@ function renderMarkdown(md) {
     .replace(/^\*\s+(.+)$/gm, '<li>$1</li>')
     .replace(/^-\s+(.+)$/gm, '<li>$1</li>')
     .replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>')
-    // Handle inline images: ![alt](data:...) or ![alt](url)
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:8px 0;">')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br>');
 
-  // Wrap consecutive <li> in <ul>
   html = html.replace(/((?:<li>.*<\/li>(?:<br>)?)+)/g, (match) => {
     return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
   });
@@ -81,8 +87,9 @@ function hasExistingNotes() {
 }
 
 function updateConvertButtonLabel() {
-  if (!convertBtn) return;
-  convertBtn.innerHTML = `${CONVERT_BUTTON_ICON} ${hasExistingNotes() ? "Update Notes" : "Convert to Notes"}`;
+  const label = hasExistingNotes() ? "Update Notes" : "Convert to Notes";
+  if (convertBtn) convertBtn.innerHTML = `${CONVERT_BUTTON_ICON} ${label}`;
+  if (heroConvertBtn) heroConvertBtn.innerHTML = `${CONVERT_BUTTON_ICON} ${label}`;
 }
 
 updateConvertButtonLabel();
@@ -98,9 +105,7 @@ chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessi
   }
 });
 
-// Show history button if there are notes
 updateHistoryBtnVisibility();
-
 hydrateTrackedTabState();
 
 // Restore notes + chat for current session
@@ -113,7 +118,6 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     chatSection.classList.remove("hidden");
     loadChatMessages(currentSessionId);
   }
-
   updateConvertButtonLabel();
 });
 
@@ -122,7 +126,6 @@ continueBtn?.addEventListener("click", startRecordingFlow);
 
 async function startRecordingFlow() {
   try {
-    // Route through background script which has broader tabCapture permissions
     const response = await new Promise((resolve) => {
       chrome.runtime.sendMessage(
         { action: "getStreamId", tabId: trackedActiveTabId || undefined },
@@ -150,7 +153,10 @@ async function startRecordingFlow() {
   }
 }
 
-stopBtn.addEventListener("click", async () => {
+// Hero stop button
+heroStopBtn?.addEventListener("click", handleStopRecording);
+
+async function handleStopRecording() {
   const capturedSeconds = seconds;
   stopTimer();
 
@@ -168,15 +174,16 @@ stopBtn.addEventListener("click", async () => {
   } catch (e) {
     alert("Error: " + e.message);
   }
-});
+}
 
-convertBtn.addEventListener("click", async () => {
+async function handleConvertToNotes() {
   if (audioSegments.length === 0) return;
 
   const existingNotesContext = hasExistingNotes() ? buildNotesContextForAI(notesMarkdown) : null;
 
   loadingEl.classList.remove("hidden");
   convertBtn.disabled = true;
+  if (heroConvertBtn) heroConvertBtn.disabled = true;
   if (continueBtn) continueBtn.disabled = true;
   statusEl.className = "status processing";
   statusEl.querySelector("span").textContent = "Processing with AI...";
@@ -207,9 +214,7 @@ convertBtn.addEventListener("click", async () => {
     chatSection.classList.remove("hidden");
     updateConvertButtonLabel();
 
-    // Persist current notes
     chrome.storage.local.set({ currentNotes: notesMarkdown });
-
     saveToHistory(notesMarkdown);
 
     statusEl.className = "status idle";
@@ -221,9 +226,13 @@ convertBtn.addEventListener("click", async () => {
   } finally {
     loadingEl.classList.add("hidden");
     convertBtn.disabled = false;
+    if (heroConvertBtn) heroConvertBtn.disabled = false;
     if (continueBtn) continueBtn.disabled = false;
   }
-});
+}
+
+convertBtn.addEventListener("click", handleConvertToNotes);
+heroConvertBtn?.addEventListener("click", handleConvertToNotes);
 
 // New Session
 newSessionBtn?.addEventListener("click", () => {
@@ -286,11 +295,9 @@ async function hydrateTrackedTabState() {
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
-
   if (changes.activeTabId) {
     trackedActiveTabId = typeof changes.activeTabId.newValue === "number" ? changes.activeTabId.newValue : null;
   }
-
   if (changes.activeWindowId) {
     trackedActiveWindowId = typeof changes.activeWindowId.newValue === "number" ? changes.activeWindowId.newValue : null;
   }
@@ -299,15 +306,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 async function closeNotionAuthTab() {
   const data = await getStorage("notionAuthTabId");
   const tabId = data.notionAuthTabId;
-
   if (typeof tabId === "number") {
-    try {
-      await chrome.tabs.remove(tabId);
-    } catch {
-      // Ignore tabs that were already closed by the user or browser.
-    }
+    try { await chrome.tabs.remove(tabId); } catch {}
   }
-
   await removeStorage("notionAuthTabId");
 }
 
@@ -333,11 +334,8 @@ async function beginLocalRecording(streamId) {
   audioChunks = [];
   mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
   mediaRecorder.ondataavailable = (event) => {
-    if (event.data.size > 0) {
-      audioChunks.push(event.data);
-    }
+    if (event.data.size > 0) audioChunks.push(event.data);
   };
-
   mediaRecorder.start(1000);
 }
 
@@ -347,19 +345,13 @@ async function stopLocalRecording() {
       reject(new Error("Not recording"));
       return;
     }
-
     const activeRecorder = mediaRecorder;
     activeRecorder.onstop = () => {
       const blob = new Blob(audioChunks, { type: "audio/webm" });
       activeRecorder.stream.getTracks().forEach((track) => track.stop());
       mediaRecorder = null;
       audioChunks = [];
-
-      if (playbackEl) {
-        playbackEl.remove();
-        playbackEl = null;
-      }
-
+      if (playbackEl) { playbackEl.remove(); playbackEl = null; }
       const reader = new FileReader();
       reader.onload = () => {
         const result = typeof reader.result === "string" ? reader.result : "";
@@ -368,7 +360,6 @@ async function stopLocalRecording() {
       reader.onerror = () => reject(new Error("Failed to read recorded audio"));
       reader.readAsDataURL(blob);
     };
-
     activeRecorder.stop();
   });
 }
@@ -380,7 +371,6 @@ function handleRecordingStartError(message) {
     alert("Chrome needs the extension to be reopened on the current page before a new recording can start there. Click the extension icon once on that page/video, then press Start Recording again.");
     return;
   }
-
   alert("Error: " + message);
 }
 
@@ -388,11 +378,7 @@ window.addEventListener("beforeunload", () => {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stream.getTracks().forEach((track) => track.stop());
   }
-
-  if (playbackEl) {
-    playbackEl.remove();
-    playbackEl = null;
-  }
+  if (playbackEl) { playbackEl.remove(); playbackEl = null; }
 });
 
 function setNotionButtonLabel(label) {
@@ -405,61 +391,41 @@ async function fetchNotionConnectionStatus(userIdentifier) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userIdentifier }),
   });
-
-  if (!res.ok) {
-    throw new Error("Failed to check Notion connection");
-  }
-
+  if (!res.ok) throw new Error("Failed to check Notion connection");
   return res.json();
 }
 
 async function getSessionNotionPageId(sessionId = currentSessionId) {
   if (!sessionId) return null;
-
   const data = await getStorage("notionSyncedPages");
   return data.notionSyncedPages?.[String(sessionId)] || null;
 }
 
 async function setSessionNotionPageId(pageId, sessionId = currentSessionId) {
   if (!pageId || !sessionId) return;
-
   const data = await getStorage("notionSyncedPages");
   const notionSyncedPages = data.notionSyncedPages || {};
   notionSyncedPages[String(sessionId)] = pageId;
-
   await setStorage({ notionSyncedPages, notionSyncedPageId: pageId });
 }
 
 async function getNotionDestination() {
   const data = await getStorage(["notionDestination", "notionSyncedPageId"]);
-
-  if (data.notionDestination?.id && data.notionDestination?.type) {
-    return data.notionDestination;
-  }
-
-  if (data.notionSyncedPageId) {
-    return { type: "page", id: data.notionSyncedPageId };
-  }
-
+  if (data.notionDestination?.id && data.notionDestination?.type) return data.notionDestination;
+  if (data.notionSyncedPageId) return { type: "page", id: data.notionSyncedPageId };
   return null;
 }
 
 function stopNotionConnectionPolling() {
-  if (notionConnectionPoller) {
-    clearInterval(notionConnectionPoller);
-    notionConnectionPoller = null;
-  }
+  if (notionConnectionPoller) { clearInterval(notionConnectionPoller); notionConnectionPoller = null; }
 }
 
 async function checkNotionConnection() {
   const userId = await getNotionUserId();
-
   try {
     const status = await fetchNotionConnectionStatus(userId);
     await setStorage({ notionConnected: Boolean(status.connected) });
-    if (status.connected) {
-      await closeNotionAuthTab();
-    }
+    if (status.connected) await closeNotionAuthTab();
     setNotionButtonLabel(status.connected ? "Sync to Notion" : "Connect Notion");
     return Boolean(status.connected);
   } catch {
@@ -472,10 +438,8 @@ async function checkNotionConnection() {
 function startNotionConnectionPolling(userId) {
   stopNotionConnectionPolling();
   let attempts = 0;
-
   notionConnectionPoller = setInterval(async () => {
     attempts += 1;
-
     try {
       const status = await fetchNotionConnectionStatus(userId);
       if (status.connected) {
@@ -488,10 +452,7 @@ function startNotionConnectionPolling(userId) {
         statusEl.querySelector("span").textContent = "Notion connected";
         return;
       }
-    } catch {
-      // Keep polling quietly until timeout.
-    }
-
+    } catch {}
     if (attempts >= 60) {
       stopNotionConnectionPolling();
       syncNotionBtn.disabled = false;
@@ -508,35 +469,26 @@ window.addEventListener("focus", () => {
 
 syncNotionBtn?.addEventListener("click", async () => {
   const userId = await getNotionUserId();
-
   let connected = false;
   try {
     const status = await fetchNotionConnectionStatus(userId);
     connected = Boolean(status.connected);
     await setStorage({ notionConnected: connected });
-  } catch {
-    connected = false;
-  }
+  } catch { connected = false; }
 
   if (!connected) {
-    // Start OAuth flow
     syncNotionBtn.disabled = true;
     setNotionButtonLabel("Finish in Notion…");
-
     try {
       const res = await fetch(`${API_BASE}/notion-oauth-start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userIdentifier: userId }),
       });
-      
       if (!res.ok) throw new Error("Failed to start OAuth");
       const { authUrl } = await res.json();
-
       const authTab = await chrome.tabs.create({ url: authUrl });
-      if (typeof authTab?.id === "number") {
-        await setStorage({ notionAuthTabId: authTab.id });
-      }
+      if (typeof authTab?.id === "number") await setStorage({ notionAuthTabId: authTab.id });
       startNotionConnectionPolling(userId);
     } catch (e) {
       alert("Failed to connect Notion: " + e.message);
@@ -545,47 +497,36 @@ syncNotionBtn?.addEventListener("click", async () => {
     }
     return;
   }
-  
-  // Sync notes to Notion
-  if (!notesMarkdown) {
-    alert("No notes to sync!");
-    return;
-  }
-  
+
+  if (!notesMarkdown) { alert("No notes to sync!"); return; }
+
   syncNotionBtn.disabled = true;
   setNotionButtonLabel("Syncing...");
-  
+
   try {
     const titleMatch = notesMarkdown.match(/^#\s+(.+)$/m);
     const title = titleMatch ? titleMatch[1] : "LectureSnap Notes";
-    
-    // Collect base64 images from notes to upload
+
     const images = [];
     const imgRegex = /!\[[^\]]*\]\((data:image\/[^)]+)\)/g;
     const htmlImgRegex = /<img[^>]+src="(data:image\/[^"]+)"/g;
     let imgMatch;
     let imgIndex = 0;
-    
+
     while ((imgMatch = imgRegex.exec(notesMarkdown)) !== null) {
       const dataUrl = imgMatch[1];
       const base64 = dataUrl.split(",")[1];
-      if (base64) {
-        const id = `img_${Date.now()}_${imgIndex++}`;
-        images.push({ id, base64, source: dataUrl });
-      }
+      if (base64) { images.push({ id: `img_${Date.now()}_${imgIndex++}`, base64, source: dataUrl }); }
     }
     while ((imgMatch = htmlImgRegex.exec(notesMarkdown)) !== null) {
       const dataUrl = imgMatch[1];
       const base64 = dataUrl.split(",")[1];
-      if (base64) {
-        const id = `img_${Date.now()}_${imgIndex++}`;
-        images.push({ id, base64, source: dataUrl });
-      }
+      if (base64) { images.push({ id: `img_${Date.now()}_${imgIndex++}`, base64, source: dataUrl }); }
     }
-    
+
     const notionPageId = await getSessionNotionPageId();
     const notionDestination = await getNotionDestination();
-    
+
     const res = await fetch(`${API_BASE}/sync-to-notion`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -598,7 +539,7 @@ syncNotionBtn?.addEventListener("click", async () => {
         images: images.length > 0 ? images : undefined,
       }),
     });
-    
+
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       if (errData.error?.includes("not connected")) {
@@ -610,25 +551,15 @@ syncNotionBtn?.addEventListener("click", async () => {
       }
       return;
     }
-    
-    const result = await res.json();
-    
-    if (result.destination?.id && result.destination?.type) {
-      await setStorage({ notionDestination: result.destination });
-    }
 
-    // Store the page ID for future updates
-    if (result.pageId) {
-      await setSessionNotionPageId(result.pageId);
-    }
-    
+    const result = await res.json();
+    if (result.destination?.id && result.destination?.type) await setStorage({ notionDestination: result.destination });
+    if (result.pageId) await setSessionNotionPageId(result.pageId);
+
     setNotionButtonLabel("Synced! ✓");
     statusEl.className = "status idle";
     statusEl.querySelector("span").textContent = "Synced to Notion";
-    
-    setTimeout(() => {
-      setNotionButtonLabel("Sync to Notion");
-    }, 2500);
+    setTimeout(() => setNotionButtonLabel("Sync to Notion"), 2500);
   } catch (e) {
     alert("Sync failed: " + e.message);
     setNotionButtonLabel("Sync to Notion");
@@ -661,48 +592,67 @@ clearHistoryBtn?.addEventListener("click", () => {
 function updateHistoryBtnVisibility() {
   chrome.storage.local.get("notesHistory", (data) => {
     const history = data.notesHistory || [];
-    if (history.length > 0) {
-      historyBtn?.classList.remove("hidden");
-    } else {
-      historyBtn?.classList.add("hidden");
-    }
+    if (history.length > 0) historyBtn?.classList.remove("hidden");
+    else historyBtn?.classList.add("hidden");
   });
 }
 
 // ===== UI STATE =====
 function setRecordingUI() {
-  recordBtn.classList.add("hidden");
-  if (continueBtn) continueBtn.classList.add("hidden");
+  // Hide idle sections
+  idleStatusBlock?.classList.add("hidden");
+  idleControls?.classList.add("hidden");
   if (newSessionBtn) newSessionBtn.classList.add("hidden");
-  stopBtn.disabled = false;
-  stopBtn.classList.remove("hidden");
-  convertBtn.disabled = true;
+
+  // Show recording hero
+  recordingHero?.classList.remove("hidden");
+  orbContainer?.classList.add("orb-recording");
+  heroStopBtn.disabled = false;
+
+  // Update hero convert button
+  updateConvertButtonLabel();
+
+  // Status (still update for consistency)
   statusEl.className = "status recording";
   statusEl.querySelector("span").textContent = "Recording tab audio...";
 }
 
 function setResumeUI() {
+  // Hide recording hero
+  recordingHero?.classList.add("hidden");
+  orbContainer?.classList.remove("orb-recording");
+
+  // Show idle sections
+  idleStatusBlock?.classList.remove("hidden");
+  idleControls?.classList.remove("hidden");
+
   recordBtn.classList.add("hidden");
-  stopBtn.disabled = true;
-  stopBtn.classList.add("hidden");
   if (continueBtn) continueBtn.classList.remove("hidden");
   if (newSessionBtn) newSessionBtn.classList.remove("hidden");
   updateConvertButtonLabel();
   convertBtn.disabled = false;
+
   statusEl.className = "status idle";
   const segText = audioSegments.length === 1 ? "1 segment" : `${audioSegments.length} segments`;
   statusEl.querySelector("span").textContent = `Recording paused · ${segText} captured`;
 }
 
 function setIdleUI() {
+  // Hide recording hero
+  recordingHero?.classList.add("hidden");
+  orbContainer?.classList.remove("orb-recording");
+
+  // Show idle sections
+  idleStatusBlock?.classList.remove("hidden");
+  idleControls?.classList.remove("hidden");
+
   recordBtn.classList.remove("hidden");
   recordBtn.disabled = false;
-  stopBtn.disabled = true;
-  stopBtn.classList.add("hidden");
   if (continueBtn) continueBtn.classList.add("hidden");
   if (newSessionBtn) newSessionBtn.classList.add("hidden");
   updateConvertButtonLabel();
   convertBtn.disabled = true;
+
   statusEl.className = "status idle";
   statusEl.querySelector("span").textContent = "Ready to record";
 }
@@ -723,7 +673,19 @@ function updateTimer() {
   const total = totalRecordedSeconds + seconds;
   const m = String(Math.floor(total / 60)).padStart(2, "0");
   const s = String(total % 60).padStart(2, "0");
-  timerEl.textContent = `${m}:${s}`;
+  const timeStr = `${m}:${s}`;
+
+  // Update both idle timer and hero timer
+  timerEl.textContent = timeStr;
+  if (heroTimer) heroTimer.textContent = timeStr;
+
+  // Update hero segment info
+  if (heroSegment) {
+    const segNum = audioSegments.length + (mediaRecorder && mediaRecorder.state === "recording" ? 1 : 0);
+    const segLabel = segNum === 1 ? "1 segment" : `${segNum} segments`;
+    const totalSecs = totalRecordedSeconds + seconds;
+    heroSegment.textContent = `${segLabel} · ${formatTime(totalSecs)} total`;
+  }
 }
 
 function updateSegmentInfo() {
@@ -747,7 +709,6 @@ function formatTime(secs) {
 function saveToHistory(markdown) {
   chrome.storage.local.get("notesHistory", (data) => {
     const history = data.notesHistory || [];
-
     if (currentSessionId) {
       const idx = history.findIndex((e) => e.id === currentSessionId);
       if (idx !== -1) {
@@ -765,11 +726,8 @@ function saveToHistory(markdown) {
       chrome.storage.local.set({ currentSessionId });
       history.unshift({ notes: markdown, date: new Date().toISOString(), id: newId });
     }
-
     if (history.length > 20) history.pop();
-    chrome.storage.local.set({ notesHistory: history }, () => {
-      updateHistoryBtnVisibility();
-    });
+    chrome.storage.local.set({ notesHistory: history }, () => updateHistoryBtnVisibility());
   });
 }
 
@@ -839,14 +797,12 @@ function renderChatMessages() {
 function buildNotesContextForAI(markdown) {
   const existingImages = {};
   let imageIndex = 0;
-
   const sanitizedNotes = markdown.replace(/<img\b[^>]*src=["']data:image\/[^"']+["'][^>]*>/gi, (match) => {
     imageIndex += 1;
     const placeholder = `{{EXISTING_IMAGE_${imageIndex}}}`;
     existingImages[placeholder] = match;
     return `\n\n${placeholder}\n\n`;
   });
-
   return { sanitizedNotes, existingImages };
 }
 
@@ -854,16 +810,12 @@ async function sendChatMessage(text, imageBase64) {
   if (!text && !imageBase64) return;
   if (!notesMarkdown) return;
 
-  // Add user message
   const userMsg = { role: "user", content: text || "📎 Image attached — please insert into notes" };
-  if (imageBase64) {
-    userMsg.image = `data:image/png;base64,${imageBase64}`;
-  }
+  if (imageBase64) userMsg.image = `data:image/png;base64,${imageBase64}`;
   chatMessages.push(userMsg);
   renderChatMessages();
   saveChatMessages();
 
-  // Show typing indicator
   const typingEl = document.createElement("div");
   typingEl.className = "chat-bubble chat-assistant chat-typing";
   typingEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
@@ -883,9 +835,7 @@ async function sendChatMessage(text, imageBase64) {
       body.chatHistory = chatMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
     }
 
-    if (imageBase64) {
-      body.imageBase64 = imageBase64;
-    }
+    if (imageBase64) body.imageBase64 = imageBase64;
 
     const response = await fetch(`${API_BASE}/chat-about-notes`, {
       method: "POST",
@@ -899,16 +849,11 @@ async function sendChatMessage(text, imageBase64) {
     }
 
     const data = await response.json();
-
-    // Remove typing indicator
     typingEl.remove();
-
-    // Add AI response
     chatMessages.push({ role: "assistant", content: data.reply });
     renderChatMessages();
     saveChatMessages();
 
-    // If updatedNotes returned, update the notes
     if (data.updatedNotes) {
       notesMarkdown = data.updatedNotes;
       notesContent.innerHTML = renderMarkdown(notesMarkdown);
@@ -937,21 +882,6 @@ chatInput?.addEventListener("keydown", (e) => {
     e.preventDefault();
     chatSendBtn.click();
   }
-});
-
-// Image attachment
-chatAttachBtn?.addEventListener("click", () => chatFileInput.click());
-
-chatFileInput?.addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const base64 = reader.result.split(",")[1];
-    setPendingImage(base64, reader.result);
-  };
-  reader.readAsDataURL(file);
-  chatFileInput.value = "";
 });
 
 // Paste image from clipboard
@@ -1022,7 +952,6 @@ cropCanvas?.addEventListener("mousedown", (e) => {
   const canvasRect = cropCanvas.getBoundingClientRect();
   const imgRect = cropImage.getBoundingClientRect();
   isDragging = true;
-  // Store positions relative to cropCanvas container
   const relX = e.clientX - canvasRect.left;
   const relY = e.clientY - canvasRect.top;
   cropStart = { x: relX, y: relY, canvasRect, imgRect };
@@ -1056,7 +985,6 @@ document.addEventListener("mouseup", (e) => {
   const imgRect = cropImage.getBoundingClientRect();
   const relX = e.clientX - canvasRect.left;
   const relY = e.clientY - canvasRect.top;
-  // Calculate relative to the image within the canvas
   const imgOffsetX = imgRect.left - canvasRect.left;
   const imgOffsetY = imgRect.top - canvasRect.top;
   const x1 = Math.max(0, Math.min(cropStart.x, relX) - imgOffsetX);
@@ -1101,7 +1029,6 @@ cropUseFullBtn?.addEventListener("click", () => {
 
 cropConfirmBtn?.addEventListener("click", () => {
   if (!screenshotDataUrl || !cropRect) return;
-  // Crop using canvas
   const img = new Image();
   img.onload = () => {
     const canvas = document.createElement("canvas");

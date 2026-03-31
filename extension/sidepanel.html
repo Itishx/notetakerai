@@ -21,13 +21,9 @@
     </div>
   </div>
 
-  <div class="container">
-    <div class="header" style="position: relative;">
-      <div class="orb-container">
-        <div class="orb-layer orb-outer"></div>
-        <div class="orb-layer orb-mid"></div>
-        <div class="orb-layer orb-core"></div>
-      </div>
+  <div class="container" id="mainContainer">
+    <!-- Header (visible in idle/notes mode) -->
+    <div class="header" id="headerSection">
       <div class="header-top" style="position: relative; z-index: 1;">
         <div class="logo-group">
           <div class="logo">
@@ -53,33 +49,59 @@
       </div>
     </div>
 
-    <div id="status" class="status idle">
-      <div class="status-dot"></div>
-      <span>Ready to record</span>
+    <!-- Idle status + timer (hidden during recording) -->
+    <div id="idleStatusBlock">
+      <div id="status" class="status idle">
+        <div class="status-dot"></div>
+        <span>Ready to record</span>
+      </div>
+      <div class="timer" id="timer">00:00</div>
+      <div id="segmentCount" class="segment-count hidden"></div>
     </div>
 
-    <div class="timer" id="timer">00:00</div>
-    <div id="segmentCount" class="segment-count hidden"></div>
-
-    <div class="controls">
-      <button id="recordBtn" class="btn btn-record">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-        Start Recording
-      </button>
-      <button id="continueBtn" class="btn btn-record hidden">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-        Continue Recording
-      </button>
-      <button id="stopBtn" class="btn btn-stop hidden" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-        Pause & Save Segment
+    <!-- Idle controls (shown when NOT recording) -->
+    <div id="idleControls">
+      <div class="controls">
+        <button id="recordBtn" class="btn btn-record">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+          Start Recording
+        </button>
+        <button id="continueBtn" class="btn btn-record hidden">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+          Continue Recording
+        </button>
+      </div>
+      <button id="convertBtn" class="btn btn-convert" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+        Convert to Notes
       </button>
     </div>
 
-    <button id="convertBtn" class="btn btn-convert" disabled>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
-      Convert to Notes
-    </button>
+    <!-- RECORDING HERO (visible only while recording) -->
+    <div id="recordingHero" class="recording-hero hidden">
+      <div class="recording-orb-area">
+        <div class="orb-container orb-hero">
+          <div class="orb-layer orb-outer"></div>
+          <div class="orb-layer orb-mid"></div>
+          <div class="orb-layer orb-core"></div>
+        </div>
+      </div>
+      <div id="recordingInfo" class="recording-info">
+        <span id="heroTimer">00:00</span>
+        <span class="recording-info-sep">·</span>
+        <span id="heroSegment">1 segment</span>
+      </div>
+      <div class="recording-hero-controls">
+        <button id="heroStopBtn" class="btn btn-stop">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          Pause & Save Segment
+        </button>
+        <button id="heroConvertBtn" class="btn btn-convert" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+          Convert to Notes
+        </button>
+      </div>
+    </div>
 
     <div id="loading" class="loading hidden">
       <div class="spinner"></div>
@@ -117,15 +139,11 @@
         <button id="chatScreenshotBtn" class="btn-icon-sm" title="Take screenshot from page">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
-        <button id="chatAttachBtn" class="btn-icon-sm" title="Attach image file">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-        </button>
         <input type="text" id="chatInput" placeholder="Ask about these notes..." autocomplete="off" />
         <button id="chatSendBtn" class="btn-icon-sm btn-send" title="Send">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
         </button>
       </div>
-      <input type="file" id="chatFileInput" accept="image/*" class="hidden" />
     </div>
 
     <!-- Screenshot Crop Overlay -->

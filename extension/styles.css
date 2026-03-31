@@ -60,14 +60,10 @@ body.sidepanel .notes-content {
   flex: 1;
 }
 
-/* Orb */
+/* ===== ORB ===== */
 .orb-container {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: relative;
   pointer-events: none;
-  z-index: 0;
 }
 
 .orb-layer {
@@ -78,25 +74,42 @@ body.sidepanel .notes-content {
   animation: orb-breathe 6s ease-in-out infinite;
 }
 
-.orb-outer {
+/* Hero orb — large, centred during recording */
+.orb-hero {
   width: 200px;
   height: 200px;
-  background: radial-gradient(circle, rgba(74, 124, 89, 0.12) 0%, rgba(74, 124, 89, 0.04) 50%, transparent 70%);
+  margin: 0 auto;
 }
 
-.orb-mid {
+.orb-hero .orb-outer {
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(74, 124, 89, 0.18) 0%, rgba(74, 124, 89, 0.06) 50%, transparent 70%);
+}
+
+.orb-hero .orb-mid {
   width: 120px;
   height: 120px;
-  background: radial-gradient(circle, rgba(74, 124, 89, 0.18) 0%, rgba(74, 124, 89, 0.06) 60%, transparent 75%);
+  background: radial-gradient(circle, rgba(74, 124, 89, 0.25) 0%, rgba(74, 124, 89, 0.08) 60%, transparent 75%);
   animation-delay: 1.5s;
 }
 
-.orb-core {
+.orb-hero .orb-core {
   width: 60px;
   height: 60px;
-  background: radial-gradient(circle, rgba(74, 124, 89, 0.28) 0%, rgba(74, 124, 89, 0.08) 60%, transparent 80%);
-  box-shadow: 0 0 30px 10px rgba(74, 124, 89, 0.1);
+  background: radial-gradient(circle, rgba(74, 124, 89, 0.4) 0%, rgba(74, 124, 89, 0.12) 60%, transparent 80%);
+  box-shadow: 0 0 40px 15px rgba(74, 124, 89, 0.15);
   animation-delay: 0.8s;
+}
+
+/* Recording-active: faster, brighter pulse */
+.orb-recording .orb-layer {
+  animation-name: orb-pulse-active;
+  animation-duration: 2.5s;
+}
+
+.orb-recording .orb-core {
+  box-shadow: 0 0 50px 20px rgba(74, 124, 89, 0.25);
 }
 
 @keyframes orb-breathe {
@@ -104,7 +117,62 @@ body.sidepanel .notes-content {
   50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.85; }
 }
 
-/* Header */
+@keyframes orb-pulse-active {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+  50% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+}
+
+/* ===== RECORDING HERO SECTION ===== */
+.recording-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 0 8px;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.recording-orb-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+}
+
+.recording-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.recording-info-sep {
+  color: var(--text-faint);
+}
+
+#heroTimer {
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--text);
+  letter-spacing: 2px;
+}
+
+.recording-hero-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 0 8px;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== HEADER ===== */
 .header { padding-bottom: 4px; }
 
 .header-top {
