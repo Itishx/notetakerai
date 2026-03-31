@@ -102,13 +102,13 @@ body.sidepanel .notes-content {
 }
 
 @keyframes orb-glow {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 50px 18px rgba(90, 160, 110, 0.35), 0 0 100px 40px rgba(74, 124, 89, 0.15); }
-  50% { transform: scale(1.06); box-shadow: 0 0 65px 25px rgba(90, 160, 110, 0.45), 0 0 120px 50px rgba(74, 124, 89, 0.2); }
+  0%, 100% { transform: scale(0.92); box-shadow: 0 0 30px 10px rgba(90, 160, 110, 0.2), 0 0 60px 25px rgba(74, 124, 89, 0.1); }
+  50% { transform: scale(1.08); box-shadow: 0 0 70px 30px rgba(90, 160, 110, 0.5), 0 0 130px 55px rgba(74, 124, 89, 0.25); }
 }
 
 @keyframes orb-glow-active {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 60px 24px rgba(90, 160, 110, 0.4), 0 0 120px 50px rgba(74, 124, 89, 0.2); }
-  50% { transform: scale(1.1); box-shadow: 0 0 80px 32px rgba(90, 160, 110, 0.5), 0 0 140px 60px rgba(74, 124, 89, 0.25); }
+  0%, 100% { transform: scale(0.9); box-shadow: 0 0 35px 14px rgba(90, 160, 110, 0.25), 0 0 70px 30px rgba(74, 124, 89, 0.12); }
+  50% { transform: scale(1.12); box-shadow: 0 0 90px 38px rgba(90, 160, 110, 0.55), 0 0 160px 70px rgba(74, 124, 89, 0.3); }
 }
 
 /* ===== RECORDING HERO SECTION ===== */
