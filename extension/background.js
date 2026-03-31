@@ -1,6 +1,11 @@
 // Background service worker for LectureSnap (MV3)
 let isRecording = false;
 
+// Open side panel when extension icon is clicked
+chrome.action.onClicked.addListener((tab) => {
+  chrome.sidePanel.open({ windowId: tab.windowId });
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "startRecording") {
     startRecording(message.tabId)
