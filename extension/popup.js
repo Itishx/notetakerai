@@ -598,12 +598,16 @@ chatScreenshotBtn?.addEventListener("click", () => {
 
 cropCanvas?.addEventListener("mousedown", (e) => {
   if (e.target !== cropImage && e.target !== cropCanvas) return;
-  const rect = cropImage.getBoundingClientRect();
+  const canvasRect = cropCanvas.getBoundingClientRect();
+  const imgRect = cropImage.getBoundingClientRect();
   isDragging = true;
-  cropStart = { x: e.clientX, y: e.clientY, imgRect: rect };
+  // Store positions relative to cropCanvas container
+  const relX = e.clientX - canvasRect.left;
+  const relY = e.clientY - canvasRect.top;
+  cropStart = { x: relX, y: relY, canvasRect, imgRect };
   cropSelection.classList.remove("hidden");
-  cropSelection.style.left = e.clientX + "px";
-  cropSelection.style.top = e.clientY + "px";
+  cropSelection.style.left = relX + "px";
+  cropSelection.style.top = relY + "px";
   cropSelection.style.width = "0px";
   cropSelection.style.height = "0px";
   e.preventDefault();
@@ -611,10 +615,13 @@ cropCanvas?.addEventListener("mousedown", (e) => {
 
 document.addEventListener("mousemove", (e) => {
   if (!isDragging || !cropStart) return;
-  const x1 = Math.min(cropStart.x, e.clientX);
-  const y1 = Math.min(cropStart.y, e.clientY);
-  const x2 = Math.max(cropStart.x, e.clientX);
-  const y2 = Math.max(cropStart.y, e.clientY);
+  const canvasRect = cropCanvas.getBoundingClientRect();
+  const relX = e.clientX - canvasRect.left;
+  const relY = e.clientY - canvasRect.top;
+  const x1 = Math.min(cropStart.x, relX);
+  const y1 = Math.min(cropStart.y, relY);
+  const x2 = Math.max(cropStart.x, relX);
+  const y2 = Math.max(cropStart.y, relY);
   cropSelection.style.left = x1 + "px";
   cropSelection.style.top = y1 + "px";
   cropSelection.style.width = (x2 - x1) + "px";
@@ -624,15 +631,20 @@ document.addEventListener("mousemove", (e) => {
 document.addEventListener("mouseup", (e) => {
   if (!isDragging || !cropStart) return;
   isDragging = false;
+  const canvasRect = cropCanvas.getBoundingClientRect();
   const imgRect = cropImage.getBoundingClientRect();
-  const x1 = Math.max(0, Math.min(cropStart.x, e.clientX) - imgRect.left);
-  const y1 = Math.max(0, Math.min(cropStart.y, e.clientY) - imgRect.top);
-  const x2 = Math.min(imgRect.width, Math.max(cropStart.x, e.clientX) - imgRect.left);
-  const y2 = Math.min(imgRect.height, Math.max(cropStart.y, e.clientY) - imgRect.top);
+  const relX = e.clientX - canvasRect.left;
+  const relY = e.clientY - canvasRect.top;
+  // Calculate relative to the image within the canvas
+  const imgOffsetX = imgRect.left - canvasRect.left;
+  const imgOffsetY = imgRect.top - canvasRect.top;
+  const x1 = Math.max(0, Math.min(cropStart.x, relX) - imgOffsetX);
+  const y1 = Math.max(0, Math.min(cropStart.y, relY) - imgOffsetY);
+  const x2 = Math.min(imgRect.width, Math.max(cropStart.x, relX) - imgOffsetX);
+  const y2 = Math.min(imgRect.height, Math.max(cropStart.y, relY) - imgOffsetY);
   const w = x2 - x1;
   const h = y2 - y1;
   if (w > 10 && h > 10) {
-    // Scale to actual image size
     const scaleX = cropImage.naturalWidth / imgRect.width;
     const scaleY = cropImage.naturalHeight / imgRect.height;
     cropRect = {
