@@ -76,39 +76,44 @@ body.sidepanel .notes-content {
 
 /* Hero orb — single filled gradient sphere */
 .orb-hero {
-  width: 160px;
-  height: 160px;
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  display: block;
+  width: 176px;
+  height: 176px;
   margin: 0 auto;
+  flex-shrink: 0;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, rgba(90, 140, 105, 0.45), rgba(74, 124, 89, 0.3) 40%, rgba(61, 107, 78, 0.18) 70%, rgba(44, 62, 45, 0.06) 100%);
-  box-shadow: 0 0 60px 20px rgba(74, 124, 89, 0.12), 0 0 120px 40px rgba(74, 124, 89, 0.06);
+  background: radial-gradient(circle at 35% 30%, rgba(245, 240, 232, 0.32) 0%, rgba(90, 140, 105, 0.58) 16%, rgba(74, 124, 89, 0.9) 44%, rgba(61, 107, 78, 0.98) 74%, rgba(44, 62, 45, 1) 100%);
+  box-shadow: 0 18px 42px rgba(74, 124, 89, 0.18), 0 0 78px rgba(74, 124, 89, 0.14);
   animation: orb-breathe 6s ease-in-out infinite;
 }
 
-/* Hide individual layers — using single filled orb */
 .orb-hero .orb-layer {
   display: none;
 }
 
-/* Recording-active: faster, brighter pulse */
 .orb-recording {
   animation-name: orb-pulse-active !important;
   animation-duration: 2.5s !important;
-  box-shadow: 0 0 70px 25px rgba(74, 124, 89, 0.2), 0 0 140px 50px rgba(74, 124, 89, 0.1) !important;
+  box-shadow: 0 22px 56px rgba(74, 124, 89, 0.22), 0 0 108px rgba(74, 124, 89, 0.16) !important;
 }
 
 @keyframes orb-breathe {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
-  50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.85; }
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.08); opacity: 1; }
 }
 
 @keyframes orb-pulse-active {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
-  50% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+  0%, 100% { transform: scale(1); opacity: 0.88; }
+  50% { transform: scale(1.14); opacity: 1; }
 }
 
 /* ===== RECORDING HERO SECTION ===== */
 .recording-hero {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -118,10 +123,11 @@ body.sidepanel .notes-content {
 }
 
 .recording-orb-area {
+  width: 100%;
+  min-height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 200px;
 }
 
 .recording-info {
@@ -147,9 +153,9 @@ body.sidepanel .notes-content {
 .recording-hero-controls {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
   width: 100%;
-  padding: 0 8px;
+  padding: 8px 8px 0;
 }
 
 @keyframes fadeInUp {
@@ -296,6 +302,12 @@ h1 {
   color: var(--text);
   letter-spacing: 3px;
   padding: 4px 0;
+}
+
+#idleControls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 /* Buttons */
