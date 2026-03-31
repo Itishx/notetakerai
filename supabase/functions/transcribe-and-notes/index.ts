@@ -13,6 +13,11 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
+    const existingNotes = typeof body.existingNotes === "string" ? body.existingNotes : "";
+    const existingImages = body.existingImages && typeof body.existingImages === "object" ? body.existingImages : {};
+    const existingImageKeys = Object.keys(existingImages);
+    const hasExistingNotes = existingNotes.trim().length > 0;
+
     // Support both single audioBase64 (legacy) and audioSegments array
     let segments: string[] = [];
     if (body.audioSegments && Array.isArray(body.audioSegments)) {
@@ -119,18 +124,23 @@ serve(async (req) => {
 
     // Step 2: Convert transcript to notes
     console.log("Generating notes...");
-    const notesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are a precise note-taking assistant. Convert lecture transcripts into well-structured study notes in Markdown format.
+    const notesSystemPrompt = hasExistingNotes
+      ? `You are a precise note-taking assistant. Update the user's existing lecture notes in Markdown using the FULL lecture transcript.
+
+CRITICAL RULE: The transcript is the source of truth. Only include information that was EXPLICITLY stated in the transcript. Do NOT add, infer, elaborate, or expand on anything.
+
+The transcript may contain multiple segments recorded at different times from the same lecture. Treat them as one continuous lecture and produce one unified set of notes.
+
+Important rules:
+- Preserve any existing image placeholders exactly as they appear, such as ${existingImageKeys.length > 0 ? existingImageKeys.join(", ") : "{{EXISTING_IMAGE_1}}"}
+- Do not remove, rename, or duplicate existing image placeholders
+- If the structure changes, keep each placeholder in the closest relevant section
+- Keep the notes concise and easy to study
+- Use clear headings (## and ###) and bullet points
+- Highlight important terms with **bold**
+- Include a "Key Takeaways" section only for content explicitly covered
+- Include a "Glossary" section only if technical terms were actually used`
+      : `You are a precise note-taking assistant. Convert lecture transcripts into well-structured study notes in Markdown format.
 
 CRITICAL RULE: Only include information that was EXPLICITLY stated in the transcript. Do NOT add, infer, elaborate, or expand on anything. If something was said in one sentence, it should be one bullet point — not a paragraph. The notes should be a faithful, condensed reflection of ONLY what was spoken.
 
@@ -145,11 +155,28 @@ Rules:
 - Add a "Glossary" section if technical terms were ACTUALLY used in the transcript
 - If speakers are identified, attribute key points to them
 - Format for easy Notion import (clean Markdown)
-- Short transcript = short notes. Never pad or stretch content.`,
+- Short transcript = short notes. Never pad or stretch content.`;
+
+    const notesUserPrompt = hasExistingNotes
+      ? `Existing lecture notes (for structure and image placement):\n\n${existingNotes}\n\nFull lecture transcript (source of truth):\n\n${combinedTranscript}\n\nUpdate the notes so they reflect the full transcript while preserving every existing image placeholder exactly.`
+      : `Convert this lecture transcript into well-structured study notes:\n\n${combinedTranscript}`;
+
+    const notesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          {
+            role: "system",
+            content: notesSystemPrompt,
           },
           {
             role: "user",
-            content: `Convert this lecture transcript into well-structured study notes:\n\n${combinedTranscript}`,
+            content: notesUserPrompt,
           },
         ],
       }),
@@ -177,7 +204,11 @@ Rules:
     }
 
     const notesData = await notesRes.json();
-    const notes = notesData.choices?.[0]?.message?.content || "No notes generated";
+    let notes = notesData.choices?.[0]?.message?.content || "No notes generated";
+
+    if (existingImageKeys.length > 0) {
+      notes = restoreExistingImages(notes, existingImages as Record<string, string>);
+    }
 
     return new Response(JSON.stringify({ notes, transcript: combinedTranscript }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -190,3 +221,22 @@ Rules:
     });
   }
 });
+
+function restoreExistingImages(markdown: string, existingImages: Record<string, string>) {
+  let restored = markdown;
+  const missingImages: string[] = [];
+
+  for (const [placeholder, imageTag] of Object.entries(existingImages)) {
+    if (restored.includes(placeholder)) {
+      restored = restored.split(placeholder).join(String(imageTag));
+    } else {
+      missingImages.push(String(imageTag));
+    }
+  }
+
+  if (missingImages.length > 0) {
+    restored = `${restored.trim()}\n\n${missingImages.join("\n\n")}`;
+  }
+
+  return restored;
+}

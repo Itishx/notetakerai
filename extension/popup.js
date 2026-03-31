@@ -11,6 +11,8 @@ let chatMessages = [];
 let pendingImageBase64 = null;
 let notionConnectionPoller = null;
 
+const CONVERT_BUTTON_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>';
+
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
 const convertBtn = document.getElementById("convertBtn");
@@ -69,6 +71,17 @@ function renderMarkdown(md) {
   return '<p>' + html + '</p>';
 }
 
+function hasExistingNotes() {
+  return Boolean(notesMarkdown && notesMarkdown.trim());
+}
+
+function updateConvertButtonLabel() {
+  if (!convertBtn) return;
+  convertBtn.innerHTML = `${CONVERT_BUTTON_ICON} ${hasExistingNotes() ? "Update Notes" : "Convert to Notes"}`;
+}
+
+updateConvertButtonLabel();
+
 // Restore session state
 chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessionId"], (data) => {
   if (data.audioSegments && data.audioSegments.length > 0) {
@@ -107,6 +120,8 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     chatSection.classList.remove("hidden");
     loadChatMessages(currentSessionId);
   }
+
+  updateConvertButtonLabel();
 });
 
 recordBtn.addEventListener("click", startRecordingFlow);
@@ -168,6 +183,8 @@ stopBtn.addEventListener("click", () => {
 convertBtn.addEventListener("click", async () => {
   if (audioSegments.length === 0) return;
 
+  const existingNotesContext = hasExistingNotes() ? buildNotesContextForAI(notesMarkdown) : null;
+
   loadingEl.classList.remove("hidden");
   convertBtn.disabled = true;
   if (continueBtn) continueBtn.disabled = true;
@@ -175,10 +192,17 @@ convertBtn.addEventListener("click", async () => {
   statusEl.querySelector("span").textContent = "Processing with AI...";
 
   try {
+    const requestBody = { audioSegments };
+
+    if (existingNotesContext) {
+      requestBody.existingNotes = existingNotesContext.sanitizedNotes;
+      requestBody.existingImages = existingNotesContext.existingImages;
+    }
+
     const response = await fetch(`${API_BASE}/transcribe-and-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audioSegments }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -191,6 +215,7 @@ convertBtn.addEventListener("click", async () => {
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
     chatSection.classList.remove("hidden");
+    updateConvertButtonLabel();
 
     // Persist current notes
     chrome.storage.local.set({ currentNotes: notesMarkdown });
@@ -223,6 +248,7 @@ newSessionBtn?.addEventListener("click", () => {
   notesSection.classList.add("hidden");
   chatSection.classList.add("hidden");
   chatMessagesEl.innerHTML = "";
+  updateConvertButtonLabel();
   updateTimer();
   updateSegmentInfo();
   setIdleUI();
@@ -527,6 +553,7 @@ function setResumeUI() {
   stopBtn.classList.add("hidden");
   if (continueBtn) continueBtn.classList.remove("hidden");
   if (newSessionBtn) newSessionBtn.classList.remove("hidden");
+  updateConvertButtonLabel();
   convertBtn.disabled = false;
   statusEl.className = "status idle";
   const segText = audioSegments.length === 1 ? "1 segment" : `${audioSegments.length} segments`;
@@ -540,6 +567,7 @@ function setIdleUI() {
   stopBtn.classList.add("hidden");
   if (continueBtn) continueBtn.classList.add("hidden");
   if (newSessionBtn) newSessionBtn.classList.add("hidden");
+  updateConvertButtonLabel();
   convertBtn.disabled = true;
   statusEl.className = "status idle";
   statusEl.querySelector("span").textContent = "Ready to record";
@@ -636,6 +664,7 @@ function loadHistory() {
         notesContent.innerHTML = renderMarkdown(notesMarkdown);
         notesSection.classList.remove("hidden");
         chatSection.classList.remove("hidden");
+        updateConvertButtonLabel();
         loadChatMessages(currentSessionId);
         closeHistory();
       });
