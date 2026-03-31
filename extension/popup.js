@@ -180,6 +180,7 @@ convertBtn.addEventListener("click", async () => {
   if (continueBtn) continueBtn.disabled = true;
   statusEl.className = "status processing";
   statusEl.querySelector("span").textContent = "Processing with AI...";
+  setOrbState("processing");
 
   try {
     const requestBody = { audioSegments };
@@ -669,6 +670,31 @@ function updateHistoryBtnVisibility() {
   });
 }
 
+// Orb + label elements
+const orbEl = document.getElementById("orb");
+const orbLabel = document.getElementById("orbLabel");
+const liveTranscript = document.getElementById("liveTranscript");
+
+function setOrbState(state) {
+  if (!orbEl) return;
+  orbEl.className = "orb " + state;
+  if (orbLabel) {
+    if (state === "recording") {
+      orbLabel.className = "orb-label recording-label";
+      orbLabel.textContent = "Recording...";
+      if (liveTranscript) liveTranscript.classList.remove("hidden");
+    } else if (state === "processing") {
+      orbLabel.className = "orb-label";
+      orbLabel.textContent = "Processing...";
+      if (liveTranscript) liveTranscript.classList.add("hidden");
+    } else {
+      orbLabel.className = "orb-label";
+      orbLabel.textContent = "Ready to record";
+      if (liveTranscript) liveTranscript.classList.add("hidden");
+    }
+  }
+}
+
 // ===== UI STATE =====
 function setRecordingUI() {
   recordBtn.classList.add("hidden");
@@ -679,6 +705,7 @@ function setRecordingUI() {
   convertBtn.disabled = true;
   statusEl.className = "status recording";
   statusEl.querySelector("span").textContent = "Recording tab audio...";
+  setOrbState("recording");
 }
 
 function setResumeUI() {
@@ -692,6 +719,10 @@ function setResumeUI() {
   statusEl.className = "status idle";
   const segText = audioSegments.length === 1 ? "1 segment" : `${audioSegments.length} segments`;
   statusEl.querySelector("span").textContent = `Recording paused · ${segText} captured`;
+  setOrbState("idle");
+  if (orbLabel) {
+    orbLabel.textContent = `Paused · ${segText}`;
+  }
 }
 
 function setIdleUI() {
@@ -705,6 +736,7 @@ function setIdleUI() {
   convertBtn.disabled = true;
   statusEl.className = "status idle";
   statusEl.querySelector("span").textContent = "Ready to record";
+  setOrbState("idle");
 }
 
 function startTimer() {
