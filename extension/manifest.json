@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "LectureSnap — AI Lecture Notes",
+  "version": "1.0.0",
+  "description": "Record tab audio from Udemy, DataCamp, YouTube and convert to beautiful AI-powered notes",
+  "permissions": ["activeTab", "tabCapture", "offscreen", "storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
