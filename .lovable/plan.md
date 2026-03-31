@@ -1,79 +1,47 @@
 
 
-## Interactive Chat, History Tab, and Image-to-Notes
+# Sidepanel Recording UI Redesign — Orb-Centric Layout with Transitions
 
-### What's changing
+## What Changes
 
-1. **History moves to a sliding sidebar** — "Previous Notes" leaves the main view. A clock/history icon appears in the header next to "+". Clicking it slides in an overlay listing all past notes. Clicking a note loads it and closes the sidebar.
+The sidepanel will have two visual states with smooth CSS transitions between them:
 
-2. **AI Chat below notes** — Below the notes and copy buttons, a chat thread appears with an input bar: "Ask about these notes..." Messages persist per session in `chrome.storage.local`. The AI receives the current notes as context and answers questions.
+### State 1: Recording Mode (orb is hero)
+- The timer and small controls area at the top collapse/hide
+- A **large centered orb** replaces the timer area, pulsing/glowing while recording
+- Below the orb: small muted text showing duration + segment info (e.g. "00:22 · 1 segment · 22s total")
+- Below that: **Pause & Save Segment** and **Continue Recording** buttons
+- Convert to Notes button below those
 
-3. **Image paste in chat** — Users can paste/drop screenshots into the chat input. The image is sent to the AI along with the notes. The AI returns updated notes with the image embedded as a base64 `<img>` tag at the contextually appropriate location. The notes panel re-renders with the image inline.
+### State 2: Idle / Notes Mode (orb shrinks back)
+- The orb **animates smaller** and moves up to where the timer currently sits (compact size, ~40-50px)
+- Timer text, status bar, and control buttons return to their normal top positions
+- Notes section, chat, Notion sync — all appear below as they currently do
 
-### Architecture
+### Additional
+- Remove the **Attach image file** button (`chatAttachBtn`) from the chat input bar; keep only the screenshot button
+- The orb animation should use CSS transitions (`transition: all 0.5s ease`) for the size/position change between states
 
-```text
-Header: [Logo] [LectureSnap]         [History ☰] [+ New]
+## Technical Approach
 
-Main view:
-  [Status bar] [Timer] [Segment count]
-  [Record / Continue / Stop buttons]
-  [Convert to Notes]
-  [Loading spinner]
-  [Your Notes — rendered markdown with inline images]
-  [Copy Markdown | Copy for Notion]
-  ─── Chat ───
-  [AI bubble] [User bubble] [AI bubble]...
-  [📎 image preview]
-  [Input: "Ask about these notes..." | 📎 | Send]
+### 1. `extension/styles.css` — New orb states + transitions
+- Add `.orb-recording` class: larger size (180-200px area), centered in the main content area
+- Add `.orb-idle` class: small size (~50px), positioned inline where the timer sits
+- Add `transition` properties on `.orb-container` and `.orb-layer` for smooth scaling
+- Add `.recording-mode` body/container class that restructures the layout
+- Style the sub-orb info text (duration + segments)
 
-History overlay (slides from left):
-  [← Back] [All Notes]
-  [Note 1] [Note 2] ...
-  [Clear All]
-```
+### 2. `extension/sidepanel.html` — Restructure layout
+- Wrap the orb in a dedicated recording-hero area that can expand/collapse
+- Add a small text element below the orb for duration/segment info
+- Remove the `chatAttachBtn` button and its associated file input
+- Keep the orb in the header for idle state, but allow it to "grow" into the main area during recording
 
-### Technical Details
+### 3. `extension/popup.js` — Toggle recording layout state
+- In `setRecordingUI()`: add `.recording-mode` class to container, expand orb, hide top controls, show bottom buttons
+- In `setResumeUI()` / `setIdleUI()`: remove `.recording-mode`, shrink orb back, restore normal layout
+- Update timer display to write into the sub-orb text element during recording
+- Remove `chatAttachBtn` and `chatFileInput` references
 
-**New edge function: `supabase/functions/chat-about-notes/index.ts`**
-- Accepts `{ notes, chatHistory, message, imageBase64? }`
-- Uses Lovable AI (Gemini 2.5 Flash) with notes as system context
-- When image is included: sends multimodal content, instructs AI to return the full updated notes markdown with the image embedded as `![description](data:image/png;base64,...)` at the right location
-- Returns `{ reply, updatedNotes? }` — `updatedNotes` only present when an image was processed
-
-**Modified: `extension/sidepanel.html`**
-- Remove `historySection` div from main flow
-- Add history overlay div (absolute positioned, slides in/out)
-- Add history icon button in header
-- Add chat container below notes: message list + input bar with image attach button
-- Add hidden file input for image selection
-
-**Modified: `extension/popup.js`**
-- History overlay toggle logic (open/close)
-- `loadHistory()` renders into the overlay instead of main view
-- Chat state: `chatMessages` array per `currentSessionId`, persisted in `chrome.storage.local`
-- `sendChatMessage(text, imageBase64?)` — calls `chat-about-notes` edge function, appends user+AI messages, re-renders chat
-- If response includes `updatedNotes`, update `notesMarkdown` and re-render notes panel + save to history
-- Paste event listener on chat input to capture clipboard images → convert to base64
-- Image attach button triggers file input → convert to base64
-- `renderMarkdown()` updated to handle `![alt](data:...)` image syntax → `<img>` tags
-
-**Modified: `extension/styles.css`**
-- History overlay: full-height, slides from left, semi-transparent backdrop
-- Chat container: flex column, scrollable message list
-- Chat bubbles: user (right-aligned, green bg) and AI (left-aligned, card bg)
-- Chat input bar: fixed at bottom of chat area, with attach icon
-- Image thumbnails in chat messages
-- Markdown images in notes: max-width 100%, rounded corners
-
-**Repackage: `public/lecturesnap-extension.zip`**
-
-### Steps
-
-1. Create `supabase/functions/chat-about-notes/index.ts`
-2. Update `extension/sidepanel.html` — history overlay + chat UI
-3. Update `extension/popup.js` — history sidebar, chat logic, image handling
-4. Update `extension/styles.css` — new component styles
-5. Update `renderMarkdown()` to support image syntax
-6. Repackage extension ZIP
+### 4. Repackage extension ZIP
 
