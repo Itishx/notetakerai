@@ -1,34 +1,79 @@
 
 
-## Side Panel Extension
+## Interactive Chat, History Tab, and Image-to-Notes
 
-Chrome Manifest V3 supports a **Side Panel API** — this is exactly what you need. Instead of opening as a small popup dropdown, the extension will open as a full-height panel docked to the right side of the browser, giving you plenty of room for notes without scrolling.
+### What's changing
 
-### How it works
+1. **History moves to a sliding sidebar** — "Previous Notes" leaves the main view. A clock/history icon appears in the header next to "+". Clicking it slides in an overlay listing all past notes. Clicking a note loads it and closes the sidebar.
 
-The Side Panel API lets extensions display content in a panel that occupies the full right side of the browser window (similar to how Chrome's bookmarks or reading list panel works). Users click the extension icon and it opens/toggles the side panel instead of a popup.
+2. **AI Chat below notes** — Below the notes and copy buttons, a chat thread appears with an input bar: "Ask about these notes..." Messages persist per session in `chrome.storage.local`. The AI receives the current notes as context and answers questions.
 
-### Changes required
+3. **Image paste in chat** — Users can paste/drop screenshots into the chat input. The image is sent to the AI along with the notes. The AI returns updated notes with the image embedded as a base64 `<img>` tag at the contextually appropriate location. The notes panel re-renders with the image inline.
 
-**1. Update `extension/manifest.json`**
-- Add `"sidePanel"` permission
-- Add a `"side_panel"` config block pointing to `sidepanel.html`
-- Remove `"default_popup"` from the action (so clicking the icon opens the side panel instead)
+### Architecture
 
-**2. Create `extension/sidepanel.html`**
-- Same content as current `popup.html` but optimized for the taller, narrower layout
+```text
+Header: [Logo] [LectureSnap]         [History ☰] [+ New]
 
-**3. Update `extension/styles.css`**
-- Change `body` width from fixed `520px` to `100%` so it fills the panel
-- Adjust `min-height` to `100vh` to use full vertical space
-- Make the notes content area expand to fill available space using flexbox
+Main view:
+  [Status bar] [Timer] [Segment count]
+  [Record / Continue / Stop buttons]
+  [Convert to Notes]
+  [Loading spinner]
+  [Your Notes — rendered markdown with inline images]
+  [Copy Markdown | Copy for Notion]
+  ─── Chat ───
+  [AI bubble] [User bubble] [AI bubble]...
+  [📎 image preview]
+  [Input: "Ask about these notes..." | 📎 | Send]
 
-**4. Update `extension/background.js`**
-- Add logic to open the side panel when the extension icon is clicked via `chrome.sidePanel.open()`
-- Use `chrome.action.onClicked` listener (works because we removed the popup)
+History overlay (slides from left):
+  [← Back] [All Notes]
+  [Note 1] [Note 2] ...
+  [Clear All]
+```
 
-**5. Repackage the extension ZIP**
+### Technical Details
 
-### Result
-Clicking the extension icon will open a full-height panel on the right side of the browser. All controls, timer, notes, and history will be visible without scrolling. The popup fallback is removed since the side panel is strictly better for this use case.
+**New edge function: `supabase/functions/chat-about-notes/index.ts`**
+- Accepts `{ notes, chatHistory, message, imageBase64? }`
+- Uses Lovable AI (Gemini 2.5 Flash) with notes as system context
+- When image is included: sends multimodal content, instructs AI to return the full updated notes markdown with the image embedded as `![description](data:image/png;base64,...)` at the right location
+- Returns `{ reply, updatedNotes? }` — `updatedNotes` only present when an image was processed
+
+**Modified: `extension/sidepanel.html`**
+- Remove `historySection` div from main flow
+- Add history overlay div (absolute positioned, slides in/out)
+- Add history icon button in header
+- Add chat container below notes: message list + input bar with image attach button
+- Add hidden file input for image selection
+
+**Modified: `extension/popup.js`**
+- History overlay toggle logic (open/close)
+- `loadHistory()` renders into the overlay instead of main view
+- Chat state: `chatMessages` array per `currentSessionId`, persisted in `chrome.storage.local`
+- `sendChatMessage(text, imageBase64?)` — calls `chat-about-notes` edge function, appends user+AI messages, re-renders chat
+- If response includes `updatedNotes`, update `notesMarkdown` and re-render notes panel + save to history
+- Paste event listener on chat input to capture clipboard images → convert to base64
+- Image attach button triggers file input → convert to base64
+- `renderMarkdown()` updated to handle `![alt](data:...)` image syntax → `<img>` tags
+
+**Modified: `extension/styles.css`**
+- History overlay: full-height, slides from left, semi-transparent backdrop
+- Chat container: flex column, scrollable message list
+- Chat bubbles: user (right-aligned, green bg) and AI (left-aligned, card bg)
+- Chat input bar: fixed at bottom of chat area, with attach icon
+- Image thumbnails in chat messages
+- Markdown images in notes: max-width 100%, rounded corners
+
+**Repackage: `public/lecturesnap-extension.zip`**
+
+### Steps
+
+1. Create `supabase/functions/chat-about-notes/index.ts`
+2. Update `extension/sidepanel.html` — history overlay + chat UI
+3. Update `extension/popup.js` — history sidebar, chat logic, image handling
+4. Update `extension/styles.css` — new component styles
+5. Update `renderMarkdown()` to support image syntax
+6. Repackage extension ZIP
 
