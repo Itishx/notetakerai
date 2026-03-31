@@ -53,45 +53,36 @@ const Index = () => {
     <div className="min-h-screen bg-background selection:bg-primary/20">
       {/* Hero */}
       <section className="relative overflow-hidden">
-        {/* Glowing orb */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-          {/* Outer glow */}
-          <div
-            className="absolute top-1/2 left-1/2 w-[500px] h-[500px] rounded-full animate-breathe"
-            style={{
-              background: 'radial-gradient(circle, hsl(160 25% 38% / 0.12) 0%, hsl(160 25% 38% / 0.04) 50%, transparent 70%)',
-            }}
-          />
-          {/* Mid ring */}
-          <div
-            className="absolute top-1/2 left-1/2 w-[300px] h-[300px] rounded-full animate-breathe"
-            style={{
-              animationDelay: '1.5s',
-              background: 'radial-gradient(circle, hsl(160 25% 38% / 0.15) 0%, hsl(160 25% 38% / 0.05) 60%, transparent 75%)',
-            }}
-          />
-          {/* Core orb */}
-          <div
-            className="absolute top-1/2 left-1/2 w-[140px] h-[140px] rounded-full animate-breathe"
-            style={{
-              animationDelay: '0.8s',
-              background: 'radial-gradient(circle, hsl(160 25% 38% / 0.25) 0%, hsl(160 25% 38% / 0.08) 60%, transparent 80%)',
-              boxShadow: '0 0 60px 20px hsl(160 25% 38% / 0.1)',
-            }}
-          />
-        </div>
-
         <div className="container relative mx-auto px-6 pt-28 pb-24 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-5 py-2 text-sm text-muted-foreground mb-8 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
             <Leaf className="w-3.5 h-3.5 text-primary" />
             Simple · Focused · Free
           </div>
 
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-normal tracking-tight text-foreground max-w-3xl mx-auto leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            Let your lectures
-            <br />
-            <em className="text-primary not-italic">become notes</em>
-          </h1>
+          {/* Headlines with orb behind */}
+          <div className="relative">
+            {/* Orb */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+              <div
+                className="absolute top-1/2 left-1/2 w-[500px] h-[500px] rounded-full animate-breathe"
+                style={{ background: 'radial-gradient(circle, hsl(160 25% 38% / 0.12) 0%, hsl(160 25% 38% / 0.04) 50%, transparent 70%)' }}
+              />
+              <div
+                className="absolute top-1/2 left-1/2 w-[300px] h-[300px] rounded-full animate-breathe"
+                style={{ animationDelay: '1.5s', background: 'radial-gradient(circle, hsl(160 25% 38% / 0.15) 0%, hsl(160 25% 38% / 0.05) 60%, transparent 75%)' }}
+              />
+              <div
+                className="absolute top-1/2 left-1/2 w-[140px] h-[140px] rounded-full animate-breathe"
+                style={{ animationDelay: '0.8s', background: 'radial-gradient(circle, hsl(160 25% 38% / 0.25) 0%, hsl(160 25% 38% / 0.08) 60%, transparent 80%)', boxShadow: '0 0 60px 20px hsl(160 25% 38% / 0.1)' }}
+              />
+            </div>
+
+            <h1 className="relative z-10 text-4xl md:text-6xl lg:text-7xl font-normal tracking-tight text-foreground max-w-3xl mx-auto leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
+              Let your lectures
+              <br />
+              <em className="text-primary not-italic">become notes</em>
+            </h1>
+          </div>
 
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-lg mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
             Record. Transcribe. Organize. A calm tool that turns any online lecture into beautifully structured study notes.

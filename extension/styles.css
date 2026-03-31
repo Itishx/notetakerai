@@ -60,6 +60,50 @@ body.sidepanel .notes-content {
   flex: 1;
 }
 
+/* Orb */
+.orb-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.orb-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  animation: orb-breathe 6s ease-in-out infinite;
+}
+
+.orb-outer {
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(74, 124, 89, 0.12) 0%, rgba(74, 124, 89, 0.04) 50%, transparent 70%);
+}
+
+.orb-mid {
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(74, 124, 89, 0.18) 0%, rgba(74, 124, 89, 0.06) 60%, transparent 75%);
+  animation-delay: 1.5s;
+}
+
+.orb-core {
+  width: 60px;
+  height: 60px;
+  background: radial-gradient(circle, rgba(74, 124, 89, 0.28) 0%, rgba(74, 124, 89, 0.08) 60%, transparent 80%);
+  box-shadow: 0 0 30px 10px rgba(74, 124, 89, 0.1);
+  animation-delay: 0.8s;
+}
+
+@keyframes orb-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+  50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.85; }
+}
+
 /* Header */
 .header { padding-bottom: 4px; }
 
