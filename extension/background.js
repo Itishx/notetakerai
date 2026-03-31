@@ -1,10 +1,10 @@
 // Background service worker for LectureSnap (MV3)
 let isRecording = false;
 
-// Open side panel when extension icon is clicked and store the active tab
-chrome.action.onClicked.addListener(async (tab) => {
-  // Store the current tab ID so the side panel can use it for recording
-  await chrome.storage.local.set({ activeTabId: tab.id });
+// Open side panel when extension icon is clicked
+chrome.action.onClicked.addListener((tab) => {
+  // Store tab ID asynchronously — don't await before opening side panel
+  chrome.storage.local.set({ activeTabId: tab.id });
   chrome.sidePanel.open({ windowId: tab.windowId });
 });
 
