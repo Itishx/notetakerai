@@ -23,6 +23,37 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "getStreamId") {
+    // Get stream ID from the background, which has broader permissions
+    const targetTabId = message.tabId;
+    if (!targetTabId) {
+      // Use the currently active tab
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const tab = tabs?.[0];
+        if (!tab?.id) {
+          sendResponse({ error: "No active tab found" });
+          return;
+        }
+        chrome.storage.local.set({ activeTabId: tab.id });
+        chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (streamId) => {
+          if (chrome.runtime.lastError || !streamId) {
+            sendResponse({ error: chrome.runtime.lastError?.message || "Failed to get stream" });
+          } else {
+            sendResponse({ streamId });
+          }
+        });
+      });
+    } else {
+      chrome.tabCapture.getMediaStreamId({ targetTabId: targetTabId }, (streamId) => {
+        if (chrome.runtime.lastError || !streamId) {
+          sendResponse({ error: chrome.runtime.lastError?.message || "Failed to get stream" });
+        } else {
+          sendResponse({ streamId });
+        }
+      });
+    }
+    return true;
+  }
   if (message.action === "startRecording") {
     startRecording(message.tabId)
       .then(() => sendResponse({ success: true }))

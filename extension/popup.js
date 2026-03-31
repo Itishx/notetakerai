@@ -120,31 +120,34 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
 recordBtn.addEventListener("click", startRecordingFlow);
 continueBtn?.addEventListener("click", startRecordingFlow);
 
-function startRecordingFlow() {
-  const tabId = trackedActiveTabId;
+async function startRecordingFlow() {
+  try {
+    // Route through background script which has broader tabCapture permissions
+    const response = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: "getStreamId", tabId: trackedActiveTabId || undefined },
+        (res) => resolve(res)
+      );
+    });
 
-  if (!tabId) {
-    alert("No active page found. Click the extension icon on the page you want to record, then try again.");
-    return;
-  }
-
-  chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, async (streamId) => {
-    const runtimeError = chrome.runtime.lastError;
-    if (runtimeError || !streamId) {
-      handleRecordingStartError(runtimeError?.message || "Failed to start tab capture");
+    if (response?.error) {
+      handleRecordingStartError(response.error);
       return;
     }
 
-    try {
-      await beginLocalRecording(streamId);
-      seconds = 0;
-      setRecordingUI();
-      updateTimer();
-      startTimer();
-    } catch (e) {
-      handleRecordingStartError(e instanceof Error ? e.message : "Failed to start recording");
+    if (!response?.streamId) {
+      handleRecordingStartError("Failed to get audio stream");
+      return;
     }
-  });
+
+    await beginLocalRecording(response.streamId);
+    seconds = 0;
+    setRecordingUI();
+    updateTimer();
+    startTimer();
+  } catch (e) {
+    handleRecordingStartError(e instanceof Error ? e.message : "Failed to start recording");
+  }
 }
 
 stopBtn.addEventListener("click", async () => {
