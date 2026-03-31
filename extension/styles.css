@@ -293,3 +293,15 @@ h1 {
   color: var(--text-faint);
   letter-spacing: 0.5px;
 }
+
+/* History section */
+.history-section { margin-top: 4px; }
+.history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.history-header h2 { font-size: 16px; font-weight: 400; color: var(--text); }
+.btn-clear { background: none; border: none; color: var(--text-faint); font-size: 11px; cursor: pointer; font-family: 'Charter', 'Georgia', serif; }
+.btn-clear:hover { color: var(--danger); }
+.history-list { display: flex; flex-direction: column; gap: 6px; }
+.history-item { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all 0.2s ease; }
+.history-item:hover { background: var(--bg-input); border-color: var(--primary); }
+.history-meta { font-size: 11px; color: var(--text-faint); margin-bottom: 2px; }
+.history-preview { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
