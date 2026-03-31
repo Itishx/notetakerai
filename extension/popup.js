@@ -14,7 +14,8 @@ const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
 const convertBtn = document.getElementById("convertBtn");
 const copyBtn = document.getElementById("copyBtn");
-const copyNotionBtn = document.getElementById("copyNotionBtn");
+const syncNotionBtn = document.getElementById("syncNotionBtn");
+const syncNotionLabel = document.getElementById("syncNotionLabel");
 const statusEl = document.getElementById("status");
 const timerEl = document.getElementById("timer");
 const loadingEl = document.getElementById("loading");
@@ -233,11 +234,125 @@ copyBtn.addEventListener("click", () => {
   });
 });
 
-copyNotionBtn.addEventListener("click", () => {
-  navigator.clipboard.writeText(notesMarkdown).then(() => {
-    copyNotionBtn.textContent = "Copied for Notion!";
-    setTimeout(() => { copyNotionBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M9 4v16"/><path d="M14 10l-5 4"/></svg> Copy for Notion'; }, 1500);
+// ===== NOTION SYNC =====
+function getNotionUserId() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get("notionUserId", (data) => {
+      if (data.notionUserId) {
+        resolve(data.notionUserId);
+      } else {
+        const id = "user_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+        chrome.storage.local.set({ notionUserId: id });
+        resolve(id);
+      }
+    });
   });
+}
+
+function checkNotionConnection() {
+  chrome.storage.local.get("notionConnected", (data) => {
+    if (data.notionConnected) {
+      if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
+    } else {
+      if (syncNotionLabel) syncNotionLabel.textContent = "Connect Notion";
+    }
+  });
+}
+
+checkNotionConnection();
+
+syncNotionBtn?.addEventListener("click", async () => {
+  const userId = await getNotionUserId();
+  
+  // Check if connected
+  const data = await new Promise((resolve) => chrome.storage.local.get("notionConnected", resolve));
+  
+  if (!data.notionConnected) {
+    // Start OAuth flow
+    syncNotionBtn.disabled = true;
+    if (syncNotionLabel) syncNotionLabel.textContent = "Connecting...";
+    
+    try {
+      const res = await fetch(`${API_BASE}/notion-oauth-start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIdentifier: userId }),
+      });
+      
+      if (!res.ok) throw new Error("Failed to start OAuth");
+      const { authUrl } = await res.json();
+      
+      // Open OAuth in new tab
+      chrome.tabs.create({ url: authUrl });
+      
+      // Mark as connected after a delay (user will complete OAuth in the tab)
+      // We'll poll or just set it when they come back
+      chrome.storage.local.set({ notionConnected: true });
+      setTimeout(() => {
+        if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
+        syncNotionBtn.disabled = false;
+      }, 2000);
+    } catch (e) {
+      alert("Failed to connect Notion: " + e.message);
+      if (syncNotionLabel) syncNotionLabel.textContent = "Connect Notion";
+      syncNotionBtn.disabled = false;
+    }
+    return;
+  }
+  
+  // Sync notes to Notion
+  if (!notesMarkdown) {
+    alert("No notes to sync!");
+    return;
+  }
+  
+  syncNotionBtn.disabled = true;
+  if (syncNotionLabel) syncNotionLabel.textContent = "Syncing...";
+  
+  try {
+    // Extract title from notes
+    const titleMatch = notesMarkdown.match(/^#\s+(.+)$/m);
+    const title = titleMatch ? titleMatch[1] : "LectureSnap Notes";
+    
+    const res = await fetch(`${API_BASE}/sync-to-notion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userIdentifier: userId,
+        title,
+        markdown: notesMarkdown,
+      }),
+    });
+    
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      if (errData.error?.includes("not connected")) {
+        chrome.storage.local.set({ notionConnected: false });
+        checkNotionConnection();
+        alert("Notion not connected. Please click 'Connect Notion' first.");
+      } else {
+        throw new Error(errData.error || "Sync failed");
+      }
+      return;
+    }
+    
+    const result = await res.json();
+    if (syncNotionLabel) syncNotionLabel.textContent = "Synced! ✓";
+    
+    // Open the Notion page
+    if (result.url) {
+      chrome.tabs.create({ url: result.url });
+    }
+    
+    setTimeout(() => {
+      if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
+    }, 2000);
+  } catch (e) {
+    alert("Sync failed: " + e.message);
+    if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
+  } finally {
+    syncNotionBtn.disabled = false;
+  }
 });
 
 // ===== HISTORY OVERLAY =====
