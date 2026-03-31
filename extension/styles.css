@@ -29,8 +29,8 @@
 }
 
 body {
-  width: 340px;
-  min-height: 400px;
+  width: 520px;
+  min-height: 500px;
   background: var(--bg);
   color: var(--text);
   font-family: 'Charter', 'Georgia', serif;
