@@ -13,9 +13,13 @@ function doCapture(windowId, sendResponse) {
 
 // Open side panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
-  // Store tab ID asynchronously — don't await before opening side panel
   chrome.storage.local.set({ activeTabId: tab.id });
   chrome.sidePanel.open({ windowId: tab.windowId });
+});
+
+// Auto-update activeTabId when user switches tabs
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  chrome.storage.local.set({ activeTabId: tabId });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
