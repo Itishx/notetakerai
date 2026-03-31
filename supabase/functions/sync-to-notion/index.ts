@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { userIdentifier, title, markdown } = await req.json();
+    const { userIdentifier, title, markdown, notionPageId, images } = await req.json();
 
     if (!userIdentifier || !markdown) {
       return new Response(JSON.stringify({ error: "userIdentifier and markdown required" }), {
@@ -47,11 +47,95 @@ serve(async (req) => {
 
     const accessToken = conn.access_token;
 
-    // Convert markdown to Notion blocks
-    const blocks = markdownToNotionBlocks(markdown);
+    // Upload base64 images to storage and get public URLs
+    const imageUrlMap: Record<string, string> = {};
+    if (images && Array.isArray(images)) {
+      for (const img of images) {
+        if (img.base64 && img.id) {
+          try {
+            const binary = Uint8Array.from(atob(img.base64), c => c.charCodeAt(0));
+            const filePath = `${userIdentifier}/${img.id}.png`;
+            await supabase.storage.from("note-images").upload(filePath, binary, {
+              contentType: "image/png",
+              upsert: true,
+            });
+            const { data: urlData } = supabase.storage.from("note-images").getPublicUrl(filePath);
+            if (urlData?.publicUrl) {
+              imageUrlMap[img.id] = urlData.publicUrl;
+            }
+          } catch (e) {
+            console.error("Image upload error:", e);
+          }
+        }
+      }
+    }
 
-    // Search for a page to use as parent, or use the first available page
-    // First try to find accessible pages
+    // Convert markdown to Notion blocks, replacing base64 images with public URLs
+    const blocks = markdownToNotionBlocks(markdown, imageUrlMap);
+
+    // If we have an existing page ID, update it instead of creating new
+    if (notionPageId) {
+      // Delete existing children first
+      const childrenRes = await fetch(`https://api.notion.com/v1/blocks/${notionPageId}/children?page_size=100`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Notion-Version": "2022-06-28",
+        },
+      });
+
+      if (childrenRes.ok) {
+        const childrenData = await childrenRes.json();
+        // Delete each existing block
+        for (const block of childrenData.results || []) {
+          await fetch(`https://api.notion.com/v1/blocks/${block.id}`, {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Notion-Version": "2022-06-28",
+            },
+          });
+        }
+      }
+
+      // Append new blocks in chunks of 100
+      for (let i = 0; i < blocks.length; i += 100) {
+        const chunk = blocks.slice(i, i + 100);
+        await fetch(`https://api.notion.com/v1/blocks/${notionPageId}/children`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ children: chunk }),
+        });
+      }
+
+      // Update title
+      try {
+        await fetch(`https://api.notion.com/v1/pages/${notionPageId}`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            properties: {
+              title: { title: [{ text: { content: title || "LectureSnap Notes" } }] },
+            },
+          }),
+        });
+      } catch {
+        // Title update is best-effort
+      }
+
+      return new Response(JSON.stringify({ success: true, pageId: notionPageId, message: "Notes updated in Notion" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // First sync: find parent and create new page
     const searchRes = await fetch("https://api.notion.com/v1/search", {
       method: "POST",
       headers: {
@@ -72,7 +156,6 @@ serve(async (req) => {
       }
     }
 
-    // If no page found, try databases
     if (!parentId) {
       const dbSearchRes = await fetch("https://api.notion.com/v1/search", {
         method: "POST",
@@ -83,7 +166,6 @@ serve(async (req) => {
         },
         body: JSON.stringify({ filter: { property: "object", value: "database" }, page_size: 1 }),
       });
-
       if (dbSearchRes.ok) {
         const dbData = await dbSearchRes.json();
         if (dbData.results?.length > 0) {
@@ -94,19 +176,18 @@ serve(async (req) => {
     }
 
     if (!parentId) {
-      return new Response(JSON.stringify({ error: "No accessible Notion pages found. Make sure you've shared at least one page with the integration." }), {
+      return new Response(JSON.stringify({ error: "No accessible Notion pages found. Share at least one page with the integration." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Create the page
     const pagePayload: any = {
       parent: { [parentType]: parentId },
       properties: parentType === "page_id"
         ? { title: { title: [{ text: { content: title || "LectureSnap Notes" } }] } }
         : { Name: { title: [{ text: { content: title || "LectureSnap Notes" } }] } },
-      children: blocks.slice(0, 100), // Notion limit: 100 blocks per request
+      children: blocks.slice(0, 100),
     };
 
     const createRes = await fetch("https://api.notion.com/v1/pages", {
@@ -122,8 +203,7 @@ serve(async (req) => {
     if (!createRes.ok) {
       const errText = await createRes.text();
       console.error("Notion create page error:", errText);
-      
-      // If the property name doesn't work, try with "title" property for databases
+
       if (parentType === "database_id" && errText.includes("Name")) {
         pagePayload.properties = { title: { title: [{ text: { content: title || "LectureSnap Notes" } }] } };
         const retryRes = await fetch("https://api.notion.com/v1/pages", {
@@ -142,7 +222,8 @@ serve(async (req) => {
           });
         }
         const retryData = await retryRes.json();
-        return new Response(JSON.stringify({ success: true, url: retryData.url }), {
+        if (blocks.length > 100) await appendRemainingBlocks(retryData.id, blocks, accessToken);
+        return new Response(JSON.stringify({ success: true, url: retryData.url, pageId: retryData.id, message: "Notes synced to Notion" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -154,25 +235,9 @@ serve(async (req) => {
     }
 
     const pageData = await createRes.json();
+    if (blocks.length > 100) await appendRemainingBlocks(pageData.id, blocks, accessToken);
 
-    // If more than 100 blocks, append the rest
-    if (blocks.length > 100) {
-      const pageId = pageData.id;
-      for (let i = 100; i < blocks.length; i += 100) {
-        const chunk = blocks.slice(i, i + 100);
-        await fetch(`https://api.notion.com/v1/blocks/${pageId}/children`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ children: chunk }),
-        });
-      }
-    }
-
-    return new Response(JSON.stringify({ success: true, url: pageData.url }), {
+    return new Response(JSON.stringify({ success: true, url: pageData.url, pageId: pageData.id, message: "Notes synced to Notion" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
@@ -184,84 +249,121 @@ serve(async (req) => {
   }
 });
 
-function markdownToNotionBlocks(md: string): any[] {
+async function appendRemainingBlocks(pageId: string, blocks: any[], accessToken: string) {
+  for (let i = 100; i < blocks.length; i += 100) {
+    const chunk = blocks.slice(i, i + 100);
+    await fetch(`https://api.notion.com/v1/blocks/${pageId}/children`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ children: chunk }),
+    });
+  }
+}
+
+function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>): any[] {
   const blocks: any[] = [];
   const lines = md.split("\n");
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-
-    // Skip empty lines
     if (!line.trim()) continue;
 
-    // Skip HTML img tags (can't embed base64 images in Notion)
-    if (line.trim().startsWith("<img")) continue;
+    // Handle markdown images: ![alt](src)
+    const imgMatch = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+    if (imgMatch) {
+      let imgUrl = imgMatch[2];
+      // Check if it's a base64 data URL - look up in imageUrlMap
+      if (imgUrl.startsWith("data:")) {
+        // Try to find a matching public URL from our uploaded images
+        const matchingUrl = Object.values(imageUrlMap).find(u => u);
+        if (matchingUrl) {
+          imgUrl = matchingUrl;
+        } else {
+          continue; // Skip base64 images we couldn't upload
+        }
+      }
+      // Check if it matches an image ID in the map
+      for (const [id, url] of Object.entries(imageUrlMap)) {
+        if (imgUrl.includes(id)) {
+          imgUrl = url;
+          break;
+        }
+      }
+      if (imgUrl.startsWith("http")) {
+        blocks.push({
+          object: "block",
+          type: "image",
+          image: { type: "external", external: { url: imgUrl } },
+        });
+      }
+      continue;
+    }
+
+    // Skip standalone HTML img tags
+    if (line.trim().startsWith("<img")) {
+      // Try to extract src and find in imageUrlMap
+      const srcMatch = line.match(/src="([^"]+)"/);
+      if (srcMatch) {
+        let imgUrl = srcMatch[1];
+        if (imgUrl.startsWith("data:")) {
+          const matchingUrl = Object.values(imageUrlMap).find(u => u);
+          if (matchingUrl) {
+            blocks.push({
+              object: "block",
+              type: "image",
+              image: { type: "external", external: { url: matchingUrl } },
+            });
+          }
+        } else if (imgUrl.startsWith("http")) {
+          blocks.push({
+            object: "block",
+            type: "image",
+            image: { type: "external", external: { url: imgUrl } },
+          });
+        }
+      }
+      continue;
+    }
 
     // Headings
     const h1 = line.match(/^# (.+)/);
     if (h1) {
-      blocks.push({
-        object: "block",
-        type: "heading_1",
-        heading_1: { rich_text: parseRichText(h1[1]) },
-      });
+      blocks.push({ object: "block", type: "heading_1", heading_1: { rich_text: parseRichText(h1[1]) } });
       continue;
     }
-
     const h2 = line.match(/^## (.+)/);
     if (h2) {
-      blocks.push({
-        object: "block",
-        type: "heading_2",
-        heading_2: { rich_text: parseRichText(h2[1]) },
-      });
+      blocks.push({ object: "block", type: "heading_2", heading_2: { rich_text: parseRichText(h2[1]) } });
       continue;
     }
-
     const h3 = line.match(/^### (.+)/);
     if (h3) {
-      blocks.push({
-        object: "block",
-        type: "heading_3",
-        heading_3: { rich_text: parseRichText(h3[1]) },
-      });
+      blocks.push({ object: "block", type: "heading_3", heading_3: { rich_text: parseRichText(h3[1]) } });
       continue;
     }
 
-    // Horizontal rule
     if (line.trim() === "---") {
       blocks.push({ object: "block", type: "divider", divider: {} });
       continue;
     }
 
-    // Bullet list
     const bullet = line.match(/^[-*]\s+(.+)/);
     if (bullet) {
-      blocks.push({
-        object: "block",
-        type: "bulleted_list_item",
-        bulleted_list_item: { rich_text: parseRichText(bullet[1]) },
-      });
+      blocks.push({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: parseRichText(bullet[1]) } });
       continue;
     }
 
-    // Blockquote
     const quote = line.match(/^>\s+(.+)/);
     if (quote) {
-      blocks.push({
-        object: "block",
-        type: "quote",
-        quote: { rich_text: parseRichText(quote[1]) },
-      });
+      blocks.push({ object: "block", type: "quote", quote: { rich_text: parseRichText(quote[1]) } });
       continue;
     }
 
-    // Regular paragraph
-    blocks.push({
-      object: "block",
-      type: "paragraph",
-      paragraph: { rich_text: parseRichText(line) },
-    });
+    blocks.push({ object: "block", type: "paragraph", paragraph: { rich_text: parseRichText(line) } });
   }
 
   return blocks;
@@ -269,21 +371,16 @@ function markdownToNotionBlocks(md: string): any[] {
 
 function parseRichText(text: string): any[] {
   const parts: any[] = [];
-  // Simple bold/italic parsing
   const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|([^*]+))/g;
   let match;
-
   while ((match = regex.exec(text)) !== null) {
     if (match[2]) {
-      // Bold
       parts.push({ type: "text", text: { content: match[2] }, annotations: { bold: true } });
     } else if (match[3]) {
-      // Italic
       parts.push({ type: "text", text: { content: match[3] }, annotations: { italic: true } });
     } else if (match[4]) {
       parts.push({ type: "text", text: { content: match[4] } });
     }
   }
-
   return parts.length > 0 ? parts : [{ type: "text", text: { content: text } }];
 }
