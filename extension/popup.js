@@ -6,6 +6,7 @@ let timerInterval = null;
 let seconds = 0;
 let totalRecordedSeconds = 0; // Total across all segments
 let notesMarkdown = "";
+let currentSessionId = null;
 
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
@@ -55,10 +56,11 @@ function renderMarkdown(md) {
 }
 
 // Restore session state (segments persisted across side panel reopens)
-chrome.storage.local.get(["audioSegments", "totalRecordedSeconds"], (data) => {
+chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessionId"], (data) => {
   if (data.audioSegments && data.audioSegments.length > 0) {
     audioSegments = data.audioSegments;
     totalRecordedSeconds = data.totalRecordedSeconds || 0;
+    currentSessionId = data.currentSessionId || null;
     updateSegmentInfo();
     setResumeUI();
   }
@@ -192,7 +194,8 @@ newSessionBtn?.addEventListener("click", () => {
   totalRecordedSeconds = 0;
   seconds = 0;
   notesMarkdown = "";
-  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds"]);
+  currentSessionId = null;
+  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId"]);
   notesSection.classList.add("hidden");
   updateTimer();
   updateSegmentInfo();
@@ -295,11 +298,28 @@ function formatTime(secs) {
 function saveToHistory(markdown) {
   chrome.storage.local.get("notesHistory", (data) => {
     const history = data.notesHistory || [];
-    history.unshift({
-      notes: markdown,
-      date: new Date().toISOString(),
-      id: Date.now(),
-    });
+
+    if (currentSessionId) {
+      // Update existing entry for this session
+      const idx = history.findIndex((e) => e.id === currentSessionId);
+      if (idx !== -1) {
+        history[idx].notes = markdown;
+        history[idx].date = new Date().toISOString();
+      } else {
+        // Session ID exists but entry was deleted — create new
+        const newId = Date.now();
+        currentSessionId = newId;
+        chrome.storage.local.set({ currentSessionId });
+        history.unshift({ notes: markdown, date: new Date().toISOString(), id: newId });
+      }
+    } else {
+      // First conversion in this session — create new entry
+      const newId = Date.now();
+      currentSessionId = newId;
+      chrome.storage.local.set({ currentSessionId });
+      history.unshift({ notes: markdown, date: new Date().toISOString(), id: newId });
+    }
+
     if (history.length > 20) history.pop();
     chrome.storage.local.set({ notesHistory: history }, () => {
       loadHistory();
