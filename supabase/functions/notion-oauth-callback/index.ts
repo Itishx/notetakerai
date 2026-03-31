@@ -131,8 +131,12 @@ function renderHTML(success: boolean, message: string): string {
     <a href="#" class="button" onclick="window.close(); return false;">Return to LectureSnap</a>
   </div>
   <script>
+    // Try to close immediately, then retry aggressively
     if (${success ? "true" : "false"}) {
-      setTimeout(() => window.close(), 1200);
+      window.close();
+      setTimeout(() => window.close(), 500);
+      setTimeout(() => window.close(), 1500);
+      setTimeout(() => { document.body.innerHTML = '<div style="text-align:center;padding:60px;font-family:Georgia,serif;color:#2c3e2d"><h2>✅ Connected!</h2><p>You can close this tab and return to LectureSnap.</p></div>'; }, 2000);
     }
   </script>
 </body>
