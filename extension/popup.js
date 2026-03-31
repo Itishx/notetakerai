@@ -1,12 +1,14 @@
 // LectureSnap Popup Controller
 const API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
-let audioSegments = []; // Array of base64 audio chunks for current session
+let audioSegments = [];
 let timerInterval = null;
 let seconds = 0;
-let totalRecordedSeconds = 0; // Total across all segments
+let totalRecordedSeconds = 0;
 let notesMarkdown = "";
 let currentSessionId = null;
+let chatMessages = [];
+let pendingImageBase64 = null;
 
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
@@ -18,32 +20,42 @@ const timerEl = document.getElementById("timer");
 const loadingEl = document.getElementById("loading");
 const notesSection = document.getElementById("notesSection");
 const notesContent = document.getElementById("notesContent");
-const historySection = document.getElementById("historySection");
-const historyList = document.getElementById("historyList");
-const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const continueBtn = document.getElementById("continueBtn");
 const newSessionBtn = document.getElementById("newSessionBtn");
 const segmentCount = document.getElementById("segmentCount");
 
+// History overlay elements
+const historyOverlay = document.getElementById("historyOverlay");
+const historyList = document.getElementById("historyList");
+const historyBtn = document.getElementById("historyBtn");
+const historyBackBtn = document.getElementById("historyBackBtn");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+
+// Chat elements
+const chatSection = document.getElementById("chatSection");
+const chatMessagesEl = document.getElementById("chatMessages");
+const chatInput = document.getElementById("chatInput");
+const chatSendBtn = document.getElementById("chatSendBtn");
+const chatAttachBtn = document.getElementById("chatAttachBtn");
+const chatFileInput = document.getElementById("chatFileInput");
+const chatImagePreview = document.getElementById("chatImagePreview");
+const chatPreviewImg = document.getElementById("chatPreviewImg");
+const chatRemoveImage = document.getElementById("chatRemoveImage");
+
 // Simple markdown to HTML converter
 function renderMarkdown(md) {
   let html = md
-    // Headings
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // Horizontal rules
     .replace(/^---$/gm, '<hr>')
-    // Bold
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // Italic
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Unordered lists
     .replace(/^\*\s+(.+)$/gm, '<li>$1</li>')
     .replace(/^-\s+(.+)$/gm, '<li>$1</li>')
-    // Blockquotes
     .replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>')
-    // Line breaks
+    // Handle inline images: ![alt](data:...) or ![alt](url)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:8px 0;">')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br>');
 
@@ -55,7 +67,7 @@ function renderMarkdown(md) {
   return '<p>' + html + '</p>';
 }
 
-// Restore session state (segments persisted across side panel reopens)
+// Restore session state
 chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessionId"], (data) => {
   if (data.audioSegments && data.audioSegments.length > 0) {
     audioSegments = data.audioSegments;
@@ -66,8 +78,8 @@ chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessi
   }
 });
 
-// Load saved notes history on popup open
-loadHistory();
+// Show history button if there are notes
+updateHistoryBtnVisibility();
 
 // Check initial status
 chrome.runtime.sendMessage({ action: "getStatus" }, (res) => {
@@ -83,11 +95,22 @@ chrome.runtime.sendMessage({ action: "getStatus" }, (res) => {
   }
 });
 
+// Restore notes + chat for current session
+chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
+  if (data.currentNotes && data.currentSessionId) {
+    notesMarkdown = data.currentNotes;
+    currentSessionId = data.currentSessionId;
+    notesContent.innerHTML = renderMarkdown(notesMarkdown);
+    notesSection.classList.remove("hidden");
+    chatSection.classList.remove("hidden");
+    loadChatMessages(currentSessionId);
+  }
+});
+
 recordBtn.addEventListener("click", startRecordingFlow);
 continueBtn?.addEventListener("click", startRecordingFlow);
 
 async function startRecordingFlow() {
-  // Try stored tab ID first, then query active tab
   let tabId;
   try {
     const data = await chrome.storage.local.get("activeTabId");
@@ -104,7 +127,6 @@ async function startRecordingFlow() {
     return;
   }
 
-  // Refresh to current active tab
   const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (currentTab?.id) {
     await chrome.storage.local.set({ activeTabId: currentTab.id });
@@ -129,15 +151,10 @@ stopBtn.addEventListener("click", () => {
       alert("Error: " + res.error);
       return;
     }
-    // Add this segment to the list
     audioSegments.push(res.audioBase64);
     totalRecordedSeconds += seconds;
 
-    // Persist segments so they survive panel close/reopen
-    chrome.storage.local.set({
-      audioSegments,
-      totalRecordedSeconds,
-    });
+    chrome.storage.local.set({ audioSegments, totalRecordedSeconds });
 
     setResumeUI();
     stopTimer();
@@ -171,8 +188,11 @@ convertBtn.addEventListener("click", async () => {
     notesMarkdown = data.notes;
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
+    chatSection.classList.remove("hidden");
 
-    // Save to history
+    // Persist current notes
+    chrome.storage.local.set({ currentNotes: notesMarkdown });
+
     saveToHistory(notesMarkdown);
 
     statusEl.className = "status idle";
@@ -188,15 +208,19 @@ convertBtn.addEventListener("click", async () => {
   }
 });
 
-// New Session — clear segments, reset everything
+// New Session
 newSessionBtn?.addEventListener("click", () => {
   audioSegments = [];
   totalRecordedSeconds = 0;
   seconds = 0;
   notesMarkdown = "";
   currentSessionId = null;
-  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId"]);
+  chatMessages = [];
+  pendingImageBase64 = null;
+  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId", "currentNotes"]);
   notesSection.classList.add("hidden");
+  chatSection.classList.add("hidden");
+  chatMessagesEl.innerHTML = "";
   updateTimer();
   updateSegmentInfo();
   setIdleUI();
@@ -216,12 +240,39 @@ copyNotionBtn.addEventListener("click", () => {
   });
 });
 
+// ===== HISTORY OVERLAY =====
+historyBtn?.addEventListener("click", () => {
+  loadHistory();
+  historyOverlay.classList.remove("hidden");
+  setTimeout(() => historyOverlay.classList.add("open"), 10);
+});
+
+historyBackBtn?.addEventListener("click", closeHistory);
+
+function closeHistory() {
+  historyOverlay.classList.remove("open");
+  setTimeout(() => historyOverlay.classList.add("hidden"), 300);
+}
+
 clearHistoryBtn?.addEventListener("click", () => {
   chrome.storage.local.remove("notesHistory", () => {
     loadHistory();
+    updateHistoryBtnVisibility();
   });
 });
 
+function updateHistoryBtnVisibility() {
+  chrome.storage.local.get("notesHistory", (data) => {
+    const history = data.notesHistory || [];
+    if (history.length > 0) {
+      historyBtn?.classList.remove("hidden");
+    } else {
+      historyBtn?.classList.add("hidden");
+    }
+  });
+}
+
+// ===== UI STATE =====
 function setRecordingUI() {
   recordBtn.classList.add("hidden");
   if (continueBtn) continueBtn.classList.add("hidden");
@@ -234,7 +285,6 @@ function setRecordingUI() {
 }
 
 function setResumeUI() {
-  // Show continue + convert, hide record
   recordBtn.classList.add("hidden");
   stopBtn.disabled = true;
   stopBtn.classList.add("hidden");
@@ -294,26 +344,23 @@ function formatTime(secs) {
   return `${m}m ${s}s`;
 }
 
-// History functions
+// ===== HISTORY =====
 function saveToHistory(markdown) {
   chrome.storage.local.get("notesHistory", (data) => {
     const history = data.notesHistory || [];
 
     if (currentSessionId) {
-      // Update existing entry for this session
       const idx = history.findIndex((e) => e.id === currentSessionId);
       if (idx !== -1) {
         history[idx].notes = markdown;
         history[idx].date = new Date().toISOString();
       } else {
-        // Session ID exists but entry was deleted — create new
         const newId = Date.now();
         currentSessionId = newId;
         chrome.storage.local.set({ currentSessionId });
         history.unshift({ notes: markdown, date: new Date().toISOString(), id: newId });
       }
     } else {
-      // First conversion in this session — create new entry
       const newId = Date.now();
       currentSessionId = newId;
       chrome.storage.local.set({ currentSessionId });
@@ -322,7 +369,7 @@ function saveToHistory(markdown) {
 
     if (history.length > 20) history.pop();
     chrome.storage.local.set({ notesHistory: history }, () => {
-      loadHistory();
+      updateHistoryBtnVisibility();
     });
   });
 }
@@ -330,12 +377,11 @@ function saveToHistory(markdown) {
 function loadHistory() {
   chrome.storage.local.get("notesHistory", (data) => {
     const history = data.notesHistory || [];
+    historyList.innerHTML = "";
     if (history.length === 0) {
-      historySection.classList.add("hidden");
+      historyList.innerHTML = '<div class="history-empty">No saved notes yet</div>';
       return;
     }
-    historySection.classList.remove("hidden");
-    historyList.innerHTML = "";
     history.forEach((entry) => {
       const item = document.createElement("div");
       item.className = "history-item";
@@ -348,11 +394,174 @@ function loadHistory() {
       `;
       item.addEventListener("click", () => {
         notesMarkdown = entry.notes;
+        currentSessionId = entry.id;
+        chrome.storage.local.set({ currentSessionId, currentNotes: notesMarkdown });
         notesContent.innerHTML = renderMarkdown(notesMarkdown);
         notesSection.classList.remove("hidden");
-        notesSection.scrollIntoView({ behavior: "smooth" });
+        chatSection.classList.remove("hidden");
+        loadChatMessages(currentSessionId);
+        closeHistory();
       });
       historyList.appendChild(item);
     });
   });
 }
+
+// ===== CHAT =====
+function loadChatMessages(sessionId) {
+  const key = `chat_${sessionId}`;
+  chrome.storage.local.get(key, (data) => {
+    chatMessages = data[key] || [];
+    renderChatMessages();
+  });
+}
+
+function saveChatMessages() {
+  if (!currentSessionId) return;
+  const key = `chat_${currentSessionId}`;
+  chrome.storage.local.set({ [key]: chatMessages });
+}
+
+function renderChatMessages() {
+  chatMessagesEl.innerHTML = "";
+  chatMessages.forEach((msg) => {
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble chat-${msg.role}`;
+    if (msg.image) {
+      bubble.innerHTML += `<img src="${msg.image}" alt="Attached image" class="chat-msg-image" />`;
+    }
+    bubble.innerHTML += `<div class="chat-bubble-text">${renderMarkdown(msg.content)}</div>`;
+    chatMessagesEl.appendChild(bubble);
+  });
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+async function sendChatMessage(text, imageBase64) {
+  if (!text && !imageBase64) return;
+  if (!notesMarkdown) return;
+
+  // Add user message
+  const userMsg = { role: "user", content: text || "📎 Image attached — please insert into notes" };
+  if (imageBase64) {
+    userMsg.image = `data:image/png;base64,${imageBase64}`;
+  }
+  chatMessages.push(userMsg);
+  renderChatMessages();
+  saveChatMessages();
+
+  // Show typing indicator
+  const typingEl = document.createElement("div");
+  typingEl.className = "chat-bubble chat-assistant chat-typing";
+  typingEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  chatMessagesEl.appendChild(typingEl);
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+
+  try {
+    const body = {
+      notes: notesMarkdown,
+      chatHistory: chatMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
+      message: text || "Please insert this diagram/image into my notes at the most appropriate location.",
+    };
+    if (imageBase64) {
+      body.imageBase64 = imageBase64;
+    }
+
+    const response = await fetch(`${API_BASE}/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Remove typing indicator
+    typingEl.remove();
+
+    // Add AI response
+    chatMessages.push({ role: "assistant", content: data.reply });
+    renderChatMessages();
+    saveChatMessages();
+
+    // If updatedNotes returned, update the notes
+    if (data.updatedNotes) {
+      notesMarkdown = data.updatedNotes;
+      notesContent.innerHTML = renderMarkdown(notesMarkdown);
+      chrome.storage.local.set({ currentNotes: notesMarkdown });
+      saveToHistory(notesMarkdown);
+    }
+  } catch (e) {
+    typingEl.remove();
+    chatMessages.push({ role: "assistant", content: `⚠️ Error: ${e.message}` });
+    renderChatMessages();
+    saveChatMessages();
+  }
+}
+
+// Chat input handlers
+chatSendBtn?.addEventListener("click", () => {
+  const text = chatInput.value.trim();
+  const img = pendingImageBase64;
+  chatInput.value = "";
+  clearPendingImage();
+  sendChatMessage(text, img);
+});
+
+chatInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    chatSendBtn.click();
+  }
+});
+
+// Image attachment
+chatAttachBtn?.addEventListener("click", () => chatFileInput.click());
+
+chatFileInput?.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const base64 = reader.result.split(",")[1];
+    setPendingImage(base64, reader.result);
+  };
+  reader.readAsDataURL(file);
+  chatFileInput.value = "";
+});
+
+// Paste image from clipboard
+chatInput?.addEventListener("paste", (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(",")[1];
+        setPendingImage(base64, reader.result);
+      };
+      reader.readAsDataURL(blob);
+      break;
+    }
+  }
+});
+
+function setPendingImage(base64, dataUrl) {
+  pendingImageBase64 = base64;
+  chatPreviewImg.src = dataUrl;
+  chatImagePreview.classList.remove("hidden");
+}
+
+function clearPendingImage() {
+  pendingImageBase64 = null;
+  chatPreviewImg.src = "";
+  chatImagePreview.classList.add("hidden");
+}
+
+chatRemoveImage?.addEventListener("click", clearPendingImage);
