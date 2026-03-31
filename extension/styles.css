@@ -74,42 +74,27 @@ body.sidepanel .notes-content {
   animation: orb-breathe 6s ease-in-out infinite;
 }
 
-/* Hero orb — large, centred during recording */
+/* Hero orb — single filled gradient sphere */
 .orb-hero {
-  width: 200px;
-  height: 200px;
+  width: 160px;
+  height: 160px;
   margin: 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(90, 140, 105, 0.45), rgba(74, 124, 89, 0.3) 40%, rgba(61, 107, 78, 0.18) 70%, rgba(44, 62, 45, 0.06) 100%);
+  box-shadow: 0 0 60px 20px rgba(74, 124, 89, 0.12), 0 0 120px 40px rgba(74, 124, 89, 0.06);
+  animation: orb-breathe 6s ease-in-out infinite;
 }
 
-.orb-hero .orb-outer {
-  width: 200px;
-  height: 200px;
-  background: radial-gradient(circle, rgba(74, 124, 89, 0.18) 0%, rgba(74, 124, 89, 0.06) 50%, transparent 70%);
-}
-
-.orb-hero .orb-mid {
-  width: 120px;
-  height: 120px;
-  background: radial-gradient(circle, rgba(74, 124, 89, 0.25) 0%, rgba(74, 124, 89, 0.08) 60%, transparent 75%);
-  animation-delay: 1.5s;
-}
-
-.orb-hero .orb-core {
-  width: 60px;
-  height: 60px;
-  background: radial-gradient(circle, rgba(74, 124, 89, 0.4) 0%, rgba(74, 124, 89, 0.12) 60%, transparent 80%);
-  box-shadow: 0 0 40px 15px rgba(74, 124, 89, 0.15);
-  animation-delay: 0.8s;
+/* Hide individual layers — using single filled orb */
+.orb-hero .orb-layer {
+  display: none;
 }
 
 /* Recording-active: faster, brighter pulse */
-.orb-recording .orb-layer {
-  animation-name: orb-pulse-active;
-  animation-duration: 2.5s;
-}
-
-.orb-recording .orb-core {
-  box-shadow: 0 0 50px 20px rgba(74, 124, 89, 0.25);
+.orb-recording {
+  animation-name: orb-pulse-active !important;
+  animation-duration: 2.5s !important;
+  box-shadow: 0 0 70px 25px rgba(74, 124, 89, 0.2), 0 0 140px 50px rgba(74, 124, 89, 0.1) !important;
 }
 
 @keyframes orb-breathe {
