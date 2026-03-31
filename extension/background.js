@@ -1,6 +1,16 @@
 // Background service worker for LectureSnap (MV3)
 let isRecording = false;
 
+function doCapture(windowId, sendResponse) {
+  chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
+    if (chrome.runtime.lastError) {
+      sendResponse({ error: chrome.runtime.lastError.message });
+    } else {
+      sendResponse({ dataUrl });
+    }
+  });
+}
+
 // Open side panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   // Store tab ID asynchronously — don't await before opening side panel
@@ -26,12 +36,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "captureScreenshot") {
-    chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl) => {
-      if (chrome.runtime.lastError) {
-        sendResponse({ error: chrome.runtime.lastError.message });
-      } else {
-        sendResponse({ dataUrl });
+    // Get the window that contains the active tab we're recording
+    chrome.storage.local.get("activeTabId", (store) => {
+      const tabId = store.activeTabId;
+      if (!tabId) {
+        // Fallback: capture current window
+        doCapture(null, sendResponse);
+        return;
       }
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError || !tab) {
+          doCapture(null, sendResponse);
+        } else {
+          doCapture(tab.windowId, sendResponse);
+        }
+      });
     });
     return true;
   }
