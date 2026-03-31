@@ -61,8 +61,39 @@ body.sidepanel .notes-content {
 }
 
 .header {
-  text-align: center;
   padding-bottom: 4px;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+  background: var(--primary);
+  color: #f5f0e8;
+  border-color: var(--primary);
 }
 
 .logo {
@@ -74,7 +105,6 @@ body.sidepanel .notes-content {
   border-radius: 50%;
   background: var(--primary-faint);
   color: var(--primary);
-  margin-bottom: 10px;
 }
 
 h1 {
@@ -87,9 +117,17 @@ h1 {
 .subtitle {
   font-size: 12px;
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: 2px;
   font-style: italic;
   letter-spacing: 0.3px;
+}
+
+.segment-count {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: -10px;
 }
 
 .status {

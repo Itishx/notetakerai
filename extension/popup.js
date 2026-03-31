@@ -1,9 +1,10 @@
 // LectureSnap Popup Controller
 const API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
-let audioBase64 = null;
+let audioSegments = []; // Array of base64 audio chunks for current session
 let timerInterval = null;
 let seconds = 0;
+let totalRecordedSeconds = 0; // Total across all segments
 let notesMarkdown = "";
 
 const recordBtn = document.getElementById("recordBtn");
@@ -19,6 +20,9 @@ const notesContent = document.getElementById("notesContent");
 const historySection = document.getElementById("historySection");
 const historyList = document.getElementById("historyList");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+const continueBtn = document.getElementById("continueBtn");
+const newSessionBtn = document.getElementById("newSessionBtn");
+const segmentCount = document.getElementById("segmentCount");
 
 // Simple markdown to HTML converter
 function renderMarkdown(md) {
@@ -50,6 +54,16 @@ function renderMarkdown(md) {
   return '<p>' + html + '</p>';
 }
 
+// Restore session state (segments persisted across side panel reopens)
+chrome.storage.local.get(["audioSegments", "totalRecordedSeconds"], (data) => {
+  if (data.audioSegments && data.audioSegments.length > 0) {
+    audioSegments = data.audioSegments;
+    totalRecordedSeconds = data.totalRecordedSeconds || 0;
+    updateSegmentInfo();
+    setResumeUI();
+  }
+});
+
 // Load saved notes history on popup open
 loadHistory();
 
@@ -67,8 +81,11 @@ chrome.runtime.sendMessage({ action: "getStatus" }, (res) => {
   }
 });
 
-recordBtn.addEventListener("click", async () => {
-  // Try stored tab ID first (set when side panel opened), then query active tab
+recordBtn.addEventListener("click", startRecordingFlow);
+continueBtn?.addEventListener("click", startRecordingFlow);
+
+async function startRecordingFlow() {
+  // Try stored tab ID first, then query active tab
   let tabId;
   try {
     const data = await chrome.storage.local.get("activeTabId");
@@ -85,7 +102,7 @@ recordBtn.addEventListener("click", async () => {
     return;
   }
 
-  // Refresh the stored tab ID to the current active tab for future use
+  // Refresh to current active tab
   const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (currentTab?.id) {
     await chrome.storage.local.set({ activeTabId: currentTab.id });
@@ -97,11 +114,12 @@ recordBtn.addEventListener("click", async () => {
       alert("Error: " + res.error);
       return;
     }
+    seconds = 0;
     chrome.storage.local.set({ startTime: Date.now() });
     setRecordingUI();
     startTimer();
   });
-});
+}
 
 stopBtn.addEventListener("click", () => {
   chrome.runtime.sendMessage({ action: "stopRecording" }, (res) => {
@@ -109,18 +127,29 @@ stopBtn.addEventListener("click", () => {
       alert("Error: " + res.error);
       return;
     }
-    audioBase64 = res.audioBase64;
-    setStoppedUI();
+    // Add this segment to the list
+    audioSegments.push(res.audioBase64);
+    totalRecordedSeconds += seconds;
+
+    // Persist segments so they survive panel close/reopen
+    chrome.storage.local.set({
+      audioSegments,
+      totalRecordedSeconds,
+    });
+
+    setResumeUI();
     stopTimer();
     chrome.storage.local.remove("startTime");
+    updateSegmentInfo();
   });
 });
 
 convertBtn.addEventListener("click", async () => {
-  if (!audioBase64) return;
+  if (audioSegments.length === 0) return;
 
   loadingEl.classList.remove("hidden");
   convertBtn.disabled = true;
+  if (continueBtn) continueBtn.disabled = true;
   statusEl.className = "status processing";
   statusEl.querySelector("span").textContent = "Processing with AI...";
 
@@ -128,7 +157,7 @@ convertBtn.addEventListener("click", async () => {
     const response = await fetch(`${API_BASE}/transcribe-and-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audioBase64 }),
+      body: JSON.stringify({ audioSegments }),
     });
 
     if (!response.ok) {
@@ -153,7 +182,21 @@ convertBtn.addEventListener("click", async () => {
   } finally {
     loadingEl.classList.add("hidden");
     convertBtn.disabled = false;
+    if (continueBtn) continueBtn.disabled = false;
   }
+});
+
+// New Session — clear segments, reset everything
+newSessionBtn?.addEventListener("click", () => {
+  audioSegments = [];
+  totalRecordedSeconds = 0;
+  seconds = 0;
+  notesMarkdown = "";
+  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds"]);
+  notesSection.classList.add("hidden");
+  updateTimer();
+  updateSegmentInfo();
+  setIdleUI();
 });
 
 copyBtn.addEventListener("click", () => {
@@ -177,19 +220,39 @@ clearHistoryBtn?.addEventListener("click", () => {
 });
 
 function setRecordingUI() {
-  recordBtn.disabled = true;
+  recordBtn.classList.add("hidden");
+  if (continueBtn) continueBtn.classList.add("hidden");
+  if (newSessionBtn) newSessionBtn.classList.add("hidden");
   stopBtn.disabled = false;
+  stopBtn.classList.remove("hidden");
   convertBtn.disabled = true;
   statusEl.className = "status recording";
   statusEl.querySelector("span").textContent = "Recording tab audio...";
 }
 
-function setStoppedUI() {
-  recordBtn.disabled = false;
+function setResumeUI() {
+  // Show continue + convert, hide record
+  recordBtn.classList.add("hidden");
   stopBtn.disabled = true;
+  stopBtn.classList.add("hidden");
+  if (continueBtn) continueBtn.classList.remove("hidden");
+  if (newSessionBtn) newSessionBtn.classList.remove("hidden");
   convertBtn.disabled = false;
   statusEl.className = "status idle";
-  statusEl.querySelector("span").textContent = "Recording complete";
+  const segText = audioSegments.length === 1 ? "1 segment" : `${audioSegments.length} segments`;
+  statusEl.querySelector("span").textContent = `Recording paused · ${segText} captured`;
+}
+
+function setIdleUI() {
+  recordBtn.classList.remove("hidden");
+  recordBtn.disabled = false;
+  stopBtn.disabled = true;
+  stopBtn.classList.add("hidden");
+  if (continueBtn) continueBtn.classList.add("hidden");
+  if (newSessionBtn) newSessionBtn.classList.add("hidden");
+  convertBtn.disabled = true;
+  statusEl.className = "status idle";
+  statusEl.querySelector("span").textContent = "Ready to record";
 }
 
 function startTimer() {
@@ -205,9 +268,27 @@ function stopTimer() {
 }
 
 function updateTimer() {
-  const m = String(Math.floor(seconds / 60)).padStart(2, "0");
-  const s = String(seconds % 60).padStart(2, "0");
+  const total = totalRecordedSeconds + seconds;
+  const m = String(Math.floor(total / 60)).padStart(2, "0");
+  const s = String(total % 60).padStart(2, "0");
   timerEl.textContent = `${m}:${s}`;
+}
+
+function updateSegmentInfo() {
+  if (!segmentCount) return;
+  if (audioSegments.length > 0) {
+    segmentCount.classList.remove("hidden");
+    segmentCount.textContent = `${audioSegments.length} segment${audioSegments.length > 1 ? "s" : ""} · ${formatTime(totalRecordedSeconds)} total`;
+  } else {
+    segmentCount.classList.add("hidden");
+    segmentCount.textContent = "";
+  }
+}
+
+function formatTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}m ${s}s`;
 }
 
 // History functions
@@ -219,7 +300,6 @@ function saveToHistory(markdown) {
       date: new Date().toISOString(),
       id: Date.now(),
     });
-    // Keep max 20 entries
     if (history.length > 20) history.pop();
     chrome.storage.local.set({ notesHistory: history }, () => {
       loadHistory();
@@ -241,7 +321,6 @@ function loadHistory() {
       item.className = "history-item";
       const date = new Date(entry.date);
       const dateStr = date.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-      // Get first heading or first line as preview
       const preview = (entry.notes.match(/^##?\s+(.+)$/m) || ["", entry.notes.substring(0, 60)])[1];
       item.innerHTML = `
         <div class="history-meta">${dateStr}</div>
