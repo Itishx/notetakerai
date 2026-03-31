@@ -297,11 +297,28 @@ function formatTime(secs) {
 function saveToHistory(markdown) {
   chrome.storage.local.get("notesHistory", (data) => {
     const history = data.notesHistory || [];
-    history.unshift({
-      notes: markdown,
-      date: new Date().toISOString(),
-      id: Date.now(),
-    });
+
+    if (currentSessionId) {
+      // Update existing entry for this session
+      const idx = history.findIndex((e) => e.id === currentSessionId);
+      if (idx !== -1) {
+        history[idx].notes = markdown;
+        history[idx].date = new Date().toISOString();
+      } else {
+        // Session ID exists but entry was deleted — create new
+        const newId = Date.now();
+        currentSessionId = newId;
+        chrome.storage.local.set({ currentSessionId });
+        history.unshift({ notes: markdown, date: new Date().toISOString(), id: newId });
+      }
+    } else {
+      // First conversion in this session — create new entry
+      const newId = Date.now();
+      currentSessionId = newId;
+      chrome.storage.local.set({ currentSessionId });
+      history.unshift({ notes: markdown, date: new Date().toISOString(), id: newId });
+    }
+
     if (history.length > 20) history.pop();
     chrome.storage.local.set({ notesHistory: history }, () => {
       loadHistory();
