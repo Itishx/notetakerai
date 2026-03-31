@@ -180,6 +180,7 @@ convertBtn.addEventListener("click", async () => {
   if (continueBtn) continueBtn.disabled = true;
   statusEl.className = "status processing";
   statusEl.querySelector("span").textContent = "Processing with AI...";
+  setOrbState("processing");
 
   try {
     const requestBody = { audioSegments };
