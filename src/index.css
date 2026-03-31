@@ -2,52 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+@font-face {
+  font-family: 'Charter';
+  src: url('/fonts/Charter_BT_Roman.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 @layer base {
   :root {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 92%;
+    --background: 40 20% 97%;
+    --foreground: 30 10% 15%;
 
-    --card: 222 44% 9%;
-    --card-foreground: 210 40% 92%;
+    --card: 40 25% 94%;
+    --card-foreground: 30 10% 15%;
 
-    --popover: 222 44% 9%;
-    --popover-foreground: 210 40% 92%;
+    --popover: 40 25% 94%;
+    --popover-foreground: 30 10% 15%;
 
-    --primary: 210 100% 56%;
-    --primary-foreground: 222 47% 6%;
+    --primary: 160 25% 38%;
+    --primary-foreground: 40 20% 97%;
 
-    --secondary: 222 30% 14%;
-    --secondary-foreground: 210 40% 85%;
+    --secondary: 40 15% 90%;
+    --secondary-foreground: 30 10% 25%;
 
-    --muted: 222 25% 12%;
-    --muted-foreground: 215 20% 55%;
+    --muted: 40 12% 91%;
+    --muted-foreground: 30 8% 50%;
 
-    --accent: 170 80% 45%;
-    --accent-foreground: 222 47% 6%;
+    --accent: 25 40% 55%;
+    --accent-foreground: 40 20% 97%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 50% 45%;
+    --destructive-foreground: 40 20% 97%;
 
-    --border: 222 25% 16%;
-    --input: 222 25% 16%;
-    --ring: 210 100% 56%;
+    --border: 35 15% 85%;
+    --input: 35 15% 85%;
+    --ring: 160 25% 38%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 222 44% 7%;
-    --sidebar-foreground: 210 20% 70%;
-    --sidebar-primary: 210 100% 56%;
-    --sidebar-primary-foreground: 222 47% 6%;
-    --sidebar-accent: 222 25% 12%;
-    --sidebar-accent-foreground: 210 40% 85%;
-    --sidebar-border: 222 25% 16%;
-    --sidebar-ring: 210 100% 56%;
+    --sidebar-background: 40 20% 95%;
+    --sidebar-foreground: 30 10% 35%;
+    --sidebar-primary: 160 25% 38%;
+    --sidebar-primary-foreground: 40 20% 97%;
+    --sidebar-accent: 40 15% 90%;
+    --sidebar-accent-foreground: 30 10% 25%;
+    --sidebar-border: 35 15% 85%;
+    --sidebar-ring: 160 25% 38%;
 
-    --glow: 210 100% 56%;
+    --glow: 160 25% 38%;
+  }
+
+  .dark {
+    --background: 30 10% 8%;
+    --foreground: 35 15% 85%;
+
+    --card: 30 10% 11%;
+    --card-foreground: 35 15% 85%;
+
+    --popover: 30 10% 11%;
+    --popover-foreground: 35 15% 85%;
+
+    --primary: 160 25% 50%;
+    --primary-foreground: 30 10% 8%;
+
+    --secondary: 30 8% 16%;
+    --secondary-foreground: 35 15% 75%;
+
+    --muted: 30 8% 14%;
+    --muted-foreground: 30 8% 50%;
+
+    --accent: 25 40% 55%;
+    --accent-foreground: 30 10% 8%;
+
+    --destructive: 0 50% 45%;
+    --destructive-foreground: 35 15% 85%;
+
+    --border: 30 8% 18%;
+    --input: 30 8% 18%;
+    --ring: 160 25% 50%;
   }
 }
 
@@ -56,7 +90,13 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-family: 'Charter', Georgia, 'Times New Roman', serif;
+    -webkit-font-smoothing: antialiased;
   }
 }
