@@ -303,25 +303,34 @@ async function fetchNotionConnectionStatus(userIdentifier) {
 }
 
 async function getSessionNotionPageId(sessionId = currentSessionId) {
-  const data = await getStorage(["notionSyncedPages", "notionSyncedPageId"]);
-  if (sessionId && data.notionSyncedPages?.[String(sessionId)]) {
-    return data.notionSyncedPages[String(sessionId)];
-  }
+  if (!sessionId) return null;
 
-  return data.notionSyncedPageId || null;
+  const data = await getStorage("notionSyncedPages");
+  return data.notionSyncedPages?.[String(sessionId)] || null;
 }
 
 async function setSessionNotionPageId(pageId, sessionId = currentSessionId) {
-  if (!pageId) return;
+  if (!pageId || !sessionId) return;
 
   const data = await getStorage("notionSyncedPages");
   const notionSyncedPages = data.notionSyncedPages || {};
-
-  if (sessionId) {
-    notionSyncedPages[String(sessionId)] = pageId;
-  }
+  notionSyncedPages[String(sessionId)] = pageId;
 
   await setStorage({ notionSyncedPages, notionSyncedPageId: pageId });
+}
+
+async function getNotionDestination() {
+  const data = await getStorage(["notionDestination", "notionSyncedPageId"]);
+
+  if (data.notionDestination?.id && data.notionDestination?.type) {
+    return data.notionDestination;
+  }
+
+  if (data.notionSyncedPageId) {
+    return { type: "page", id: data.notionSyncedPageId };
+  }
+
+  return null;
 }
 
 function stopNotionConnectionPolling() {
@@ -456,6 +465,7 @@ syncNotionBtn?.addEventListener("click", async () => {
     }
     
     const notionPageId = await getSessionNotionPageId();
+    const notionDestination = await getNotionDestination();
     
     const res = await fetch(`${API_BASE}/sync-to-notion`, {
       method: "POST",
@@ -465,6 +475,7 @@ syncNotionBtn?.addEventListener("click", async () => {
         title,
         markdown: notesMarkdown,
         notionPageId,
+        notionDestination,
         images: images.length > 0 ? images : undefined,
       }),
     });
@@ -483,6 +494,10 @@ syncNotionBtn?.addEventListener("click", async () => {
     
     const result = await res.json();
     
+    if (result.destination?.id && result.destination?.type) {
+      await setStorage({ notionDestination: result.destination });
+    }
+
     // Store the page ID for future updates
     if (result.pageId) {
       await setSessionNotionPageId(result.pageId);
