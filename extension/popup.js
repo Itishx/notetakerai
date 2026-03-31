@@ -193,7 +193,8 @@ newSessionBtn?.addEventListener("click", () => {
   totalRecordedSeconds = 0;
   seconds = 0;
   notesMarkdown = "";
-  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds"]);
+  currentSessionId = null;
+  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId"]);
   notesSection.classList.add("hidden");
   updateTimer();
   updateSegmentInfo();
