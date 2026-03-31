@@ -74,20 +74,20 @@ body.sidepanel .notes-content {
   animation: orb-breathe 6s ease-in-out infinite;
 }
 
-/* Hero orb — single filled gradient sphere */
+/* Hero orb — flat glowing gradient circle */
 .orb-hero {
   position: relative !important;
   top: auto !important;
   left: auto !important;
   transform: none !important;
   display: block;
-  width: 176px;
-  height: 176px;
+  width: 160px;
+  height: 160px;
   margin: 0 auto;
   flex-shrink: 0;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, rgba(245, 240, 232, 0.32) 0%, rgba(90, 140, 105, 0.58) 16%, rgba(74, 124, 89, 0.9) 44%, rgba(61, 107, 78, 0.98) 74%, rgba(44, 62, 45, 1) 100%);
-  box-shadow: 0 18px 42px rgba(74, 124, 89, 0.18), 0 0 78px rgba(74, 124, 89, 0.14);
+  background: linear-gradient(135deg, #5a8c69 0%, #4a7c59 40%, #3d6b4e 100%);
+  box-shadow: 0 0 40px 12px rgba(74, 124, 89, 0.25), 0 0 80px 30px rgba(74, 124, 89, 0.1);
   animation: orb-breathe 6s ease-in-out infinite;
 }
 
@@ -153,7 +153,7 @@ body.sidepanel .notes-content {
 .recording-hero-controls {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24px;
   width: 100%;
   padding: 8px 8px 0;
 }
