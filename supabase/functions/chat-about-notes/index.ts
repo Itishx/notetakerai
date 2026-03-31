@@ -118,7 +118,7 @@ ${notes || "(no notes yet)"}`;
           // Replace placeholder with actual image tag
           const imgTag = `<img src="data:image/png;base64,${imageBase64}" alt="Lecture diagram" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
           const updatedNotes = parsed.updatedNotes.replace(/\{\{IMAGE_PLACEHOLDER\}\}/g, imgTag);
-          return new Response(JSON.stringify({ reply: parsed.reply, updatedNotes }), {
+          return new Response(JSON.stringify({ reply: "Done! Image inserted into your notes.", updatedNotes }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
