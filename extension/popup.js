@@ -68,10 +68,31 @@ chrome.runtime.sendMessage({ action: "getStatus" }, (res) => {
 });
 
 recordBtn.addEventListener("click", async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
+  // Try stored tab ID first (set when side panel opened), then query active tab
+  let tabId;
+  try {
+    const data = await chrome.storage.local.get("activeTabId");
+    tabId = data.activeTabId;
+  } catch (e) {}
 
-  chrome.runtime.sendMessage({ action: "startRecording", tabId: tab.id }, (res) => {
+  if (!tabId) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    tabId = tab?.id;
+  }
+
+  if (!tabId) {
+    alert("No active tab found. Try clicking the extension icon again.");
+    return;
+  }
+
+  // Refresh the stored tab ID to the current active tab for future use
+  const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (currentTab?.id) {
+    await chrome.storage.local.set({ activeTabId: currentTab.id });
+    tabId = currentTab.id;
+  }
+
+  chrome.runtime.sendMessage({ action: "startRecording", tabId }, (res) => {
     if (res?.error) {
       alert("Error: " + res.error);
       return;
