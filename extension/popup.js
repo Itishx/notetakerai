@@ -1,5 +1,5 @@
 // LectureSnap Popup Controller
-const API_BASE = "%%SUPABASE_URL%%/functions/v1";
+const API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
 let audioBase64 = null;
 let timerInterval = null;
