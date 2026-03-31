@@ -34,13 +34,12 @@ serve(async (req) => {
     const systemPrompt = hasImage
       ? `You are a helpful lecture notes assistant. The user has lecture notes and is sharing a diagram/image screenshot from the lecture.
 
-Your task: Analyze the image and integrate it into the existing notes at the most contextually appropriate location. Return the COMPLETE updated notes in markdown with the image embedded using this exact HTML tag at the right spot:
-<img src="data:image/png;base64,${imageBase64}" alt="[descriptive alt text]" style="max-width:100%;border-radius:8px;margin:8px 0;">
+Your task: Analyze the image and integrate it into the existing notes at the most contextually appropriate location. Return the COMPLETE updated notes in markdown with the placeholder {{IMAGE_PLACEHOLDER}} inserted at the right spot where the image should appear.
 
 Also provide a brief reply explaining what you did (where you placed the image and why).
 
 Return your response in this exact JSON format:
-{"reply": "your explanation here", "updatedNotes": "the full updated markdown notes with the image tag inserted"}
+{"reply": "your explanation here", "updatedNotes": "the full updated markdown notes with {{IMAGE_PLACEHOLDER}} inserted at the right location"}
 
 Current notes:
 ${notes || "(no notes yet)"}`
