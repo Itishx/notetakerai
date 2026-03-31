@@ -218,7 +218,7 @@ newSessionBtn?.addEventListener("click", () => {
   currentSessionId = null;
   chatMessages = [];
   pendingImageBase64 = null;
-  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId", "currentNotes"]);
+  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId", "currentNotes", "notionSyncedPageId"]);
   notesSection.classList.add("hidden");
   chatSection.classList.add("hidden");
   chatMessagesEl.innerHTML = "";
@@ -282,11 +282,7 @@ syncNotionBtn?.addEventListener("click", async () => {
       if (!res.ok) throw new Error("Failed to start OAuth");
       const { authUrl } = await res.json();
       
-      // Open OAuth in new tab
       chrome.tabs.create({ url: authUrl });
-      
-      // Mark as connected after a delay (user will complete OAuth in the tab)
-      // We'll poll or just set it when they come back
       chrome.storage.local.set({ notionConnected: true });
       setTimeout(() => {
         if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
@@ -310,9 +306,36 @@ syncNotionBtn?.addEventListener("click", async () => {
   if (syncNotionLabel) syncNotionLabel.textContent = "Syncing...";
   
   try {
-    // Extract title from notes
     const titleMatch = notesMarkdown.match(/^#\s+(.+)$/m);
     const title = titleMatch ? titleMatch[1] : "LectureSnap Notes";
+    
+    // Collect base64 images from notes to upload
+    const images = [];
+    const imgRegex = /!\[[^\]]*\]\((data:image\/[^)]+)\)/g;
+    const htmlImgRegex = /<img[^>]+src="(data:image\/[^"]+)"/g;
+    let imgMatch;
+    let imgIndex = 0;
+    
+    while ((imgMatch = imgRegex.exec(notesMarkdown)) !== null) {
+      const dataUrl = imgMatch[1];
+      const base64 = dataUrl.split(",")[1];
+      if (base64) {
+        const id = `img_${Date.now()}_${imgIndex++}`;
+        images.push({ id, base64 });
+      }
+    }
+    while ((imgMatch = htmlImgRegex.exec(notesMarkdown)) !== null) {
+      const dataUrl = imgMatch[1];
+      const base64 = dataUrl.split(",")[1];
+      if (base64) {
+        const id = `img_${Date.now()}_${imgIndex++}`;
+        images.push({ id, base64 });
+      }
+    }
+    
+    // Check for existing synced page ID
+    const storageData = await new Promise((resolve) => chrome.storage.local.get("notionSyncedPageId", resolve));
+    const notionPageId = storageData.notionSyncedPageId || null;
     
     const res = await fetch(`${API_BASE}/sync-to-notion`, {
       method: "POST",
@@ -321,6 +344,8 @@ syncNotionBtn?.addEventListener("click", async () => {
         userIdentifier: userId,
         title,
         markdown: notesMarkdown,
+        notionPageId,
+        images: images.length > 0 ? images : undefined,
       }),
     });
     
@@ -337,16 +362,22 @@ syncNotionBtn?.addEventListener("click", async () => {
     }
     
     const result = await res.json();
+    
+    // Store the page ID for future updates
+    if (result.pageId) {
+      chrome.storage.local.set({ notionSyncedPageId: result.pageId });
+    }
+    
     if (syncNotionLabel) syncNotionLabel.textContent = "Synced! ✓";
     
-    // Open the Notion page
-    if (result.url) {
+    // Only open Notion page on first sync (when no prior pageId existed)
+    if (!notionPageId && result.url) {
       chrome.tabs.create({ url: result.url });
     }
     
     setTimeout(() => {
       if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
-    }, 2000);
+    }, 2500);
   } catch (e) {
     alert("Sync failed: " + e.message);
     if (syncNotionLabel) syncNotionLabel.textContent = "Sync to Notion";
