@@ -55,10 +55,11 @@ function renderMarkdown(md) {
 }
 
 // Restore session state (segments persisted across side panel reopens)
-chrome.storage.local.get(["audioSegments", "totalRecordedSeconds"], (data) => {
+chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessionId"], (data) => {
   if (data.audioSegments && data.audioSegments.length > 0) {
     audioSegments = data.audioSegments;
     totalRecordedSeconds = data.totalRecordedSeconds || 0;
+    currentSessionId = data.currentSessionId || null;
     updateSegmentInfo();
     setResumeUI();
   }
