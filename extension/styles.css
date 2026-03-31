@@ -644,3 +644,74 @@ h1 {
 .btn-send:hover {
   background: var(--primary-light) !important;
 }
+
+/* Screenshot Crop Overlay */
+.crop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.crop-overlay.hidden {
+  display: none;
+}
+
+.crop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crop-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.btn-sm {
+  padding: 5px 12px !important;
+  font-size: 11px !important;
+  min-height: auto !important;
+}
+
+.crop-canvas {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  cursor: crosshair;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.crop-canvas img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.crop-selection {
+  position: absolute;
+  border: 2px solid var(--primary);
+  background: rgba(74, 124, 89, 0.15);
+  pointer-events: none;
+  border-radius: 4px;
+}
+
+.crop-selection.hidden {
+  display: none;
+}

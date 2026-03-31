@@ -565,3 +565,125 @@ function clearPendingImage() {
 }
 
 chatRemoveImage?.addEventListener("click", clearPendingImage);
+
+// ===== SCREENSHOT CAPTURE & CROP =====
+const chatScreenshotBtn = document.getElementById("chatScreenshotBtn");
+const cropOverlay = document.getElementById("cropOverlay");
+const cropImage = document.getElementById("cropImage");
+const cropCanvas = document.getElementById("cropCanvas");
+const cropSelection = document.getElementById("cropSelection");
+const cropConfirmBtn = document.getElementById("cropConfirmBtn");
+const cropUseFullBtn = document.getElementById("cropUseFullBtn");
+const cropCancelBtn = document.getElementById("cropCancelBtn");
+
+let screenshotDataUrl = null;
+let cropStart = null;
+let cropRect = null;
+let isDragging = false;
+
+chatScreenshotBtn?.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ action: "captureScreenshot" }, (res) => {
+    if (res?.error) {
+      alert("Screenshot failed: " + res.error);
+      return;
+    }
+    screenshotDataUrl = res.dataUrl;
+    cropImage.src = screenshotDataUrl;
+    cropSelection.classList.add("hidden");
+    cropConfirmBtn.disabled = true;
+    cropRect = null;
+    cropOverlay.classList.remove("hidden");
+  });
+});
+
+cropCanvas?.addEventListener("mousedown", (e) => {
+  if (e.target !== cropImage && e.target !== cropCanvas) return;
+  const rect = cropImage.getBoundingClientRect();
+  isDragging = true;
+  cropStart = { x: e.clientX, y: e.clientY, imgRect: rect };
+  cropSelection.classList.remove("hidden");
+  cropSelection.style.left = e.clientX + "px";
+  cropSelection.style.top = e.clientY + "px";
+  cropSelection.style.width = "0px";
+  cropSelection.style.height = "0px";
+  e.preventDefault();
+});
+
+document.addEventListener("mousemove", (e) => {
+  if (!isDragging || !cropStart) return;
+  const x1 = Math.min(cropStart.x, e.clientX);
+  const y1 = Math.min(cropStart.y, e.clientY);
+  const x2 = Math.max(cropStart.x, e.clientX);
+  const y2 = Math.max(cropStart.y, e.clientY);
+  cropSelection.style.left = x1 + "px";
+  cropSelection.style.top = y1 + "px";
+  cropSelection.style.width = (x2 - x1) + "px";
+  cropSelection.style.height = (y2 - y1) + "px";
+});
+
+document.addEventListener("mouseup", (e) => {
+  if (!isDragging || !cropStart) return;
+  isDragging = false;
+  const imgRect = cropImage.getBoundingClientRect();
+  const x1 = Math.max(0, Math.min(cropStart.x, e.clientX) - imgRect.left);
+  const y1 = Math.max(0, Math.min(cropStart.y, e.clientY) - imgRect.top);
+  const x2 = Math.min(imgRect.width, Math.max(cropStart.x, e.clientX) - imgRect.left);
+  const y2 = Math.min(imgRect.height, Math.max(cropStart.y, e.clientY) - imgRect.top);
+  const w = x2 - x1;
+  const h = y2 - y1;
+  if (w > 10 && h > 10) {
+    // Scale to actual image size
+    const scaleX = cropImage.naturalWidth / imgRect.width;
+    const scaleY = cropImage.naturalHeight / imgRect.height;
+    cropRect = {
+      x: Math.round(x1 * scaleX),
+      y: Math.round(y1 * scaleY),
+      w: Math.round(w * scaleX),
+      h: Math.round(h * scaleY),
+    };
+    cropConfirmBtn.disabled = false;
+  } else {
+    cropSelection.classList.add("hidden");
+    cropConfirmBtn.disabled = true;
+    cropRect = null;
+  }
+  cropStart = null;
+});
+
+cropCancelBtn?.addEventListener("click", () => {
+  cropOverlay.classList.add("hidden");
+  screenshotDataUrl = null;
+  cropRect = null;
+});
+
+cropUseFullBtn?.addEventListener("click", () => {
+  if (!screenshotDataUrl) return;
+  const base64 = screenshotDataUrl.split(",")[1];
+  cropOverlay.classList.add("hidden");
+  setPendingImage(base64, screenshotDataUrl);
+  chatInput.value = "Please add this diagram wherever it's relevant in the notes";
+  chatInput.focus();
+  screenshotDataUrl = null;
+});
+
+cropConfirmBtn?.addEventListener("click", () => {
+  if (!screenshotDataUrl || !cropRect) return;
+  // Crop using canvas
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = cropRect.w;
+    canvas.height = cropRect.h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, cropRect.w, cropRect.h);
+    const croppedDataUrl = canvas.toDataURL("image/png");
+    const base64 = croppedDataUrl.split(",")[1];
+    cropOverlay.classList.add("hidden");
+    setPendingImage(base64, croppedDataUrl);
+    chatInput.value = "Please add this diagram wherever it's relevant in the notes";
+    chatInput.focus();
+    screenshotDataUrl = null;
+    cropRect = null;
+  };
+  img.src = screenshotDataUrl;
+});
