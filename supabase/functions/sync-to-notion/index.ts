@@ -7,13 +7,18 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+type NotionDestination = {
+  type: "page" | "database";
+  id: string;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { userIdentifier, title, markdown, notionPageId, images } = await req.json();
+    const { userIdentifier, title, markdown, notionPageId, notionDestination, images } = await req.json();
 
     if (!userIdentifier || !markdown) {
       return new Response(JSON.stringify({ error: "userIdentifier and markdown required" }), {
@@ -46,14 +51,14 @@ serve(async (req) => {
     }
 
     const accessToken = conn.access_token;
+    const safeTitle = title || "LectureSnap Notes";
 
-    // Upload base64 images to storage and get public URLs
     const imageUrlMap: Record<string, string> = {};
     if (images && Array.isArray(images)) {
       for (const img of images) {
         if (img.base64 && img.id) {
           try {
-            const binary = Uint8Array.from(atob(img.base64), c => c.charCodeAt(0));
+            const binary = Uint8Array.from(atob(img.base64), (c) => c.charCodeAt(0));
             const filePath = `${userIdentifier}/${img.id}.png`;
             await supabase.storage.from("note-images").upload(filePath, binary, {
               contentType: "image/png",
@@ -75,46 +80,168 @@ serve(async (req) => {
       }
     }
 
-    // Convert markdown to Notion blocks, replacing base64 images with public URLs
     const blocks = markdownToNotionBlocks(markdown, imageUrlMap);
+    const resolvedDestination =
+      parseNotionDestination(notionDestination) || (await resolveDefaultDestination(accessToken));
 
-    // If we have an existing page ID, update it instead of creating new
     if (notionPageId) {
+      if (
+        resolvedDestination?.type === "page" &&
+        normalizeNotionId(notionPageId) === normalizeNotionId(resolvedDestination.id)
+      ) {
+        const createdPage = await createChildPageUnderPage(
+          resolvedDestination.id,
+          safeTitle,
+          blocks,
+          accessToken,
+        );
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            url: createdPage.url,
+            pageId: createdPage.id,
+            destination: resolvedDestination,
+            message: "Notes synced to a new Notion page",
+          }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
       await replacePageContent(notionPageId, blocks, accessToken);
-      await updatePageTitle(notionPageId, title, accessToken);
+      await updatePageTitle(notionPageId, safeTitle, accessToken);
 
-      return new Response(JSON.stringify({ success: true, pageId: notionPageId, message: "Notes updated in Notion" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          pageId: notionPageId,
+          destination: resolvedDestination,
+          message: "Notes updated in Notion",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    const accessiblePageId = await searchFirstAccessibleObject(accessToken, "page");
-
-    if (accessiblePageId) {
-      await replacePageContent(accessiblePageId, blocks, accessToken);
-      await updatePageTitle(accessiblePageId, title, accessToken);
-
-      return new Response(JSON.stringify({ success: true, pageId: accessiblePageId, message: "Notes synced to Notion" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!resolvedDestination) {
+      return new Response(
+        JSON.stringify({ error: "No accessible Notion pages or databases found. Share at least one page with the integration." }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    const parentId = await searchFirstAccessibleObject(accessToken, "database");
+    const createdPage =
+      resolvedDestination.type === "page"
+        ? await createChildPageUnderPage(resolvedDestination.id, safeTitle, blocks, accessToken)
+        : await createPageInDatabase(resolvedDestination.id, safeTitle, blocks, accessToken);
 
-    if (!parentId) {
-      return new Response(JSON.stringify({ error: "No accessible Notion pages or databases found. Share at least one page with the integration." }), {
-        status: 400,
+    return new Response(
+      JSON.stringify({
+        success: true,
+        url: createdPage.url,
+        pageId: createdPage.id,
+        destination: resolvedDestination,
+        message: "Notes synced to Notion",
+      }),
+      {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      },
+    );
+  } catch (e) {
+    console.error("sync-to-notion error:", e);
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
+
+function parseNotionDestination(value: unknown): NotionDestination | null {
+  if (!value || typeof value !== "object") return null;
+
+  const record = value as Record<string, unknown>;
+  if ((record.type === "page" || record.type === "database") && typeof record.id === "string" && record.id) {
+    return { type: record.type, id: record.id };
+  }
+
+  return null;
+}
+
+async function resolveDefaultDestination(accessToken: string): Promise<NotionDestination | null> {
+  const pageId = await searchFirstAccessibleObject(accessToken, "page");
+  if (pageId) return { type: "page", id: pageId };
+
+  const databaseId = await searchFirstAccessibleObject(accessToken, "database");
+  if (databaseId) return { type: "database", id: databaseId };
+
+  return null;
+}
+
+async function createChildPageUnderPage(pageId: string, title: string, blocks: any[], accessToken: string) {
+  const pagePayload = {
+    parent: { page_id: pageId },
+    properties: {
+      title: {
+        title: [{ text: { content: title } }],
+      },
+    },
+    children: blocks.slice(0, 100),
+  };
+
+  const createRes = await fetch("https://api.notion.com/v1/pages", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(pagePayload),
+  });
+
+  if (!createRes.ok) {
+    const errText = await createRes.text();
+    console.error("Notion create child page error:", errText);
+    throw new Error("Failed to create Notion page");
+  }
+
+  const pageData = await createRes.json();
+  if (blocks.length > 100) await appendRemainingBlocks(pageData.id, blocks, accessToken);
+  return pageData;
+}
+
+async function createPageInDatabase(databaseId: string, title: string, blocks: any[], accessToken: string) {
+  const pagePayload: any = {
+    parent: { database_id: databaseId },
+    properties: { Name: { title: [{ text: { content: title } }] } },
+    children: blocks.slice(0, 100),
+  };
+
+  let createRes = await fetch("https://api.notion.com/v1/pages", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(pagePayload),
+  });
+
+  if (!createRes.ok) {
+    const errText = await createRes.text();
+    console.error("Notion create page error:", errText);
+
+    if (!errText.includes("Name")) {
+      throw new Error("Failed to create Notion page");
     }
 
-    const pagePayload: any = {
-      parent: { database_id: parentId },
-      properties: { Name: { title: [{ text: { content: title || "LectureSnap Notes" } }] } },
-      children: blocks.slice(0, 100),
-    };
-
-    const createRes = await fetch("https://api.notion.com/v1/pages", {
+    pagePayload.properties = { title: { title: [{ text: { content: title } }] } };
+    createRes = await fetch("https://api.notion.com/v1/pages", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -125,53 +252,16 @@ serve(async (req) => {
     });
 
     if (!createRes.ok) {
-      const errText = await createRes.text();
-      console.error("Notion create page error:", errText);
-
-      if (errText.includes("Name")) {
-        pagePayload.properties = { title: { title: [{ text: { content: title || "LectureSnap Notes" } }] } };
-        const retryRes = await fetch("https://api.notion.com/v1/pages", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(pagePayload),
-        });
-        if (!retryRes.ok) {
-          return new Response(JSON.stringify({ error: "Failed to create Notion page" }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        const retryData = await retryRes.json();
-        if (blocks.length > 100) await appendRemainingBlocks(retryData.id, blocks, accessToken);
-        return new Response(JSON.stringify({ success: true, url: retryData.url, pageId: retryData.id, message: "Notes synced to Notion" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: "Failed to create Notion page" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const retryErrText = await createRes.text();
+      console.error("Notion create page retry error:", retryErrText);
+      throw new Error("Failed to create Notion page");
     }
-
-    const pageData = await createRes.json();
-    if (blocks.length > 100) await appendRemainingBlocks(pageData.id, blocks, accessToken);
-
-    return new Response(JSON.stringify({ success: true, url: pageData.url, pageId: pageData.id, message: "Notes synced to Notion" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("sync-to-notion error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   }
-});
+
+  const pageData = await createRes.json();
+  if (blocks.length > 100) await appendRemainingBlocks(pageData.id, blocks, accessToken);
+  return pageData;
+}
 
 async function appendRemainingBlocks(pageId: string, blocks: any[], accessToken: string) {
   for (let i = 100; i < blocks.length; i += 100) {
@@ -278,6 +368,10 @@ async function searchFirstAccessibleObject(accessToken: string, objectType: "pag
   return searchData.results?.[0]?.id ?? null;
 }
 
+function normalizeNotionId(id: string) {
+  return id.replace(/-/g, "").toLowerCase();
+}
+
 function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>): any[] {
   const blocks: any[] = [];
   const lines = md.split("\n");
@@ -286,7 +380,6 @@ function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>)
     const line = lines[i];
     if (!line.trim()) continue;
 
-    // Handle markdown images: ![alt](src)
     const imgMatch = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
     if (imgMatch) {
       let imgUrl = imgMatch[2];
@@ -296,7 +389,7 @@ function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>)
         if (matchingUrl) {
           imgUrl = matchingUrl;
         } else {
-          continue; // Skip base64 images we couldn't upload
+          continue;
         }
       }
       for (const [id, url] of Object.entries(imageUrlMap)) {
@@ -315,9 +408,7 @@ function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>)
       continue;
     }
 
-    // Skip standalone HTML img tags
     if (line.trim().startsWith("<img")) {
-      // Try to extract src and find in imageUrlMap
       const srcMatch = line.match(/src="([^"]+)"/);
       if (srcMatch) {
         let imgUrl = srcMatch[1];
@@ -342,7 +433,6 @@ function markdownToNotionBlocks(md: string, imageUrlMap: Record<string, string>)
       continue;
     }
 
-    // Headings
     const h1 = line.match(/^# (.+)/);
     if (h1) {
       blocks.push({ object: "block", type: "heading_1", heading_1: { rich_text: parseRichText(h1[1]) } });
