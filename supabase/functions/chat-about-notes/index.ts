@@ -112,18 +112,19 @@ ${notes || "(no notes yet)"}`;
     // If image was sent, try to parse JSON response for updatedNotes
     if (hasImage) {
       try {
-        // Try to extract JSON from the response
         const jsonMatch = rawContent.match(/\{[\s\S]*"reply"[\s\S]*"updatedNotes"[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
-          return new Response(JSON.stringify({ reply: parsed.reply, updatedNotes: parsed.updatedNotes }), {
+          // Replace placeholder with actual image tag
+          const imgTag = `<img src="data:image/png;base64,${imageBase64}" alt="Lecture diagram" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
+          const updatedNotes = parsed.updatedNotes.replace(/\{\{IMAGE_PLACEHOLDER\}\}/g, imgTag);
+          return new Response(JSON.stringify({ reply: parsed.reply, updatedNotes }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
       } catch (e) {
         console.log("Could not parse JSON from image response, using raw content");
       }
-      // Fallback: return the raw content as reply
       return new Response(JSON.stringify({ reply: rawContent }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
