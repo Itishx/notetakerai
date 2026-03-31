@@ -108,19 +108,20 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are an expert note-taking assistant. Convert lecture transcripts into comprehensive, well-structured study notes in Markdown format.
+            content: `You are a precise note-taking assistant. Convert lecture transcripts into well-structured study notes in Markdown format.
+
+CRITICAL RULE: Only include information that was EXPLICITLY stated in the transcript. Do NOT add, infer, elaborate, or expand on anything. If something was said in one sentence, it should be one bullet point — not a paragraph. The notes should be a faithful, condensed reflection of ONLY what was spoken.
 
 Rules:
 - Use clear headings (## and ###) to organize by topic
 - Use bullet points for key concepts
 - Highlight important terms with **bold**
 - Include any formulas, code, or technical details mentioned
-- Add a "Key Takeaways" section at the end
-- Add a "Glossary" section if technical terms are used
-- Keep notes concise but comprehensive — don't lose important details
+- Add a "Key Takeaways" section at the end summarizing ONLY what was covered
+- Add a "Glossary" section if technical terms were ACTUALLY used in the transcript
 - If speakers are identified, attribute key points to them
-- Use > blockquotes for important quotes or definitions
-- Format for easy Notion import (clean Markdown)`,
+- Format for easy Notion import (clean Markdown)
+- Short transcript = short notes. Never pad or stretch content.`,
           },
           {
             role: "user",
