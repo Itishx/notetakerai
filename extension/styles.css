@@ -248,9 +248,20 @@ h1 {
   overflow-y: auto;
   font-size: 13px;
   line-height: 1.7;
-  white-space: pre-wrap;
   color: var(--text);
 }
+
+/* Rendered markdown styles */
+.rendered-md h1 { font-size: 18px; font-weight: 600; margin: 12px 0 6px; color: var(--text); }
+.rendered-md h2 { font-size: 15px; font-weight: 600; margin: 10px 0 4px; color: var(--text); }
+.rendered-md h3 { font-size: 13px; font-weight: 600; margin: 8px 0 4px; color: var(--text-muted); }
+.rendered-md strong { font-weight: 600; color: var(--primary); }
+.rendered-md em { font-style: italic; }
+.rendered-md ul { margin: 4px 0 8px 16px; padding: 0; }
+.rendered-md li { margin: 2px 0; list-style: disc; }
+.rendered-md hr { border: none; border-top: 1px solid var(--border-light); margin: 10px 0; }
+.rendered-md blockquote { border-left: 3px solid var(--primary); padding-left: 10px; margin: 6px 0; color: var(--text-muted); font-style: italic; }
+.rendered-md p { margin: 4px 0; }
 
 .notes-content::-webkit-scrollbar {
   width: 5px;
