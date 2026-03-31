@@ -10,6 +10,11 @@ let currentSessionId = null;
 let chatMessages = [];
 let pendingImageBase64 = null;
 let notionConnectionPoller = null;
+let trackedActiveTabId = null;
+let trackedActiveWindowId = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let playbackEl = null;
 
 const CONVERT_BUTTON_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>';
 
@@ -96,19 +101,7 @@ chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessi
 // Show history button if there are notes
 updateHistoryBtnVisibility();
 
-// Check initial status
-chrome.runtime.sendMessage({ action: "getStatus" }, (res) => {
-  if (res?.isRecording) {
-    setRecordingUI();
-    chrome.storage.local.get("startTime", (data) => {
-      if (data.startTime) {
-        seconds = Math.floor((Date.now() - data.startTime) / 1000);
-        updateTimer();
-        startTimer();
-      }
-    });
-  }
-});
+hydrateTrackedTabState();
 
 // Restore notes + chat for current session
 chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
@@ -127,57 +120,51 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
 recordBtn.addEventListener("click", startRecordingFlow);
 continueBtn?.addEventListener("click", startRecordingFlow);
 
-async function startRecordingFlow() {
-  let tabId;
-  try {
-    const data = await chrome.storage.local.get("activeTabId");
-    tabId = data.activeTabId;
-  } catch (e) {}
+function startRecordingFlow() {
+  const tabId = trackedActiveTabId;
 
   if (!tabId) {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    tabId = tab?.id;
-  }
-
-  if (!tabId) {
-    alert("No active tab found. Try clicking the extension icon again.");
+    alert("No active page found. Click the extension icon on the page you want to record, then try again.");
     return;
   }
 
-  const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (currentTab?.id) {
-    await chrome.storage.local.set({ activeTabId: currentTab.id });
-    tabId = currentTab.id;
-  }
-
-  chrome.runtime.sendMessage({ action: "startRecording", tabId }, (res) => {
-    if (res?.error) {
-      alert("Error: " + res.error);
+  chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, async (streamId) => {
+    const runtimeError = chrome.runtime.lastError;
+    if (runtimeError || !streamId) {
+      handleRecordingStartError(runtimeError?.message || "Failed to start tab capture");
       return;
     }
-    seconds = 0;
-    chrome.storage.local.set({ startTime: Date.now() });
-    setRecordingUI();
-    startTimer();
+
+    try {
+      await beginLocalRecording(streamId);
+      seconds = 0;
+      setRecordingUI();
+      updateTimer();
+      startTimer();
+    } catch (e) {
+      handleRecordingStartError(e instanceof Error ? e.message : "Failed to start recording");
+    }
   });
 }
 
-stopBtn.addEventListener("click", () => {
-  chrome.runtime.sendMessage({ action: "stopRecording" }, (res) => {
-    if (res?.error) {
-      alert("Error: " + res.error);
-      return;
-    }
-    audioSegments.push(res.audioBase64);
-    totalRecordedSeconds += seconds;
+stopBtn.addEventListener("click", async () => {
+  const capturedSeconds = seconds;
+  stopTimer();
+
+  try {
+    const audioBase64 = await stopLocalRecording();
+    audioSegments.push(audioBase64);
+    totalRecordedSeconds += capturedSeconds;
+    seconds = 0;
 
     chrome.storage.local.set({ audioSegments, totalRecordedSeconds });
 
     setResumeUI();
-    stopTimer();
-    chrome.storage.local.remove("startTime");
+    updateTimer();
     updateSegmentInfo();
-  });
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
 });
 
 convertBtn.addEventListener("click", async () => {
@@ -284,6 +271,127 @@ function setStorage(values) {
   return new Promise((resolve) => chrome.storage.local.set(values, resolve));
 }
 
+function removeStorage(keys) {
+  return new Promise((resolve) => chrome.storage.local.remove(keys, resolve));
+}
+
+async function hydrateTrackedTabState() {
+  const data = await getStorage(["activeTabId", "activeWindowId"]);
+  trackedActiveTabId = typeof data.activeTabId === "number" ? data.activeTabId : trackedActiveTabId;
+  trackedActiveWindowId = typeof data.activeWindowId === "number" ? data.activeWindowId : trackedActiveWindowId;
+}
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return;
+
+  if (changes.activeTabId) {
+    trackedActiveTabId = typeof changes.activeTabId.newValue === "number" ? changes.activeTabId.newValue : null;
+  }
+
+  if (changes.activeWindowId) {
+    trackedActiveWindowId = typeof changes.activeWindowId.newValue === "number" ? changes.activeWindowId.newValue : null;
+  }
+});
+
+async function closeNotionAuthTab() {
+  const data = await getStorage("notionAuthTabId");
+  const tabId = data.notionAuthTabId;
+
+  if (typeof tabId === "number") {
+    try {
+      await chrome.tabs.remove(tabId);
+    } catch {
+      // Ignore tabs that were already closed by the user or browser.
+    }
+  }
+
+  await removeStorage("notionAuthTabId");
+}
+
+async function beginLocalRecording(streamId) {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      mandatory: {
+        chromeMediaSource: "tab",
+        chromeMediaSourceId: streamId,
+      },
+    },
+  });
+
+  if (playbackEl) playbackEl.remove();
+
+  playbackEl = document.createElement("audio");
+  playbackEl.srcObject = stream;
+  playbackEl.autoplay = true;
+  playbackEl.id = "tabPlayback";
+  playbackEl.style.display = "none";
+  document.body.appendChild(playbackEl);
+
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data.size > 0) {
+      audioChunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.start(1000);
+}
+
+async function stopLocalRecording() {
+  return new Promise((resolve, reject) => {
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+      reject(new Error("Not recording"));
+      return;
+    }
+
+    const activeRecorder = mediaRecorder;
+    activeRecorder.onstop = () => {
+      const blob = new Blob(audioChunks, { type: "audio/webm" });
+      activeRecorder.stream.getTracks().forEach((track) => track.stop());
+      mediaRecorder = null;
+      audioChunks = [];
+
+      if (playbackEl) {
+        playbackEl.remove();
+        playbackEl = null;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === "string" ? reader.result : "";
+        resolve(result.split(",")[1]);
+      };
+      reader.onerror = () => reject(new Error("Failed to read recorded audio"));
+      reader.readAsDataURL(blob);
+    };
+
+    activeRecorder.stop();
+  });
+}
+
+function handleRecordingStartError(message) {
+  if (/Extension has not been invoked for the current page|activeTab permission|Chrome pages cannot be captured/i.test(message)) {
+    statusEl.className = "status idle";
+    statusEl.querySelector("span").textContent = "Reopen the extension on this page, then start recording";
+    alert("Chrome needs the extension to be reopened on the current page before a new recording can start there. Click the extension icon once on that page/video, then press Start Recording again.");
+    return;
+  }
+
+  alert("Error: " + message);
+}
+
+window.addEventListener("beforeunload", () => {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+  }
+
+  if (playbackEl) {
+    playbackEl.remove();
+    playbackEl = null;
+  }
+});
+
 function setNotionButtonLabel(label) {
   if (syncNotionLabel) syncNotionLabel.textContent = label;
 }
@@ -346,6 +454,9 @@ async function checkNotionConnection() {
   try {
     const status = await fetchNotionConnectionStatus(userId);
     await setStorage({ notionConnected: Boolean(status.connected) });
+    if (status.connected) {
+      await closeNotionAuthTab();
+    }
     setNotionButtonLabel(status.connected ? "Sync to Notion" : "Connect Notion");
     return Boolean(status.connected);
   } catch {
@@ -367,6 +478,7 @@ function startNotionConnectionPolling(userId) {
       if (status.connected) {
         stopNotionConnectionPolling();
         await setStorage({ notionConnected: true });
+        await closeNotionAuthTab();
         setNotionButtonLabel("Sync to Notion");
         syncNotionBtn.disabled = false;
         statusEl.className = "status idle";
@@ -382,11 +494,12 @@ function startNotionConnectionPolling(userId) {
       syncNotionBtn.disabled = false;
       setNotionButtonLabel("Connect Notion");
     }
-  }, 2000);
+  }, 1000);
 }
 
 checkNotionConnection();
 window.addEventListener("focus", () => {
+  hydrateTrackedTabState();
   checkNotionConnection();
 });
 
@@ -417,7 +530,10 @@ syncNotionBtn?.addEventListener("click", async () => {
       if (!res.ok) throw new Error("Failed to start OAuth");
       const { authUrl } = await res.json();
 
-      chrome.tabs.create({ url: authUrl });
+      const authTab = await chrome.tabs.create({ url: authUrl });
+      if (typeof authTab?.id === "number") {
+        await setStorage({ notionAuthTabId: authTab.id });
+      }
       startNotionConnectionPolling(userId);
     } catch (e) {
       alert("Failed to connect Notion: " + e.message);
