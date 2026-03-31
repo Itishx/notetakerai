@@ -31,6 +31,11 @@
 body {
   width: 520px;
   min-height: 500px;
+}
+
+body.sidepanel {
+  width: 100%;
+  min-height: 100vh;
   background: var(--bg);
   color: var(--text);
   font-family: 'Charter', 'Georgia', serif;
@@ -43,6 +48,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+body.sidepanel .container {
+  max-width: 100%;
+  min-height: 100vh;
+}
+
+body.sidepanel .notes-content {
+  max-height: none;
+  flex: 1;
 }
 
 .header {
