@@ -67,15 +67,15 @@ const Index = () => {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
               <div
                 className="absolute top-1/2 left-1/2 w-[500px] h-[500px] rounded-full animate-breathe"
-                style={{ background: 'radial-gradient(circle, hsl(160 25% 38% / 0.12) 0%, hsl(160 25% 38% / 0.04) 50%, transparent 70%)' }}
+                style={{ background: 'radial-gradient(circle, hsl(24 80% 50% / 0.12) 0%, hsl(24 80% 50% / 0.04) 50%, transparent 70%)' }}
               />
               <div
                 className="absolute top-1/2 left-1/2 w-[300px] h-[300px] rounded-full animate-breathe"
-                style={{ animationDelay: '1.5s', background: 'radial-gradient(circle, hsl(160 25% 38% / 0.15) 0%, hsl(160 25% 38% / 0.05) 60%, transparent 75%)' }}
+                style={{ animationDelay: '1.5s', background: 'radial-gradient(circle, hsl(24 80% 50% / 0.15) 0%, hsl(24 80% 50% / 0.05) 60%, transparent 75%)' }}
               />
               <div
                 className="absolute top-1/2 left-1/2 w-[140px] h-[140px] rounded-full animate-breathe"
-                style={{ animationDelay: '0.8s', background: 'radial-gradient(circle, hsl(160 25% 38% / 0.25) 0%, hsl(160 25% 38% / 0.08) 60%, transparent 80%)', boxShadow: '0 0 60px 20px hsl(160 25% 38% / 0.1)' }}
+                style={{ animationDelay: '0.8s', background: 'radial-gradient(circle, hsl(24 80% 50% / 0.25) 0%, hsl(24 80% 50% / 0.08) 60%, transparent 80%)', boxShadow: '0 0 60px 20px hsl(24 80% 50% / 0.1)' }}
               />
             </div>
 
