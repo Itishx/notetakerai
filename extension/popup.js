@@ -309,8 +309,8 @@ async function handleConvertToNotes() {
     notesMarkdown = data.notes;
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
-    chatSection.classList.remove("hidden");
     updateConvertButtonLabel();
+    updateChatContextUI();
 
     chrome.storage.local.set({ currentNotes: notesMarkdown });
     saveToHistory(notesMarkdown);
