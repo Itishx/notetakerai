@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "SideBrain — AI Lecture Notes",
+  "name": "SideBrain — AI Browser Companion",
   "version": "1.1.0",
   "description": "Record tab audio from Udemy, DataCamp, YouTube and convert to beautiful AI-powered notes",
   "permissions": ["activeTab", "tabs", "tabCapture", "offscreen", "storage", "sidePanel"],
