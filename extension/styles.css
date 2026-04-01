@@ -1128,3 +1128,57 @@ h1 {
 .onboarding-next-btn {
   min-width: 120px;
 }
+
+/* Answer Confirmation Modal */
+.answer-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.answer-confirm-overlay.hidden { display: none; }
+
+.answer-confirm-card {
+  background: hsl(40,18%,92%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 24px;
+  text-align: center;
+  max-width: 320px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+
+.answer-confirm-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.answer-confirm-card h3 {
+  font-size: 16px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.answer-confirm-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.answer-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.answer-confirm-actions .btn {
+  flex: 1;
+  font-size: 13px;
+  padding: 8px 12px;
+}
