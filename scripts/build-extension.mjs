@@ -11,7 +11,7 @@ const DIST = path.join(ROOT, "dist-extension");
 const OUT_ZIP = path.join(ROOT, "public", "sidebrain-extension.zip");
 
 // JS files to minify (simple whitespace removal, no obfuscation — Chrome flags obfuscated code as malware)
-const JS_FILES = ["popup.js", "background.js", "offscreen.js"];
+const JS_FILES = ["popup.js", "background.js", "offscreen.js", "content.js"];
 
 // Files/folders to copy as-is
 const COPY_FILES = [

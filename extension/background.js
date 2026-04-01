@@ -70,6 +70,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ isRecording });
     return true;
   }
+  if (message.action === "getPageContent") {
+    chrome.storage.local.get("activeTabId", (store) => {
+      const tabId = store.activeTabId;
+      if (!tabId) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          const tab = tabs?.[0];
+          if (!tab?.id) { sendResponse({ error: "No active tab" }); return; }
+          chrome.tabs.sendMessage(tab.id, { action: "extractPageContent" }, (res) => {
+            if (chrome.runtime.lastError) {
+              sendResponse({ error: chrome.runtime.lastError.message });
+            } else {
+              sendResponse(res || { error: "No response from content script" });
+            }
+          });
+        });
+        return;
+      }
+      chrome.tabs.sendMessage(tabId, { action: "extractPageContent" }, (res) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse(res || { error: "No response from content script" });
+        }
+      });
+    });
+    return true;
+  }
   if (message.action === "captureScreenshot") {
     // Get the window that contains the active tab we're recording
     chrome.storage.local.get("activeTabId", (store) => {
