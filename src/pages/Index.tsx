@@ -200,6 +200,31 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Install */}
+      <section className="container mx-auto px-6 py-16">
+        <div className="rounded-2xl border border-border/60 bg-card/40 p-10 md:p-14 max-w-2xl mx-auto">
+          <h2 className="text-2xl text-foreground mb-8">Getting started</h2>
+          <ol className="space-y-5 text-muted-foreground">
+            {[
+              "Download and unzip the extension file",
+              <>Open <code className="px-2 py-1 rounded-md bg-muted text-foreground text-sm">chrome://extensions</code></>,
+              <>Enable <strong className="text-foreground font-normal">Developer mode</strong></>,
+              <>Click <strong className="text-foreground font-normal">Load unpacked</strong> → select the folder</>,
+            ].map((text, i) => (
+              <li key={i} className="flex gap-4 items-start">
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center mt-0.5">
+                  {i + 1}
+                </span>
+                <span className="text-sm leading-relaxed">{text}</span>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-8 text-xs text-muted-foreground/60">
+            Works with Chrome, Edge, Brave, Arc, and all Chromium browsers.
+          </p>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="container mx-auto px-6 py-24">
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
