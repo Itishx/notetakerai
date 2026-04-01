@@ -1017,13 +1017,58 @@ async function sendChatMessage(text, imageBase64) {
   }
 }
 
+// Detect if user is asking for a direct answer/solution
+function looksLikeAnswerRequest(text) {
+  const patterns = [
+    /\b(solve|solution|answer|give me the code|write the code|code for|fix this|complete this)\b/i,
+    /\b(what('?s| is) the (answer|solution|code))\b/i,
+    /\b(do it for me|just (tell|give|show) me)\b/i,
+  ];
+  return patterns.some(p => p.test(text));
+}
+
+let pendingConfirmText = null;
+let pendingConfirmImg = null;
+
+function showAnswerConfirm(text, img) {
+  pendingConfirmText = text;
+  pendingConfirmImg = img;
+  const overlay = document.getElementById("answerConfirmOverlay");
+  if (overlay) overlay.classList.remove("hidden");
+}
+
+function hideAnswerConfirm() {
+  const overlay = document.getElementById("answerConfirmOverlay");
+  if (overlay) overlay.classList.add("hidden");
+  pendingConfirmText = null;
+  pendingConfirmImg = null;
+}
+
+document.getElementById("answerConfirmYes")?.addEventListener("click", () => {
+  const text = pendingConfirmText;
+  const img = pendingConfirmImg;
+  hideAnswerConfirm();
+  if (text || img) sendChatMessage(text, img);
+});
+
+document.getElementById("answerConfirmNo")?.addEventListener("click", () => {
+  hideAnswerConfirm();
+  // Put the text back so user can rephrase
+  if (pendingConfirmText && chatInput) chatInput.value = pendingConfirmText;
+});
+
 // Chat input handlers
 chatSendBtn?.addEventListener("click", () => {
   const text = chatInput.value.trim();
   const img = pendingImageBase64;
   chatInput.value = "";
   clearPendingImage();
-  sendChatMessage(text, img);
+  
+  if (looksLikeAnswerRequest(text) && !img) {
+    showAnswerConfirm(text, img);
+  } else {
+    sendChatMessage(text, img);
+  }
 });
 
 chatInput?.addEventListener("keydown", (e) => {
