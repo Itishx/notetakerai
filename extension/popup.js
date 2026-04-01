@@ -59,6 +59,9 @@ const chatSendBtn = document.getElementById("chatSendBtn");
 const chatImagePreview = document.getElementById("chatImagePreview");
 const chatPreviewImg = document.getElementById("chatPreviewImg");
 const chatRemoveImage = document.getElementById("chatRemoveImage");
+const chatDividerLabel = document.getElementById("chatDividerLabel");
+const pageContextBadge = document.getElementById("pageContextBadge");
+const pageContextLabel = document.getElementById("pageContextLabel");
 
 // Simple markdown to HTML converter
 function renderMarkdown(md) {
