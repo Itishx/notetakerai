@@ -67,15 +67,15 @@ const Index = () => {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
               <div
                 className="absolute top-1/2 left-1/2 w-[500px] h-[500px] rounded-full animate-breathe"
-                style={{ background: 'radial-gradient(circle, hsl(160 25% 38% / 0.12) 0%, hsl(160 25% 38% / 0.04) 50%, transparent 70%)' }}
+                style={{ background: 'radial-gradient(circle, hsl(24 80% 50% / 0.12) 0%, hsl(24 80% 50% / 0.04) 50%, transparent 70%)' }}
               />
               <div
                 className="absolute top-1/2 left-1/2 w-[300px] h-[300px] rounded-full animate-breathe"
-                style={{ animationDelay: '1.5s', background: 'radial-gradient(circle, hsl(160 25% 38% / 0.15) 0%, hsl(160 25% 38% / 0.05) 60%, transparent 75%)' }}
+                style={{ animationDelay: '1.5s', background: 'radial-gradient(circle, hsl(24 80% 50% / 0.15) 0%, hsl(24 80% 50% / 0.05) 60%, transparent 75%)' }}
               />
               <div
                 className="absolute top-1/2 left-1/2 w-[140px] h-[140px] rounded-full animate-breathe"
-                style={{ animationDelay: '0.8s', background: 'radial-gradient(circle, hsl(160 25% 38% / 0.25) 0%, hsl(160 25% 38% / 0.08) 60%, transparent 80%)', boxShadow: '0 0 60px 20px hsl(160 25% 38% / 0.1)' }}
+                style={{ animationDelay: '0.8s', background: 'radial-gradient(circle, hsl(24 80% 50% / 0.25) 0%, hsl(24 80% 50% / 0.08) 60%, transparent 80%)', boxShadow: '0 0 60px 20px hsl(24 80% 50% / 0.1)' }}
               />
             </div>
 
@@ -200,38 +200,45 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Install */}
-      <section className="container mx-auto px-6 py-16">
-        <div className="rounded-2xl border border-border/60 bg-card/40 p-10 md:p-14 max-w-2xl mx-auto">
-          <h2 className="text-2xl text-foreground mb-8">Getting started</h2>
-          <ol className="space-y-5 text-muted-foreground">
-            {[
-              "Download and unzip the extension file",
-              <>Open <code className="px-2 py-1 rounded-md bg-muted text-foreground text-sm">chrome://extensions</code></>,
-              <>Enable <strong className="text-foreground font-normal">Developer mode</strong></>,
-              <>Click <strong className="text-foreground font-normal">Load unpacked</strong> → select the folder</>,
-            ].map((text, i) => (
-              <li key={i} className="flex gap-4 items-start">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center mt-0.5">
-                  {i + 1}
-                </span>
-                <span className="text-sm leading-relaxed">{text}</span>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-8 text-xs text-muted-foreground/60">
-            Works with Chrome, Edge, Brave, Arc, and all Chromium browsers.
+      {/* CTA */}
+      <section className="container mx-auto px-6 py-24">
+        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
+        <div className="flex flex-col items-center text-center max-w-2xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-normal text-foreground mb-4">
+            Ready to capture what matters?
+          </h2>
+          <p className="text-muted-foreground text-lg leading-relaxed mb-10">
+            Download LectureSnap and turn your next lecture, meeting, or podcast into beautifully structured notes — in one click.
+          </p>
+          <Button
+            onClick={handleDownload}
+            className="h-13 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download Extension
+          </Button>
+          <p className="mt-6 text-xs text-muted-foreground/50">
+            Free · No account required · Works on all Chromium browsers
           </p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-16">
-        <div className="container mx-auto px-6 text-center">
-          <Leaf className="w-5 h-5 text-primary/40 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground/50">
-            LectureSnap — Learn with calm intention
-          </p>
+      <footer className="border-t border-border/60 py-12">
+        <div className="container mx-auto px-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-2">
+              <Leaf className="w-4 h-4 text-primary/60" />
+              <span className="text-sm text-foreground">LectureSnap</span>
+            </div>
+            <nav className="flex items-center gap-6 text-sm text-muted-foreground">
+              <Link to="/use-cases" className="hover:text-foreground transition-colors">Use Cases</Link>
+              <Link to="/notion-sync" className="hover:text-foreground transition-colors">Notion Sync</Link>
+            </nav>
+            <p className="text-xs text-muted-foreground/50">
+              © {new Date().getFullYear()} LectureSnap. Learn with calm intention.
+            </p>
+          </div>
         </div>
       </footer>
     </div>
