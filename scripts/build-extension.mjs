@@ -13,6 +13,18 @@ const OUT_ZIP = path.join(ROOT, "public", "lecturesnap-extension.zip");
 // JS files to minify (simple whitespace removal, no obfuscation — Chrome flags obfuscated code as malware)
 const JS_FILES = ["popup.js", "background.js", "offscreen.js"];
 
+// Files/folders to copy as-is
+const COPY_FILES = [
+  "manifest.json",
+  "sidepanel.html",
+  "offscreen.html",
+  "popup.html",
+  "styles.css",
+  "icon48.png",
+  "icon128.png",
+];
+const COPY_DIRS = ["fonts"];
+
 // ── Clean & recreate dist ──────────────────────────────────────────────────
 if (fs.existsSync(DIST)) fs.rmSync(DIST, { recursive: true });
 fs.mkdirSync(DIST, { recursive: true });
