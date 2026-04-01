@@ -44,6 +44,13 @@ const heroStopBtn = document.getElementById("heroStopBtn");
 const heroConvertBtn = document.getElementById("heroConvertBtn");
 const orbContainer = recordingHero?.querySelector(".orb-container");
 
+// Mode cards
+const modeCards = document.getElementById("modeCards");
+const modeRecord = document.getElementById("modeRecord");
+const modeBrowse = document.getElementById("modeBrowse");
+const recordModeControls = document.getElementById("recordModeControls");
+const backToModesBtn = document.getElementById("backToModesBtn");
+
 // History overlay elements
 const historyOverlay = document.getElementById("historyOverlay");
 const historyList = document.getElementById("historyList");
@@ -63,9 +70,22 @@ const chatDividerLabel = document.getElementById("chatDividerLabel");
 const pageContextBadge = document.getElementById("pageContextBadge");
 const pageContextLabel = document.getElementById("pageContextLabel");
 
-// Simple markdown to HTML converter
+// Simple markdown to HTML converter with code block support
 function renderMarkdown(md) {
-  let html = md
+  // First, extract fenced code blocks to protect them
+  const codeBlocks = [];
+  let processed = md.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+    const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const langLabel = lang ? `<span class="code-lang">${lang}</span>` : '';
+    codeBlocks.push(`<div class="code-block">${langLabel}<pre><code>${escapedCode}</code></pre></div>`);
+    return placeholder;
+  });
+
+  // Handle inline code
+  processed = processed.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+
+  let html = processed
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
@@ -83,7 +103,14 @@ function renderMarkdown(md) {
     return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
   });
 
-  return '<p>' + html + '</p>';
+  html = '<p>' + html + '</p>';
+
+  // Restore code blocks
+  codeBlocks.forEach((block, i) => {
+    html = html.replace(`__CODE_BLOCK_${i}__`, block);
+  });
+
+  return html;
 }
 
 function hasExistingNotes() {
@@ -120,7 +147,24 @@ if (onboardingOverlay && onboardingNextBtn) {
   chrome.storage.local.get(["onboardingDone"], (data) => {
     if (!data.onboardingDone) {
       onboardingOverlay.classList.remove("hidden");
-    }
+}
+
+// ===== MODE CARD HANDLERS =====
+modeRecord?.addEventListener("click", () => {
+  modeCards?.classList.add("hidden");
+  recordModeControls?.classList.remove("hidden");
+});
+
+modeBrowse?.addEventListener("click", () => {
+  // Scroll to chat section
+  chatSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+  chatInput?.focus();
+});
+
+backToModesBtn?.addEventListener("click", () => {
+  recordModeControls?.classList.add("hidden");
+  modeCards?.classList.remove("hidden");
+});
   });
 
   onboardingNextBtn.addEventListener("click", () => {
