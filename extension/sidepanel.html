@@ -21,6 +21,57 @@
     </div>
   </div>
 
+  <!-- Onboarding Overlay -->
+  <div id="onboardingOverlay" class="onboarding-overlay hidden">
+    <div class="onboarding-slides" id="onboardingSlides">
+      <!-- Slide 1: Welcome -->
+      <div class="onboarding-slide active" data-slide="0">
+        <div class="onboarding-orb-mini"></div>
+        <h1 class="onboarding-title">Welcome to SideBrain</h1>
+        <p class="onboarding-desc">Your AI-powered companion that lives right in your browser — record lectures, ask questions about any page, and sync everything to Notion.</p>
+      </div>
+      <!-- Slide 2: Use Cases -->
+      <div class="onboarding-slide" data-slide="1">
+        <div class="onboarding-cards">
+          <div class="onboarding-card">
+            <div class="onboarding-card-icon">🎙️</div>
+            <h3>Record & Transcribe</h3>
+            <p>Capture audio from any tab — lectures, meetings, tutorials — and get AI-generated notes instantly.</p>
+          </div>
+          <div class="onboarding-card">
+            <div class="onboarding-card-icon">💬</div>
+            <h3>Chat with AI</h3>
+            <p>Ask follow-up questions about your notes or the page you're on. Screenshot & share context easily.</p>
+          </div>
+          <div class="onboarding-card">
+            <div class="onboarding-card-icon">🌐</div>
+            <h3>Page-Aware Context</h3>
+            <p>SideBrain reads the page you're on and lets you ask questions about it — perfect for LeetCode, docs, articles.</p>
+          </div>
+        </div>
+      </div>
+      <!-- Slide 3: Notion + CTA -->
+      <div class="onboarding-slide" data-slide="2">
+        <div class="onboarding-cards">
+          <div class="onboarding-card onboarding-card-accent">
+            <div class="onboarding-card-icon">📓</div>
+            <h3>Sync to Notion</h3>
+            <p>One-click sync your notes to Notion. Each session becomes a beautifully formatted page.</p>
+          </div>
+        </div>
+        <a href="https://notetakerai.lovable.app" target="_blank" class="onboarding-link">Explore more on our website →</a>
+      </div>
+    </div>
+    <div class="onboarding-footer">
+      <div class="onboarding-dots" id="onboardingDots">
+        <span class="dot active" data-dot="0"></span>
+        <span class="dot" data-dot="1"></span>
+        <span class="dot" data-dot="2"></span>
+      </div>
+      <button id="onboardingNextBtn" class="btn btn-record onboarding-next-btn">Next</button>
+    </div>
+  </div>
+
   <div class="container" id="mainContainer">
     <!-- Header (visible in idle/notes mode) -->
     <div class="header" id="headerSection">
