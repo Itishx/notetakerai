@@ -44,10 +44,11 @@ body.sidepanel {
 }
 
 .container {
-  padding: 24px 20px;
+  padding: 24px 20px 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: calc(100vh - 120px);
 }
 
 body.sidepanel .container {
