@@ -215,16 +215,12 @@ function updateChatContextUI() {
   const hasPage = !!currentPageContext;
 
   if (hasNotes && hasPage) {
-    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about notes & page";
     if (chatInput) chatInput.placeholder = "Ask about your notes or this page...";
   } else if (hasNotes) {
-    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about your notes";
     if (chatInput) chatInput.placeholder = "Ask about your notes...";
   } else if (hasPage) {
-    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about this page";
     if (chatInput) chatInput.placeholder = "Ask about this page...";
   } else {
-    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI";
     if (chatInput) chatInput.placeholder = "Ask anything...";
   }
 
