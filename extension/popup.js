@@ -44,6 +44,13 @@ const heroStopBtn = document.getElementById("heroStopBtn");
 const heroConvertBtn = document.getElementById("heroConvertBtn");
 const orbContainer = recordingHero?.querySelector(".orb-container");
 
+// Mode cards
+const modeCards = document.getElementById("modeCards");
+const modeRecord = document.getElementById("modeRecord");
+const modeBrowse = document.getElementById("modeBrowse");
+const recordModeControls = document.getElementById("recordModeControls");
+const backToModesBtn = document.getElementById("backToModesBtn");
+
 // History overlay elements
 const historyOverlay = document.getElementById("historyOverlay");
 const historyList = document.getElementById("historyList");
