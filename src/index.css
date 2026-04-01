@@ -21,7 +21,7 @@
     --popover: 40 25% 94%;
     --popover-foreground: 30 10% 15%;
 
-    --primary: 160 25% 38%;
+    --primary: 24 80% 50%;
     --primary-foreground: 40 20% 97%;
 
     --secondary: 40 15% 90%;
@@ -38,20 +38,20 @@
 
     --border: 35 15% 85%;
     --input: 35 15% 85%;
-    --ring: 160 25% 38%;
+    --ring: 24 80% 50%;
 
     --radius: 0.75rem;
 
     --sidebar-background: 40 20% 95%;
     --sidebar-foreground: 30 10% 35%;
-    --sidebar-primary: 160 25% 38%;
+    --sidebar-primary: 24 80% 50%;
     --sidebar-primary-foreground: 40 20% 97%;
     --sidebar-accent: 40 15% 90%;
     --sidebar-accent-foreground: 30 10% 25%;
     --sidebar-border: 35 15% 85%;
-    --sidebar-ring: 160 25% 38%;
+    --sidebar-ring: 24 80% 50%;
 
-    --glow: 160 25% 38%;
+    --glow: 24 80% 50%;
   }
 
   @keyframes breathe {
@@ -78,7 +78,7 @@
     --popover: 30 10% 11%;
     --popover-foreground: 35 15% 85%;
 
-    --primary: 160 25% 50%;
+    --primary: 24 80% 55%;
     --primary-foreground: 30 10% 8%;
 
     --secondary: 30 8% 16%;
@@ -95,7 +95,7 @@
 
     --border: 30 8% 18%;
     --input: 30 8% 18%;
-    --ring: 160 25% 50%;
+    --ring: 24 80% 55%;
   }
 }
 
