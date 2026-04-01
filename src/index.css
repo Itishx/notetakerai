@@ -64,6 +64,15 @@
     to { transform: rotate(360deg); }
   }
 
+  @keyframes orb-drift {
+    0% { transform: translate(-50%, -50%) translate(0px, 0px); }
+    20% { transform: translate(-50%, -50%) translate(80px, -60px); }
+    40% { transform: translate(-50%, -50%) translate(-70px, -90px); }
+    60% { transform: translate(-50%, -50%) translate(-100px, 40px); }
+    80% { transform: translate(-50%, -50%) translate(60px, 70px); }
+    100% { transform: translate(-50%, -50%) translate(0px, 0px); }
+  }
+
   .animate-breathe {
     animation: breathe 6s ease-in-out infinite;
   }
