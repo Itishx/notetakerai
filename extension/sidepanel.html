@@ -110,22 +110,44 @@
       <div id="segmentCount" class="segment-count hidden"></div>
     </div>
 
-    <!-- Idle controls (shown when NOT recording) -->
+    <!-- Mode Selection Cards (shown when NOT recording) -->
     <div id="idleControls">
-      <div class="controls">
-        <button id="recordBtn" class="btn btn-record">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-          Start Recording
+      <div id="modeCards" class="mode-cards">
+        <div id="modeRecord" class="mode-card">
+          <div class="mode-card-icon">🎙️</div>
+          <div class="mode-card-text">
+            <h3>Record & Notes</h3>
+            <p>Capture audio from any tab and convert to structured notes</p>
+          </div>
+        </div>
+        <div id="modeBrowse" class="mode-card">
+          <div class="mode-card-icon">💬</div>
+          <div class="mode-card-text">
+            <h3>Chat with this page</h3>
+            <p>Ask AI questions about the page you're currently on</p>
+          </div>
+        </div>
+      </div>
+      <!-- Hidden recording controls (shown after entering record mode) -->
+      <div id="recordModeControls" class="hidden">
+        <div class="controls">
+          <button id="recordBtn" class="btn btn-record">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+            Start Recording
+          </button>
+          <button id="continueBtn" class="btn btn-record hidden">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+            Continue Recording
+          </button>
+        </div>
+        <button id="convertBtn" class="btn btn-convert" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+          Convert to Notes
         </button>
-        <button id="continueBtn" class="btn btn-record hidden">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-          Continue Recording
+        <button id="backToModesBtn" class="btn btn-secondary btn-sm" style="margin-top:4px;">
+          ← Back
         </button>
       </div>
-      <button id="convertBtn" class="btn btn-convert" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
-        Convert to Notes
-      </button>
     </div>
 
     <!-- RECORDING HERO (visible only while recording) -->
