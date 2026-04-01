@@ -950,8 +950,6 @@ function buildNotesContextForAI(markdown) {
 
 async function sendChatMessage(text, imageBase64) {
   if (!text && !imageBase64) return;
-  // Allow chat even without notes — page context is enough
-  if (!notesMarkdown && !currentPageContext && !imageBase64) return;
 
   const userMsg = { role: "user", content: text || "📎 Image attached — please insert into notes" };
   if (imageBase64) userMsg.image = `data:image/png;base64,${imageBase64}`;
