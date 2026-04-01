@@ -94,7 +94,49 @@ function updateConvertButtonLabel() {
 
 updateConvertButtonLabel();
 
-// Restore session state
+// ===== ONBOARDING =====
+const onboardingOverlay = document.getElementById("onboardingOverlay");
+const onboardingNextBtn = document.getElementById("onboardingNextBtn");
+const onboardingDots = document.querySelectorAll("#onboardingDots .dot");
+const onboardingSlides = document.querySelectorAll(".onboarding-slide");
+let currentOnboardingSlide = 0;
+const TOTAL_ONBOARDING_SLIDES = 3;
+
+function showOnboardingSlide(idx) {
+  onboardingSlides.forEach((s, i) => {
+    s.classList.remove("active", "exit-left");
+    if (i < idx) s.classList.add("exit-left");
+    if (i === idx) s.classList.add("active");
+  });
+  onboardingDots.forEach((d, i) => d.classList.toggle("active", i === idx));
+  onboardingNextBtn.textContent = idx === TOTAL_ONBOARDING_SLIDES - 1 ? "Get Started" : "Next";
+}
+
+if (onboardingOverlay && onboardingNextBtn) {
+  chrome.storage.local.get(["onboardingDone"], (data) => {
+    if (!data.onboardingDone) {
+      onboardingOverlay.classList.remove("hidden");
+    }
+  });
+
+  onboardingNextBtn.addEventListener("click", () => {
+    if (currentOnboardingSlide < TOTAL_ONBOARDING_SLIDES - 1) {
+      currentOnboardingSlide++;
+      showOnboardingSlide(currentOnboardingSlide);
+    } else {
+      chrome.storage.local.set({ onboardingDone: true });
+      onboardingOverlay.classList.add("hidden");
+    }
+  });
+
+  onboardingDots.forEach((dot) => {
+    dot.addEventListener("click", () => {
+      currentOnboardingSlide = parseInt(dot.dataset.dot);
+      showOnboardingSlide(currentOnboardingSlide);
+    });
+  });
+}
+
 chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessionId"], (data) => {
   if (data.audioSegments && data.audioSegments.length > 0) {
     audioSegments = data.audioSegments;
