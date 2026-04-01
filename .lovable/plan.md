@@ -1,81 +1,39 @@
 
 
-# SideBrain: Page-Aware AI Browser Companion
-
-## Summary
-
-Add a **content script** that extracts the current page's text and sends it to the sidepanel. The AI chat becomes dual-mode: it works with **notes** (when you've recorded/generated them) AND with **page context** (always available). Users can ask questions about any webpage — LeetCode, blogs, docs, articles — directly from the sidepanel.
+# Sidepanel: Dual-Mode UI + Code Markdown Rendering
 
 ## What Changes
 
-1. **Always-visible chat**: The chat section is no longer hidden behind "Convert to Notes." It's always shown at the bottom of the sidepanel. When notes exist, AI uses both page context + notes. When no notes exist, AI uses page context only.
+### 1. Dual-Mode Landing (Record vs Browse)
 
-2. **Content script** (`extension/content.js`): Injected into every page, extracts `document.body.innerText` (trimmed to ~12K chars) and sends it to the sidepanel on demand via `chrome.runtime.sendMessage`.
+Instead of showing Start Recording + Convert to Notes by default, the idle state will show **two mode cards**:
 
-3. **Background relay**: `background.js` gets a new `getPageContent` action — it injects/messages the content script on the active tab and relays the extracted text back to the sidepanel.
+- **Record Mode** — icon + "Record & Notes" label + subtitle "Capture audio from any tab and convert to structured notes." Clicking enters the current recording flow (orb, timer, convert).
+- **Browse Mode** — icon + "Chat with this page" label + subtitle "Ask AI questions about the page you're on." Clicking scrolls/focuses directly to the chat section with page context active.
 
-4. **Updated manifest**: Adds `content.js` as a content script matching `<all_urls>`, and adds `scripting` permission for programmatic injection fallback.
+This gives users a clear entry point based on intent. Both modes remain accessible at all times (the chat section stays visible below recording controls regardless), but the two cards make the distinction obvious on first glance.
 
-5. **Chat edge function update**: `chat-about-notes` accepts an optional `pageContext` field. When present, the system prompt includes the page text so the AI can answer questions about it.
+### 2. Code Block Rendering in Chat
 
-6. **UI changes in sidepanel**:
-   - Chat section always visible (remove the `hidden` class dependency on notes)
-   - Chat placeholder changes contextually: "Ask about this page..." vs "Ask about your notes..."
-   - A small badge/indicator shows what context is active (page name / notes)
-   - The chat divider text updates to reflect mode
+The current `renderMarkdown()` function doesn't handle fenced code blocks (` ```lang ... ``` `). AI responses with code appear as plain text.
+
+**Fix**: Enhance `renderMarkdown()` to detect fenced code blocks and render them as `<pre><code class="language-xxx">` with proper styling. Add CSS for code blocks with a dark background, monospace font, horizontal scroll, and syntax-appropriate styling.
 
 ## Technical Details
 
-### New file: `extension/content.js`
-```javascript
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === "extractPageContent") {
-    const text = document.body.innerText.substring(0, 12000);
-    const title = document.title;
-    const url = window.location.href;
-    sendResponse({ text, title, url });
-  }
-  return true;
-});
-```
+### `extension/popup.js`
+- Update `renderMarkdown()` to handle fenced code blocks (` ```language\n...\n``` `) BEFORE other replacements. Also handle inline code (`` `code` ``).
+- Add click handlers for the two mode cards: Record card calls existing `recordBtn.click()` flow; Browse card scrolls to chat section.
 
-### `extension/manifest.json` changes
-- Add `"scripting"` to permissions
-- Add content_scripts block:
-```json
-"content_scripts": [{
-  "matches": ["<all_urls>"],
-  "js": ["content.js"],
-  "run_at": "document_idle"
-}]
-```
+### `extension/sidepanel.html`
+- Replace the idle controls area with two side-by-side (or stacked) mode cards inside `#idleControls`.
+- Keep existing recording/convert buttons available within the Record flow.
 
-### `extension/background.js` changes
-- Add handler for `getPageContent` message that uses `chrome.tabs.sendMessage` to the active tab's content script and relays the response.
-
-### `extension/popup.js` changes
-- On load and on tab change, fetch page context via `chrome.runtime.sendMessage({ action: "getPageContent" })`
-- Store `currentPageContext = { title, url, text }` in memory
-- Make chat section always visible (remove the notes-only gate)
-- Update `sendChatMessage()` to include `pageContext` in the request body
-- Update chat placeholder text based on available context
-
-### `supabase/functions/chat-about-notes/index.ts` changes
-- Accept optional `pageContext` (object with `title`, `url`, `text`)
-- When present (and no image), prepend page context to system prompt:
-  ```
-  The user is currently viewing: "${title}" (${url})
-  Page content:
-  ${text}
-  ```
-- When both notes and page context exist, include both in the system prompt
-
-### `extension/sidepanel.html` changes
-- Remove `hidden` from `chatSection` initial state
-- Update chat divider to show dynamic context indicator
-- Update footer text to "Works on any webpage"
+### `extension/styles.css`
+- Add `.mode-card` styles: bordered card with icon, title, subtitle, hover effect.
+- Add `pre`, `code` styles for chat messages: dark background (`#1e1e1e`), monospace font, padding, border-radius, overflow-x scroll, proper text color.
+- Add inline code styling (`` `code` ``): subtle background, smaller font.
 
 ### Build
-- Add `content.js` to build script copy list
-- Rebuild extension ZIP
+- Rebuild extension ZIP.
 
