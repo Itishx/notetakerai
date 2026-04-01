@@ -1031,7 +1031,8 @@ async function sendChatMessage(text, imageBase64) {
     }
 
     const data = await response.json();
-    typingEl.remove();
+    clearInterval(thinkingInterval);
+    thinkingEl.remove();
     chatMessages.push({ role: "assistant", content: data.reply });
     renderChatMessages();
     saveChatMessages();
