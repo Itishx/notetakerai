@@ -1,4 +1,4 @@
-import { Mic, FileText, Download, Zap, BookOpen, ChevronRight, Leaf, ArrowRight, Users, GraduationCap, Radio, TrendingUp, Link2, Image } from "lucide-react";
+import { Mic, FileText, Download, Zap, BookOpen, ChevronRight, Leaf, ArrowRight, Users, GraduationCap, Radio, TrendingUp, Globe, MessageSquare, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -6,23 +6,33 @@ import Navbar from "@/components/Navbar";
 const features = [
   {
     icon: Mic,
-    title: "Effortless Capture",
-    desc: "Records audio directly from your browser tab — no microphone, no setup, no extra software.",
-  },
-  {
-    icon: Zap,
-    title: "Deep Transcription",
-    desc: "AI listens carefully, capturing every word with speaker awareness across any content type.",
+    title: "Record any tab",
+    desc: "Capture audio from any browser tab — lectures, meetings, tutorials — no microphone, no setup.",
   },
   {
     icon: FileText,
-    title: "Thoughtful Notes",
-    desc: "AI distills transcripts into structured notes — headings, key points, takeaways, and a glossary.",
+    title: "AI-structured notes",
+    desc: "Transcribed and shaped into headings, key points, takeaways, and a glossary. Automatically.",
+  },
+  {
+    icon: Globe,
+    title: "Understands the page",
+    desc: "Open on any webpage — docs, articles, LeetCode — and ask questions about what's in front of you.",
+  },
+  {
+    icon: MessageSquare,
+    title: "Chat across both",
+    desc: "Ask about your notes, the page you're on, or both at once. Attach screenshots for deeper context.",
+  },
+  {
+    icon: Zap,
+    title: "Screenshot & annotate",
+    desc: "Capture any region of your screen and send it to the AI — it embeds diagrams directly into your notes.",
   },
   {
     icon: BookOpen,
-    title: "Flows into Notion",
-    desc: "One click syncs your notes — including images — directly into your Notion workspace.",
+    title: "Syncs to Notion",
+    desc: "One click pushes structured notes — including images — as native Notion blocks into your workspace.",
   },
 ];
 
@@ -59,7 +69,7 @@ const Index = () => {
         <div className="container relative mx-auto px-6 pt-28 pb-24 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-5 py-2 text-sm text-muted-foreground mb-8 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
             <Leaf className="w-3.5 h-3.5 text-primary" />
-            Simple · Focused · Free
+            Browser AI · Free · No account needed
           </div>
 
           {/* Headline with orb */}
@@ -80,14 +90,14 @@ const Index = () => {
             </div>
 
             <h1 className="relative z-10 text-4xl md:text-6xl lg:text-7xl font-normal tracking-tight text-foreground max-w-3xl mx-auto leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-              Let any audio
+              Your browser,
               <br />
-              <em className="text-primary not-italic">become notes</em>
+              <em className="text-primary not-italic">made smarter</em>
             </h1>
           </div>
 
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-lg mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            Record. Transcribe. Organize. A calm tool that turns any browser audio — lectures, meetings, podcasts — into beautifully structured notes.
+            Record any audio, chat about any webpage, annotate with screenshots — SideBrain is the AI sidekick that lives in your browser sidebar.
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-fade-in" style={{ animationDelay: "0.6s" }}>
@@ -109,11 +119,11 @@ const Index = () => {
           </div>
 
           <div className="mt-14 flex items-center justify-center gap-8 text-muted-foreground/60 text-sm opacity-0 animate-fade-in" style={{ animationDelay: "0.8s" }}>
-            <span>Any tab</span>
+            <span>Record audio</span>
             <span className="w-1 h-1 rounded-full bg-border" />
-            <span>Any content</span>
+            <span>Chat any page</span>
             <span className="w-1 h-1 rounded-full bg-border" />
-            <span>Any workflow</span>
+            <span>Sync to Notion</span>
           </div>
         </div>
       </section>
@@ -126,7 +136,7 @@ const Index = () => {
       {/* Features */}
       <section className="container mx-auto px-6 py-24">
         <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">What it does</p>
-        <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {features.map((f, i) => (
             <div
               key={f.title}
@@ -204,15 +214,15 @@ const Index = () => {
           <div className="opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
             <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-4">Use Cases</p>
             <h2 className="text-3xl md:text-4xl font-normal text-foreground leading-snug mb-14">
-              One tool,<br /><em className="text-primary not-italic">every workflow</em>
+              Works wherever<br /><em className="text-primary not-italic">you browse</em>
             </h2>
 
             <div className="space-y-10">
               {[
-                { icon: Users, label: "Meeting documentation", desc: "Auto-summarise any browser-based call with decisions, action items, and speakers." },
-                { icon: GraduationCap, label: "Online courses", desc: "Turn any lecture or tutorial into structured notes with headings, terms, and takeaways." },
-                { icon: TrendingUp, label: "Sales call notes", desc: "Capture objections, commitments, and next steps — paste directly into your CRM." },
-                { icon: Radio, label: "Podcast summaries", desc: "Get structured takeaways from any episode without sitting through the whole thing." },
+                { icon: GraduationCap, label: "Online courses & lectures", desc: "Record any video lesson and get structured notes with headings, key terms, and takeaways." },
+                { icon: Users, label: "Meetings & calls", desc: "Auto-summarise any browser-based call with decisions, action items, and speaker context." },
+                { icon: Globe, label: "Articles & documentation", desc: "Open SideBrain on any webpage and ask questions about what's in front of you — no recording needed." },
+                { icon: TrendingUp, label: "LeetCode & problem solving", desc: "Read the problem, ask for hints, get explanations — all without leaving the page." },
               ].map(({ icon: Icon, label, desc }, i) => (
                 <div key={label} className="flex items-start gap-5 group">
                   <div className="flex-shrink-0 w-10 h-10 rounded-xl border border-border/60 bg-card/40 flex items-center justify-center group-hover:border-primary/30 group-hover:bg-card/80 transition-all duration-300">
@@ -304,6 +314,27 @@ const Index = () => {
         </div>
       </section>
 
+
+      {/* CTA */}
+      <section className="container mx-auto px-6 py-24 text-center">
+        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
+        <h2 className="text-3xl md:text-5xl font-normal text-foreground mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+          Ready to capture what matters?
+        </h2>
+        <p className="text-muted-foreground max-w-lg mx-auto mb-10 leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
+          Download SideBrain and turn your next lecture, meeting, or podcast into beautifully structured notes — in one click.
+        </p>
+        <div className="opacity-0 animate-fade-in" style={{ animationDelay: "0.3s" }}>
+          <Button
+            onClick={handleDownload}
+            className="h-13 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download Extension
+          </Button>
+          <p className="mt-5 text-xs text-muted-foreground/50">Free · No account required · Works on all Chromium browsers</p>
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="mt-8 mx-4 md:mx-8 mb-8 rounded-2xl border border-border/60 bg-card/40 overflow-hidden">

@@ -139,7 +139,7 @@ const UseCases = () => {
             <em className="text-primary not-italic">every workflow</em>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            SideBrain captures audio from any browser tab. The "lecture" is just the beginning — here's where else it fits.
+            Record audio, chat about any page, annotate with screenshots. Here's every workflow SideBrain fits into.
           </p>
         </div>
       </section>
