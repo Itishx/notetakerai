@@ -147,7 +147,24 @@ if (onboardingOverlay && onboardingNextBtn) {
   chrome.storage.local.get(["onboardingDone"], (data) => {
     if (!data.onboardingDone) {
       onboardingOverlay.classList.remove("hidden");
-    }
+}
+
+// ===== MODE CARD HANDLERS =====
+modeRecord?.addEventListener("click", () => {
+  modeCards?.classList.add("hidden");
+  recordModeControls?.classList.remove("hidden");
+});
+
+modeBrowse?.addEventListener("click", () => {
+  // Scroll to chat section
+  chatSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+  chatInput?.focus();
+});
+
+backToModesBtn?.addEventListener("click", () => {
+  recordModeControls?.classList.add("hidden");
+  modeCards?.classList.remove("hidden");
+});
   });
 
   onboardingNextBtn.addEventListener("click", () => {
