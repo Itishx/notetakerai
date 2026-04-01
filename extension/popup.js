@@ -164,6 +164,8 @@ modeBrowse?.addEventListener("click", () => {
   idleStatusBlock?.classList.add("hidden");
   headerSection?.classList.add("hidden");
   chatSection?.classList.remove("hidden");
+  // Re-fetch page context when entering browse mode
+  fetchPageContext();
   // Show greeting if no messages
   if (chatMessages.length === 0 && chatGreeting) {
     chatGreeting.classList.remove("hidden");
