@@ -634,7 +634,24 @@ h1 {
   letter-spacing: 0.3px;
 }
 
-.chat-messages {
+.page-context-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  margin: 0 0 6px 0;
+  font-size: 10px;
+  color: var(--primary);
+  background: var(--primary-faint);
+  border-radius: 20px;
+  width: fit-content;
+}
+.page-context-badge svg {
+  flex-shrink: 0;
+  stroke: var(--primary);
+}
+
+
   display: flex;
   flex-direction: column;
   gap: 8px;
