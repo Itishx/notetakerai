@@ -906,7 +906,8 @@ function buildNotesContextForAI(markdown) {
 
 async function sendChatMessage(text, imageBase64) {
   if (!text && !imageBase64) return;
-  if (!notesMarkdown) return;
+  // Allow chat even without notes — page context is enough
+  if (!notesMarkdown && !currentPageContext && !imageBase64) return;
 
   const userMsg = { role: "user", content: text || "📎 Image attached — please insert into notes" };
   if (imageBase64) userMsg.image = `data:image/png;base64,${imageBase64}`;
@@ -921,14 +922,20 @@ async function sendChatMessage(text, imageBase64) {
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 
   try {
-    const { sanitizedNotes, existingImages } = buildNotesContextForAI(notesMarkdown);
+    const hasNotes = hasExistingNotes();
+    const notesCtx = hasNotes ? buildNotesContextForAI(notesMarkdown) : { sanitizedNotes: "", existingImages: {} };
     const body = {
-      notes: sanitizedNotes,
+      notes: notesCtx.sanitizedNotes,
       message: text || "Please insert this diagram/image into my notes at the most appropriate location.",
     };
 
+    // Include page context if available
+    if (currentPageContext) {
+      body.pageContext = currentPageContext;
+    }
+
     if (imageBase64) {
-      body.existingImages = existingImages;
+      body.existingImages = notesCtx.existingImages;
     } else {
       body.chatHistory = chatMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
     }
