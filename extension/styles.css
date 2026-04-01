@@ -588,13 +588,20 @@ h1 {
 .footer {
   text-align: center;
   padding-top: 6px;
-  border-top: 1px solid rgba(212, 200, 182, 0.40);
 }
 
 .footer p {
   font-size: 11px;
   color: var(--text-faint);
   letter-spacing: 0.5px;
+}
+
+/* Chat Bottom Bar */
+.chat-bottom-bar {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(0deg, hsl(40,18%,90%) 60%, transparent);
+  padding: 12px 20px 16px;
 }
 
 /* ===== HISTORY OVERLAY ===== */
