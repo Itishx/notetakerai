@@ -51,7 +51,7 @@ serve(async (req) => {
     }
 
     const accessToken = conn.access_token;
-    const safeTitle = title || "LectureSnap Notes";
+    const safeTitle = title || "SideBrain Notes";
 
     const imageUrlMap: Record<string, string> = {};
     if (images && Array.isArray(images)) {
@@ -342,7 +342,7 @@ async function updatePageTitle(pageId: string, title: string | undefined, access
       },
       body: JSON.stringify({
         properties: {
-          title: { title: [{ text: { content: title || "LectureSnap Notes" } }] },
+          title: { title: [{ text: { content: title || "SideBrain Notes" } }] },
         },
       }),
     });

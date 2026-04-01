@@ -160,7 +160,7 @@ const SidepanelMockup = ({ v }: { v: GlassStyle }) => {
               <Leaf className="w-3.5 h-3.5" style={{ color: v.primary }} strokeWidth={1.5} />
             </div>
             <div>
-              <div className="text-xs font-normal tracking-wide" style={{ color: v.text, fontFamily: "Georgia, serif" }}>LectureSnap</div>
+              <div className="text-xs font-normal tracking-wide" style={{ color: v.text, fontFamily: "Georgia, serif" }}>SideBrain</div>
               <div className="text-[10px]" style={{ color: v.textFaint, fontFamily: "Georgia, serif", fontStyle: "italic" }}>AI lecture notes</div>
             </div>
           </div>

@@ -10,7 +10,7 @@ const syncSteps = [
     num: "01",
     icon: Lock,
     title: "Connect your Notion workspace",
-    desc: "Click \"Connect Notion\" inside the LectureSnap side panel. You're redirected to Notion's official OAuth page — authorize once and you're done. LectureSnap never sees your Notion password. Your credentials are handled entirely by Notion's own authentication.",
+    desc: "Click \"Connect Notion\" inside the SideBrain side panel. You're redirected to Notion's official OAuth page — authorize once and you're done. SideBrain never sees your Notion password. Your credentials are handled entirely by Notion's own authentication.",
     detail: "Powered by OAuth 2.0 via Supabase. Connection is stored securely — no re-auth needed.",
   },
   {
@@ -68,7 +68,7 @@ const NotionSync = () => {
           <div className="w-10 h-10 rounded-full border border-border/50 flex items-center justify-center">
             <Image className="w-4 h-4 text-muted-foreground/30" strokeWidth={1.5} />
           </div>
-          <p className="text-sm text-muted-foreground/30">Screenshot: LectureSnap side panel alongside synced Notion page</p>
+          <p className="text-sm text-muted-foreground/30">Screenshot: SideBrain side panel alongside synced Notion page</p>
         </div>
       </div>
 
@@ -108,7 +108,7 @@ const NotionSync = () => {
             <div className="w-8 h-8 rounded-full border border-border/50 flex items-center justify-center">
               <Image className="w-3.5 h-3.5 text-muted-foreground/30" strokeWidth={1.5} />
             </div>
-            <p className="text-xs text-muted-foreground/30 text-center px-4">Screenshot: LectureSnap notes panel with images and sections</p>
+            <p className="text-xs text-muted-foreground/30 text-center px-4">Screenshot: SideBrain notes panel with images and sections</p>
           </div>
           <div className="rounded-2xl border-2 border-dashed border-border/50 bg-card/30 aspect-[4/3] flex flex-col items-center justify-center gap-3">
             <div className="w-8 h-8 rounded-full border border-border/50 flex items-center justify-center">
@@ -157,7 +157,7 @@ const NotionSync = () => {
                 <h3 className="text-foreground">Secure OAuth connection</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                The Notion connection uses official OAuth 2.0. When you click "Connect Notion," you're redirected to Notion's own authorization page. LectureSnap never handles your password. Your access token is stored securely via Supabase and used only to write notes on your behalf.
+                The Notion connection uses official OAuth 2.0. When you click "Connect Notion," you're redirected to Notion's own authorization page. SideBrain never handles your password. Your access token is stored securely via Supabase and used only to write notes on your behalf.
               </p>
             </div>
 
@@ -167,7 +167,7 @@ const NotionSync = () => {
                 <h3 className="text-foreground">Images that actually render</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Notion requires publicly accessible image URLs — it can't accept base64 or local data. When your notes include diagrams or screenshots, LectureSnap uploads them to Supabase Storage first, generates a permanent public URL, then embeds that URL into the synced Notion page. Your images appear inline, exactly where they belong.
+                Notion requires publicly accessible image URLs — it can't accept base64 or local data. When your notes include diagrams or screenshots, SideBrain uploads them to Supabase Storage first, generates a permanent public URL, then embeds that URL into the synced Notion page. Your images appear inline, exactly where they belong.
               </p>
             </div>
 
@@ -187,7 +187,7 @@ const NotionSync = () => {
                 <h3 className="text-foreground">Works with pages & databases</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Choose any Notion page or database as your sync target. When syncing to a database, LectureSnap creates a new entry for each session — keeping your notes organized as rows you can filter, sort, and tag. Syncing to a page appends or updates content in place.
+                Choose any Notion page or database as your sync target. When syncing to a database, SideBrain creates a new entry for each session — keeping your notes organized as rows you can filter, sort, and tag. Syncing to a page appends or updates content in place.
               </p>
             </div>
           </div>
@@ -233,9 +233,9 @@ const NotionSync = () => {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button
             onClick={() => {
-              fetch("/lecturesnap-extension.zip")
+              fetch("/sidebrain-extension.zip")
                 .then((res) => { if (!res.ok) throw new Error(); return res.blob(); })
-                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "lecturesnap-extension.zip"; a.click(); URL.revokeObjectURL(a.href); })
+                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "sidebrain-extension.zip"; a.click(); URL.revokeObjectURL(a.href); })
                 .catch(() => alert("Extension not yet packaged. Please check back soon."));
             }}
             className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base"
@@ -255,7 +255,7 @@ const NotionSync = () => {
       <footer className="py-12 border-t border-border/40">
         <div className="container mx-auto px-6 text-center">
           <Leaf className="w-5 h-5 text-primary/40 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground/50">LectureSnap — Learn with calm intention</p>
+          <p className="text-sm text-muted-foreground/50">SideBrain — Learn with calm intention</p>
         </div>
       </footer>
     </div>

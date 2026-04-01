@@ -35,7 +35,7 @@ const steps = [
 
 const Index = () => {
   const handleDownload = () => {
-    fetch("/lecturesnap-extension.zip")
+    fetch("/sidebrain-extension.zip")
       .then((res) => {
         if (!res.ok) throw new Error("Download failed");
         return res.blob();
@@ -43,7 +43,7 @@ const Index = () => {
       .then((blob) => {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = "lecturesnap-extension.zip";
+        a.download = "sidebrain-extension.zip";
         a.click();
         URL.revokeObjectURL(a.href);
       })
@@ -177,7 +177,7 @@ const Index = () => {
             <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-4">01</p>
             <h3 className="text-xl text-foreground mb-3">More than lectures</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Meetings, podcasts, sales calls, training videos — discover every workflow LectureSnap fits into.
+              Meetings, podcasts, sales calls, training videos — discover every workflow SideBrain fits into.
             </p>
             <span className="inline-flex items-center gap-1.5 text-sm text-primary group-hover:gap-2.5 transition-all duration-300">
               See all use cases <ArrowRight className="w-4 h-4" />
@@ -233,7 +233,7 @@ const Index = () => {
             Ready to capture what matters?
           </h2>
           <p className="text-muted-foreground text-lg leading-relaxed mb-10">
-            Download LectureSnap and turn your next lecture, meeting, or podcast into beautifully structured notes — in one click.
+            Download SideBrain and turn your next lecture, meeting, or podcast into beautifully structured notes — in one click.
           </p>
           <Button
             onClick={handleDownload}
@@ -254,14 +254,14 @@ const Index = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <Leaf className="w-4 h-4 text-primary/60" />
-              <span className="text-sm text-foreground">LectureSnap</span>
+              <span className="text-sm text-foreground">SideBrain</span>
             </div>
             <nav className="flex items-center gap-6 text-sm text-muted-foreground">
               <Link to="/use-cases" className="hover:text-foreground transition-colors">Use Cases</Link>
               <Link to="/notion-sync" className="hover:text-foreground transition-colors">Notion Sync</Link>
             </nav>
             <p className="text-xs text-muted-foreground/50">
-              © {new Date().getFullYear()} LectureSnap. Learn with calm intention.
+              © {new Date().getFullYear()} SideBrain. Learn with calm intention.
             </p>
           </div>
         </div>

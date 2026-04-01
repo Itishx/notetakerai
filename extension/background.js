@@ -1,4 +1,4 @@
-// Background service worker for LectureSnap (MV3)
+// Background service worker for SideBrain (MV3)
 let isRecording = false;
 
 function doCapture(windowId, sendResponse) {

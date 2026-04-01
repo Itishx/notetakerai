@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "extension");
 const DIST = path.join(ROOT, "dist-extension");
-const OUT_ZIP = path.join(ROOT, "public", "lecturesnap-extension.zip");
+const OUT_ZIP = path.join(ROOT, "public", "sidebrain-extension.zip");
 
 // JS files to minify (simple whitespace removal, no obfuscation — Chrome flags obfuscated code as malware)
 const JS_FILES = ["popup.js", "background.js", "offscreen.js"];
@@ -62,7 +62,7 @@ const archive = archiver("zip", { zlib: { level: 9 } });
 
 output.on("close", () => {
   const kb = (archive.pointer() / 1024).toFixed(1);
-  console.log(`\n  📦  lecturesnap-extension.zip → ${kb} KB`);
+  console.log(`\n  📦  sidebrain-extension.zip → ${kb} KB`);
   console.log(`      ${OUT_ZIP}\n`);
 });
 
