@@ -209,10 +209,15 @@
       </div>
     </div>
 
-    <!-- Chat Section -->
+    <!-- Chat Section (Browse Mode Full Screen) -->
     <div id="chatSection" class="chat-section">
-      <div class="chat-divider">
-        <span id="chatDividerLabel">Chat with AI about this page</span>
+      <!-- Greeting shown when entering browse mode with no messages -->
+      <div id="chatGreeting" class="chat-greeting hidden">
+        <div class="chat-greeting-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h2>What can I help with?</h2>
+        <p>Ask me anything about the page you're on — code, articles, docs, or any content.</p>
       </div>
       <div id="pageContextBadge" class="page-context-badge hidden">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
