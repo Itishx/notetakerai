@@ -175,9 +175,13 @@
     </div>
 
     <!-- Chat Section -->
-    <div id="chatSection" class="chat-section hidden">
+    <div id="chatSection" class="chat-section">
       <div class="chat-divider">
-        <span>Chat with AI about your notes</span>
+        <span id="chatDividerLabel">Chat with AI about this page</span>
+      </div>
+      <div id="pageContextBadge" class="page-context-badge hidden">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <span id="pageContextLabel">Reading page...</span>
       </div>
       <div id="chatMessages" class="chat-messages"></div>
       <div id="chatImagePreview" class="chat-image-preview hidden">
@@ -190,7 +194,7 @@
         <button id="chatScreenshotBtn" class="btn-icon-sm" title="Take screenshot from page">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
-        <input type="text" id="chatInput" placeholder="Ask about these notes..." autocomplete="off" />
+        <input type="text" id="chatInput" placeholder="Ask about this page..." autocomplete="off" />
         <button id="chatSendBtn" class="btn-icon-sm btn-send" title="Send">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
         </button>
