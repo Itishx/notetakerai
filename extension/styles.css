@@ -38,7 +38,7 @@ body.sidepanel {
   min-height: 100vh;
   background: #ffffff;
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-family: 'Charter', Georgia, 'Times New Roman', serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
