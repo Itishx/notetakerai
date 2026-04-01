@@ -66,9 +66,10 @@ const chatSendBtn = document.getElementById("chatSendBtn");
 const chatImagePreview = document.getElementById("chatImagePreview");
 const chatPreviewImg = document.getElementById("chatPreviewImg");
 const chatRemoveImage = document.getElementById("chatRemoveImage");
-const chatDividerLabel = document.getElementById("chatDividerLabel");
+const chatGreeting = document.getElementById("chatGreeting");
 const pageContextBadge = document.getElementById("pageContextBadge");
 const pageContextLabel = document.getElementById("pageContextLabel");
+let inBrowseMode = false;
 
 // Simple markdown to HTML converter with code block support
 function renderMarkdown(md) {
