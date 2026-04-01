@@ -853,8 +853,8 @@ function loadHistory() {
         chrome.storage.local.set({ currentSessionId, currentNotes: notesMarkdown });
         notesContent.innerHTML = renderMarkdown(notesMarkdown);
         notesSection.classList.remove("hidden");
-        chatSection.classList.remove("hidden");
         updateConvertButtonLabel();
+        updateChatContextUI();
         loadChatMessages(currentSessionId);
         closeHistory();
       });
