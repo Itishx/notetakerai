@@ -13,7 +13,7 @@ const useCases = [
     category: "Professional",
     icon: Users,
     title: "Meeting Documentation",
-    desc: "Record any browser-based call — Google Meet, Teams web, or Zoom in the browser. LectureSnap transcribes every voice and generates structured summaries with decisions made, action items, and key discussion points. Never write meeting notes manually again.",
+    desc: "Record any browser-based call — Google Meet, Teams web, or Zoom in the browser. SideBrain transcribes every voice and generates structured summaries with decisions made, action items, and key discussion points. Never write meeting notes manually again.",
     forWho: "Remote teams, managers, consultants",
     size: "large",
   },
@@ -76,7 +76,7 @@ const useCases = [
     category: "Accessibility",
     icon: Heart,
     title: "Accessibility Companion",
-    desc: "For those who find it easier to read than to listen — or who need to revisit content at their own pace — LectureSnap converts any audio into readable, structured notes without any special setup.",
+    desc: "For those who find it easier to read than to listen — or who need to revisit content at their own pace — SideBrain converts any audio into readable, structured notes without any special setup.",
     forWho: "Anyone who prefers reading",
     size: "small",
   },
@@ -102,7 +102,7 @@ const categoryColors: Record<string, string> = {
 
 const UseCases = () => {
   const handleDownload = () => {
-    fetch("/lecturesnap-extension.zip")
+    fetch("/sidebrain-extension.zip")
       .then((res) => {
         if (!res.ok) throw new Error("Download failed");
         return res.blob();
@@ -110,7 +110,7 @@ const UseCases = () => {
       .then((blob) => {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = "lecturesnap-extension.zip";
+        a.download = "sidebrain-extension.zip";
         a.click();
         URL.revokeObjectURL(a.href);
       })
@@ -139,7 +139,7 @@ const UseCases = () => {
             <em className="text-primary not-italic">every workflow</em>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            LectureSnap captures audio from any browser tab. The "lecture" is just the beginning — here's where else it fits.
+            SideBrain captures audio from any browser tab. The "lecture" is just the beginning — here's where else it fits.
           </p>
         </div>
       </section>
@@ -162,7 +162,7 @@ const UseCases = () => {
             </div>
             <h3 className="text-xl text-foreground mb-3">Meeting Documentation</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Record any browser-based call — Google Meet, Teams web, or Zoom in the browser. LectureSnap transcribes every voice and generates structured summaries with decisions made, action items, and key discussion points. Never write meeting notes manually again.
+              Record any browser-based call — Google Meet, Teams web, or Zoom in the browser. SideBrain transcribes every voice and generates structured summaries with decisions made, action items, and key discussion points. Never write meeting notes manually again.
             </p>
             <p className="text-xs text-muted-foreground/50">Remote teams · managers · consultants</p>
           </div>
@@ -300,7 +300,7 @@ const UseCases = () => {
                 </span>
                 <h3 className="text-xl text-foreground mb-3">Built for everyone</h3>
                 <p className="text-muted-foreground leading-relaxed max-w-2xl">
-                  For those who find it easier to read than to listen — or who need to revisit content at their own pace — LectureSnap converts any audio into readable, structured notes without any special setup. No captions required. No replaying. Just clear, organized text.
+                  For those who find it easier to read than to listen — or who need to revisit content at their own pace — SideBrain converts any audio into readable, structured notes without any special setup. No captions required. No replaying. Just clear, organized text.
                 </p>
               </div>
             </div>
@@ -325,9 +325,9 @@ const UseCases = () => {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button
             onClick={() => {
-              fetch("/lecturesnap-extension.zip")
+              fetch("/sidebrain-extension.zip")
                 .then((res) => { if (!res.ok) throw new Error(); return res.blob(); })
-                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "lecturesnap-extension.zip"; a.click(); URL.revokeObjectURL(a.href); })
+                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "sidebrain-extension.zip"; a.click(); URL.revokeObjectURL(a.href); })
                 .catch(() => alert("Extension not yet packaged. Please check back soon."));
             }}
             className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base"
@@ -347,7 +347,7 @@ const UseCases = () => {
       <footer className="py-12 border-t border-border/40">
         <div className="container mx-auto px-6 text-center">
           <Leaf className="w-5 h-5 text-primary/40 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground/50">LectureSnap — Learn with calm intention</p>
+          <p className="text-sm text-muted-foreground/50">SideBrain — Learn with calm intention</p>
         </div>
       </footer>
     </div>

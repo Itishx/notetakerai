@@ -9,7 +9,7 @@ const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleDownload = () => {
-    fetch("/lecturesnap-extension.zip")
+    fetch("/sidebrain-extension.zip")
       .then((res) => {
         if (!res.ok) throw new Error("Download failed");
         return res.blob();
@@ -17,7 +17,7 @@ const Navbar = () => {
       .then((blob) => {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = "lecturesnap-extension.zip";
+        a.download = "sidebrain-extension.zip";
         a.click();
         URL.revokeObjectURL(a.href);
       })
@@ -36,7 +36,7 @@ const Navbar = () => {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors duration-200">
           <Leaf className="w-4 h-4 text-primary" strokeWidth={1.5} />
-          <span className="text-sm tracking-wide">LectureSnap</span>
+          <span className="text-sm tracking-wide">SideBrain</span>
         </Link>
 
         {/* Desktop nav */}

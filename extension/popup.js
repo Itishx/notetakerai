@@ -1,4 +1,4 @@
-// LectureSnap Popup Controller
+// SideBrain Popup Controller
 const API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
 let audioSegments = [];
@@ -505,7 +505,7 @@ syncNotionBtn?.addEventListener("click", async () => {
 
   try {
     const titleMatch = notesMarkdown.match(/^#\s+(.+)$/m);
-    const title = titleMatch ? titleMatch[1] : "LectureSnap Notes";
+    const title = titleMatch ? titleMatch[1] : "SideBrain Notes";
 
     const images = [];
     const imgRegex = /!\[[^\]]*\]\((data:image\/[^)]+)\)/g;
