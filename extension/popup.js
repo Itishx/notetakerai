@@ -154,17 +154,27 @@ if (onboardingOverlay && onboardingNextBtn) {
 modeRecord?.addEventListener("click", () => {
   modeCards?.classList.add("hidden");
   recordModeControls?.classList.remove("hidden");
+  idleStatusBlock?.classList.remove("hidden");
 });
 
 modeBrowse?.addEventListener("click", () => {
-  // Scroll to chat section
-  chatSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+  inBrowseMode = true;
+  // Hide idle UI, show chat fullscreen
+  idleControls?.classList.add("hidden");
+  idleStatusBlock?.classList.add("hidden");
+  headerSection?.classList.add("hidden");
+  chatSection?.classList.remove("hidden");
+  // Show greeting if no messages
+  if (chatMessages.length === 0 && chatGreeting) {
+    chatGreeting.classList.remove("hidden");
+  }
   chatInput?.focus();
 });
 
 backToModesBtn?.addEventListener("click", () => {
   recordModeControls?.classList.add("hidden");
   modeCards?.classList.remove("hidden");
+  idleStatusBlock?.classList.add("hidden");
 });
   });
 
