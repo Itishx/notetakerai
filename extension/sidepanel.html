@@ -206,39 +206,6 @@
         <span id="pageContextLabel">Reading page...</span>
       </div>
       <div id="chatMessages" class="chat-messages"></div>
-      <div id="chatImagePreview" class="chat-image-preview hidden">
-        <img id="chatPreviewImg" src="" alt="preview" />
-        <button id="chatRemoveImage" class="btn-icon-sm" title="Remove image">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="chat-input-bar">
-        <button id="chatScreenshotBtn" class="btn-icon-sm" title="Take screenshot from page">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </button>
-        <input type="text" id="chatInput" placeholder="Ask about this page..." autocomplete="off" />
-        <button id="chatSendBtn" class="btn-icon-sm btn-send" title="Send">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Screenshot Crop Overlay -->
-    <div id="cropOverlay" class="crop-overlay hidden">
-      <div class="crop-header">
-        <span>Drag to select area, or use full screenshot</span>
-        <div class="crop-header-actions">
-          <button id="cropUseFullBtn" class="btn btn-secondary btn-sm">Use Full Screenshot</button>
-          <button id="cropConfirmBtn" class="btn btn-record btn-sm" disabled>Crop & Insert</button>
-          <button id="cropCancelBtn" class="btn-icon-sm" title="Cancel">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-      </div>
-      <div id="cropCanvas" class="crop-canvas">
-        <img id="cropImage" src="" alt="screenshot" />
-        <div id="cropSelection" class="crop-selection hidden"></div>
-      </div>
     </div>
 
     <!-- Chat Input Bar (pinned to bottom) -->
