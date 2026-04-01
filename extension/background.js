@@ -73,27 +73,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getPageContent") {
     chrome.storage.local.get("activeTabId", (store) => {
       const tabId = store.activeTabId;
+      function queryTab(tid) {
+        chrome.tabs.sendMessage(tid, { action: "extractPageContent" }, (res) => {
+          if (chrome.runtime.lastError) {
+            // Content script not injected yet — inject it programmatically and retry
+            chrome.scripting.executeScript(
+              { target: { tabId: tid }, files: ["content.js"] },
+              () => {
+                if (chrome.runtime.lastError) {
+                  sendResponse({ error: chrome.runtime.lastError.message });
+                  return;
+                }
+                // Retry after injection
+                setTimeout(() => {
+                  chrome.tabs.sendMessage(tid, { action: "extractPageContent" }, (res2) => {
+                    if (chrome.runtime.lastError) {
+                      sendResponse({ error: chrome.runtime.lastError.message });
+                    } else {
+                      sendResponse(res2 || { error: "No response from content script" });
+                    }
+                  });
+                }, 100);
+              }
+            );
+          } else {
+            sendResponse(res || { error: "No response from content script" });
+          }
+        });
+      }
       if (!tabId) {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           const tab = tabs?.[0];
           if (!tab?.id) { sendResponse({ error: "No active tab" }); return; }
-          chrome.tabs.sendMessage(tab.id, { action: "extractPageContent" }, (res) => {
-            if (chrome.runtime.lastError) {
-              sendResponse({ error: chrome.runtime.lastError.message });
-            } else {
-              sendResponse(res || { error: "No response from content script" });
-            }
-          });
+          queryTab(tab.id);
         });
-        return;
+      } else {
+        queryTab(tabId);
       }
-      chrome.tabs.sendMessage(tabId, { action: "extractPageContent" }, (res) => {
-        if (chrome.runtime.lastError) {
-          sendResponse({ error: chrome.runtime.lastError.message });
-        } else {
-          sendResponse(res || { error: "No response from content script" });
-        }
-      });
     });
     return true;
   }

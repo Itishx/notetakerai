@@ -711,27 +711,16 @@ h1 {
   letter-spacing: 0.2px;
 }
 
-/* Chat greeting for browse mode */
+/* Chat greeting — positioned near bottom */
 .chat-greeting {
   text-align: center;
-  padding: 32px 20px 16px;
+  padding: 16px 20px;
   animation: fadeInUp 0.4s ease-out;
-}
-
-.chat-greeting-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 16px;
-  background: var(--text);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 12px;
+  margin-top: auto;
 }
 
 .chat-greeting h2 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text);
   margin-bottom: 4px;
