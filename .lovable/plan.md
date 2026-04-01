@@ -1,47 +1,81 @@
 
 
-# Sidepanel Recording UI Redesign — Orb-Centric Layout with Transitions
+# SideBrain: Page-Aware AI Browser Companion
+
+## Summary
+
+Add a **content script** that extracts the current page's text and sends it to the sidepanel. The AI chat becomes dual-mode: it works with **notes** (when you've recorded/generated them) AND with **page context** (always available). Users can ask questions about any webpage — LeetCode, blogs, docs, articles — directly from the sidepanel.
 
 ## What Changes
 
-The sidepanel will have two visual states with smooth CSS transitions between them:
+1. **Always-visible chat**: The chat section is no longer hidden behind "Convert to Notes." It's always shown at the bottom of the sidepanel. When notes exist, AI uses both page context + notes. When no notes exist, AI uses page context only.
 
-### State 1: Recording Mode (orb is hero)
-- The timer and small controls area at the top collapse/hide
-- A **large centered orb** replaces the timer area, pulsing/glowing while recording
-- Below the orb: small muted text showing duration + segment info (e.g. "00:22 · 1 segment · 22s total")
-- Below that: **Pause & Save Segment** and **Continue Recording** buttons
-- Convert to Notes button below those
+2. **Content script** (`extension/content.js`): Injected into every page, extracts `document.body.innerText` (trimmed to ~12K chars) and sends it to the sidepanel on demand via `chrome.runtime.sendMessage`.
 
-### State 2: Idle / Notes Mode (orb shrinks back)
-- The orb **animates smaller** and moves up to where the timer currently sits (compact size, ~40-50px)
-- Timer text, status bar, and control buttons return to their normal top positions
-- Notes section, chat, Notion sync — all appear below as they currently do
+3. **Background relay**: `background.js` gets a new `getPageContent` action — it injects/messages the content script on the active tab and relays the extracted text back to the sidepanel.
 
-### Additional
-- Remove the **Attach image file** button (`chatAttachBtn`) from the chat input bar; keep only the screenshot button
-- The orb animation should use CSS transitions (`transition: all 0.5s ease`) for the size/position change between states
+4. **Updated manifest**: Adds `content.js` as a content script matching `<all_urls>`, and adds `scripting` permission for programmatic injection fallback.
 
-## Technical Approach
+5. **Chat edge function update**: `chat-about-notes` accepts an optional `pageContext` field. When present, the system prompt includes the page text so the AI can answer questions about it.
 
-### 1. `extension/styles.css` — New orb states + transitions
-- Add `.orb-recording` class: larger size (180-200px area), centered in the main content area
-- Add `.orb-idle` class: small size (~50px), positioned inline where the timer sits
-- Add `transition` properties on `.orb-container` and `.orb-layer` for smooth scaling
-- Add `.recording-mode` body/container class that restructures the layout
-- Style the sub-orb info text (duration + segments)
+6. **UI changes in sidepanel**:
+   - Chat section always visible (remove the `hidden` class dependency on notes)
+   - Chat placeholder changes contextually: "Ask about this page..." vs "Ask about your notes..."
+   - A small badge/indicator shows what context is active (page name / notes)
+   - The chat divider text updates to reflect mode
 
-### 2. `extension/sidepanel.html` — Restructure layout
-- Wrap the orb in a dedicated recording-hero area that can expand/collapse
-- Add a small text element below the orb for duration/segment info
-- Remove the `chatAttachBtn` button and its associated file input
-- Keep the orb in the header for idle state, but allow it to "grow" into the main area during recording
+## Technical Details
 
-### 3. `extension/popup.js` — Toggle recording layout state
-- In `setRecordingUI()`: add `.recording-mode` class to container, expand orb, hide top controls, show bottom buttons
-- In `setResumeUI()` / `setIdleUI()`: remove `.recording-mode`, shrink orb back, restore normal layout
-- Update timer display to write into the sub-orb text element during recording
-- Remove `chatAttachBtn` and `chatFileInput` references
+### New file: `extension/content.js`
+```javascript
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "extractPageContent") {
+    const text = document.body.innerText.substring(0, 12000);
+    const title = document.title;
+    const url = window.location.href;
+    sendResponse({ text, title, url });
+  }
+  return true;
+});
+```
 
-### 4. Repackage extension ZIP
+### `extension/manifest.json` changes
+- Add `"scripting"` to permissions
+- Add content_scripts block:
+```json
+"content_scripts": [{
+  "matches": ["<all_urls>"],
+  "js": ["content.js"],
+  "run_at": "document_idle"
+}]
+```
+
+### `extension/background.js` changes
+- Add handler for `getPageContent` message that uses `chrome.tabs.sendMessage` to the active tab's content script and relays the response.
+
+### `extension/popup.js` changes
+- On load and on tab change, fetch page context via `chrome.runtime.sendMessage({ action: "getPageContent" })`
+- Store `currentPageContext = { title, url, text }` in memory
+- Make chat section always visible (remove the notes-only gate)
+- Update `sendChatMessage()` to include `pageContext` in the request body
+- Update chat placeholder text based on available context
+
+### `supabase/functions/chat-about-notes/index.ts` changes
+- Accept optional `pageContext` (object with `title`, `url`, `text`)
+- When present (and no image), prepend page context to system prompt:
+  ```
+  The user is currently viewing: "${title}" (${url})
+  Page content:
+  ${text}
+  ```
+- When both notes and page context exist, include both in the system prompt
+
+### `extension/sidepanel.html` changes
+- Remove `hidden` from `chatSection` initial state
+- Update chat divider to show dynamic context indicator
+- Update footer text to "Works on any webpage"
+
+### Build
+- Add `content.js` to build script copy list
+- Rebuild extension ZIP
 
