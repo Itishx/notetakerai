@@ -15,6 +15,7 @@ let trackedActiveWindowId = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let playbackEl = null;
+let currentPageContext = null;
 
 const CONVERT_BUTTON_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>';
 
@@ -58,6 +59,9 @@ const chatSendBtn = document.getElementById("chatSendBtn");
 const chatImagePreview = document.getElementById("chatImagePreview");
 const chatPreviewImg = document.getElementById("chatPreviewImg");
 const chatRemoveImage = document.getElementById("chatRemoveImage");
+const chatDividerLabel = document.getElementById("chatDividerLabel");
+const pageContextBadge = document.getElementById("pageContextBadge");
+const pageContextLabel = document.getElementById("pageContextLabel");
 
 // Simple markdown to HTML converter
 function renderMarkdown(md) {
@@ -137,6 +141,58 @@ if (onboardingOverlay && onboardingNextBtn) {
   });
 }
 
+
+// ===== PAGE CONTEXT =====
+function fetchPageContext() {
+  chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
+    if (chrome.runtime.lastError || res?.error || !res?.text) {
+      currentPageContext = null;
+      updateChatContextUI();
+      return;
+    }
+    currentPageContext = { title: res.title, url: res.url, text: res.text };
+    updateChatContextUI();
+  });
+}
+
+function updateChatContextUI() {
+  const hasNotes = hasExistingNotes();
+  const hasPage = !!currentPageContext;
+
+  if (hasNotes && hasPage) {
+    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about notes & page";
+    if (chatInput) chatInput.placeholder = "Ask about your notes or this page...";
+  } else if (hasNotes) {
+    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about your notes";
+    if (chatInput) chatInput.placeholder = "Ask about your notes...";
+  } else if (hasPage) {
+    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about this page";
+    if (chatInput) chatInput.placeholder = "Ask about this page...";
+  } else {
+    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI";
+    if (chatInput) chatInput.placeholder = "Ask anything...";
+  }
+
+  if (hasPage && pageContextBadge && pageContextLabel) {
+    const shortTitle = currentPageContext.title.length > 40
+      ? currentPageContext.title.substring(0, 40) + "…"
+      : currentPageContext.title;
+    pageContextLabel.textContent = `Reading: ${shortTitle}`;
+    pageContextBadge.classList.remove("hidden");
+  } else if (pageContextBadge) {
+    pageContextBadge.classList.add("hidden");
+  }
+}
+
+// Fetch page context on load and when tab changes
+fetchPageContext();
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes.activeTabId) {
+    setTimeout(fetchPageContext, 300);
+  }
+});
+window.addEventListener("focus", () => setTimeout(fetchPageContext, 200));
+
 chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessionId"], (data) => {
   if (data.audioSegments && data.audioSegments.length > 0) {
     audioSegments = data.audioSegments;
@@ -157,10 +213,10 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     currentSessionId = data.currentSessionId;
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
-    chatSection.classList.remove("hidden");
     loadChatMessages(currentSessionId);
   }
   updateConvertButtonLabel();
+  updateChatContextUI();
 });
 
 recordBtn.addEventListener("click", startRecordingFlow);
@@ -253,8 +309,8 @@ async function handleConvertToNotes() {
     notesMarkdown = data.notes;
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
-    chatSection.classList.remove("hidden");
     updateConvertButtonLabel();
+    updateChatContextUI();
 
     chrome.storage.local.set({ currentNotes: notesMarkdown });
     saveToHistory(notesMarkdown);
@@ -287,9 +343,9 @@ newSessionBtn?.addEventListener("click", () => {
   pendingImageBase64 = null;
   chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId", "currentNotes", "notionSyncedPageId"]);
   notesSection.classList.add("hidden");
-  chatSection.classList.add("hidden");
   chatMessagesEl.innerHTML = "";
   updateConvertButtonLabel();
+  updateChatContextUI();
   updateTimer();
   updateSegmentInfo();
   setIdleUI();
@@ -797,8 +853,8 @@ function loadHistory() {
         chrome.storage.local.set({ currentSessionId, currentNotes: notesMarkdown });
         notesContent.innerHTML = renderMarkdown(notesMarkdown);
         notesSection.classList.remove("hidden");
-        chatSection.classList.remove("hidden");
         updateConvertButtonLabel();
+        updateChatContextUI();
         loadChatMessages(currentSessionId);
         closeHistory();
       });
@@ -850,7 +906,8 @@ function buildNotesContextForAI(markdown) {
 
 async function sendChatMessage(text, imageBase64) {
   if (!text && !imageBase64) return;
-  if (!notesMarkdown) return;
+  // Allow chat even without notes — page context is enough
+  if (!notesMarkdown && !currentPageContext && !imageBase64) return;
 
   const userMsg = { role: "user", content: text || "📎 Image attached — please insert into notes" };
   if (imageBase64) userMsg.image = `data:image/png;base64,${imageBase64}`;
@@ -865,14 +922,20 @@ async function sendChatMessage(text, imageBase64) {
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 
   try {
-    const { sanitizedNotes, existingImages } = buildNotesContextForAI(notesMarkdown);
+    const hasNotes = hasExistingNotes();
+    const notesCtx = hasNotes ? buildNotesContextForAI(notesMarkdown) : { sanitizedNotes: "", existingImages: {} };
     const body = {
-      notes: sanitizedNotes,
+      notes: notesCtx.sanitizedNotes,
       message: text || "Please insert this diagram/image into my notes at the most appropriate location.",
     };
 
+    // Include page context if available
+    if (currentPageContext) {
+      body.pageContext = currentPageContext;
+    }
+
     if (imageBase64) {
-      body.existingImages = existingImages;
+      body.existingImages = notesCtx.existingImages;
     } else {
       body.chatHistory = chatMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
     }

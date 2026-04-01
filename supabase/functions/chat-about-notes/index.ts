@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { notes, chatHistory, message, imageBase64, existingImages } = await req.json();
+    const { notes, chatHistory, message, imageBase64, existingImages, pageContext } = await req.json();
 
     if (!message && !imageBase64) {
       return new Response(JSON.stringify({ error: "No message or image provided" }), {
@@ -33,6 +33,11 @@ serve(async (req) => {
     const existingImageMap = existingImages && typeof existingImages === "object" ? existingImages : {};
     const existingImageKeys = Object.keys(existingImageMap);
 
+    // Build page context string if available
+    const pageCtx = pageContext && pageContext.text
+      ? `\n\nThe user is currently viewing: "${pageContext.title || "Untitled"}" (${pageContext.url || "unknown URL"})\nPage content:\n${pageContext.text}`
+      : "";
+
     const systemPrompt = hasImage
       ? `You are a helpful lecture notes assistant. The user has lecture notes and is sharing a diagram/image screenshot from the lecture.
 
@@ -52,10 +57,8 @@ the full updated markdown notes with {{IMAGE_PLACEHOLDER}} inserted at the right
 
 Current notes:
 ${notes || "(no notes yet)"}`
-      : `You are a helpful AI assistant for lecture notes. The user has lecture notes and wants to ask questions or discuss them. Answer based on the notes content. Be concise and helpful. Use markdown formatting in your responses.
-
-Current lecture notes:
-${notes || "(no notes yet)"}`;
+      : `You are a helpful AI assistant called SideBrain. You help users understand content they're viewing in their browser. You can discuss lecture notes, web pages, articles, code problems, documentation, and more. Be concise and helpful. Use markdown formatting in your responses.
+${notes ? `\nCurrent lecture notes:\n${notes}` : ""}${pageCtx}`;
 
     // Build messages array
     const messages: any[] = [
