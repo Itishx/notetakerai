@@ -964,11 +964,39 @@ async function sendChatMessage(text, imageBase64) {
   renderChatMessages();
   saveChatMessages();
 
-  const typingEl = document.createElement("div");
-  typingEl.className = "chat-bubble chat-assistant chat-typing";
-  typingEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
-  chatMessagesEl.appendChild(typingEl);
+  // Hide greeting once user sends a message
+  if (chatGreeting) chatGreeting.classList.add("hidden");
+
+  // Create thinking animation
+  const thinkingEl = document.createElement("div");
+  thinkingEl.className = "chat-bubble chat-assistant chat-thinking";
+  const steps = currentPageContext
+    ? ["Reading page content...", "Thinking...", "Writing response..."]
+    : ["Thinking...", "Writing response..."];
+  thinkingEl.innerHTML = `<div class="thinking-steps">${steps.map((s, i) =>
+    `<div class="thinking-step ${i === 0 ? 'active' : ''}" data-step="${i}">
+      <div class="thinking-spinner"></div>
+      <span>${s}</span>
+    </div>`
+  ).join('')}</div>`;
+  chatMessagesEl.appendChild(thinkingEl);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+
+  // Animate through thinking steps
+  let stepIdx = 0;
+  const thinkingInterval = setInterval(() => {
+    if (stepIdx < steps.length - 1) {
+      const current = thinkingEl.querySelector(`[data-step="${stepIdx}"]`);
+      if (current) {
+        current.classList.remove("active");
+        current.classList.add("done");
+        current.querySelector(".thinking-spinner").outerHTML = '<div class="thinking-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg></div>';
+      }
+      stepIdx++;
+      const next = thinkingEl.querySelector(`[data-step="${stepIdx}"]`);
+      if (next) next.classList.add("active");
+    }
+  }, 1200);
 
   try {
     const hasNotes = hasExistingNotes();
