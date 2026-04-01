@@ -66,9 +66,10 @@ const chatSendBtn = document.getElementById("chatSendBtn");
 const chatImagePreview = document.getElementById("chatImagePreview");
 const chatPreviewImg = document.getElementById("chatPreviewImg");
 const chatRemoveImage = document.getElementById("chatRemoveImage");
-const chatDividerLabel = document.getElementById("chatDividerLabel");
+const chatGreeting = document.getElementById("chatGreeting");
 const pageContextBadge = document.getElementById("pageContextBadge");
 const pageContextLabel = document.getElementById("pageContextLabel");
+let inBrowseMode = false;
 
 // Simple markdown to HTML converter with code block support
 function renderMarkdown(md) {
@@ -153,17 +154,27 @@ if (onboardingOverlay && onboardingNextBtn) {
 modeRecord?.addEventListener("click", () => {
   modeCards?.classList.add("hidden");
   recordModeControls?.classList.remove("hidden");
+  idleStatusBlock?.classList.remove("hidden");
 });
 
 modeBrowse?.addEventListener("click", () => {
-  // Scroll to chat section
-  chatSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+  inBrowseMode = true;
+  // Hide idle UI, show chat fullscreen
+  idleControls?.classList.add("hidden");
+  idleStatusBlock?.classList.add("hidden");
+  headerSection?.classList.add("hidden");
+  chatSection?.classList.remove("hidden");
+  // Show greeting if no messages
+  if (chatMessages.length === 0 && chatGreeting) {
+    chatGreeting.classList.remove("hidden");
+  }
   chatInput?.focus();
 });
 
 backToModesBtn?.addEventListener("click", () => {
   recordModeControls?.classList.add("hidden");
   modeCards?.classList.remove("hidden");
+  idleStatusBlock?.classList.add("hidden");
 });
   });
 
@@ -204,16 +215,12 @@ function updateChatContextUI() {
   const hasPage = !!currentPageContext;
 
   if (hasNotes && hasPage) {
-    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about notes & page";
     if (chatInput) chatInput.placeholder = "Ask about your notes or this page...";
   } else if (hasNotes) {
-    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about your notes";
     if (chatInput) chatInput.placeholder = "Ask about your notes...";
   } else if (hasPage) {
-    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about this page";
     if (chatInput) chatInput.placeholder = "Ask about this page...";
   } else {
-    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI";
     if (chatInput) chatInput.placeholder = "Ask anything...";
   }
 
@@ -957,11 +964,39 @@ async function sendChatMessage(text, imageBase64) {
   renderChatMessages();
   saveChatMessages();
 
-  const typingEl = document.createElement("div");
-  typingEl.className = "chat-bubble chat-assistant chat-typing";
-  typingEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
-  chatMessagesEl.appendChild(typingEl);
+  // Hide greeting once user sends a message
+  if (chatGreeting) chatGreeting.classList.add("hidden");
+
+  // Create thinking animation
+  const thinkingEl = document.createElement("div");
+  thinkingEl.className = "chat-bubble chat-assistant chat-thinking";
+  const steps = currentPageContext
+    ? ["Reading page content...", "Thinking...", "Writing response..."]
+    : ["Thinking...", "Writing response..."];
+  thinkingEl.innerHTML = `<div class="thinking-steps">${steps.map((s, i) =>
+    `<div class="thinking-step ${i === 0 ? 'active' : ''}" data-step="${i}">
+      <div class="thinking-spinner"></div>
+      <span>${s}</span>
+    </div>`
+  ).join('')}</div>`;
+  chatMessagesEl.appendChild(thinkingEl);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+
+  // Animate through thinking steps
+  let stepIdx = 0;
+  const thinkingInterval = setInterval(() => {
+    if (stepIdx < steps.length - 1) {
+      const current = thinkingEl.querySelector(`[data-step="${stepIdx}"]`);
+      if (current) {
+        current.classList.remove("active");
+        current.classList.add("done");
+        current.querySelector(".thinking-spinner").outerHTML = '<div class="thinking-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg></div>';
+      }
+      stepIdx++;
+      const next = thinkingEl.querySelector(`[data-step="${stepIdx}"]`);
+      if (next) next.classList.add("active");
+    }
+  }, 1200);
 
   try {
     const hasNotes = hasExistingNotes();
@@ -996,7 +1031,8 @@ async function sendChatMessage(text, imageBase64) {
     }
 
     const data = await response.json();
-    typingEl.remove();
+    clearInterval(thinkingInterval);
+    thinkingEl.remove();
     chatMessages.push({ role: "assistant", content: data.reply });
     renderChatMessages();
     saveChatMessages();
@@ -1008,7 +1044,8 @@ async function sendChatMessage(text, imageBase64) {
       saveToHistory(notesMarkdown);
     }
   } catch (e) {
-    typingEl.remove();
+    clearInterval(thinkingInterval);
+    thinkingEl.remove();
     chatMessages.push({ role: "assistant", content: `⚠️ Error: ${e.message}` });
     renderChatMessages();
     saveChatMessages();

@@ -99,7 +99,7 @@
           </div>
           <div>
             <h1>SideBrain</h1>
-            <p class="subtitle">AI-Powered Lecture Notes</p>
+            <p class="subtitle">Your AI browser companion</p>
           </div>
         </div>
         <div class="header-actions">
@@ -114,7 +114,7 @@
     </div>
 
     <!-- Idle status + timer (hidden during recording) -->
-    <div id="idleStatusBlock">
+    <div id="idleStatusBlock" class="hidden">
       <div id="status" class="status idle">
         <div class="status-dot"></div>
         <span>Ready to record</span>
@@ -129,15 +129,15 @@
         <div id="modeRecord" class="mode-card">
           <div class="mode-card-icon">🎙️</div>
           <div class="mode-card-text">
-            <h3>Record & Notes</h3>
-            <p>Capture audio from any tab and convert to structured notes</p>
+            <h3>Record Audio</h3>
+            <p>Capture & convert to notes</p>
           </div>
         </div>
         <div id="modeBrowse" class="mode-card">
           <div class="mode-card-icon">💬</div>
           <div class="mode-card-text">
-            <h3>Chat with this page</h3>
-            <p>Ask AI questions about the page you're currently on</p>
+            <h3>Chat with Page</h3>
+            <p>Ask AI about this page</p>
           </div>
         </div>
       </div>
@@ -209,10 +209,15 @@
       </div>
     </div>
 
-    <!-- Chat Section -->
+    <!-- Chat Section (Browse Mode Full Screen) -->
     <div id="chatSection" class="chat-section">
-      <div class="chat-divider">
-        <span id="chatDividerLabel">Chat with AI about this page</span>
+      <!-- Greeting shown when entering browse mode with no messages -->
+      <div id="chatGreeting" class="chat-greeting hidden">
+        <div class="chat-greeting-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h2>What can I help with?</h2>
+        <p>Ask me anything about the page you're on — code, articles, docs, or any content.</p>
       </div>
       <div id="pageContextBadge" class="page-context-badge hidden">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
