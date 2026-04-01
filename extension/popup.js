@@ -203,10 +203,17 @@ backToModesBtn?.addEventListener("click", () => {
 function fetchPageContext() {
   chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
     if (chrome.runtime.lastError || res?.error || !res?.text) {
+      console.log("Page context failed:", chrome.runtime.lastError?.message || res?.error || "no text");
       currentPageContext = null;
       updateChatContextUI();
+      // Show a notice in browse mode if we can't read the page
+      if (inBrowseMode && pageContextBadge && pageContextLabel) {
+        pageContextLabel.textContent = "Can't read this page (restricted)";
+        pageContextBadge.classList.remove("hidden");
+      }
       return;
     }
+    console.log("Page context loaded:", res.title, "(" + res.text.length + " chars)");
     currentPageContext = { title: res.title, url: res.url, text: res.text };
     updateChatContextUI();
   });
