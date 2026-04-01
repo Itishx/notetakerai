@@ -141,6 +141,58 @@ if (onboardingOverlay && onboardingNextBtn) {
   });
 }
 
+
+// ===== PAGE CONTEXT =====
+function fetchPageContext() {
+  chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
+    if (chrome.runtime.lastError || res?.error || !res?.text) {
+      currentPageContext = null;
+      updateChatContextUI();
+      return;
+    }
+    currentPageContext = { title: res.title, url: res.url, text: res.text };
+    updateChatContextUI();
+  });
+}
+
+function updateChatContextUI() {
+  const hasNotes = hasExistingNotes();
+  const hasPage = !!currentPageContext;
+
+  if (hasNotes && hasPage) {
+    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about notes & page";
+    if (chatInput) chatInput.placeholder = "Ask about your notes or this page...";
+  } else if (hasNotes) {
+    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about your notes";
+    if (chatInput) chatInput.placeholder = "Ask about your notes...";
+  } else if (hasPage) {
+    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI about this page";
+    if (chatInput) chatInput.placeholder = "Ask about this page...";
+  } else {
+    if (chatDividerLabel) chatDividerLabel.textContent = "Chat with AI";
+    if (chatInput) chatInput.placeholder = "Ask anything...";
+  }
+
+  if (hasPage && pageContextBadge && pageContextLabel) {
+    const shortTitle = currentPageContext.title.length > 40
+      ? currentPageContext.title.substring(0, 40) + "…"
+      : currentPageContext.title;
+    pageContextLabel.textContent = `Reading: ${shortTitle}`;
+    pageContextBadge.classList.remove("hidden");
+  } else if (pageContextBadge) {
+    pageContextBadge.classList.add("hidden");
+  }
+}
+
+// Fetch page context on load and when tab changes
+fetchPageContext();
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes.activeTabId) {
+    setTimeout(fetchPageContext, 300);
+  }
+});
+window.addEventListener("focus", () => setTimeout(fetchPageContext, 200));
+
 chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessionId"], (data) => {
   if (data.audioSegments && data.audioSegments.length > 0) {
     audioSegments = data.audioSegments;
@@ -161,10 +213,10 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     currentSessionId = data.currentSessionId;
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
-    chatSection.classList.remove("hidden");
     loadChatMessages(currentSessionId);
   }
   updateConvertButtonLabel();
+  updateChatContextUI();
 });
 
 recordBtn.addEventListener("click", startRecordingFlow);
