@@ -1044,7 +1044,8 @@ async function sendChatMessage(text, imageBase64) {
       saveToHistory(notesMarkdown);
     }
   } catch (e) {
-    typingEl.remove();
+    clearInterval(thinkingInterval);
+    thinkingEl.remove();
     chatMessages.push({ role: "assistant", content: `⚠️ Error: ${e.message}` });
     renderChatMessages();
     saveChatMessages();
