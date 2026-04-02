@@ -472,19 +472,16 @@ async function closeNotionAuthTab() {
 
 async function beginLocalRecording(streamId) {
   // Use the offscreen document for recording — more reliable across all tabs (e.g. Google Meet)
-  try {
-    await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage(
-        { action: "startRecording", tabId: trackedActiveTabId || undefined, streamId },
-        (res) => {
-          if (res?.error) reject(new Error(res.error));
-          else resolve();
-        }
-      );
-    });
-  } catch (e) {
-    throw e;
-  }
+  await new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { action: "startRecording", tabId: trackedActiveTabId || undefined, streamId },
+      (res) => {
+        if (res?.error) reject(new Error(res.error));
+        else resolve();
+      }
+    );
+  });
+  mediaRecorder = true; // flag for UI state tracking
 }
 
 async function stopLocalRecording() {
