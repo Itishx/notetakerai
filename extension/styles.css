@@ -760,17 +760,15 @@ h1 {
 }
 .btn-back:hover { color: var(--text); }
 
-.chat-section-header {
+.mode-title-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px 6px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
+  padding: 6px 0 2px;
 }
 
-.chat-section-title {
-  font-size: 13px;
+.mode-title-label {
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
@@ -1415,37 +1413,53 @@ h1 {
   font-style: normal;
 }
 
-body.sidepanel.theme-clean {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+/* ===== WARM THEME (amber-orange, parchment bg) ===== */
+body.sidepanel.theme-warm {
+  --bg: hsl(40, 20%, 97%);
+  --bg-body: hsl(40, 20%, 97%);
+  --bg-card: rgba(255, 255, 255, 0.72);
+  --bg-input: rgba(255, 255, 255, 0.65);
+  --text: #2c2318;
+  --text-muted: #7a6e62;
+  --text-faint: #b0a498;
+  --primary: #d97234;
+  --primary-light: #c4612a;
+  --primary-faint: rgba(217, 114, 52, 0.10);
+  --accent: #d97234;
+  --border: rgba(200, 185, 165, 0.45);
+  --border-light: rgba(200, 185, 165, 0.25);
+  --danger: #e53935;
+  background: linear-gradient(145deg, hsl(40,18%,93%) 0%, hsl(35,16%,88%) 50%, hsl(30,14%,90%) 100%);
 }
 
-body.sidepanel.theme-clean h1,
-body.sidepanel.theme-clean h2,
-body.sidepanel.theme-clean h3,
-body.sidepanel.theme-clean .onboarding-title,
-body.sidepanel.theme-clean .chat-greeting h2 {
-  font-family: 'NeueHaasDisplay', -apple-system, sans-serif;
-  font-weight: 700;
+body.sidepanel.theme-warm .container {
+  background: transparent;
 }
 
-body.sidepanel.theme-clean .mode-card {
-  border-radius: 12px;
+body.sidepanel.theme-warm .btn-record {
+  background: linear-gradient(135deg, #d97234, #c4612a);
+  box-shadow: 0 2px 12px rgba(217,114,52,0.35);
 }
 
-body.sidepanel.theme-clean .notes-content,
-body.sidepanel.theme-clean .rendered-md {
-  font-family: 'Inter', -apple-system, sans-serif;
+body.sidepanel.theme-warm .btn-record:hover {
+  background: linear-gradient(135deg, #c4612a, #b5561f);
 }
 
-body.sidepanel.theme-clean .chat-input-bar input {
-  font-family: 'Inter', -apple-system, sans-serif;
+body.sidepanel.theme-warm .mode-card:hover {
+  background: rgba(217,114,52,0.08);
+  border-color: rgba(217,114,52,0.35);
 }
 
-body.sidepanel.theme-clean .btn {
-  font-family: 'Inter', -apple-system, sans-serif;
-  border-radius: 8px;
+body.sidepanel.theme-warm .chat-bottom-bar {
+  background: linear-gradient(0deg, hsl(40,20%,97%) 70%, transparent);
 }
 
-body.sidepanel.theme-clean .subtitle {
-  font-family: 'Inter', -apple-system, sans-serif;
+body.sidepanel.theme-warm .onboarding-overlay,
+body.sidepanel.theme-warm .history-overlay {
+  background: rgba(44,35,24,0.15);
+}
+
+body.sidepanel.theme-warm .onboarding-slide,
+body.sidepanel.theme-warm .onboarding-panel {
+  background: hsl(40,20%,97%);
 }

@@ -160,12 +160,27 @@ if (onboardingOverlay && onboardingNextBtn) {
       onboardingOverlay.classList.remove("hidden");
 }
 
+// ===== MODE HELPERS =====
+function enterMode(label) {
+  document.getElementById("homeGreeting")?.classList.add("hidden");
+  const bar = document.getElementById("modeTitleBar");
+  const lbl = document.getElementById("modeTitleLabel");
+  if (bar) bar.classList.remove("hidden");
+  if (lbl) lbl.textContent = label;
+}
+
+function exitMode() {
+  document.getElementById("homeGreeting")?.classList.remove("hidden");
+  document.getElementById("modeTitleBar")?.classList.add("hidden");
+}
+
 // ===== MODE CARD HANDLERS =====
 modeRecord?.addEventListener("click", () => {
   currentUseCase = "lecture";
   modeCards?.classList.add("hidden");
   recordModeControls?.classList.remove("hidden");
   idleStatusBlock?.classList.remove("hidden");
+  enterMode("Lectures & Audio");
 });
 
 modeMeeting?.addEventListener("click", () => {
@@ -173,6 +188,7 @@ modeMeeting?.addEventListener("click", () => {
   modeCards?.classList.add("hidden");
   recordModeControls?.classList.remove("hidden");
   idleStatusBlock?.classList.remove("hidden");
+  enterMode("Meetings & Calls");
 });
 
 modeBrowse?.addEventListener("click", () => {
@@ -180,9 +196,10 @@ modeBrowse?.addEventListener("click", () => {
   inBrowseMode = true;
   idleControls?.classList.add("hidden");
   idleStatusBlock?.classList.add("hidden");
-  headerSection?.classList.add("hidden");
+  headerSection?.classList.remove("hidden");
   chatSection?.classList.remove("hidden");
   document.getElementById("chatBottomBar")?.classList.remove("hidden");
+  enterMode("Chat with Page");
   fetchPageContext();
   if (chatMessages.length === 0 && chatGreeting) {
     chatGreeting.classList.remove("hidden");
@@ -194,15 +211,23 @@ backToModesBtn?.addEventListener("click", () => {
   recordModeControls?.classList.add("hidden");
   modeCards?.classList.remove("hidden");
   idleStatusBlock?.classList.add("hidden");
+  exitMode();
 });
 
-document.getElementById("backFromChatBtn")?.addEventListener("click", () => {
+// backFromChatBtn kept for compatibility; backToHomeBtn is the unified back from modeTitleBar
+function goHome() {
   inBrowseMode = false;
   chatSection?.classList.add("hidden");
   document.getElementById("chatBottomBar")?.classList.add("hidden");
-  headerSection?.classList.remove("hidden");
+  recordModeControls?.classList.add("hidden");
+  idleStatusBlock?.classList.add("hidden");
   idleControls?.classList.remove("hidden");
-});
+  modeCards?.classList.remove("hidden");
+  exitMode();
+}
+
+document.getElementById("backFromChatBtn")?.addEventListener("click", goHome);
+document.getElementById("backToHomeBtn")?.addEventListener("click", goHome);
   });
 
   onboardingNextBtn.addEventListener("click", () => {
@@ -1305,26 +1330,29 @@ cropConfirmBtn?.addEventListener("click", () => {
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const THEME_DEFAULT_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><text x="3" y="18" font-size="16" font-family="serif" font-style="italic" fill="currentColor" stroke="none">A</text><text x="13" y="18" font-size="14" font-family="sans-serif" font-weight="bold" fill="currentColor" stroke="none">a</text></svg>';
 
-function applyTheme(clean) {
-  if (clean) {
-    document.body.classList.add("theme-clean");
-    if (themeToggleBtn) themeToggleBtn.title = "Switch to classic theme";
+const SUN_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+const LEAF_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`;
+
+function applyTheme(warm) {
+  if (warm) {
+    document.body.classList.add("theme-warm");
+    if (themeToggleBtn) { themeToggleBtn.innerHTML = SUN_ICON; themeToggleBtn.title = "Switch to white theme"; }
   } else {
-    document.body.classList.remove("theme-clean");
-    if (themeToggleBtn) themeToggleBtn.title = "Switch to modern theme";
+    document.body.classList.remove("theme-warm");
+    if (themeToggleBtn) { themeToggleBtn.innerHTML = LEAF_ICON; themeToggleBtn.title = "Switch to warm theme"; }
   }
 }
 
 // Load saved theme
-chrome.storage.local.get("sidepanelCleanTheme", (data) => {
-  applyTheme(!!data.sidepanelCleanTheme);
+chrome.storage.local.get("sidepanelWarmTheme", (data) => {
+  applyTheme(!!data.sidepanelWarmTheme);
 });
 
 themeToggleBtn?.addEventListener("click", () => {
-  const isClean = document.body.classList.contains("theme-clean");
-  const newClean = !isClean;
-  chrome.storage.local.set({ sidepanelCleanTheme: newClean });
-  applyTheme(newClean);
+  const isWarm = document.body.classList.contains("theme-warm");
+  const newWarm = !isWarm;
+  chrome.storage.local.set({ sidepanelWarmTheme: newWarm });
+  applyTheme(newWarm);
 });
 
 // ===== AUTH =====
@@ -1340,7 +1368,7 @@ function updateAuthUI() {
       currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
       if (loginBtn) loginBtn.classList.add("hidden");
       if (logoutBtn) logoutBtn.classList.remove("hidden");
-      if (userGreeting) userGreeting.textContent = `Hey, ${data.authDisplayName.split(" ")[0]} 👋`;
+      if (userGreeting) userGreeting.textContent = `Hello, ${data.authDisplayName.split(" ")[0]} 👋`;
     } else {
       currentAuthUser = null;
       if (loginBtn) loginBtn.classList.add("hidden");

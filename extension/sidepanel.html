@@ -128,10 +128,18 @@
           <button id="logoutBtn" class="hidden"></button>
         </div>
       </div>
-      <!-- Greeting -->
-      <div class="home-greeting">
+      <!-- Greeting (home only) -->
+      <div class="home-greeting" id="homeGreeting">
         <p class="greeting-hey" id="userGreeting">Hey there 👋</p>
         <p class="greeting-sub">What do you want me to do?</p>
+      </div>
+      <!-- Mode title (shown when inside a mode, hidden on home) -->
+      <div class="mode-title-bar hidden" id="modeTitleBar">
+        <button id="backToHomeBtn" class="btn-back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></svg>
+          Back
+        </button>
+        <span class="mode-title-label" id="modeTitleLabel"></span>
       </div>
     </div>
 
@@ -247,13 +255,6 @@
 
     <!-- Chat Section (Browse Mode Full Screen) -->
     <div id="chatSection" class="chat-section">
-      <div class="chat-section-header">
-        <button id="backFromChatBtn" class="btn-back">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></svg>
-          Back
-        </button>
-        <span class="chat-section-title">Chat with Page</span>
-      </div>
       <div id="chatMessages" class="chat-messages"></div>
       <!-- Greeting shown at bottom when entering browse mode with no messages -->
       <div id="chatGreeting" class="chat-greeting hidden">
