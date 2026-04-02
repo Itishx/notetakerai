@@ -485,6 +485,7 @@ async function beginLocalRecording(streamId) {
 }
 
 async function stopLocalRecording() {
+  mediaRecorder = null; // reset flag
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
       { action: "stopRecording" },
