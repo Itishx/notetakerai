@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { Leaf, Download, Menu, X } from "lucide-react";
+import SideBrainLogo from "@/components/SideBrainLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
