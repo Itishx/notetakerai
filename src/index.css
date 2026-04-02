@@ -10,6 +10,22 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'TimesNewRomanMT';
+  src: url('/fonts/Times_New_Roman_MT_Std_Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BeVietnam';
+  src: url('/fonts/BeVietnam-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
