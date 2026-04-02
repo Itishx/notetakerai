@@ -478,11 +478,11 @@ async function closeNotionAuthTab() {
   await removeStorage("notionAuthTabId");
 }
 
-async function beginLocalRecording(streamId) {
+async function beginLocalRecording(streamId, withMic = false) {
   // Use the offscreen document for recording — more reliable across all tabs (e.g. Google Meet)
   await new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
-      { action: "startRecording", tabId: trackedActiveTabId || undefined, streamId },
+      { action: "startRecording", tabId: trackedActiveTabId || undefined, streamId, withMic },
       (res) => {
         if (res?.error) reject(new Error(res.error));
         else resolve();
