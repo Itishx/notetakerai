@@ -70,6 +70,31 @@ const Navbar = () => {
           >
             {theme === "default" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
+          {user ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {profile?.display_name?.split(" ")[0] || user.email}
+              </span>
+              <button
+                onClick={() => signOut()}
+                className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <Link to="/auth">
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full px-4 text-sm"
+              >
+                <User className="w-3.5 h-3.5 mr-1.5" />
+                Sign In
+              </Button>
+            </Link>
+          )}
           <Button
             onClick={handleDownload}
             size="sm"
