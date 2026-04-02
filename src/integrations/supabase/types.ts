@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      notes: {
+        Row: {
+          created_at: string
+          id: string
+          session_id: string | null
+          source_title: string | null
+          source_url: string | null
+          structured_notes: string | null
+          title: string | null
+          transcript: string | null
+          updated_at: string
+          use_case: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          session_id?: string | null
+          source_title?: string | null
+          source_url?: string | null
+          structured_notes?: string | null
+          title?: string | null
+          transcript?: string | null
+          updated_at?: string
+          use_case?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          session_id?: string | null
+          source_title?: string | null
+          source_url?: string | null
+          structured_notes?: string | null
+          title?: string | null
+          transcript?: string | null
+          updated_at?: string
+          use_case?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       notion_connections: {
         Row: {
           access_token: string
@@ -44,6 +86,33 @@ export type Database = {
           user_identifier?: string
           workspace_id?: string | null
           workspace_name?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

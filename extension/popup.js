@@ -383,6 +383,13 @@ async function handleConvertToNotes() {
     chrome.storage.local.set({ currentNotes: notesMarkdown });
     saveToHistory(notesMarkdown);
 
+    // Save to cloud if authenticated
+    if (currentAuthUser?.token && currentSessionId) {
+      const pageTitle = currentPageContext?.title || "Untitled";
+      const pageUrl = currentPageContext?.url || "";
+      saveNoteToCloud(currentSessionId, notesMarkdown, pageUrl, pageTitle, currentUseCase);
+    }
+
     statusEl.className = "status idle";
     statusEl.querySelector("span").textContent = "Notes ready!";
   } catch (e) {
@@ -1287,3 +1294,86 @@ themeToggleBtn?.addEventListener("click", () => {
   chrome.storage.local.set({ sidepanelCleanTheme: newClean });
   applyTheme(newClean);
 });
+
+// ===== AUTH =====
+const WEBSITE_URL = "https://notetakerai.lovable.app";
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const userGreeting = document.getElementById("userGreeting");
+let currentAuthUser = null;
+
+function updateAuthUI() {
+  chrome.storage.local.get(["authToken", "authDisplayName", "authEmail", "authUserId"], (data) => {
+    if (data.authToken && data.authDisplayName) {
+      currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
+      if (loginBtn) loginBtn.classList.add("hidden");
+      if (logoutBtn) logoutBtn.classList.remove("hidden");
+      if (userGreeting) userGreeting.textContent = `Hey, ${data.authDisplayName.split(" ")[0]}`;
+    } else {
+      currentAuthUser = null;
+      if (loginBtn) loginBtn.classList.remove("hidden");
+      if (logoutBtn) logoutBtn.classList.add("hidden");
+      if (userGreeting) userGreeting.textContent = "Your AI browser companion";
+    }
+  });
+}
+
+updateAuthUI();
+
+loginBtn?.addEventListener("click", () => {
+  const extId = chrome.runtime.id;
+  const authUrl = `${WEBSITE_URL}/auth/extension?ext=${extId}`;
+  chrome.tabs.create({ url: authUrl });
+});
+
+logoutBtn?.addEventListener("click", () => {
+  chrome.storage.local.remove(["authToken", "authRefreshToken", "authDisplayName", "authEmail", "authUserId"]);
+  updateAuthUI();
+});
+
+// Listen for auth token from website
+chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
+  if (message.action === "authToken") {
+    chrome.storage.local.set({
+      authToken: message.token,
+      authRefreshToken: message.refreshToken,
+      authDisplayName: message.displayName,
+      authEmail: message.email,
+      authUserId: message.userId,
+    });
+    updateAuthUI();
+    sendResponse({ success: true });
+  }
+});
+
+// Also check storage changes (for content script based auth)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && (changes.authToken || changes.authDisplayName)) {
+    updateAuthUI();
+  }
+});
+
+// ===== CLOUD NOTES SYNC =====
+async function saveNoteToCloud(sessionId, notes, sourceUrl, sourceTitle, useCase) {
+  if (!currentAuthUser?.token) return;
+  try {
+    await fetch(`${API_BASE}/save-note`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${currentAuthUser.token}`,
+      },
+      body: JSON.stringify({
+        action: "save",
+        session_id: sessionId,
+        title: sourceTitle || "Untitled Notes",
+        structured_notes: notes,
+        source_url: sourceUrl,
+        source_title: sourceTitle,
+        use_case: useCase || "lecture",
+      }),
+    });
+  } catch (e) {
+    console.log("Cloud save failed:", e.message);
+  }
+}
