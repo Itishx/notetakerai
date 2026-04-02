@@ -93,7 +93,7 @@ const Index = () => {
             <h1 className="relative z-10 text-4xl md:text-6xl lg:text-7xl font-normal tracking-tight text-foreground max-w-3xl mx-auto leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
               Your browser,
               <br />
-              <em className="text-primary not-italic">made smarter</em>
+              <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>made smarter</em>
             </h1>
           </div>
 
