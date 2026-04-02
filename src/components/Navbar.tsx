@@ -37,15 +37,15 @@ const Navbar = () => {
   ];
 
   return (
-    <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-3xl rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
-      <div className="px-6 h-12 flex items-center justify-between">
+    <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-5xl rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
+      <div className="px-8 h-14 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center text-foreground hover:text-primary transition-colors duration-200">
           <SideBrainLogo sizeClass="text-sm" />
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-8">
+        <div className="hidden md:flex items-center gap-10">
           {links.map(({ to, label }) => (
             <Link
               key={to}

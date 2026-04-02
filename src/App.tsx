@@ -12,6 +12,7 @@ import GlassPreview from "./pages/GlassPreview.tsx";
 import Auth from "./pages/Auth.tsx";
 import ExtensionAuth from "./pages/ExtensionAuth.tsx";
 import Premium from "./pages/Premium.tsx";
+import SidepanelTest from "./pages/SidepanelTest.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/auth/extension" element={<ExtensionAuth />} />
               <Route path="/premium" element={<Premium />} />
+              <Route path="/sidepanel-test" element={<SidepanelTest />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
