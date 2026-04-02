@@ -61,6 +61,13 @@ const Navbar = () => {
 
         {/* CTA */}
         <div className="hidden md:flex items-center gap-3">
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            title={theme === "default" ? "Switch to clean theme" : "Switch to default theme"}
+          >
+            {theme === "default" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
           <Button
             onClick={handleDownload}
             size="sm"
