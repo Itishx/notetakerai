@@ -29,8 +29,9 @@ const ExtensionAuth = () => {
 
     // Try sending via chrome.runtime.sendMessage (works if extension is installed)
     try {
-      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
-        chrome.runtime.sendMessage(extensionId, {
+      const w = window as any;
+      if (w.chrome?.runtime?.sendMessage) {
+        w.chrome.runtime.sendMessage(extensionId, {
           action: "authToken",
           token: session.access_token,
           refreshToken: session.refresh_token,
