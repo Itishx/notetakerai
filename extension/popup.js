@@ -154,21 +154,27 @@ if (onboardingOverlay && onboardingNextBtn) {
 
 // ===== MODE CARD HANDLERS =====
 modeRecord?.addEventListener("click", () => {
+  currentUseCase = "lecture";
+  modeCards?.classList.add("hidden");
+  recordModeControls?.classList.remove("hidden");
+  idleStatusBlock?.classList.remove("hidden");
+});
+
+modeMeeting?.addEventListener("click", () => {
+  currentUseCase = "meeting";
   modeCards?.classList.add("hidden");
   recordModeControls?.classList.remove("hidden");
   idleStatusBlock?.classList.remove("hidden");
 });
 
 modeBrowse?.addEventListener("click", () => {
+  currentUseCase = "chat";
   inBrowseMode = true;
-  // Hide idle UI, show chat fullscreen
   idleControls?.classList.add("hidden");
   idleStatusBlock?.classList.add("hidden");
   headerSection?.classList.add("hidden");
   chatSection?.classList.remove("hidden");
-  // Re-fetch page context when entering browse mode
   fetchPageContext();
-  // Show greeting if no messages
   if (chatMessages.length === 0 && chatGreeting) {
     chatGreeting.classList.remove("hidden");
   }
