@@ -47,9 +47,11 @@ const orbContainer = recordingHero?.querySelector(".orb-container");
 // Mode cards
 const modeCards = document.getElementById("modeCards");
 const modeRecord = document.getElementById("modeRecord");
+const modeMeeting = document.getElementById("modeMeeting");
 const modeBrowse = document.getElementById("modeBrowse");
 const recordModeControls = document.getElementById("recordModeControls");
 const backToModesBtn = document.getElementById("backToModesBtn");
+let currentUseCase = "lecture"; // "lecture" | "meeting" | "chat"
 
 // History overlay elements
 const historyOverlay = document.getElementById("historyOverlay");
