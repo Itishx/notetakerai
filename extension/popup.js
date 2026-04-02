@@ -143,7 +143,15 @@ function showOnboardingSlide(idx) {
     if (i === idx) s.classList.add("active");
   });
   onboardingDots.forEach((d, i) => d.classList.toggle("active", i === idx));
-  onboardingNextBtn.textContent = idx === TOTAL_ONBOARDING_SLIDES - 1 ? "Get Started" : "Next";
+  // Hide Next button on auth slide (last slide) — auth buttons handle progression
+  const isAuthSlide = idx === TOTAL_ONBOARDING_SLIDES - 1;
+  onboardingNextBtn.style.display = isAuthSlide ? "none" : "";
+  onboardingNextBtn.textContent = "Next";
+}
+
+function finishOnboarding() {
+  chrome.storage.local.set({ onboardingDone: true });
+  onboardingOverlay.classList.add("hidden");
 }
 
 if (onboardingOverlay && onboardingNextBtn) {
@@ -192,9 +200,6 @@ backToModesBtn?.addEventListener("click", () => {
     if (currentOnboardingSlide < TOTAL_ONBOARDING_SLIDES - 1) {
       currentOnboardingSlide++;
       showOnboardingSlide(currentOnboardingSlide);
-    } else {
-      chrome.storage.local.set({ onboardingDone: true });
-      onboardingOverlay.classList.add("hidden");
     }
   });
 
@@ -203,6 +208,21 @@ backToModesBtn?.addEventListener("click", () => {
       currentOnboardingSlide = parseInt(dot.dataset.dot);
       showOnboardingSlide(currentOnboardingSlide);
     });
+  });
+
+  // Auth slide buttons
+  document.getElementById("onboardingSignUpBtn")?.addEventListener("click", () => {
+    chrome.tabs.create({ url: "https://notetakerai.lovable.app/auth?mode=signup" });
+    finishOnboarding();
+  });
+
+  document.getElementById("onboardingSignInBtn")?.addEventListener("click", () => {
+    chrome.tabs.create({ url: "https://notetakerai.lovable.app/auth?mode=signin" });
+    finishOnboarding();
+  });
+
+  document.getElementById("onboardingSkipAuthBtn")?.addEventListener("click", () => {
+    finishOnboarding();
   });
 }
 

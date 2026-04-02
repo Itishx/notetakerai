@@ -30,7 +30,7 @@
         <h1 class="onboarding-title">Welcome to <span class="logo-side">side</span><span class="logo-brain">brain</span></h1>
         <p class="onboarding-desc">Your AI-powered companion that lives right in your browser — record lectures, ask questions about any page, and sync everything to Notion.</p>
       </div>
-      <!-- Slide 2: Use Cases -->
+      <!-- Slide 2: Features + Notion -->
       <div class="onboarding-slide" data-slide="1">
         <div class="onboarding-cards">
           <div class="onboarding-card">
@@ -51,14 +51,9 @@
             <div class="onboarding-card-icon">🌐</div>
             <div class="onboarding-card-body">
               <h3>Page-Aware Context</h3>
-              <p>SideBrain reads the page you're on and lets you ask questions about it — perfect for LeetCode, docs, articles.</p>
+              <p>Ask questions about any page you're on — perfect for LeetCode, docs, articles.</p>
             </div>
           </div>
-        </div>
-      </div>
-      <!-- Slide 3: Notion + CTA -->
-      <div class="onboarding-slide" data-slide="2">
-        <div class="onboarding-cards">
           <div class="onboarding-card onboarding-card-accent">
             <div class="onboarding-card-icon">📓</div>
             <div class="onboarding-card-body">
@@ -67,7 +62,23 @@
             </div>
           </div>
         </div>
-        <a href="https://notetakerai.lovable.app" target="_blank" class="onboarding-link">Explore more on our website →</a>
+      </div>
+      <!-- Slide 3: Auth -->
+      <div class="onboarding-slide" data-slide="2">
+        <div class="onboarding-auth">
+          <div class="onboarding-auth-icon">🔐</div>
+          <h2 class="onboarding-auth-title">Create your account</h2>
+          <p class="onboarding-auth-desc">Sign up to sync notes across devices, unlock cloud history, and keep everything in one place.</p>
+          <button id="onboardingSignUpBtn" class="btn btn-record onboarding-auth-btn">
+            Sign up — it's free
+          </button>
+          <button id="onboardingSignInBtn" class="btn btn-secondary onboarding-auth-btn">
+            I already have an account
+          </button>
+          <button id="onboardingSkipAuthBtn" class="onboarding-auth-skip">
+            Continue without account →
+          </button>
+        </div>
       </div>
     </div>
     <div class="onboarding-footer">
