@@ -309,7 +309,7 @@ async function startRecordingFlow() {
       return;
     }
 
-    await beginLocalRecording(response.streamId);
+    await beginLocalRecording(response.streamId, currentUseCase === "meeting");
     seconds = 0;
     setRecordingUI();
     updateTimer();
