@@ -334,6 +334,10 @@ h1 {
   gap: 10px;
 }
 
+.mode-cards.mode-cards-3 {
+  grid-template-columns: 1fr;
+}
+
 .mode-card {
   display: flex;
   flex-direction: column;
