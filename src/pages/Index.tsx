@@ -345,7 +345,7 @@ const Index = () => {
             {/* Brand */}
             <div className="flex items-center gap-2">
               <Leaf className="w-4 h-4 text-primary/60" strokeWidth={1.5} />
-              <span className="text-sm text-foreground">SideBrain</span>
+              <SideBrainLogo sizeClass="text-sm" />
             </div>
 
             {/* Nav columns */}
