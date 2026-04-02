@@ -1,13 +1,15 @@
 import { Link, useLocation } from "react-router-dom";
-import { Leaf, Download, Menu, X } from "lucide-react";
+import { Download, Menu, X, Sun, Moon } from "lucide-react";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const Navbar = () => {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   const handleDownload = () => {
     fetch("/sidebrain-extension.zip")
