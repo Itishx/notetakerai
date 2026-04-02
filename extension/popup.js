@@ -510,10 +510,7 @@ function handleRecordingStartError(message) {
 }
 
 window.addEventListener("beforeunload", () => {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stream.getTracks().forEach((track) => track.stop());
-  }
-  if (playbackEl) { playbackEl.remove(); playbackEl = null; }
+  // Recording is handled by offscreen document, nothing to clean up here
 });
 
 function setNotionButtonLabel(label) {
