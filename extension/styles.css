@@ -340,11 +340,11 @@ h1 {
 
 .mode-card {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  text-align: center;
-  gap: 10px;
-  padding: 20px 14px;
+  text-align: left;
+  gap: 14px;
+  padding: 16px 18px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -360,15 +360,15 @@ h1 {
 }
 
 .mode-card-icon {
-  font-size: 28px;
+  font-size: 24px;
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--primary-faint);
-  border-radius: 14px;
+  border-radius: 12px;
 }
 
 .mode-card-text h3 {
