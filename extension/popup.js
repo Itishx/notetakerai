@@ -383,6 +383,13 @@ async function handleConvertToNotes() {
     chrome.storage.local.set({ currentNotes: notesMarkdown });
     saveToHistory(notesMarkdown);
 
+    // Save to cloud if authenticated
+    if (currentAuthUser?.token && currentSessionId) {
+      const pageTitle = currentPageContext?.title || "Untitled";
+      const pageUrl = currentPageContext?.url || "";
+      saveNoteToCloud(currentSessionId, notesMarkdown, pageUrl, pageTitle, currentUseCase);
+    }
+
     statusEl.className = "status idle";
     statusEl.querySelector("span").textContent = "Notes ready!";
   } catch (e) {
