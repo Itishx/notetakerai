@@ -55,7 +55,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "startRecording") {
-    startRecording(message.tabId)
+    startRecording(message.tabId, message.streamId)
       .then(() => sendResponse({ success: true }))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -147,8 +147,15 @@ async function ensureOffscreen() {
   }
 }
 
-async function startRecording(tabId) {
-  const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+async function startRecording(tabId, existingStreamId) {
+  let streamId;
+  if (existingStreamId) {
+    streamId = existingStreamId;
+  } else if (tabId) {
+    streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+  } else {
+    throw new Error("No tab ID or stream ID provided");
+  }
 
   await ensureOffscreen();
 

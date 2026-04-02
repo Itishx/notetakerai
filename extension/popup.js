@@ -12,7 +12,7 @@ let pendingImageBase64 = null;
 let notionConnectionPoller = null;
 let trackedActiveTabId = null;
 let trackedActiveWindowId = null;
-let mediaRecorder = null;
+let mediaRecorder = null; // kept as a flag (true/false) for UI state
 let audioChunks = [];
 let playbackEl = null;
 let currentPageContext = null;
@@ -471,54 +471,29 @@ async function closeNotionAuthTab() {
 }
 
 async function beginLocalRecording(streamId) {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      mandatory: {
-        chromeMediaSource: "tab",
-        chromeMediaSourceId: streamId,
-      },
-    },
+  // Use the offscreen document for recording — more reliable across all tabs (e.g. Google Meet)
+  await new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { action: "startRecording", tabId: trackedActiveTabId || undefined, streamId },
+      (res) => {
+        if (res?.error) reject(new Error(res.error));
+        else resolve();
+      }
+    );
   });
-
-  if (playbackEl) playbackEl.remove();
-
-  playbackEl = document.createElement("audio");
-  playbackEl.srcObject = stream;
-  playbackEl.autoplay = true;
-  playbackEl.id = "tabPlayback";
-  playbackEl.style.display = "none";
-  document.body.appendChild(playbackEl);
-
-  audioChunks = [];
-  mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-  mediaRecorder.ondataavailable = (event) => {
-    if (event.data.size > 0) audioChunks.push(event.data);
-  };
-  mediaRecorder.start(1000);
+  mediaRecorder = true; // flag for UI state tracking
 }
 
 async function stopLocalRecording() {
+  mediaRecorder = null; // reset flag
   return new Promise((resolve, reject) => {
-    if (!mediaRecorder || mediaRecorder.state === "inactive") {
-      reject(new Error("Not recording"));
-      return;
-    }
-    const activeRecorder = mediaRecorder;
-    activeRecorder.onstop = () => {
-      const blob = new Blob(audioChunks, { type: "audio/webm" });
-      activeRecorder.stream.getTracks().forEach((track) => track.stop());
-      mediaRecorder = null;
-      audioChunks = [];
-      if (playbackEl) { playbackEl.remove(); playbackEl = null; }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = typeof reader.result === "string" ? reader.result : "";
-        resolve(result.split(",")[1]);
-      };
-      reader.onerror = () => reject(new Error("Failed to read recorded audio"));
-      reader.readAsDataURL(blob);
-    };
-    activeRecorder.stop();
+    chrome.runtime.sendMessage(
+      { action: "stopRecording" },
+      (res) => {
+        if (res?.error) reject(new Error(res.error));
+        else resolve(res.audioBase64);
+      }
+    );
   });
 }
 
@@ -533,10 +508,7 @@ function handleRecordingStartError(message) {
 }
 
 window.addEventListener("beforeunload", () => {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stream.getTracks().forEach((track) => track.stop());
-  }
-  if (playbackEl) { playbackEl.remove(); playbackEl = null; }
+  // Recording is handled by offscreen document, nothing to clean up here
 });
 
 function setNotionButtonLabel(label) {
@@ -839,7 +811,7 @@ function updateTimer() {
 
   // Update hero segment info
   if (heroSegment) {
-    const segNum = audioSegments.length + (mediaRecorder && mediaRecorder.state === "recording" ? 1 : 0);
+    const segNum = audioSegments.length + (mediaRecorder ? 1 : 0);
     const segLabel = segNum === 1 ? "1 segment" : `${segNum} segments`;
     const totalSecs = totalRecordedSeconds + seconds;
     heroSegment.textContent = `${segLabel} · ${formatTime(totalSecs)} total`;
@@ -1280,4 +1252,33 @@ cropConfirmBtn?.addEventListener("click", () => {
     cropRect = null;
   };
   img.src = screenshotDataUrl;
+});
+
+// ===== THEME TOGGLE =====
+const themeToggleBtn = document.getElementById("themeToggleBtn");
+const SUN_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+const MOON_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+function applyTheme(dark) {
+  if (dark) {
+    document.body.classList.add("theme-dark");
+    if (themeToggleBtn) themeToggleBtn.innerHTML = SUN_ICON;
+    if (themeToggleBtn) themeToggleBtn.title = "Switch to light theme";
+  } else {
+    document.body.classList.remove("theme-dark");
+    if (themeToggleBtn) themeToggleBtn.innerHTML = MOON_ICON;
+    if (themeToggleBtn) themeToggleBtn.title = "Switch to dark theme";
+  }
+}
+
+// Load saved theme
+chrome.storage.local.get("sidepanelDarkTheme", (data) => {
+  applyTheme(!!data.sidepanelDarkTheme);
+});
+
+themeToggleBtn?.addEventListener("click", () => {
+  const isDark = document.body.classList.contains("theme-dark");
+  const newDark = !isDark;
+  chrome.storage.local.set({ sidepanelDarkTheme: newDark });
+  applyTheme(newDark);
 });
