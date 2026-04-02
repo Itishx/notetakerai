@@ -489,26 +489,13 @@ async function beginLocalRecording(streamId) {
 
 async function stopLocalRecording() {
   return new Promise((resolve, reject) => {
-    if (!mediaRecorder || mediaRecorder.state === "inactive") {
-      reject(new Error("Not recording"));
-      return;
-    }
-    const activeRecorder = mediaRecorder;
-    activeRecorder.onstop = () => {
-      const blob = new Blob(audioChunks, { type: "audio/webm" });
-      activeRecorder.stream.getTracks().forEach((track) => track.stop());
-      mediaRecorder = null;
-      audioChunks = [];
-      if (playbackEl) { playbackEl.remove(); playbackEl = null; }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = typeof reader.result === "string" ? reader.result : "";
-        resolve(result.split(",")[1]);
-      };
-      reader.onerror = () => reject(new Error("Failed to read recorded audio"));
-      reader.readAsDataURL(blob);
-    };
-    activeRecorder.stop();
+    chrome.runtime.sendMessage(
+      { action: "stopRecording" },
+      (res) => {
+        if (res?.error) reject(new Error(res.error));
+        else resolve(res.audioBase64);
+      }
+    );
   });
 }
 
