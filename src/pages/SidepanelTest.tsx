@@ -3,12 +3,13 @@ import {
   Leaf, Mic, Square, Copy, RefreshCw, Send, Camera,
   History, Plus, ChevronRight, Globe, Check, Zap,
   NotebookPen, MessageSquare, Loader2, BookOpen,
+  GraduationCap, Users, Radio, TrendingUp, ArrowRight,
 } from "lucide-react";
 
 // ─── Flow states ──────────────────────────────────────────────────────────────
-// empty → recording → processing → notes (+ chat available) → (reset to empty)
+// welcome → empty → recording → processing → notes (+ chat available) → (reset to empty)
 
-type FlowState = "empty" | "recording" | "processing" | "notes";
+type FlowState = "welcome" | "empty" | "recording" | "processing" | "notes";
 type Tab = "notes" | "chat" | "page";
 
 // ─── Sample generated content ─────────────────────────────────────────────────
@@ -23,6 +24,14 @@ const GENERATED_NOTES = [
   { type: "h3", text: "Glossary" },
   { type: "term", label: "Semantic structure", def: "The meaning embedded in how information is organized, beyond its surface form." },
   { type: "term", label: "Retrieval latency", def: "The delay between a query and a usable result; determined by indexing quality." },
+];
+
+const USE_CASES = [
+  { icon: GraduationCap, label: "Online lectures", desc: "Turn any video lesson into structured notes." },
+  { icon: Users, label: "Meetings & calls", desc: "Auto-summarise decisions and action items." },
+  { icon: Globe, label: "Articles & docs", desc: "Ask questions about any page you're reading." },
+  { icon: Radio, label: "Podcasts", desc: "Get key takeaways without sitting through it all." },
+  { icon: TrendingUp, label: "LeetCode", desc: "Read the problem, ask for hints, get unstuck." },
 ];
 
 const PROCESSING_STEPS = [
@@ -171,7 +180,7 @@ const ChatBubble = ({ m }: { m: Msg }) => {
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 const Sidepanel = ({ onReset }: { onReset: () => void }) => {
-  const [flow, setFlow] = useState<FlowState>("empty");
+  const [flow, setFlow] = useState<FlowState>("welcome");
   const [tab, setTab] = useState<Tab>("notes");
   const [elapsed, setElapsed] = useState(0);
   const [procStep, setProcStep] = useState(0);
@@ -239,7 +248,7 @@ const Sidepanel = ({ onReset }: { onReset: () => void }) => {
   };
 
   const handleReset = () => {
-    setFlow("empty");
+    setFlow("welcome");
     setElapsed(0);
     setMessages([]);
     setChatInput("");
@@ -305,6 +314,67 @@ const Sidepanel = ({ onReset }: { onReset: () => void }) => {
         </div>
 
         <Divider />
+
+        {/* ── WELCOME STATE ── */}
+        {flow === "welcome" && (
+          <div className="flex flex-col flex-1 overflow-y-auto px-4 py-3 gap-4">
+            {/* Greeting */}
+            <div className="flex flex-col gap-1 opacity-0 animate-[fadeIn_0.4s_ease_0.1s_forwards]">
+              <div className="text-[15px]" style={{ color: g.text, ...serif }}>Welcome to SideBrain 👋</div>
+              <div className="text-[10.5px] leading-relaxed" style={{ color: g.textMuted, ...serif }}>
+                Your AI sidekick for the browser. Record any tab, chat about any page, annotate with screenshots.
+              </div>
+            </div>
+
+            {/* Use cases */}
+            <div className="flex flex-col gap-1.5 opacity-0 animate-[fadeIn_0.4s_ease_0.25s_forwards]">
+              <div className="text-[9.5px] tracking-widest uppercase mb-1" style={{ color: g.textFaint, ...serif }}>
+                What can I do?
+              </div>
+              {USE_CASES.map(({ icon: Icon, label, desc }, i) => (
+                <div
+                  key={label}
+                  className="flex items-start gap-3 rounded-xl px-3 py-2.5 transition-all duration-150 cursor-default hover:scale-[1.01]"
+                  style={{
+                    background: g.surface,
+                    border: `1px solid ${g.surfaceBorder}`,
+                    opacity: 0,
+                    animation: `fadeIn 0.35s ease ${0.3 + i * 0.07}s forwards`,
+                  }}
+                >
+                  <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                    style={{ background: g.primaryLight, border: `1px solid ${g.primaryBorder}` }}>
+                    <Icon className="w-3 h-3" style={{ color: g.primary }} strokeWidth={1.5} />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-medium leading-tight mb-0.5" style={{ color: g.text, ...serif }}>{label}</div>
+                    <div className="text-[9.5px] leading-relaxed" style={{ color: g.textMuted, ...serif }}>{desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* CTA */}
+            <div className="flex flex-col gap-2 opacity-0 animate-[fadeIn_0.4s_ease_0.7s_forwards]">
+              <button
+                onClick={() => setFlow("empty")}
+                className="w-full rounded-xl py-2.5 flex items-center justify-center gap-2 text-[11.5px] transition-all duration-200 active:scale-[0.97]"
+                style={{
+                  background: `linear-gradient(135deg, ${g.primary}, #c4612a)`,
+                  color: "#fff",
+                  boxShadow: `0 4px 16px ${g.primary}44`,
+                  ...serif,
+                }}
+              >
+                Get started
+                <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.5} />
+              </button>
+              <div className="text-center text-[9px]" style={{ color: g.textFaint, ...serif }}>
+                Free · No account required · Works on all Chromium browsers
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── EMPTY STATE ── */}
         {flow === "empty" && (
@@ -696,12 +766,13 @@ const SidepanelTest = () => {
             <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-6">The flow</p>
             <div className="space-y-5">
               {[
-                { n: "1", label: "Empty state", note: "Fresh panel. Mic icon, short description, big record button, or 'ask about page' escape." },
-                { n: "2", label: "Recording", note: "Live waveform, red pulsing dot, running timer, tab info, free-plan warning." },
-                { n: "3", label: "Processing", note: "BookOpen icon + spinner, step-by-step status ('Transcribing… Extracting…'), progress dots." },
-                { n: "4", label: "Notes", note: "Notes appear line by line. Notes / Chat / Page tabs. Copy, Redo, Notion sync, New recording." },
-                { n: "5", label: "Chat", note: "Empty prompt, then real message bubbles. AI typing indicator. Free limit reminder." },
-                { n: "6", label: "Page chat", note: "Shows current tab context. Same chat input. Same limit nudge." },
+                { n: "1", label: "Welcome", note: "Greeting + 5 use case cards stagger in. 'Get started' CTA at the bottom." },
+                { n: "2", label: "Empty state", note: "Fresh panel. Mic icon, short description, big record button, or 'ask about page' escape." },
+                { n: "3", label: "Recording", note: "Live waveform, red pulsing dot, running timer, tab info, free-plan warning." },
+                { n: "4", label: "Processing", note: "BookOpen icon + spinner, step-by-step status ('Transcribing… Extracting…'), progress dots." },
+                { n: "5", label: "Notes", note: "Notes appear line by line. Notes / Chat / Page tabs. Copy, Redo, Notion sync, New recording." },
+                { n: "6", label: "Chat", note: "Empty prompt, then real message bubbles. AI typing indicator. Free limit reminder." },
+                { n: "7", label: "Page chat", note: "Shows current tab context. Same chat input. Same limit nudge." },
               ].map(({ n, label, note }) => (
                 <div key={n} className="flex gap-4 items-start">
                   <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]"
