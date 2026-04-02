@@ -11,6 +11,7 @@ import NotionSync from "./pages/NotionSync.tsx";
 import GlassPreview from "./pages/GlassPreview.tsx";
 import Auth from "./pages/Auth.tsx";
 import ExtensionAuth from "./pages/ExtensionAuth.tsx";
+import Premium from "./pages/Premium.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/glass-preview" element={<GlassPreview />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/auth/extension" element={<ExtensionAuth />} />
+              <Route path="/premium" element={<Premium />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
@@ -39,4 +41,5 @@ const App = () => (
     </ThemeProvider>
   </QueryClientProvider>
 );
+
 export default App;
