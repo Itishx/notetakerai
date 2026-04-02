@@ -1,15 +1,17 @@
 import { Link, useLocation } from "react-router-dom";
-import { Download, Menu, X, Sun, Moon } from "lucide-react";
+import { Download, Menu, X, Sun, Moon, User, LogOut } from "lucide-react";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Navbar = () => {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { user, profile, signOut } = useAuth();
 
   const handleDownload = () => {
     fetch("/sidebrain-extension.zip")
@@ -68,6 +70,31 @@ const Navbar = () => {
           >
             {theme === "default" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
+          {user ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {profile?.display_name?.split(" ")[0] || user.email}
+              </span>
+              <button
+                onClick={() => signOut()}
+                className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <Link to="/auth">
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full px-4 text-sm"
+              >
+                <User className="w-3.5 h-3.5 mr-1.5" />
+                Sign In
+              </Button>
+            </Link>
+          )}
           <Button
             onClick={handleDownload}
             size="sm"
@@ -103,13 +130,25 @@ const Navbar = () => {
               {label}
             </Link>
           ))}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={toggleTheme}
               className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               {theme === "default" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
+            {user ? (
+              <button
+                onClick={() => { signOut(); setMenuOpen(false); }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Sign out ({profile?.display_name?.split(" ")[0] || "Account"})
+              </button>
+            ) : (
+              <Link to="/auth" onClick={() => setMenuOpen(false)} className="text-sm text-primary">
+                Sign In
+              </Link>
+            )}
             <Button
               onClick={() => { handleDownload(); setMenuOpen(false); }}
               size="sm"
