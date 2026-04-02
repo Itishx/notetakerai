@@ -130,13 +130,25 @@ const Navbar = () => {
               {label}
             </Link>
           ))}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={toggleTheme}
               className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               {theme === "default" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
+            {user ? (
+              <button
+                onClick={() => { signOut(); setMenuOpen(false); }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Sign out ({profile?.display_name?.split(" ")[0] || "Account"})
+              </button>
+            ) : (
+              <Link to="/auth" onClick={() => setMenuOpen(false)} className="text-sm text-primary">
+                Sign In
+              </Link>
+            )}
             <Button
               onClick={() => { handleDownload(); setMenuOpen(false); }}
               size="sm"
