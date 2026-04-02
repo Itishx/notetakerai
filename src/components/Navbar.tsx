@@ -11,6 +11,7 @@ const Navbar = () => {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { user, profile, signOut } = useAuth();
 
   const handleDownload = () => {
     fetch("/sidebrain-extension.zip")
