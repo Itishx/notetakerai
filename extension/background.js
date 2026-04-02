@@ -55,7 +55,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "startRecording") {
-    startRecording(message.tabId)
+    startRecording(message.tabId, message.streamId)
       .then(() => sendResponse({ success: true }))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
