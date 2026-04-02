@@ -119,6 +119,9 @@ const Navbar = () => {
               Download Free
             </Button>
           </div>
+        </div>
+      )}
+    </nav>
   );
 };
 
