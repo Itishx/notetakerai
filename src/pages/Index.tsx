@@ -2,6 +2,7 @@ import { Mic, FileText, Download, Zap, BookOpen, ChevronRight, Leaf, ArrowRight,
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
+import SideBrainLogo from "@/components/SideBrainLogo";
 
 const features = [
   {
