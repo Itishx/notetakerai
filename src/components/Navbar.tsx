@@ -103,17 +103,22 @@ const Navbar = () => {
               {label}
             </Link>
           ))}
-          <Button
-            onClick={() => { handleDownload(); setMenuOpen(false); }}
-            size="sm"
-            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 w-fit px-5 text-sm"
-          >
-            <Download className="w-3.5 h-3.5 mr-1.5" />
-            Download Free
-          </Button>
-        </div>
-      )}
-    </nav>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleTheme}
+              className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {theme === "default" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            </button>
+            <Button
+              onClick={() => { handleDownload(); setMenuOpen(false); }}
+              size="sm"
+              className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 w-fit px-5 text-sm"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" />
+              Download Free
+            </Button>
+          </div>
   );
 };
 
