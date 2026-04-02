@@ -247,13 +247,13 @@ const Index = () => {
       {/* Notion Sync section */}
       <section className="container mx-auto px-6 py-24">
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
-        <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-16 items-center">
+        <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-6">
 
           {/* Left: content */}
-          <div className="opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+          <div className="rounded-2xl border border-border/60 bg-card/40 p-8 md:p-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
             <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-4">Notion Sync</p>
             <h2 className="text-3xl md:text-4xl font-normal text-foreground leading-snug mb-14">
-              Your knowledge,<br /><em className="text-primary not-italic">at home in Notion</em>
+              Your knowledge,<br /><em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>at home in Notion</em>
             </h2>
 
             <div className="space-y-10">
