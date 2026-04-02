@@ -811,7 +811,7 @@ function updateTimer() {
 
   // Update hero segment info
   if (heroSegment) {
-    const segNum = audioSegments.length + (mediaRecorder && mediaRecorder.state === "recording" ? 1 : 0);
+    const segNum = audioSegments.length + (mediaRecorder ? 1 : 0);
     const segLabel = segNum === 1 ? "1 segment" : `${segNum} segments`;
     const totalSecs = totalRecordedSeconds + seconds;
     heroSegment.textContent = `${segLabel} · ${formatTime(totalSecs)} total`;
