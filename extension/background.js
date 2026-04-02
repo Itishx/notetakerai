@@ -147,7 +147,7 @@ async function ensureOffscreen() {
   }
 }
 
-async function startRecording(tabId, existingStreamId) {
+async function startRecording(tabId, existingStreamId, withMic) {
   let streamId;
   if (existingStreamId) {
     streamId = existingStreamId;
@@ -161,7 +161,7 @@ async function startRecording(tabId, existingStreamId) {
 
   await new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
-      { target: "offscreen", action: "startCapture", streamId },
+      { target: "offscreen", action: "startCapture", streamId, withMic: !!withMic },
       (res) => {
         if (res?.error) reject(new Error(res.error));
         else resolve();
