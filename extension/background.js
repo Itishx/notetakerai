@@ -147,8 +147,15 @@ async function ensureOffscreen() {
   }
 }
 
-async function startRecording(tabId) {
-  const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+async function startRecording(tabId, existingStreamId) {
+  let streamId;
+  if (existingStreamId) {
+    streamId = existingStreamId;
+  } else if (tabId) {
+    streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+  } else {
+    throw new Error("No tab ID or stream ID provided");
+  }
 
   await ensureOffscreen();
 
