@@ -145,8 +145,8 @@ const ExtensionAuth = () => {
             />
           </div>
 
-          {error && <p className="text-xs text-red-500">{error}</p>}
-          {success && <p className="text-xs text-green-600">{success}</p>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          {success && <p className="text-xs text-primary">{success}</p>}
 
           <button
             type="submit"

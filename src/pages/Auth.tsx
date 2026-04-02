@@ -94,8 +94,8 @@ const Auth = () => {
               />
             </div>
 
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            {success && <p className="text-sm text-green-600">{success}</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {success && <p className="text-sm text-primary">{success}</p>}
 
             <Button type="submit" className="w-full rounded-full" disabled={loading}>
               {loading ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
