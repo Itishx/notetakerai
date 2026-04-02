@@ -471,30 +471,20 @@ async function closeNotionAuthTab() {
 }
 
 async function beginLocalRecording(streamId) {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      mandatory: {
-        chromeMediaSource: "tab",
-        chromeMediaSourceId: streamId,
-      },
-    },
-  });
-
-  if (playbackEl) playbackEl.remove();
-
-  playbackEl = document.createElement("audio");
-  playbackEl.srcObject = stream;
-  playbackEl.autoplay = true;
-  playbackEl.id = "tabPlayback";
-  playbackEl.style.display = "none";
-  document.body.appendChild(playbackEl);
-
-  audioChunks = [];
-  mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-  mediaRecorder.ondataavailable = (event) => {
-    if (event.data.size > 0) audioChunks.push(event.data);
-  };
-  mediaRecorder.start(1000);
+  // Use the offscreen document for recording — more reliable across all tabs (e.g. Google Meet)
+  try {
+    await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { action: "startRecording", tabId: trackedActiveTabId || undefined, streamId },
+        (res) => {
+          if (res?.error) reject(new Error(res.error));
+          else resolve();
+        }
+      );
+    });
+  } catch (e) {
+    throw e;
+  }
 }
 
 async function stopLocalRecording() {
