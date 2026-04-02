@@ -194,6 +194,13 @@ backToModesBtn?.addEventListener("click", () => {
   modeCards?.classList.remove("hidden");
   idleStatusBlock?.classList.add("hidden");
 });
+
+document.getElementById("backFromChatBtn")?.addEventListener("click", () => {
+  inBrowseMode = false;
+  chatSection?.classList.add("hidden");
+  headerSection?.classList.remove("hidden");
+  idleControls?.classList.remove("hidden");
+});
   });
 
   onboardingNextBtn.addEventListener("click", () => {
