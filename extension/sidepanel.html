@@ -128,19 +128,26 @@
 
     <!-- Mode Selection Cards (shown when NOT recording) -->
     <div id="idleControls">
-      <div id="modeCards" class="mode-cards">
-        <div id="modeRecord" class="mode-card">
-          <div class="mode-card-icon">🎙️</div>
+      <div id="modeCards" class="mode-cards mode-cards-3">
+        <div id="modeRecord" class="mode-card" data-usecase="lecture">
+          <div class="mode-card-icon">🎓</div>
           <div class="mode-card-text">
-            <h3>Record Audio</h3>
-            <p>Capture & convert to notes</p>
+            <h3>Lectures & Audio</h3>
+            <p>YouTube, tutorials, podcasts, research talks</p>
           </div>
         </div>
-        <div id="modeBrowse" class="mode-card">
+        <div id="modeMeeting" class="mode-card" data-usecase="meeting">
+          <div class="mode-card-icon">🤝</div>
+          <div class="mode-card-text">
+            <h3>Meetings</h3>
+            <p>Captures your voice + tab audio with speaker detection</p>
+          </div>
+        </div>
+        <div id="modeBrowse" class="mode-card" data-usecase="chat">
           <div class="mode-card-icon">💬</div>
           <div class="mode-card-text">
             <h3>Chat with Page</h3>
-            <p>Ask AI about this page</p>
+            <p>Ask AI about any page you're on</p>
           </div>
         </div>
       </div>
