@@ -54,7 +54,7 @@ const NotionSync = () => {
           <h1 className="text-4xl md:text-6xl font-normal tracking-tight text-foreground max-w-3xl mx-auto leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
             Your knowledge,
             <br />
-            <em className="text-primary not-italic">at home in Notion</em>
+            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>at home in Notion</em>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
             Every note, diagram, and structured section — pushed directly into your Notion workspace with a single click. Not a paste. A real sync.
