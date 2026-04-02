@@ -1,12 +1,14 @@
 // Offscreen document for audio recording (MV3 requirement)
 let mediaRecorder = null;
 let audioChunks = [];
+let audioContext = null;
+let micStream = null;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "offscreen") return;
 
   if (message.action === "startCapture") {
-    startCapture(message.streamId)
+    startCapture(message.streamId, message.withMic)
       .then(() => sendResponse({ success: true }))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -20,8 +22,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function startCapture(streamId) {
-  const stream = await navigator.mediaDevices.getUserMedia({
+async function startCapture(streamId, withMic) {
+  const tabStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       mandatory: {
         chromeMediaSource: "tab",
@@ -30,15 +32,32 @@ async function startCapture(streamId) {
     },
   });
 
-  // Play the audio back so the user can still hear it
+  // Play the tab audio back so the user can still hear it
   const audio = document.createElement("audio");
-  audio.srcObject = stream;
+  audio.srcObject = tabStream;
   audio.autoplay = true;
   audio.id = "playback";
   document.body.appendChild(audio);
 
+  let recordStream = tabStream;
+
+  // For meetings: mix tab audio + microphone
+  if (withMic) {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContext = new AudioContext();
+      const dest = audioContext.createMediaStreamDestination();
+      audioContext.createMediaStreamSource(tabStream).connect(dest);
+      audioContext.createMediaStreamSource(micStream).connect(dest);
+      recordStream = dest.stream;
+    } catch (e) {
+      console.warn("Mic access denied, recording tab audio only:", e.message);
+      // Fall back to tab-only
+    }
+  }
+
   audioChunks = [];
-  mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+  mediaRecorder = new MediaRecorder(recordStream, { mimeType: "audio/webm;codecs=opus" });
 
   mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) audioChunks.push(e.data);
@@ -59,6 +78,16 @@ async function stopCapture() {
       mediaRecorder.stream.getTracks().forEach((t) => t.stop());
       mediaRecorder = null;
       audioChunks = [];
+
+      // Stop mic if active
+      if (micStream) {
+        micStream.getTracks().forEach((t) => t.stop());
+        micStream = null;
+      }
+      if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+      }
 
       // Remove playback element
       const playback = document.getElementById("playback");

@@ -55,7 +55,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "startRecording") {
-    startRecording(message.tabId, message.streamId)
+    startRecording(message.tabId, message.streamId, message.withMic)
       .then(() => sendResponse({ success: true }))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -147,7 +147,7 @@ async function ensureOffscreen() {
   }
 }
 
-async function startRecording(tabId, existingStreamId) {
+async function startRecording(tabId, existingStreamId, withMic) {
   let streamId;
   if (existingStreamId) {
     streamId = existingStreamId;
@@ -161,7 +161,7 @@ async function startRecording(tabId, existingStreamId) {
 
   await new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
-      { target: "offscreen", action: "startCapture", streamId },
+      { target: "offscreen", action: "startCapture", streamId, withMic: !!withMic },
       (res) => {
         if (res?.error) reject(new Error(res.error));
         else resolve();

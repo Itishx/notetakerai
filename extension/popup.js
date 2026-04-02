@@ -47,9 +47,11 @@ const orbContainer = recordingHero?.querySelector(".orb-container");
 // Mode cards
 const modeCards = document.getElementById("modeCards");
 const modeRecord = document.getElementById("modeRecord");
+const modeMeeting = document.getElementById("modeMeeting");
 const modeBrowse = document.getElementById("modeBrowse");
 const recordModeControls = document.getElementById("recordModeControls");
 const backToModesBtn = document.getElementById("backToModesBtn");
+let currentUseCase = "lecture"; // "lecture" | "meeting" | "chat"
 
 // History overlay elements
 const historyOverlay = document.getElementById("historyOverlay");
@@ -152,21 +154,27 @@ if (onboardingOverlay && onboardingNextBtn) {
 
 // ===== MODE CARD HANDLERS =====
 modeRecord?.addEventListener("click", () => {
+  currentUseCase = "lecture";
+  modeCards?.classList.add("hidden");
+  recordModeControls?.classList.remove("hidden");
+  idleStatusBlock?.classList.remove("hidden");
+});
+
+modeMeeting?.addEventListener("click", () => {
+  currentUseCase = "meeting";
   modeCards?.classList.add("hidden");
   recordModeControls?.classList.remove("hidden");
   idleStatusBlock?.classList.remove("hidden");
 });
 
 modeBrowse?.addEventListener("click", () => {
+  currentUseCase = "chat";
   inBrowseMode = true;
-  // Hide idle UI, show chat fullscreen
   idleControls?.classList.add("hidden");
   idleStatusBlock?.classList.add("hidden");
   headerSection?.classList.add("hidden");
   chatSection?.classList.remove("hidden");
-  // Re-fetch page context when entering browse mode
   fetchPageContext();
-  // Show greeting if no messages
   if (chatMessages.length === 0 && chatGreeting) {
     chatGreeting.classList.remove("hidden");
   }
@@ -301,7 +309,7 @@ async function startRecordingFlow() {
       return;
     }
 
-    await beginLocalRecording(response.streamId);
+    await beginLocalRecording(response.streamId, currentUseCase === "meeting");
     seconds = 0;
     setRecordingUI();
     updateTimer();
@@ -470,11 +478,11 @@ async function closeNotionAuthTab() {
   await removeStorage("notionAuthTabId");
 }
 
-async function beginLocalRecording(streamId) {
+async function beginLocalRecording(streamId, withMic = false) {
   // Use the offscreen document for recording — more reliable across all tabs (e.g. Google Meet)
   await new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
-      { action: "startRecording", tabId: trackedActiveTabId || undefined, streamId },
+      { action: "startRecording", tabId: trackedActiveTabId || undefined, streamId, withMic },
       (res) => {
         if (res?.error) reject(new Error(res.error));
         else resolve();
@@ -1254,31 +1262,28 @@ cropConfirmBtn?.addEventListener("click", () => {
   img.src = screenshotDataUrl;
 });
 
-// ===== THEME TOGGLE =====
+// ===== THEME TOGGLE (Default Charter vs Clean Neue Haas) =====
 const themeToggleBtn = document.getElementById("themeToggleBtn");
-const SUN_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-const MOON_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+const THEME_DEFAULT_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><text x="3" y="18" font-size="16" font-family="serif" font-style="italic" fill="currentColor" stroke="none">A</text><text x="13" y="18" font-size="14" font-family="sans-serif" font-weight="bold" fill="currentColor" stroke="none">a</text></svg>';
 
-function applyTheme(dark) {
-  if (dark) {
-    document.body.classList.add("theme-dark");
-    if (themeToggleBtn) themeToggleBtn.innerHTML = SUN_ICON;
-    if (themeToggleBtn) themeToggleBtn.title = "Switch to light theme";
+function applyTheme(clean) {
+  if (clean) {
+    document.body.classList.add("theme-clean");
+    if (themeToggleBtn) themeToggleBtn.title = "Switch to classic theme";
   } else {
-    document.body.classList.remove("theme-dark");
-    if (themeToggleBtn) themeToggleBtn.innerHTML = MOON_ICON;
-    if (themeToggleBtn) themeToggleBtn.title = "Switch to dark theme";
+    document.body.classList.remove("theme-clean");
+    if (themeToggleBtn) themeToggleBtn.title = "Switch to modern theme";
   }
 }
 
 // Load saved theme
-chrome.storage.local.get("sidepanelDarkTheme", (data) => {
-  applyTheme(!!data.sidepanelDarkTheme);
+chrome.storage.local.get("sidepanelCleanTheme", (data) => {
+  applyTheme(!!data.sidepanelCleanTheme);
 });
 
 themeToggleBtn?.addEventListener("click", () => {
-  const isDark = document.body.classList.contains("theme-dark");
-  const newDark = !isDark;
-  chrome.storage.local.set({ sidepanelDarkTheme: newDark });
-  applyTheme(newDark);
+  const isClean = document.body.classList.contains("theme-clean");
+  const newClean = !isClean;
+  chrome.storage.local.set({ sidepanelCleanTheme: newClean });
+  applyTheme(newClean);
 });
