@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { Leaf, Download, Menu, X } from "lucide-react";
+import SideBrainLogo from "@/components/SideBrainLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -36,7 +37,7 @@ const Navbar = () => {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors duration-200">
           <Leaf className="w-4 h-4 text-primary" strokeWidth={1.5} />
-          <span className="text-sm tracking-wide">SideBrain</span>
+          <SideBrainLogo sizeClass="text-sm" />
         </Link>
 
         {/* Desktop nav */}

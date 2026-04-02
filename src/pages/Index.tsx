@@ -2,6 +2,7 @@ import { Mic, FileText, Download, Zap, BookOpen, ChevronRight, Leaf, ArrowRight,
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
+import SideBrainLogo from "@/components/SideBrainLogo";
 
 const features = [
   {
@@ -344,7 +345,7 @@ const Index = () => {
             {/* Brand */}
             <div className="flex items-center gap-2">
               <Leaf className="w-4 h-4 text-primary/60" strokeWidth={1.5} />
-              <span className="text-sm text-foreground">SideBrain</span>
+              <SideBrainLogo sizeClass="text-sm" />
             </div>
 
             {/* Nav columns */}
@@ -370,9 +371,7 @@ const Index = () => {
 
         {/* Big watermark */}
         <div className="pb-2 overflow-hidden select-none pointer-events-none border-t border-border/40 pt-4 text-center">
-          <p className="text-[80px] md:text-[120px] lg:text-[160px] font-normal leading-none text-foreground/5 tracking-tight -mb-4">
-            SideBrain
-          </p>
+          <SideBrainLogo sizeClass="text-[80px] md:text-[120px] lg:text-[160px]" className="leading-none text-foreground/5 tracking-tight -mb-4" />
         </div>
       </footer>
     </div>
