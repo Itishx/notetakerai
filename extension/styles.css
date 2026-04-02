@@ -1110,39 +1110,65 @@ h1 {
 .onboarding-cards {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   max-width: 360px;
 }
 
 .onboarding-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px 18px;
+  border-radius: 16px;
+  padding: 14px 16px;
+  transition: all 0.25s ease;
+}
+
+.onboarding-card:hover {
+  border-color: var(--primary);
+  background: var(--primary-faint);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
 }
 
 .onboarding-card-accent {
-  border-color: var(--text);
+  border-color: var(--primary);
   background: var(--primary-faint);
 }
 
 .onboarding-card-icon {
-  font-size: 22px;
-  margin-bottom: 6px;
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-faint);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.onboarding-card-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .onboarding-card h3 {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .onboarding-card p {
-  font-size: 12.5px;
+  font-size: 11px;
   color: var(--text-muted);
-  line-height: 1.55;
+  line-height: 1.45;
 }
 
 .onboarding-link {
