@@ -134,6 +134,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// ===== AUTH — onMessageExternal must live in background.js =====
+chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
+  if (message.action === "authToken") {
+    chrome.storage.local.set({
+      authToken: message.token,
+      authRefreshToken: message.refreshToken,
+      authDisplayName: message.displayName,
+      authEmail: message.email,
+      authUserId: message.userId,
+    }, () => {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+});
+
 async function ensureOffscreen() {
   const contexts = await chrome.runtime.getContexts({
     contextTypes: ["OFFSCREEN_DOCUMENT"],

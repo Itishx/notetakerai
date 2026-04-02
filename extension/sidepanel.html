@@ -128,11 +128,6 @@
           <button id="logoutBtn" class="hidden"></button>
         </div>
       </div>
-      <!-- Greeting (home only) -->
-      <div class="home-greeting" id="homeGreeting">
-        <p class="greeting-hey" id="userGreeting">Hey there 👋</p>
-        <p class="greeting-sub">What do you want me to do?</p>
-      </div>
       <!-- Mode title (shown when inside a mode, hidden on home) -->
       <div class="mode-title-bar hidden" id="modeTitleBar">
         <button id="backToHomeBtn" class="btn-back">
@@ -153,43 +148,16 @@
       <div id="segmentCount" class="segment-count hidden"></div>
     </div>
 
-    <!-- Mode Selection Cards (shown when NOT recording) -->
+    <!-- Home screen: centered greeting + chat bar -->
     <div id="idleControls">
-      <div id="modeCards" class="mode-cards mode-cards-3">
-        <div id="modeRecord" class="mode-card" data-usecase="lecture">
-          <div class="mode-card-top">
-            <div class="mode-card-icon">🎓</div>
-            <span class="mode-card-badge">Audio</span>
-          </div>
-          <h3 class="mode-card-title">Lectures & Audio</h3>
-          <p class="mode-card-desc">Record any tab — YouTube, tutorials, podcasts — and get AI-structured notes instantly.</p>
-          <p class="mode-card-who">Students · researchers · self-learners</p>
-        </div>
-        <div id="modeMeeting" class="mode-card" data-usecase="meeting">
-          <div class="mode-card-top">
-            <div class="mode-card-icon">🤝</div>
-            <span class="mode-card-badge">Professional</span>
-          </div>
-          <h3 class="mode-card-title">Meetings & Calls</h3>
-          <p class="mode-card-desc">Captures tab audio and generates summaries with decisions, action items, and speakers.</p>
-          <p class="mode-card-who">Teams · managers · consultants</p>
-        </div>
-        <div id="modeBrowse" class="mode-card" data-usecase="chat">
-          <div class="mode-card-top">
-            <div class="mode-card-icon">💬</div>
-            <span class="mode-card-badge">Chat</span>
-          </div>
-          <h3 class="mode-card-title">Chat with Page</h3>
-          <p class="mode-card-desc">Ask AI questions about any page you're on — docs, articles, LeetCode problems.</p>
-          <p class="mode-card-who">Anyone browsing</p>
-        </div>
+      <!-- Centered hero (Claude-style greeting) -->
+      <div id="homeHero" class="home-hero">
+        <p class="greeting-hey" id="userGreeting">Hey there 👋</p>
+        <p class="home-hero-sub">Record, chat, and understand anything in your browser.</p>
       </div>
-      <!-- Hidden recording controls (shown after entering record mode) -->
+
+      <!-- Recording controls (shown after mode selected, hidden on home) -->
       <div id="recordModeControls" class="hidden">
-        <button id="backToModesBtn" class="btn-back" style="margin-bottom: 12px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></svg>
-          Back
-        </button>
         <div class="controls">
           <button id="recordBtn" class="btn btn-record">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
@@ -203,6 +171,31 @@
         <button id="convertBtn" class="btn btn-convert" disabled>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
           Convert to Notes
+        </button>
+      </div>
+    </div>
+
+    <!-- Home chat bar (always at bottom on home screen) -->
+    <div id="homeChatBar" class="home-chat-bar">
+      <!-- Use case dropdown -->
+      <div class="home-usecase-wrapper" id="usecaseWrapper">
+        <button id="usecaseBtn" class="home-usecase-btn" title="Choose what to do">
+          <span id="usecaseBtnLabel">🎓 Lectures</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6,9 12,15 18,9"/></svg>
+        </button>
+        <div id="usecaseDropdown" class="home-usecase-dropdown hidden">
+          <button class="usecase-option" data-usecase="lecture">🎓 Lectures & Audio</button>
+          <button class="usecase-option" data-usecase="meeting">🤝 Meetings & Calls</button>
+          <button class="usecase-option" data-usecase="chat">💬 Chat with Page</button>
+        </div>
+      </div>
+      <div class="home-chat-input-bar">
+        <button id="homeChatScreenshotBtn" class="btn-icon-sm" title="Screenshot">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+        <input type="text" id="homeChatInput" placeholder="Ask anything, or start recording..." autocomplete="off" />
+        <button id="homeChatSendBtn" class="btn-icon-sm btn-send" title="Go">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
         </button>
       </div>
     </div>

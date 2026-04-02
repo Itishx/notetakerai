@@ -58,7 +58,8 @@ body {
 
 body.sidepanel {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #ffffff;
   color: var(--text);
   font-family: 'Charter', Georgia, 'Times New Roman', serif;
@@ -70,13 +71,15 @@ body.sidepanel {
   padding: 20px 16px 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  min-height: calc(100vh - 120px);
+  gap: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
 body.sidepanel .container {
   max-width: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 body.sidepanel .notes-content {
@@ -324,22 +327,136 @@ h1 {
 #idleControls {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  flex: 1;
+  overflow: hidden;
 }
 
-/* Greeting */
-.home-greeting {
-  padding: 4px 0 8px;
+/* Home hero — Claude-style centered greeting */
+.home-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 24px 24px;
+  gap: 10px;
 }
-.greeting-hey {
-  font-size: 18px;
-  font-weight: 600;
+
+.home-hero .greeting-hey {
+  font-size: 26px;
+  font-weight: 700;
   color: var(--text);
-  margin-bottom: 2px;
+  line-height: 1.2;
 }
-.greeting-sub {
+
+.home-hero-sub {
   font-size: 13px;
   color: var(--text-muted);
+  line-height: 1.5;
+  max-width: 240px;
+}
+
+/* Home chat bar — pinned at bottom */
+.home-chat-bar {
+  flex-shrink: 0;
+  padding: 8px 16px 16px;
+  background: var(--bg);
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-usecase-wrapper {
+  position: relative;
+}
+
+.home-usecase-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px 4px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.18s;
+  font-weight: 500;
+}
+
+.home-usecase-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-faint);
+}
+
+.home-usecase-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 5px;
+  min-width: 190px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  z-index: 200;
+}
+
+.usecase-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.usecase-option:hover { background: var(--primary-faint); }
+
+.usecase-option.active {
+  background: var(--primary-faint);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.home-chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: 24px;
+  padding: 6px 6px 6px 12px;
+  transition: border-color 0.18s;
+}
+
+.home-chat-input-bar:focus-within {
+  border-color: var(--primary);
+}
+
+.home-chat-input-bar input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  min-width: 0;
+}
+
+.home-chat-input-bar input::placeholder {
+  color: var(--text-faint);
 }
 
 /* Mode Cards — vertical use-case style */
@@ -1462,4 +1579,21 @@ body.sidepanel.theme-warm .history-overlay {
 body.sidepanel.theme-warm .onboarding-slide,
 body.sidepanel.theme-warm .onboarding-panel {
   background: hsl(40,20%,97%);
+}
+
+body.sidepanel.theme-warm .home-chat-bar {
+  background: hsl(40,20%,97%);
+  border-top-color: rgba(200,185,165,0.3);
+}
+
+body.sidepanel.theme-warm .home-chat-input-bar {
+  background: rgba(255,255,255,0.6);
+}
+
+body.sidepanel.theme-warm .home-chat-input-bar:focus-within {
+  border-color: #d97234;
+}
+
+body.sidepanel.theme-warm .btn-send {
+  background: linear-gradient(135deg, #d97234, #c4612a);
 }

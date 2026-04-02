@@ -162,7 +162,8 @@ if (onboardingOverlay && onboardingNextBtn) {
 
 // ===== MODE HELPERS =====
 function enterMode(label) {
-  document.getElementById("homeGreeting")?.classList.add("hidden");
+  document.getElementById("homeHero")?.classList.add("hidden");
+  document.getElementById("homeChatBar")?.classList.add("hidden");
   const bar = document.getElementById("modeTitleBar");
   const lbl = document.getElementById("modeTitleLabel");
   if (bar) bar.classList.remove("hidden");
@@ -170,7 +171,8 @@ function enterMode(label) {
 }
 
 function exitMode() {
-  document.getElementById("homeGreeting")?.classList.remove("hidden");
+  document.getElementById("homeHero")?.classList.remove("hidden");
+  document.getElementById("homeChatBar")?.classList.remove("hidden");
   document.getElementById("modeTitleBar")?.classList.add("hidden");
 }
 
@@ -223,11 +225,110 @@ function goHome() {
   idleStatusBlock?.classList.add("hidden");
   idleControls?.classList.remove("hidden");
   modeCards?.classList.remove("hidden");
-  exitMode();
+  exitMode(); // this also shows homeHero and homeChatBar
 }
 
 document.getElementById("backFromChatBtn")?.addEventListener("click", goHome);
 document.getElementById("backToHomeBtn")?.addEventListener("click", goHome);
+
+// ===== HOME CHAT BAR =====
+const homeChatInput = document.getElementById("homeChatInput");
+const homeChatSendBtn = document.getElementById("homeChatSendBtn");
+const homeChatScreenshotBtn = document.getElementById("homeChatScreenshotBtn");
+const usecaseWrapper = document.getElementById("usecaseWrapper");
+const usecaseBtnEl = document.getElementById("usecaseBtn");
+const usecaseBtnLabel = document.getElementById("usecaseBtnLabel");
+const usecaseDropdown = document.getElementById("usecaseDropdown");
+const usecaseOptions = document.querySelectorAll(".usecase-option");
+
+// Dropdown toggle
+usecaseBtnEl?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  usecaseDropdown?.classList.toggle("hidden");
+});
+
+// Close on outside click
+document.addEventListener("click", (e) => {
+  if (!usecaseWrapper?.contains(e.target)) {
+    usecaseDropdown?.classList.add("hidden");
+  }
+});
+
+// Option selection
+usecaseOptions?.forEach((opt) => {
+  opt.addEventListener("click", () => {
+    const uc = opt.dataset.usecase;
+    currentUseCase = uc;
+    if (usecaseBtnLabel) usecaseBtnLabel.textContent = opt.textContent.trim();
+    usecaseDropdown?.classList.add("hidden");
+    usecaseOptions.forEach((o) => o.classList.remove("active"));
+    opt.classList.add("active");
+    if (homeChatInput) {
+      homeChatInput.placeholder = uc === "chat"
+        ? "Ask about this page..."
+        : "Ask about your recording, or just start...";
+    }
+  });
+});
+
+function handleHomeSend() {
+  if (currentUseCase === "chat") {
+    const text = homeChatInput?.value.trim();
+    // Enter chat-with-page mode
+    document.getElementById("homeChatBar")?.classList.add("hidden");
+    idleControls?.classList.add("hidden");
+    idleStatusBlock?.classList.add("hidden");
+    chatSection?.classList.remove("hidden");
+    document.getElementById("chatBottomBar")?.classList.remove("hidden");
+    enterMode("Chat with Page");
+    inBrowseMode = true;
+    fetchPageContext();
+    if (chatMessages.length === 0 && chatGreeting) {
+      chatGreeting.classList.remove("hidden");
+    }
+    if (text && chatInput) {
+      chatInput.value = text;
+      if (homeChatInput) homeChatInput.value = "";
+      setTimeout(() => chatSendBtn?.click(), 50);
+    } else {
+      chatInput?.focus();
+    }
+  } else {
+    // Enter recording mode
+    document.getElementById("homeChatBar")?.classList.add("hidden");
+    recordModeControls?.classList.remove("hidden");
+    idleStatusBlock?.classList.remove("hidden");
+    const label = currentUseCase === "lecture" ? "Lectures & Audio" : "Meetings & Calls";
+    enterMode(label);
+  }
+}
+
+homeChatSendBtn?.addEventListener("click", handleHomeSend);
+homeChatInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") handleHomeSend();
+});
+
+// Screenshot button on home bar
+homeChatScreenshotBtn?.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ action: "captureScreenshot" }, (res) => {
+    if (res?.dataUrl) {
+      pendingImageBase64 = res.dataUrl.split(",")[1];
+      currentUseCase = "chat";
+      document.getElementById("homeChatBar")?.classList.add("hidden");
+      idleControls?.classList.add("hidden");
+      chatSection?.classList.remove("hidden");
+      document.getElementById("chatBottomBar")?.classList.remove("hidden");
+      enterMode("Chat with Page");
+      inBrowseMode = true;
+      fetchPageContext();
+      if (chatPreviewImg && chatImagePreview) {
+        chatPreviewImg.src = res.dataUrl;
+        chatImagePreview.classList.remove("hidden");
+      }
+      chatInput?.focus();
+    }
+  });
+});
   });
 
   onboardingNextBtn.addEventListener("click", () => {
@@ -246,12 +347,14 @@ document.getElementById("backToHomeBtn")?.addEventListener("click", goHome);
 
   // Auth slide buttons
   document.getElementById("onboardingSignUpBtn")?.addEventListener("click", () => {
-    chrome.tabs.create({ url: "https://notetakerai.lovable.app/auth?mode=signup" });
+    const extId = chrome.runtime.id;
+    chrome.tabs.create({ url: `https://notetakerai.lovable.app/auth/extension?ext=${extId}&mode=signup` });
     finishOnboarding();
   });
 
   document.getElementById("onboardingSignInBtn")?.addEventListener("click", () => {
-    chrome.tabs.create({ url: "https://notetakerai.lovable.app/auth?mode=signin" });
+    const extId = chrome.runtime.id;
+    chrome.tabs.create({ url: `https://notetakerai.lovable.app/auth/extension?ext=${extId}&mode=signin` });
     finishOnboarding();
   });
 
@@ -1391,22 +1494,8 @@ logoutBtn?.addEventListener("click", () => {
   updateAuthUI();
 });
 
-// Listen for auth token from website
-chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
-  if (message.action === "authToken") {
-    chrome.storage.local.set({
-      authToken: message.token,
-      authRefreshToken: message.refreshToken,
-      authDisplayName: message.displayName,
-      authEmail: message.email,
-      authUserId: message.userId,
-    });
-    updateAuthUI();
-    sendResponse({ success: true });
-  }
-});
-
-// Also check storage changes (for content script based auth)
+// Auth token is received in background.js via onMessageExternal and saved to storage.
+// We listen for storage changes here to update the UI when auth completes.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.authToken || changes.authDisplayName)) {
     updateAuthUI();
