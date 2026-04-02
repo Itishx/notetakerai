@@ -8,7 +8,7 @@ interface SideBrainLogoProps {
 const SideBrainLogo = ({ className, sizeClass = "text-sm" }: SideBrainLogoProps) => {
   return (
     <span className={cn("inline-flex items-baseline", sizeClass, className)}>
-      <span style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', Georgia, serif", fontStyle: "italic", marginRight: "0.08em" }}>
+      <span style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', Georgia, serif", fontStyle: "italic", marginRight: "0.04em" }}>
         side
       </span>
       <span style={{ fontFamily: "'BeVietnam', 'Be Vietnam Pro', sans-serif", fontWeight: 800 }}>
