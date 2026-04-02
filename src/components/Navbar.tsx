@@ -37,7 +37,7 @@ const Navbar = () => {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors duration-200">
           <Leaf className="w-4 h-4 text-primary" strokeWidth={1.5} />
-          <span className="text-sm tracking-wide">SideBrain</span>
+          <SideBrainLogo sizeClass="text-sm" />
         </Link>
 
         {/* Desktop nav */}
