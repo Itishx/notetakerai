@@ -182,6 +182,7 @@ modeBrowse?.addEventListener("click", () => {
   idleStatusBlock?.classList.add("hidden");
   headerSection?.classList.add("hidden");
   chatSection?.classList.remove("hidden");
+  document.getElementById("chatBottomBar")?.classList.remove("hidden");
   fetchPageContext();
   if (chatMessages.length === 0 && chatGreeting) {
     chatGreeting.classList.remove("hidden");
@@ -198,6 +199,7 @@ backToModesBtn?.addEventListener("click", () => {
 document.getElementById("backFromChatBtn")?.addEventListener("click", () => {
   inBrowseMode = false;
   chatSection?.classList.add("hidden");
+  document.getElementById("chatBottomBar")?.classList.add("hidden");
   headerSection?.classList.remove("hidden");
   idleControls?.classList.remove("hidden");
 });
@@ -308,6 +310,7 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     currentSessionId = data.currentSessionId;
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
+    document.getElementById("chatBottomBar")?.classList.remove("hidden");
     loadChatMessages(currentSessionId);
   }
   updateConvertButtonLabel();
@@ -404,6 +407,7 @@ async function handleConvertToNotes() {
     notesMarkdown = data.notes;
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
+    document.getElementById("chatBottomBar")?.classList.remove("hidden");
     updateConvertButtonLabel();
     updateChatContextUI();
 
@@ -927,6 +931,7 @@ function loadHistory() {
         chrome.storage.local.set({ currentSessionId, currentNotes: notesMarkdown });
         notesContent.innerHTML = renderMarkdown(notesMarkdown);
         notesSection.classList.remove("hidden");
+        document.getElementById("chatBottomBar")?.classList.remove("hidden");
         updateConvertButtonLabel();
         updateChatContextUI();
         loadChatMessages(currentSessionId);
@@ -1335,12 +1340,12 @@ function updateAuthUI() {
       currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
       if (loginBtn) loginBtn.classList.add("hidden");
       if (logoutBtn) logoutBtn.classList.remove("hidden");
-      if (userGreeting) userGreeting.textContent = `Hey, ${data.authDisplayName.split(" ")[0]}`;
+      if (userGreeting) userGreeting.textContent = `Hey, ${data.authDisplayName.split(" ")[0]} 👋`;
     } else {
       currentAuthUser = null;
-      if (loginBtn) loginBtn.classList.remove("hidden");
+      if (loginBtn) loginBtn.classList.add("hidden");
       if (logoutBtn) logoutBtn.classList.add("hidden");
-      if (userGreeting) userGreeting.textContent = "Your AI browser companion";
+      if (userGreeting) userGreeting.textContent = "Hey there 👋";
     }
   });
 }
