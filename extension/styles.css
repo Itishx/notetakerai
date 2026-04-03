@@ -973,6 +973,14 @@ body.sidepanel.home-layout #idleControls {
   width: fit-content;
 }
 
+.home-page-badge {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-alpha, rgba(99,102,241,0.08));
+  border-color: var(--accent-alpha, rgba(99,102,241,0.2));
+}
+
 .page-context-badge svg {
   flex-shrink: 0;
   stroke: var(--text-muted);
