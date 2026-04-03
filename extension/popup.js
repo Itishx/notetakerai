@@ -783,6 +783,7 @@ checkNotionConnection();
 window.addEventListener("focus", () => {
   hydrateTrackedTabState();
   checkNotionConnection();
+  updateAuthUI(); // re-check auth whenever user returns to sidepanel (e.g. after sign-in)
 });
 
 syncNotionBtn?.addEventListener("click", async () => {

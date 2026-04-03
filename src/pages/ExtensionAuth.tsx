@@ -25,33 +25,36 @@ const ExtensionAuth = () => {
   useEffect(() => {
     if (!user || !session || !extensionId || sent) return;
 
-    const displayName = profile?.display_name || user.email || "User";
+    // Use name from profile if loaded, fall back to email. Never send before we have something meaningful.
+    const displayName = profile?.display_name || user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
 
-    // Try sending via chrome.runtime.sendMessage (works if extension is installed)
-    try {
-      const w = window as any;
-      if (w.chrome?.runtime?.sendMessage) {
-        w.chrome.runtime.sendMessage(extensionId, {
-          action: "authToken",
-          token: session.access_token,
-          refreshToken: session.refresh_token,
-          userId: user.id,
-          displayName,
-          email: user.email,
-        });
-      }
-    } catch (e) {
-      console.log("Could not send to extension directly, using storage fallback");
-    }
-
-    // Also store in localStorage so extension content script can pick it up
-    localStorage.setItem("sidebrain_ext_auth", JSON.stringify({
+    const payload = {
+      action: "authToken",
       token: session.access_token,
       refreshToken: session.refresh_token,
       userId: user.id,
       displayName,
       email: user.email,
-    }));
+    };
+
+    // Try sending via chrome.runtime.sendMessage (works if extension is installed)
+    try {
+      const w = window as any;
+      if (w.chrome?.runtime?.sendMessage) {
+        w.chrome.runtime.sendMessage(extensionId, payload, (response: any) => {
+          if (w.chrome.runtime.lastError) {
+            console.log("Extension message error:", w.chrome.runtime.lastError.message);
+          } else {
+            console.log("Auth token sent to extension:", response);
+          }
+        });
+      }
+    } catch (e) {
+      console.log("Could not send to extension directly");
+    }
+
+    // Also store in localStorage as fallback
+    localStorage.setItem("sidebrain_ext_auth", JSON.stringify(payload));
 
     setSent(true);
   }, [user, session, profile, extensionId, sent]);
