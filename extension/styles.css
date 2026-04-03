@@ -199,13 +199,20 @@ body.sidepanel .notes-content {
 }
 
 /* ===== HEADER ===== */
-.header { padding-bottom: 4px; }
-
 .header-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
+
+/* Logo centered, actions pinned right */
+.header-top .logo-group {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.header { position: relative; padding-bottom: 4px; }
 
 .header-actions {
   display: flex;
