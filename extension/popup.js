@@ -254,52 +254,67 @@ document.addEventListener("click", (e) => {
   }
 });
 
-// Option selection
+// Navigate into recording mode
+function enterRecordingFromHome(uc) {
+  currentUseCase = uc;
+  const label = uc === "meeting" ? "Meetings & Calls" : "Lectures & Audio";
+  document.getElementById("homeChatBar")?.classList.add("hidden");
+  recordModeControls?.classList.remove("hidden");
+  idleStatusBlock?.classList.remove("hidden");
+  enterMode(label);
+}
+
+// Navigate into chat-with-page mode
+function enterChatFromHome(prefillText) {
+  currentUseCase = "chat";
+  inBrowseMode = true;
+  document.getElementById("homeChatBar")?.classList.add("hidden");
+  idleControls?.classList.add("hidden");
+  chatSection?.classList.remove("hidden");
+  document.getElementById("chatBottomBar")?.classList.remove("hidden");
+  enterMode("Chat with Page");
+  fetchPageContext();
+  if (chatMessages.length === 0 && chatGreeting) {
+    chatGreeting.classList.remove("hidden");
+  }
+  if (prefillText && chatInput) {
+    chatInput.value = prefillText;
+    setTimeout(() => chatSendBtn?.click(), 50);
+  } else {
+    chatInput?.focus();
+  }
+}
+
+// Use-case option selection — lecture/meeting navigate immediately; chat waits for send
 usecaseOptions?.forEach((opt) => {
   opt.addEventListener("click", () => {
     const uc = opt.dataset.usecase;
-    currentUseCase = uc;
-    if (usecaseBtnLabel) usecaseBtnLabel.textContent = opt.textContent.trim();
     usecaseDropdown?.classList.add("hidden");
     usecaseOptions.forEach((o) => o.classList.remove("active"));
     opt.classList.add("active");
-    if (homeChatInput) {
-      homeChatInput.placeholder = uc === "chat"
-        ? "Ask about this page..."
-        : "Ask about your recording, or just start...";
+
+    if (uc === "lecture" || uc === "meeting") {
+      enterRecordingFromHome(uc);
+    } else {
+      // chat — update label and let user type then send
+      currentUseCase = "chat";
+      if (usecaseBtnLabel) usecaseBtnLabel.textContent = opt.textContent.trim();
+      if (homeChatInput) {
+        homeChatInput.placeholder = "Ask about this page...";
+        homeChatInput.focus();
+      }
     }
   });
 });
 
+// Send / Enter — navigate based on currentUseCase
 function handleHomeSend() {
+  const text = homeChatInput?.value.trim() || "";
   if (currentUseCase === "chat") {
-    const text = homeChatInput?.value.trim();
-    // Enter chat-with-page mode
-    document.getElementById("homeChatBar")?.classList.add("hidden");
-    idleControls?.classList.add("hidden");
-    idleStatusBlock?.classList.add("hidden");
-    chatSection?.classList.remove("hidden");
-    document.getElementById("chatBottomBar")?.classList.remove("hidden");
-    enterMode("Chat with Page");
-    inBrowseMode = true;
-    fetchPageContext();
-    if (chatMessages.length === 0 && chatGreeting) {
-      chatGreeting.classList.remove("hidden");
-    }
-    if (text && chatInput) {
-      chatInput.value = text;
-      if (homeChatInput) homeChatInput.value = "";
-      setTimeout(() => chatSendBtn?.click(), 50);
-    } else {
-      chatInput?.focus();
-    }
+    if (homeChatInput) homeChatInput.value = "";
+    enterChatFromHome(text);
   } else {
-    // Enter recording mode
-    document.getElementById("homeChatBar")?.classList.add("hidden");
-    recordModeControls?.classList.remove("hidden");
-    idleStatusBlock?.classList.remove("hidden");
-    const label = currentUseCase === "lecture" ? "Lectures & Audio" : "Meetings & Calls";
-    enterMode(label);
+    enterRecordingFromHome(currentUseCase);
   }
 }
 
