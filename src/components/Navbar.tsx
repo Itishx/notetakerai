@@ -40,14 +40,14 @@ const Navbar = () => {
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-6xl flex items-center gap-2">
       {/* Main nav pill */}
       <nav className="flex-1 min-w-0 rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
-        <div className="pl-8 pr-4 h-14 flex items-center gap-4">
-          {/* Logo */}
+        <div className="pl-8 pr-4 h-14 flex items-center">
+          {/* Logo — left */}
           <Link to="/" className="flex-shrink-0 flex items-center text-foreground hover:text-primary transition-colors duration-200">
             <SideBrainLogo sizeClass="text-sm" />
           </Link>
 
-          {/* Desktop nav - centered with auto margins */}
-          <div className="hidden md:flex items-center gap-10 ml-auto">
+          {/* Desktop nav — absolutely centered in pill */}
+          <div className="hidden md:flex items-center gap-10 absolute left-1/2 -translate-x-1/2">
             {links.map(({ to, label }) => (
               <Link
                 key={to}
@@ -64,8 +64,8 @@ const Navbar = () => {
             ))}
           </div>
 
-          {/* Desktop right actions — inside the pill, pinned right */}
-          <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+          {/* Desktop right actions — pinned right */}
+          <div className="hidden md:flex items-center gap-2 ml-auto flex-shrink-0">
             <button
               onClick={toggleTheme}
               className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
