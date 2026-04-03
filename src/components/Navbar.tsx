@@ -47,7 +47,7 @@ const Navbar = () => {
           </Link>
 
           {/* Desktop nav - centered with auto margins */}
-          <div className="hidden md:flex items-center gap-10 ml-12">
+          <div className="hidden md:flex items-center gap-10 ml-auto">
             {links.map(({ to, label }) => (
               <Link
                 key={to}
@@ -65,7 +65,7 @@ const Navbar = () => {
           </div>
 
           {/* Desktop right actions — inside the pill, pinned right */}
-          <div className="hidden md:flex items-center gap-2 ml-auto flex-shrink-0">
+          <div className="hidden md:flex items-center gap-2 flex-shrink-0">
             <button
               onClick={toggleTheme}
               className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
