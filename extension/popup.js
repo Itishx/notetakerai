@@ -378,6 +378,9 @@ homeChatScreenshotBtn?.addEventListener("click", () => {
 
 
 // ===== PAGE CONTEXT =====
+const homePageContextBadge = document.getElementById("homePageContextBadge");
+const homePageContextLabel = document.getElementById("homePageContextLabel");
+
 function fetchPageContext() {
   chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
     if (chrome.runtime.lastError || res?.error || !res?.text) {
@@ -389,6 +392,8 @@ function fetchPageContext() {
         pageContextLabel.textContent = "Can't read this page (restricted)";
         pageContextBadge.classList.remove("hidden");
       }
+      // Also update home badge
+      if (homePageContextBadge) homePageContextBadge.classList.add("hidden");
       return;
     }
     console.log("Page context loaded:", res.title, "(" + res.text.length + " chars)");
@@ -411,14 +416,26 @@ function updateChatContextUI() {
     if (chatInput) chatInput.placeholder = "Ask anything...";
   }
 
-  if (hasPage && pageContextBadge && pageContextLabel) {
-    const shortTitle = currentPageContext.title.length > 40
+  const shortTitle = hasPage
+    ? (currentPageContext.title.length > 40
       ? currentPageContext.title.substring(0, 40) + "…"
-      : currentPageContext.title;
+      : currentPageContext.title)
+    : "";
+
+  // Update chat section badge
+  if (hasPage && pageContextBadge && pageContextLabel) {
     pageContextLabel.textContent = `Reading: ${shortTitle}`;
     pageContextBadge.classList.remove("hidden");
   } else if (pageContextBadge) {
     pageContextBadge.classList.add("hidden");
+  }
+
+  // Update home screen badge
+  if (hasPage && homePageContextBadge && homePageContextLabel) {
+    homePageContextLabel.textContent = `📄 ${shortTitle}`;
+    homePageContextBadge.classList.remove("hidden");
+  } else if (homePageContextBadge) {
+    homePageContextBadge.classList.add("hidden");
   }
 }
 
@@ -429,7 +446,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     setTimeout(fetchPageContext, 300);
   }
 });
+// Re-fetch when sidepanel gains focus (user may have switched tabs)
 window.addEventListener("focus", () => setTimeout(fetchPageContext, 200));
+// Also re-fetch when tab is activated (via background message)
+chrome.tabs.onActivated?.addListener?.(() => setTimeout(fetchPageContext, 300));
 
 chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessionId"], (data) => {
   if (data.audioSegments && data.audioSegments.length > 0) {
