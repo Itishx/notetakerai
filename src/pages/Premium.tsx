@@ -120,7 +120,7 @@ const Premium = () => {
               <Zap className="w-4 h-4 mr-2" />
               Get Premium
             </Button>
-            <p className="mt-4 text-xs text-muted-foreground/50">No account required to try the free plan first</p>
+            <p className="mt-4 text-xs text-muted-foreground/50">Free plan · Sign up in seconds</p>
           </div>
         </div>
       </section>

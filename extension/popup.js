@@ -374,9 +374,6 @@ homeChatScreenshotBtn?.addEventListener("click", () => {
     finishOnboarding();
   });
 
-  document.getElementById("onboardingSkipAuthBtn")?.addEventListener("click", () => {
-    finishOnboarding();
-  });
 }
 
 

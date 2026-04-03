@@ -370,7 +370,7 @@ const Sidepanel = ({ onReset }: { onReset: () => void }) => {
                 <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.5} />
               </button>
               <div className="text-center text-[9px]" style={{ color: g.textFaint, ...serif }}>
-                Free · No account required · Works on all Chromium browsers
+                Free · Sign up in seconds · Works on all Chromium browsers
               </div>
             </div>
           </div>

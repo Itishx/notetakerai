@@ -320,7 +320,7 @@ const UseCases = () => {
           Your workflow, your notes
         </h2>
         <p className="text-muted-foreground mb-10 max-w-md mx-auto text-sm leading-relaxed">
-          Free to download. Works in any Chromium browser. No account required to start.
+          Free to download. Works in any Chromium browser. Sign up to get started.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button

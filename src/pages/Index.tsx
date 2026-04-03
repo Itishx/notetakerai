@@ -70,7 +70,7 @@ const Index = () => {
         <div className="container relative mx-auto px-6 pt-28 pb-24 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-5 py-2 text-sm text-muted-foreground mb-8 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
             <Leaf className="w-3.5 h-3.5 text-primary" />
-            Browser AI · Free · No account needed
+            Browser AI · Free to start
           </div>
 
           {/* Headline with orb */}
@@ -333,7 +333,7 @@ const Index = () => {
             <Download className="w-4 h-4 mr-2" />
             Download Extension
           </Button>
-          <p className="mt-5 text-xs text-muted-foreground/50">Free · No account required · Works on all Chromium browsers</p>
+          <p className="mt-5 text-xs text-muted-foreground/50">Free · Sign up in seconds · Works on all Chromium browsers</p>
         </div>
       </section>
 
