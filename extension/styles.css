@@ -58,8 +58,7 @@ body {
 
 body.sidepanel {
   width: 100%;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
   background: #ffffff;
   color: var(--text);
   font-family: 'Charter', Georgia, 'Times New Roman', serif;
@@ -67,19 +66,33 @@ body.sidepanel {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Home layout: full-height flex so hero centers and chat bar pins to bottom */
+body.sidepanel.home-layout {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .container {
   padding: 20px 16px 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  height: 100vh;
-  overflow: hidden;
+  gap: 16px;
+  min-height: calc(100vh - 120px);
 }
 
 body.sidepanel .container {
   max-width: 100%;
-  height: 100vh;
+  min-height: 100vh;
+}
+
+/* When in home layout the container also stretches */
+body.sidepanel.home-layout .container {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
+  gap: 0;
 }
 
 body.sidepanel .notes-content {
@@ -327,7 +340,11 @@ h1 {
 #idleControls {
   display: flex;
   flex-direction: column;
+}
+
+body.sidepanel.home-layout #idleControls {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 

@@ -162,6 +162,7 @@ if (onboardingOverlay && onboardingNextBtn) {
 
 // ===== MODE HELPERS =====
 function enterMode(label) {
+  document.body.classList.remove("home-layout");
   document.getElementById("homeHero")?.classList.add("hidden");
   document.getElementById("homeChatBar")?.classList.add("hidden");
   const bar = document.getElementById("modeTitleBar");
@@ -171,6 +172,7 @@ function enterMode(label) {
 }
 
 function exitMode() {
+  document.body.classList.add("home-layout");
   document.getElementById("homeHero")?.classList.remove("hidden");
   document.getElementById("homeChatBar")?.classList.remove("hidden");
   document.getElementById("modeTitleBar")?.classList.add("hidden");
@@ -446,6 +448,9 @@ updateHistoryBtnVisibility();
 hydrateTrackedTabState();
 
 // Restore notes + chat for current session
+// Start in home layout
+document.body.classList.add("home-layout");
+
 chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
   if (data.currentNotes && data.currentSessionId) {
     notesMarkdown = data.currentNotes;
@@ -453,6 +458,10 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     notesContent.innerHTML = renderMarkdown(notesMarkdown);
     notesSection.classList.remove("hidden");
     document.getElementById("chatBottomBar")?.classList.remove("hidden");
+    // Notes exist — leave home layout so page can scroll normally
+    document.body.classList.remove("home-layout");
+    document.getElementById("homeHero")?.classList.add("hidden");
+    document.getElementById("homeChatBar")?.classList.add("hidden");
     loadChatMessages(currentSessionId);
   }
   updateConvertButtonLabel();

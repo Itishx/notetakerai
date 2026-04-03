@@ -76,7 +76,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       function queryTab(tid) {
         chrome.tabs.sendMessage(tid, { action: "extractPageContent" }, (res) => {
           if (chrome.runtime.lastError) {
-            // Content script not injected yet — inject it programmatically and retry
+            // Content script not injected yet — try to inject it programmatically
+            if (!chrome.scripting) {
+              sendResponse({ error: "Cannot inject on this page" });
+              return;
+            }
             chrome.scripting.executeScript(
               { target: { tabId: tid }, files: ["content.js"] },
               () => {
