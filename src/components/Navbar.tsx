@@ -40,14 +40,14 @@ const Navbar = () => {
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-fit flex items-center gap-2">
       {/* Main nav pill */}
       <nav className="rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
-        <div className="px-6 h-14 flex items-center">
+        <div className="px-8 h-14 flex items-center">
           {/* Logo — left */}
           <Link to="/" className="flex-shrink-0 flex items-center text-foreground hover:text-primary transition-colors duration-200">
             <SideBrainLogo sizeClass="text-sm" />
           </Link>
 
           {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-8 mx-10">
+          <div className="hidden md:flex items-center gap-6 mx-8 whitespace-nowrap">
             {links.map(({ to, label }) => (
               <Link
                 key={to}
