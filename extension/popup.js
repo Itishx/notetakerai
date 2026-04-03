@@ -224,8 +224,7 @@ function goHome() {
   recordModeControls?.classList.add("hidden");
   idleStatusBlock?.classList.add("hidden");
   idleControls?.classList.remove("hidden");
-  modeCards?.classList.remove("hidden");
-  exitMode(); // this also shows homeHero and homeChatBar
+  exitMode(); // shows homeHero and homeChatBar, hides modeTitleBar
 }
 
 document.getElementById("backFromChatBtn")?.addEventListener("click", goHome);
@@ -941,9 +940,12 @@ function setResumeUI() {
   recordingHero?.classList.add("hidden");
   orbContainer?.classList.remove("orb-recording");
 
-  // Show idle sections
+  // Stay in recording mode — show controls but NOT homeHero/homeChatBar
   idleStatusBlock?.classList.remove("hidden");
   idleControls?.classList.remove("hidden");
+  document.getElementById("homeHero")?.classList.add("hidden");
+  document.getElementById("homeChatBar")?.classList.add("hidden");
+  recordModeControls?.classList.remove("hidden");
 
   recordBtn.classList.add("hidden");
   if (continueBtn) continueBtn.classList.remove("hidden");
@@ -961,9 +963,13 @@ function setIdleUI() {
   recordingHero?.classList.add("hidden");
   orbContainer?.classList.remove("orb-recording");
 
-  // Show idle sections
-  idleStatusBlock?.classList.remove("hidden");
+  // Go back to true home — show greeting + chat bar, hide recording controls
+  idleStatusBlock?.classList.add("hidden");
   idleControls?.classList.remove("hidden");
+  document.getElementById("homeHero")?.classList.remove("hidden");
+  document.getElementById("homeChatBar")?.classList.remove("hidden");
+  recordModeControls?.classList.add("hidden");
+  exitMode(); // hides modeTitleBar, restores greeting
 
   recordBtn.classList.remove("hidden");
   recordBtn.disabled = false;
