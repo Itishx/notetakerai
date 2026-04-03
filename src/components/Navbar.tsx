@@ -30,7 +30,6 @@ const Navbar = () => {
   };
 
   const links = [
-    { to: "/", label: "Home" },
     { to: "/use-cases", label: "Use Cases" },
     { to: "/notion-sync", label: "Notion Sync" },
     { to: "/premium", label: "Premium" },
