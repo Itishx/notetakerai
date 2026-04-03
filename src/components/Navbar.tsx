@@ -40,13 +40,13 @@ const Navbar = () => {
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-6xl flex items-center gap-3">
       {/* Main nav pill */}
       <nav className="flex-1 rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
-        <div className="px-8 h-14 flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/" className="flex items-center text-foreground hover:text-primary transition-colors duration-200">
+        <div className="px-8 h-14 flex items-center justify-center relative">
+          {/* Logo - absolute left */}
+          <Link to="/" className="absolute left-8 flex items-center text-foreground hover:text-primary transition-colors duration-200">
             <SideBrainLogo sizeClass="text-sm" />
           </Link>
 
-          {/* Desktop nav */}
+          {/* Desktop nav - truly centered */}
           <div className="hidden md:flex items-center gap-10">
             {links.map(({ to, label }) => (
               <Link
@@ -63,9 +63,6 @@ const Navbar = () => {
               </Link>
             ))}
           </div>
-
-          {/* Spacer for desktop to keep links centered */}
-          <div className="hidden md:block w-[72px]" />
 
           {/* Mobile menu toggle */}
           <button
