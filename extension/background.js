@@ -138,21 +138,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// ===== AUTH — onMessageExternal must live in background.js =====
+// ===== AUTH — onMessageExternal (backup, from website directly) =====
 chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
   if (message.action === "authToken") {
-    chrome.storage.local.set({
-      authToken: message.token,
-      authRefreshToken: message.refreshToken,
-      authDisplayName: message.displayName,
-      authEmail: message.email,
-      authUserId: message.userId,
-    }, () => {
-      sendResponse({ success: true });
-    });
+    storeAuthData(message);
+    sendResponse({ success: true });
     return true;
   }
 });
+
+// ===== AUTH — relay from content script (primary, more reliable) =====
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "authTokenRelay") {
+    storeAuthData(message);
+    sendResponse({ success: true });
+    return true;
+  }
+});
+
+function storeAuthData(data) {
+  chrome.storage.local.set({
+    authToken: data.token,
+    authRefreshToken: data.refreshToken,
+    authDisplayName: data.displayName,
+    authEmail: data.email,
+    authUserId: data.userId,
+  });
+}
 
 async function ensureOffscreen() {
   const contexts = await chrome.runtime.getContexts({

@@ -53,8 +53,12 @@ const ExtensionAuth = () => {
       console.log("Could not send to extension directly");
     }
 
-    // Also store in localStorage as fallback
-    localStorage.setItem("sidebrain_ext_auth", JSON.stringify(payload));
+    // Also write auth data to a hidden DOM element for content script relay (most reliable method)
+    const el = document.createElement("div");
+    el.id = "sidebrain-auth-data";
+    el.style.display = "none";
+    el.textContent = JSON.stringify(payload);
+    document.body.appendChild(el);
 
     setSent(true);
   }, [user, session, profile, extensionId, sent]);
