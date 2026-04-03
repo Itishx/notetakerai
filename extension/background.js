@@ -71,8 +71,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "getPageContent") {
+    // First try stored activeTabId, then fallback to querying active tab
     chrome.storage.local.get("activeTabId", (store) => {
-      const tabId = store.activeTabId;
+      let tabId = store.activeTabId;
+
       function queryTab(tid) {
         chrome.tabs.sendMessage(tid, { action: "extractPageContent" }, (res) => {
           if (chrome.runtime.lastError) {
@@ -105,14 +107,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         });
       }
-      if (!tabId) {
+
+      function tryActiveTab() {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           const tab = tabs?.[0];
           if (!tab?.id) { sendResponse({ error: "No active tab" }); return; }
+          // Update stored activeTabId for future use
+          chrome.storage.local.set({ activeTabId: tab.id });
           queryTab(tab.id);
         });
+      }
+
+      if (tabId) {
+        // Verify the stored tab still exists
+        chrome.tabs.get(tabId, (tab) => {
+          if (chrome.runtime.lastError || !tab) {
+            // Tab no longer exists, fallback
+            tryActiveTab();
+          } else {
+            queryTab(tabId);
+          }
+        });
       } else {
-        queryTab(tabId);
+        tryActiveTab();
       }
     });
     return true;
