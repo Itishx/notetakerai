@@ -118,7 +118,7 @@ const Navbar = () => {
           <Link to="/auth">
             <Button size="sm" variant="outline" className="rounded-full px-4 text-sm">
               <User className="w-3.5 h-3.5 mr-1.5" />
-              Sign In
+              Login
             </Button>
           </Link>
         )}
