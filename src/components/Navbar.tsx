@@ -37,17 +37,17 @@ const Navbar = () => {
   ];
 
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-6xl flex items-center gap-2">
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-fit flex items-center gap-2">
       {/* Main nav pill */}
-      <nav className="flex-1 min-w-0 rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
+      <nav className="rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
         <div className="pl-4 pr-4 h-14 flex items-center">
           {/* Logo — left */}
           <Link to="/" className="flex-shrink-0 flex items-center text-foreground hover:text-primary transition-colors duration-200">
             <SideBrainLogo sizeClass="text-sm" />
           </Link>
 
-          {/* Desktop nav — absolutely centered in pill */}
-          <div className="hidden md:flex items-center gap-10 absolute left-1/2 -translate-x-1/2">
+          {/* Desktop nav */}
+          <div className="hidden md:flex items-center gap-8 ml-8">
             {links.map(({ to, label }) => (
               <Link
                 key={to}
