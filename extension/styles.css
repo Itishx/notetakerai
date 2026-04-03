@@ -22,6 +22,7 @@
 .logo-side {
   font-family: 'TimesNewRomanMT', 'Times New Roman', Georgia, serif;
   font-style: italic;
+  color: var(--primary);
 }
 .logo-brain {
   font-family: 'BeVietnam', 'Be Vietnam Pro', sans-serif;
@@ -41,10 +42,10 @@
   --text: #1a1a1a;
   --text-muted: #6b6b6b;
   --text-faint: #a0a0a0;
-  --primary: #1a1a1a;
-  --primary-light: #333333;
-  --primary-faint: rgba(26, 26, 26, 0.06);
-  --accent: #1a1a1a;
+  --primary: #d97234;
+  --primary-light: #c4612a;
+  --primary-faint: rgba(217, 114, 52, 0.08);
+  --accent: #d97234;
   --border: rgba(0, 0, 0, 0.08);
   --border-light: rgba(0, 0, 0, 0.04);
   --danger: #e53935;
