@@ -47,7 +47,7 @@ const Navbar = () => {
           </Link>
 
           {/* Desktop nav - centered with auto margins */}
-          <div className="hidden md:flex items-center gap-10 mx-auto">
+          <div className="hidden md:flex items-center gap-10 ml-12">
             {links.map(({ to, label }) => (
               <Link
                 key={to}
