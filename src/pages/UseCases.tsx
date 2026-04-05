@@ -13,7 +13,7 @@ const useCases = [
     category: "Professional",
     icon: Users,
     title: "Meeting Documentation",
-    desc: "Record any browser-based call — Google Meet, Teams web, or Zoom in the browser. SideBrain transcribes every voice and generates structured summaries with decisions made, action items, and key discussion points. Never write meeting notes manually again.",
+    desc: "Record any browser-based call, Google Meet, Teams web, or Zoom in the browser. SideBrain transcribes every voice and generates structured summaries with decisions made, action items, and key discussion points. Never write meeting notes manually again.",
     forWho: "Remote teams, managers, consultants",
     size: "large",
   },
@@ -31,7 +31,7 @@ const useCases = [
     category: "Education",
     icon: GraduationCap,
     title: "Online Courses & Lectures",
-    desc: "Turn any online course into rich study notes. Headings, bullet points, key terms, and a glossary are automatically generated — organized the way you'd want them.",
+    desc: "Turn any online course into rich study notes. Headings, bullet points, key terms, and a glossary are automatically generated, organized the way you'd want them.",
     forWho: "Students, self-learners",
     size: "small",
   },
@@ -49,7 +49,7 @@ const useCases = [
     category: "Professional",
     icon: TrendingUp,
     title: "Sales Call Notes",
-    desc: "Capture prospect conversations played back from your browser. AI surfaces objections raised, commitments made, and next steps — formatted and ready to paste into your CRM.",
+    desc: "Capture prospect conversations played back from your browser. AI surfaces objections raised, commitments made, and next steps, formatted and ready to paste into your CRM.",
     forWho: "Sales reps, account managers",
     size: "small",
   },
@@ -58,7 +58,7 @@ const useCases = [
     category: "Research",
     icon: Search,
     title: "Journalism & Research",
-    desc: "Transcribe press conferences, interviews, or academic talks playing in your browser. Get structured notes with key quotes highlighted — reference-ready in seconds.",
+    desc: "Transcribe press conferences, interviews, or academic talks playing in your browser. Get structured notes with key quotes highlighted, reference-ready in seconds.",
     forWho: "Journalists, researchers, analysts",
     size: "small",
   },
@@ -67,7 +67,7 @@ const useCases = [
     category: "Enterprise",
     icon: Building2,
     title: "Corporate Training to SOPs",
-    desc: "L&D and HR teams can convert internal training videos into written documentation, standard operating procedures, or knowledge base articles — automatically. Capture tribal knowledge before it walks out the door.",
+    desc: "L&D and HR teams can convert internal training videos into written documentation, standard operating procedures, or knowledge base articles, automatically. Capture tribal knowledge before it walks out the door.",
     forWho: "L&D teams, HR, operations",
     size: "full",
   },
@@ -76,7 +76,7 @@ const useCases = [
     category: "Accessibility",
     icon: Heart,
     title: "Accessibility Companion",
-    desc: "For those who find it easier to read than to listen — or who need to revisit content at their own pace — SideBrain converts any audio into readable, structured notes without any special setup.",
+    desc: "For those who find it easier to read than to listen, or who need to revisit content at their own pace, SideBrain converts any audio into readable, structured notes without any special setup.",
     forWho: "Anyone who prefers reading",
     size: "small",
   },
@@ -85,7 +85,7 @@ const useCases = [
     category: "Research",
     icon: Radio,
     title: "Podcast Summaries",
-    desc: "Deep-dive episodes, industry podcasts, expert interviews — capture the signal without sitting through the noise. Get structured takeaways from any audio content in your browser.",
+    desc: "Deep-dive episodes, industry podcasts, expert interviews, capture the signal without sitting through the noise. Get structured takeaways from any audio content in your browser.",
     forWho: "Busy professionals, researchers",
     size: "small",
   },
@@ -148,7 +148,7 @@ const UseCases = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
       </div>
 
-      {/* Bento grid — Row 1: large + small */}
+      {/* Bento grid, Row 1: large + small */}
       <section className="container mx-auto px-6 py-20">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
 
@@ -162,7 +162,7 @@ const UseCases = () => {
             </div>
             <h3 className="text-xl text-foreground mb-3">Meeting Documentation</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Record any browser-based call — Google Meet, Teams web, or Zoom in the browser. SideBrain transcribes every voice and generates structured summaries with decisions made, action items, and key discussion points. Never write meeting notes manually again.
+              Record any browser-based call, Google Meet, Teams web, or Zoom in the browser. SideBrain transcribes every voice and generates structured summaries with decisions made, action items, and key discussion points. Never write meeting notes manually again.
             </p>
             <p className="text-xs text-muted-foreground/50">Remote teams · managers · consultants</p>
           </div>
@@ -192,7 +192,7 @@ const UseCases = () => {
             </div>
             <h3 className="text-lg text-foreground mb-3">Online Courses</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Turn any online course into rich study notes. Headings, bullet points, key terms, and a glossary — organized the way you'd want them.
+              Turn any online course into rich study notes. Headings, bullet points, key terms, and a glossary, organized the way you'd want them.
             </p>
             <p className="text-xs text-muted-foreground/50">Students · self-learners</p>
           </div>
@@ -222,7 +222,7 @@ const UseCases = () => {
             </div>
             <h3 className="text-lg text-foreground mb-3">Sales Call Notes</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Capture prospect conversations. AI surfaces objections raised, commitments made, and next steps — ready to paste into your CRM.
+              Capture prospect conversations. AI surfaces objections raised, commitments made, and next steps, ready to paste into your CRM.
             </p>
             <p className="text-xs text-muted-foreground/50">Sales reps · account managers</p>
           </div>
@@ -237,7 +237,7 @@ const UseCases = () => {
             </div>
             <h3 className="text-lg text-foreground mb-3">Journalism & Research</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Transcribe press conferences, interviews, or academic talks. Get structured notes with key quotes highlighted — reference-ready in seconds.
+              Transcribe press conferences, interviews, or academic talks. Get structured notes with key quotes highlighted, reference-ready in seconds.
             </p>
             <p className="text-xs text-muted-foreground/50">Journalists · researchers · analysts</p>
           </div>
@@ -252,7 +252,7 @@ const UseCases = () => {
             </div>
             <h3 className="text-lg text-foreground mb-3">Podcast Summaries</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Deep-dive episodes, industry podcasts, expert interviews — capture the signal without sitting through the noise.
+              Deep-dive episodes, industry podcasts, expert interviews, capture the signal without sitting through the noise.
             </p>
             <p className="text-xs text-muted-foreground/50">Professionals · researchers</p>
           </div>
@@ -276,7 +276,7 @@ const UseCases = () => {
                   </span>
                 </div>
                 <p className="text-muted-foreground leading-relaxed mb-4 max-w-3xl">
-                  L&D and HR teams can convert internal training videos into written documentation, standard operating procedures, or knowledge base articles — automatically. Record onboarding walkthroughs, compliance training sessions, or expert demos and transform them into reusable written assets your whole organization can search and reference.
+                  L&D and HR teams can convert internal training videos into written documentation, standard operating procedures, or knowledge base articles, automatically. Record onboarding walkthroughs, compliance training sessions, or expert demos and transform them into reusable written assets your whole organization can search and reference.
                 </p>
                 <p className="text-sm text-muted-foreground/70">
                   Capture tribal knowledge before it walks out the door.
@@ -300,7 +300,7 @@ const UseCases = () => {
                 </span>
                 <h3 className="text-xl text-foreground mb-3">Built for everyone</h3>
                 <p className="text-muted-foreground leading-relaxed max-w-2xl">
-                  For those who find it easier to read than to listen — or who need to revisit content at their own pace — SideBrain converts any audio into readable, structured notes without any special setup. No captions required. No replaying. Just clear, organized text.
+                  For those who find it easier to read than to listen, or who need to revisit content at their own pace, SideBrain converts any audio into readable, structured notes without any special setup. No captions required. No replaying. Just clear, organized text.
                 </p>
               </div>
             </div>
@@ -347,7 +347,7 @@ const UseCases = () => {
       <footer className="py-12 border-t border-border/40">
         <div className="container mx-auto px-6 text-center">
           <Leaf className="w-5 h-5 text-primary/40 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground/50">SideBrain — Learn with calm intention</p>
+          <p className="text-sm text-muted-foreground/50">SideBrain, Learn with calm intention</p>
         </div>
       </footer>
     </div>

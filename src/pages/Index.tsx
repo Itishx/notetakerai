@@ -8,7 +8,7 @@ const features = [
   {
     icon: Mic,
     title: "Record any tab",
-    desc: "Capture audio from any browser tab — lectures, meetings, tutorials — no microphone, no setup.",
+    desc: "Capture audio from any browser tab, lectures, meetings, tutorials, no microphone, no setup.",
   },
   {
     icon: FileText,
@@ -18,7 +18,7 @@ const features = [
   {
     icon: Globe,
     title: "Understands the page",
-    desc: "Open on any webpage — docs, articles, LeetCode — and ask questions about what's in front of you.",
+    desc: "Open on any webpage, docs, articles, LeetCode, and ask questions about what's in front of you.",
   },
   {
     icon: MessageSquare,
@@ -28,18 +28,18 @@ const features = [
   {
     icon: Zap,
     title: "Screenshot & annotate",
-    desc: "Capture any region of your screen and send it to the AI — it embeds diagrams directly into your notes.",
+    desc: "Capture any region of your screen and send it to the AI, it embeds diagrams directly into your notes.",
   },
   {
     icon: BookOpen,
     title: "Syncs to Notion",
-    desc: "One click pushes structured notes — including images — as native Notion blocks into your workspace.",
+    desc: "One click pushes structured notes, including images, as native Notion blocks into your workspace.",
   },
 ];
 
 const steps = [
   { num: "一", title: "Download", desc: "Get the extension and load it into your browser in under a minute." },
-  { num: "二", title: "Capture", desc: "Open any tab with audio — courses, meetings, podcasts — and press record." },
+  { num: "二", title: "Capture", desc: "Open any tab with audio, courses, meetings, podcasts, and press record." },
   { num: "三", title: "Transform", desc: "Stop recording. AI transcribes and shapes your notes automatically." },
   { num: "四", title: "Flow", desc: "Sync to Notion or copy Markdown. Your knowledge, beautifully preserved." },
 ];
@@ -98,7 +98,7 @@ const Index = () => {
           </div>
 
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-lg mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            Record any audio, chat about any webpage, annotate with screenshots — SideBrain is the AI sidekick that lives in your browser sidebar.
+            Record any audio, chat about any webpage, annotate with screenshots, SideBrain is the AI sidekick that lives in your browser sidebar.
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-fade-in" style={{ animationDelay: "0.6s" }}>
@@ -152,14 +152,14 @@ const Index = () => {
         </div>
       </section>
 
-      {/* How it works — bento grid */}
+      {/* How it works, bento grid */}
       <section id="how-it-works" className="container mx-auto px-6 py-24">
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
         <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">The flow</p>
 
         <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 grid-rows-2 gap-4 auto-rows-fr">
 
-          {/* Step 1 — tall, spans 2 rows on md */}
+          {/* Step 1, tall, spans 2 rows on md */}
           <div className="col-span-1 row-span-2 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.1s", minHeight: 240 }}>
             <span className="text-4xl text-primary/15 font-normal leading-none">1</span>
             <div>
@@ -168,16 +168,16 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Step 2 — wide, spans 2 cols */}
+          {/* Step 2, wide, spans 2 cols */}
           <div className="col-span-1 md:col-span-2 row-span-1 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
             <span className="text-4xl text-primary/15 font-normal leading-none">2</span>
             <div>
               <h3 className="text-foreground text-base mb-2">Capture</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">Open any tab with audio — courses, meetings, podcasts — and press record.</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">Open any tab with audio, courses, meetings, podcasts, and press record.</p>
             </div>
           </div>
 
-          {/* Step 4 — tall, spans 2 rows */}
+          {/* Step 4, tall, spans 2 rows */}
           <div className="col-span-1 row-span-2 p-8 rounded-2xl border border-border/60 bg-primary/8 border-primary/20 hover:bg-primary/12 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.3s", minHeight: 240 }}>
             <span className="text-4xl text-primary/25 font-normal leading-none">4</span>
             <div>
@@ -186,7 +186,7 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Step 3 — wide, spans 2 cols */}
+          {/* Step 3, wide, spans 2 cols */}
           <div className="col-span-1 md:col-span-2 row-span-1 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.35s" }}>
             <span className="text-4xl text-primary/15 font-normal leading-none">3</span>
             <div>
@@ -222,8 +222,8 @@ const Index = () => {
               {[
                 { icon: GraduationCap, label: "Online courses & lectures", desc: "Record any video lesson and get structured notes with headings, key terms, and takeaways." },
                 { icon: Users, label: "Meetings & calls", desc: "Auto-summarise any browser-based call with decisions, action items, and speaker context." },
-                { icon: Globe, label: "Articles & documentation", desc: "Open SideBrain on any webpage and ask questions about what's in front of you — no recording needed." },
-                { icon: TrendingUp, label: "LeetCode & problem solving", desc: "Read the problem, ask for hints, get explanations — all without leaving the page." },
+                { icon: Globe, label: "Articles & documentation", desc: "Open SideBrain on any webpage and ask questions about what's in front of you, no recording needed." },
+                { icon: TrendingUp, label: "LeetCode & problem solving", desc: "Read the problem, ask for hints, get explanations, all without leaving the page." },
               ].map(({ icon: Icon, label, desc }, i) => (
                 <div key={label} className="flex items-start gap-5 group">
                   <div className="flex-shrink-0 w-10 h-10 rounded-xl border border-border/60 bg-card/40 flex items-center justify-center group-hover:border-primary/30 group-hover:bg-card/80 transition-all duration-300">
@@ -259,9 +259,9 @@ const Index = () => {
             <div className="space-y-10">
               {[
                 { stat: "1-click", label: "Sync to Notion", desc: "Connect once via OAuth. Every note syncs directly into your chosen page or database." },
-                { stat: "Native", label: "Notion blocks", desc: "Headings, bullets, bold terms — all converted to real Notion blocks, not pasted text." },
+                { stat: "Native", label: "Notion blocks", desc: "Headings, bullets, bold terms, all converted to real Notion blocks, not pasted text." },
                 { stat: "Inline", label: "Images & diagrams", desc: "Screenshots are hosted and embedded inline, exactly where they belong in your notes." },
-                { stat: "Live", label: "Incremental updates", desc: "Record more, update the same Notion page — without overwriting what's already there." },
+                { stat: "Live", label: "Incremental updates", desc: "Record more, update the same Notion page, without overwriting what's already there." },
               ].map(({ stat, label, desc }) => (
                 <div key={label} className="flex items-start gap-5 group">
                   <div className="flex-shrink-0 w-10 text-right">
@@ -323,7 +323,7 @@ const Index = () => {
           Ready to capture what matters?
         </h2>
         <p className="text-muted-foreground max-w-lg mx-auto mb-10 leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-          Download SideBrain and turn your next lecture, meeting, or podcast into beautifully structured notes — in one click.
+          Download SideBrain and turn your next lecture, meeting, or podcast into beautifully structured notes, in one click.
         </p>
         <div className="opacity-0 animate-fade-in" style={{ animationDelay: "0.3s" }}>
           <Button

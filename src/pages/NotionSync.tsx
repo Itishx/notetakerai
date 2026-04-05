@@ -10,21 +10,21 @@ const syncSteps = [
     num: "01",
     icon: Lock,
     title: "Connect your Notion workspace",
-    desc: "Click \"Connect Notion\" inside the SideBrain side panel. You're redirected to Notion's official OAuth page — authorize once and you're done. SideBrain never sees your Notion password. Your credentials are handled entirely by Notion's own authentication.",
-    detail: "Powered by OAuth 2.0 via Supabase. Connection is stored securely — no re-auth needed.",
+    desc: "Click \"Connect Notion\" inside the SideBrain side panel. You're redirected to Notion's official OAuth page, authorize once and you're done. SideBrain never sees your Notion password. Your credentials are handled entirely by Notion's own authentication.",
+    detail: "Powered by OAuth 2.0 via Supabase. Connection is stored securely, no re-auth needed.",
   },
   {
     num: "02",
     icon: FileText,
     title: "Generate your notes",
-    desc: "Record audio from any browser tab, then hit \"Convert to Notes.\" AI transcribes the audio and produces fully structured Markdown — headings, bullet points, bold key terms, a Key Takeaways section, and a Glossary. Add screenshots or diagrams if needed.",
-    detail: "Notes are built incrementally — record more, update existing notes without losing what's there.",
+    desc: "Record audio from any browser tab, then hit \"Convert to Notes.\" AI transcribes the audio and produces fully structured Markdown, headings, bullet points, bold key terms, a Key Takeaways section, and a Glossary. Add screenshots or diagrams if needed.",
+    detail: "Notes are built incrementally, record more, update existing notes without losing what's there.",
   },
   {
     num: "03",
     icon: Link2,
     title: "Sync with one click",
-    desc: "Press \"Sync to Notion.\" Your notes are converted to native Notion blocks and pushed directly into your chosen workspace. Images are uploaded first to secure cloud storage, then embedded inline — so they render perfectly inside Notion.",
+    desc: "Press \"Sync to Notion.\" Your notes are converted to native Notion blocks and pushed directly into your chosen workspace. Images are uploaded first to secure cloud storage, then embedded inline, so they render perfectly inside Notion.",
     detail: "Select a target page or database. Future syncs update the same Notion page.",
   },
 ];
@@ -57,7 +57,7 @@ const NotionSync = () => {
             <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>at home in Notion</em>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            Every note, diagram, and structured section — pushed directly into your Notion workspace with a single click. Not a paste. A real sync.
+            Every note, diagram, and structured section, pushed directly into your Notion workspace with a single click. Not a paste. A real sync.
           </p>
         </div>
       </section>
@@ -76,7 +76,7 @@ const NotionSync = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
       </div>
 
-      {/* How it works — 3 steps */}
+      {/* How it works, 3 steps */}
       <section className="container mx-auto px-6 py-24">
         <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-20">How it works</p>
 
@@ -127,7 +127,7 @@ const NotionSync = () => {
       <section className="container mx-auto px-6 py-24">
         <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-4">What gets preserved</p>
         <p className="text-center text-muted-foreground/70 text-sm max-w-lg mx-auto mb-16">
-          Every structural element of your notes maps to a native Notion block type — nothing is flattened or lost.
+          Every structural element of your notes maps to a native Notion block type, nothing is flattened or lost.
         </p>
 
         <div className="grid md:grid-cols-3 gap-5 max-w-4xl mx-auto">
@@ -167,7 +167,7 @@ const NotionSync = () => {
                 <h3 className="text-foreground">Images that actually render</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Notion requires publicly accessible image URLs — it can't accept base64 or local data. When your notes include diagrams or screenshots, SideBrain uploads them to Supabase Storage first, generates a permanent public URL, then embeds that URL into the synced Notion page. Your images appear inline, exactly where they belong.
+                Notion requires publicly accessible image URLs, it can't accept base64 or local data. When your notes include diagrams or screenshots, SideBrain uploads them to Supabase Storage first, generates a permanent public URL, then embeds that URL into the synced Notion page. Your images appear inline, exactly where they belong.
               </p>
             </div>
 
@@ -187,7 +187,7 @@ const NotionSync = () => {
                 <h3 className="text-foreground">Works with pages & databases</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Choose any Notion page or database as your sync target. When syncing to a database, SideBrain creates a new entry for each session — keeping your notes organized as rows you can filter, sort, and tag. Syncing to a page appends or updates content in place.
+                Choose any Notion page or database as your sync target. When syncing to a database, SideBrain creates a new entry for each session, keeping your notes organized as rows you can filter, sort, and tag. Syncing to a page appends or updates content in place.
               </p>
             </div>
           </div>
@@ -215,7 +215,7 @@ const NotionSync = () => {
           <div>
             <h3 className="text-foreground mb-2">Prefer to paste manually?</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Every note also has a one-click "Copy Markdown" button. Clean Markdown copies to your clipboard instantly — paste it anywhere: Notion, Obsidian, Roam, Bear, or any editor that accepts Markdown.
+              Every note also has a one-click "Copy Markdown" button. Clean Markdown copies to your clipboard instantly, paste it anywhere: Notion, Obsidian, Roam, Bear, or any editor that accepts Markdown.
             </p>
           </div>
         </div>
@@ -255,7 +255,7 @@ const NotionSync = () => {
       <footer className="py-12 border-t border-border/40">
         <div className="container mx-auto px-6 text-center">
           <Leaf className="w-5 h-5 text-primary/40 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground/50">SideBrain — Learn with calm intention</p>
+          <p className="text-sm text-muted-foreground/50">SideBrain, Learn with calm intention</p>
         </div>
       </footer>
     </div>

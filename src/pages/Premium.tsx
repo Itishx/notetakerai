@@ -11,7 +11,7 @@ const premiumFeatures = [
     icon: Mic,
     tag: "Recording",
     title: "Record without limits",
-    desc: "Free users hit a 5-minute cap per day. With Premium, record full lectures, long meetings, hour-long podcasts — however long the content runs, SideBrain keeps up.",
+    desc: "Free users hit a 5-minute cap per day. With Premium, record full lectures, long meetings, hour-long podcasts, however long the content runs, SideBrain keeps up.",
     free: "5 min / day",
     premium: "Unlimited",
     size: "large",
@@ -20,7 +20,7 @@ const premiumFeatures = [
     icon: Cloud,
     tag: "Storage",
     title: "Cloud sync & note history",
-    desc: "Free notes live only on your device — reinstall the extension and they're gone. Premium saves every note to the cloud. Switch browsers, upgrade to a new version, log in anywhere — your entire history is waiting.",
+    desc: "Free notes live only on your device, reinstall the extension and they're gone. Premium saves every note to the cloud. Switch browsers, upgrade to a new version, log in anywhere, your entire history is waiting.",
     free: "Local only",
     premium: "Unlimited cloud history",
     size: "small",
@@ -29,7 +29,7 @@ const premiumFeatures = [
     icon: Brain,
     tag: "AI",
     title: "Smarter AI, richer notes",
-    desc: "Premium runs your recordings through a more capable model. Better structure, sharper key points, more accurate glossaries — especially noticeable on dense or fast-paced content.",
+    desc: "Premium runs your recordings through a more capable model. Better structure, sharper key points, more accurate glossaries, especially noticeable on dense or fast-paced content.",
     free: "Basic model",
     premium: "Advanced model",
     size: "small",
@@ -38,7 +38,7 @@ const premiumFeatures = [
     icon: Globe,
     tag: "AI",
     title: "Multi-language transcription",
-    desc: "Recording content in Spanish, Hindi, Mandarin, or French? Premium transcribes and structures notes in 50+ languages — automatically detected, no setup needed.",
+    desc: "Recording content in Spanish, Hindi, Mandarin, or French? Premium transcribes and structures notes in 50+ languages, automatically detected, no setup needed.",
     free: "English only",
     premium: "50+ languages",
     size: "small",
@@ -47,7 +47,7 @@ const premiumFeatures = [
     icon: MessageSquare,
     tag: "Page Chat",
     title: "Chat without limits, across any tab",
-    desc: "Free users get 5 questions per day. Premium unlocks unlimited chat — ask as many questions as you need, and switch between multiple open tabs in a single conversation. Reference your notes and the current page at the same time.",
+    desc: "Free users get 5 questions per day. Premium unlocks unlimited chat, ask as many questions as you need, and switch between multiple open tabs in a single conversation. Reference your notes and the current page at the same time.",
     free: "5 questions / day · single tab",
     premium: "Unlimited · multi-tab",
     size: "large",
@@ -56,7 +56,7 @@ const premiumFeatures = [
     icon: Camera,
     tag: "Screenshots",
     title: "Unlimited screenshots, auto-embedded",
-    desc: "Free lets you attach 2 screenshots per note. Premium removes the cap and automatically embeds every screenshot inline — right where it belongs in your structured notes.",
+    desc: "Free lets you attach 2 screenshots per note. Premium removes the cap and automatically embeds every screenshot inline, right where it belongs in your structured notes.",
     free: "2 per note",
     premium: "Unlimited + auto-embed",
     size: "small",
@@ -79,7 +79,7 @@ const premiumItems = [
   "Advanced AI model",
   "Notion sync",
   "Cloud sync across devices",
-  "Full note history — never lose a session",
+  "Full note history, never lose a session",
   "Multi-language transcription (50+ languages)",
   "Chat across multiple tabs simultaneously",
 ];
@@ -113,7 +113,7 @@ const Premium = () => {
             <em className="text-primary not-italic">nothing held back</em>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            The free plan gets you started. Premium gets out of your way — unlimited recording, smarter AI, cloud history, and unrestricted chat.
+            The free plan gets you started. Premium gets out of your way, unlimited recording, smarter AI, cloud history, and unrestricted chat.
           </p>
           <div className="mt-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.5s" }}>
             <Button className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md">
@@ -129,13 +129,13 @@ const Premium = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
       </div>
 
-      {/* Feature cards — bento grid */}
+      {/* Feature cards, bento grid */}
       <section className="container mx-auto px-6 py-20">
         <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">What Premium unlocks</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
 
-          {/* Unlimited Recording — large */}
+          {/* Unlimited Recording, large */}
           <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
             <div className="flex items-start justify-between mb-6">
               <Mic className="w-6 h-6 text-primary" strokeWidth={1.5} />
@@ -143,7 +143,7 @@ const Premium = () => {
             </div>
             <h3 className="text-xl text-foreground mb-3">Record without limits</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Free users hit a 5-minute cap per day. With Premium, record full lectures, long meetings, hour-long podcasts — however long the content runs, SideBrain keeps up.
+              Free users hit a 5-minute cap per day. With Premium, record full lectures, long meetings, hour-long podcasts, however long the content runs, SideBrain keeps up.
             </p>
             <div className="flex items-center gap-6 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground/50">
@@ -155,7 +155,7 @@ const Premium = () => {
             </div>
           </div>
 
-          {/* Cloud Sync — small */}
+          {/* Cloud Sync, small */}
           <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
             <div className="flex items-start justify-between mb-6">
               <Cloud className="w-5 h-5 text-primary" strokeWidth={1.5} />
@@ -163,7 +163,7 @@ const Premium = () => {
             </div>
             <h3 className="text-lg text-foreground mb-3">Cloud sync & note history</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Free notes live only on your device. Premium saves everything to the cloud — upgrade versions, switch browsers, log in anywhere, your history is there.
+              Free notes live only on your device. Premium saves everything to the cloud, upgrade versions, switch browsers, log in anywhere, your history is there.
             </p>
             <div className="flex flex-col gap-2 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground/50"><Lock className="w-3 h-3" /> Free: Local only</span>
@@ -171,7 +171,7 @@ const Premium = () => {
             </div>
           </div>
 
-          {/* Smarter AI — small */}
+          {/* Smarter AI, small */}
           <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.3s" }}>
             <div className="flex items-start justify-between mb-6">
               <Brain className="w-5 h-5 text-primary" strokeWidth={1.5} />
@@ -179,7 +179,7 @@ const Premium = () => {
             </div>
             <h3 className="text-lg text-foreground mb-3">Smarter AI, richer notes</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Premium runs on a more capable model. Better structure, sharper key points, more accurate glossaries — especially on dense or fast-paced content.
+              Premium runs on a more capable model. Better structure, sharper key points, more accurate glossaries, especially on dense or fast-paced content.
             </p>
             <div className="flex flex-col gap-2 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground/50"><Lock className="w-3 h-3" /> Free: Basic model</span>
@@ -187,7 +187,7 @@ const Premium = () => {
             </div>
           </div>
 
-          {/* Multi-language — small */}
+          {/* Multi-language, small */}
           <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.35s" }}>
             <div className="flex items-start justify-between mb-6">
               <Globe className="w-5 h-5 text-primary" strokeWidth={1.5} />
@@ -195,7 +195,7 @@ const Premium = () => {
             </div>
             <h3 className="text-lg text-foreground mb-3">Multi-language transcription</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Recording in Spanish, Hindi, Mandarin, or French? Premium transcribes and structures notes in 50+ languages — auto-detected, no setup needed.
+              Recording in Spanish, Hindi, Mandarin, or French? Premium transcribes and structures notes in 50+ languages, auto-detected, no setup needed.
             </p>
             <div className="flex flex-col gap-2 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground/50"><Lock className="w-3 h-3" /> Free: English only</span>
@@ -203,7 +203,7 @@ const Premium = () => {
             </div>
           </div>
 
-          {/* Page Chat — large */}
+          {/* Page Chat, large */}
           <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-accent/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
             <div className="flex items-start justify-between mb-6">
               <MessageSquare className="w-6 h-6 text-accent" strokeWidth={1.5} />
@@ -211,7 +211,7 @@ const Premium = () => {
             </div>
             <h3 className="text-xl text-foreground mb-3">Chat without limits, across any tab</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Free users get 5 questions per day. Premium unlocks unlimited chat — ask as much as you need, switch between multiple open tabs in one conversation, and reference both your notes and the current page simultaneously.
+              Free users get 5 questions per day. Premium unlocks unlimited chat, ask as much as you need, switch between multiple open tabs in one conversation, and reference both your notes and the current page simultaneously.
             </p>
             <div className="flex items-center gap-6 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground/50">
@@ -223,7 +223,7 @@ const Premium = () => {
             </div>
           </div>
 
-          {/* Screenshots — small */}
+          {/* Screenshots, small */}
           <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.45s" }}>
             <div className="flex items-start justify-between mb-6">
               <Camera className="w-5 h-5 text-primary" strokeWidth={1.5} />
@@ -231,7 +231,7 @@ const Premium = () => {
             </div>
             <h3 className="text-lg text-foreground mb-3">Unlimited screenshots, auto-embedded</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Free lets you attach 2 screenshots per note. Premium removes the cap and embeds every screenshot inline — right where it belongs in your notes.
+              Free lets you attach 2 screenshots per note. Premium removes the cap and embeds every screenshot inline, right where it belongs in your notes.
             </p>
             <div className="flex flex-col gap-2 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground/50"><Lock className="w-3 h-3" /> Free: 2 per note</span>
@@ -304,7 +304,7 @@ const Premium = () => {
           Start free.<br /><em className="text-primary not-italic">Upgrade when you're ready.</em>
         </h2>
         <p className="text-muted-foreground mb-10 max-w-md mx-auto text-sm leading-relaxed">
-          No credit card needed to get started. The free plan is generous enough to get real value — Premium is there when you outgrow it.
+          No credit card needed to get started. The free plan is generous enough to get real value, Premium is there when you outgrow it.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base">
@@ -323,7 +323,7 @@ const Premium = () => {
       <footer className="py-12 border-t border-border/40">
         <div className="container mx-auto px-6 text-center">
           <Leaf className="w-5 h-5 text-primary/40 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground/50">SideBrain — Learn with calm intention</p>
+          <p className="text-sm text-muted-foreground/50">SideBrain, Learn with calm intention</p>
         </div>
       </footer>
     </div>
