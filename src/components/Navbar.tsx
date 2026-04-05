@@ -41,7 +41,7 @@ const Navbar = () => {
     <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
         <div className="px-8 h-14 flex items-center">
           {/* Logo */}
-          <Link to="/" className="flex-shrink-0 flex items-center text-foreground hover:text-primary transition-colors duration-200">
+          <Link to="/" onClick={() => window.scrollTo(0, 0)} className="flex-shrink-0 flex items-center text-foreground hover:text-primary transition-colors duration-200">
             <SideBrainLogo sizeClass="text-sm" />
           </Link>
 
@@ -51,6 +51,7 @@ const Navbar = () => {
               <Link
                 key={to}
                 to={to}
+                onClick={() => window.scrollTo(0, 0)}
                 className={cn(
                   "text-sm transition-colors duration-200",
                   pathname === to
@@ -79,7 +80,7 @@ const Navbar = () => {
               <Link
                 key={to}
                 to={to}
-                onClick={() => setMenuOpen(false)}
+                onClick={() => { setMenuOpen(false); window.scrollTo(0, 0); }}
                 className={cn(
                   "text-sm transition-colors duration-200",
                   pathname === to ? "text-foreground" : "text-muted-foreground"
@@ -92,13 +93,13 @@ const Navbar = () => {
         )}
       </nav>
     {/* Actions pill — fixed to top-right, independent of nav */}
-    <div className="hidden md:flex fixed top-4 right-4 z-50 items-center gap-2 rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5 px-4 h-14">
+    <div className="actions-pill hidden md:flex fixed top-4 right-4 z-50 items-center gap-2 rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5 px-4 h-14">
         <button
           onClick={toggleTheme}
           className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
           title="Toggle theme"
         >
-          {theme === "default" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          {theme === "default" ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
         </button>
         {user ? (
           <div className="flex items-center gap-2">
