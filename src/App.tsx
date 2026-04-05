@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { useState } from "react";
+import SplashScreen from "@/components/SplashScreen";
 import Index from "./pages/Index.tsx";
 import UseCases from "./pages/UseCases.tsx";
 import NotionSync from "./pages/NotionSync.tsx";
@@ -17,13 +19,17 @@ import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  const [splashDone, setSplashDone] = useState(false);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <AuthProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
@@ -42,6 +48,7 @@ const App = () => (
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

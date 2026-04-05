@@ -1,11 +1,6 @@
 // SideBrain Popup Controller
 const API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
-// ===== SPLASH SCREEN =====
-setTimeout(() => {
-  const splash = document.getElementById("splashScreen");
-  if (splash) splash.classList.add("hidden");
-}, 1500);
 
 let audioSegments = [];
 let timerInterval = null;
