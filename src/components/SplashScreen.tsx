@@ -21,7 +21,7 @@ const SplashScreen = ({ onDone }: { onDone: () => void }) => {
       }}
     >
       <img
-        src="/brain.png"
+        src="/brain.jpeg"
         alt=""
         className="w-28 h-28 object-contain"
         style={{ animation: "splashFloat 2s ease-in-out infinite" }}
