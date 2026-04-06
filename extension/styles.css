@@ -1778,9 +1778,9 @@ body.sidepanel.theme-warm .btn-send {
 }
 
 .mode-dropup {
-  position: absolute;
-  bottom: 52px;
-  left: 0;
+  position: fixed;
+  bottom: 72px;
+  left: 12px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 14px;
