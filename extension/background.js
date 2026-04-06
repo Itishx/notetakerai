@@ -138,22 +138,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.get("activeTabId", (store) => {
       const tabId = store.activeTabId;
       if (!tabId) { sendResponse({ error: "No active tab" }); return; }
-      chrome.tabs.sendMessage(tabId, message, (res) => {
-        if (chrome.runtime.lastError) {
-          // Try injecting content script then retry
-          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
-            if (chrome.runtime.lastError) { sendResponse({ error: chrome.runtime.lastError.message }); return; }
-            setTimeout(() => {
-              chrome.tabs.sendMessage(tabId, message, (res2) => {
-                if (chrome.runtime.lastError) sendResponse({ error: chrome.runtime.lastError.message });
-                else sendResponse(res2 || { error: "No response" });
-              });
-            }, 200);
-          });
-        } else {
-          sendResponse(res || { error: "No response from content script" });
-        }
-      });
+
+      // Navigate can be done directly — works even on pages without content scripts
+      if (message.action === "agentAction" && message.type === "navigate") {
+        chrome.tabs.update(tabId, { url: message.url }, () => {
+          if (chrome.runtime.lastError) sendResponse({ error: chrome.runtime.lastError.message });
+          else sendResponse({ success: true });
+        });
+        return;
+      }
+
+      function sendToContentScript(retrying) {
+        chrome.tabs.sendMessage(tabId, message, (res) => {
+          if (chrome.runtime.lastError) {
+            if (retrying) { sendResponse({ error: chrome.runtime.lastError.message }); return; }
+            // Inject content script and retry once
+            chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+              if (chrome.runtime.lastError) { sendResponse({ error: chrome.runtime.lastError.message }); return; }
+              setTimeout(() => sendToContentScript(true), 250);
+            });
+          } else {
+            sendResponse(res || { error: "No response from content script" });
+          }
+        });
+      }
+      sendToContentScript(false);
     });
     return true;
   }

@@ -54,7 +54,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // ===== BROWSER AGENT: execute action on page =====
   if (msg.action === "agentAction") {
     const { type, selector, targetText, targetTag, text, url, direction, amount } = msg;
-    try {
+    (async () => { try {
       if (type === "click") {
         let el = null;
         // Try CSS selector first
@@ -85,32 +85,67 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
         }
+        // If a targetText hint was given, try finding by aria-label or placeholder
+        if (!el && msg.targetText) {
+          const hint = msg.targetText.toLowerCase();
+          el = Array.from(document.querySelectorAll('input, textarea, [contenteditable="true"]')).find(e => {
+            const label = (e.getAttribute("aria-label") || e.getAttribute("placeholder") || e.getAttribute("name") || "").toLowerCase();
+            return label.includes(hint);
+          });
+        }
         if (!el) {
-          // Find focused input or first visible input
-          el = document.activeElement;
-          if (!el || !["input","textarea"].includes(el.tagName.toLowerCase())) {
-            el = document.querySelector('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, [contenteditable="true"]');
+          // Use focused element if it's an input, otherwise find the most relevant visible one
+          const active = document.activeElement;
+          const tag = active?.tagName?.toLowerCase();
+          if (active && (["input","textarea"].includes(tag) || active.contentEditable === "true")) {
+            el = active;
+          } else {
+            el = document.querySelector('[contenteditable="true"], textarea, input:not([type="hidden"]):not([type="submit"]):not([type="button"])');
           }
         }
         if (!el) { sendResponse({ error: "No input element found" }); return true; }
+
+        const isContentEditable = el.contentEditable === "true" || el.getAttribute("contenteditable") === "true";
+
         el.focus();
-        // Clear existing value
-        el.value = "";
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-        // Type character by character for React/Vue compatibility
-        for (const char of text) {
-          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-          if (nativeInputValueSetter) {
-            nativeInputValueSetter.call(el, el.value + char);
-          } else {
-            el.value += char;
+        el.click();
+        await new Promise(r => setTimeout(r, 80));
+
+        if (isContentEditable) {
+          // Gmail body, Notion, etc. — use execCommand for reliable typing
+          document.execCommand("selectAll", false, null);
+          document.execCommand("delete", false, null);
+          // Type chunk by chunk using insertText
+          document.execCommand("insertText", false, text);
+          // Fallback: set textContent and fire input event
+          if (!el.textContent.includes(text.substring(0, 5))) {
+            el.textContent = text;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
           }
-          el.dispatchEvent(new KeyboardEvent("keydown", { key: char, bubbles: true }));
-          el.dispatchEvent(new KeyboardEvent("keypress", { key: char, bubbles: true }));
+        } else {
+          // Regular input/textarea — use native value setter for React compatibility
+          const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
+            || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+          if (nativeInputSetter) {
+            nativeInputSetter.call(el, "");
+          } else {
+            el.value = "";
+          }
           el.dispatchEvent(new Event("input", { bubbles: true }));
-          el.dispatchEvent(new KeyboardEvent("keyup", { key: char, bubbles: true }));
+
+          for (const char of text) {
+            if (nativeInputSetter) {
+              nativeInputSetter.call(el, el.value + char);
+            } else {
+              el.value += char;
+            }
+            el.dispatchEvent(new KeyboardEvent("keydown", { key: char, bubbles: true }));
+            el.dispatchEvent(new KeyboardEvent("keypress", { key: char, bubbles: true }));
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new KeyboardEvent("keyup", { key: char, bubbles: true }));
+          }
+          el.dispatchEvent(new Event("change", { bubbles: true }));
         }
-        el.dispatchEvent(new Event("change", { bubbles: true }));
         sendResponse({ success: true });
 
       } else if (type === "pressEnter") {
@@ -139,7 +174,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     } catch (e) {
       sendResponse({ error: e.message });
-    }
+    } })();
     return true;
   }
 

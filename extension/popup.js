@@ -895,29 +895,35 @@ async function callAgentStep(task, pageInfo, history) {
   const agentSystemPrompt = `You are a browser automation agent. Respond ONLY with a single JSON object, no other text.
 
 Available actions:
-- Click element by text:  {"type":"click","targetText":"exact button text","targetTag":"button","description":"what you click"}
-- Type into input:        {"type":"type","selector":"css-selector","text":"text to type","description":"what you type"}
-- Press Enter:            {"type":"pressEnter","description":"submit/search"}
-- Navigate to URL:        {"type":"navigate","url":"https://...","description":"where you go"}
-- Scroll page:            {"type":"scroll","direction":"down","amount":400,"description":"scroll down"}
+- Click element by text:  {"type":"click","targetText":"exact visible text","targetTag":"button","description":"..."}
+- Type into a field:      {"type":"type","targetText":"field label/placeholder","text":"text to type","description":"..."}
+- Type into element:      {"type":"type","selector":"css-selector","text":"text to type","description":"..."}
+- Press Enter:            {"type":"pressEnter","description":"..."}
+- Navigate to any URL:    {"type":"navigate","url":"https://full-url.com","description":"..."}
+- Scroll page:            {"type":"scroll","direction":"down","amount":400,"description":"..."}
 - Task complete:          {"type":"done","message":"what was accomplished"}
 
-Rules:
-- Only output valid JSON, nothing else.
-- If already on the right page, interact directly.
-- If the goal requires navigation, navigate first.
-- Use "targetText" to find elements by their visible label.
-- After typing, use pressEnter to submit if there is no obvious submit button.
-- If a step failed, try a different approach.`;
+Critical rules:
+- Output ONLY valid JSON. No explanation, no markdown, no extra text.
+- You can ALWAYS navigate to any URL even if you're on a different page — navigation works universally.
+- If the task involves a website you're not on, navigate there FIRST.
+- For Gmail: compose → click "Compose" button → type recipient in To field → Tab to Subject → type subject → click body → type message → click Send.
+- For typing in Gmail/Docs/rich editors, use selector "div[contenteditable]" or targetText matching the field label.
+- After typing in a field, click the next field or use pressEnter rather than assuming focus moved.
+- If a step failed, try a different selector or approach — never repeat the same failed action.
+- Always include "description" explaining what you're doing.`;
+
+  const pageStatus = pageInfo.url
+    ? `URL: ${pageInfo.url}\nTitle: ${pageInfo.title}`
+    : "Not yet on a specific page (navigate to the right site first)";
 
   const userMessage = `TASK: ${task}
 
 CURRENT PAGE:
-URL: ${pageInfo.url}
-Title: ${pageInfo.title}
+${pageStatus}
 
 PAGE TEXT (excerpt):
-${pageInfo.bodyText?.substring(0, 3000) || "(empty)"}
+${pageInfo.bodyText?.substring(0, 3000) || "(no page content — navigate first)"}
 
 INTERACTIVE ELEMENTS:
 ${elementsText}
@@ -1002,9 +1008,12 @@ async function runAgentLoop(task) {
 
     if (result?.error) {
       addAgentBubble(`↳ Failed: ${result.error}`, "error");
+      // Short wait before retrying with a different approach
+      await new Promise(r => setTimeout(r, 800));
     } else {
-      // Wait for page to react (navigation/DOM update)
-      await new Promise(r => setTimeout(r, 1800));
+      // Navigate needs more time for the new page to load
+      const waitMs = actionObj.type === "navigate" ? 3500 : 1500;
+      await new Promise(r => setTimeout(r, waitMs));
     }
 
     if (step === MAX_STEPS - 1) {
