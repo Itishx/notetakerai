@@ -63,6 +63,10 @@ const historyBtn = document.getElementById("historyBtn");
 const historyBackBtn = document.getElementById("historyBackBtn");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 
+const emptyState = document.getElementById("emptyState");
+const userGreeting = document.getElementById("userGreeting");
+const newSessionBtn = document.getElementById("newSessionBtn");
+
 // Legacy hidden elements (kept for JS compatibility in unchanged functions)
 const statusEl = document.getElementById("status") || { className: "", querySelector: () => ({ textContent: "" }) };
 const timerEl = document.getElementById("timer") || { textContent: "" };
@@ -164,6 +168,13 @@ window.addEventListener("focus", () => {
 
 chrome.tabs.onActivated?.addListener?.(() => setTimeout(fetchPageContext, 300));
 
+
+// ===== EMPTY STATE =====
+function updateEmptyState() {
+  const hasSession = hasExistingNotes() || chatMessages.length > 0 || !!recordingCardEl;
+  if (emptyState) emptyState.classList.toggle("hidden", hasSession);
+  if (newSessionBtn) newSessionBtn.classList.toggle("hidden", !hasSession);
+}
 
 // ===== ONBOARDING =====
 const onboardingOverlay = document.getElementById("onboardingOverlay");
@@ -425,6 +436,7 @@ async function startRecordingFlow() {
     updateTimer();
     startTimer();
     updateChatContextUI();
+    updateEmptyState();
   } catch (e) {
     handleRecordingStartError(e instanceof Error ? e.message : "Failed to start recording");
   }
@@ -699,6 +711,7 @@ async function sendChatMessage(text, imageBase64) {
   chatMessages.push(userMsg);
   renderChatMessages();
   saveChatMessages();
+  updateEmptyState();
 
   // Create thinking bubble
   const thinkingEl = document.createElement("div");
@@ -1022,8 +1035,11 @@ function updateAuthUI() {
   chrome.storage.local.get(["authToken", "authDisplayName", "authEmail", "authUserId"], (data) => {
     if (data.authToken && data.authDisplayName) {
       currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
+      const firstName = data.authDisplayName.split(" ")[0];
+      if (userGreeting) userGreeting.textContent = `Hello, ${firstName} 👋`;
     } else {
       currentAuthUser = null;
+      if (userGreeting) userGreeting.textContent = "Hey there 👋";
     }
   });
 }
@@ -1264,6 +1280,27 @@ syncNotionBtn?.addEventListener("click", async () => {
 });
 
 
+// ===== NEW SESSION =====
+newSessionBtn?.addEventListener("click", () => {
+  if (!confirm("Start a new session? Current notes and chat will be cleared.")) return;
+  audioSegments = [];
+  totalRecordedSeconds = 0;
+  seconds = 0;
+  notesMarkdown = "";
+  currentSessionId = null;
+  chatMessages = [];
+  pendingImageBase64 = null;
+  stopTimer();
+  chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds", "currentSessionId", "currentNotes", "notionSyncedPageId"]);
+  removeRecordingCard();
+  chatMessagesEl.innerHTML = "";
+  chatArea.querySelectorAll(".notes-ready-card").forEach(el => el.remove());
+  notesContent.innerHTML = "";
+  updateChatContextUI();
+  updateEmptyState();
+  updateHistoryBtnVisibility();
+});
+
 // ===== INITIAL LOAD =====
 hydrateTrackedTabState();
 updateHistoryBtnVisibility();
@@ -1277,4 +1314,5 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     loadChatMessages(data.currentSessionId);
   }
   updateChatContextUI();
+  updateEmptyState();
 });

@@ -133,11 +133,33 @@
         <button id="historyBtn" class="btn-icon hidden" title="View History">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
         </button>
+        <button id="newSessionBtn" class="btn-icon hidden" title="New session">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
       </div>
     </header>
 
     <!-- Chat Area — all content renders here -->
     <div id="chatArea" class="chat-area">
+      <!-- Empty state: greeting + hints, hidden once session starts -->
+      <div id="emptyState" class="empty-state">
+        <p class="greeting-hey" id="userGreeting">Hey there 👋</p>
+        <p class="empty-state-sub">Record tab audio, read any page, or just ask something.</p>
+        <div class="empty-state-hints">
+          <div class="hint-row">
+            <span class="hint-icon">🎓</span>
+            <span>Select <strong>Lecture & Audio</strong> → press Enter to record</span>
+          </div>
+          <div class="hint-row">
+            <span class="hint-icon">💬</span>
+            <span>Select <strong>Chat with Page</strong> → ask about what's on screen</span>
+          </div>
+          <div class="hint-row">
+            <span class="hint-icon">🤝</span>
+            <span>Select <strong>Meeting & Call</strong> → record multi-speaker calls</span>
+          </div>
+        </div>
+      </div>
       <div id="chatMessages" class="chat-messages-inner"></div>
       <div id="loading" class="chat-loading hidden">
         <div class="spinner"></div>
