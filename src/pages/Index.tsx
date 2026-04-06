@@ -201,6 +201,10 @@ const Index = () => {
       <section className="container mx-auto px-6 py-12">
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-20" />
         <div className="max-w-5xl mx-auto">
+          <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] mb-12 opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
+            And one more thing —<br />
+            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>your browser listens now</em>
+          </h2>
           <div className="rounded-2xl border border-primary/20 bg-primary/4 p-8 md:p-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-8 mb-8">
               <div>
