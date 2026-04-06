@@ -164,7 +164,7 @@ const Index = () => {
             >
               {/* Header row */}
               <div className="flex items-start gap-4 mb-6">
-                <span className="text-3xl text-primary/15 font-normal leading-none w-8 flex-shrink-0">{pillar.num}</span>
+                <span className="text-3xl text-primary/50 font-normal leading-none w-8 flex-shrink-0">{pillar.num}</span>
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
                     <pillar.icon className="w-5 h-5 text-primary" strokeWidth={1.5} />
@@ -255,7 +255,7 @@ const Index = () => {
 
           {/* Step 1, tall, spans 2 rows on md */}
           <div className="col-span-1 row-span-2 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.1s", minHeight: 240 }}>
-            <span className="text-4xl text-primary/15 font-normal leading-none">1</span>
+            <span className="text-4xl text-primary/50 font-normal leading-none">1</span>
             <div>
               <h3 className="text-foreground text-base mb-2">Install</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">Add the extension to your browser. Takes under a minute, no setup required.</p>
@@ -264,7 +264,7 @@ const Index = () => {
 
           {/* Step 2, wide, spans 2 cols */}
           <div className="col-span-1 md:col-span-2 row-span-1 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            <span className="text-4xl text-primary/15 font-normal leading-none">2</span>
+            <span className="text-4xl text-primary/50 font-normal leading-none">2</span>
             <div>
               <h3 className="text-foreground text-base mb-2">Open</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">Pin it to your sidebar. Open on any tab — a lecture, a meeting, a docs page, a problem set.</p>
@@ -273,7 +273,7 @@ const Index = () => {
 
           {/* Step 4, tall, spans 2 rows */}
           <div className="col-span-1 row-span-2 p-8 rounded-2xl border border-border/60 bg-primary/8 border-primary/20 hover:bg-primary/12 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.3s", minHeight: 240 }}>
-            <span className="text-4xl text-primary/25 font-normal leading-none">4</span>
+            <span className="text-4xl text-primary/50 font-normal leading-none">4</span>
             <div>
               <h3 className="text-foreground text-base mb-2">Sync</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">Push notes to Notion in one click, or copy Markdown. Your knowledge, always somewhere useful.</p>
@@ -282,7 +282,7 @@ const Index = () => {
 
           {/* Step 3, wide, spans 2 cols */}
           <div className="col-span-1 md:col-span-2 row-span-1 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.35s" }}>
-            <span className="text-4xl text-primary/15 font-normal leading-none">3</span>
+            <span className="text-4xl text-primary/50 font-normal leading-none">3</span>
             <div>
               <h3 className="text-foreground text-base mb-2">Use</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">Record audio for structured notes, read a page and chat about it, or document a meeting with speaker breakdown.</p>

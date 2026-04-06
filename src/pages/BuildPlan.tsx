@@ -247,7 +247,7 @@ const BuildPlan = () => (
         {phases.map((phase) => (
           <div key={phase.num} className="p-8 md:p-10 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in">
             <div className="flex items-start gap-4 mb-6">
-              <span className="text-3xl text-primary/15 font-normal leading-none w-8 flex-shrink-0">{phase.num}</span>
+              <span className="text-3xl text-primary/50 font-normal leading-none w-8 flex-shrink-0">{phase.num}</span>
               <div className="flex-1">
                 <div className="flex items-center gap-3 flex-wrap mb-1">
                   <h3 className="text-lg text-foreground">{phase.title}</h3>

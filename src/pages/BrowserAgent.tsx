@@ -143,7 +143,7 @@ const BrowserAgent = () => {
               className="p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 transition-all duration-500 opacity-0 animate-fade-in"
               style={{ animationDelay: `${0.1 + i * 0.15}s` }}
             >
-              <span className="text-3xl text-primary/15 font-normal leading-none block mb-6">{item.num}</span>
+              <span className="text-3xl text-primary/50 font-normal leading-none block mb-6">{item.num}</span>
               <h3 className="text-foreground mb-3">{item.title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
             </div>
