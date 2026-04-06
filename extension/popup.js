@@ -17,6 +17,7 @@ let mediaRecorder = null;
 let audioChunks = [];
 let currentPageContext = null;
 let currentMode = "page"; // "page" | "lecture" | "meeting" | "general"
+let currentAiProvider = "lovable"; // "lovable" | "claude"
 let isRecording = false;
 let recordingCardEl = null; // DOM ref to active recording card
 // Dynamic refs inside recording card (assigned in createRecordingCard)
@@ -69,14 +70,51 @@ const newSessionBtn = document.getElementById("newSessionBtn");
 const infoBtn = document.getElementById("infoBtn");
 const infoPopover = document.getElementById("infoPopover");
 const infoWrap = document.getElementById("infoWrap");
+const modelBtn = document.getElementById("modelBtn");
+const modelPopover = document.getElementById("modelPopover");
+const modelWrap = document.getElementById("modelWrap");
+const modelLabel = document.getElementById("modelLabel");
 
 // Info popover toggle
 infoBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
   infoPopover?.classList.toggle("hidden");
+  modelPopover?.classList.add("hidden");
 });
 document.addEventListener("click", (e) => {
   if (!infoWrap?.contains(e.target)) infoPopover?.classList.add("hidden");
+  if (!modelWrap?.contains(e.target)) modelPopover?.classList.add("hidden");
+});
+
+// Model selector
+modelBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  modelPopover?.classList.toggle("hidden");
+  infoPopover?.classList.add("hidden");
+});
+
+// Load saved provider
+chrome.storage.local.get(["aiProvider"], (r) => {
+  if (r.aiProvider) {
+    currentAiProvider = r.aiProvider;
+    updateModelUI();
+  }
+});
+
+function updateModelUI() {
+  if (modelLabel) modelLabel.textContent = currentAiProvider === "claude" ? "CL" : "SB";
+  modelPopover?.querySelectorAll(".model-option").forEach((el) => {
+    el.classList.toggle("active", el.dataset.provider === currentAiProvider);
+  });
+}
+
+modelPopover?.querySelectorAll(".model-option").forEach((el) => {
+  el.addEventListener("click", () => {
+    currentAiProvider = el.dataset.provider;
+    chrome.storage.local.set({ aiProvider: currentAiProvider });
+    updateModelUI();
+    modelPopover?.classList.add("hidden");
+  });
 });
 
 // Legacy hidden elements (kept for JS compatibility in unchanged functions)
@@ -763,6 +801,7 @@ async function sendChatMessage(text, imageBase64) {
     const body = {
       notes: notesCtx.sanitizedNotes,
       message: text || "Please insert this diagram/image into my notes at the most appropriate location.",
+      aiProvider: currentAiProvider,
     };
     if (currentPageContext) body.pageContext = currentPageContext;
     if (imageBase64) {

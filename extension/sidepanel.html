@@ -129,6 +129,22 @@
     <header class="shell-header">
       <h1><span class="logo-side">side</span><span class="logo-brain">brain</span></h1>
       <div class="header-actions">
+        <!-- Model selector -->
+        <div class="model-wrap" id="modelWrap">
+          <button id="modelBtn" class="btn-icon model-btn" title="Switch AI model">
+            <span id="modelLabel">SB</span>
+          </button>
+          <div id="modelPopover" class="model-popover hidden">
+            <div class="model-option active" data-provider="lovable">
+              <span class="model-dot"></span>
+              <div><strong>SideBrain AI</strong><br><span class="model-desc">Default · Fast & free</span></div>
+            </div>
+            <div class="model-option" data-provider="claude">
+              <span class="model-dot"></span>
+              <div><strong>Claude</strong><br><span class="model-desc">Anthropic · Your API key</span></div>
+            </div>
+          </div>
+        </div>
         <!-- Info button with popover -->
         <div class="info-wrap" id="infoWrap">
           <button id="infoBtn" class="btn-icon info-btn" title="How to use">i</button>

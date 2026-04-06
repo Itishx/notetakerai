@@ -1975,6 +1975,73 @@ body.sidepanel.theme-warm .btn-send {
   font-size: 14px;
 }
 
+/* Model selector */
+.model-wrap {
+  position: relative;
+}
+
+.model-btn {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px 6px;
+  min-width: 28px;
+  text-align: center;
+}
+
+.model-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px;
+  width: 200px;
+  z-index: 60;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.model-option:hover {
+  background: var(--bg-hover, rgba(128,128,128,0.1));
+}
+
+.model-option .model-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+}
+
+.model-option.active .model-dot {
+  background: var(--accent, #7c5aed);
+  border-color: var(--accent, #7c5aed);
+}
+
+.model-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 /* Info button & popover */
 .info-wrap {
   position: relative;
