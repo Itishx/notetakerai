@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="sidepanel">
+
   <!-- History Overlay -->
   <div id="historyOverlay" class="history-overlay hidden">
     <div class="history-panel">
@@ -24,13 +25,11 @@
   <!-- Onboarding Overlay -->
   <div id="onboardingOverlay" class="onboarding-overlay hidden">
     <div class="onboarding-slides" id="onboardingSlides">
-      <!-- Slide 1: Welcome -->
       <div class="onboarding-slide active" data-slide="0">
         <div class="onboarding-orb-mini"></div>
         <h1 class="onboarding-title">Welcome to <span class="logo-side">side</span><span class="logo-brain">brain</span></h1>
-        <p class="onboarding-desc">Your AI-powered companion that lives right in your browser — record lectures, ask questions about any page, and sync everything to Notion.</p>
+        <p class="onboarding-desc">Your AI companion in your browser sidebar — record lectures, chat with any page, and sync everything to Notion.</p>
       </div>
-      <!-- Slide 2: Features + Notion -->
       <div class="onboarding-slide" data-slide="1">
         <div class="onboarding-cards">
           <div class="onboarding-card">
@@ -43,15 +42,8 @@
           <div class="onboarding-card">
             <div class="onboarding-card-icon">💬</div>
             <div class="onboarding-card-body">
-              <h3>Chat with AI</h3>
-              <p>Ask follow-up questions about your notes or the page you're on. Screenshot & share context easily.</p>
-            </div>
-          </div>
-          <div class="onboarding-card">
-            <div class="onboarding-card-icon">🌐</div>
-            <div class="onboarding-card-body">
-              <h3>Page-Aware Context</h3>
-              <p>Ask questions about any page you're on — perfect for LeetCode, docs, articles.</p>
+              <h3>Chat with Page</h3>
+              <p>Ask follow-up questions about your notes or the page you're on.</p>
             </div>
           </div>
           <div class="onboarding-card onboarding-card-accent">
@@ -63,18 +55,13 @@
           </div>
         </div>
       </div>
-      <!-- Slide 3: Auth -->
       <div class="onboarding-slide" data-slide="2">
         <div class="onboarding-auth">
           <div class="onboarding-auth-icon">🔐</div>
           <h2 class="onboarding-auth-title">Create your account</h2>
           <p class="onboarding-auth-desc">Sign up to sync notes across devices, unlock cloud history, and keep everything in one place.</p>
-          <button id="onboardingSignUpBtn" class="btn btn-record onboarding-auth-btn">
-            Sign up — it's free
-          </button>
-          <button id="onboardingSignInBtn" class="btn btn-secondary onboarding-auth-btn">
-            I already have an account
-          </button>
+          <button id="onboardingSignUpBtn" class="btn btn-record onboarding-auth-btn">Sign up — it's free</button>
+          <button id="onboardingSignInBtn" class="btn btn-secondary onboarding-auth-btn">I already have an account</button>
         </div>
       </div>
     </div>
@@ -101,206 +88,103 @@
     </div>
   </div>
 
-  <div class="container" id="mainContainer">
-    <!-- Header (visible in idle/notes mode) -->
-    <div class="header" id="headerSection">
-      <div class="header-top" style="position: relative; z-index: 1;">
-        <div class="logo-group">
-          <div>
-            <h1><span class="logo-side">side</span><span class="logo-brain">brain</span></h1>
-          </div>
-        </div>
-        <div class="header-actions">
-          <button id="themeToggleBtn" class="btn-icon" title="Switch theme">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-          </button>
-          <button id="historyBtn" class="btn-icon hidden" title="View History">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
-          </button>
-          <button id="newSessionBtn" class="btn-icon hidden" title="New Recording Session">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-          <!-- kept in DOM for JS compatibility, hidden visually -->
-          <button id="loginBtn" class="hidden"></button>
-          <button id="logoutBtn" class="hidden"></button>
-        </div>
-      </div>
-      <!-- Mode title (shown when inside a mode, hidden on home) -->
-      <div class="mode-title-bar hidden" id="modeTitleBar">
-        <button id="backToHomeBtn" class="btn-back">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></svg>
-          Back
-        </button>
-        <span class="mode-title-label" id="modeTitleLabel"></span>
-      </div>
-    </div>
-
-    <!-- Idle status + timer (hidden during recording) -->
-    <div id="idleStatusBlock" class="hidden">
-      <div id="status" class="status idle">
-        <div class="status-dot"></div>
-        <span>Ready to record</span>
-      </div>
-      <div class="timer" id="timer">00:00</div>
-      <div id="segmentCount" class="segment-count hidden"></div>
-    </div>
-
-    <!-- Home screen: centered greeting + chat bar -->
-    <div id="idleControls">
-      <!-- Centered hero (Claude-style greeting) -->
-      <div id="homeHero" class="home-hero">
-        <p class="greeting-hey" id="userGreeting">Hey there 👋</p>
-        <p class="home-hero-sub">Record, chat, and understand anything in your browser.</p>
-        <!-- Page context shown on home screen too -->
-        <div id="homePageContextBadge" class="page-context-badge home-page-badge hidden">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-          <span id="homePageContextLabel">Reading page...</span>
-        </div>
-      </div>
-
-      <!-- Recording controls (shown after mode selected, hidden on home) -->
-      <div id="recordModeControls" class="hidden">
-        <div class="controls">
-          <button id="recordBtn" class="btn btn-record">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-            Start Recording
-          </button>
-          <button id="continueBtn" class="btn btn-record hidden">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-            Continue Recording
-          </button>
-        </div>
-        <button id="convertBtn" class="btn btn-convert" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
-          Convert to Notes
-        </button>
-      </div>
-    </div>
-
-    <!-- Home chat bar (always at bottom on home screen) -->
-    <div id="homeChatBar" class="home-chat-bar">
-      <!-- Use case dropdown -->
-      <div class="home-usecase-wrapper" id="usecaseWrapper">
-        <button id="usecaseBtn" class="home-usecase-btn" title="Choose what to do">
-          <span id="usecaseBtnLabel">🎓 Lectures</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6,9 12,15 18,9"/></svg>
-        </button>
-        <div id="usecaseDropdown" class="home-usecase-dropdown hidden">
-          <button class="usecase-option" data-usecase="lecture">🎓 Lectures & Audio</button>
-          <button class="usecase-option" data-usecase="meeting">🤝 Meetings & Calls</button>
-          <button class="usecase-option" data-usecase="chat">💬 Chat with Page</button>
-        </div>
-      </div>
-      <div class="home-chat-input-bar">
-        <button id="homeChatScreenshotBtn" class="btn-icon-sm" title="Screenshot">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </button>
-        <input type="text" id="homeChatInput" placeholder="Ask anything, or start recording..." autocomplete="off" />
-        <button id="homeChatSendBtn" class="btn-icon-sm btn-send" title="Go">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- RECORDING HERO (visible only while recording) -->
-    <div id="recordingHero" class="recording-hero hidden">
-      <div class="recording-orb-area">
-        <div class="orb-container orb-hero">
-          <div class="orb-layer orb-outer"></div>
-          <div class="orb-layer orb-mid"></div>
-          <div class="orb-layer orb-core"></div>
-        </div>
-      </div>
-      <div id="recordingInfo" class="recording-info">
-        <span id="heroTimer">00:00</span>
-        <span class="recording-info-sep">·</span>
-        <span id="heroSegment">1 segment</span>
-      </div>
-      <div class="recording-hero-controls">
-        <button id="heroStopBtn" class="btn btn-stop">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-          Pause & Save Segment
-        </button>
-        <button id="heroConvertBtn" class="btn btn-convert" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
-          Convert to Notes
-        </button>
-      </div>
-    </div>
-
-    <div id="loading" class="loading hidden">
-      <div class="spinner"></div>
-      <p>Transcribing & generating notes...</p>
-    </div>
-
-    <div id="notesSection" class="notes-section hidden">
-      <h2>Your Notes</h2>
-      <div id="notesContent" class="notes-content rendered-md"></div>
-      <div class="notes-actions">
-        <button id="copyBtn" class="btn btn-secondary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copy Markdown
-        </button>
-        <button id="syncNotionBtn" class="btn btn-accent">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M9 4v16"/><path d="M14 10l-5 4"/></svg>
+  <!-- Notes Overlay (full-panel, slides over everything) -->
+  <div id="notesOverlay" class="notes-overlay hidden">
+    <div class="notes-overlay-header">
+      <button id="closeNotesBtn" class="btn-back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></svg>
+        Back
+      </button>
+      <div class="notes-overlay-actions">
+        <button id="copyBtn" class="btn btn-secondary btn-sm">Copy</button>
+        <button id="syncNotionBtn" class="btn btn-accent btn-sm">
           <span id="syncNotionLabel">Sync to Notion</span>
         </button>
       </div>
     </div>
+    <div id="notesContent" class="notes-content rendered-md"></div>
+  </div>
 
-    <!-- Chat Section (Browse Mode Full Screen) -->
-    <div id="chatSection" class="chat-section">
-      <div id="chatMessages" class="chat-messages"></div>
-      <!-- Greeting shown at bottom when entering browse mode with no messages -->
-      <div id="chatGreeting" class="chat-greeting hidden">
-        <h2>What can I help with?</h2>
-        <p>Ask me anything about the page you're on.</p>
+  <!-- Screenshot Crop Overlay -->
+  <div id="cropOverlay" class="crop-overlay hidden">
+    <div class="crop-header">
+      <span>Drag to select area, or use full screenshot</span>
+      <div class="crop-header-actions">
+        <button id="cropUseFullBtn" class="btn btn-secondary btn-sm">Use Full Screenshot</button>
+        <button id="cropConfirmBtn" class="btn btn-record btn-sm" disabled>Crop & Insert</button>
+        <button id="cropCancelBtn" class="btn-icon-sm" title="Cancel">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
-      <div id="pageContextBadge" class="page-context-badge hidden">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-        <span id="pageContextLabel">Reading page...</span>
+    </div>
+    <div id="cropCanvas" class="crop-canvas">
+      <img id="cropImage" src="" alt="screenshot" />
+      <div id="cropSelection" class="crop-selection hidden"></div>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="shell-header">
+      <h1><span class="logo-side">side</span><span class="logo-brain">brain</span></h1>
+      <div class="header-actions">
+        <button id="themeToggleBtn" class="btn-icon" title="Switch theme"></button>
+        <button id="historyBtn" class="btn-icon hidden" title="View History">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Chat Area — all content renders here -->
+    <div id="chatArea" class="chat-area">
+      <div id="chatMessages" class="chat-messages-inner"></div>
+      <div id="loading" class="chat-loading hidden">
+        <div class="spinner"></div>
+        <span>Transcribing &amp; generating notes...</span>
       </div>
     </div>
 
-    <!-- Chat Input Bar (pinned to bottom, only in chat modes) -->
-    <div class="chat-bottom-bar hidden" id="chatBottomBar">
-      <div id="chatImagePreview" class="chat-image-preview hidden">
-        <img id="chatPreviewImg" src="" alt="preview" />
-        <button id="chatRemoveImage" class="btn-icon-sm" title="Remove image">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+    <!-- Bottom Bar -->
+    <div class="bottom-bar">
+      <!-- Mode selector (opens upward) -->
+      <div class="mode-wrap" id="modeWrap">
+        <div id="modeDropup" class="mode-dropup hidden">
+          <button class="mode-option" data-mode="page">💬 Chat with Page</button>
+          <button class="mode-option" data-mode="lecture">🎓 Lecture &amp; Audio</button>
+          <button class="mode-option" data-mode="meeting">🤝 Meeting &amp; Call</button>
+          <button class="mode-option" data-mode="general">🌐 General Chat</button>
+        </div>
+        <button id="modeSelectorBtn" class="btn-icon mode-selector-btn" title="Select mode"></button>
       </div>
-      <div class="chat-input-bar">
-        <button id="chatScreenshotBtn" class="btn-icon-sm" title="Take screenshot from page">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </button>
-        <input type="text" id="chatInput" placeholder="Ask about this page..." autocomplete="off" />
-        <button id="chatSendBtn" class="btn-icon-sm btn-send" title="Send">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
-        </button>
-      </div>
-      <div class="footer">
-        <p>Works on any webpage</p>
-      </div>
-    </div>
-
-    <!-- Screenshot Crop Overlay -->
-    <div id="cropOverlay" class="crop-overlay hidden">
-      <div class="crop-header">
-        <span>Drag to select area, or use full screenshot</span>
-        <div class="crop-header-actions">
-          <button id="cropUseFullBtn" class="btn btn-secondary btn-sm">Use Full Screenshot</button>
-          <button id="cropConfirmBtn" class="btn btn-record btn-sm" disabled>Crop & Insert</button>
-          <button id="cropCancelBtn" class="btn-icon-sm" title="Cancel">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <!-- Input area -->
+      <div class="input-wrap">
+        <div id="chatImagePreview" class="chat-image-preview hidden">
+          <img id="chatPreviewImg" src="" alt="preview" />
+          <button id="chatRemoveImage" class="btn-icon-sm" title="Remove">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="input-row">
+          <button id="chatScreenshotBtn" class="btn-icon-sm" title="Screenshot">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+          <input type="text" id="chatInput" placeholder="Ask anything..." autocomplete="off" />
+          <button id="chatSendBtn" class="btn-icon-sm btn-send" title="Send">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
           </button>
         </div>
       </div>
-      <div id="cropCanvas" class="crop-canvas">
-        <img id="cropImage" src="" alt="screenshot" />
-        <div id="cropSelection" class="crop-selection hidden"></div>
-      </div>
     </div>
+  </div>
+
+  <!-- Hidden legacy elements for JS compatibility -->
+  <div style="display:none" aria-hidden="true">
+    <div id="status"><div class="status-dot"></div><span></span></div>
+    <div id="timer">00:00</div>
+    <div id="segmentCount"></div>
+    <button id="loginBtn"></button>
+    <button id="logoutBtn"></button>
   </div>
 
   <script src="popup.js"></script>
