@@ -79,7 +79,6 @@ const modelLabel = document.getElementById("modelLabel");
 infoBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
   infoPopover?.classList.toggle("hidden");
-  modelPopover?.classList.add("hidden");
 });
 document.addEventListener("click", (e) => {
   if (!infoWrap?.contains(e.target)) infoPopover?.classList.add("hidden");
@@ -90,7 +89,6 @@ document.addEventListener("click", (e) => {
 modelBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
   modelPopover?.classList.toggle("hidden");
-  infoPopover?.classList.add("hidden");
 });
 
 // Load saved provider
@@ -102,7 +100,7 @@ chrome.storage.local.get(["aiProvider"], (r) => {
 });
 
 function updateModelUI() {
-  if (modelLabel) modelLabel.textContent = currentAiProvider === "claude" ? "CL" : "SB";
+  if (modelLabel) modelLabel.textContent = currentAiProvider === "claude" ? "Claude Sonnet 4.6" : "SideBrain AI";
   modelPopover?.querySelectorAll(".model-option").forEach((el) => {
     el.classList.toggle("active", el.dataset.provider === currentAiProvider);
   });
