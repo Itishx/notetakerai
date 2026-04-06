@@ -47,7 +47,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       interactiveEls.push(entry);
     });
 
-    sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 60) });
+    // Also collect <select> dropdowns with their options (e.g. Netflix season selector)
+    const selectEls = [];
+    document.querySelectorAll("select").forEach(sel => {
+      const label = sel.getAttribute("aria-label") || sel.getAttribute("name") || sel.id || "";
+      const options = Array.from(sel.options).map(o => o.text.trim()).filter(Boolean).slice(0, 20);
+      if (options.length) selectEls.push({ label, options, current: sel.options[sel.selectedIndex]?.text || "" });
+    });
+
+    sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 60), selectEls });
     return true;
   }
 
@@ -167,6 +175,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } else if (type === "scroll") {
         const px = amount || 400;
         window.scrollBy({ top: direction === "up" ? -px : px, behavior: "smooth" });
+        sendResponse({ success: true });
+
+      } else if (type === "selectOption") {
+        // For <select> dropdowns (e.g. Netflix season selector)
+        let el = null;
+        if (selector) { try { el = document.querySelector(selector); } catch (e) {} }
+        if (!el && msg.targetText) {
+          el = Array.from(document.querySelectorAll("select")).find(s => {
+            const label = (s.getAttribute("aria-label") || s.getAttribute("name") || "").toLowerCase();
+            return label.includes(msg.targetText.toLowerCase());
+          });
+        }
+        if (!el) el = document.querySelector("select");
+        if (!el) { sendResponse({ error: "No <select> found" }); return true; }
+        const optionValue = msg.value || msg.text || "";
+        const opt = Array.from(el.options).find(o =>
+          o.text.toLowerCase().includes(optionValue.toLowerCase()) ||
+          o.value.toLowerCase().includes(optionValue.toLowerCase())
+        );
+        if (!opt) { sendResponse({ error: `Option not found: ${optionValue}` }); return true; }
+        el.value = opt.value;
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        sendResponse({ success: true });
+
+      } else if (type === "wait") {
+        await new Promise(r => setTimeout(r, Math.min(msg.ms || 1000, 5000)));
         sendResponse({ success: true });
 
       } else {

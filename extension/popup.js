@@ -19,6 +19,7 @@ let currentPageContext = null;
 let currentMode = "page"; // "page" | "lecture" | "meeting" | "general" | "agent"
 let currentAiProvider = "lovable"; // "lovable" | "claude"
 let agentRunning = false;
+let agentShouldStop = false;
 let isRecording = false;
 let recordingCardEl = null; // DOM ref to active recording card
 // Dynamic refs inside recording card (assigned in createRecordingCard)
@@ -462,9 +463,7 @@ function updateChatContextUI() {
     else if (hasPage) chatInput.placeholder = "Ask about this page...";
     else chatInput.placeholder = "Ask about this page...";
   } else if (currentMode === "agent") {
-    chatInput.placeholder = agentRunning ? "Agent is working..." : "Tell the agent what to do on this page...";
-    if (chatInput) chatInput.disabled = agentRunning;
-    if (chatSendBtn) chatSendBtn.disabled = agentRunning;
+    if (!agentRunning) chatInput.placeholder = "Tell the agent what to do on this page...";
   } else {
     chatInput.placeholder = hasNotes ? "Ask about your notes..." : "Ask anything...";
   }
@@ -851,6 +850,23 @@ async function sendChatMessage(text, imageBase64) {
 
 // ===== BROWSER AGENT =====
 
+function setAgentRunningUI(running) {
+  agentRunning = running;
+  if (!chatSendBtn) return;
+  if (running) {
+    chatSendBtn.innerHTML = STOP_ICON;
+    chatSendBtn.title = "Stop agent";
+    chatSendBtn.classList.add("btn-agent-stop");
+    if (chatInput) { chatInput.disabled = true; chatInput.placeholder = "Agent is working…"; }
+  } else {
+    chatSendBtn.innerHTML = SEND_ICON;
+    chatSendBtn.title = "Send";
+    chatSendBtn.classList.remove("btn-agent-stop");
+    if (chatInput) chatInput.disabled = false;
+    updateChatContextUI();
+  }
+}
+
 // ---- Agent thinking block (Claude-style collapsible) ----
 function createAgentThinkingBlock() {
   const block = document.createElement("div");
@@ -873,18 +889,29 @@ function createAgentThinkingBlock() {
 
 function agentAddStep(block, text, type = "step") {
   const steps = block.querySelector(".agent-thinking-steps");
-  // Remove pending "thinking..." line
   steps.querySelectorAll(".agent-step-pending").forEach(el => el.remove());
   const line = document.createElement("div");
   line.className = `agent-step agent-step-${type}`;
   line.textContent = text;
   steps.appendChild(line);
-  // Add a new pending line
   const pending = document.createElement("div");
   pending.className = "agent-step agent-step-pending";
   pending.textContent = "Thinking…";
   steps.appendChild(pending);
   chatArea.scrollTop = chatArea.scrollHeight;
+  return line;
+}
+
+function agentMarkStepResult(stepEl, success, errorMsg) {
+  if (!stepEl) return;
+  stepEl.textContent = (success ? "✓ " : "✗ ") + stepEl.textContent;
+  if (!success) {
+    stepEl.classList.add("agent-step-error");
+    const err = document.createElement("div");
+    err.className = "agent-step agent-step-error agent-step-sub";
+    err.textContent = `  ↳ ${errorMsg}`;
+    stepEl.after(err);
+  }
 }
 
 function agentFinalizeBlock(block, stepCount) {
@@ -929,6 +956,12 @@ async function callAgentStep(task, pageInfo, history) {
     ? pageInfo.interactiveEls.map(e => `  [${e.tag}] ${e.text}${e.href ? ` (href: ${e.href})` : ""}${e.type ? ` (type: ${e.type})` : ""}`).join("\n")
     : "  (none detected)";
 
+  const selectsText = pageInfo.selectEls?.length > 0
+    ? "\n\nDROPDOWNS (use selectOption):\n" + pageInfo.selectEls.map(s =>
+        `  [select] ${s.label || "unnamed"} — current: "${s.current}" — options: ${s.options.join(", ")}`
+      ).join("\n")
+    : "";
+
   const agentSystemPrompt = `You are a browser automation agent. Respond ONLY with a single JSON object, no other text.
 
 Available actions:
@@ -937,7 +970,9 @@ Available actions:
 - Type into element:      {"type":"type","selector":"css-selector","text":"text to type","description":"..."}
 - Press Enter:            {"type":"pressEnter","description":"..."}
 - Navigate to any URL:    {"type":"navigate","url":"https://full-url.com","description":"..."}
+- Select dropdown option: {"type":"selectOption","selector":"select","value":"Season 2","description":"..."}
 - Scroll page:            {"type":"scroll","direction":"down","amount":400,"description":"..."}
+- Wait for page to load:  {"type":"wait","ms":2000,"description":"wait for compose window"}
 - Task complete:          {"type":"done","message":"what was accomplished"}
 
 Critical rules:
@@ -947,6 +982,8 @@ Critical rules:
 - For Gmail: compose → click "Compose" button → type recipient in To field → Tab to Subject → type subject → click body → type message → click Send.
 - For typing in Gmail/Docs/rich editors, use selector "div[contenteditable]" or targetText matching the field label.
 - After typing in a field, click the next field or use pressEnter rather than assuming focus moved.
+- For Netflix/streaming season selectors: use selectOption with the <select> dropdown, not click.
+- After clicking a button that opens a panel (Compose, dialog, etc.), use wait 1500ms before interacting with it.
 - If a step failed, try a different selector or approach — never repeat the same failed action.
 - Always include "description" explaining what you're doing.`;
 
@@ -963,7 +1000,7 @@ PAGE TEXT (excerpt):
 ${pageInfo.bodyText?.substring(0, 3000) || "(no page content — navigate first)"}
 
 INTERACTIVE ELEMENTS:
-${elementsText}
+${elementsText}${selectsText}
 
 STEPS TAKEN SO FAR:
 ${historyText}
@@ -995,10 +1032,9 @@ What is the next single action to take?`;
 
 async function runAgentLoop(task) {
   if (agentRunning) return;
-  agentRunning = true;
-  updateChatContextUI();
+  agentShouldStop = false;
+  setAgentRunningUI(true);
 
-  // Show user message
   const userMsg = { role: "user", content: `🤖 ${task}` };
   chatMessages.push(userMsg);
   renderChatMessages();
@@ -1009,52 +1045,47 @@ async function runAgentLoop(task) {
   const history = [];
   const thinkingBlock = createAgentThinkingBlock();
 
-  let stepCount = 0;
+  const finish = (msg) => {
+    agentFinalizeBlock(thinkingBlock, history.length);
+    chatMessages.push({ role: "assistant", content: msg });
+    renderChatMessages();
+    saveChatMessages();
+    setAgentRunningUI(false);
+  };
+
   for (let step = 0; step < MAX_STEPS; step++) {
-    stepCount = step + 1;
+    if (agentShouldStop) { finish("⏹ Stopped."); return; }
+
     const pageInfo = await getAgentPageContext();
 
     let actionObj;
     try {
       actionObj = await callAgentStep(task, pageInfo, history);
     } catch (e) {
-      agentAddStep(thinkingBlock, `⚠️ AI error: ${e.message}`, "error");
-      break;
+      agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
+      finish(`⚠️ AI error: ${e.message}`);
+      return;
     }
 
+    if (agentShouldStop) { finish("⏹ Stopped."); return; }
+
     if (actionObj.type === "done") {
-      agentFinalizeBlock(thinkingBlock, step);
-      const finalMsg = actionObj.message || "Task completed.";
-      chatMessages.push({ role: "assistant", content: `✅ ${finalMsg}` });
-      renderChatMessages();
-      saveChatMessages();
-      agentRunning = false;
-      updateChatContextUI();
+      finish(`✅ ${actionObj.message || "Task completed."}`);
       return;
     }
 
     const desc = actionObj.description || actionObj.type;
-    agentAddStep(thinkingBlock, desc);
+    const stepEl = agentAddStep(thinkingBlock, desc);
 
     const result = await executeAgentAction(actionObj);
     history.push({ ...actionObj, result });
+    agentMarkStepResult(stepEl, !result?.error, result?.error);
 
-    if (result?.error) {
-      agentAddStep(thinkingBlock, `↳ failed: ${result.error}`, "error");
-      await new Promise(r => setTimeout(r, 800));
-    } else {
-      const waitMs = actionObj.type === "navigate" ? 3500 : 1500;
-      await new Promise(r => setTimeout(r, waitMs));
-    }
+    const waitMs = result?.error ? 600 : (actionObj.type === "navigate" ? 3500 : 1200);
+    await new Promise(r => setTimeout(r, waitMs));
   }
 
-  // Hit max steps
-  agentFinalizeBlock(thinkingBlock, stepCount);
-  chatMessages.push({ role: "assistant", content: "⚠️ Reached max steps — task may be incomplete. Check the page." });
-  renderChatMessages();
-  saveChatMessages();
-  agentRunning = false;
-  updateChatContextUI();
+  finish("⚠️ Reached max steps — task may be incomplete.");
 }
 
 
@@ -1082,7 +1113,16 @@ function handleSend() {
   }
 }
 
-chatSendBtn?.addEventListener("click", handleSend);
+const SEND_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>`;
+const STOP_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>`;
+
+chatSendBtn?.addEventListener("click", () => {
+  if (agentRunning) {
+    agentShouldStop = true;
+  } else {
+    handleSend();
+  }
+});
 chatInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
 });

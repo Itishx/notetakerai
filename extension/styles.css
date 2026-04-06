@@ -2228,3 +2228,13 @@ body.sidepanel.theme-warm .mode-option-agent { color: #c2410c; }
 }
 
 body.sidepanel.theme-warm .agent-thinking-block { border-color: var(--border); }
+
+.agent-step-sub { padding-left: 12px; font-size: 11px; }
+
+/* Stop button (send btn transforms while agent runs) */
+.btn-send.btn-agent-stop {
+  background: #ef4444 !important;
+  border-color: #ef4444 !important;
+  color: #fff !important;
+}
+.btn-send.btn-agent-stop:hover { background: #dc2626 !important; }
