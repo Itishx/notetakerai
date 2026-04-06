@@ -20,6 +20,11 @@ let currentMode = "page"; // "page" | "lecture" | "meeting" | "general" | "agent
 let currentAiProvider = "lovable"; // "lovable" | "claude"
 let agentRunning = false;
 let agentShouldStop = false;
+let isPremium = false;
+
+// Daily usage counters (free tier limits)
+const FREE_RECORDING_SECONDS = 30 * 60; // 30 min/day
+const FREE_CHAT_QUESTIONS = 10;         // 10 questions/day
 let isRecording = false;
 let recordingCardEl = null; // DOM ref to active recording card
 // Dynamic refs inside recording card (assigned in createRecordingCard)
@@ -474,6 +479,8 @@ fetchPageContext();
 
 // ===== RECORDING FLOW =====
 async function startRecordingFlow() {
+  const allowed = await checkRecordingLimit();
+  if (!allowed) return;
   try {
     const response = await new Promise((resolve) => {
       chrome.runtime.sendMessage(
@@ -494,6 +501,7 @@ async function startRecordingFlow() {
     updatePauseBtnState();
     updateTimer();
     startTimer();
+    startTrackingRecordingTime();
     updateChatContextUI();
     updateEmptyState();
   } catch (e) {
@@ -502,6 +510,7 @@ async function startRecordingFlow() {
 }
 
 async function handleStopRecording() {
+  stopTrackingRecordingTime();
   const capturedSeconds = seconds;
   stopTimer();
 
@@ -764,6 +773,9 @@ function renderChatMessages() {
 
 async function sendChatMessage(text, imageBase64) {
   if (!text && !imageBase64) return;
+  const allowed = await checkChatLimit();
+  if (!allowed) return;
+  await incrementChatCount();
 
   const userMsg = { role: "user", content: text || "📎 Image attached — please insert into notes" };
   if (imageBase64) userMsg.image = `data:image/png;base64,${imageBase64}`;
@@ -1051,6 +1063,10 @@ What is the next single action to take?`;
 
 async function runAgentLoop(task) {
   if (agentRunning) return;
+  if (!isPremium) {
+    showUpgradePrompt("Browser Agent");
+    return;
+  }
   agentShouldStop = false;
   setAgentRunningUI(true);
 
@@ -1360,6 +1376,112 @@ themeToggleBtn?.addEventListener("click", () => {
 });
 
 
+// ===== PREMIUM =====
+const SUPABASE_URL = "https://ovapacfrzddnhrwvkbkr.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2Zyemk5ZG5ocnd2a2JrciIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzQzNDMwNTY3LCJleHAiOjIwNTkwMDY1Njd9.vQWalLqFidCu7pRPpIKnhJ5S3lY2d4Zk1oTrkLU40BE";
+
+async function loadPremiumStatus() {
+  const data = await getStorage(["authToken", "authUserId", "isPremium", "isPremiumCachedAt"]);
+  if (!data.authToken || !data.authUserId) {
+    isPremium = false;
+    return;
+  }
+  // Use cached value if fresh (< 5 min old)
+  const now = Date.now();
+  if (data.isPremium !== undefined && data.isPremiumCachedAt && (now - data.isPremiumCachedAt) < 5 * 60 * 1000) {
+    isPremium = !!data.isPremium;
+    return;
+  }
+  // Fetch from Supabase profiles
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${data.authUserId}&select=is_premium`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${data.authToken}`,
+      },
+    });
+    if (res.ok) {
+      const rows = await res.json();
+      isPremium = !!rows?.[0]?.is_premium;
+      await setStorage({ isPremium, isPremiumCachedAt: now });
+    }
+  } catch (e) {
+    // Fallback to cached
+    isPremium = !!data.isPremium;
+  }
+}
+
+function showUpgradePrompt(feature) {
+  // Remove any existing
+  chatArea.querySelectorAll(".upgrade-prompt").forEach(el => el.remove());
+  const el = document.createElement("div");
+  el.className = "upgrade-prompt";
+  el.innerHTML = `
+    <span class="upgrade-prompt-icon">⚡</span>
+    <span><strong>${feature}</strong> is a Premium feature.</span>
+    <button class="upgrade-prompt-btn">Upgrade</button>
+  `;
+  el.querySelector(".upgrade-prompt-btn").addEventListener("click", () => {
+    chrome.tabs.create({ url: "https://notetakerai.lovable.app/premium" });
+  });
+  chatArea.appendChild(el);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  // Auto-dismiss after 8s
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 8000);
+}
+
+async function checkRecordingLimit() {
+  if (isPremium) return true;
+  const today = new Date().toDateString();
+  const data = await getStorage(["recordingSecondsToday", "recordingResetDate"]);
+  const usedSeconds = (data.recordingResetDate === today) ? (data.recordingSecondsToday || 0) : 0;
+  if (usedSeconds >= FREE_RECORDING_SECONDS) {
+    showUpgradePrompt("Unlimited recording");
+    return false;
+  }
+  return true;
+}
+
+async function checkChatLimit() {
+  if (isPremium) return true;
+  const today = new Date().toDateString();
+  const data = await getStorage(["chatQuestionsToday", "chatResetDate"]);
+  const used = (data.chatResetDate === today) ? (data.chatQuestionsToday || 0) : 0;
+  if (used >= FREE_CHAT_QUESTIONS) {
+    showUpgradePrompt("Unlimited chat");
+    return false;
+  }
+  return true;
+}
+
+async function incrementChatCount() {
+  if (isPremium) return;
+  const today = new Date().toDateString();
+  const data = await getStorage(["chatQuestionsToday", "chatResetDate"]);
+  const used = (data.chatResetDate === today) ? (data.chatQuestionsToday || 0) : 0;
+  await setStorage({ chatQuestionsToday: used + 1, chatResetDate: today });
+}
+
+// Track recording seconds while active
+let recordingSecondInterval = null;
+function startTrackingRecordingTime() {
+  if (isPremium) return;
+  recordingSecondInterval = setInterval(async () => {
+    const today = new Date().toDateString();
+    const data = await getStorage(["recordingSecondsToday", "recordingResetDate"]);
+    const used = (data.recordingResetDate === today) ? (data.recordingSecondsToday || 0) : 0;
+    await setStorage({ recordingSecondsToday: used + 1, recordingResetDate: today });
+    if (used + 1 >= FREE_RECORDING_SECONDS) {
+      handleStopRecording();
+      showUpgradePrompt("Unlimited recording");
+    }
+  }, 1000);
+}
+function stopTrackingRecordingTime() {
+  clearInterval(recordingSecondInterval);
+  recordingSecondInterval = null;
+}
+
 // ===== AUTH =====
 const WEBSITE_URL = "https://notetakerai.lovable.app";
 const loginBtn = document.getElementById("loginBtn");
@@ -1376,6 +1498,7 @@ function updateAuthUI() {
       currentAuthUser = null;
       if (userGreeting) userGreeting.textContent = "Hey there 👋";
     }
+    loadPremiumStatus();
   });
 }
 

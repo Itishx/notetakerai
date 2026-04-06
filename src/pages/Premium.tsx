@@ -4,6 +4,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 
 const premiumFeatures = [
@@ -97,10 +100,56 @@ const tagColor = (tag: string) => {
 const Premium = () => {
   const large = premiumFeatures.filter((f) => f.size === "large");
   const small = premiumFeatures.filter((f) => f.size === "small");
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+
+  const handleGetPremium = async () => {
+    if (!user) {
+      // Not logged in — send to auth first
+      window.location.href = "/auth?redirect=/premium";
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL || "https://ovapacfrzddnhrwvkbkr.supabase.co"}/functions/v1/create-checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ successUrl: window.location.origin + "/premium?success=true" }),
+        }
+      );
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert("Could not start checkout. Please try again.");
+      }
+    } catch (e) {
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Show success banner if redirected back from Polar
+  const isSuccess = new URLSearchParams(window.location.search).get("success") === "true";
 
   return (
     <div className="min-h-screen bg-background selection:bg-primary/20">
       <Navbar />
+
+      {/* Success banner */}
+      {isSuccess && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 rounded-full px-6 py-3 text-sm shadow-lg">
+          <Check className="w-4 h-4" />
+          You're now a Premium member. Welcome!
+        </div>
+      )}
 
       {/* Hero */}
       <section className="relative overflow-hidden pt-16">
@@ -116,14 +165,18 @@ const Premium = () => {
             <em className="text-primary not-italic">nothing held back</em>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            The free plan gets you started. Premium gets out of your way, unlimited recording, smarter AI, cloud history, and unrestricted chat.
+            The free plan gets you started. Premium gets out of your way — unlimited recording, smarter AI, cloud history, browser agent, and unrestricted chat.
           </p>
           <div className="mt-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.5s" }}>
-            <Button className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md">
+            <Button
+              onClick={handleGetPremium}
+              disabled={loading}
+              className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
+            >
               <Zap className="w-4 h-4 mr-2" />
-              Get Premium
+              {loading ? "Loading..." : "Get Premium · $10/mo"}
             </Button>
-            <p className="mt-4 text-xs text-muted-foreground/50">Free plan · Sign up in seconds</p>
+            <p className="mt-4 text-xs text-muted-foreground/50">Cancel anytime · Powered by Polar</p>
           </div>
         </div>
       </section>
@@ -319,9 +372,13 @@ const Premium = () => {
               ))}
             </ul>
             <div className="mt-8">
-              <Button className="w-full rounded-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button
+                onClick={handleGetPremium}
+                disabled={loading}
+                className="w-full rounded-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90"
+              >
                 <Zap className="w-3.5 h-3.5 mr-2" />
-                Get Premium
+                {loading ? "Loading..." : "Get Premium · $10/mo"}
               </Button>
             </div>
           </div>
@@ -339,9 +396,13 @@ const Premium = () => {
           No credit card needed to get started. The free plan is generous enough to get real value, Premium is there when you outgrow it.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base">
+          <Button
+            onClick={handleGetPremium}
+            disabled={loading}
+            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base"
+          >
             <Zap className="w-4 h-4 mr-2" />
-            Get Premium
+            {loading ? "Loading..." : "Get Premium · $10/mo"}
           </Button>
           <Link to="/">
             <Button variant="ghost" className="rounded-full h-12 px-8 text-muted-foreground hover:text-foreground text-base">

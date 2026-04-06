@@ -2238,3 +2238,34 @@ body.sidepanel.theme-warm .agent-thinking-block { border-color: var(--border); }
   color: #fff !important;
 }
 .btn-send.btn-agent-stop:hover { background: #dc2626 !important; }
+
+/* ===== UPGRADE PROMPT ===== */
+.upgrade-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  background: linear-gradient(135deg, rgba(217,114,52,0.12), rgba(217,114,52,0.06));
+  border: 1px solid rgba(217,114,52,0.3);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text);
+  animation: fadeInUp 0.2s ease;
+  max-width: 90%;
+}
+.upgrade-prompt-icon { font-size: 14px; flex-shrink: 0; }
+.upgrade-prompt span { flex: 1; line-height: 1.4; }
+.upgrade-prompt-btn {
+  flex-shrink: 0;
+  background: var(--accent, #d97234);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.upgrade-prompt-btn:hover { opacity: 0.85; }
