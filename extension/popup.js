@@ -801,6 +801,7 @@ async function sendChatMessage(text, imageBase64) {
     const body = {
       notes: notesCtx.sanitizedNotes,
       message: text || "Please insert this diagram/image into my notes at the most appropriate location.",
+      aiProvider: currentAiProvider,
     };
     if (currentPageContext) body.pageContext = currentPageContext;
     if (imageBase64) {
