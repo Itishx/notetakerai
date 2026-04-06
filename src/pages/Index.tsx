@@ -1,4 +1,4 @@
-import { Mic, Download, ChevronRight, Leaf, ArrowRight, Users, Globe, Image } from "lucide-react";
+import { Mic, Download, ChevronRight, Leaf, ArrowRight, Users, Globe, Image, Bot, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -114,7 +114,7 @@ const Index = () => {
           </div>
 
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-lg mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            Record tab audio. Read any page. Document meetings. SideBrain is the AI layer that lives in your browser sidebar.
+            Record tab audio. Read any page. Document meetings. Now control your browser with plain language. SideBrain is the AI layer that lives in your sidebar.
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-fade-in" style={{ animationDelay: "0.6s" }}>
@@ -135,12 +135,14 @@ const Index = () => {
             </Button>
           </div>
 
-          <div className="mt-14 flex items-center justify-center gap-8 text-muted-foreground/60 text-sm opacity-0 animate-fade-in" style={{ animationDelay: "0.8s" }}>
+          <div className="mt-14 flex items-center justify-center gap-8 text-muted-foreground/60 text-sm opacity-0 animate-fade-in flex-wrap" style={{ animationDelay: "0.8s" }}>
             <span>Record Tab Audio</span>
             <span className="w-1 h-1 rounded-full bg-border" />
             <span>Read Any Page</span>
             <span className="w-1 h-1 rounded-full bg-border" />
             <span>Record Meetings</span>
+            <span className="w-1 h-1 rounded-full bg-border" />
+            <span className="text-primary flex items-center gap-1.5"><Bot className="w-3.5 h-3.5" /> Browser Agent</span>
           </div>
         </div>
       </section>
@@ -192,6 +194,51 @@ const Index = () => {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Browser Agent preview */}
+      <section className="container mx-auto px-6 py-12">
+        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-20" />
+        <div className="max-w-5xl mx-auto">
+          <div className="rounded-2xl border border-primary/20 bg-primary/4 p-8 md:p-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-8 mb-8">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Bot className="w-5 h-5 text-primary" strokeWidth={1.5} />
+                  <span className="text-xs tracking-widest uppercase text-primary/70">New · Browser Agent</span>
+                </div>
+                <h2 className="text-2xl md:text-3xl font-normal text-foreground leading-snug mb-2">
+                  Tell your browser what to do.
+                </h2>
+                <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
+                  Type a plain instruction. SideBrain reads the page, clicks buttons, fills forms, and navigates — no scripting, no setup.
+                </p>
+              </div>
+              <Link to="/browser-agent" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300 flex-shrink-0 whitespace-nowrap">
+                Learn more <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            {/* Mini demo strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { prompt: "Play Stranger Things S4 E2", site: "Netflix" },
+                { prompt: "Send a hello email to alex@gmail.com", site: "Gmail" },
+                { prompt: "Search flights to Tokyo next week", site: "MakeMyTrip" },
+              ].map((demo) => (
+                <div key={demo.site} className="rounded-xl border border-border/50 bg-background/60 p-4">
+                  <p className="text-xs text-muted-foreground/50 mb-2 tracking-wide">{demo.site}</p>
+                  <p className="text-sm text-foreground leading-snug">"{demo.prompt}"</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex items-center gap-2">
+              <Zap className="w-3.5 h-3.5 text-primary/60" />
+              <span className="text-xs text-muted-foreground/60">Premium feature — <Link to="/premium" className="text-primary hover:underline">see what else is included</Link></span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -366,6 +413,7 @@ const Index = () => {
               <div className="flex flex-col gap-3">
                 <span className="text-muted-foreground/50 text-xs tracking-widest uppercase">Product</span>
                 <Link to="/use-cases" className="text-muted-foreground hover:text-foreground transition-colors">Use Cases</Link>
+                <Link to="/browser-agent" className="text-muted-foreground hover:text-foreground transition-colors">Browser Agent</Link>
                 <Link to="/notion-sync" className="text-muted-foreground hover:text-foreground transition-colors">Notion Sync</Link>
               </div>
               <div className="flex flex-col gap-3">

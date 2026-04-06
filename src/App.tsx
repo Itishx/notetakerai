@@ -14,6 +14,7 @@ import GlassPreview from "./pages/GlassPreview.tsx";
 import Auth from "./pages/Auth.tsx";
 import ExtensionAuth from "./pages/ExtensionAuth.tsx";
 import Premium from "./pages/Premium.tsx";
+import BrowserAgent from "./pages/BrowserAgent.tsx";
 import SidepanelTest from "./pages/SidepanelTest.tsx";
 import BuildPlan from "./pages/BuildPlan.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -40,6 +41,7 @@ const App = () => {
               <Route path="/auth" element={<Auth />} />
               <Route path="/auth/extension" element={<ExtensionAuth />} />
               <Route path="/premium" element={<Premium />} />
+              <Route path="/browser-agent" element={<BrowserAgent />} />
               <Route path="/sidepanel-test" element={<SidepanelTest />} />
               <Route path="/build-plan" element={<BuildPlan />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

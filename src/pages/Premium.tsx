@@ -1,5 +1,5 @@
 import {
-  Mic, Cloud, Brain, Globe, MessageSquare, Camera,
+  Mic, Cloud, Brain, Globe, MessageSquare, Camera, Bot,
   Check, X, Leaf, Zap, Download, ArrowRight, Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ const premiumFeatures = [
 ];
 
 const freeItems = [
+  "Browser Agent: not included",
   "5 min recording per day",
   "5 AI questions per day",
   "2 screenshots per note",
@@ -73,6 +74,7 @@ const freeItems = [
 ];
 
 const premiumItems = [
+  "Browser Agent — control any website with plain language",
   "Unlimited recording time",
   "Unlimited AI questions",
   "Unlimited screenshots + auto-embed",
@@ -86,6 +88,7 @@ const premiumItems = [
 
 const tagColor = (tag: string) => {
   if (tag === "AI") return "text-primary bg-primary/8 border-primary/20";
+  if (tag === "Browser Agent") return "text-primary bg-primary/8 border-primary/20";
   if (tag === "Page Chat") return "text-accent bg-accent/10 border-accent/20";
   if (tag === "Recording") return "text-primary bg-primary/8 border-primary/20";
   return "text-foreground/70 bg-muted border-border/60";
@@ -134,6 +137,35 @@ const Premium = () => {
         <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">What Premium unlocks</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
+
+          {/* Browser Agent, full width — new flagship feature */}
+          <div className="md:col-span-3 group p-8 md:p-10 rounded-2xl border border-primary/30 bg-primary/5 hover:bg-primary/8 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+              <div className="flex-1">
+                <div className="flex items-start justify-between mb-4">
+                  <Bot className="w-6 h-6 text-primary" strokeWidth={1.5} />
+                  <span className="text-xs px-3 py-1 rounded-full border text-primary bg-primary/8 border-primary/20 ml-auto">Browser Agent</span>
+                </div>
+                <h3 className="text-xl text-foreground mb-3">Control any website with plain language</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
+                  The only AI sidebar that doesn't just read your browser — it drives it. Tell SideBrain to send an email, play a show, book a flight, or fill a form. It reads the page, finds the right elements, and acts — step by step, until the task is done.
+                </p>
+              </div>
+              <div className="flex-shrink-0 flex flex-col gap-2 md:items-end justify-end">
+                {["Send emails", "Navigate sites", "Fill forms", "Pick dropdowns"].map((cap) => (
+                  <span key={cap} className="text-xs px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary/80 whitespace-nowrap">{cap}</span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-6 flex items-center gap-6 text-xs">
+              <span className="flex items-center gap-1.5 text-muted-foreground/50">
+                <Lock className="w-3 h-3" /> Free: Not included
+              </span>
+              <span className="flex items-center gap-1.5 text-primary">
+                <Zap className="w-3 h-3" /> Premium: Full access
+              </span>
+            </div>
+          </div>
 
           {/* Unlimited Recording, large */}
           <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
