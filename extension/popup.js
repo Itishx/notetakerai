@@ -17,6 +17,7 @@ let mediaRecorder = null;
 let audioChunks = [];
 let currentPageContext = null;
 let currentMode = "page"; // "page" | "lecture" | "meeting" | "general"
+let currentAiProvider = "lovable"; // "lovable" | "claude"
 let isRecording = false;
 let recordingCardEl = null; // DOM ref to active recording card
 // Dynamic refs inside recording card (assigned in createRecordingCard)
