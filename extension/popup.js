@@ -974,6 +974,7 @@ Available actions:
 - Scroll page:            {"type":"scroll","direction":"down","amount":400,"description":"..."}
 - Wait for page to load:  {"type":"wait","ms":2000,"description":"wait for compose window"}
 - Task complete:          {"type":"done","message":"what was accomplished"}
+- Answer/explain:         {"type":"answer","message":"your response to the user"}
 
 Critical rules:
 - Output ONLY valid JSON. No explanation, no markdown, no extra text.
@@ -982,6 +983,7 @@ Critical rules:
 - For Gmail: compose → click "Compose" button → type recipient in To field → Tab to Subject → type subject → click body → type message → click Send.
 - For typing in Gmail/Docs/rich editors, use selector "div[contenteditable]" or targetText matching the field label.
 - After typing in a field, click the next field or use pressEnter rather than assuming focus moved.
+- If the user is asking a question or wants information (not a browser task), use {"type":"answer","message":"..."} immediately.
 - For Netflix/streaming season selectors: use selectOption with the <select> dropdown, not click.
 - After clicking a button that opens a panel (Compose, dialog, etc.), use wait 1500ms before interacting with it.
 - If a step failed, try a different selector or approach — never repeat the same failed action.
@@ -1041,7 +1043,6 @@ async function runAgentLoop(task) {
   saveChatMessages();
   updateEmptyState();
 
-  const MAX_STEPS = 15;
   const history = [];
   const thinkingBlock = createAgentThinkingBlock();
 
@@ -1053,7 +1054,7 @@ async function runAgentLoop(task) {
     setAgentRunningUI(false);
   };
 
-  for (let step = 0; step < MAX_STEPS; step++) {
+  while (true) {
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
 
     const pageInfo = await getAgentPageContext();
@@ -1069,8 +1070,12 @@ async function runAgentLoop(task) {
 
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
 
-    if (actionObj.type === "done") {
-      finish(`✅ ${actionObj.message || "Task completed."}`);
+    if (actionObj.type === "done" || actionObj.type === "answer") {
+      // For answer, skip the thinking block entirely if no steps taken
+      if (history.length === 0) {
+        thinkingBlock.remove();
+      }
+      finish(actionObj.message || "Done.");
       return;
     }
 
@@ -1084,8 +1089,6 @@ async function runAgentLoop(task) {
     const waitMs = result?.error ? 600 : (actionObj.type === "navigate" ? 3500 : 1200);
     await new Promise(r => setTimeout(r, waitMs));
   }
-
-  finish("⚠️ Reached max steps — task may be incomplete.");
 }
 
 
