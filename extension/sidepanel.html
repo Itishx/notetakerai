@@ -129,6 +129,16 @@
     <header class="shell-header">
       <h1><span class="logo-side">side</span><span class="logo-brain">brain</span></h1>
       <div class="header-actions">
+        <!-- Info button with popover -->
+        <div class="info-wrap" id="infoWrap">
+          <button id="infoBtn" class="btn-icon info-btn" title="How to use">i</button>
+          <div id="infoPopover" class="info-popover hidden">
+            <div class="hint-row"><span class="hint-icon">🎓</span><span>Select <strong>Lecture & Audio</strong> → press Enter to start recording</span></div>
+            <div class="hint-row"><span class="hint-icon">🤝</span><span>Select <strong>Meeting & Call</strong> → record multi-speaker calls</span></div>
+            <div class="hint-row"><span class="hint-icon">💬</span><span>Select <strong>Chat with Page</strong> → ask about what's on screen</span></div>
+            <div class="hint-row"><span class="hint-icon">🌐</span><span>Select <strong>General Chat</strong> → ask anything at all</span></div>
+          </div>
+        </div>
         <button id="themeToggleBtn" class="btn-icon" title="Switch theme"></button>
         <button id="historyBtn" class="btn-icon hidden" title="View History">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
@@ -141,24 +151,10 @@
 
     <!-- Chat Area — all content renders here -->
     <div id="chatArea" class="chat-area">
-      <!-- Empty state: greeting + hints, hidden once session starts -->
+      <!-- Empty state: greeting only, hints moved to ⓘ button -->
       <div id="emptyState" class="empty-state">
         <p class="greeting-hey" id="userGreeting">Hey there 👋</p>
         <p class="empty-state-sub">Record tab audio, read any page, or just ask something.</p>
-        <div class="empty-state-hints">
-          <div class="hint-row">
-            <span class="hint-icon">🎓</span>
-            <span>Select <strong>Lecture & Audio</strong> → press Enter to record</span>
-          </div>
-          <div class="hint-row">
-            <span class="hint-icon">💬</span>
-            <span>Select <strong>Chat with Page</strong> → ask about what's on screen</span>
-          </div>
-          <div class="hint-row">
-            <span class="hint-icon">🤝</span>
-            <span>Select <strong>Meeting & Call</strong> → record multi-speaker calls</span>
-          </div>
-        </div>
       </div>
       <div id="chatMessages" class="chat-messages-inner"></div>
       <div id="loading" class="chat-loading hidden">

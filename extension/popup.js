@@ -66,6 +66,18 @@ const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const emptyState = document.getElementById("emptyState");
 const userGreeting = document.getElementById("userGreeting");
 const newSessionBtn = document.getElementById("newSessionBtn");
+const infoBtn = document.getElementById("infoBtn");
+const infoPopover = document.getElementById("infoPopover");
+const infoWrap = document.getElementById("infoWrap");
+
+// Info popover toggle
+infoBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  infoPopover?.classList.toggle("hidden");
+});
+document.addEventListener("click", (e) => {
+  if (!infoWrap?.contains(e.target)) infoPopover?.classList.add("hidden");
+});
 
 // Legacy hidden elements (kept for JS compatibility in unchanged functions)
 const statusEl = document.getElementById("status") || { className: "", querySelector: () => ({ textContent: "" }) };
@@ -331,6 +343,12 @@ function injectNotesReadyCard() {
   });
   chatArea.appendChild(card);
   chatArea.scrollTop = chatArea.scrollHeight;
+
+  // Auto-dismiss after 5 seconds
+  setTimeout(() => {
+    card.classList.add("notes-ready-fade");
+    setTimeout(() => { if (card.parentNode) card.remove(); }, 400);
+  }, 5000);
 }
 
 function handlePauseOrContinue() {
