@@ -71,16 +71,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         // Try by visible text
         if (!el && targetText) {
+          const needle = targetText.toLowerCase();
           const tags = targetTag
             ? [targetTag, "[role='button']"]
-            : ["button", "a", "[role='button']", "[role='tab']", "[role='menuitem']", "input[type='submit']", "input[type='button']"];
+            : ["button", "a", "[role='button']", "[role='tab']", "[role='menuitem']", "input[type='submit']", "input[type='button']", "div[role='button']", "span[role='button']"];
           for (const t of tags) {
             const candidates = Array.from(document.querySelectorAll(t));
             el = candidates.find(e => {
-              const label = (e.innerText || e.getAttribute("aria-label") || e.value || "").trim().toLowerCase();
-              return label.includes(targetText.toLowerCase());
+              const label = (e.innerText || e.getAttribute("aria-label") || e.getAttribute("data-tooltip") || e.value || "").trim().toLowerCase();
+              return label.includes(needle);
             });
             if (el) break;
+          }
+          // Last resort: any visible element containing the text
+          if (!el) {
+            const all = Array.from(document.querySelectorAll("*"));
+            el = all.find(e => {
+              if (!e.offsetParent) return false;
+              const style = window.getComputedStyle(e);
+              if (style.display === "none" || style.visibility === "hidden") return false;
+              const label = (e.getAttribute("aria-label") || e.getAttribute("data-tooltip") || "").toLowerCase();
+              return label.includes(needle) || (e.children.length === 0 && e.innerText?.trim().toLowerCase() === needle);
+            });
           }
         }
         if (!el) { sendResponse({ error: `Element not found: ${targetText || selector}` }); return true; }
@@ -156,15 +168,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         sendResponse({ success: true });
 
-      } else if (type === "pressEnter") {
+      } else if (type === "pressEnter" || type === "pressKey") {
+        const key = msg.key || "Enter";
+        const keyCode = key === "Enter" ? 13 : key === "Tab" ? 9 : key.charCodeAt(0);
         const el = document.activeElement || document.querySelector("input, textarea");
         if (el) {
-          el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true }));
-          el.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", keyCode: 13, bubbles: true }));
-          el.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", keyCode: 13, bubbles: true }));
-          // Also try form submit
-          const form = el.closest("form");
-          if (form) form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+          el.dispatchEvent(new KeyboardEvent("keydown", { key, keyCode, bubbles: true, cancelable: true }));
+          el.dispatchEvent(new KeyboardEvent("keypress", { key, keyCode, bubbles: true, cancelable: true }));
+          el.dispatchEvent(new KeyboardEvent("keyup", { key, keyCode, bubbles: true, cancelable: true }));
+          if (key === "Enter") {
+            const form = el.closest("form");
+            if (form) form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+          }
+          if (key === "Tab") {
+            // Move focus to next focusable element
+            const focusables = Array.from(document.querySelectorAll('input, textarea, button, [contenteditable], [tabindex]:not([tabindex="-1"])'))
+              .filter(e => !e.disabled && e.offsetParent !== null);
+            const idx = focusables.indexOf(el);
+            if (idx !== -1 && focusables[idx + 1]) focusables[idx + 1].focus();
+          }
         }
         sendResponse({ success: true });
 

@@ -947,9 +947,9 @@ function executeAgentAction(actionObj) {
   });
 }
 
-async function callAgentStep(task, pageInfo, history) {
+async function callAgentStep(task, pageInfo, history, chatHistory) {
   const historyText = history.length > 0
-    ? history.map((h, i) => `Step ${i + 1}: ${h.description} → ${h.result?.success ? "OK" : ("FAILED: " + (h.result?.error || "unknown"))}`).join("\n")
+    ? history.map((h, i) => `Step ${i + 1}: ${h.description} → ${h.result?.success ? "✓ OK" : ("✗ FAILED: " + (h.result?.error || "unknown"))}`).join("\n")
     : "None yet.";
 
   const elementsText = pageInfo.interactiveEls?.length > 0
@@ -962,44 +962,61 @@ async function callAgentStep(task, pageInfo, history) {
       ).join("\n")
     : "";
 
-  const agentSystemPrompt = `You are a browser automation agent. Respond ONLY with a single JSON object, no other text.
+  // Include recent chat for context (names, preferences, prior info)
+  const chatCtx = chatHistory && chatHistory.length > 0
+    ? "\n\nCONVERSATION CONTEXT (use this to extract names, emails, details the user mentioned):\n" +
+      chatHistory.slice(-10).map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n")
+    : "";
+
+  const agentSystemPrompt = `You are a smart browser automation agent AND a general assistant. Respond ONLY with a single JSON object, no other text.
 
 Available actions:
 - Click element by text:  {"type":"click","targetText":"exact visible text","targetTag":"button","description":"..."}
-- Type into a field:      {"type":"type","targetText":"field label/placeholder","text":"text to type","description":"..."}
+- Type into a field:      {"type":"type","targetText":"field aria-label or placeholder","text":"text to type","description":"..."}
 - Type into element:      {"type":"type","selector":"css-selector","text":"text to type","description":"..."}
-- Press Enter:            {"type":"pressEnter","description":"..."}
+- Press Enter/Tab:        {"type":"pressKey","key":"Enter","description":"..."} or {"type":"pressKey","key":"Tab","description":"..."}
 - Navigate to any URL:    {"type":"navigate","url":"https://full-url.com","description":"..."}
 - Select dropdown option: {"type":"selectOption","selector":"select","value":"Season 2","description":"..."}
 - Scroll page:            {"type":"scroll","direction":"down","amount":400,"description":"..."}
-- Wait for page to load:  {"type":"wait","ms":2000,"description":"wait for compose window"}
+- Wait for UI to load:    {"type":"wait","ms":1500,"description":"wait for compose window to open"}
 - Task complete:          {"type":"done","message":"what was accomplished"}
 - Answer/explain:         {"type":"answer","message":"your response to the user"}
 
+GMAIL EXACT STEPS (follow precisely):
+1. Navigate to https://mail.google.com if not already there
+2. {"type":"wait","ms":2000,"description":"wait for Gmail to load"}
+3. {"type":"click","targetText":"Compose","description":"open compose window"}
+4. {"type":"wait","ms":1500,"description":"wait for compose window"}
+5. {"type":"type","selector":"input[name='to'], div[aria-label='To'], textarea[name='to']","text":"EMAIL","description":"type recipient"}
+6. {"type":"pressKey","key":"Tab","description":"confirm recipient and move to Subject"}
+7. {"type":"type","selector":"input[name='subjectbox'], input[placeholder='Subject']","text":"SUBJECT","description":"type subject"}
+8. {"type":"pressKey","key":"Tab","description":"move to body"}
+9. {"type":"type","selector":"div[aria-label='Message Body'], div[role='textbox'][aria-multiline='true']","text":"BODY","description":"type message body"}
+10. {"type":"click","targetText":"Send","description":"send the email"}
+
 Critical rules:
 - Output ONLY valid JSON. No explanation, no markdown, no extra text.
-- You can ALWAYS navigate to any URL even if you're on a different page — navigation works universally.
-- If the task involves a website you're not on, navigate there FIRST.
-- For Gmail: compose → click "Compose" button → type recipient in To field → Tab to Subject → type subject → click body → type message → click Send.
-- For typing in Gmail/Docs/rich editors, use selector "div[contenteditable]" or targetText matching the field label.
-- After typing in a field, click the next field or use pressEnter rather than assuming focus moved.
-- If the user is asking a question or wants information (not a browser task), use {"type":"answer","message":"..."} immediately.
-- For Netflix/streaming season selectors: use selectOption with the <select> dropdown, not click.
-- After clicking a button that opens a panel (Compose, dialog, etc.), use wait 1500ms before interacting with it.
-- If a step failed, try a different selector or approach — never repeat the same failed action.
-- Always include "description" explaining what you're doing.`;
+- Use conversation context to extract recipient email, names, or content if the user mentioned them earlier.
+- If the user is asking a question (not a task), use answer immediately.
+- You can navigate to any URL from any page — navigation always works.
+- For Gmail To field: use selector "input[name='to']" first; if that fails try "div[aria-label='To'] input".
+- After each type action in Gmail, use pressKey Tab to move focus to next field.
+- For Netflix season: use selectOption not click.
+- Never repeat a failed action — try a different selector or approach.
+- Always include "description".`;
 
   const pageStatus = pageInfo.url
     ? `URL: ${pageInfo.url}\nTitle: ${pageInfo.title}`
-    : "Not yet on a specific page (navigate to the right site first)";
+    : "Not on a specific page yet — navigate first.";
 
   const userMessage = `TASK: ${task}
+${chatCtx}
 
 CURRENT PAGE:
 ${pageStatus}
 
 PAGE TEXT (excerpt):
-${pageInfo.bodyText?.substring(0, 3000) || "(no page content — navigate first)"}
+${pageInfo.bodyText?.substring(0, 2000) || "(empty — navigate first)"}
 
 INTERACTIVE ELEMENTS:
 ${elementsText}${selectsText}
@@ -1061,7 +1078,7 @@ async function runAgentLoop(task) {
 
     let actionObj;
     try {
-      actionObj = await callAgentStep(task, pageInfo, history);
+      actionObj = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
     } catch (e) {
       agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
       finish(`⚠️ AI error: ${e.message}`);
