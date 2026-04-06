@@ -16,8 +16,9 @@ let trackedActiveWindowId = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let currentPageContext = null;
-let currentMode = "page"; // "page" | "lecture" | "meeting" | "general"
+let currentMode = "page"; // "page" | "lecture" | "meeting" | "general" | "agent"
 let currentAiProvider = "lovable"; // "lovable" | "claude"
+let agentRunning = false;
 let isRecording = false;
 let recordingCardEl = null; // DOM ref to active recording card
 // Dynamic refs inside recording card (assigned in createRecordingCard)
@@ -34,6 +35,7 @@ const MODE_ICONS = {
   lecture: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
   meeting: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   general: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  agent: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8V5"/><circle cx="12" cy="3.5" r="1.5"/><circle cx="8.5" cy="14" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="14" r="1.5" fill="currentColor" stroke="none"/><path d="M9 19h6"/></svg>`,
 };
 
 // ===== DOM REFS =====
@@ -459,6 +461,10 @@ function updateChatContextUI() {
     if (hasNotes && hasPage) chatInput.placeholder = "Ask about notes or this page...";
     else if (hasPage) chatInput.placeholder = "Ask about this page...";
     else chatInput.placeholder = "Ask about this page...";
+  } else if (currentMode === "agent") {
+    chatInput.placeholder = agentRunning ? "Agent is working..." : "Tell the agent what to do on this page...";
+    if (chatInput) chatInput.disabled = agentRunning;
+    if (chatSendBtn) chatSendBtn.disabled = agentRunning;
   } else {
     chatInput.placeholder = hasNotes ? "Ask about your notes..." : "Ask anything...";
   }
@@ -843,6 +849,176 @@ async function sendChatMessage(text, imageBase64) {
 }
 
 
+// ===== BROWSER AGENT =====
+
+function addAgentBubble(text, type = "action") {
+  // type: "action" (step log) | "final" (assistant reply) | "error"
+  const el = document.createElement("div");
+  el.className = `agent-bubble agent-bubble-${type}`;
+  el.textContent = text;
+  chatMessagesEl.appendChild(el);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return el;
+}
+
+function getAgentPageContext() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "getAgentPageContext" }, (res) => {
+      if (chrome.runtime.lastError || res?.error) {
+        resolve({ url: "", title: "", bodyText: "", interactiveEls: [] });
+      } else {
+        resolve(res);
+      }
+    });
+  });
+}
+
+function executeAgentAction(actionObj) {
+  return new Promise((resolve) => {
+    const msg = { action: "agentAction", ...actionObj };
+    chrome.runtime.sendMessage(msg, (res) => {
+      if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
+      else resolve(res || { error: "No response" });
+    });
+  });
+}
+
+async function callAgentStep(task, pageInfo, history) {
+  const historyText = history.length > 0
+    ? history.map((h, i) => `Step ${i + 1}: ${h.description} → ${h.result?.success ? "OK" : ("FAILED: " + (h.result?.error || "unknown"))}`).join("\n")
+    : "None yet.";
+
+  const elementsText = pageInfo.interactiveEls?.length > 0
+    ? pageInfo.interactiveEls.map(e => `  [${e.tag}] ${e.text}${e.href ? ` (href: ${e.href})` : ""}${e.type ? ` (type: ${e.type})` : ""}`).join("\n")
+    : "  (none detected)";
+
+  const agentSystemPrompt = `You are a browser automation agent. Respond ONLY with a single JSON object, no other text.
+
+Available actions:
+- Click element by text:  {"type":"click","targetText":"exact button text","targetTag":"button","description":"what you click"}
+- Type into input:        {"type":"type","selector":"css-selector","text":"text to type","description":"what you type"}
+- Press Enter:            {"type":"pressEnter","description":"submit/search"}
+- Navigate to URL:        {"type":"navigate","url":"https://...","description":"where you go"}
+- Scroll page:            {"type":"scroll","direction":"down","amount":400,"description":"scroll down"}
+- Task complete:          {"type":"done","message":"what was accomplished"}
+
+Rules:
+- Only output valid JSON, nothing else.
+- If already on the right page, interact directly.
+- If the goal requires navigation, navigate first.
+- Use "targetText" to find elements by their visible label.
+- After typing, use pressEnter to submit if there is no obvious submit button.
+- If a step failed, try a different approach.`;
+
+  const userMessage = `TASK: ${task}
+
+CURRENT PAGE:
+URL: ${pageInfo.url}
+Title: ${pageInfo.title}
+
+PAGE TEXT (excerpt):
+${pageInfo.bodyText?.substring(0, 3000) || "(empty)"}
+
+INTERACTIVE ELEMENTS:
+${elementsText}
+
+STEPS TAKEN SO FAR:
+${historyText}
+
+What is the next single action to take?`;
+
+  const response = await fetch(`${API_BASE}/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      notes: agentSystemPrompt,
+      message: userMessage,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `API error ${response.status}`);
+  }
+
+  const data = await response.json();
+  const reply = (data.reply || "").trim();
+
+  // Parse JSON from reply — strip markdown code fences if present
+  const jsonMatch = reply.match(/```(?:json)?\s*([\s\S]*?)```/) || reply.match(/(\{[\s\S]*\})/);
+  const jsonStr = jsonMatch ? jsonMatch[1].trim() : reply.trim();
+  return JSON.parse(jsonStr);
+}
+
+async function runAgentLoop(task) {
+  if (agentRunning) return;
+  agentRunning = true;
+  updateChatContextUI();
+
+  // Show user message
+  const userMsg = { role: "user", content: `🤖 ${task}` };
+  chatMessages.push(userMsg);
+  renderChatMessages();
+  saveChatMessages();
+  updateEmptyState();
+
+  const MAX_STEPS = 12;
+  const history = [];
+
+  for (let step = 0; step < MAX_STEPS; step++) {
+    // Get current page state
+    const pageInfo = await getAgentPageContext();
+
+    // Show thinking bubble
+    const thinkingEl = addAgentBubble("Thinking...", "action");
+    thinkingEl.classList.add("agent-bubble-thinking");
+
+    let actionObj;
+    try {
+      actionObj = await callAgentStep(task, pageInfo, history);
+    } catch (e) {
+      thinkingEl.remove();
+      addAgentBubble(`⚠️ AI error: ${e.message}`, "error");
+      break;
+    }
+
+    thinkingEl.remove();
+
+    if (actionObj.type === "done") {
+      const finalMsg = actionObj.message || "Task completed.";
+      chatMessages.push({ role: "assistant", content: `✅ ${finalMsg}` });
+      renderChatMessages();
+      saveChatMessages();
+      break;
+    }
+
+    // Show action step
+    const desc = actionObj.description || `${actionObj.type}`;
+    addAgentBubble(`⚡ ${desc}`, "action");
+
+    // Execute the action
+    const result = await executeAgentAction(actionObj);
+    history.push({ ...actionObj, result });
+
+    if (result?.error) {
+      addAgentBubble(`↳ Failed: ${result.error}`, "error");
+    } else {
+      // Wait for page to react (navigation/DOM update)
+      await new Promise(r => setTimeout(r, 1800));
+    }
+
+    if (step === MAX_STEPS - 1) {
+      chatMessages.push({ role: "assistant", content: "⚠️ Reached max steps. The task may be incomplete — please check the page." });
+      renderChatMessages();
+      saveChatMessages();
+    }
+  }
+
+  agentRunning = false;
+  updateChatContextUI();
+}
+
+
 // ===== SEND HANDLER (unified) =====
 function handleSend() {
   if ((currentMode === "lecture" || currentMode === "meeting") && !recordingCardEl) {
@@ -854,6 +1030,11 @@ function handleSend() {
   if (!text && !img) return;
   chatInput.value = "";
   clearPendingImage();
+
+  if (currentMode === "agent") {
+    runAgentLoop(text);
+    return;
+  }
 
   if (looksLikeAnswerRequest(text) && !img) {
     showAnswerConfirm(text, img);

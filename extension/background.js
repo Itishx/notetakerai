@@ -134,6 +134,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+  if (message.action === "agentAction" || message.action === "getAgentPageContext") {
+    chrome.storage.local.get("activeTabId", (store) => {
+      const tabId = store.activeTabId;
+      if (!tabId) { sendResponse({ error: "No active tab" }); return; }
+      chrome.tabs.sendMessage(tabId, message, (res) => {
+        if (chrome.runtime.lastError) {
+          // Try injecting content script then retry
+          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+            if (chrome.runtime.lastError) { sendResponse({ error: chrome.runtime.lastError.message }); return; }
+            setTimeout(() => {
+              chrome.tabs.sendMessage(tabId, message, (res2) => {
+                if (chrome.runtime.lastError) sendResponse({ error: chrome.runtime.lastError.message });
+                else sendResponse(res2 || { error: "No response" });
+              });
+            }, 200);
+          });
+        } else {
+          sendResponse(res || { error: "No response from content script" });
+        }
+      });
+    });
+    return true;
+  }
   if (message.action === "captureScreenshot") {
     // Get the window that contains the active tab we're recording
     chrome.storage.local.get("activeTabId", (store) => {

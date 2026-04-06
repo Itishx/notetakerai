@@ -2150,3 +2150,51 @@ body.sidepanel.theme-warm .bottom-bar { background: hsl(40,20%,97%); }
 body.sidepanel.theme-warm .input-wrap { background: rgba(255,255,255,0.6); }
 body.sidepanel.theme-warm .input-wrap:focus-within { border-color: #d97234; }
 body.sidepanel.theme-warm .notes-overlay { background: hsl(40,20%,97%); }
+
+/* ===== BROWSER AGENT ===== */
+.mode-option-agent {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 10px !important;
+  color: #7c3aed;
+}
+body.sidepanel.theme-warm .mode-option-agent { color: #c2410c; }
+
+/* Agent action step bubbles */
+.agent-bubble {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  max-width: 90%;
+  align-self: flex-start;
+  line-height: 1.4;
+  animation: fadeInUp 0.2s ease;
+}
+.agent-bubble-action {
+  background: var(--bg-secondary, rgba(124,58,237,0.08));
+  color: #7c3aed;
+  border: 1px solid rgba(124,58,237,0.15);
+}
+.agent-bubble-error {
+  background: rgba(239,68,68,0.08);
+  color: #dc2626;
+  border: 1px solid rgba(239,68,68,0.15);
+}
+.agent-bubble-thinking {
+  opacity: 0.7;
+}
+.agent-bubble-thinking::after {
+  content: " ●●●";
+  animation: agentDots 1.2s steps(3, end) infinite;
+}
+@keyframes agentDots {
+  0%   { content: " ●"; }
+  33%  { content: " ●●"; }
+  66%  { content: " ●●●"; }
+  100% { content: " ●"; }
+}
+body.sidepanel.theme-warm .agent-bubble-action {
+  background: rgba(194,65,12,0.08);
+  color: #c2410c;
+  border-color: rgba(194,65,12,0.15);
+}
