@@ -851,14 +851,51 @@ async function sendChatMessage(text, imageBase64) {
 
 // ===== BROWSER AGENT =====
 
-function addAgentBubble(text, type = "action") {
-  // type: "action" (step log) | "final" (assistant reply) | "error"
-  const el = document.createElement("div");
-  el.className = `agent-bubble agent-bubble-${type}`;
-  el.textContent = text;
-  chatMessagesEl.appendChild(el);
+// ---- Agent thinking block (Claude-style collapsible) ----
+function createAgentThinkingBlock() {
+  const block = document.createElement("div");
+  block.className = "agent-thinking-block";
+  block.innerHTML = `
+    <div class="agent-thinking-header">
+      <span class="agent-thinking-spinner"></span>
+      <span class="agent-thinking-label">Agent is thinking…</span>
+      <span class="agent-thinking-chevron">▾</span>
+    </div>
+    <div class="agent-thinking-steps"></div>
+  `;
+  block.querySelector(".agent-thinking-header").addEventListener("click", () => {
+    block.classList.toggle("collapsed");
+  });
+  chatMessagesEl.appendChild(block);
   chatArea.scrollTop = chatArea.scrollHeight;
-  return el;
+  return block;
+}
+
+function agentAddStep(block, text, type = "step") {
+  const steps = block.querySelector(".agent-thinking-steps");
+  // Remove pending "thinking..." line
+  steps.querySelectorAll(".agent-step-pending").forEach(el => el.remove());
+  const line = document.createElement("div");
+  line.className = `agent-step agent-step-${type}`;
+  line.textContent = text;
+  steps.appendChild(line);
+  // Add a new pending line
+  const pending = document.createElement("div");
+  pending.className = "agent-step agent-step-pending";
+  pending.textContent = "Thinking…";
+  steps.appendChild(pending);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function agentFinalizeBlock(block, stepCount) {
+  // Remove pending line
+  block.querySelector(".agent-step-pending")?.remove();
+  // Collapse header to summary
+  block.classList.add("collapsed");
+  const header = block.querySelector(".agent-thinking-header");
+  header.querySelector(".agent-thinking-spinner").style.display = "none";
+  header.querySelector(".agent-thinking-label").textContent = `Agent · ${stepCount} step${stepCount !== 1 ? "s" : ""}`;
+  header.querySelector(".agent-thinking-chevron").textContent = "▸";
 }
 
 function getAgentPageContext() {
@@ -968,61 +1005,54 @@ async function runAgentLoop(task) {
   saveChatMessages();
   updateEmptyState();
 
-  const MAX_STEPS = 12;
+  const MAX_STEPS = 15;
   const history = [];
+  const thinkingBlock = createAgentThinkingBlock();
 
+  let stepCount = 0;
   for (let step = 0; step < MAX_STEPS; step++) {
-    // Get current page state
+    stepCount = step + 1;
     const pageInfo = await getAgentPageContext();
-
-    // Show thinking bubble
-    const thinkingEl = addAgentBubble("Thinking...", "action");
-    thinkingEl.classList.add("agent-bubble-thinking");
 
     let actionObj;
     try {
       actionObj = await callAgentStep(task, pageInfo, history);
     } catch (e) {
-      thinkingEl.remove();
-      addAgentBubble(`⚠️ AI error: ${e.message}`, "error");
+      agentAddStep(thinkingBlock, `⚠️ AI error: ${e.message}`, "error");
       break;
     }
 
-    thinkingEl.remove();
-
     if (actionObj.type === "done") {
+      agentFinalizeBlock(thinkingBlock, step);
       const finalMsg = actionObj.message || "Task completed.";
       chatMessages.push({ role: "assistant", content: `✅ ${finalMsg}` });
       renderChatMessages();
       saveChatMessages();
-      break;
+      agentRunning = false;
+      updateChatContextUI();
+      return;
     }
 
-    // Show action step
-    const desc = actionObj.description || `${actionObj.type}`;
-    addAgentBubble(`⚡ ${desc}`, "action");
+    const desc = actionObj.description || actionObj.type;
+    agentAddStep(thinkingBlock, desc);
 
-    // Execute the action
     const result = await executeAgentAction(actionObj);
     history.push({ ...actionObj, result });
 
     if (result?.error) {
-      addAgentBubble(`↳ Failed: ${result.error}`, "error");
-      // Short wait before retrying with a different approach
+      agentAddStep(thinkingBlock, `↳ failed: ${result.error}`, "error");
       await new Promise(r => setTimeout(r, 800));
     } else {
-      // Navigate needs more time for the new page to load
       const waitMs = actionObj.type === "navigate" ? 3500 : 1500;
       await new Promise(r => setTimeout(r, waitMs));
     }
-
-    if (step === MAX_STEPS - 1) {
-      chatMessages.push({ role: "assistant", content: "⚠️ Reached max steps. The task may be incomplete — please check the page." });
-      renderChatMessages();
-      saveChatMessages();
-    }
   }
 
+  // Hit max steps
+  agentFinalizeBlock(thinkingBlock, stepCount);
+  chatMessages.push({ role: "assistant", content: "⚠️ Reached max steps — task may be incomplete. Check the page." });
+  renderChatMessages();
+  saveChatMessages();
   agentRunning = false;
   updateChatContextUI();
 }
