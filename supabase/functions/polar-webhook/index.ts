@@ -11,7 +11,7 @@ async function verifyPolarSignature(body: string, signature: string, secret: str
     ["verify"]
   );
   const sigBytes = hexToBytes(signature);
-  return await crypto.subtle.verify("HMAC", key, sigBytes, encoder.encode(body));
+  return await crypto.subtle.verify("HMAC", key, new Uint8Array(sigBytes.buffer) as any, encoder.encode(body));
 }
 
 function hexToBytes(hex: string): Uint8Array {
