@@ -1,1 +1,4 @@
 project_id = "ovapacfrzddnhrwvkbkr"
+
+[functions.polar-webhook]
+verify_jwt = false
