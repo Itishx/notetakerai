@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        product_id: polarProductId,
+        products: [polarProductId],
         customer_email: user.email,
         metadata: {
           supabase_user_id: user.id,
@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
 
   } catch (e) {
     console.error("create-checkout error:", e);
-    return new Response(JSON.stringify({ error: e.message }), {
+    return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
