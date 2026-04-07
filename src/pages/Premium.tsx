@@ -100,7 +100,8 @@ const tagColor = (tag: string) => {
 const Premium = () => {
   const large = premiumFeatures.filter((f) => f.size === "large");
   const small = premiumFeatures.filter((f) => f.size === "small");
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isPremium = (profile as any)?.is_premium === true;
   const [loading, setLoading] = useState(false);
 
   const handleGetPremium = async () => {
@@ -168,15 +169,24 @@ const Premium = () => {
             The free plan gets you started. Premium gets out of your way — unlimited recording, smarter AI, cloud history, browser agent, and unrestricted chat.
           </p>
           <div className="mt-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.5s" }}>
-            <Button
-              onClick={handleGetPremium}
-              disabled={loading}
-              className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              {loading ? "Loading..." : "Get Premium · $10/mo"}
-            </Button>
-            <p className="mt-4 text-xs text-muted-foreground/50">Cancel anytime · Powered by Polar</p>
+            {isPremium ? (
+              <div className="inline-flex items-center gap-2 h-12 px-10 text-base rounded-full border border-primary/30 bg-primary/8 text-primary">
+                <Check className="w-4 h-4" />
+                You're a Premium member
+              </div>
+            ) : (
+              <Button
+                onClick={handleGetPremium}
+                disabled={loading}
+                className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                {loading ? "Loading..." : "Get Premium · $10/mo"}
+              </Button>
+            )}
+            <p className="mt-4 text-xs text-muted-foreground/50">
+              {isPremium ? "Thanks for supporting SideBrain." : "Cancel anytime · Powered by Polar"}
+            </p>
           </div>
         </div>
       </section>
