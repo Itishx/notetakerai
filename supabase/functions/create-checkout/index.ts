@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        product_id: polarProductId,
+        products: [polarProductId],
         customer_email: user.email,
         metadata: {
           supabase_user_id: user.id,
