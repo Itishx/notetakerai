@@ -387,14 +387,21 @@ const Premium = () => {
               ))}
             </ul>
             <div className="mt-8">
-              <Button
-                onClick={handleGetPremium}
-                disabled={loading}
-                className="w-full rounded-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                <Zap className="w-3.5 h-3.5 mr-2" />
-                {loading ? "Loading..." : "Get Premium · $10/mo"}
-              </Button>
+              {isPremium ? (
+                <div className="w-full rounded-full h-11 text-sm border border-primary/30 bg-primary/8 text-primary flex items-center justify-center gap-2">
+                  <Check className="w-3.5 h-3.5" />
+                  You're already here
+                </div>
+              ) : (
+                <Button
+                  onClick={handleGetPremium}
+                  disabled={loading}
+                  className="w-full rounded-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <Zap className="w-3.5 h-3.5 mr-2" />
+                  {loading ? "Loading..." : "Get Premium · $10/mo"}
+                </Button>
+              )}
             </div>
           </div>
 
@@ -411,6 +418,12 @@ const Premium = () => {
           No credit card needed to get started. The free plan is generous enough to get real value, Premium is there when you outgrow it.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          {isPremium ? (
+            <div className="rounded-full border border-primary/30 bg-primary/8 text-primary px-10 h-12 text-base flex items-center gap-2">
+              <Check className="w-4 h-4" />
+              You're already here
+            </div>
+          ) : (
           <Button
             onClick={handleGetPremium}
             disabled={loading}
@@ -419,6 +432,7 @@ const Premium = () => {
             <Zap className="w-4 h-4 mr-2" />
             {loading ? "Loading..." : "Get Premium · $10/mo"}
           </Button>
+          )}
           <Link to="/">
             <Button variant="ghost" className="rounded-full h-12 px-8 text-muted-foreground hover:text-foreground text-base">
               Download free first <ArrowRight className="w-4 h-4 ml-2" />
