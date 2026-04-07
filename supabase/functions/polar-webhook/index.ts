@@ -61,18 +61,18 @@ Deno.serve(async (req) => {
   console.log("Polar webhook:", eventType, subscription?.id);
 
   // Extract the user's email or metadata to find their Supabase user
-  const customerEmail = subscription?.customer?.email || subscription?.metadata?.email;
-  const supabaseUserId = subscription?.metadata?.supabase_user_id;
+  const customerEmail = subscription?.customer?.email || subscription?.user?.email || subscription?.metadata?.email;
+  const supabaseUserId = subscription?.metadata?.supabase_user_id || subscription?.customer?.metadata?.supabase_user_id;
 
   async function findUserId(): Promise<string | null> {
     if (supabaseUserId) return supabaseUserId;
     if (customerEmail) {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", customerEmail)
-        .maybeSingle();
-      return data?.id || null;
+      // Look up in auth.users via admin API (profiles table may not have email column)
+      const { data, error } = await supabase.auth.admin.listUsers();
+      if (!error && data?.users) {
+        const match = data.users.find((u) => u.email === customerEmail);
+        if (match) return match.id;
+      }
     }
     return null;
   }

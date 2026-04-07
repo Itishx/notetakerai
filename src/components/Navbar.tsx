@@ -31,8 +31,6 @@ const Navbar = () => {
 
   const links = [
     { to: "/use-cases", label: "Use Cases" },
-    { to: "/browser-agent", label: "Browser Agent" },
-    { to: "/notion-sync", label: "Notion Sync" },
     { to: "/premium", label: "Premium" },
   ];
 

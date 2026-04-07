@@ -152,95 +152,115 @@ const Index = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
       </div>
 
-      {/* Three Things */}
+      {/* Three Things — Option A */}
       <section className="container mx-auto px-6 py-24">
-        <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">Three things. That's it.</p>
+        <div className="max-w-5xl mx-auto mb-12 text-center">
+          <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
+            SideBrain does<br />
+            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>3 things</em>
+          </h2>
+        </div>
         <div className="space-y-4 max-w-5xl mx-auto">
           {pillars.map((pillar, i) => (
             <div
               key={pillar.title}
-              className="p-8 md:p-10 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in"
+              className="relative overflow-hidden p-8 md:p-12 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 transition-all duration-500 opacity-0 animate-fade-in"
               style={{ animationDelay: `${0.1 + i * 0.15}s` }}
             >
-              {/* Header row */}
-              <div className="flex items-start gap-4 mb-6">
-                <span className="text-3xl text-primary/50 font-normal leading-none w-8 flex-shrink-0">{pillar.num}</span>
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <pillar.icon className="w-5 h-5 text-primary" strokeWidth={1.5} />
-                    <h3 className="text-xl text-foreground">{pillar.title}</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{pillar.tagline}</p>
+              {/* Giant number watermark */}
+              <span className="absolute top-6 right-8 text-[72px] font-normal text-foreground/4 leading-none select-none pointer-events-none">
+                {pillar.num}
+              </span>
+
+              <div className="relative grid md:grid-cols-2 gap-8 items-start">
+                {/* Left: identity */}
+                <div>
+                  <pillar.icon className="w-6 h-6 text-primary mb-4" strokeWidth={1.5} />
+                  <h3 className="text-2xl md:text-3xl font-normal text-foreground mb-3 leading-snug">{pillar.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{pillar.tagline}</p>
                 </div>
-              </div>
 
-              {/* Pipeline */}
-              <div className="flex items-center gap-2 flex-wrap mb-5">
-                {pillar.pipeline.map((step, j) => (
-                  <span key={step} className="contents">
-                    <span className="text-xs px-3 py-1 rounded-full bg-card border border-border/60 text-muted-foreground">{step}</span>
-                    {j < pillar.pipeline.length - 1 && (
-                      <ChevronRight className="w-3 h-3 text-muted-foreground/30 flex-shrink-0" />
-                    )}
-                  </span>
-                ))}
-              </div>
-
-              {/* Use cases */}
-              <div className="flex flex-wrap gap-2">
-                {pillar.useCases.map((uc) => (
-                  <span key={uc} className="text-xs px-3 py-1.5 rounded-full bg-primary/8 border border-primary/15 text-primary/70">{uc}</span>
-                ))}
+                {/* Right: pipeline + use cases */}
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">Pipeline</p>
+                    <div className="flex flex-col gap-2">
+                      {pillar.pipeline.map((step) => (
+                        <div key={step} className="flex items-center gap-3">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary/40 flex-shrink-0" />
+                          <span className="text-sm text-muted-foreground">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">Use cases</p>
+                    <p className="text-sm text-muted-foreground">{pillar.useCases.join(" · ")}</p>
+                  </div>
+                </div>
               </div>
             </div>
           ))}
         </div>
       </section>
 
+
       {/* Browser Agent preview */}
       <section className="container mx-auto px-6 py-12">
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-20" />
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] mb-12 opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
+        <div className="max-w-5xl mx-auto mb-12 text-center">
+          <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
             And one more thing —<br />
             <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>your browser listens now</em>
           </h2>
-          <div className="rounded-2xl border border-primary/20 bg-primary/4 p-8 md:p-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-8 mb-8">
+        </div>
+        <div className="max-w-5xl mx-auto">
+          <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/4 p-8 md:p-12 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+            {/* Giant number watermark */}
+            <span className="absolute top-6 right-8 text-[72px] font-normal text-primary/8 leading-none select-none pointer-events-none">
+              04
+            </span>
+
+            <div className="relative grid md:grid-cols-2 gap-8 items-start mb-8">
+              {/* Left: identity */}
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Bot className="w-5 h-5 text-primary" strokeWidth={1.5} />
-                  <span className="text-xs tracking-widest uppercase text-primary/70">New · Browser Agent</span>
-                </div>
-                <h2 className="text-2xl md:text-3xl font-normal text-foreground leading-snug mb-2">
-                  Tell your browser what to do.
-                </h2>
-                <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-                  Type a plain instruction. SideBrain reads the page, clicks buttons, fills forms, and navigates — no scripting, no setup.
-                </p>
+                <Bot className="w-6 h-6 text-primary mb-4" strokeWidth={1.5} />
+                <h3 className="text-2xl md:text-3xl font-normal text-foreground mb-3 leading-snug">Browser Agent</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Type a plain instruction. SideBrain reads the page, clicks buttons, fills forms, and navigates — no scripting, no setup.</p>
               </div>
-              <Link to="/browser-agent" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300 flex-shrink-0 whitespace-nowrap">
+
+              {/* Right: demos + use cases */}
+              <div className="space-y-6">
+                <div>
+                  <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">Try saying</p>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      "Play Stranger Things S4 E2",
+                      "Send a hello email to alex@gmail.com",
+                      "Search flights to Tokyo next week",
+                    ].map((prompt) => (
+                      <div key={prompt} className="flex items-center gap-3">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary/40 flex-shrink-0" />
+                        <span className="text-sm text-muted-foreground">"{prompt}"</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">Works on</p>
+                  <p className="text-sm text-muted-foreground">Netflix · Gmail · Amazon · Google · any site</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5 text-primary/60" />
+                <span className="text-xs text-muted-foreground/60">Premium feature — <Link to="/premium" className="text-primary hover:underline">see what else is included</Link></span>
+              </div>
+              <Link to="/browser-agent" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300 whitespace-nowrap">
                 Learn more <ArrowRight className="w-4 h-4" />
               </Link>
-            </div>
-
-            {/* Mini demo strip */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { prompt: "Play Stranger Things S4 E2", site: "Netflix" },
-                { prompt: "Send a hello email to alex@gmail.com", site: "Gmail" },
-                { prompt: "Search flights to Tokyo next week", site: "MakeMyTrip" },
-              ].map((demo) => (
-                <div key={demo.site} className="rounded-xl border border-border/50 bg-background/60 p-4">
-                  <p className="text-xs text-muted-foreground/50 mb-2 tracking-wide">{demo.site}</p>
-                  <p className="text-sm text-foreground leading-snug">"{demo.prompt}"</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5 text-primary/60" />
-              <span className="text-xs text-muted-foreground/60">Premium feature — <Link to="/premium" className="text-primary hover:underline">see what else is included</Link></span>
             </div>
           </div>
         </div>

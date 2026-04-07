@@ -1388,7 +1388,7 @@ async function loadPremiumStatus() {
   }
   // Use cached value if fresh (< 5 min old)
   const now = Date.now();
-  if (data.isPremium !== undefined && data.isPremiumCachedAt && (now - data.isPremiumCachedAt) < 5 * 60 * 1000) {
+  if (data.isPremium !== undefined && data.isPremiumCachedAt && (now - data.isPremiumCachedAt) < 60 * 1000) {
     isPremium = !!data.isPremium;
     return;
   }

@@ -210,13 +210,18 @@ const Premium = () => {
                 ))}
               </div>
             </div>
-            <div className="mt-6 flex items-center gap-6 text-xs">
-              <span className="flex items-center gap-1.5 text-muted-foreground/50">
-                <Lock className="w-3 h-3" /> Free: Not included
-              </span>
-              <span className="flex items-center gap-1.5 text-primary">
-                <Zap className="w-3 h-3" /> Premium: Full access
-              </span>
+            <div className="mt-6 flex items-center justify-between gap-6 text-xs flex-wrap">
+              <div className="flex items-center gap-6">
+                <span className="flex items-center gap-1.5 text-muted-foreground/50">
+                  <Lock className="w-3 h-3" /> Free: Not included
+                </span>
+                <span className="flex items-center gap-1.5 text-primary">
+                  <Zap className="w-3 h-3" /> Premium: Full access
+                </span>
+              </div>
+              <Link to="/browser-agent" className="flex items-center gap-1 text-primary/70 hover:text-primary transition-colors">
+                See full details <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
           </div>
 
