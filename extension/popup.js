@@ -1063,7 +1063,7 @@ What is the next single action to take?`;
 
 async function runAgentLoop(task) {
   if (agentRunning) return;
-  if (!isPremium) {
+  if (!(await loadPremiumStatus())) {
     showUpgradePrompt("Browser Agent");
     return;
   }
@@ -1378,36 +1378,48 @@ themeToggleBtn?.addEventListener("click", () => {
 
 // ===== PREMIUM =====
 const SUPABASE_URL = "https://ovapacfrzddnhrwvkbkr.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2Zyemk5ZG5ocnd2a2JrciIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzQzNDMwNTY3LCJleHAiOjIwNTkwMDY1Njd9.vQWalLqFidCu7pRPpIKnhJ5S3lY2d4Zk1oTrkLU40BE";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2ZyemRkbmhyd3ZrYmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDc4NTUsImV4cCI6MjA5MDUyMzg1NX0.WZV4fy1XqMS3TTyR09TneueaLl-729tp-Pi4HkfzURo";
+const PREMIUM_CACHE_MS = 60 * 1000;
 
-async function loadPremiumStatus() {
+async function loadPremiumStatus(forceRefresh = false) {
   const data = await getStorage(["authToken", "authUserId", "isPremium", "isPremiumCachedAt"]);
   if (!data.authToken || !data.authUserId) {
     isPremium = false;
-    return;
+    return false;
   }
-  // Use cached value if fresh (< 5 min old)
+
   const now = Date.now();
-  if (data.isPremium !== undefined && data.isPremiumCachedAt && (now - data.isPremiumCachedAt) < 60 * 1000) {
-    isPremium = !!data.isPremium;
-    return;
+  const hasFreshPositiveCache =
+    !forceRefresh &&
+    data.isPremium === true &&
+    data.isPremiumCachedAt &&
+    (now - data.isPremiumCachedAt) < PREMIUM_CACHE_MS;
+
+  if (hasFreshPositiveCache) {
+    isPremium = true;
+    return true;
   }
-  // Fetch from Supabase profiles
+
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${data.authUserId}&select=is_premium`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${encodeURIComponent(data.authUserId)}&select=is_premium`, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${data.authToken}`,
       },
     });
-    if (res.ok) {
-      const rows = await res.json();
-      isPremium = !!rows?.[0]?.is_premium;
-      await setStorage({ isPremium, isPremiumCachedAt: now });
+
+    if (!res.ok) {
+      throw new Error(`Premium lookup failed: ${res.status}`);
     }
+
+    const rows = await res.json();
+    isPremium = !!rows?.[0]?.is_premium;
+    await setStorage({ isPremium, isPremiumCachedAt: now });
+    return isPremium;
   } catch (e) {
-    // Fallback to cached
+    console.warn("Premium lookup failed:", e?.message || e);
     isPremium = !!data.isPremium;
+    return isPremium;
   }
 }
 
@@ -1431,7 +1443,7 @@ function showUpgradePrompt(feature) {
 }
 
 async function checkRecordingLimit() {
-  if (isPremium) return true;
+  if (await loadPremiumStatus()) return true;
   const today = new Date().toDateString();
   const data = await getStorage(["recordingSecondsToday", "recordingResetDate"]);
   const usedSeconds = (data.recordingResetDate === today) ? (data.recordingSecondsToday || 0) : 0;
@@ -1443,7 +1455,7 @@ async function checkRecordingLimit() {
 }
 
 async function checkChatLimit() {
-  if (isPremium) return true;
+  if (await loadPremiumStatus()) return true;
   const today = new Date().toDateString();
   const data = await getStorage(["chatQuestionsToday", "chatResetDate"]);
   const used = (data.chatResetDate === today) ? (data.chatQuestionsToday || 0) : 0;
@@ -1494,11 +1506,13 @@ function updateAuthUI() {
       currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
       const firstName = data.authDisplayName.split(" ")[0];
       if (userGreeting) userGreeting.textContent = `Hello, ${firstName} 👋`;
+      void loadPremiumStatus(true);
     } else {
       currentAuthUser = null;
+      isPremium = false;
       if (userGreeting) userGreeting.textContent = "Hey there 👋";
+      void removeStorage(["isPremium", "isPremiumCachedAt"]);
     }
-    loadPremiumStatus();
   });
 }
 
@@ -1510,12 +1524,12 @@ loginBtn?.addEventListener("click", () => {
 });
 
 logoutBtn?.addEventListener("click", () => {
-  chrome.storage.local.remove(["authToken", "authRefreshToken", "authDisplayName", "authEmail", "authUserId"]);
+  chrome.storage.local.remove(["authToken", "authRefreshToken", "authDisplayName", "authEmail", "authUserId", "isPremium", "isPremiumCachedAt"]);
   updateAuthUI();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.authToken || changes.authDisplayName)) updateAuthUI();
+  if (area === "local" && (changes.authToken || changes.authDisplayName || changes.authUserId)) updateAuthUI();
 });
 
 
