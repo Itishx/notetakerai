@@ -1381,9 +1381,29 @@ const SUPABASE_URL = "https://ovapacfrzddnhrwvkbkr.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2ZyemRkbmhyd3ZrYmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDc4NTUsImV4cCI6MjA5MDUyMzg1NX0.WZV4fy1XqMS3TTyR09TneueaLl-729tp-Pi4HkfzURo";
 const PREMIUM_CACHE_MS = 60 * 1000;
 
+async function refreshAuthToken(refreshToken) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.access_token) return null;
+    await setStorage({
+      authToken: json.access_token,
+      authRefreshToken: json.refresh_token || refreshToken,
+    });
+    return json.access_token;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function loadPremiumStatus(forceRefresh = false) {
-  const data = await getStorage(["authToken", "authUserId", "isPremium", "isPremiumCachedAt"]);
-  if (!data.authToken || !data.authUserId) {
+  const data = await getStorage(["authToken", "authRefreshToken", "authUserId", "isPremium", "isPremiumCachedAt"]);
+  if (!data.authUserId) {
     isPremium = false;
     return false;
   }
@@ -1400,17 +1420,30 @@ async function loadPremiumStatus(forceRefresh = false) {
     return true;
   }
 
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${encodeURIComponent(data.authUserId)}&select=is_premium`, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${data.authToken}`,
-      },
-    });
+  let token = data.authToken;
 
-    if (!res.ok) {
-      throw new Error(`Premium lookup failed: ${res.status}`);
+  const fetchPremium = async (t) => {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${encodeURIComponent(data.authUserId)}&select=is_premium`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${t}` },
+    });
+    return res;
+  };
+
+  try {
+    let res = token ? await fetchPremium(token) : null;
+
+    // If token expired or missing, try refreshing
+    if (!res || res.status === 401) {
+      if (data.authRefreshToken) {
+        const newToken = await refreshAuthToken(data.authRefreshToken);
+        if (newToken) {
+          token = newToken;
+          res = await fetchPremium(token);
+        }
+      }
     }
+
+    if (!res || !res.ok) throw new Error(`Premium lookup failed: ${res?.status}`);
 
     const rows = await res.json();
     isPremium = !!rows?.[0]?.is_premium;
