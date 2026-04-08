@@ -165,49 +165,58 @@
 
     <!-- Bottom Bar -->
     <div class="bottom-bar">
-      <!-- Mode selector (opens upward) -->
-      <div class="mode-wrap" id="modeWrap">
-        <div id="modeDropup" class="mode-dropup hidden">
-          <button class="mode-option" data-mode="page">💬 Chat with Page</button>
-          <button class="mode-option" data-mode="lecture">🎓 Lecture &amp; Audio</button>
-          <button class="mode-option" data-mode="meeting">🤝 Meeting &amp; Call</button>
-          <button class="mode-option" data-mode="general">🌐 General Chat</button>
-          <button class="mode-option mode-option-agent" data-mode="agent">🤖 Browser Agent</button>
-        </div>
-        <button id="modeSelectorBtn" class="btn-icon mode-selector-btn" title="Select mode"></button>
-      </div>
-      <!-- Input area -->
       <div class="input-wrap">
+        <!-- Image preview -->
         <div id="chatImagePreview" class="chat-image-preview hidden">
           <img id="chatPreviewImg" src="" alt="preview" />
           <button id="chatRemoveImage" class="btn-icon-sm" title="Remove">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <div class="input-row">
-          <button id="chatScreenshotBtn" class="btn-icon-sm" title="Screenshot">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          </button>
-          <input type="text" id="chatInput" placeholder="Ask anything..." autocomplete="off" />
-          <div class="model-wrap model-wrap-inline" id="modelWrap">
-            <button id="modelBtn" class="model-chip" title="Switch AI model">
-              <span id="modelLabel">SideBrain AI</span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6,9 12,15 18,9"/></svg>
-            </button>
-            <div id="modelPopover" class="model-popover hidden">
-              <div class="model-option active" data-provider="lovable">
-                <span class="model-dot"></span>
-                <div><strong>SideBrain AI</strong><br><span class="model-desc">Default · Fast & free</span></div>
+        <!-- Text input -->
+        <input type="text" id="chatInput" placeholder="Ask anything..." autocomplete="off" />
+        <!-- Bottom actions row -->
+        <div class="input-actions-row">
+          <div class="input-actions-left">
+            <!-- Mode selector now lives here -->
+            <div class="mode-wrap" id="modeWrap">
+              <div id="modeDropup" class="mode-dropup hidden">
+                <button class="mode-option" data-mode="page">💬 Chat with Page</button>
+                <button class="mode-option" data-mode="lecture">🎓 Lecture &amp; Audio</button>
+                <button class="mode-option" data-mode="meeting">🤝 Meeting &amp; Call</button>
+                <button class="mode-option" data-mode="general">🌐 General Chat</button>
+                <button class="mode-option mode-option-agent" data-mode="agent">🤖 Browser Agent</button>
               </div>
-              <div class="model-option" data-provider="claude">
-                <span class="model-dot"></span>
-                <div><strong>Claude Sonnet 4.6</strong><br><span class="model-desc">Anthropic · Your API key</span></div>
+              <button id="modeSelectorBtn" class="btn-action mode-selector-btn" title="Select mode">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
+            <!-- Screenshot -->
+            <button id="chatScreenshotBtn" class="btn-action" title="Screenshot">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
+          </div>
+          <div class="input-actions-right">
+            <div class="model-wrap model-wrap-inline" id="modelWrap">
+              <button id="modelBtn" class="model-chip" title="Switch AI model">
+                <span id="modelLabel">SideBrain AI</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6,9 12,15 18,9"/></svg>
+              </button>
+              <div id="modelPopover" class="model-popover hidden">
+                <div class="model-option active" data-provider="lovable">
+                  <span class="model-dot"></span>
+                  <div><strong>SideBrain AI</strong><br><span class="model-desc">Default · Fast & free</span></div>
+                </div>
+                <div class="model-option" data-provider="claude">
+                  <span class="model-dot"></span>
+                  <div><strong>Claude Sonnet 4.6</strong><br><span class="model-desc">Anthropic · Your API key</span></div>
+                </div>
               </div>
             </div>
+            <button id="chatSendBtn" class="btn-send" title="Send">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
+            </button>
           </div>
-          <button id="chatSendBtn" class="btn-icon-sm btn-send" title="Send">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
-          </button>
         </div>
       </div>
     </div>
