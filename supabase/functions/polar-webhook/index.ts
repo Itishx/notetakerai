@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
           is_premium: isActive,
           polar_customer_id: subscription?.customer_id || subscription?.customer?.id || null,
         })
-        .eq("id", userId);
+        .eq("user_id", userId);
       console.log(`Set is_premium=${isActive} for user ${userId}`);
     } else {
       console.error("Could not find user for email:", customerEmail);
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
       await supabase
         .from("profiles")
         .update({ is_premium: false })
-        .eq("id", userId);
+        .eq("user_id", userId);
       console.log(`Revoked premium for user ${userId}`);
     }
   }
