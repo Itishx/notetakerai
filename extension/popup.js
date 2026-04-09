@@ -965,7 +965,7 @@ async function callAgentStep(task, pageInfo, history, chatHistory) {
     : "None yet.";
 
   const elementsText = pageInfo.interactiveEls?.length > 0
-    ? pageInfo.interactiveEls.map(e => `  ${e.inPopup ? "[POPUP] " : ""}[${e.tag}] ${e.text}${e.href ? ` (href: ${e.href})` : ""}${e.type ? ` (type: ${e.type})` : ""}`).join("\n")
+    ? pageInfo.interactiveEls.map(e => `  [${e.tag}] ${e.text}${e.href ? ` (href: ${e.href})` : ""}${e.type ? ` (type: ${e.type})` : ""}`).join("\n")
     : "  (none detected)";
 
   const selectsText = pageInfo.selectEls?.length > 0
@@ -980,89 +980,54 @@ async function callAgentStep(task, pageInfo, history, chatHistory) {
       chatHistory.slice(-10).map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n")
     : "";
 
-  const agentSystemPrompt = `You are SideBrain, an expert browser automation agent. You control the browser step-by-step. Respond ONLY with a single JSON object — no markdown, no explanation.
+  const agentSystemPrompt = `You are SideBrain, an intelligent browser agent and personal assistant — think of yourself like a calm, sharp human assistant who happens to control the browser. You respond ONLY with a single JSON object, no markdown, no explanation.
 
-CRITICAL RULES:
-1. CLARIFY FIRST: If the request is ambiguous or missing key info (recipient, dates, destination, etc.), respond with {"type":"clarify","message":"..."} — do NOT guess.
-2. ONE ACTION per response. Never batch multiple actions.
-3. NEVER repeat a failed action verbatim. Try a different selector, approach, or workaround.
-4. After each action, evaluate if the task is done before taking another step.
-5. Always include "description" in every action.
-
-POPUP & OVERLAY HANDLING (very important):
-- Websites often show popups, cookie banners, login prompts, notification requests, promotional overlays, app-install banners, and newsletter modals.
-- BEFORE executing the main task step, check the interactive elements list for dismiss/close buttons. Look for:
-  • Buttons with text like: "Close", "×", "✕", "No thanks", "Skip", "Dismiss", "Not now", "Maybe later", "Got it", "Accept", "OK", "Continue", "I agree", "Accept all", "Reject all"
-  • Elements with aria-label containing "close", "dismiss", "reject"
-  • Small "×" or "✕" characters that are close buttons
-- If you see a popup/overlay blocking the page, dismiss it FIRST before proceeding with the main task.
-- Cookie consent: prefer "Reject all" or "Accept all" to clear it quickly.
-- If a login wall appears and login is not part of the task, inform the user.
-
-SMART ELEMENT TARGETING:
-- Prefer targetText matching visible text over CSS selectors.
-- For inputs, use aria-label, placeholder, or name attributes in targetText.
-- If an element has no clear text, describe what you see and use a selector.
-- When clicking doesn't work, try: scroll to element first → wait → click again, or navigate via URL.
+CLARIFICATION FIRST — this is critical:
+- If the user's request is ambiguous or missing key info (e.g. "play something", "send an email" without recipient, "search for flights" without dates/destination), do NOT guess. Instead respond with:
+  {"type":"clarify","message":"What would you like me to [specific question]? For example: [example]"}
+- Only proceed with automation once you have all the info you need.
 
 Available actions:
-{"type":"click","targetText":"exact visible button/link text","targetTag":"optional tag filter","description":"..."}
-{"type":"type","targetText":"field label or placeholder","text":"text to type","description":"..."}
+{"type":"click","targetText":"exact visible button/link text","description":"..."}
 {"type":"type","selector":"css-selector","text":"text to type","description":"..."}
-{"type":"pressKey","key":"Enter|Tab|Escape","description":"..."}
+{"type":"pressKey","key":"Enter","description":"..."}
 {"type":"navigate","url":"https://full-url.com","description":"..."}
-{"type":"selectOption","targetText":"dropdown label","value":"option text","description":"..."}
-{"type":"scroll","direction":"down|up","amount":400,"description":"..."}
+{"type":"selectOption","selector":"select","value":"option value","description":"..."}
+{"type":"scroll","direction":"down","amount":400,"description":"..."}
 {"type":"wait","ms":1500,"description":"..."}
 {"type":"done","message":"summary of what was accomplished"}
-{"type":"answer","message":"conversational response to a question"}
+{"type":"answer","message":"conversational response"}
 {"type":"clarify","message":"question to ask the user before proceeding"}
 
 PLATFORM KNOWLEDGE:
-- YouTube: Navigate to https://www.youtube.com/results?search_query=ENCODED_QUERY, then click the first video.
-- Gmail compose: navigate to https://mail.google.com → wait 2000 → click "Compose" → wait 1500 → type to field (targetText: "To") → pressKey Tab → type subject → pressKey Tab → type body → click "Send".
-- Google Search: navigate to https://www.google.com/search?q=ENCODED_QUERY.
-- Netflix: Use selectOption for season dropdowns.
-- MakeMyTrip/travel sites: Often have complex popups, datepickers, and overlays. Dismiss popups first. For date fields, try clicking the field → wait for calendar → click specific dates. Use navigation URLs with query params when possible.
-- Amazon/e-commerce: Dismiss location/login popups first. Use search bar for products.
-- Forms with autocomplete dropdowns: After typing, wait 1000ms for suggestions, then click the matching suggestion.
+YouTube: To play a specific video — navigate to https://www.youtube.com/results?search_query=QUERY (URL-encode the query). Click the first video result. Never type in the search bar unless on YouTube already.
+Gmail compose: navigate → wait 2000 → click Compose → wait 1500 → type to field (selector: "input[name='to']") → Tab → type subject → Tab → type body → click Send.
+Netflix: Use selectOption for season dropdowns, not click.
+Google Search: navigate to https://www.google.com/search?q=QUERY.
 
-MULTI-STEP STRATEGIES:
-- For complex tasks, break into clear phases: navigate → dismiss popups → fill form → submit.
-- After navigation, always wait (1500-3000ms) for the page to load before interacting.
-- If a page seems stuck or unchanged after an action, try scrolling or waiting longer.
-- After typing in search/input fields, check if you need to press Enter or click a search button.
-- For date pickers: click the date input → wait for calendar popup → click the correct date. Don't try to type dates directly.
-
-Decision rules:
-1. Missing/ambiguous info → clarify.
-2. Popup/overlay visible → dismiss it first.
-3. User asking a question, not requesting action → answer.
-4. All info available → execute next step.
-5. Failed action → try different approach.
-6. Task complete → done.`;
+Decision rules (follow in order):
+1. If info is missing or ambiguous → clarify immediately, do not guess.
+2. If user is asking a question, not requesting an action → answer.
+3. If you have all info → execute step by step.
+4. Never repeat a failed action. Try a different selector or approach.
+5. After each step, check if task is done before taking another step.
+6. Always include "description" in every action.
+7. Prefer navigation by URL over clicking search bars.`;
 
   const pageStatus = pageInfo.url
     ? `URL: ${pageInfo.url}\nTitle: ${pageInfo.title}`
     : "Not on a specific page yet — navigate first.";
-
-  const popupsText = pageInfo.popups?.length > 0
-    ? "\n\n⚠️ POPUPS/OVERLAYS DETECTED (dismiss these first!):\n" + pageInfo.popups.map(p =>
-        `  [${p.type}] "${p.text.substring(0, 100)}..." — dismiss buttons: ${p.dismissButtons.length > 0 ? p.dismissButtons.join(", ") : "(look for × or close icon)"}`
-      ).join("\n")
-    : "";
 
   const userMessage = `TASK: ${task}
 ${chatCtx}
 
 CURRENT PAGE:
 ${pageStatus}
-${popupsText}
 
 PAGE TEXT (excerpt):
 ${pageInfo.bodyText?.substring(0, 2000) || "(empty — navigate first)"}
 
-INTERACTIVE ELEMENTS${pageInfo.popups?.length > 0 ? " (elements marked [POPUP] are inside overlays — dismiss the popup first or click its dismiss button)" : ""}:
+INTERACTIVE ELEMENTS:
 ${elementsText}${selectsText}
 
 STEPS TAKEN SO FAR:
@@ -1076,7 +1041,6 @@ What is the next single action to take?`;
     body: JSON.stringify({
       notes: agentSystemPrompt,
       message: userMessage,
-      aiProvider: "claude",
     }),
   });
 
@@ -1158,38 +1122,6 @@ async function speakAndShowSubtitle(text) {
   setVoiceOrbState("idle");
 }
 
-async function ensureMicPermission() {
-  // Check permission status first
-  try {
-    if (navigator.permissions) {
-      const status = await navigator.permissions.query({ name: "microphone" });
-      if (status.state === "denied") {
-        setVoiceSubtitles("", "Microphone blocked. Go to chrome://settings/content/microphone and allow this extension.");
-        return false;
-      }
-    }
-  } catch (e) { /* permissions.query may not support 'microphone' everywhere */ }
-
-  // Request mic via getUserMedia — required in extension sidepanels
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach(t => t.stop());
-    return true;
-  } catch (e) {
-    console.warn("Mic permission error:", e.name, e.message);
-    if (e.name === "NotAllowedError") {
-      setVoiceSubtitles("", "Microphone access denied. Click the lock icon in your address bar → Site settings → Microphone → Allow.");
-    } else if (e.name === "NotFoundError") {
-      setVoiceSubtitles("", "No microphone found. Please connect a microphone.");
-    } else if (e.name === "NotReadableError") {
-      setVoiceSubtitles("", "Microphone is in use by another app. Close it and try again.");
-    } else {
-      setVoiceSubtitles("", `Microphone error: ${e.message}`);
-    }
-    return false;
-  }
-}
-
 async function startVoiceListening() {
   if (!voiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1197,10 +1129,6 @@ async function startVoiceListening() {
     setVoiceSubtitles("", "Speech recognition not supported in this browser.");
     return;
   }
-
-  // Must request mic permission first in extension context
-  const hasMic = await ensureMicPermission();
-  if (!hasMic) return;
 
   recognition = new SpeechRecognition();
   recognition.lang = "en-US";
@@ -1223,8 +1151,8 @@ async function startVoiceListening() {
     console.warn("Speech recognition error:", e.error);
     setVoiceOrbState("idle");
     if (e.error === "not-allowed") {
-      setVoiceSubtitles("", "Microphone access denied. Click the lock icon in your address bar → Site settings → Allow microphone.");
-      return;
+      setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome settings.");
+      return; // don't retry
     }
     if (e.error === "no-speech") {
       if (voiceActive) setTimeout(() => startVoiceListening(), 500);
@@ -1333,12 +1261,7 @@ async function runAgentLoop(task) {
     }
   };
 
-  let consecutiveErrors = 0;
-  const MAX_STEPS = 25; // prevent infinite loops
-  let stepCount = 0;
-
-  while (stepCount < MAX_STEPS) {
-    stepCount++;
+  while (true) {
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
 
     const pageInfo = await getAgentPageContext();
@@ -1346,16 +1269,10 @@ async function runAgentLoop(task) {
     let actionObj;
     try {
       actionObj = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
-      consecutiveErrors = 0;
     } catch (e) {
-      consecutiveErrors++;
       agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
-      if (consecutiveErrors >= 3) {
-        finish(`⚠️ AI error after ${consecutiveErrors} retries: ${e.message}`);
-        return;
-      }
-      await new Promise(r => setTimeout(r, 1500));
-      continue;
+      finish(`⚠️ AI error: ${e.message}`);
+      return;
     }
 
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
@@ -1376,15 +1293,9 @@ async function runAgentLoop(task) {
     history.push({ ...actionObj, result });
     agentMarkStepResult(stepEl, !result?.error, result?.error);
 
-    if (result?.error) consecutiveErrors++;
-    else consecutiveErrors = 0;
-
-    // Adaptive wait times
-    const waitMs = result?.error ? 800 : (actionObj.type === "navigate" ? 3500 : actionObj.type === "wait" ? 200 : 1000);
+    const waitMs = result?.error ? 600 : (actionObj.type === "navigate" ? 3500 : 1200);
     await new Promise(r => setTimeout(r, waitMs));
   }
-
-  finish("⚠️ Reached maximum steps. Task may be incomplete.");
 }
 
 
