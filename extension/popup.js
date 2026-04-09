@@ -1333,7 +1333,12 @@ async function runAgentLoop(task) {
     }
   };
 
-  while (true) {
+  let consecutiveErrors = 0;
+  const MAX_STEPS = 25; // prevent infinite loops
+  let stepCount = 0;
+
+  while (stepCount < MAX_STEPS) {
+    stepCount++;
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
 
     const pageInfo = await getAgentPageContext();
@@ -1341,10 +1346,16 @@ async function runAgentLoop(task) {
     let actionObj;
     try {
       actionObj = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
+      consecutiveErrors = 0;
     } catch (e) {
+      consecutiveErrors++;
       agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
-      finish(`⚠️ AI error: ${e.message}`);
-      return;
+      if (consecutiveErrors >= 3) {
+        finish(`⚠️ AI error after ${consecutiveErrors} retries: ${e.message}`);
+        return;
+      }
+      await new Promise(r => setTimeout(r, 1500));
+      continue;
     }
 
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
@@ -1365,9 +1376,15 @@ async function runAgentLoop(task) {
     history.push({ ...actionObj, result });
     agentMarkStepResult(stepEl, !result?.error, result?.error);
 
-    const waitMs = result?.error ? 600 : (actionObj.type === "navigate" ? 3500 : 1200);
+    if (result?.error) consecutiveErrors++;
+    else consecutiveErrors = 0;
+
+    // Adaptive wait times
+    const waitMs = result?.error ? 800 : (actionObj.type === "navigate" ? 3500 : actionObj.type === "wait" ? 200 : 1000);
     await new Promise(r => setTimeout(r, waitMs));
   }
+
+  finish("⚠️ Reached maximum steps. Task may be incomplete.");
 }
 
 
