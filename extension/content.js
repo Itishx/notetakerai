@@ -14,10 +14,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const title = document.title;
     const bodyText = (document.body?.innerText || "").substring(0, 5000);
 
+    // Detect popups/overlays/modals
+    const popupInfo = detectPopupsAndOverlays();
+
     // Collect interactive elements with their visible text
     const interactiveEls = [];
     const seen = new Set();
-    const selectors = ['button', 'a', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]'];
+    const selectors = ['button', 'a', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]', '[role="dialog"] button', '[role="alertdialog"] button', '[aria-label*="close"]', '[aria-label*="dismiss"]'];
     document.querySelectorAll(selectors.join(",")).forEach(el => {
       // Skip hidden elements
       const style = window.getComputedStyle(el);
@@ -44,10 +47,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (type) entry.type = type;
       const href = el.getAttribute("href");
       if (href) entry.href = href.substring(0, 100);
+      // Flag if element is inside a modal/popup
+      if (el.closest('[role="dialog"], [role="alertdialog"], [class*="modal"], [class*="popup"], [class*="overlay"], [class*="banner"]')) {
+        entry.inPopup = true;
+      }
       interactiveEls.push(entry);
     });
 
-    // Also collect <select> dropdowns with their options (e.g. Netflix season selector)
+    // Also collect <select> dropdowns with their options
     const selectEls = [];
     document.querySelectorAll("select").forEach(sel => {
       const label = sel.getAttribute("aria-label") || sel.getAttribute("name") || sel.id || "";
@@ -55,7 +62,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (options.length) selectEls.push({ label, options, current: sel.options[sel.selectedIndex]?.text || "" });
     });
 
-    sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 60), selectEls });
+    sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 80), selectEls, popups: popupInfo });
     return true;
   }
 
