@@ -1126,12 +1126,25 @@ async function speakAndShowSubtitle(text) {
 }
 
 async function ensureMicPermission() {
+  // In Chrome extension side panels, mic permission must be requested
+  // via chrome.permissions API first, then getUserMedia
+  try {
+    await new Promise((resolve, reject) => {
+      chrome.permissions.request({ permissions: ["audioCapture"] }, (granted) => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else if (granted) resolve();
+        else reject(new Error("denied"));
+      });
+    });
+  } catch (e) {
+    // audioCapture not needed in all Chrome versions — continue anyway
+  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // Stop all tracks immediately — we just needed the permission grant
     stream.getTracks().forEach(t => t.stop());
     return true;
   } catch (e) {
+    console.warn("Mic getUserMedia failed:", e.name, e.message);
     return false;
   }
 }
