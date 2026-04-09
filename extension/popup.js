@@ -1122,6 +1122,38 @@ async function speakAndShowSubtitle(text) {
   setVoiceOrbState("idle");
 }
 
+async function ensureMicPermission() {
+  // Check permission status first
+  try {
+    if (navigator.permissions) {
+      const status = await navigator.permissions.query({ name: "microphone" });
+      if (status.state === "denied") {
+        setVoiceSubtitles("", "Microphone blocked. Go to chrome://settings/content/microphone and allow this extension.");
+        return false;
+      }
+    }
+  } catch (e) { /* permissions.query may not support 'microphone' everywhere */ }
+
+  // Request mic via getUserMedia — required in extension sidepanels
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+    return true;
+  } catch (e) {
+    console.warn("Mic permission error:", e.name, e.message);
+    if (e.name === "NotAllowedError") {
+      setVoiceSubtitles("", "Microphone access denied. Click the lock icon in your address bar → Site settings → Microphone → Allow.");
+    } else if (e.name === "NotFoundError") {
+      setVoiceSubtitles("", "No microphone found. Please connect a microphone.");
+    } else if (e.name === "NotReadableError") {
+      setVoiceSubtitles("", "Microphone is in use by another app. Close it and try again.");
+    } else {
+      setVoiceSubtitles("", `Microphone error: ${e.message}`);
+    }
+    return false;
+  }
+}
+
 async function startVoiceListening() {
   if (!voiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1129,6 +1161,10 @@ async function startVoiceListening() {
     setVoiceSubtitles("", "Speech recognition not supported in this browser.");
     return;
   }
+
+  // Must request mic permission first in extension context
+  const hasMic = await ensureMicPermission();
+  if (!hasMic) return;
 
   recognition = new SpeechRecognition();
   recognition.lang = "en-US";
@@ -1151,8 +1187,8 @@ async function startVoiceListening() {
     console.warn("Speech recognition error:", e.error);
     setVoiceOrbState("idle");
     if (e.error === "not-allowed") {
-      setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome settings.");
-      return; // don't retry
+      setVoiceSubtitles("", "Microphone access denied. Click the lock icon in your address bar → Site settings → Allow microphone.");
+      return;
     }
     if (e.error === "no-speech") {
       if (voiceActive) setTimeout(() => startVoiceListening(), 500);
