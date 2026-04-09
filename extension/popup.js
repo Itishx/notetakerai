@@ -864,20 +864,17 @@ async function sendChatMessage(text, imageBase64) {
 
 function setAgentRunningUI(running) {
   agentRunning = running;
-  const orb = document.getElementById("agentOrb");
   if (!chatSendBtn) return;
   if (running) {
     chatSendBtn.innerHTML = STOP_ICON;
     chatSendBtn.title = "Stop agent";
     chatSendBtn.classList.add("btn-agent-stop");
     if (chatInput) { chatInput.disabled = true; chatInput.placeholder = "Agent is working…"; }
-    if (orb) orb.classList.remove("hidden");
   } else {
     chatSendBtn.innerHTML = SEND_ICON;
     chatSendBtn.title = "Send";
     chatSendBtn.classList.remove("btn-agent-stop");
     if (chatInput) chatInput.disabled = false;
-    if (orb) orb.classList.add("hidden");
     updateChatContextUI();
   }
 }
