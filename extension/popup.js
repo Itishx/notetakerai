@@ -1062,8 +1062,8 @@ What is the next single action to take?`;
 }
 
 // ===== ELEVENLABS VOICE =====
-const ELEVENLABS_API_KEY = ""; // paste your ElevenLabs API key here
-const ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah — calm, clear voice
+const ELEVENLABS_API_KEY = "sk_2ee3bb5258f10b54aba4d71a7ff1640d98fc322c3e2410cd";
+const ELEVENLABS_VOICE_ID = "2ajXGJNYBR0iNHpS4VZb";
 let currentAudio = null;
 
 async function speakAgentResponse(text) {
