@@ -1046,16 +1046,23 @@ Decision rules:
     ? `URL: ${pageInfo.url}\nTitle: ${pageInfo.title}`
     : "Not on a specific page yet — navigate first.";
 
+  const popupsText = pageInfo.popups?.length > 0
+    ? "\n\n⚠️ POPUPS/OVERLAYS DETECTED (dismiss these first!):\n" + pageInfo.popups.map(p =>
+        `  [${p.type}] "${p.text.substring(0, 100)}..." — dismiss buttons: ${p.dismissButtons.length > 0 ? p.dismissButtons.join(", ") : "(look for × or close icon)"}`
+      ).join("\n")
+    : "";
+
   const userMessage = `TASK: ${task}
 ${chatCtx}
 
 CURRENT PAGE:
 ${pageStatus}
+${popupsText}
 
 PAGE TEXT (excerpt):
 ${pageInfo.bodyText?.substring(0, 2000) || "(empty — navigate first)"}
 
-INTERACTIVE ELEMENTS:
+INTERACTIVE ELEMENTS${pageInfo.popups?.length > 0 ? " (elements marked [POPUP] are inside overlays — dismiss the popup first or click its dismiss button)" : ""}:
 ${elementsText}${selectsText}
 
 STEPS TAKEN SO FAR:
