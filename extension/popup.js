@@ -1093,6 +1093,135 @@ async function speakAgentResponse(text) {
   }
 }
 
+// ===== VOICE MODE =====
+let voiceActive = false;
+let recognition = null;
+
+const voiceOverlay   = document.getElementById("voiceOverlay");
+const voiceOrb       = document.getElementById("voiceOrb");
+const voiceUserText  = document.getElementById("voiceUserText");
+const voiceAgentText = document.getElementById("voiceAgentText");
+const voiceModeBtn   = document.getElementById("voiceModeBtn");
+const voiceCloseBtn  = document.getElementById("voiceCloseBtn");
+
+function setVoiceOrbState(state) {
+  if (!voiceOrb) return;
+  voiceOrb.className = `voice-orb ${state}`;
+}
+
+function setVoiceSubtitles(userText, agentText) {
+  if (voiceUserText) voiceUserText.textContent = userText || "";
+  if (voiceAgentText) voiceAgentText.textContent = agentText || "";
+}
+
+async function speakAndShowSubtitle(text) {
+  setVoiceOrbState("speaking");
+  setVoiceSubtitles("", text);
+  await speakAgentResponse(text);
+  // Wait for audio to finish (rough estimate: 80ms per char, min 1s)
+  const wait = Math.max(1000, text.length * 80);
+  await new Promise(r => setTimeout(r, wait));
+  setVoiceOrbState("idle");
+}
+
+function startVoiceListening() {
+  if (!voiceActive) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    setVoiceSubtitles("", "Speech recognition not supported in this browser.");
+    return;
+  }
+  recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  setVoiceOrbState("listening");
+  setVoiceSubtitles("Listening…", "");
+
+  recognition.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
+    setVoiceSubtitles(transcript, "");
+    if (e.results[e.results.length - 1].isFinal) {
+      recognition.stop();
+      handleVoiceInput(transcript);
+    }
+  };
+
+  recognition.onerror = () => {
+    setVoiceOrbState("idle");
+    setVoiceSubtitles("", "Couldn't hear you. Try again.");
+    if (voiceActive) setTimeout(startVoiceListening, 2000);
+  };
+
+  recognition.onend = () => {
+    if (voiceActive && voiceOrb?.classList.contains("listening")) {
+      // restarted by handleVoiceInput or error handler
+    }
+  };
+
+  recognition.start();
+}
+
+async function handleVoiceInput(text) {
+  if (!text.trim()) { startVoiceListening(); return; }
+  setVoiceOrbState("idle");
+  setVoiceSubtitles(text, "Thinking…");
+
+  // Route through normal chat/agent depending on current mode
+  const userMsg = { role: "user", content: text };
+  chatMessages.push(userMsg);
+  saveChatMessages();
+
+  try {
+    let reply;
+    if (currentMode === "agent") {
+      // Run one agent step as a conversational turn
+      const pageInfo = await getAgentPageContext();
+      const actionObj = await callAgentStep(text, pageInfo, [], chatMessages.slice(0, -1));
+      reply = actionObj.message || actionObj.description || "Done.";
+      if (actionObj.type !== "answer" && actionObj.type !== "clarify" && actionObj.type !== "done") {
+        reply = "On it — check the page.";
+        executeAgentAction(actionObj);
+      }
+    } else {
+      const res = await fetch(`${API_BASE}/chat-about-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "", message: text }),
+      });
+      const data = await res.json();
+      reply = data.reply || "I didn't catch that.";
+    }
+    chatMessages.push({ role: "assistant", content: reply });
+    saveChatMessages();
+    renderChatMessages();
+    await speakAndShowSubtitle(reply);
+  } catch (e) {
+    await speakAndShowSubtitle("Something went wrong. Try again.");
+  }
+
+  if (voiceActive) startVoiceListening();
+}
+
+function openVoiceMode() {
+  voiceActive = true;
+  if (voiceOverlay) voiceOverlay.classList.remove("hidden");
+  setVoiceSubtitles("", "");
+  startVoiceListening();
+}
+
+function closeVoiceMode() {
+  voiceActive = false;
+  if (recognition) { try { recognition.stop(); } catch(e) {} recognition = null; }
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (voiceOverlay) voiceOverlay.classList.add("hidden");
+  setVoiceOrbState("idle");
+}
+
+voiceModeBtn?.addEventListener("click", openVoiceMode);
+voiceCloseBtn?.addEventListener("click", closeVoiceMode);
+
 async function runAgentLoop(task) {
   if (agentRunning) return;
   if (!(await loadPremiumStatus())) {
