@@ -1808,10 +1808,9 @@ function getTimeGreeting(name) {
 
 function updateAuthUI() {
   chrome.storage.local.get(["authToken", "authDisplayName", "authEmail", "authUserId"], (data) => {
-    if (data.authToken && data.authUserId) {
-      const displayName = data.authDisplayName || data.authEmail?.split("@")[0] || "User";
-      currentAuthUser = { token: data.authToken, name: displayName, email: data.authEmail, userId: data.authUserId };
-      const firstName = displayName.split(" ")[0];
+    if (data.authToken && data.authDisplayName) {
+      currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
+      const firstName = data.authDisplayName.split(" ")[0];
       if (userGreeting) userGreeting.textContent = getTimeGreeting(firstName);
       void loadPremiumStatus(true);
     } else {
