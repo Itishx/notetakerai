@@ -1096,6 +1096,7 @@ async function speakAgentResponse(text) {
 // ===== VOICE MODE =====
 let voiceActive = false;
 let recognition = null;
+let voiceFinishCallback = null;
 
 const voiceOverlay   = document.getElementById("voiceOverlay");
 const voiceOrb       = document.getElementById("voiceOrb");
@@ -1168,35 +1169,35 @@ async function handleVoiceInput(text) {
   setVoiceOrbState("idle");
   setVoiceSubtitles(text, "Thinking…");
 
-  // Route through normal chat/agent depending on current mode
-  const userMsg = { role: "user", content: text };
-  chatMessages.push(userMsg);
-  saveChatMessages();
-
   try {
-    let reply;
     if (currentMode === "agent") {
-      // Run one agent step as a conversational turn
-      const pageInfo = await getAgentPageContext();
-      const actionObj = await callAgentStep(text, pageInfo, [], chatMessages.slice(0, -1));
-      reply = actionObj.message || actionObj.description || "Done.";
-      if (actionObj.type !== "answer" && actionObj.type !== "clarify" && actionObj.type !== "done") {
-        reply = "On it — check the page.";
-        executeAgentAction(actionObj);
-      }
+      // Run the full agent loop — it will speak + show subtitle when done via voiceFinishCallback
+      setVoiceOrbState("listening");
+      setVoiceSubtitles(text, "Agent working…");
+      voiceFinishCallback = async (msg) => {
+        voiceFinishCallback = null;
+        await speakAndShowSubtitle(msg);
+        if (voiceActive) startVoiceListening();
+      };
+      runAgentLoop(text);
+      // don't await — agent loop calls voiceFinishCallback when done
+      return;
     } else {
+      const userMsg = { role: "user", content: text };
+      chatMessages.push(userMsg);
+      saveChatMessages();
       const res = await fetch(`${API_BASE}/chat-about-notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes: "", message: text }),
       });
       const data = await res.json();
-      reply = data.reply || "I didn't catch that.";
+      const reply = data.reply || "I didn't catch that.";
+      chatMessages.push({ role: "assistant", content: reply });
+      saveChatMessages();
+      renderChatMessages();
+      await speakAndShowSubtitle(reply);
     }
-    chatMessages.push({ role: "assistant", content: reply });
-    saveChatMessages();
-    renderChatMessages();
-    await speakAndShowSubtitle(reply);
   } catch (e) {
     await speakAndShowSubtitle("Something went wrong. Try again.");
   }
@@ -1246,7 +1247,11 @@ async function runAgentLoop(task) {
     renderChatMessages();
     saveChatMessages();
     setAgentRunningUI(false);
-    speakAgentResponse(msg);
+    if (voiceFinishCallback) {
+      voiceFinishCallback(msg);
+    } else {
+      speakAgentResponse(msg);
+    }
   };
 
   while (true) {
