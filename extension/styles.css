@@ -2196,6 +2196,39 @@ body.sidepanel.theme-warm .input-wrap { background: rgba(255,255,255,0.6); }
 body.sidepanel.theme-warm .input-wrap:focus-within { border-color: #d97234; }
 body.sidepanel.theme-warm .notes-overlay { background: hsl(40,20%,97%); }
 
+/* ===== AGENT ORB ===== */
+.agent-orb {
+  position: fixed;
+  bottom: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f97316, #f59e0b 50%, #fbbf24 80%);
+  box-shadow:
+    0 0 0 0 rgba(249, 115, 22, 0.5),
+    0 0 24px 6px rgba(251, 191, 36, 0.35);
+  animation: orb-pulse 2s ease-in-out infinite;
+  z-index: 40;
+  pointer-events: none;
+}
+
+@keyframes orb-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(249, 115, 22, 0.5),
+      0 0 24px 6px rgba(251, 191, 36, 0.35);
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 10px rgba(249, 115, 22, 0),
+      0 0 40px 12px rgba(251, 191, 36, 0.5);
+    transform: translateX(-50%) scale(1.08);
+  }
+}
+
 /* ===== BROWSER AGENT ===== */
 .mode-option-agent {
   border-top: 1px solid var(--border);

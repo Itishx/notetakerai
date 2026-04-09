@@ -864,17 +864,20 @@ async function sendChatMessage(text, imageBase64) {
 
 function setAgentRunningUI(running) {
   agentRunning = running;
+  const orb = document.getElementById("agentOrb");
   if (!chatSendBtn) return;
   if (running) {
     chatSendBtn.innerHTML = STOP_ICON;
     chatSendBtn.title = "Stop agent";
     chatSendBtn.classList.add("btn-agent-stop");
     if (chatInput) { chatInput.disabled = true; chatInput.placeholder = "Agent is working…"; }
+    if (orb) orb.classList.remove("hidden");
   } else {
     chatSendBtn.innerHTML = SEND_ICON;
     chatSendBtn.title = "Send";
     chatSendBtn.classList.remove("btn-agent-stop");
     if (chatInput) chatInput.disabled = false;
+    if (orb) orb.classList.add("hidden");
     updateChatContextUI();
   }
 }
@@ -980,42 +983,39 @@ async function callAgentStep(task, pageInfo, history, chatHistory) {
       chatHistory.slice(-10).map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n")
     : "";
 
-  const agentSystemPrompt = `You are a smart browser automation agent AND a general assistant. Respond ONLY with a single JSON object, no other text.
+  const agentSystemPrompt = `You are SideBrain, an intelligent browser agent and personal assistant — think of yourself like a calm, sharp human assistant who happens to control the browser. You respond ONLY with a single JSON object, no markdown, no explanation.
+
+CLARIFICATION FIRST — this is critical:
+- If the user's request is ambiguous or missing key info (e.g. "play something", "send an email" without recipient, "search for flights" without dates/destination), do NOT guess. Instead respond with:
+  {"type":"clarify","message":"What would you like me to [specific question]? For example: [example]"}
+- Only proceed with automation once you have all the info you need.
 
 Available actions:
-- Click element by text:  {"type":"click","targetText":"exact visible text","targetTag":"button","description":"..."}
-- Type into a field:      {"type":"type","targetText":"field aria-label or placeholder","text":"text to type","description":"..."}
-- Type into element:      {"type":"type","selector":"css-selector","text":"text to type","description":"..."}
-- Press Enter/Tab:        {"type":"pressKey","key":"Enter","description":"..."} or {"type":"pressKey","key":"Tab","description":"..."}
-- Navigate to any URL:    {"type":"navigate","url":"https://full-url.com","description":"..."}
-- Select dropdown option: {"type":"selectOption","selector":"select","value":"Season 2","description":"..."}
-- Scroll page:            {"type":"scroll","direction":"down","amount":400,"description":"..."}
-- Wait for UI to load:    {"type":"wait","ms":1500,"description":"wait for compose window to open"}
-- Task complete:          {"type":"done","message":"what was accomplished"}
-- Answer/explain:         {"type":"answer","message":"your response to the user"}
+{"type":"click","targetText":"exact visible button/link text","description":"..."}
+{"type":"type","selector":"css-selector","text":"text to type","description":"..."}
+{"type":"pressKey","key":"Enter","description":"..."}
+{"type":"navigate","url":"https://full-url.com","description":"..."}
+{"type":"selectOption","selector":"select","value":"option value","description":"..."}
+{"type":"scroll","direction":"down","amount":400,"description":"..."}
+{"type":"wait","ms":1500,"description":"..."}
+{"type":"done","message":"summary of what was accomplished"}
+{"type":"answer","message":"conversational response"}
+{"type":"clarify","message":"question to ask the user before proceeding"}
 
-GMAIL EXACT STEPS (follow precisely):
-1. Navigate to https://mail.google.com if not already there
-2. {"type":"wait","ms":2000,"description":"wait for Gmail to load"}
-3. {"type":"click","targetText":"Compose","description":"open compose window"}
-4. {"type":"wait","ms":1500,"description":"wait for compose window"}
-5. {"type":"type","selector":"input[name='to'], div[aria-label='To'], textarea[name='to']","text":"EMAIL","description":"type recipient"}
-6. {"type":"pressKey","key":"Tab","description":"confirm recipient and move to Subject"}
-7. {"type":"type","selector":"input[name='subjectbox'], input[placeholder='Subject']","text":"SUBJECT","description":"type subject"}
-8. {"type":"pressKey","key":"Tab","description":"move to body"}
-9. {"type":"type","selector":"div[aria-label='Message Body'], div[role='textbox'][aria-multiline='true']","text":"BODY","description":"type message body"}
-10. {"type":"click","targetText":"Send","description":"send the email"}
+PLATFORM KNOWLEDGE:
+YouTube: To play a specific video — navigate to https://www.youtube.com/results?search_query=QUERY (URL-encode the query). Click the first video result. Never type in the search bar unless on YouTube already.
+Gmail compose: navigate → wait 2000 → click Compose → wait 1500 → type to field (selector: "input[name='to']") → Tab → type subject → Tab → type body → click Send.
+Netflix: Use selectOption for season dropdowns, not click.
+Google Search: navigate to https://www.google.com/search?q=QUERY.
 
-Critical rules:
-- Output ONLY valid JSON. No explanation, no markdown, no extra text.
-- Use conversation context to extract recipient email, names, or content if the user mentioned them earlier.
-- If the user is asking a question (not a task), use answer immediately.
-- You can navigate to any URL from any page — navigation always works.
-- For Gmail To field: use selector "input[name='to']" first; if that fails try "div[aria-label='To'] input".
-- After each type action in Gmail, use pressKey Tab to move focus to next field.
-- For Netflix season: use selectOption not click.
-- Never repeat a failed action — try a different selector or approach.
-- Always include "description".`;
+Decision rules (follow in order):
+1. If info is missing or ambiguous → clarify immediately, do not guess.
+2. If user is asking a question, not requesting an action → answer.
+3. If you have all info → execute step by step.
+4. Never repeat a failed action. Try a different selector or approach.
+5. After each step, check if task is done before taking another step.
+6. Always include "description" in every action.
+7. Prefer navigation by URL over clicking search bars.`;
 
   const pageStatus = pageInfo.url
     ? `URL: ${pageInfo.url}\nTitle: ${pageInfo.title}`
@@ -1061,6 +1061,38 @@ What is the next single action to take?`;
   return JSON.parse(jsonStr);
 }
 
+// ===== ELEVENLABS VOICE =====
+const ELEVENLABS_API_KEY = ""; // paste your ElevenLabs API key here
+const ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah — calm, clear voice
+let currentAudio = null;
+
+async function speakAgentResponse(text) {
+  if (!ELEVENLABS_API_KEY || !text) return;
+  try {
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_turbo_v2",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.play();
+    currentAudio.onended = () => URL.revokeObjectURL(url);
+  } catch (e) {
+    console.warn("ElevenLabs TTS error:", e);
+  }
+}
+
 async function runAgentLoop(task) {
   if (agentRunning) return;
   if (!(await loadPremiumStatus())) {
@@ -1085,6 +1117,7 @@ async function runAgentLoop(task) {
     renderChatMessages();
     saveChatMessages();
     setAgentRunningUI(false);
+    speakAgentResponse(msg);
   };
 
   while (true) {
@@ -1103,12 +1136,12 @@ async function runAgentLoop(task) {
 
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
 
-    if (actionObj.type === "done" || actionObj.type === "answer") {
-      // For answer, skip the thinking block entirely if no steps taken
+    if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
       if (history.length === 0) {
         thinkingBlock.remove();
       }
       finish(actionObj.message || "Done.");
+      if (actionObj.type === "clarify") speakAgentResponse(actionObj.message);
       return;
     }
 
@@ -1533,17 +1566,27 @@ const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 let currentAuthUser = null;
 
+function getTimeGreeting(name) {
+  const h = new Date().getHours();
+  let prefix;
+  if (h >= 5 && h < 12)       prefix = "Good morning";
+  else if (h >= 12 && h < 17) prefix = "Good afternoon";
+  else if (h >= 17 && h < 23) prefix = "Good evening";
+  else                         prefix = "It's late";
+  return name ? `${prefix}, ${name}` : prefix;
+}
+
 function updateAuthUI() {
   chrome.storage.local.get(["authToken", "authDisplayName", "authEmail", "authUserId"], (data) => {
     if (data.authToken && data.authDisplayName) {
       currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
       const firstName = data.authDisplayName.split(" ")[0];
-      if (userGreeting) userGreeting.textContent = `Hello, ${firstName} 👋`;
+      if (userGreeting) userGreeting.textContent = getTimeGreeting(firstName);
       void loadPremiumStatus(true);
     } else {
       currentAuthUser = null;
       isPremium = false;
-      if (userGreeting) userGreeting.textContent = "Hey there 👋";
+      if (userGreeting) userGreeting.textContent = getTimeGreeting(null);
       void removeStorage(["isPremium", "isPremiumCachedAt"]);
     }
   });
