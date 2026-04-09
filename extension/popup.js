@@ -1122,42 +1122,11 @@ async function speakAndShowSubtitle(text) {
   setVoiceOrbState("idle");
 }
 
-async function ensureMicPermission() {
-  // In Chrome extension side panels, mic permission must be requested
-  // via chrome.permissions API first, then getUserMedia
-  try {
-    await new Promise((resolve, reject) => {
-      chrome.permissions.request({ permissions: ["audioCapture"] }, (granted) => {
-        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
-        else if (granted) resolve();
-        else reject(new Error("denied"));
-      });
-    });
-  } catch (e) {
-    // audioCapture not needed in all Chrome versions — continue anyway
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach(t => t.stop());
-    return true;
-  } catch (e) {
-    console.warn("Mic getUserMedia failed:", e.name, e.message);
-    return false;
-  }
-}
-
 async function startVoiceListening() {
   if (!voiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     setVoiceSubtitles("", "Speech recognition not supported in this browser.");
-    return;
-  }
-
-  // Must request mic via getUserMedia first in extension context
-  const hasMic = await ensureMicPermission();
-  if (!hasMic) {
-    setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome → Site settings.");
     return;
   }
 
