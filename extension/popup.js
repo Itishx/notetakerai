@@ -1149,10 +1149,20 @@ function startVoiceListening() {
     }
   };
 
-  recognition.onerror = () => {
+  recognition.onerror = (e) => {
+    console.warn("Speech recognition error:", e.error);
     setVoiceOrbState("idle");
-    setVoiceSubtitles("", "Couldn't hear you. Try again.");
-    if (voiceActive) setTimeout(startVoiceListening, 2000);
+    if (e.error === "not-allowed") {
+      setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome settings.");
+      return; // don't retry
+    }
+    if (e.error === "no-speech") {
+      // silence — just restart quietly
+      if (voiceActive) setTimeout(startVoiceListening, 500);
+      return;
+    }
+    setVoiceSubtitles("", "Couldn't hear you. Trying again…");
+    if (voiceActive) setTimeout(startVoiceListening, 1500);
   };
 
   recognition.onend = () => {
