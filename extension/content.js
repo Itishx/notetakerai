@@ -14,10 +14,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const title = document.title;
     const bodyText = (document.body?.innerText || "").substring(0, 5000);
 
+    // Detect popups/overlays/modals
+    const popupInfo = detectPopupsAndOverlays();
+
     // Collect interactive elements with their visible text
     const interactiveEls = [];
     const seen = new Set();
-    const selectors = ['button', 'a', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]'];
+    const selectors = ['button', 'a', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]', '[role="dialog"] button', '[role="alertdialog"] button', '[aria-label*="close"]', '[aria-label*="dismiss"]'];
     document.querySelectorAll(selectors.join(",")).forEach(el => {
       // Skip hidden elements
       const style = window.getComputedStyle(el);
@@ -44,10 +47,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (type) entry.type = type;
       const href = el.getAttribute("href");
       if (href) entry.href = href.substring(0, 100);
+      // Flag if element is inside a modal/popup
+      if (el.closest('[role="dialog"], [role="alertdialog"], [class*="modal"], [class*="popup"], [class*="overlay"], [class*="banner"]')) {
+        entry.inPopup = true;
+      }
       interactiveEls.push(entry);
     });
 
-    // Also collect <select> dropdowns with their options (e.g. Netflix season selector)
+    // Also collect <select> dropdowns with their options
     const selectEls = [];
     document.querySelectorAll("select").forEach(sel => {
       const label = sel.getAttribute("aria-label") || sel.getAttribute("name") || sel.id || "";
@@ -55,7 +62,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (options.length) selectEls.push({ label, options, current: sel.options[sel.selectedIndex]?.text || "" });
     });
 
-    sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 60), selectEls });
+    sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 80), selectEls, popups: popupInfo });
     return true;
   }
 
@@ -235,8 +242,74 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  return true;
-});
+// ===== POPUP/OVERLAY DETECTION =====
+function detectPopupsAndOverlays() {
+  const popups = [];
+  
+  // Check for modal dialogs
+  const dialogSelectors = [
+    '[role="dialog"]', '[role="alertdialog"]', '[aria-modal="true"]',
+    '[class*="modal"]', '[class*="Modal"]', '[class*="popup"]', '[class*="Popup"]',
+    '[class*="overlay"]', '[class*="Overlay"]', '[class*="cookie"]', '[class*="Cookie"]',
+    '[class*="consent"]', '[class*="Consent"]', '[class*="banner"]', '[class*="Banner"]',
+    '[class*="notification"]', '[class*="Notification"]',
+    '[id*="modal"]', '[id*="popup"]', '[id*="overlay"]', '[id*="cookie"]', '[id*="consent"]'
+  ];
+  
+  document.querySelectorAll(dialogSelectors.join(",")).forEach(el => {
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    
+    // Find dismiss buttons inside
+    const dismissButtons = [];
+    const dismissSelectors = ['button', '[role="button"]', 'a', '[aria-label*="close"]', '[aria-label*="dismiss"]'];
+    el.querySelectorAll(dismissSelectors.join(",")).forEach(btn => {
+      const btnText = (btn.innerText || btn.getAttribute("aria-label") || "").trim().substring(0, 50);
+      if (btnText) dismissButtons.push(btnText);
+    });
+    
+    const popupText = (el.innerText || "").substring(0, 200).trim();
+    if (popupText.length > 5) {
+      popups.push({
+        type: el.getAttribute("role") || "overlay",
+        text: popupText,
+        dismissButtons: dismissButtons.slice(0, 5)
+      });
+    }
+  });
+  
+  // Check for fixed/sticky positioned overlays covering the page
+  const allFixed = document.querySelectorAll("*");
+  for (const el of allFixed) {
+    const style = window.getComputedStyle(el);
+    if ((style.position === "fixed" || style.position === "sticky") && 
+        style.zIndex && parseInt(style.zIndex) > 100 &&
+        style.display !== "none" && style.visibility !== "hidden") {
+      const rect = el.getBoundingClientRect();
+      // Large overlay covering significant viewport area
+      if (rect.width > window.innerWidth * 0.3 && rect.height > window.innerHeight * 0.15) {
+        const existing = popups.find(p => p.text === (el.innerText || "").substring(0, 200).trim());
+        if (!existing) {
+          const dismissBtns = [];
+          el.querySelectorAll('button, [role="button"], a').forEach(btn => {
+            const t = (btn.innerText || btn.getAttribute("aria-label") || "").trim();
+            if (t && t.length < 30) dismissBtns.push(t);
+          });
+          const txt = (el.innerText || "").substring(0, 200).trim();
+          if (txt.length > 5) {
+            popups.push({ type: "fixed-overlay", text: txt, dismissButtons: dismissBtns.slice(0, 5) });
+          }
+        }
+      }
+    }
+    if (popups.length >= 5) break;
+  }
+  
+  return popups;
+}
+
 
 // ===== AUTH RELAY =====
 // When the user logs in on the website auth page, the page stores auth data
