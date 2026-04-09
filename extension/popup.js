@@ -965,7 +965,7 @@ async function callAgentStep(task, pageInfo, history, chatHistory) {
     : "None yet.";
 
   const elementsText = pageInfo.interactiveEls?.length > 0
-    ? pageInfo.interactiveEls.map(e => `  [${e.tag}] ${e.text}${e.href ? ` (href: ${e.href})` : ""}${e.type ? ` (type: ${e.type})` : ""}`).join("\n")
+    ? pageInfo.interactiveEls.map(e => `  ${e.inPopup ? "[POPUP] " : ""}[${e.tag}] ${e.text}${e.href ? ` (href: ${e.href})` : ""}${e.type ? ` (type: ${e.type})` : ""}`).join("\n")
     : "  (none detected)";
 
   const selectsText = pageInfo.selectEls?.length > 0
