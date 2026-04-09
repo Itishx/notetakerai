@@ -242,8 +242,74 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  return true;
-});
+// ===== POPUP/OVERLAY DETECTION =====
+function detectPopupsAndOverlays() {
+  const popups = [];
+  
+  // Check for modal dialogs
+  const dialogSelectors = [
+    '[role="dialog"]', '[role="alertdialog"]', '[aria-modal="true"]',
+    '[class*="modal"]', '[class*="Modal"]', '[class*="popup"]', '[class*="Popup"]',
+    '[class*="overlay"]', '[class*="Overlay"]', '[class*="cookie"]', '[class*="Cookie"]',
+    '[class*="consent"]', '[class*="Consent"]', '[class*="banner"]', '[class*="Banner"]',
+    '[class*="notification"]', '[class*="Notification"]',
+    '[id*="modal"]', '[id*="popup"]', '[id*="overlay"]', '[id*="cookie"]', '[id*="consent"]'
+  ];
+  
+  document.querySelectorAll(dialogSelectors.join(",")).forEach(el => {
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    
+    // Find dismiss buttons inside
+    const dismissButtons = [];
+    const dismissSelectors = ['button', '[role="button"]', 'a', '[aria-label*="close"]', '[aria-label*="dismiss"]'];
+    el.querySelectorAll(dismissSelectors.join(",")).forEach(btn => {
+      const btnText = (btn.innerText || btn.getAttribute("aria-label") || "").trim().substring(0, 50);
+      if (btnText) dismissButtons.push(btnText);
+    });
+    
+    const popupText = (el.innerText || "").substring(0, 200).trim();
+    if (popupText.length > 5) {
+      popups.push({
+        type: el.getAttribute("role") || "overlay",
+        text: popupText,
+        dismissButtons: dismissButtons.slice(0, 5)
+      });
+    }
+  });
+  
+  // Check for fixed/sticky positioned overlays covering the page
+  const allFixed = document.querySelectorAll("*");
+  for (const el of allFixed) {
+    const style = window.getComputedStyle(el);
+    if ((style.position === "fixed" || style.position === "sticky") && 
+        style.zIndex && parseInt(style.zIndex) > 100 &&
+        style.display !== "none" && style.visibility !== "hidden") {
+      const rect = el.getBoundingClientRect();
+      // Large overlay covering significant viewport area
+      if (rect.width > window.innerWidth * 0.3 && rect.height > window.innerHeight * 0.15) {
+        const existing = popups.find(p => p.text === (el.innerText || "").substring(0, 200).trim());
+        if (!existing) {
+          const dismissBtns = [];
+          el.querySelectorAll('button, [role="button"], a').forEach(btn => {
+            const t = (btn.innerText || btn.getAttribute("aria-label") || "").trim();
+            if (t && t.length < 30) dismissBtns.push(t);
+          });
+          const txt = (el.innerText || "").substring(0, 200).trim();
+          if (txt.length > 5) {
+            popups.push({ type: "fixed-overlay", text: txt, dismissButtons: dismissBtns.slice(0, 5) });
+          }
+        }
+      }
+    }
+    if (popups.length >= 5) break;
+  }
+  
+  return popups;
+}
+
 
 // ===== AUTH RELAY =====
 // When the user logs in on the website auth page, the page stores auth data
