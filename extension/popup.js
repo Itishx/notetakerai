@@ -1125,13 +1125,32 @@ async function speakAndShowSubtitle(text) {
   setVoiceOrbState("idle");
 }
 
-function startVoiceListening() {
+async function ensureMicPermission() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Stop all tracks immediately — we just needed the permission grant
+    stream.getTracks().forEach(t => t.stop());
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function startVoiceListening() {
   if (!voiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     setVoiceSubtitles("", "Speech recognition not supported in this browser.");
     return;
   }
+
+  // Must request mic via getUserMedia first in extension context
+  const hasMic = await ensureMicPermission();
+  if (!hasMic) {
+    setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome → Site settings.");
+    return;
+  }
+
   recognition = new SpeechRecognition();
   recognition.lang = "en-US";
   recognition.interimResults = true;
@@ -1157,12 +1176,11 @@ function startVoiceListening() {
       return; // don't retry
     }
     if (e.error === "no-speech") {
-      // silence — just restart quietly
-      if (voiceActive) setTimeout(startVoiceListening, 500);
+      if (voiceActive) setTimeout(() => startVoiceListening(), 500);
       return;
     }
     setVoiceSubtitles("", "Couldn't hear you. Trying again…");
-    if (voiceActive) setTimeout(startVoiceListening, 1500);
+    if (voiceActive) setTimeout(() => startVoiceListening(), 1500);
   };
 
   recognition.onend = () => {
@@ -1212,14 +1230,14 @@ async function handleVoiceInput(text) {
     await speakAndShowSubtitle("Something went wrong. Try again.");
   }
 
-  if (voiceActive) startVoiceListening();
+  if (voiceActive) void startVoiceListening();
 }
 
 function openVoiceMode() {
   voiceActive = true;
   if (voiceOverlay) voiceOverlay.classList.remove("hidden");
   setVoiceSubtitles("", "");
-  startVoiceListening();
+  void startVoiceListening();
 }
 
 function closeVoiceMode() {
