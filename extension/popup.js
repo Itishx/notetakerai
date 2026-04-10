@@ -1130,6 +1130,28 @@ async function startVoiceListening() {
     return;
   }
 
+  // Request microphone permission explicitly first — this ensures Chrome
+  // grants access in extension contexts (side panel / popup) where the
+  // SpeechRecognition API alone may silently fail with "not-allowed".
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Got permission — stop the stream immediately, SpeechRecognition will open its own.
+    stream.getTracks().forEach(t => t.stop());
+  } catch (permErr) {
+    console.warn("Microphone permission denied:", permErr);
+    setVoiceOrbState("idle");
+    if (permErr.name === "NotAllowedError") {
+      setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome → Site settings → Microphone.");
+    } else if (permErr.name === "NotFoundError") {
+      setVoiceSubtitles("", "No microphone found. Please connect one and try again.");
+    } else if (permErr.name === "NotReadableError") {
+      setVoiceSubtitles("", "Microphone is in use by another app.");
+    } else {
+      setVoiceSubtitles("", "Could not access microphone. Please check permissions.");
+    }
+    return;
+  }
+
   recognition = new SpeechRecognition();
   recognition.lang = "en-US";
   recognition.interimResults = true;
@@ -1151,8 +1173,8 @@ async function startVoiceListening() {
     console.warn("Speech recognition error:", e.error);
     setVoiceOrbState("idle");
     if (e.error === "not-allowed") {
-      setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome settings.");
-      return; // don't retry
+      setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome → Site settings → Microphone.");
+      return;
     }
     if (e.error === "no-speech") {
       if (voiceActive) setTimeout(() => startVoiceListening(), 500);
@@ -1163,12 +1185,19 @@ async function startVoiceListening() {
   };
 
   recognition.onend = () => {
-    if (voiceActive && voiceOrb?.classList.contains("listening")) {
-      // restarted by handleVoiceInput or error handler
+    // If voice mode is still active but nothing restarted listening, do it now
+    if (voiceActive) {
+      setTimeout(() => startVoiceListening(), 300);
     }
   };
 
-  recognition.start();
+  try {
+    recognition.start();
+  } catch (startErr) {
+    console.error("Failed to start speech recognition:", startErr);
+    setVoiceSubtitles("", "Could not start listening. Please try again.");
+    setVoiceOrbState("idle");
+  }
 }
 
 async function handleVoiceInput(text) {
