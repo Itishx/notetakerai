@@ -1122,7 +1122,10 @@ async function speakAndShowSubtitle(text) {
   setVoiceOrbState("idle");
 }
 
-async function startVoiceListening() {
+// micPermissionGranted tracks whether we've already gotten mic access in this session
+let micPermissionGranted = false;
+
+function startVoiceListening() {
   if (!voiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -1130,32 +1133,11 @@ async function startVoiceListening() {
     return;
   }
 
-  // Request microphone permission explicitly first — this ensures Chrome
-  // grants access in extension contexts (side panel / popup) where the
-  // SpeechRecognition API alone may silently fail with "not-allowed".
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // Got permission — stop the stream immediately, SpeechRecognition will open its own.
-    stream.getTracks().forEach(t => t.stop());
-  } catch (permErr) {
-    console.warn("Microphone permission denied:", permErr);
-    setVoiceOrbState("idle");
-    if (permErr.name === "NotAllowedError") {
-      setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome → Site settings → Microphone.");
-    } else if (permErr.name === "NotFoundError") {
-      setVoiceSubtitles("", "No microphone found. Please connect one and try again.");
-    } else if (permErr.name === "NotReadableError") {
-      setVoiceSubtitles("", "Microphone is in use by another app.");
-    } else {
-      setVoiceSubtitles("", "Could not access microphone. Please check permissions.");
-    }
-    return;
-  }
-
   recognition = new SpeechRecognition();
   recognition.lang = "en-US";
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;
+  recognition.continuous = false;
 
   setVoiceOrbState("listening");
   setVoiceSubtitles("Listening…", "");
@@ -1171,31 +1153,49 @@ async function startVoiceListening() {
 
   recognition.onerror = (e) => {
     console.warn("Speech recognition error:", e.error);
-    setVoiceOrbState("idle");
     if (e.error === "not-allowed") {
-      setVoiceSubtitles("", "Microphone access denied. Allow it in Chrome → Site settings → Microphone.");
+      setVoiceOrbState("idle");
+      micPermissionGranted = false;
+      setVoiceSubtitles("", "Microphone blocked. Click the mic button again to retry.");
+      return;
+    }
+    if (e.error === "aborted") {
+      // Silently ignore — happens on intentional .stop() or page nav
       return;
     }
     if (e.error === "no-speech") {
-      if (voiceActive) setTimeout(() => startVoiceListening(), 500);
+      // No speech detected — just restart if still active
+      if (voiceActive) setTimeout(() => startVoiceListening(), 300);
       return;
     }
-    setVoiceSubtitles("", "Couldn't hear you. Trying again…");
-    if (voiceActive) setTimeout(() => startVoiceListening(), 1500);
+    setVoiceOrbState("idle");
+    setVoiceSubtitles("", "Couldn't hear you. Tap mic to retry.");
   };
 
   recognition.onend = () => {
-    // If voice mode is still active but nothing restarted listening, do it now
-    if (voiceActive) {
-      setTimeout(() => startVoiceListening(), 300);
+    // Only auto-restart if voice mode is still active AND we have mic permission
+    if (voiceActive && micPermissionGranted) {
+      try {
+        startVoiceListening();
+      } catch (err) {
+        console.warn("Auto-restart failed:", err);
+        setVoiceOrbState("idle");
+        setVoiceSubtitles("", "Tap mic button to continue listening.");
+      }
     }
   };
 
   try {
     recognition.start();
+    micPermissionGranted = true;
   } catch (startErr) {
     console.error("Failed to start speech recognition:", startErr);
-    setVoiceSubtitles("", "Could not start listening. Please try again.");
+    micPermissionGranted = false;
+    if (startErr.name === "NotAllowedError") {
+      setVoiceSubtitles("", "Microphone blocked. Allow mic access in Chrome, then tap the mic button again.");
+    } else {
+      setVoiceSubtitles("", "Could not start listening. Please try again.");
+    }
     setVoiceOrbState("idle");
   }
 }
