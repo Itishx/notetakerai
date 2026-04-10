@@ -999,14 +999,20 @@ Available actions:
 {"type":"answer","message":"conversational response"}
 {"type":"clarify","message":"question to ask the user before proceeding"}
 
+DATE AWARENESS:
+- Today's date is ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
+- When the user says "next week", "tomorrow", "this Friday", etc., calculate the actual date from today. Do NOT ask what year it is or what date "next week" means — you know today's date, so work it out yourself.
+- Only ask for dates if the user's intent is genuinely ambiguous (e.g. "sometime in April" with no other hint).
+
 PLATFORM KNOWLEDGE:
 YouTube: To play a specific video — navigate to https://www.youtube.com/results?search_query=QUERY (URL-encode the query). Click the first video result. Never type in the search bar unless on YouTube already.
 Gmail compose: navigate → wait 2000 → click Compose → wait 1500 → type to field (selector: "input[name='to']") → Tab → type subject → Tab → type body → click Send.
 Netflix: Use selectOption for season dropdowns, not click.
 Google Search: navigate to https://www.google.com/search?q=QUERY.
+Flights: For flight searches, navigate directly to Google Flights: https://www.google.com/travel/flights — then use answer to tell the user what to fill in (Google Flights date pickers are not automatable). Alternatively for MakeMyTrip one-way flights use: https://www.makemytrip.com/flights/cheap-flights-from-ORIGIN-to-DEST.html (e.g. DEL to TYO = del-tokyo). For MakeMyTrip the URL format is https://www.makemytrip.com/flight/search?itinerary=DEL-TYO-DD/MM/YYYY&tripType=O&paxType=A-1_C-0_I-0&cabinClass=E — use IATA codes (DEL=Delhi, BOM=Mumbai, TYO=Tokyo, LHR=London, JFK=New York, etc.) and the exact date. Always use the URL approach for flights — never try to click date pickers or dropdowns on booking sites.
 
 Decision rules (follow in order):
-1. If info is missing or ambiguous → clarify immediately, do not guess.
+1. If info is missing or ambiguous → clarify immediately, do not guess. But NEVER ask for information you can calculate yourself (dates relative to today, year of "next week", etc.).
 2. If user is asking a question, not requesting an action → answer.
 3. If you have all info → execute step by step.
 4. Never repeat a failed action. Try a different selector or approach.
@@ -1058,206 +1064,10 @@ What is the next single action to take?`;
   return JSON.parse(jsonStr);
 }
 
-// ===== ELEVENLABS VOICE =====
+// ===== ELEVENLABS =====
 const ELEVENLABS_API_KEY = "sk_2ee3bb5258f10b54aba4d71a7ff1640d98fc322c3e2410cd";
 const ELEVENLABS_VOICE_ID = "2ajXGJNYBR0iNHpS4VZb";
-let currentAudio = null;
-
-async function speakAgentResponse(text) {
-  if (!ELEVENLABS_API_KEY || !text) return;
-  try {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": ELEVENLABS_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_turbo_v2",
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-      }),
-    });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    currentAudio = new Audio(url);
-    currentAudio.play();
-    currentAudio.onended = () => URL.revokeObjectURL(url);
-  } catch (e) {
-    console.warn("ElevenLabs TTS error:", e);
-  }
-}
-
-// ===== VOICE MODE =====
-let voiceActive = false;
-let recognition = null;
-let voiceFinishCallback = null;
-
-const voiceOverlay   = document.getElementById("voiceOverlay");
-const voiceOrb       = document.getElementById("voiceOrb");
-const voiceUserText  = document.getElementById("voiceUserText");
-const voiceAgentText = document.getElementById("voiceAgentText");
-const voiceModeBtn   = document.getElementById("voiceModeBtn");
-const voiceCloseBtn  = document.getElementById("voiceCloseBtn");
-
-function setVoiceOrbState(state) {
-  if (!voiceOrb) return;
-  voiceOrb.className = `voice-orb ${state}`;
-}
-
-function setVoiceSubtitles(userText, agentText) {
-  if (voiceUserText) voiceUserText.textContent = userText || "";
-  if (voiceAgentText) voiceAgentText.textContent = agentText || "";
-}
-
-async function speakAndShowSubtitle(text) {
-  setVoiceOrbState("speaking");
-  setVoiceSubtitles("", text);
-  await speakAgentResponse(text);
-  // Wait for audio to finish (rough estimate: 80ms per char, min 1s)
-  const wait = Math.max(1000, text.length * 80);
-  await new Promise(r => setTimeout(r, wait));
-  setVoiceOrbState("idle");
-}
-
-// micPermissionGranted tracks whether we've already gotten mic access in this session
-let micPermissionGranted = false;
-
-function startVoiceListening() {
-  if (!voiceActive) return;
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    setVoiceSubtitles("", "Speech recognition not supported in this browser.");
-    return;
-  }
-
-  recognition = new SpeechRecognition();
-  recognition.lang = "en-US";
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
-  recognition.continuous = false;
-
-  setVoiceOrbState("listening");
-  setVoiceSubtitles("Listening…", "");
-
-  recognition.onresult = (e) => {
-    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
-    setVoiceSubtitles(transcript, "");
-    if (e.results[e.results.length - 1].isFinal) {
-      recognition.stop();
-      handleVoiceInput(transcript);
-    }
-  };
-
-  recognition.onerror = (e) => {
-    console.warn("Speech recognition error:", e.error);
-    if (e.error === "not-allowed") {
-      setVoiceOrbState("idle");
-      micPermissionGranted = false;
-      setVoiceSubtitles("", "Microphone blocked. Click the mic button again to retry.");
-      return;
-    }
-    if (e.error === "aborted") {
-      // Silently ignore — happens on intentional .stop() or page nav
-      return;
-    }
-    if (e.error === "no-speech") {
-      // No speech detected — just restart if still active
-      if (voiceActive) setTimeout(() => startVoiceListening(), 300);
-      return;
-    }
-    setVoiceOrbState("idle");
-    setVoiceSubtitles("", "Couldn't hear you. Tap mic to retry.");
-  };
-
-  recognition.onend = () => {
-    // Only auto-restart if voice mode is still active AND we have mic permission
-    if (voiceActive && micPermissionGranted) {
-      try {
-        startVoiceListening();
-      } catch (err) {
-        console.warn("Auto-restart failed:", err);
-        setVoiceOrbState("idle");
-        setVoiceSubtitles("", "Tap mic button to continue listening.");
-      }
-    }
-  };
-
-  try {
-    recognition.start();
-    micPermissionGranted = true;
-  } catch (startErr) {
-    console.error("Failed to start speech recognition:", startErr);
-    micPermissionGranted = false;
-    if (startErr.name === "NotAllowedError") {
-      setVoiceSubtitles("", "Microphone blocked. Allow mic access in Chrome, then tap the mic button again.");
-    } else {
-      setVoiceSubtitles("", "Could not start listening. Please try again.");
-    }
-    setVoiceOrbState("idle");
-  }
-}
-
-async function handleVoiceInput(text) {
-  if (!text.trim()) { startVoiceListening(); return; }
-  setVoiceOrbState("idle");
-  setVoiceSubtitles(text, "Thinking…");
-
-  try {
-    if (currentMode === "agent") {
-      // Run the full agent loop — it will speak + show subtitle when done via voiceFinishCallback
-      setVoiceOrbState("listening");
-      setVoiceSubtitles(text, "Agent working…");
-      voiceFinishCallback = async (msg) => {
-        voiceFinishCallback = null;
-        await speakAndShowSubtitle(msg);
-        if (voiceActive) startVoiceListening();
-      };
-      runAgentLoop(text);
-      // don't await — agent loop calls voiceFinishCallback when done
-      return;
-    } else {
-      const userMsg = { role: "user", content: text };
-      chatMessages.push(userMsg);
-      saveChatMessages();
-      const res = await fetch(`${API_BASE}/chat-about-notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: "", message: text }),
-      });
-      const data = await res.json();
-      const reply = data.reply || "I didn't catch that.";
-      chatMessages.push({ role: "assistant", content: reply });
-      saveChatMessages();
-      renderChatMessages();
-      await speakAndShowSubtitle(reply);
-    }
-  } catch (e) {
-    await speakAndShowSubtitle("Something went wrong. Try again.");
-  }
-
-  if (voiceActive) void startVoiceListening();
-}
-
-function openVoiceMode() {
-  voiceActive = true;
-  if (voiceOverlay) voiceOverlay.classList.remove("hidden");
-  setVoiceSubtitles("", "");
-  void startVoiceListening();
-}
-
-function closeVoiceMode() {
-  voiceActive = false;
-  if (recognition) { try { recognition.stop(); } catch(e) {} recognition = null; }
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if (voiceOverlay) voiceOverlay.classList.add("hidden");
-  setVoiceOrbState("idle");
-}
-
-voiceModeBtn?.addEventListener("click", openVoiceMode);
-voiceCloseBtn?.addEventListener("click", closeVoiceMode);
+// Voice mode will be rebuilt here
 
 async function runAgentLoop(task) {
   if (agentRunning) return;
@@ -1283,11 +1093,6 @@ async function runAgentLoop(task) {
     renderChatMessages();
     saveChatMessages();
     setAgentRunningUI(false);
-    if (voiceFinishCallback) {
-      voiceFinishCallback(msg);
-    } else {
-      speakAgentResponse(msg);
-    }
   };
 
   while (true) {
@@ -1311,7 +1116,6 @@ async function runAgentLoop(task) {
         thinkingBlock.remove();
       }
       finish(actionObj.message || "Done.");
-      if (actionObj.type === "clarify") speakAgentResponse(actionObj.message);
       return;
     }
 
