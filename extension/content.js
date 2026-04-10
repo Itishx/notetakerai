@@ -1,4 +1,39 @@
 // SideBrain Content Script — extracts page text for AI context
+
+// Generate a stable, unique CSS selector for an element (used by browser agent)
+function getStableSelector(el) {
+  // Priority 1: id attribute (must be valid CSS ident)
+  if (el.id && /^[a-zA-Z][\w-]*$/.test(el.id)) {
+    return '#' + el.id;
+  }
+  // Priority 2: unique aria-label on this tag
+  const aria = el.getAttribute('aria-label');
+  if (aria) {
+    const c = `${el.tagName.toLowerCase()}[aria-label="${aria.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"]`;
+    try { if (document.querySelectorAll(c).length === 1) return c; } catch(e) {}
+  }
+  // Priority 3: name on form fields
+  const name = el.getAttribute('name');
+  if (name && ['INPUT','SELECT','TEXTAREA'].includes(el.tagName)) {
+    const c = `${el.tagName.toLowerCase()}[name="${name}"]`;
+    try { if (document.querySelectorAll(c).length === 1) return c; } catch(e) {}
+  }
+  // Priority 4: data-testid / data-id / data-cy
+  for (const attr of ['data-testid', 'data-id', 'data-cy']) {
+    const val = el.getAttribute(attr);
+    if (val) {
+      const c = `[${attr}="${val}"]`;
+      try { if (document.querySelectorAll(c).length === 1) return c; } catch(e) {}
+    }
+  }
+  // Priority 5: type attribute on inputs (only if unique enough)
+  if (el.tagName === 'INPUT' && el.type && el.type !== 'text') {
+    const c = `input[type="${el.type}"]`;
+    try { if (document.querySelectorAll(c).length === 1) return c; } catch(e) {}
+  }
+  return null;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "extractPageContent") {
     const text = (document.body?.innerText || "").substring(0, 12000);
@@ -44,6 +79,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (type) entry.type = type;
       const href = el.getAttribute("href");
       if (href) entry.href = href.substring(0, 100);
+      const sel = getStableSelector(el);
+      if (sel) entry.selector = sel;
       interactiveEls.push(entry);
     });
 
@@ -55,7 +92,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (options.length) selectEls.push({ label, options, current: sel.options[sel.selectedIndex]?.text || "" });
     });
 
-    sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 60), selectEls });
+    sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 80), selectEls });
     return true;
   }
 

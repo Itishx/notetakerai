@@ -965,7 +965,7 @@ async function callAgentStep(task, pageInfo, history, chatHistory) {
     : "None yet.";
 
   const elementsText = pageInfo.interactiveEls?.length > 0
-    ? pageInfo.interactiveEls.map(e => `  [${e.tag}] ${e.text}${e.href ? ` (href: ${e.href})` : ""}${e.type ? ` (type: ${e.type})` : ""}`).join("\n")
+    ? pageInfo.interactiveEls.map(e => `  [${e.tag}]${e.selector ? ` sel="${e.selector}"` : ""} ${e.text}${e.href ? ` (href: ${e.href})` : ""}${e.type ? ` (type: ${e.type})` : ""}`).join("\n")
     : "  (none detected)";
 
   const selectsText = pageInfo.selectEls?.length > 0
@@ -988,7 +988,7 @@ CLARIFICATION FIRST — this is critical:
 - Only proceed with automation once you have all the info you need.
 
 Available actions:
-{"type":"click","targetText":"exact visible button/link text","description":"..."}
+{"type":"click","selector":"css-selector-from-sel=","targetText":"fallback text if no sel=","description":"..."}
 {"type":"type","selector":"css-selector","text":"text to type","description":"..."}
 {"type":"pressKey","key":"Enter","description":"..."}
 {"type":"navigate","url":"https://full-url.com","description":"..."}
@@ -1018,7 +1018,9 @@ Decision rules (follow in order):
 4. Never repeat a failed action. Try a different selector or approach.
 5. After each step, check if task is done before taking another step.
 6. Always include "description" in every action.
-7. Prefer navigation by URL over clicking search bars.`;
+7. Prefer navigation by URL over clicking search bars.
+8. For click actions: ALWAYS use the "selector" field from sel= when it appears in the element list. Only use "targetText" as a fallback when no sel= is shown.
+9. You may return a JSON array of up to 3 actions for sequences that are certain to succeed in order (e.g. [type, pressKey] or [click, type]). Only batch when confident. NEVER batch a navigate with other actions.`;
 
   const pageStatus = pageInfo.url
     ? `URL: ${pageInfo.url}\nTitle: ${pageInfo.title}`
@@ -1031,7 +1033,7 @@ CURRENT PAGE:
 ${pageStatus}
 
 PAGE TEXT (excerpt):
-${pageInfo.bodyText?.substring(0, 2000) || "(empty — navigate first)"}
+${pageInfo.bodyText?.substring(0, 4000) || "(empty — navigate first)"}
 
 INTERACTIVE ELEMENTS:
 ${elementsText}${selectsText}
@@ -1039,7 +1041,7 @@ ${elementsText}${selectsText}
 STEPS TAKEN SO FAR:
 ${historyText}
 
-What is the next single action to take?`;
+What actions should be taken next? Return a single JSON object, OR a JSON array of up to 3 objects for sequences that are certain to succeed in order (e.g. [type, pressKey] or [click, type]). Only batch when all steps are highly predictable. NEVER include navigate in a batch.`;
 
   const response = await fetch(`${API_BASE}/chat-about-notes`, {
     method: "POST",
@@ -1059,15 +1061,34 @@ What is the next single action to take?`;
   const reply = (data.reply || "").trim();
 
   // Parse JSON from reply — strip markdown code fences if present
-  const jsonMatch = reply.match(/```(?:json)?\s*([\s\S]*?)```/) || reply.match(/(\{[\s\S]*\})/);
+  const jsonMatch = reply.match(/```(?:json)?\s*([\s\S]*?)```/) || reply.match(/([\[{][\s\S]*[\]}])/);
   const jsonStr = jsonMatch ? jsonMatch[1].trim() : reply.trim();
-  return JSON.parse(jsonStr);
+  const parsed = JSON.parse(jsonStr);
+  // Normalize to always be an array
+  return Array.isArray(parsed) ? parsed : [parsed];
 }
 
 // ===== ELEVENLABS =====
 const ELEVENLABS_API_KEY = "sk_2ee3bb5258f10b54aba4d71a7ff1640d98fc322c3e2410cd";
 const ELEVENLABS_VOICE_ID = "2ajXGJNYBR0iNHpS4VZb";
 // Voice mode will be rebuilt here
+
+// Poll until the active tab finishes loading (replaces fixed 3500ms navigate wait)
+async function waitForTabReady(maxMs = 5000) {
+  const start = Date.now();
+  return new Promise((resolve) => {
+    function check() {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || !tabs[0]) return resolve();
+        if (tabs[0].status === "complete") return resolve();
+        if (Date.now() - start > maxMs) return resolve();
+        setTimeout(check, 200);
+      });
+    }
+    // Minimum floor: let content script re-initialize after navigation
+    setTimeout(check, 400);
+  });
+}
 
 async function runAgentLoop(task) {
   if (agentRunning) return;
@@ -1100,9 +1121,9 @@ async function runAgentLoop(task) {
 
     const pageInfo = await getAgentPageContext();
 
-    let actionObj;
+    let actions;
     try {
-      actionObj = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
+      actions = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
     } catch (e) {
       agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
       finish(`⚠️ AI error: ${e.message}`);
@@ -1111,23 +1132,53 @@ async function runAgentLoop(task) {
 
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
 
-    if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
-      if (history.length === 0) {
-        thinkingBlock.remove();
-      }
-      finish(actionObj.message || "Done.");
+    // Check if first action is terminal
+    const firstAction = actions[0];
+    if (firstAction.type === "done" || firstAction.type === "answer" || firstAction.type === "clarify") {
+      if (history.length === 0) thinkingBlock.remove();
+      finish(firstAction.message || "Done.");
       return;
     }
 
-    const desc = actionObj.description || actionObj.type;
-    const stepEl = agentAddStep(thinkingBlock, desc);
+    // Execute each action in the batch
+    let batchError = false;
+    for (const actionObj of actions) {
+      if (agentShouldStop) { finish("⏹ Stopped."); return; }
 
-    const result = await executeAgentAction(actionObj);
-    history.push({ ...actionObj, result });
-    agentMarkStepResult(stepEl, !result?.error, result?.error);
+      // Terminal types mid-batch shouldn't happen, but handle gracefully
+      if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
+        finish(actionObj.message || "Done.");
+        return;
+      }
 
-    const waitMs = result?.error ? 600 : (actionObj.type === "navigate" ? 3500 : 1200);
-    await new Promise(r => setTimeout(r, waitMs));
+      const desc = actionObj.description || actionObj.type;
+      const stepEl = agentAddStep(thinkingBlock, desc);
+
+      const result = await executeAgentAction(actionObj);
+      history.push({ ...actionObj, result });
+      agentMarkStepResult(stepEl, !result?.error, result?.error);
+
+      if (result?.error) {
+        // On error: pause, then break batch and re-query LLM
+        await new Promise(r => setTimeout(r, 600));
+        batchError = true;
+        break;
+      }
+
+      if (actionObj.type === "navigate") {
+        // Smart wait: poll until tab is loaded instead of fixed 3500ms
+        await waitForTabReady(5000);
+        await new Promise(r => setTimeout(r, 300)); // small buffer for content script
+      } else {
+        // Short settle time between batch steps
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    // If batch succeeded with no error, small pause before re-querying
+    if (!batchError) {
+      await new Promise(r => setTimeout(r, 150));
+    }
   }
 }
 
