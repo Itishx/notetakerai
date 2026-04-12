@@ -1932,7 +1932,7 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     voiceActive = true;
     // Auto-switch to agent mode for voice
     if (currentMode !== "agent") {
-      selectMode("agent");
+      setMode("agent");
     }
     voiceAgentText.textContent = "Listening…";
     voiceUserText.textContent = "";
