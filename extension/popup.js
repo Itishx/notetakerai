@@ -1074,19 +1074,55 @@ const ELEVENLABS_API_KEY = "sk_2ee3bb5258f10b54aba4d71a7ff1640d98fc322c3e2410cd"
 const ELEVENLABS_VOICE_ID = "2ajXGJNYBR0iNHpS4VZb";
 let currentAudio = null;
 
-async function speakText(text) {
+function stripMarkdownForTTS(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")   // **bold**
+    .replace(/\*(.+?)\*/g, "$1")        // *italic*
+    .replace(/`(.+?)`/g, "$1")          // `code`
+    .replace(/#{1,6}\s+/g, "")          // ## headings
+    .replace(/^\s*[\*\-\+]\s+/gm, "")  // bullet points
+    .replace(/^\s*\d+\.\s+/gm, "")     // numbered lists
+    .replace(/\[(.+?)\]\(.+?\)/g, "$1")// [links](url)
+    .replace(/_{1,2}(.+?)_{1,2}/g, "$1")// _italic_ / __bold__
+    .replace(/\n{2,}/g, ". ")          // paragraph breaks → pause
+    .replace(/\n/g, " ")               // single newlines
+    .replace(/\s{2,}/g, " ")           // collapse spaces
+    .trim();
+}
+
+async function speakText(text, onWordUpdate) {
   if (!text) return;
+  const clean = stripMarkdownForTTS(text);
+  if (!clean) return;
+
   try {
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`, {
       method: "POST",
       headers: { "xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ text, model_id: "eleven_turbo_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+      body: JSON.stringify({ text: clean, model_id: "eleven_turbo_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
     });
     if (!res.ok) return;
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     currentAudio = new Audio(url);
+
+    // Progressive subtitle: roll words in sync with estimated speech timing (~140 wpm)
+    if (onWordUpdate) {
+      const words = clean.split(" ").filter(Boolean);
+      const msPerWord = Math.min(Math.max((blob.size / 8000) * 1000 / words.length, 150), 500);
+      let i = 0;
+      const wordInterval = setInterval(() => {
+        if (i < words.length) {
+          onWordUpdate(words.slice(0, ++i).join(" "));
+        } else {
+          clearInterval(wordInterval);
+        }
+      }, msPerWord);
+      currentAudio.onended = () => clearInterval(wordInterval);
+      currentAudio.onerror = () => clearInterval(wordInterval);
+    }
+
     await currentAudio.play();
     await new Promise(resolve => { currentAudio.onended = resolve; currentAudio.onerror = resolve; });
     URL.revokeObjectURL(url);
@@ -1212,8 +1248,8 @@ async function handleVoiceInput(text) {
     }
 
     setOrbState("speaking");
-    setSubtitles(text, reply);
-    await speakText(reply);
+    setSubtitles(text, "");
+    await speakText(reply, (words) => setSubtitles(text, words));
   } catch(e) {
     reply = "Something went wrong. Try again.";
     setSubtitles(text, reply);
