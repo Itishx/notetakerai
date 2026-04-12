@@ -1223,20 +1223,37 @@ async function handleVoiceInput(text) {
   if (!text || !voiceActive) return;
 
   setOrbState("processing");
-  setSubtitles(text, "Working on it…");
+  setSubtitles(text, "Thinking…");
 
   let reply;
 
   try {
     if (currentMode === "agent") {
-      // Run the full browser agent loop and speak the result when done
       reply = await runAgentLoopForVoice(text);
     } else {
-      const notesCtx = notesMarkdown || "";
+      // Use same rich context as sendChatMessage — notes + page context + chat history + mode
+      const hasNotes = hasExistingNotes();
+      const notesCtx = hasNotes ? buildNotesContextForAI(notesMarkdown) : { sanitizedNotes: "", existingImages: {} };
+
+      const body = {
+        notes: notesCtx.sanitizedNotes,
+        message: text,
+        aiProvider: currentAiProvider,
+        chatHistory: chatMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
+      };
+
+      // "Chat with Page" — pass page context
+      if (currentMode === "page" && currentPageContext) {
+        body.pageContext = currentPageContext;
+      }
+
+      // "Lecture/Meeting" — if notes exist, they're already in sanitizedNotes
+      // "General" — no extra context needed
+
       const res = await fetch(`${API_BASE}/chat-about-notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: notesCtx, message: text }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       reply = data.reply || "Sorry, I didn't get that.";
