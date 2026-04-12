@@ -1907,3 +1907,339 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
   updateChatContextUI();
   updateEmptyState();
 });
+
+
+// ===== VOICE MODE =====
+(function() {
+  const voiceOverlay = document.getElementById("voiceOverlay");
+  const voiceOrb = document.getElementById("voiceOrb");
+  const voiceUserText = document.getElementById("voiceUserText");
+  const voiceAgentText = document.getElementById("voiceAgentText");
+  const voiceCloseBtn = document.getElementById("voiceCloseBtn");
+  const voiceModeBtn = document.getElementById("voiceModeBtn");
+
+  let voiceActive = false;
+  let recognition = null;
+  let currentAudio = null;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function setOrbState(state) {
+    voiceOrb.className = "voice-orb " + state; // idle | listening | speaking | processing
+  }
+
+  function showVoiceOverlay() {
+    voiceOverlay.classList.remove("hidden");
+    voiceActive = true;
+    // Auto-switch to agent mode for voice
+    if (currentMode !== "agent") {
+      selectMode("agent");
+    }
+    voiceAgentText.textContent = "Listening…";
+    voiceUserText.textContent = "";
+    startListening();
+  }
+
+  function hideVoiceOverlay() {
+    voiceActive = false;
+    voiceOverlay.classList.add("hidden");
+    stopListening();
+    stopAudio();
+    setOrbState("idle");
+  }
+
+  function stopAudio() {
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.src = "";
+      currentAudio = null;
+    }
+  }
+
+  function startListening() {
+    if (!SpeechRecognition) {
+      voiceAgentText.textContent = "Speech recognition not supported in this browser.";
+      return;
+    }
+    stopListening();
+    
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => {
+      setOrbState("listening");
+      voiceAgentText.textContent = "Listening…";
+    };
+
+    recognition.onresult = (event) => {
+      let interim = "";
+      let final = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript;
+        } else {
+          interim += transcript;
+        }
+      }
+      if (interim) voiceUserText.textContent = interim;
+      if (final) {
+        voiceUserText.textContent = final;
+        handleVoiceCommand(final.trim());
+      }
+    };
+
+    recognition.onerror = (e) => {
+      console.warn("Voice recognition error:", e.error);
+      if (e.error === "not-allowed") {
+        voiceAgentText.textContent = "Microphone blocked. Please allow mic access in Chrome settings (click the lock icon in the address bar).";
+        setOrbState("idle");
+        return;
+      }
+      if (e.error === "no-speech") {
+        if (voiceActive) {
+          voiceAgentText.textContent = "I didn't catch that. Listening…";
+          setTimeout(() => { if (voiceActive) startListening(); }, 500);
+        }
+        return;
+      }
+      if (e.error === "aborted") return; // we stopped it
+      voiceAgentText.textContent = "Couldn't hear you. Trying again…";
+      if (voiceActive) setTimeout(() => startListening(), 1000);
+    };
+
+    recognition.onend = () => {
+      // Only restart if we're still in voice mode and not processing
+      if (voiceActive && voiceOrb.classList.contains("listening")) {
+        setTimeout(() => { if (voiceActive) startListening(); }, 300);
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start recognition:", err);
+      voiceAgentText.textContent = "Microphone error. Please reload the extension.";
+    }
+  }
+
+  function stopListening() {
+    if (recognition) {
+      try { recognition.abort(); } catch(e) {}
+      recognition = null;
+    }
+  }
+
+  async function handleVoiceCommand(text) {
+    if (!text) {
+      if (voiceActive) startListening();
+      return;
+    }
+
+    stopListening();
+    setOrbState("processing");
+    voiceAgentText.textContent = "Working on it…";
+
+    // Run the browser agent with this command
+    try {
+      const result = await runVoiceAgentTask(text);
+      // Speak the result
+      await speakText(result);
+      // After speaking, go back to listening
+      if (voiceActive) {
+        voiceAgentText.textContent = "Listening…";
+        startListening();
+      }
+    } catch (err) {
+      console.error("Voice agent error:", err);
+      voiceAgentText.textContent = "Something went wrong. Say something to try again.";
+      setOrbState("idle");
+      if (voiceActive) setTimeout(() => startListening(), 2000);
+    }
+  }
+
+  // Run agent and return the final message
+  function runVoiceAgentTask(task) {
+    return new Promise(async (resolve, reject) => {
+      if (agentRunning) {
+        resolve("I'm already working on something. Please wait.");
+        return;
+      }
+      if (!(await loadPremiumStatus())) {
+        resolve("Voice agent requires a premium subscription. Please upgrade to use this feature.");
+        return;
+      }
+
+      agentShouldStop = false;
+      setAgentRunningUI(true);
+
+      // Add to chat history
+      const userMsg = { role: "user", content: `🎙️ ${task}` };
+      chatMessages.push(userMsg);
+      renderChatMessages();
+      saveChatMessages();
+      updateEmptyState();
+
+      const history = [];
+      // No thinking block in voice mode — we show orb instead
+
+      const finish = (msg) => {
+        chatMessages.push({ role: "assistant", content: msg });
+        renderChatMessages();
+        saveChatMessages();
+        setAgentRunningUI(false);
+        resolve(msg);
+      };
+
+      let iterations = 0;
+      const MAX_ITERATIONS = 15;
+
+      while (iterations++ < MAX_ITERATIONS) {
+        if (agentShouldStop) { finish("Stopped."); return; }
+        if (!voiceActive) { finish("Voice mode closed."); return; }
+
+        voiceAgentText.textContent = iterations === 1 ? "Working on it…" : `Still working… (step ${iterations})`;
+
+        const pageInfo = await getAgentPageContext();
+
+        let actions;
+        try {
+          actions = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
+        } catch (e) {
+          finish(`Sorry, I encountered an error: ${e.message}`);
+          return;
+        }
+
+        if (agentShouldStop || !voiceActive) { finish("Stopped."); return; }
+
+        const firstAction = actions[0];
+        if (firstAction.type === "done" || firstAction.type === "answer" || firstAction.type === "clarify") {
+          // Hallucination guard
+          if (firstAction.type === "done") {
+            const realActionTypes = ["click", "type", "pressKey", "selectOption"];
+            const successfulRealActions = history.filter(h => realActionTypes.includes(h.type) && h.result?.success);
+            const taskRequiresActions = /send|submit|reply|compose|type|fill|click|buy|order|play|post|write|upload|open/i.test(task);
+            if (taskRequiresActions && successfulRealActions.length === 0 && iterations < MAX_ITERATIONS) {
+              history.push({
+                type: "correction",
+                description: "SYSTEM: No real browser actions executed. Task not complete. Execute actual steps.",
+                result: { success: false, error: "No real actions taken" }
+              });
+              continue;
+            }
+          }
+          finish(firstAction.message || "Done.");
+          return;
+        }
+
+        // Execute actions
+        for (const actionObj of actions) {
+          if (agentShouldStop || !voiceActive) { finish("Stopped."); return; }
+          if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
+            finish(actionObj.message || "Done.");
+            return;
+          }
+
+          const result = await executeAgentAction(actionObj);
+          history.push({ ...actionObj, result });
+
+          if (result?.error) {
+            await new Promise(r => setTimeout(r, 600));
+            break;
+          }
+
+          if (actionObj.type === "navigate") {
+            await waitForTabReady(5000);
+            await new Promise(r => setTimeout(r, 300));
+          } else {
+            await new Promise(r => setTimeout(r, 150));
+          }
+        }
+
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      finish("I took too many steps. Here's what I did so far — please check the page.");
+    });
+  }
+
+  async function speakText(text) {
+    if (!voiceActive) return;
+    setOrbState("speaking");
+    voiceAgentText.textContent = text;
+
+    try {
+      const response = await fetch(`${API_BASE}/elevenlabs-tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.slice(0, 500) }),
+      });
+
+      if (!response.ok) {
+        console.warn("TTS failed, falling back to browser speech");
+        await fallbackSpeak(text);
+        return;
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      await new Promise((resolve, reject) => {
+        currentAudio = new Audio(audioUrl);
+        currentAudio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          currentAudio = null;
+          resolve();
+        };
+        currentAudio.onerror = (e) => {
+          URL.revokeObjectURL(audioUrl);
+          currentAudio = null;
+          reject(e);
+        };
+        currentAudio.play().catch(reject);
+      });
+    } catch (err) {
+      console.warn("TTS playback failed, using fallback:", err);
+      await fallbackSpeak(text);
+    }
+  }
+
+  function fallbackSpeak(text) {
+    return new Promise((resolve) => {
+      if (!window.speechSynthesis) { resolve(); return; }
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 1.0;
+      utter.onend = resolve;
+      utter.onerror = resolve;
+      speechSynthesis.speak(utter);
+    });
+  }
+
+  // Event listeners
+  voiceModeBtn?.addEventListener("click", () => {
+    if (voiceActive) {
+      hideVoiceOverlay();
+    } else {
+      showVoiceOverlay();
+    }
+  });
+
+  voiceCloseBtn?.addEventListener("click", hideVoiceOverlay);
+
+  // Tap orb to toggle listening/stop
+  voiceOrb?.addEventListener("click", () => {
+    if (!voiceActive) return;
+    if (voiceOrb.classList.contains("speaking")) {
+      stopAudio();
+      voiceAgentText.textContent = "Listening…";
+      startListening();
+    } else if (voiceOrb.classList.contains("listening")) {
+      stopListening();
+      setOrbState("idle");
+      voiceAgentText.textContent = "Paused. Tap to listen again.";
+    } else {
+      startListening();
+    }
+  });
+})();
