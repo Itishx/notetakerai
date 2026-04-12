@@ -961,7 +961,7 @@ function executeAgentAction(actionObj) {
 
 async function callAgentStep(task, pageInfo, history, chatHistory) {
   const historyText = history.length > 0
-    ? history.map((h, i) => `Step ${i + 1}: ${h.description} → ${h.result?.success ? "✓ OK" : ("✗ FAILED: " + (h.result?.error || "unknown"))}`).join("\n")
+    ? history.map((h, i) => `Step ${i + 1}: ${h.description} → ${h.result?.success ? "✓ OK" : ("✗ " + (h.result?.error || "FAILED"))}`).join("\n")
     : "None yet.";
 
   const elementsText = pageInfo.interactiveEls?.length > 0
@@ -1136,6 +1136,23 @@ async function runAgentLoop(task) {
     // Check if first action is terminal
     const firstAction = actions[0];
     if (firstAction.type === "done" || firstAction.type === "answer" || firstAction.type === "clarify") {
+
+      // HALLUCINATION GUARD: if agent claims "done" but no real browser actions were executed, force it to continue
+      if (firstAction.type === "done") {
+        const realActionTypes = ["click", "type", "pressKey", "selectOption"];
+        const successfulRealActions = history.filter(h => realActionTypes.includes(h.type) && h.result?.success);
+        const taskRequiresActions = /send|submit|reply|compose|type|fill|click|buy|order|play|post|write|upload/i.test(task);
+        if (taskRequiresActions && successfulRealActions.length === 0) {
+          // Inject a correction into history so the LLM sees it next iteration
+          history.push({
+            type: "correction",
+            description: "⚠️ SYSTEM: You returned 'done' but NO clicks, types, or keypresses have been executed. The task is NOT complete. You MUST execute the actual browser steps — navigate somewhere if needed, then click and type.",
+            result: { success: false, error: "No real actions taken — task not complete" }
+          });
+          continue; // re-query LLM without marking done
+        }
+      }
+
       if (history.length === 0) thinkingBlock.remove();
       finish(firstAction.message || "Done.");
       return;
