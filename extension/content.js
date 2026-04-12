@@ -272,6 +272,63 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ===== VOICE: run SpeechRecognition here in the page context =====
+  // Content scripts inherit the page's mic permissions — this is the only
+  // reliable way to get mic access in an MV3 extension side panel.
+  if (msg.action === "startVoiceListening") {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      sendResponse({ error: "not-supported" });
+      return true;
+    }
+    // Stop any existing recognition
+    if (window.__sideBrainRecognition) {
+      try { window.__sideBrainRecognition.abort(); } catch(e) {}
+      window.__sideBrainRecognition = null;
+    }
+
+    const recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    window.__sideBrainRecognition = recognition;
+
+    recognition.onresult = (e) => {
+      const text = Array.from(e.results).map(r => r[0].transcript).join("");
+      const isFinal = e.results[e.results.length - 1].isFinal;
+      chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text, isFinal });
+      if (isFinal) window.__sideBrainRecognition = null;
+    };
+
+    recognition.onerror = (e) => {
+      if (e.error === "aborted") return;
+      chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.error });
+      window.__sideBrainRecognition = null;
+    };
+
+    recognition.onstart = () => {
+      chrome.runtime.sendMessage({ action: "voiceEvent", event: "listening" });
+    };
+
+    try {
+      recognition.start();
+      sendResponse({ success: true });
+    } catch(e) {
+      chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.message });
+      sendResponse({ error: e.message });
+    }
+    return true;
+  }
+
+  if (msg.action === "stopVoiceListening") {
+    if (window.__sideBrainRecognition) {
+      try { window.__sideBrainRecognition.abort(); } catch(e) {}
+      window.__sideBrainRecognition = null;
+    }
+    sendResponse({ success: true });
+    return true;
+  }
+
   return true;
 });
 

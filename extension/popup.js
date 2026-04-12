@@ -1116,20 +1116,20 @@ function setSubtitles(user, agent) {
   if (voiceAgentText) voiceAgentText.textContent = agent || "";
 }
 
-async function ensureOffscreen() {
-  const existing = await chrome.offscreen.hasDocument?.().catch(() => false);
-  if (!existing) {
-    await chrome.offscreen.createDocument({
-      url: "offscreen.html",
-      reasons: ["USER_MEDIA"],
-      justification: "Speech recognition for voice mode",
-    }).catch(() => {}); // may already exist
-  }
+function getActiveTabId() {
+  return new Promise(resolve => {
+    chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
+      if (activeTabId) { resolve(activeTabId); return; }
+      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+        resolve(tabs[0]?.id || null);
+      });
+    });
+  });
 }
 
-function sendToOffscreen(action, extra = {}) {
+function sendToContentScript(tabId, action) {
   return new Promise(resolve => {
-    chrome.runtime.sendMessage({ target: "offscreen", action, ...extra }, res => {
+    chrome.tabs.sendMessage(tabId, { action }, res => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || {});
     });
@@ -1140,9 +1140,20 @@ async function openVoiceMode() {
   voiceActive = true;
   voiceOverlay?.classList.remove("hidden");
   setOrbState("listening");
-  setSubtitles("", "Listening…");
-  await ensureOffscreen();
-  await sendToOffscreen("startVoiceListening");
+  setSubtitles("", "Starting…");
+
+  const tabId = await getActiveTabId();
+  if (!tabId) {
+    setSubtitles("", "No active tab. Open a webpage first, then try voice mode.");
+    setOrbState("idle");
+    return;
+  }
+
+  const res = await sendToContentScript(tabId, "startVoiceListening");
+  if (res?.error) {
+    setSubtitles("", "Could not start voice: " + res.error);
+    setOrbState("idle");
+  }
 }
 
 async function closeVoiceMode() {
@@ -1150,7 +1161,8 @@ async function closeVoiceMode() {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
   voiceOverlay?.classList.add("hidden");
   setOrbState("idle");
-  await sendToOffscreen("stopVoiceListening");
+  const tabId = await getActiveTabId();
+  if (tabId) sendToContentScript(tabId, "stopVoiceListening");
 }
 
 // Receive voice events from offscreen document
@@ -1202,7 +1214,8 @@ async function handleVoiceInput(text) {
   if (voiceActive) {
     setOrbState("listening");
     setSubtitles("", "Listening…");
-    await sendToOffscreen("startVoiceListening");
+    const tabId = await getActiveTabId();
+    if (tabId) sendToContentScript(tabId, "startVoiceListening");
   }
 }
 
