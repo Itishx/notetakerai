@@ -132,7 +132,7 @@ const segmentCountEl = document.getElementById("segmentCount") || { classList: {
 // ===== MARKDOWN RENDERER (unchanged) =====
 function renderMarkdown(md) {
   const codeBlocks = [];
-  let processed = md.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+  let processed = md.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
     const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
     const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const langLabel = lang ? `<span class="code-lang">${lang}</span>` : '';
@@ -959,6 +959,41 @@ function executeAgentAction(actionObj) {
   });
 }
 
+// Zero-LLM fast paths for simple deterministic tasks
+function tryFastPath(task, history) {
+  if (history.length > 0) return null; // only on first step
+  const t = task.toLowerCase().trim();
+
+  // "go to / open <url or site>"
+  const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
+  if (gotoMatch) {
+    const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
+    return [{ type: "navigate", url, description: `Navigate to ${url}` }];
+  }
+
+  // "search <query> on youtube"
+  const ytMatch = t.match(/search\s+(.+?)\s+on\s+youtube/i) || t.match(/youtube\s+search\s+(.+)/i);
+  if (ytMatch) {
+    const q = encodeURIComponent(ytMatch[1].trim());
+    return [{ type: "navigate", url: `https://www.youtube.com/results?search_query=${q}`, description: `Search YouTube for "${ytMatch[1]}"` }];
+  }
+
+  // "search <query> on google" / "google <query>"
+  const gMatch = t.match(/(?:search\s+(.+?)\s+on\s+google|^google\s+(.+))/i);
+  if (gMatch) {
+    const q = encodeURIComponent((gMatch[1] || gMatch[2]).trim());
+    return [{ type: "navigate", url: `https://www.google.com/search?q=${q}`, description: `Google search` }];
+  }
+
+  // "scroll down/up"
+  if (/^scroll\s+(down|up)/.test(t)) {
+    const dir = t.includes("up") ? "up" : "down";
+    return [{ type: "scroll", direction: dir, amount: 600, description: `Scroll ${dir}` }];
+  }
+
+  return null;
+}
+
 async function callAgentStep(task, pageInfo, history, chatHistory) {
   const historyText = history.length > 0
     ? history.map((h, i) => `Step ${i + 1}: ${h.description} → ${h.result?.success ? "✓ OK" : ("✗ " + (h.result?.error || "FAILED"))}`).join("\n")
@@ -980,48 +1015,137 @@ async function callAgentStep(task, pageInfo, history, chatHistory) {
       chatHistory.slice(-10).map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n")
     : "";
 
-  const agentSystemPrompt = `You are SideBrain, a browser automation agent. You control a real browser by returning JSON actions. You respond ONLY with a JSON object or array — no markdown, no explanation, no prose.
+  const today = new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const currentUrl = pageInfo.url || "";
 
-CRITICAL — YOU CANNOT DO THINGS YOURSELF:
-You are NOT an AI assistant that can perform tasks directly. You have ZERO ability to send emails, search the web, or do anything outside of the browser actions listed below. The ONLY way anything happens is by returning browser actions (navigate, click, type, etc.) that get executed step by step on the real browser. If you return {"type":"done"} before the steps have been executed and confirmed in STEPS TAKEN SO FAR, you are lying. NEVER claim a task is complete unless the STEPS TAKEN SO FAR show all the required actions were executed successfully.
+  // Dynamic platform cheat-sheet — only inject the relevant section
+  function getPlatformGuide(url) {
+    if (/mail\.google\.com/.test(url)) return `
+── GMAIL (you are here) ──
+Compose new email:
+  1. navigate → https://mail.google.com/mail/u/0/#compose
+  2. wait 1200
+  3. [{"type":"type","selector":"[name='to']","targetText":"To","text":"RECIPIENT"},{"type":"pressKey","key":"Tab"},{"type":"type","selector":"[name='subjectbox']","text":"SUBJECT"}]
+  4. pressKey Tab
+  5. type body → selector="[role='textbox'][aria-label*='Message']" or targetText="Message Body"
+  6. click Send → selector="[data-tooltip*='Send']" or [aria-label*="Send"] or targetText="Send"
+Reply: click Reply (.amn or targetText="Reply") → wait 600 → type in [role='textbox'] → click Send
+Search: click [aria-label="Search mail"] → type query → pressKey Enter`;
 
-CLARIFICATION FIRST:
-- If the user's request is ambiguous or missing key info, respond with: {"type":"clarify","message":"..."}
-- Only clarify when truly needed. Do not ask for info you can infer.
+    if (/youtube\.com/.test(url)) return `
+── YOUTUBE (you are here) ──
+Search & play: navigate → https://www.youtube.com/results?search_query=QUERY (encode spaces as +)
+  → wait 800 → click selector="ytd-video-renderer #video-title" or targetText=video title
+Player controls:
+  Play/Pause: selector=".ytp-play-button"
+  Fullscreen: selector=".ytp-fullscreen-button"
+  Mute: selector=".ytp-mute-button"
+  Speed: click .ytp-settings-button → targetText="Playback speed"`;
 
-Available actions:
-{"type":"click","selector":"css-selector-from-sel=","targetText":"fallback text if no sel=","description":"..."}
-{"type":"type","selector":"css-selector","text":"text to type","description":"..."}
+    if (/netflix\.com/.test(url)) return `
+── NETFLIX (you are here) ──
+Search: navigate → https://www.netflix.com/search?q=QUERY → wait 1200
+  → click first result card (targetText=show title) → wait 800 → click Play selector="[data-uia*='play']" or targetText="Play"
+Season: selectOption selector="select[id*='season']" value="Season 2"
+Episode: click episode card by targetText`;
+
+    if (/x\.com|twitter\.com/.test(url)) return `
+── TWITTER/X (you are here) ──
+Post tweet: navigate → https://x.com/compose/tweet → wait 1000
+  → type selector="[data-testid='tweetTextarea_0']"
+  → click selector="[data-testid='tweetButtonInline']"
+Search: navigate → https://x.com/search?q=QUERY&src=typed_query
+Like: click [data-testid="like"] on the tweet row`;
+
+    if (/linkedin\.com/.test(url)) return `
+── LINKEDIN (you are here) ──
+Search people: navigate → https://www.linkedin.com/search/results/people/?keywords=NAME
+Connect: click targetText="Connect" → click targetText="Send without a note"
+Message: navigate to profile → click targetText="Message" → type [aria-label*="Write a message"] → pressKey Enter`;
+
+    if (/amazon\./.test(url)) return `
+── AMAZON (you are here) ──
+Search: type selector="#twotabsearchtextbox" → pressKey Enter
+  → click product title → click selector="#add-to-cart-button"
+Buy Now: selector="#buy-now-button"`;
+
+    if (/web\.whatsapp\.com/.test(url)) return `
+── WHATSAPP WEB (you are here) ──
+Send message: click selector="[data-tab='3']" (search) → type contact name → wait 600
+  → click contact in list → type selector="[data-tab='10']" or [aria-label*="Type a message"] → pressKey Enter`;
+
+    if (/open\.spotify\.com/.test(url)) return `
+── SPOTIFY (you are here) ──
+Search & play: navigate → https://open.spotify.com/search/QUERY → wait 1000
+  → click first song row selector="[data-testid='tracklist-row']" → click play button inside it`;
+
+    if (/github\.com/.test(url)) return `
+── GITHUB (you are here) ──
+Search repos: navigate → https://github.com/search?q=QUERY&type=repositories
+Open VS Code editor: pressKey "." on any repo page
+View file: click file name in file tree`;
+
+    if (/google\.com\/search|google\.co/.test(url)) return `
+── GOOGLE SEARCH (you are here) ──
+New search: type selector="[name='q']" → pressKey Enter
+Direct: navigate → https://www.google.com/search?q=QUERY`;
+
+    // Generic guide for unknown sites
+    return `
+── GENERAL SITE ──
+Prefer navigating to URLs over clicking search bars.
+Use sel= selectors from INTERACTIVE ELEMENTS when available.
+For forms: click field → type → Tab to next field → submit.`;
+  }
+
+  const agentSystemPrompt = `You are SideBrain Browser Agent. Automate a real Chrome browser by returning JSON actions.
+Respond ONLY with a JSON object or array. Zero prose. Zero explanation. Zero markdown fences.
+
+MINDSET: You are a browser robot, not a chatbot. Every task is solved by executing actions.
+- Infer everything possible. NEVER ask about things you can figure out.
+- Never return done/answer before taking the required browser actions.
+- If STEPS TAKEN SO FAR is empty → you have done NOTHING yet → start executing immediately.
+- If task is a pure question with no browser actions needed → {"type":"answer","message":"..."}
+
+ACTIONS:
+{"type":"navigate","url":"https://...","description":"..."}
+{"type":"click","selector":"css","targetText":"fallback","description":"..."}
+{"type":"type","selector":"css","targetText":"fallback","text":"...","description":"..."}
 {"type":"pressKey","key":"Enter","description":"..."}
-{"type":"navigate","url":"https://full-url.com","description":"..."}
-{"type":"selectOption","selector":"select","value":"option value","description":"..."}
+{"type":"selectOption","selector":"css","value":"option text","description":"..."}
 {"type":"scroll","direction":"down","amount":400,"description":"..."}
-{"type":"wait","ms":1000,"description":"..."}
-{"type":"done","message":"summary of what was accomplished"}
-{"type":"answer","message":"conversational response"}
-{"type":"clarify","message":"question to ask before proceeding"}
+{"type":"wait","ms":1500,"description":"..."}
+{"type":"done","message":"what was accomplished"}
+{"type":"answer","message":"..."}
+{"type":"clarify","message":"..."}  ← ONLY when genuinely blocked with no way to infer
 
-DATE AWARENESS:
-- Today is ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
-- Calculate relative dates yourself ("next week", "tomorrow", etc.). Never ask what year it is.
+SELECTOR PRIORITY:
+1. sel= value shown in INTERACTIVE ELEMENTS
+2. [aria-label="..."] or [role="button"][aria-label="..."]
+3. [data-testid="..."]
+4. [placeholder="..."] or [name="..."]
+5. targetText fallback (fuzzy visible text match)
 
-PLATFORM KNOWLEDGE:
-YouTube: navigate to https://www.youtube.com/results?search_query=QUERY then click first video result.
-Gmail compose: Step 1: navigate to https://mail.google.com. Step 2: wait 2000. Step 3: click Compose button. Step 4: wait 1000. Step 5: type recipient in To field (selector: "input[name='to']" or targetText "To"). Step 6: pressKey Tab. Step 7: type subject. Step 8: pressKey Tab. Step 9: type body in message area. Step 10: click Send. You MUST execute ALL these steps — returning done before step 10 is wrong.
-Gmail reply: Navigate to Gmail, find and click the email thread, click Reply, type the reply body, click Send.
-Google Search: navigate to https://www.google.com/search?q=QUERY.
-Netflix: Use selectOption for season dropdowns.
-Flights: Navigate to https://www.makemytrip.com/flight/search?itinerary=ORIG-DEST-DD/MM/YYYY&tripType=O&paxType=A-1_C-0_I-0&cabinClass=E using IATA codes. Never click date pickers.
+BATCHING: Return array of up to 5 actions for predictable sequences. NEVER batch navigate.
+Example: [{"type":"type",...},{"type":"pressKey","key":"Tab"},{"type":"type",...},{"type":"pressKey","key":"Enter"}]
 
-Decision rules:
-1. ALWAYS check STEPS TAKEN SO FAR before deciding what to do next. If steps are empty, you have done nothing yet — start from the beginning.
-2. Never return "done" unless STEPS TAKEN SO FAR confirms all required actions succeeded.
-3. If user is asking a question (not requesting browser action) → answer.
-4. Never repeat a failed action — try a different selector or approach.
-5. Always include "description" in every action.
-6. Prefer URL navigation over clicking search bars.
-7. For click: use "selector" from sel= when shown; use "targetText" only as fallback.
-8. You may return a JSON array of up to 3 actions for obvious sequences (type+pressKey, click+type). Never batch navigate with other actions.`;
+RULES:
+1. STEPS TAKEN SO FAR is the ground truth. Empty = nothing done. Start from step 1.
+2. Never return done unless steps confirm ALL required actions succeeded.
+3. Never repeat a failed selector — switch strategy immediately.
+4. After navigate → always wait before clicking (pages need load time).
+5. Forms: type → Tab → next field. Final field → Enter or click Submit/Send.
+6. TODAY: ${today}. Calculate all relative dates yourself. Never ask for the date.
+7. Failed click → try scroll first, then different selector, then targetText.
+8. Flights: IATA codes + date as DD/MM/YYYY. Never touch date pickers.
+
+${getPlatformGuide(currentUrl)}
+
+FAILURE RECOVERY:
+- Element not found → try aria-label, data-testid, placeholder, then targetText
+- Page not loaded → add {"type":"wait","ms":1500} before next action
+- Form not responding → click field first, then type
+- Repeated failure → scroll to find element, then retry`;
 
   const pageStatus = pageInfo.url
     ? `URL: ${pageInfo.url}\nTitle: ${pageInfo.title}`
@@ -1253,8 +1377,19 @@ function isBrowserActionCommand(text) {
   return /\b(open|go to|navigate to|search for|play|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|visit|book)\b/i.test(text);
 }
 
+let voiceHandlingToken = 0;
+
 async function handleVoiceInput(text) {
   if (!text || !voiceActive) return;
+
+  // Cancel any in-progress request (agent loop, TTS, fetch)
+  agentShouldStop = true;
+  stopCurrentTTS();
+  const myToken = ++voiceHandlingToken;
+  // Brief gap so previous async calls can detect cancellation
+  await new Promise(r => setTimeout(r, 60));
+  if (voiceHandlingToken !== myToken || !voiceActive) return;
+  agentShouldStop = false;
 
   setOrbState("processing");
   if (voiceUserText) voiceUserText.textContent = text;
@@ -1352,8 +1487,8 @@ function runAgentLoopForVoice(task) {
       setSubtitles(task, iterations === 1 ? "Working on it…" : `Step ${iterations}…`);
 
       const pageInfo = await getAgentPageContext();
-      let actions;
-      try {
+      let actions = tryFastPath(task, history);
+      if (!actions) try {
         actions = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
       } catch(e) {
         agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
@@ -1454,8 +1589,8 @@ async function runAgentLoop(task) {
 
     const pageInfo = await getAgentPageContext();
 
-    let actions;
-    try {
+    let actions = tryFastPath(task, history);
+    if (!actions) try {
       actions = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
     } catch (e) {
       agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
