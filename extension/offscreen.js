@@ -5,12 +5,26 @@
 let recognition = null;
 let voiceListening = false;
 
-function startSpeechRecognition() {
+async function startSpeechRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
     chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: "Speech recognition not supported." });
     return;
   }
+
+  // getUserMedia in the offscreen document (USER_MEDIA reason) triggers
+  // the Chrome mic permission grant for the extension origin.
+  // SpeechRecognition reuses this permission once granted.
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop()); // release immediately — just needed for permission
+  } catch (e) {
+    chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: "not-allowed" });
+    return;
+  }
+
+  if (!voiceListening) return; // user may have cancelled while waiting
+
   if (recognition) { try { recognition.abort(); } catch(e) {} }
 
   recognition = new SR();
@@ -38,9 +52,7 @@ function startSpeechRecognition() {
     chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.error });
   };
 
-  recognition.onend = () => {
-    // Restart handled by sidepanel after processing result
-  };
+  recognition.onend = () => {};
 
   try { recognition.start(); } catch(e) {
     chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.message });
