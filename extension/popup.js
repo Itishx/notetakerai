@@ -1069,10 +1069,166 @@ What actions should be taken next? Return a single JSON object, OR a JSON array 
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
-// ===== ELEVENLABS =====
+// ===== ELEVENLABS TTS =====
 const ELEVENLABS_API_KEY = "sk_2ee3bb5258f10b54aba4d71a7ff1640d98fc322c3e2410cd";
 const ELEVENLABS_VOICE_ID = "2ajXGJNYBR0iNHpS4VZb";
-// Voice mode will be rebuilt here
+let currentAudio = null;
+
+async function speakText(text) {
+  if (!text) return;
+  try {
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`, {
+      method: "POST",
+      headers: { "xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ text, model_id: "eleven_turbo_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    await currentAudio.play();
+    await new Promise(resolve => { currentAudio.onended = resolve; currentAudio.onerror = resolve; });
+    URL.revokeObjectURL(url);
+    currentAudio = null;
+  } catch (e) {
+    console.warn("ElevenLabs TTS error:", e);
+  }
+}
+
+// ===== VOICE MODE =====
+let voiceActive = false;
+let recognition = null;
+
+const voiceOverlay  = document.getElementById("voiceOverlay");
+const voiceOrb      = document.getElementById("voiceOrb");
+const voiceUserText = document.getElementById("voiceUserText");
+const voiceAgentText= document.getElementById("voiceAgentText");
+const voiceModeBtn  = document.getElementById("voiceModeBtn");
+const voiceCloseBtn = document.getElementById("voiceCloseBtn");
+
+function setOrbState(state) { // "idle" | "listening" | "thinking" | "speaking"
+  if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
+}
+
+function setSubtitles(user, agent) {
+  if (voiceUserText)  voiceUserText.textContent  = user  || "";
+  if (voiceAgentText) voiceAgentText.textContent = agent || "";
+}
+
+function openVoiceMode() {
+  voiceActive = true;
+  voiceOverlay?.classList.remove("hidden");
+  setSubtitles("", "Listening…");
+  setOrbState("listening");
+  startListening();
+}
+
+function closeVoiceMode() {
+  voiceActive = false;
+  if (recognition) { try { recognition.abort(); } catch(e) {} recognition = null; }
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  voiceOverlay?.classList.add("hidden");
+  setOrbState("idle");
+}
+
+function startListening() {
+  if (!voiceActive) return;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    setSubtitles("", "Speech recognition not available in this browser.");
+    return;
+  }
+
+  if (recognition) { try { recognition.abort(); } catch(e) {} }
+  recognition = new SR();
+  recognition.lang = "en-US";
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    setOrbState("listening");
+    setSubtitles("", "Listening…");
+  };
+
+  recognition.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
+    setSubtitles(transcript, "");
+    if (e.results[e.results.length - 1].isFinal) {
+      recognition.stop();
+      handleVoiceInput(transcript.trim());
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === "aborted" || e.error === "no-speech") {
+      if (voiceActive) setTimeout(() => startListening(), 200);
+      return;
+    }
+    if (e.error === "not-allowed") {
+      setOrbState("idle");
+      setSubtitles("", "Microphone blocked. Go to chrome://settings/content/microphone and allow this extension, then try again.");
+      return;
+    }
+    console.warn("Voice recognition error:", e.error);
+    if (voiceActive) setTimeout(() => startListening(), 500);
+  };
+
+  recognition.onend = () => {
+    // Don't auto-restart here — handleVoiceInput controls the cycle
+  };
+
+  try {
+    recognition.start();
+  } catch(e) {
+    console.warn("Failed to start recognition:", e);
+    if (voiceActive) setTimeout(() => startListening(), 500);
+  }
+}
+
+async function handleVoiceInput(text) {
+  if (!text || !voiceActive) return;
+
+  setOrbState("processing");
+  setSubtitles(text, "Thinking…");
+
+  try {
+    // Send to chat API (same as regular chat, uses current context)
+    const notesCtx = notesMarkdown || "";
+    const res = await fetch(`${API_BASE}/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: notesCtx, message: text }),
+    });
+    const data = await res.json();
+    const reply = data.reply || "Sorry, I didn't get that.";
+
+    // Add to chat history
+    chatMessages.push({ role: "user", content: text });
+    chatMessages.push({ role: "assistant", content: reply });
+    saveChatMessages();
+    renderChatMessages();
+
+    // Speak the reply
+    setOrbState("speaking");
+    setSubtitles(text, reply);
+    await speakText(reply);
+  } catch(e) {
+    setSubtitles(text, "Something went wrong. Try again.");
+  }
+
+  // Back to listening after speaking
+  if (voiceActive) {
+    setOrbState("listening");
+    setSubtitles("", "Listening…");
+    startListening();
+  }
+}
+
+voiceModeBtn?.addEventListener("click", openVoiceMode);
+voiceCloseBtn?.addEventListener("click", closeVoiceMode);
 
 // Poll until the active tab finishes loading (replaces fixed 3500ms navigate wait)
 async function waitForTabReady(maxMs = 5000) {
