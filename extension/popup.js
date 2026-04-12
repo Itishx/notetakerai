@@ -1187,28 +1187,36 @@ async function handleVoiceInput(text) {
   if (!text || !voiceActive) return;
 
   setOrbState("processing");
-  setSubtitles(text, "Thinking…");
+  setSubtitles(text, "Working on it…");
+
+  let reply;
 
   try {
-    const notesCtx = notesMarkdown || "";
-    const res = await fetch(`${API_BASE}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: notesCtx, message: text }),
-    });
-    const data = await res.json();
-    const reply = data.reply || "Sorry, I didn't get that.";
+    if (currentMode === "agent") {
+      // Run the full browser agent loop and speak the result when done
+      reply = await runAgentLoopForVoice(text);
+    } else {
+      const notesCtx = notesMarkdown || "";
+      const res = await fetch(`${API_BASE}/chat-about-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notesCtx, message: text }),
+      });
+      const data = await res.json();
+      reply = data.reply || "Sorry, I didn't get that.";
 
-    chatMessages.push({ role: "user", content: text });
-    chatMessages.push({ role: "assistant", content: reply });
-    saveChatMessages();
-    renderChatMessages();
+      chatMessages.push({ role: "user", content: text });
+      chatMessages.push({ role: "assistant", content: reply });
+      saveChatMessages();
+      renderChatMessages();
+    }
 
     setOrbState("speaking");
     setSubtitles(text, reply);
     await speakText(reply);
   } catch(e) {
-    setSubtitles(text, "Something went wrong. Try again.");
+    reply = "Something went wrong. Try again.";
+    setSubtitles(text, reply);
   }
 
   if (voiceActive) {
@@ -1217,6 +1225,93 @@ async function handleVoiceInput(text) {
     const tabId = await getActiveTabId();
     if (tabId) sendToContentScript(tabId, "startVoiceListening");
   }
+}
+
+// Run agent loop from voice — returns the final message string to speak
+function runAgentLoopForVoice(task) {
+  return new Promise(async (resolve) => {
+    if (agentRunning) { resolve("I'm already working on something, please wait."); return; }
+    if (!(await loadPremiumStatus())) { resolve("Browser agent requires a premium subscription."); return; }
+
+    agentShouldStop = false;
+    setAgentRunningUI(true);
+
+    const userMsg = { role: "user", content: `🤖 ${task}` };
+    chatMessages.push(userMsg);
+    renderChatMessages();
+    saveChatMessages();
+    updateEmptyState();
+
+    const history = [];
+    const thinkingBlock = createAgentThinkingBlock();
+
+    const finish = (msg) => {
+      agentFinalizeBlock(thinkingBlock, history.length);
+      chatMessages.push({ role: "assistant", content: msg });
+      renderChatMessages();
+      saveChatMessages();
+      setAgentRunningUI(false);
+      resolve(msg);
+    };
+
+    const MAX = 20;
+    let iterations = 0;
+
+    while (iterations++ < MAX) {
+      if (agentShouldStop || !voiceActive) { finish("Stopped."); return; }
+
+      setSubtitles(task, iterations === 1 ? "Working on it…" : `Step ${iterations}…`);
+
+      const pageInfo = await getAgentPageContext();
+      let actions;
+      try {
+        actions = await callAgentStep(task, pageInfo, history, chatMessages.slice(0, -1));
+      } catch(e) {
+        agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
+        finish(`Error: ${e.message}`);
+        return;
+      }
+
+      if (agentShouldStop || !voiceActive) { finish("Stopped."); return; }
+
+      const first = actions[0];
+      if (first.type === "done" || first.type === "answer" || first.type === "clarify") {
+        if (first.type === "done") {
+          const realDone = history.filter(h => ["click","type","pressKey","selectOption"].includes(h.type) && h.result?.success);
+          const needsActions = /send|submit|reply|compose|type|fill|click|buy|order|play|post|write|upload/i.test(task);
+          if (needsActions && realDone.length === 0) {
+            history.push({ type: "correction", description: "SYSTEM: No real actions executed. Start executing now.", result: { success: false, error: "No real actions" } });
+            continue;
+          }
+        }
+        if (history.length === 0) thinkingBlock.remove();
+        finish(first.message || "Done.");
+        return;
+      }
+
+      for (const actionObj of actions) {
+        if (agentShouldStop || !voiceActive) { finish("Stopped."); return; }
+        if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
+          finish(actionObj.message || "Done.");
+          return;
+        }
+        const stepEl = agentAddStep(thinkingBlock, actionObj.description || actionObj.type);
+        const result = await executeAgentAction(actionObj);
+        history.push({ ...actionObj, result });
+        agentMarkStepResult(stepEl, !result?.error, result?.error);
+        if (result?.error) { await new Promise(r => setTimeout(r, 600)); break; }
+        if (actionObj.type === "navigate") {
+          await waitForTabReady(5000);
+          await new Promise(r => setTimeout(r, 300));
+        } else {
+          await new Promise(r => setTimeout(r, 150));
+        }
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    finish("I ran out of steps. Please check the page.");
+  });
 }
 
 voiceModeBtn?.addEventListener("click", openVoiceMode);
