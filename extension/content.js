@@ -281,46 +281,67 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ error: "not-supported" });
       return true;
     }
-    // Stop any existing recognition
+    // Abort any existing session
+    window.__sideBrainShouldListen = true;
     if (window.__sideBrainRecognition) {
       try { window.__sideBrainRecognition.abort(); } catch(e) {}
       window.__sideBrainRecognition = null;
     }
 
-    const recognition = new SR();
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    window.__sideBrainRecognition = recognition;
+    function buildAndStart() {
+      if (!window.__sideBrainShouldListen) return;
+      const rec = new SR();
+      rec.lang = "en-US";
+      rec.interimResults = true;
+      rec.continuous = false; // ends after utterance; onend auto-restarts
+      rec.maxAlternatives = 1;
+      window.__sideBrainRecognition = rec;
 
-    recognition.onresult = (e) => {
-      const text = Array.from(e.results).map(r => r[0].transcript).join("");
-      const isFinal = e.results[e.results.length - 1].isFinal;
-      chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text, isFinal });
-      if (isFinal) window.__sideBrainRecognition = null;
-    };
+      rec.onresult = (e) => {
+        const text = Array.from(e.results).map(r => r[0].transcript).join("");
+        const isFinal = e.results[e.results.length - 1].isFinal;
+        chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text, isFinal });
+      };
 
-    recognition.onerror = (e) => {
-      if (e.error === "aborted") return;
-      chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.error });
-      window.__sideBrainRecognition = null;
-    };
+      rec.onerror = (e) => {
+        if (e.error === "aborted") return;
+        // no-speech is normal (user didn't speak) — just restart silently
+        if (e.error === "no-speech") {
+          window.__sideBrainRecognition = null;
+          setTimeout(buildAndStart, 100);
+          return;
+        }
+        chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.error });
+        window.__sideBrainRecognition = null;
+        window.__sideBrainShouldListen = false;
+      };
 
-    recognition.onstart = () => {
-      chrome.runtime.sendMessage({ action: "voiceEvent", event: "listening" });
-    };
+      rec.onstart = () => {
+        chrome.runtime.sendMessage({ action: "voiceEvent", event: "listening" });
+      };
 
-    try {
-      recognition.start();
-      sendResponse({ success: true });
-    } catch(e) {
-      chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.message });
-      sendResponse({ error: e.message });
+      rec.onend = () => {
+        window.__sideBrainRecognition = null;
+        // Auto-restart so user can speak again after the current utterance is processed
+        if (window.__sideBrainShouldListen) {
+          setTimeout(buildAndStart, 150);
+        }
+      };
+
+      try {
+        rec.start();
+      } catch(e) {
+        if (window.__sideBrainShouldListen) setTimeout(buildAndStart, 500);
+      }
     }
+
+    buildAndStart();
+    sendResponse({ success: true });
     return true;
   }
 
   if (msg.action === "stopVoiceListening") {
+    window.__sideBrainShouldListen = false;
     if (window.__sideBrainRecognition) {
       try { window.__sideBrainRecognition.abort(); } catch(e) {}
       window.__sideBrainRecognition = null;

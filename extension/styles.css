@@ -2206,18 +2206,18 @@ body.sidepanel.theme-warm .notes-overlay { background: hsl(40,20%,97%); }
   position: fixed;
   inset: 0;
   background: var(--bg);
-  z-index: 100;
+  z-index: 200;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 40px;
 }
 
 .voice-orb-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-top: -60px; /* shift orb slightly above center */
 }
 
 .voice-orb {
@@ -2257,28 +2257,39 @@ body.sidepanel.theme-warm .notes-overlay { background: hsl(40,20%,97%); }
 }
 
 .voice-subtitles {
+  position: absolute;
+  bottom: 48px;
+  left: 0;
+  right: 0;
   text-align: center;
-  padding: 0 24px;
-  min-height: 72px;
+  padding: 0 28px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-width: 320px;
+  gap: 6px;
+  pointer-events: none;
 }
 
 .voice-user-text {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
-  line-height: 1.5;
-  min-height: 20px;
+  line-height: 1.4;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .voice-agent-text {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text);
-  line-height: 1.6;
+  line-height: 1.5;
   font-weight: 400;
-  min-height: 24px;
+  /* max 2 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 21px;
 }
 
 .voice-close-btn {

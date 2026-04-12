@@ -1090,13 +1090,23 @@ function stripMarkdownForTTS(text) {
     .trim();
 }
 
+let voiceWordIntervalId = null;
+let isVoiceSpeaking = false;
+
+function stopCurrentTTS() {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (voiceWordIntervalId) { clearInterval(voiceWordIntervalId); voiceWordIntervalId = null; }
+  isVoiceSpeaking = false;
+}
+
 async function speakText(text, onWordUpdate) {
   if (!text) return;
   const clean = stripMarkdownForTTS(text);
   if (!clean) return;
 
+  stopCurrentTTS();
+
   try {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`, {
       method: "POST",
       headers: { "xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json" },
@@ -1107,33 +1117,38 @@ async function speakText(text, onWordUpdate) {
     const url = URL.createObjectURL(blob);
     currentAudio = new Audio(url);
 
-    // Progressive subtitle: roll words in sync with estimated speech timing (~140 wpm)
+    // Progressive subtitle: sliding window of last 10 words being spoken
     if (onWordUpdate) {
       const words = clean.split(" ").filter(Boolean);
-      const msPerWord = Math.min(Math.max((blob.size / 8000) * 1000 / words.length, 150), 500);
+      const totalMs = Math.max((blob.size / 8000) * 1000, words.length * 150);
+      const msPerWord = Math.min(totalMs / words.length, 500);
       let i = 0;
-      const wordInterval = setInterval(() => {
+      voiceWordIntervalId = setInterval(() => {
         if (i < words.length) {
-          onWordUpdate(words.slice(0, ++i).join(" "));
+          i++;
+          // Show only the last 10 words currently being spoken
+          onWordUpdate(words.slice(Math.max(0, i - 10), i).join(" "));
         } else {
-          clearInterval(wordInterval);
+          clearInterval(voiceWordIntervalId);
+          voiceWordIntervalId = null;
         }
       }, msPerWord);
-      currentAudio.onended = () => clearInterval(wordInterval);
-      currentAudio.onerror = () => clearInterval(wordInterval);
     }
 
-    await currentAudio.play();
-    await new Promise(resolve => { currentAudio.onended = resolve; currentAudio.onerror = resolve; });
+    isVoiceSpeaking = true;
+    await new Promise(resolve => {
+      currentAudio.onended = () => { stopCurrentTTS(); resolve(); };
+      currentAudio.onerror = () => { stopCurrentTTS(); resolve(); };
+      currentAudio.play().catch(() => { stopCurrentTTS(); resolve(); });
+    });
     URL.revokeObjectURL(url);
-    currentAudio = null;
   } catch (e) {
+    stopCurrentTTS();
     console.warn("ElevenLabs TTS error:", e);
   }
 }
 
 // ===== VOICE MODE =====
-// SpeechRecognition runs in the offscreen document (mic works there, not in side panel)
 let voiceActive = false;
 
 const voiceOverlay  = document.getElementById("voiceOverlay");
@@ -1194,41 +1209,66 @@ async function openVoiceMode() {
 
 async function closeVoiceMode() {
   voiceActive = false;
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  stopCurrentTTS();
   voiceOverlay?.classList.add("hidden");
   setOrbState("idle");
   const tabId = await getActiveTabId();
   if (tabId) sendToContentScript(tabId, "stopVoiceListening");
 }
 
-// Receive voice events from offscreen document
+// Receive voice events relayed from content script
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.action !== "voiceEvent" || !voiceActive) return;
 
   if (msg.event === "listening") {
-    setOrbState("listening");
-    setSubtitles("", "Listening…");
+    // Only update UI if we're not mid-processing or speaking
+    if (!isVoiceSpeaking) {
+      setOrbState("listening");
+      setSubtitles("", "Listening…");
+    }
   } else if (msg.event === "transcript") {
-    setSubtitles(msg.text, "");
-    if (msg.isFinal) handleVoiceInput(msg.text.trim());
+    if (!msg.isFinal) {
+      // Interim: show what user is saying
+      if (voiceUserText) voiceUserText.textContent = msg.text || "";
+    } else {
+      // Final transcript — interrupt TTS if speaking, then process
+      if (isVoiceSpeaking) {
+        stopCurrentTTS();
+        if (voiceAgentText) voiceAgentText.textContent = "";
+      }
+      handleVoiceInput(msg.text.trim());
+    }
   } else if (msg.event === "error") {
-    setOrbState("idle");
-    setSubtitles("", msg.message === "not-allowed"
-      ? "Microphone blocked. Click the mic button again and allow access when prompted."
-      : `Error: ${msg.message}`);
+    if (!isVoiceSpeaking) {
+      setOrbState("idle");
+      setSubtitles("", msg.message === "not-allowed"
+        ? "Microphone blocked. Click the mic button again and allow access when prompted."
+        : `Error: ${msg.message}`);
+    }
   }
 });
+
+// Detect if a voice command is a browser action request
+function isBrowserActionCommand(text) {
+  return /\b(open|go to|navigate to|search for|play|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|visit|book)\b/i.test(text);
+}
 
 async function handleVoiceInput(text) {
   if (!text || !voiceActive) return;
 
   setOrbState("processing");
-  setSubtitles(text, "Thinking…");
+  if (voiceUserText) voiceUserText.textContent = text;
+  if (voiceAgentText) voiceAgentText.textContent = "Thinking…";
+
+  // Auto-route to agent if request sounds like a browser action
+  // (even if mode isn't explicitly "agent", unless in lecture/meeting mode)
+  const useAgent = currentMode === "agent" ||
+    (isBrowserActionCommand(text) && currentMode !== "lecture" && currentMode !== "meeting");
 
   let reply;
 
   try {
-    if (currentMode === "agent") {
+    if (useAgent) {
       reply = await runAgentLoopForVoice(text);
     } else {
       // Use same rich context as sendChatMessage — notes + page context + chat history + mode
@@ -1242,13 +1282,9 @@ async function handleVoiceInput(text) {
         chatHistory: chatMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
       };
 
-      // "Chat with Page" — pass page context
       if (currentMode === "page" && currentPageContext) {
         body.pageContext = currentPageContext;
       }
-
-      // "Lecture/Meeting" — if notes exist, they're already in sanitizedNotes
-      // "General" — no extra context needed
 
       const res = await fetch(`${API_BASE}/chat-about-notes`, {
         method: "POST",
@@ -1265,18 +1301,18 @@ async function handleVoiceInput(text) {
     }
 
     setOrbState("speaking");
-    setSubtitles(text, "");
-    await speakText(reply, (words) => setSubtitles(text, words));
+    if (voiceAgentText) voiceAgentText.textContent = "";
+    await speakText(reply, (words) => {
+      if (voiceAgentText) voiceAgentText.textContent = words;
+    });
   } catch(e) {
-    reply = "Something went wrong. Try again.";
-    setSubtitles(text, reply);
+    if (voiceAgentText) voiceAgentText.textContent = "Something went wrong. Try again.";
   }
 
-  if (voiceActive) {
+  // Content script auto-restarts recognition — just update orb state
+  if (voiceActive && !isVoiceSpeaking) {
     setOrbState("listening");
     setSubtitles("", "Listening…");
-    const tabId = await getActiveTabId();
-    if (tabId) sendToContentScript(tabId, "startVoiceListening");
   }
 }
 
