@@ -1,4 +1,52 @@
 // Offscreen document for audio recording (MV3 requirement)
+// Also handles SpeechRecognition for voice mode (mic access works here, not in side panel)
+
+// ===== SPEECH RECOGNITION =====
+let recognition = null;
+let voiceListening = false;
+
+function startSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: "Speech recognition not supported." });
+    return;
+  }
+  if (recognition) { try { recognition.abort(); } catch(e) {} }
+
+  recognition = new SR();
+  recognition.lang = "en-US";
+  recognition.interimResults = true;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    chrome.runtime.sendMessage({ action: "voiceEvent", event: "listening" });
+  };
+
+  recognition.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
+    const isFinal = e.results[e.results.length - 1].isFinal;
+    chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text: transcript, isFinal });
+    if (isFinal) { voiceListening = false; recognition.stop(); }
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === "aborted") return;
+    if (e.error === "no-speech") {
+      if (voiceListening) startSpeechRecognition();
+      return;
+    }
+    chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.error });
+  };
+
+  recognition.onend = () => {
+    // Restart handled by sidepanel after processing result
+  };
+
+  try { recognition.start(); } catch(e) {
+    chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.message });
+  }
+}
+
 let mediaRecorder = null;
 let audioChunks = [];
 let audioContext = null;
@@ -6,6 +54,20 @@ let micStream = null;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "offscreen") return;
+
+  if (message.action === "startVoiceListening") {
+    voiceListening = true;
+    startSpeechRecognition();
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (message.action === "stopVoiceListening") {
+    voiceListening = false;
+    if (recognition) { try { recognition.abort(); } catch(e) {} recognition = null; }
+    sendResponse({ success: true });
+    return true;
+  }
 
   if (message.action === "startCapture") {
     startCapture(message.streamId, message.withMic)

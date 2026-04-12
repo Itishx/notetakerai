@@ -1097,8 +1097,8 @@ async function speakText(text) {
 }
 
 // ===== VOICE MODE =====
+// SpeechRecognition runs in the offscreen document (mic works there, not in side panel)
 let voiceActive = false;
-let recognition = null;
 
 const voiceOverlay  = document.getElementById("voiceOverlay");
 const voiceOrb      = document.getElementById("voiceOrb");
@@ -1107,7 +1107,7 @@ const voiceAgentText= document.getElementById("voiceAgentText");
 const voiceModeBtn  = document.getElementById("voiceModeBtn");
 const voiceCloseBtn = document.getElementById("voiceCloseBtn");
 
-function setOrbState(state) { // "idle" | "listening" | "thinking" | "speaking"
+function setOrbState(state) {
   if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
 }
 
@@ -1116,77 +1116,60 @@ function setSubtitles(user, agent) {
   if (voiceAgentText) voiceAgentText.textContent = agent || "";
 }
 
-function openVoiceMode() {
+async function ensureOffscreen() {
+  const existing = await chrome.offscreen.hasDocument?.().catch(() => false);
+  if (!existing) {
+    await chrome.offscreen.createDocument({
+      url: "offscreen.html",
+      reasons: ["USER_MEDIA"],
+      justification: "Speech recognition for voice mode",
+    }).catch(() => {}); // may already exist
+  }
+}
+
+function sendToOffscreen(action, extra = {}) {
+  return new Promise(resolve => {
+    chrome.runtime.sendMessage({ target: "offscreen", action, ...extra }, res => {
+      if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
+      else resolve(res || {});
+    });
+  });
+}
+
+async function openVoiceMode() {
   voiceActive = true;
   voiceOverlay?.classList.remove("hidden");
   setOrbState("listening");
   setSubtitles("", "Listening…");
-  startListening();
+  await ensureOffscreen();
+  await sendToOffscreen("startVoiceListening");
 }
 
-function closeVoiceMode() {
+async function closeVoiceMode() {
   voiceActive = false;
-  if (recognition) { try { recognition.abort(); } catch(e) {} recognition = null; }
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
   voiceOverlay?.classList.add("hidden");
   setOrbState("idle");
+  await sendToOffscreen("stopVoiceListening");
 }
 
-function startListening() {
-  if (!voiceActive) return;
+// Receive voice events from offscreen document
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action !== "voiceEvent" || !voiceActive) return;
 
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    setSubtitles("", "Speech recognition not available in this browser.");
-    return;
-  }
-
-  if (recognition) { try { recognition.abort(); } catch(e) {} }
-  recognition = new SR();
-  recognition.lang = "en-US";
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
-  recognition.continuous = false;
-
-  recognition.onstart = () => {
+  if (msg.event === "listening") {
     setOrbState("listening");
     setSubtitles("", "Listening…");
-  };
-
-  recognition.onresult = (e) => {
-    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
-    setSubtitles(transcript, "");
-    if (e.results[e.results.length - 1].isFinal) {
-      recognition.stop();
-      handleVoiceInput(transcript.trim());
-    }
-  };
-
-  recognition.onerror = (e) => {
-    if (e.error === "aborted" || e.error === "no-speech") {
-      if (voiceActive) setTimeout(() => startListening(), 200);
-      return;
-    }
-    if (e.error === "not-allowed") {
-      setOrbState("idle");
-      setSubtitles("", "Microphone blocked. Go to chrome://settings/content/microphone and allow this extension, then try again.");
-      return;
-    }
-    console.warn("Voice recognition error:", e.error);
-    if (voiceActive) setTimeout(() => startListening(), 500);
-  };
-
-  recognition.onend = () => {
-    // Don't auto-restart here — handleVoiceInput controls the cycle
-  };
-
-  try {
-    recognition.start();
-  } catch(e) {
-    console.warn("Failed to start recognition:", e);
-    if (voiceActive) setTimeout(() => startListening(), 500);
+  } else if (msg.event === "transcript") {
+    setSubtitles(msg.text, "");
+    if (msg.isFinal) handleVoiceInput(msg.text.trim());
+  } else if (msg.event === "error") {
+    setOrbState("idle");
+    setSubtitles("", msg.message === "not-allowed"
+      ? "Microphone blocked. Click the mic button again and allow access when prompted."
+      : `Error: ${msg.message}`);
   }
-}
+});
 
 async function handleVoiceInput(text) {
   if (!text || !voiceActive) return;
@@ -1195,7 +1178,6 @@ async function handleVoiceInput(text) {
   setSubtitles(text, "Thinking…");
 
   try {
-    // Send to chat API (same as regular chat, uses current context)
     const notesCtx = notesMarkdown || "";
     const res = await fetch(`${API_BASE}/chat-about-notes`, {
       method: "POST",
@@ -1205,13 +1187,11 @@ async function handleVoiceInput(text) {
     const data = await res.json();
     const reply = data.reply || "Sorry, I didn't get that.";
 
-    // Add to chat history
     chatMessages.push({ role: "user", content: text });
     chatMessages.push({ role: "assistant", content: reply });
     saveChatMessages();
     renderChatMessages();
 
-    // Speak the reply
     setOrbState("speaking");
     setSubtitles(text, reply);
     await speakText(reply);
@@ -1219,11 +1199,10 @@ async function handleVoiceInput(text) {
     setSubtitles(text, "Something went wrong. Try again.");
   }
 
-  // Back to listening after speaking
   if (voiceActive) {
     setOrbState("listening");
     setSubtitles("", "Listening…");
-    startListening();
+    await sendToOffscreen("startVoiceListening");
   }
 }
 
