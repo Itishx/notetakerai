@@ -1923,19 +1923,45 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
   let currentAudio = null;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+  let micPermissionGranted = false;
+
   function setOrbState(state) {
-    voiceOrb.className = "voice-orb " + state; // idle | listening | speaking | processing
+    voiceOrb.className = "voice-orb " + state;
   }
 
-  function showVoiceOverlay() {
+  // Called directly from click handler — must request mic HERE to preserve gesture chain
+  async function showVoiceOverlay() {
     voiceOverlay.classList.remove("hidden");
     voiceActive = true;
-    // Auto-switch to agent mode for voice
-    if (currentMode !== "agent") {
-      setMode("agent");
-    }
-    voiceAgentText.textContent = "Listening…";
+    if (currentMode !== "agent") setMode("agent");
     voiceUserText.textContent = "";
+
+    // Step 1: Request mic permission IN the click handler (preserves gesture chain)
+    if (!micPermissionGranted) {
+      voiceAgentText.textContent = "Requesting microphone…";
+      setOrbState("idle");
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop()); // release immediately
+        micPermissionGranted = true;
+      } catch (err) {
+        micPermissionGranted = false;
+        if (err.name === "NotAllowedError") {
+          voiceAgentText.textContent = "Microphone blocked. Click the 🔒 lock icon in Chrome's address bar → Site settings → Microphone → Allow, then try again.";
+        } else if (err.name === "NotFoundError") {
+          voiceAgentText.textContent = "No microphone found. Please connect one and try again.";
+        } else if (err.name === "NotReadableError") {
+          voiceAgentText.textContent = "Microphone is in use by another app. Close it and try again.";
+        } else {
+          voiceAgentText.textContent = "Microphone error: " + err.message;
+        }
+        setOrbState("idle");
+        return; // don't start listening
+      }
+    }
+
+    // Step 2: Now start speech recognition (mic already granted)
+    voiceAgentText.textContent = "Listening…";
     startListening();
   }
 
@@ -1960,8 +1986,12 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
       voiceAgentText.textContent = "Speech recognition not supported in this browser.";
       return;
     }
+    if (!micPermissionGranted) {
+      voiceAgentText.textContent = "Microphone not available. Please close and reopen voice mode.";
+      return;
+    }
     stopListening();
-    
+
     recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
@@ -1977,11 +2007,8 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
       let final = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript;
-        } else {
-          interim += transcript;
-        }
+        if (event.results[i].isFinal) final += transcript;
+        else interim += transcript;
       }
       if (interim) voiceUserText.textContent = interim;
       if (final) {
@@ -1993,7 +2020,9 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
     recognition.onerror = (e) => {
       console.warn("Voice recognition error:", e.error);
       if (e.error === "not-allowed") {
-        voiceAgentText.textContent = "Microphone blocked. Please allow mic access in Chrome settings (click the lock icon in the address bar).";
+        // Mic was revoked — reset flag
+        micPermissionGranted = false;
+        voiceAgentText.textContent = "Microphone access revoked. Close voice mode and try again.";
         setOrbState("idle");
         return;
       }
@@ -2004,13 +2033,12 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
         }
         return;
       }
-      if (e.error === "aborted") return; // we stopped it
+      if (e.error === "aborted") return;
       voiceAgentText.textContent = "Couldn't hear you. Trying again…";
       if (voiceActive) setTimeout(() => startListening(), 1000);
     };
 
     recognition.onend = () => {
-      // Only restart if we're still in voice mode and not processing
       if (voiceActive && voiceOrb.classList.contains("listening")) {
         setTimeout(() => { if (voiceActive) startListening(); }, 300);
       }
@@ -2020,7 +2048,7 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
       recognition.start();
     } catch (err) {
       console.error("Failed to start recognition:", err);
-      voiceAgentText.textContent = "Microphone error. Please reload the extension.";
+      voiceAgentText.textContent = "Could not start listening. Try closing and reopening voice mode.";
     }
   }
 
