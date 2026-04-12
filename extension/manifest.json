@@ -4,6 +4,7 @@
   "version": "1.3.0",
   "description": "Your AI companion that lives in the browser — record audio, chat about any page, and sync notes to Notion",
   "permissions": ["activeTab", "tabs", "tabCapture", "offscreen", "storage", "sidePanel", "scripting"],
+  "optional_permissions": [],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
     "matches": ["https://notetakerai.lovable.app/*", "https://*.lovable.app/*"]
