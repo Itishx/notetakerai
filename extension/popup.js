@@ -1116,11 +1116,30 @@ function setSubtitles(user, agent) {
   if (voiceAgentText) voiceAgentText.textContent = agent || "";
 }
 
-function openVoiceMode() {
+async function openVoiceMode() {
   voiceActive = true;
   voiceOverlay?.classList.remove("hidden");
-  setSubtitles("", "Listening…");
+  setOrbState("idle");
+  setSubtitles("", "Requesting microphone…");
+
+  // Must call getUserMedia first — this triggers Chrome's mic permission prompt.
+  // Without this, SpeechRecognition in a side panel returns not-allowed.
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Stop the tracks immediately — we only needed the permission grant
+    stream.getTracks().forEach(t => t.stop());
+  } catch (e) {
+    if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+      setOrbState("idle");
+      setSubtitles("", "Microphone access denied. Click the mic button again — when Chrome shows a permission prompt, click Allow.");
+      return;
+    }
+    // For other errors (no device etc), still try SpeechRecognition
+  }
+
+  if (!voiceActive) return; // user closed while we were waiting
   setOrbState("listening");
+  setSubtitles("", "Listening…");
   startListening();
 }
 
