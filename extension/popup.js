@@ -230,6 +230,7 @@ function updateEmptyState() {
   const hasSession = hasExistingNotes() || chatMessages.length > 0 || !!recordingCardEl;
   if (emptyState) emptyState.classList.toggle("hidden", hasSession);
   if (newSessionBtn) newSessionBtn.classList.toggle("hidden", !hasSession);
+  updateChatContextUI();
 }
 
 // ===== ONBOARDING =====
@@ -395,6 +396,28 @@ function injectNotesReadyCard() {
   }, 5000);
 }
 
+function injectRecordMoreCard() {
+  // Remove any stale record-more cards
+  chatArea.querySelectorAll(".record-more-card").forEach(el => el.remove());
+
+  const card = document.createElement("div");
+  card.className = "record-more-card";
+  card.innerHTML = `
+    <span class="record-more-icon">🎙️</span>
+    <div class="record-more-body">
+      <span class="record-more-title">Add another recording</span>
+      <span class="record-more-desc">Record a second segment — notes will be merged when you convert again.</span>
+    </div>
+    <button class="record-more-btn">Record more</button>
+  `;
+  card.querySelector(".record-more-btn").addEventListener("click", () => {
+    card.remove();
+    startRecordingFlow();
+  });
+  chatArea.appendChild(card);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
 function handlePauseOrContinue() {
   if (isRecording) {
     handleStopRecording();
@@ -450,27 +473,33 @@ function fetchPageContext() {
   });
 }
 
-function updateChatContextUI() {
-  if (!chatInput) return;
-  const hasNotes = hasExistingNotes();
-  const hasPage = !!currentPageContext;
+const MODE_HINTS = {
+  lecture:  { sub: "Lecture & Audio mode", hint: "Press Enter or tap send to start recording — audio from this tab will be captured and turned into notes." },
+  meeting:  { sub: "Meeting & Call mode",  hint: "Press Enter or tap send to start recording — great for multi-speaker calls. Pause & Save between segments." },
+  page:     { sub: "Chat with Page mode",  hint: "Ask anything about what's on the current page. SideBrain reads the page so you don't have to." },
+  general:  { sub: "General Chat mode",    hint: "Ask me anything — no page context, just a straight conversation." },
+  agent:    { sub: "Browser Agent mode",   hint: "Type a task and the agent will navigate, click, and fill forms on your behalf. Experimental — works best for simple tasks." },
+};
 
-  if (currentMode === "lecture") {
-    chatInput.placeholder = recordingCardEl
-      ? "Ask a question while recording..."
-      : "Press Enter to start recording lecture...";
-  } else if (currentMode === "meeting") {
-    chatInput.placeholder = recordingCardEl
-      ? "Ask a question while recording..."
-      : "Press Enter to start recording meeting...";
-  } else if (currentMode === "page") {
-    if (hasNotes && hasPage) chatInput.placeholder = "Ask about notes or this page...";
-    else if (hasPage) chatInput.placeholder = "Ask about this page...";
-    else chatInput.placeholder = "Ask about this page...";
-  } else if (currentMode === "agent") {
-    if (!agentRunning) chatInput.placeholder = "Tell the agent what to do on this page...";
-  } else {
-    chatInput.placeholder = hasNotes ? "Ask about your notes..." : "Ask anything...";
+function updateChatContextUI() {
+  // Placeholder stays generic always
+  if (chatInput) chatInput.placeholder = "Ask anything...";
+
+  // Show mode hint in the empty state instead
+  const modeHintEl = document.getElementById("modeHint");
+  const emptySubEl = document.getElementById("emptyStateSub");
+  const info = MODE_HINTS[currentMode];
+
+  if (modeHintEl && info) {
+    const hasSession = hasExistingNotes() || chatMessages.length > 0 || !!recordingCardEl;
+    if (!hasSession) {
+      if (emptySubEl) emptySubEl.textContent = info.sub;
+      modeHintEl.textContent = info.hint;
+      modeHintEl.classList.remove("hidden");
+    } else {
+      modeHintEl.classList.add("hidden");
+      if (emptySubEl) emptySubEl.textContent = "Record tab audio, read any page, or just ask something.";
+    }
   }
 }
 
@@ -581,9 +610,10 @@ async function handleConvertToNotes() {
     seconds = 0;
     chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds"]);
 
-    // Update UI
+    // Update UI — remove recording card, show notes-ready + record-more option
     removeRecordingCard();
     injectNotesReadyCard();
+    injectRecordMoreCard();
     notesOverlay.classList.remove("hidden");
     updateChatContextUI();
   } catch (e) {

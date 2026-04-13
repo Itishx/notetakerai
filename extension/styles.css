@@ -1986,6 +1986,61 @@ body.sidepanel.theme-warm .btn-send {
 
 .open-notes-btn:hover { background: var(--primary-light); }
 
+/* Record-more card — appears after notes conversion */
+.record-more-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  margin-top: 8px;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.record-more-icon { font-size: 18px; flex-shrink: 0; }
+
+.record-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.record-more-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.record-more-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.record-more-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: inherit;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.record-more-btn:hover {
+  background: var(--text);
+  color: #fff;
+  border-color: var(--text);
+}
+
 /* Notes overlay — full-panel, slides over everything */
 .notes-overlay {
   position: fixed;
@@ -2169,8 +2224,19 @@ body.sidepanel.theme-warm .btn-send {
   color: var(--text-muted);
   line-height: 1.5;
   max-width: 260px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+  font-weight: 500;
 }
+
+.mode-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.65;
+  line-height: 1.55;
+  max-width: 270px;
+  margin-top: 2px;
+}
+.mode-hint.hidden { display: none; }
 
 .empty-state-hints {
   display: flex;

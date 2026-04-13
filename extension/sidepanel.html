@@ -168,10 +168,11 @@
 
     <!-- Chat Area — all content renders here -->
     <div id="chatArea" class="chat-area">
-      <!-- Empty state: greeting only, hints moved to ⓘ button -->
+      <!-- Empty state -->
       <div id="emptyState" class="empty-state">
         <p class="greeting-hey" id="userGreeting">Hey there 👋</p>
-        <p class="empty-state-sub">Record tab audio, read any page, or just ask something.</p>
+        <p class="empty-state-sub" id="emptyStateSub">Record tab audio, read any page, or just ask something.</p>
+        <p class="mode-hint hidden" id="modeHint"></p>
       </div>
       <div id="chatMessages" class="chat-messages-inner"></div>
       <div id="loading" class="chat-loading hidden">
