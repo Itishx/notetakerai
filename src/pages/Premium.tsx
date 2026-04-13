@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
@@ -103,6 +103,17 @@ const Premium = () => {
   const { user, profile } = useAuth();
   const isPremium = (profile as any)?.is_premium === true;
   const [loading, setLoading] = useState(false);
+  const [isIndia, setIsIndia] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("https://ipapi.co/json/")
+      .then(r => r.json())
+      .then(d => setIsIndia(d.country_code === "IN"))
+      .catch(() => setIsIndia(false));
+  }, []);
+
+  const priceLabel = isIndia === null ? "..." : isIndia ? "₹299/mo" : "$10/mo";
+  const priceDisplay = isIndia === null ? "..." : isIndia ? "₹299" : "$10";
 
   const handleGetPremium = async () => {
     if (!user) {
@@ -181,7 +192,7 @@ const Premium = () => {
                 className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
               >
                 <Zap className="w-4 h-4 mr-2" />
-                {loading ? "Loading..." : "Get Premium · $10/mo"}
+                {loading ? "Loading..." : `Get Premium · ${priceLabel}`}
               </Button>
             )}
             <p className="mt-4 text-xs text-muted-foreground/50">
@@ -378,8 +389,9 @@ const Premium = () => {
           <div className="p-8 rounded-2xl border border-primary/30 bg-primary/5 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
             <p className="text-xs tracking-widest uppercase text-primary/70 mb-1">Premium</p>
             <div className="flex items-baseline gap-1 mb-6">
-              <p className="text-3xl text-foreground">$10</p>
+              <p className="text-3xl text-foreground">{priceDisplay}</p>
               <p className="text-sm text-muted-foreground">/ month</p>
+              {isIndia && <p className="text-xs text-muted-foreground/50 ml-1 self-end pb-1">India pricing</p>}
             </div>
             <ul className="space-y-3">
               {premiumItems.map((item) => (
@@ -402,7 +414,7 @@ const Premium = () => {
                   className="w-full rounded-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   <Zap className="w-3.5 h-3.5 mr-2" />
-                  {loading ? "Loading..." : "Get Premium · $10/mo"}
+                  {loading ? "Loading..." : `Get Premium · ${priceLabel}`}
                 </Button>
               )}
             </div>
@@ -433,7 +445,7 @@ const Premium = () => {
             className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base"
           >
             <Zap className="w-4 h-4 mr-2" />
-            {loading ? "Loading..." : "Get Premium · $10/mo"}
+            {loading ? "Loading..." : `Get Premium · ${priceLabel}`}
           </Button>
           )}
           <Link to="/">
