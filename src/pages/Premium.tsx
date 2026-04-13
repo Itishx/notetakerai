@@ -77,7 +77,7 @@ const freeItems = [
 ];
 
 const premiumItems = [
-  "Browser Agent — control any website with plain language",
+  "Browser Agent — experimental, included free",
   "Unlimited recording time",
   "Unlimited AI questions",
   "Unlimited screenshots + auto-embed",
@@ -166,7 +166,7 @@ const Premium = () => {
             <em className="text-primary not-italic">nothing held back</em>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            The free plan gets you started. Premium gets out of your way — unlimited recording, smarter AI, cloud history, browser agent, and unrestricted chat.
+            The free plan gets you started. Premium gets out of your way — unlimited recording, smarter AI, cloud history, and unrestricted chat. Browser agent is a bonus.
           </p>
           <div className="mt-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.5s" }}>
             {isPremium ? (
@@ -201,22 +201,25 @@ const Premium = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
 
-          {/* Browser Agent, full width — new flagship feature */}
-          <div className="md:col-span-3 group p-8 md:p-10 rounded-2xl border border-primary/30 bg-primary/5 hover:bg-primary/8 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
+          {/* Browser Agent — experimental bonus */}
+          <div className="md:col-span-3 group p-8 md:p-10 rounded-2xl border border-border/60 bg-card/40 hover:bg-card/60 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
               <div className="flex-1">
                 <div className="flex items-start justify-between mb-4">
-                  <Bot className="w-6 h-6 text-primary" strokeWidth={1.5} />
-                  <span className="text-xs px-3 py-1 rounded-full border text-primary bg-primary/8 border-primary/20 ml-auto">Browser Agent</span>
+                  <Bot className="w-6 h-6 text-muted-foreground/60" strokeWidth={1.5} />
+                  <span className="text-xs px-3 py-1 rounded-full border text-muted-foreground/60 bg-muted/40 border-border/60 ml-auto">Experimental bonus</span>
                 </div>
-                <h3 className="text-xl text-foreground mb-3">Control any website with plain language</h3>
+                <h3 className="text-xl text-foreground mb-3">Browser Agent <span className="text-sm font-normal text-muted-foreground/50 ml-1">— just for fun</span></h3>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-                  The only AI sidebar that doesn't just read your browser — it drives it. Tell SideBrain to send an email, play a show, book a flight, or fill a form. It reads the page, finds the right elements, and acts — step by step, until the task is done.
+                  Type a task in plain language and SideBrain will try to execute it in your browser — clicking, typing, navigating. It works well for simple things like sending an email or doing a search. For complex flows it can be hit or miss. It's experimental, it's included free with Premium, and it's genuinely fun to play with.
+                </p>
+                <p className="text-xs text-muted-foreground/50 mt-3 leading-relaxed max-w-xl">
+                  This is not a core SideBrain feature and shouldn't be what brings you here. The main product — recording, notes, and page chat — is what SideBrain is actually built for.
                 </p>
               </div>
               <div className="flex-shrink-0 flex flex-col gap-2 md:items-end justify-end">
-                {["Send emails", "Navigate sites", "Fill forms", "Pick dropdowns"].map((cap) => (
-                  <span key={cap} className="text-xs px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary/80 whitespace-nowrap">{cap}</span>
+                {["Send emails ✓", "Navigate sites ✓", "Fill forms (~)", "Complex tasks (?)"].map((cap) => (
+                  <span key={cap} className="text-xs px-3 py-1.5 rounded-full bg-muted/40 border border-border/60 text-muted-foreground/60 whitespace-nowrap">{cap}</span>
                 ))}
               </div>
             </div>
@@ -225,12 +228,12 @@ const Premium = () => {
                 <span className="flex items-center gap-1.5 text-muted-foreground/50">
                   <Lock className="w-3 h-3" /> Free: Not included
                 </span>
-                <span className="flex items-center gap-1.5 text-primary">
-                  <Zap className="w-3 h-3" /> Premium: Full access
+                <span className="flex items-center gap-1.5 text-muted-foreground/70">
+                  <Zap className="w-3 h-3" /> Premium: Included free
                 </span>
               </div>
-              <Link to="/browser-agent" className="flex items-center gap-1 text-primary/70 hover:text-primary transition-colors">
-                See full details <ArrowRight className="w-3 h-3" />
+              <Link to="/browser-agent" className="flex items-center gap-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                Learn more <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
           </div>
