@@ -187,6 +187,72 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// ===== REMOTE AGENT POLLING (background — works even when side panel is closed) =====
+const BG_SUPABASE_URL = "https://ovapacfrzddnhrwvkbkr.supabase.co";
+const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2ZyemRkbmhyd3ZrYmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDc4NTUsImV4cCI6MjA5MDUyMzg1NX0.WZV4fy1XqMS3TTyR09TneueaLl-729tp-Pi4HkfzURo";
+
+async function bgPollRemoteCommands() {
+  const data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId", "remoteProcessingId"], r));
+  if (!data.authUserId || !data.authToken) {
+    console.log("[BgRemoteAgent] Not logged in, skipping poll");
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `${BG_SUPABASE_URL}/rest/v1/agent_commands?status=eq.pending&order=created_at.asc&limit=1`,
+      { headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${data.authToken}`, "Content-Type": "application/json" } }
+    );
+    if (!res.ok) {
+      console.warn("[BgRemoteAgent] Poll failed:", res.status, await res.text());
+      return;
+    }
+    const rows = await res.json();
+    const cmd = rows[0];
+    if (!cmd) return;
+    if (cmd.id === data.remoteProcessingId) return; // already being handled
+
+    console.log("[BgRemoteAgent] Found command:", cmd.id, cmd.task);
+    // Mark as processing so we don't double-pick
+    chrome.storage.local.set({ remoteProcessingId: cmd.id });
+
+    // Forward to side panel if open; otherwise open it first, then forward
+    const forwarded = await forwardToSidePanel(cmd);
+    if (!forwarded) {
+      // Open side panel and store command — popup.js will pick it up on load
+      chrome.storage.local.set({ pendingRemoteCommand: JSON.stringify(cmd) });
+      chrome.windows.getCurrent((win) => {
+        if (win) chrome.sidePanel.open({ windowId: win.id }).catch(() => {});
+      });
+    }
+  } catch (e) {
+    console.error("[BgRemoteAgent] Error:", e);
+  }
+}
+
+function forwardToSidePanel(cmd) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "handleRemoteCommand", cmd }, (res) => {
+      if (chrome.runtime.lastError) {
+        // Side panel not open / not listening
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    });
+    // Timeout fallback — if no response in 300ms, side panel isn't open
+    setTimeout(() => resolve(false), 300);
+  });
+}
+
+// Set up alarm for polling every 30 seconds
+chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 0.5 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "remoteAgentPoll") bgPollRemoteCommands();
+});
+// Also poll immediately on service worker startup
+bgPollRemoteCommands();
+
 // ===== AUTH — onMessageExternal (backup, from website directly) =====
 chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
   if (message.action === "authToken") {

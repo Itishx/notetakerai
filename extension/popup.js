@@ -1428,6 +1428,17 @@ async function closeVoiceMode() {
   if (tabId) sendToContentScript(tabId, "stopVoiceListening");
 }
 
+// Handle remote commands forwarded by background.js
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.action === "handleRemoteCommand" && msg.cmd) {
+    sendResponse({ ok: true }); // tell background we're alive and handling it
+    getAuthToken().then(token => {
+      if (token) runRemoteCommand(msg.cmd, token);
+    });
+    return true;
+  }
+});
+
 // Receive voice events relayed from content script
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.action !== "voiceEvent" || !voiceActive) return;
@@ -2464,6 +2475,11 @@ newSessionBtn?.addEventListener("click", () => {
 let remotePollingInterval = null;
 let remoteProcessingId = null; // ID of command currently being run
 
+function clearRemoteProcessing() {
+  remoteProcessingId = null;
+  chrome.storage.local.remove("remoteProcessingId");
+}
+
 async function getAuthToken() {
   const data = await getStorage(["authToken", "authRefreshToken", "authUserId"]);
   if (!data.authUserId) return null;
@@ -2478,21 +2494,31 @@ async function getAuthToken() {
 async function pollRemoteCommands() {
   if (agentRunning) return; // don't stack if agent already running
   const token = await getAuthToken();
-  if (!token) return;
+  if (!token) {
+    console.log("[RemoteAgent] No auth token — not logged in yet");
+    return;
+  }
 
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/agent_commands?status=eq.pending&order=created_at.asc&limit=1`,
       { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
     );
-    if (!res.ok) return;
-    const [cmd] = await res.json();
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn("[RemoteAgent] Poll failed:", res.status, text);
+      return;
+    }
+    const rows = await res.json();
+    console.log("[RemoteAgent] Poll result:", rows.length, "pending commands");
+    const [cmd] = rows;
     if (!cmd || cmd.id === remoteProcessingId) return;
 
+    console.log("[RemoteAgent] Picking up command:", cmd.id, cmd.task);
     remoteProcessingId = cmd.id;
     await runRemoteCommand(cmd, token);
   } catch (e) {
-    // silent — polling errors shouldn't surface to user
+    console.error("[RemoteAgent] Poll error:", e);
   }
 }
 
@@ -2512,7 +2538,7 @@ async function updateRemoteCommand(id, token, patch) {
 async function runRemoteCommand(cmd, token) {
   if (!(await loadPremiumStatus())) {
     await updateRemoteCommand(cmd.id, token, { status: "error", result: "Premium required to run remote commands." });
-    remoteProcessingId = null;
+    clearRemoteProcessing();
     return;
   }
 
@@ -2538,7 +2564,7 @@ async function runRemoteCommand(cmd, token) {
         actions = await callAgentStep(cmd.task, pageInfo, history, []);
       } catch (e) {
         await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
-        remoteProcessingId = null;
+        clearRemoteProcessing();
         return;
       }
     }
@@ -2558,7 +2584,7 @@ async function runRemoteCommand(cmd, token) {
         result: first.message || "Done.",
         steps,
       });
-      remoteProcessingId = null;
+      clearRemoteProcessing();
       return;
     }
 
@@ -2566,7 +2592,7 @@ async function runRemoteCommand(cmd, token) {
       if (agentShouldStop) break;
       if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
         await updateRemoteCommand(cmd.id, token, { status: "done", result: actionObj.message || "Done.", steps });
-        remoteProcessingId = null;
+        clearRemoteProcessing();
         return;
       }
 
@@ -2596,7 +2622,7 @@ async function runRemoteCommand(cmd, token) {
     result: "Ran out of steps. Check your desktop browser.",
     steps,
   });
-  remoteProcessingId = null;
+  clearRemoteProcessing();
 }
 
 function startRemotePolling() {
@@ -2612,7 +2638,7 @@ startRemotePolling();
 hydrateTrackedTabState();
 updateHistoryBtnVisibility();
 
-chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
+chrome.storage.local.get(["currentNotes", "currentSessionId", "pendingRemoteCommand"], (data) => {
   if (data.currentNotes && data.currentSessionId) {
     notesMarkdown = data.currentNotes;
     currentSessionId = data.currentSessionId;
@@ -2622,6 +2648,19 @@ chrome.storage.local.get(["currentNotes", "currentSessionId"], (data) => {
   }
   updateChatContextUI();
   updateEmptyState();
+
+  // Handle a remote command that background.js queued while panel was closed
+  if (data.pendingRemoteCommand) {
+    chrome.storage.local.remove("pendingRemoteCommand");
+    try {
+      const cmd = typeof data.pendingRemoteCommand === "string"
+        ? JSON.parse(data.pendingRemoteCommand)
+        : data.pendingRemoteCommand;
+      getAuthToken().then(token => {
+        if (token) runRemoteCommand(cmd, token);
+      });
+    } catch (e) { console.error("[RemoteAgent] Failed to parse pending command", e); }
+  }
 });
 
 
