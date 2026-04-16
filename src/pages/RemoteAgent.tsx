@@ -117,7 +117,7 @@ export default function RemoteAgent() {
       .order("created_at", { ascending: false })
       .limit(20)
       .then(({ data }) => {
-        if (data) setCommands((data as Command[]).reverse());
+        if (data) setCommands((data as unknown as Command[]).reverse());
       });
   }, [user]);
 
