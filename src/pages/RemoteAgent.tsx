@@ -251,7 +251,6 @@ export default function RemoteAgent() {
             placeholder="Send email to john@… · Search YouTube · Open Netflix…"
             rows={1}
             className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 outline-none py-1 max-h-32"
-            style={{ fieldSizing: "content" } as any}
           />
           <button
             onClick={sendCommand}
