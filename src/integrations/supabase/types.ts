@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_commands: {
+        Row: {
+          created_at: string
+          id: string
+          result: string | null
+          status: string
+          steps: Json
+          task: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          result?: string | null
+          status?: string
+          steps?: Json
+          task: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          result?: string | null
+          status?: string
+          steps?: Json
+          task?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notes: {
         Row: {
           created_at: string
