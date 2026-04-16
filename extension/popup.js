@@ -989,6 +989,30 @@ function executeAgentAction(actionObj) {
   });
 }
 
+// Lightweight page snapshot — URL, title, first 500 chars of visible text
+// Used to verify the agent actually landed where it intended
+async function getPageSnapshot() {
+  return new Promise(resolve => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (!tabs[0]?.id) { resolve(null); return; }
+      try {
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId: tabs[0].id },
+          func: () => ({
+            url: location.href,
+            title: document.title,
+            text: document.body?.innerText?.slice(0, 500) || ""
+          })
+        });
+        resolve(result?.result || null);
+      } catch(e) { resolve(null); }
+    });
+  });
+}
+
+// Actions after which we capture a snapshot so the agent can verify landing
+const SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
+
 // Zero-LLM fast paths for simple deterministic tasks
 function tryFastPath(task, history) {
   if (history.length > 0) return null; // only on first step
@@ -1026,7 +1050,12 @@ function tryFastPath(task, history) {
 
 async function callAgentStep(task, pageInfo, history, chatHistory) {
   const historyText = history.length > 0
-    ? history.map((h, i) => `Step ${i + 1}: ${h.description} → ${h.result?.success ? "✓ OK" : ("✗ " + (h.result?.error || "FAILED"))}`).join("\n")
+    ? history.map((h, i) => {
+        const status = h.result?.success ? "✓ OK" : `✗ ${h.result?.error || "FAILED"}`;
+        const snap = h.snapshot ? ` → page after: "${h.snapshot.title}" | ${h.snapshot.url}` : "";
+        const readVal = h.type === "read" && h.result?.text ? ` → content: "${h.result.text.slice(0, 200)}"` : "";
+        return `Step ${i + 1}: [${h.type}] ${h.description} → ${status}${snap}${readVal}`;
+      }).join("\n")
     : "None yet.";
 
   const elementsText = pageInfo.interactiveEls?.length > 0
@@ -1131,51 +1160,80 @@ For forms: click field → type → Tab to next field → submit.`;
   const agentSystemPrompt = `You are SideBrain Browser Agent. Automate a real Chrome browser by returning JSON actions.
 Respond ONLY with a JSON object or array. Zero prose. Zero explanation. Zero markdown fences.
 
-MINDSET: You are a browser robot, not a chatbot. Every task is solved by executing actions.
-- Infer everything possible. NEVER ask about things you can figure out.
-- Never return done/answer before taking the required browser actions.
+MINDSET: You are a browser robot. Every task is solved by executing and verifying actions.
+- After every navigate or click, check STEPS TAKEN SO FAR to see what page you landed on.
+- If the "page after" in history doesn't match your intent → you are on the wrong page. Recover.
+- Never assume a click worked. The history shows you the page title and URL after each action — read it.
 - If STEPS TAKEN SO FAR is empty → you have done NOTHING yet → start executing immediately.
-- If task is a pure question with no browser actions needed → {"type":"answer","message":"..."}
+- Pure questions with no browser actions → {"type":"answer","message":"..."}
 
 ACTIONS:
 {"type":"navigate","url":"https://...","description":"..."}
-{"type":"click","selector":"css","targetText":"fallback","description":"..."}
+{"type":"click","selector":"css","targetText":"fallback text","description":"..."}
 {"type":"type","selector":"css","targetText":"fallback","text":"...","description":"..."}
 {"type":"pressKey","key":"Enter","description":"..."}
 {"type":"selectOption","selector":"css","value":"option text","description":"..."}
+{"type":"read","selector":"css","targetText":"fallback","description":"Read element to verify state"}
 {"type":"scroll","direction":"down","amount":400,"description":"..."}
 {"type":"wait","ms":1500,"description":"..."}
 {"type":"done","message":"what was accomplished"}
 {"type":"answer","message":"..."}
-{"type":"clarify","message":"..."}  ← ONLY when genuinely blocked with no way to infer
+{"type":"clarify","message":"..."}  ← ONLY when genuinely blocked
 
 SELECTOR PRIORITY:
-1. sel= value shown in INTERACTIVE ELEMENTS
+1. sel= value from INTERACTIVE ELEMENTS
 2. [aria-label="..."] or [role="button"][aria-label="..."]
 3. [data-testid="..."]
 4. [placeholder="..."] or [name="..."]
-5. targetText fallback (fuzzy visible text match)
+5. targetText (fuzzy visible text match — last resort)
 
-BATCHING: Return array of up to 5 actions for predictable sequences. NEVER batch navigate.
+BATCHING: Array of up to 5 actions for certain sequences. NEVER batch navigate or read.
 Example: [{"type":"type",...},{"type":"pressKey","key":"Tab"},{"type":"type",...},{"type":"pressKey","key":"Enter"}]
 
+═══ VERIFY BEFORE PROCEED ═══════════════════════════════════
+After EVERY navigate or click, STEPS TAKEN SO FAR shows "page after: TITLE | URL".
+Before your next action, check that title/URL matches where you intended to be.
+
+RULE: If the page after a click is not what you expected → do NOT continue the original plan.
+Assess what happened and recover: navigate back, try a different approach, or re-read the page.
+
+FOR LISTS (seasons, episodes, search results, dropdown menus):
+  ALWAYS read the list before picking from it. Never guess position or index.
+  Step 1: use {"type":"read"} to read the list element and see what options are available.
+  Step 2: pick the exact text you saw in the read result, then click/selectOption.
+  Example for Netflix seasons: read selector="select[id*='season']" → confirm "Season 4" exists → selectOption.
+  Example for episodes: scroll down → read episode titles → click exact title you see.
+
+FOR MEDIA SITES (Netflix, YouTube, Spotify):
+  After clicking anything, check if unexpected video/audio playback started.
+  If you meant to click a title but a video started playing → you clicked the wrong thing.
+  Go back or navigate directly to the correct URL.
+
+CHECKPOINT PLANNING for complex tasks (don't just run a linear script):
+  navigate → verify landed on right page
+  → find/read target element → confirm it's visible
+  → interact → verify interaction result
+  → proceed to next step
+  Never batch past a verification checkpoint.
+═════════════════════════════════════════════════════════════
+
 RULES:
-1. STEPS TAKEN SO FAR is the ground truth. Empty = nothing done. Start from step 1.
-2. Never return done unless steps confirm ALL required actions succeeded.
+1. STEPS TAKEN SO FAR is ground truth. Read "page after" to know where you are.
+2. Never return done unless steps confirm ALL required actions succeeded and page state matches.
 3. Never repeat a failed selector — switch strategy immediately.
-4. After navigate → always wait before clicking (pages need load time).
-5. Forms: type → Tab → next field. Final field → Enter or click Submit/Send.
-6. TODAY: ${today}. Calculate all relative dates yourself. Never ask for the date.
-7. Failed click → try scroll first, then different selector, then targetText.
-8. Flights: IATA codes + date as DD/MM/YYYY. Never touch date pickers.
+4. After navigate → the next step should verify the page before clicking anything.
+5. Forms: type → Tab → next field → submit.
+6. TODAY: ${today}. Calculate all relative dates yourself.
+7. Failed click → scroll to find element, then try different selector.
+8. Flights: IATA codes + DD/MM/YYYY. Never touch date pickers.
 
 ${getPlatformGuide(currentUrl)}
 
 FAILURE RECOVERY:
-- Element not found → try aria-label, data-testid, placeholder, then targetText
-- Page not loaded → add {"type":"wait","ms":1500} before next action
-- Form not responding → click field first, then type
-- Repeated failure → scroll to find element, then retry`;
+- Wrong page after navigate/click → go back or navigate directly to correct URL
+- Element not found → aria-label, data-testid, placeholder, then targetText
+- List selection uncertain → use read action first to see all options
+- Form not responding → click field first, then type`;
 
   const pageStatus = pageInfo.url
     ? `URL: ${pageInfo.url}\nTitle: ${pageInfo.title}`
@@ -1551,15 +1609,24 @@ function runAgentLoopForVoice(task) {
         }
         const stepEl = agentAddStep(thinkingBlock, actionObj.description || actionObj.type);
         const result = await executeAgentAction(actionObj);
-        history.push({ ...actionObj, result });
-        agentMarkStepResult(stepEl, !result?.error, result?.error);
-        if (result?.error) { await new Promise(r => setTimeout(r, 600)); break; }
-        if (actionObj.type === "navigate") {
-          await waitForTabReady(5000);
-          await new Promise(r => setTimeout(r, 300));
-        } else {
+
+        // Capture snapshot after actions that change page state so agent can verify
+        let snapshot = null;
+        if (!result?.error && SNAPSHOT_ACTIONS.has(actionObj.type)) {
+          if (actionObj.type === "navigate") {
+            await waitForTabReady(5000);
+            await new Promise(r => setTimeout(r, 300));
+          } else {
+            await new Promise(r => setTimeout(r, 400));
+          }
+          snapshot = await getPageSnapshot();
+        } else if (actionObj.type !== "navigate") {
           await new Promise(r => setTimeout(r, 150));
         }
+
+        history.push({ ...actionObj, result, snapshot });
+        agentMarkStepResult(stepEl, !result?.error, result?.error);
+        if (result?.error) { await new Promise(r => setTimeout(r, 600)); break; }
       }
       await new Promise(r => setTimeout(r, 150));
     }
@@ -1660,7 +1727,6 @@ async function runAgentLoop(task) {
     for (const actionObj of actions) {
       if (agentShouldStop) { finish("⏹ Stopped."); return; }
 
-      // Terminal types mid-batch shouldn't happen, but handle gracefully
       if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
         finish(actionObj.message || "Done.");
         return;
@@ -1670,23 +1736,28 @@ async function runAgentLoop(task) {
       const stepEl = agentAddStep(thinkingBlock, desc);
 
       const result = await executeAgentAction(actionObj);
-      history.push({ ...actionObj, result });
+
+      // Capture snapshot after state-changing actions so agent can verify landing
+      let snapshot = null;
+      if (!result?.error && SNAPSHOT_ACTIONS.has(actionObj.type)) {
+        if (actionObj.type === "navigate") {
+          await waitForTabReady(5000);
+          await new Promise(r => setTimeout(r, 300));
+        } else {
+          await new Promise(r => setTimeout(r, 400));
+        }
+        snapshot = await getPageSnapshot();
+      } else if (actionObj.type !== "navigate") {
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      history.push({ ...actionObj, result, snapshot });
       agentMarkStepResult(stepEl, !result?.error, result?.error);
 
       if (result?.error) {
-        // On error: pause, then break batch and re-query LLM
         await new Promise(r => setTimeout(r, 600));
         batchError = true;
         break;
-      }
-
-      if (actionObj.type === "navigate") {
-        // Smart wait: poll until tab is loaded instead of fixed 3500ms
-        await waitForTabReady(5000);
-        await new Promise(r => setTimeout(r, 300)); // small buffer for content script
-      } else {
-        // Short settle time between batch steps
-        await new Promise(r => setTimeout(r, 150));
       }
     }
 

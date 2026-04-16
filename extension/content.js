@@ -263,6 +263,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await new Promise(r => setTimeout(r, Math.min(msg.ms || 1000, 5000)));
         sendResponse({ success: true });
 
+      } else if (type === "read") {
+        // Read element content so agent can verify state before acting
+        let el = null;
+        if (selector) { try { el = document.querySelector(selector); } catch (e) {} }
+        if (!el && targetText) {
+          const needle = targetText.toLowerCase();
+          el = Array.from(document.querySelectorAll("*")).find(e => {
+            if (!e.offsetParent) return false;
+            const label = (e.getAttribute("aria-label") || e.innerText || "").trim().toLowerCase();
+            return label.includes(needle);
+          });
+        }
+        if (!el) {
+          // Fall back to returning visible page text excerpt
+          sendResponse({ success: true, text: document.body?.innerText?.slice(0, 800) || "(empty)" });
+        } else {
+          // For select elements, return all options
+          if (el.tagName === "SELECT") {
+            const opts = Array.from(el.options).map(o => o.text.trim()).join(", ");
+            sendResponse({ success: true, text: `Options: ${opts} | Selected: ${el.options[el.selectedIndex]?.text}` });
+          } else {
+            sendResponse({ success: true, text: (el.innerText || el.textContent || "").trim().slice(0, 500) });
+          }
+        }
+
       } else {
         sendResponse({ error: `Unknown action type: ${type}` });
       }
