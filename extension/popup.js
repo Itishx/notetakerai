@@ -2460,6 +2460,156 @@ newSessionBtn?.addEventListener("click", () => {
   updateHistoryBtnVisibility();
 });
 
+// ===== REMOTE AGENT (phone → desktop) =====
+let remotePollingInterval = null;
+let remoteProcessingId = null; // ID of command currently being run
+
+async function getAuthToken() {
+  const data = await getStorage(["authToken", "authRefreshToken", "authUserId"]);
+  if (!data.authUserId) return null;
+  // Try refresh if token might be stale
+  if (!data.authToken && data.authRefreshToken) {
+    const refreshed = await refreshAuthToken(data.authRefreshToken);
+    return refreshed?.access_token || null;
+  }
+  return data.authToken || null;
+}
+
+async function pollRemoteCommands() {
+  if (agentRunning) return; // don't stack if agent already running
+  const token = await getAuthToken();
+  if (!token) return;
+
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/agent_commands?status=eq.pending&order=created_at.asc&limit=1`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+    );
+    if (!res.ok) return;
+    const [cmd] = await res.json();
+    if (!cmd || cmd.id === remoteProcessingId) return;
+
+    remoteProcessingId = cmd.id;
+    await runRemoteCommand(cmd, token);
+  } catch (e) {
+    // silent — polling errors shouldn't surface to user
+  }
+}
+
+async function updateRemoteCommand(id, token, patch) {
+  await fetch(`${SUPABASE_URL}/rest/v1/agent_commands?id=eq.${id}`, {
+    method: "PATCH",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(patch),
+  });
+}
+
+async function runRemoteCommand(cmd, token) {
+  if (!(await loadPremiumStatus())) {
+    await updateRemoteCommand(cmd.id, token, { status: "error", result: "Premium required to run remote commands." });
+    remoteProcessingId = null;
+    return;
+  }
+
+  await updateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
+
+  const steps = [];
+  const history = [];
+  const MAX = 20;
+  let iterations = 0;
+
+  const pushStep = async (description, ok, snapshot = null) => {
+    steps.push({ description, ok, snapshot });
+    await updateRemoteCommand(cmd.id, token, { steps });
+  };
+
+  while (iterations++ < MAX) {
+    if (agentShouldStop) break;
+
+    const pageInfo = await getAgentPageContext();
+    let actions = tryFastPath(cmd.task, history);
+    if (!actions) {
+      try {
+        actions = await callAgentStep(cmd.task, pageInfo, history, []);
+      } catch (e) {
+        await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
+        remoteProcessingId = null;
+        return;
+      }
+    }
+
+    const first = actions[0];
+    if (first.type === "done" || first.type === "answer" || first.type === "clarify") {
+      if (first.type === "done") {
+        const realDone = history.filter(h => ["click","type","pressKey","selectOption"].includes(h.type) && h.result?.success);
+        const needsActions = /send|submit|reply|compose|type|fill|click|buy|order|play|post|write|upload/i.test(cmd.task);
+        if (needsActions && realDone.length === 0) {
+          history.push({ type: "correction", description: "No real actions yet — keep going.", result: { success: false } });
+          continue;
+        }
+      }
+      await updateRemoteCommand(cmd.id, token, {
+        status: "done",
+        result: first.message || "Done.",
+        steps,
+      });
+      remoteProcessingId = null;
+      return;
+    }
+
+    for (const actionObj of actions) {
+      if (agentShouldStop) break;
+      if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
+        await updateRemoteCommand(cmd.id, token, { status: "done", result: actionObj.message || "Done.", steps });
+        remoteProcessingId = null;
+        return;
+      }
+
+      const result = await executeAgentAction(actionObj);
+      let snapshot = null;
+      if (!result?.error && SNAPSHOT_ACTIONS.has(actionObj.type)) {
+        if (actionObj.type === "navigate") {
+          await waitForTabReady(5000);
+          await new Promise(r => setTimeout(r, 300));
+        } else {
+          await new Promise(r => setTimeout(r, 400));
+        }
+        snapshot = await getPageSnapshot();
+      } else {
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      history.push({ ...actionObj, result, snapshot });
+      await pushStep(actionObj.description || actionObj.type, !result?.error, snapshot);
+
+      if (result?.error) { await new Promise(r => setTimeout(r, 600)); break; }
+    }
+  }
+
+  await updateRemoteCommand(cmd.id, token, {
+    status: "error",
+    result: "Ran out of steps. Check your desktop browser.",
+    steps,
+  });
+  remoteProcessingId = null;
+}
+
+function startRemotePolling() {
+  if (remotePollingInterval) return;
+  remotePollingInterval = setInterval(pollRemoteCommands, 4000);
+  pollRemoteCommands(); // immediate first check
+}
+
+// Start polling once premium status is confirmed
+loadPremiumStatus().then(premium => {
+  if (premium) startRemotePolling();
+});
+
 // ===== INITIAL LOAD =====
 hydrateTrackedTabState();
 updateHistoryBtnVisibility();
