@@ -2605,10 +2605,8 @@ function startRemotePolling() {
   pollRemoteCommands(); // immediate first check
 }
 
-// Start polling once premium status is confirmed
-loadPremiumStatus().then(premium => {
-  if (premium) startRemotePolling();
-});
+// Always start polling — pollRemoteCommands handles missing auth/premium gracefully
+startRemotePolling();
 
 // ===== INITIAL LOAD =====
 hydrateTrackedTabState();
