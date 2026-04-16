@@ -2627,6 +2627,7 @@ async function runRemoteCommand(cmd, token) {
 
 function startRemotePolling() {
   if (remotePollingInterval) return;
+  console.log("[RemoteAgent] Side panel polling started (4s interval)");
   remotePollingInterval = setInterval(pollRemoteCommands, 4000);
   pollRemoteCommands(); // immediate first check
 }

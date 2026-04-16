@@ -245,8 +245,8 @@ function forwardToSidePanel(cmd) {
   });
 }
 
-// Set up alarm for polling every 30 seconds
-chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 0.5 });
+// Set up alarm for polling every minute (MV3 minimum is 1 minute)
+chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "remoteAgentPoll") bgPollRemoteCommands();
 });
