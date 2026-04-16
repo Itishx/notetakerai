@@ -104,6 +104,7 @@ export default function RemoteAgent() {
   const [commands, setCommands] = useState<Command[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -152,15 +153,38 @@ export default function RemoteAgent() {
   const sendCommand = async () => {
     if (!input.trim() || !user || sending) return;
     const task = input.trim();
-    setInput("");
+    setSendError(null);
     setSending(true);
+
+    // Optimistic: show command immediately in the list
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: Command = {
+      id: tempId,
+      task,
+      status: "pending",
+      steps: [],
+      result: null,
+      created_at: new Date().toISOString(),
+    };
+    setCommands(prev => [...prev, optimistic]);
+    setInput("");
+
     try {
-      const { error } = await supabase
-        .from("agent_commands")
-        .insert({ user_id: user.id, task, status: "pending", steps: [] });
+      const { data, error } = await supabase
+        .from("agent_commands" as any)
+        .insert({ user_id: user.id, task, status: "pending", steps: [] })
+        .select()
+        .single();
       if (error) throw error;
-    } catch (e) {
-      console.error(e);
+      // Replace optimistic entry with real one from DB
+      if (data) {
+        setCommands(prev => prev.map(c => c.id === tempId ? data as Command : c));
+      }
+    } catch (e: any) {
+      // Remove optimistic entry and restore input on failure
+      setCommands(prev => prev.filter(c => c.id !== tempId));
+      setInput(task);
+      setSendError(e?.message || "Failed to send — is the table set up in Supabase?");
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -263,9 +287,14 @@ export default function RemoteAgent() {
             }
           </button>
         </div>
-        <p className="text-center text-xs text-muted-foreground/30 mt-2">
-          Desktop must have SideBrain open to execute tasks
-        </p>
+        {sendError && (
+          <p className="text-center text-xs text-red-400 mt-2">{sendError}</p>
+        )}
+        {!sendError && (
+          <p className="text-center text-xs text-muted-foreground/30 mt-2">
+            Desktop must have SideBrain open to execute tasks
+          </p>
+        )}
       </div>
     </div>
   );
