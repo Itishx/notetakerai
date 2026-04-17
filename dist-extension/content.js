@@ -318,7 +318,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const rec = new SR();
       rec.lang = "en-US";
       rec.interimResults = true;
-      rec.continuous = false; // ends after utterance; onend auto-restarts
+      rec.continuous = true; // keep listening through natural pauses; onend restarts on unexpected stop
       rec.maxAlternatives = 1;
       window.__sideBrainRecognition = rec;
 
