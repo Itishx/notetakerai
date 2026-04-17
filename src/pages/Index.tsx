@@ -205,50 +205,54 @@ const Index = () => {
       </section>
 
 
-      {/* Browser Agent preview */}
+      {/* Delegate preview */}
       <section className="container mx-auto px-6 py-12">
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-20" />
-        <div className="max-w-5xl mx-auto mb-12 text-center">
+        <div className="max-w-5xl mx-auto mb-10 text-center">
           <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
             And one more thing —<br />
-            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>your browser listens now</em>
+            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>your browser obeys now</em>
           </h2>
         </div>
         <div className="max-w-5xl mx-auto">
           <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/4 p-8 md:p-12 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            {/* Giant number watermark */}
-            <span className="absolute top-6 right-8 text-[72px] font-normal text-primary/8 leading-none select-none pointer-events-none">
-              04
-            </span>
+            <span className="absolute top-6 right-8 text-[72px] font-normal text-primary/8 leading-none select-none pointer-events-none">04</span>
 
             <div className="relative grid md:grid-cols-2 gap-8 items-start mb-8">
-              {/* Left: identity */}
               <div>
-                <Bot className="w-6 h-6 text-primary mb-4" strokeWidth={1.5} />
-                <h3 className="text-2xl md:text-3xl font-normal text-foreground mb-3 leading-snug">Browser Agent</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">Type a plain instruction. SideBrain reads the page, clicks buttons, fills forms, and navigates — no scripting, no setup.</p>
+                <div className="flex items-center gap-2 mb-4">
+                  <Bot className="w-5 h-5 text-primary" strokeWidth={1.5} />
+                  <span className="text-xs text-primary/60 font-medium uppercase tracking-widest">Experimental</span>
+                </div>
+                <h3 className="text-2xl md:text-3xl font-normal text-foreground mb-3 leading-snug">SideBrain Delegate</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                  Type a plain task. Delegate reads the page, clicks buttons, fills forms, and navigates — all from your sidebar. Works from your phone too.
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground/50 bg-card/40">Experimental bonus</span>
+                  <span className="text-xs text-muted-foreground/40">· Premium only</span>
+                </div>
               </div>
 
-              {/* Right: demos + use cases */}
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <div>
-                  <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">Try saying</p>
+                  <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">What works well</p>
                   <div className="flex flex-col gap-2">
                     {[
-                      "Play Stranger Things S4 E2",
-                      "Send a hello email to alex@gmail.com",
-                      "Search flights to Tokyo next week",
-                    ].map((prompt) => (
-                      <div key={prompt} className="flex items-center gap-3">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary/40 flex-shrink-0" />
-                        <span className="text-sm text-muted-foreground">"{prompt}"</span>
+                      { text: "Send emails via Gmail", good: true },
+                      { text: "Navigate to any website", good: true },
+                      { text: "Search flights on MakeMyTrip", good: true },
+                    ].map((item) => (
+                      <div key={item.text} className="flex items-center gap-2.5">
+                        <span className="text-xs text-green-500 flex-shrink-0">✓</span>
+                        <span className="text-sm text-muted-foreground">{item.text}</span>
                       </div>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">Works on</p>
-                  <p className="text-sm text-muted-foreground">Netflix · Gmail · Amazon · Google · any site</p>
+                  <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-2">Also</p>
+                  <p className="text-sm text-muted-foreground">Control it from your phone via Remote Agent</p>
                 </div>
               </div>
             </div>
@@ -256,10 +260,10 @@ const Index = () => {
             <div className="relative flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <Zap className="w-3.5 h-3.5 text-primary/60" />
-                <span className="text-xs text-muted-foreground/60">Premium feature — <Link to="/premium" className="text-primary hover:underline">see what else is included</Link></span>
+                <span className="text-xs text-muted-foreground/60">Premium feature — <Link to="/premium" className="text-primary hover:underline">see what's included</Link></span>
               </div>
-              <Link to="/browser-agent" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300 whitespace-nowrap">
-                Learn more <ArrowRight className="w-4 h-4" />
+              <Link to="/delegate" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300 whitespace-nowrap">
+                See Delegate <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>
@@ -437,7 +441,7 @@ const Index = () => {
               <div className="flex flex-col gap-3">
                 <span className="text-muted-foreground/50 text-xs tracking-widest uppercase">Product</span>
                 <Link to="/use-cases" className="text-muted-foreground hover:text-foreground transition-colors">Use Cases</Link>
-                <Link to="/browser-agent" className="text-muted-foreground hover:text-foreground transition-colors">Browser Agent</Link>
+                <Link to="/delegate" className="text-muted-foreground hover:text-foreground transition-colors">Delegate</Link>
                 <Link to="/notion-sync" className="text-muted-foreground hover:text-foreground transition-colors">Notion Sync</Link>
               </div>
               <div className="flex flex-col gap-3">

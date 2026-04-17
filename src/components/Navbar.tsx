@@ -31,6 +31,7 @@ const Navbar = () => {
 
   const links = [
     { to: "/use-cases", label: "Use Cases" },
+    { to: "/delegate", label: "Delegate" },
     { to: "/premium", label: "Premium" },
   ];
 
