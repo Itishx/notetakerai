@@ -2544,13 +2544,25 @@ async function runRemoteCommand(cmd, token) {
 
   await updateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
 
+  // Show task in side panel chat (same as regular agent)
+  updateEmptyState();
+  const remoteUserBubble = document.createElement("div");
+  remoteUserBubble.className = "chat-bubble chat-user";
+  remoteUserBubble.innerHTML = `<div class="chat-bubble-text">📱 ${cmd.task}</div>`;
+  chatMessagesEl.appendChild(remoteUserBubble);
+  const remoteBlock = createAgentThinkingBlock();
+  chatArea.scrollTop = chatArea.scrollHeight;
+
   const steps = [];
   const history = [];
   const MAX = 20;
   let iterations = 0;
+  let stepCount = 0;
 
   const pushStep = async (description, ok, snapshot = null) => {
     steps.push({ description, ok, snapshot });
+    stepCount++;
+    agentAddStep(remoteBlock, description, ok ? "step" : "error");
     await updateRemoteCommand(cmd.id, token, { steps });
   };
 
@@ -2579,11 +2591,14 @@ async function runRemoteCommand(cmd, token) {
           continue;
         }
       }
-      await updateRemoteCommand(cmd.id, token, {
-        status: "done",
-        result: first.message || "Done.",
-        steps,
-      });
+      const doneMsg = first.message || "Done.";
+      agentFinalizeBlock(remoteBlock, stepCount);
+      const doneBubble = document.createElement("div");
+      doneBubble.className = "chat-bubble chat-assistant";
+      doneBubble.innerHTML = `<div class="chat-bubble-text">✅ ${doneMsg}</div>`;
+      chatMessagesEl.appendChild(doneBubble);
+      chatArea.scrollTop = chatArea.scrollHeight;
+      await updateRemoteCommand(cmd.id, token, { status: "done", result: doneMsg, steps });
       clearRemoteProcessing();
       return;
     }
@@ -2591,7 +2606,14 @@ async function runRemoteCommand(cmd, token) {
     for (const actionObj of actions) {
       if (agentShouldStop) break;
       if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
-        await updateRemoteCommand(cmd.id, token, { status: "done", result: actionObj.message || "Done.", steps });
+        const doneMsg2 = actionObj.message || "Done.";
+        agentFinalizeBlock(remoteBlock, stepCount);
+        const doneBubble2 = document.createElement("div");
+        doneBubble2.className = "chat-bubble chat-assistant";
+        doneBubble2.innerHTML = `<div class="chat-bubble-text">✅ ${doneMsg2}</div>`;
+        chatMessagesEl.appendChild(doneBubble2);
+        chatArea.scrollTop = chatArea.scrollHeight;
+        await updateRemoteCommand(cmd.id, token, { status: "done", result: doneMsg2, steps });
         clearRemoteProcessing();
         return;
       }
@@ -2617,6 +2639,12 @@ async function runRemoteCommand(cmd, token) {
     }
   }
 
+  agentFinalizeBlock(remoteBlock, stepCount);
+  const errBubble = document.createElement("div");
+  errBubble.className = "chat-bubble chat-assistant";
+  errBubble.innerHTML = `<div class="chat-bubble-text">❌ Ran out of steps. Check your desktop browser.</div>`;
+  chatMessagesEl.appendChild(errBubble);
+  chatArea.scrollTop = chatArea.scrollHeight;
   await updateRemoteCommand(cmd.id, token, {
     status: "error",
     result: "Ran out of steps. Check your desktop browser.",
