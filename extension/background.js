@@ -194,31 +194,73 @@ const BG_API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
 // --- helpers ---
 
+function bgIsScriptableUrl(url) {
+  if (!url) return false;
+  return !url.startsWith("chrome://") &&
+         !url.startsWith("chrome-extension://") &&
+         !url.startsWith("about:") &&
+         !url.startsWith("devtools://") &&
+         !url.startsWith("edge://");
+}
+
 async function bgGetActiveTabId() {
   return new Promise(resolve => {
     chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
-      if (activeTabId) { resolve(activeTabId); return; }
-      chrome.tabs.query({ active: true, lastFocusedWindow: true }, tabs => {
-        resolve(tabs[0]?.id || null);
-      });
+      // Verify stored tab is still valid and scriptable
+      if (activeTabId) {
+        chrome.tabs.get(activeTabId, (tab) => {
+          if (!chrome.runtime.lastError && tab && bgIsScriptableUrl(tab.url)) {
+            resolve(activeTabId);
+            return;
+          }
+          // Stored tab is gone or not scriptable — find a real one
+          bgFindScriptableTab(resolve);
+        });
+      } else {
+        bgFindScriptableTab(resolve);
+      }
+    });
+  });
+}
+
+function bgFindScriptableTab(resolve) {
+  // First try the active tab in the last focused window
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, tabs => {
+    const tab = tabs.find(t => bgIsScriptableUrl(t.url));
+    if (tab) { resolve(tab.id); return; }
+    // Fallback: any scriptable tab in any window
+    chrome.tabs.query({}, allTabs => {
+      const fallback = allTabs.find(t => bgIsScriptableUrl(t.url));
+      resolve(fallback?.id || null);
     });
   });
 }
 
 async function bgGetAgentPageContext() {
   const tabId = await bgGetActiveTabId();
-  if (!tabId) return { url: "", title: "", bodyText: "", interactiveEls: [] };
   const empty = { url: "", title: "", bodyText: "", interactiveEls: [] };
+  if (!tabId) {
+    console.log("[BgRemoteAgent] bgGetAgentPageContext: no scriptable tab found");
+    return empty;
+  }
+  console.log("[BgRemoteAgent] bgGetAgentPageContext: using tabId", tabId);
   return new Promise(resolve => {
     function sendMsg(retrying) {
       chrome.tabs.sendMessage(tabId, { action: "getAgentPageContext" }, res => {
         if (chrome.runtime.lastError) {
-          if (retrying) { resolve(empty); return; }
+          if (retrying) {
+            console.warn("[BgRemoteAgent] Content script failed even after inject:", chrome.runtime.lastError.message);
+            resolve(empty); return;
+          }
           chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
-            if (chrome.runtime.lastError) { resolve(empty); return; }
+            if (chrome.runtime.lastError) {
+              console.warn("[BgRemoteAgent] Script inject failed:", chrome.runtime.lastError.message);
+              resolve(empty); return;
+            }
             setTimeout(() => sendMsg(true), 250);
           });
         } else {
+          console.log("[BgRemoteAgent] Got page context:", res?.url);
           resolve(res || empty);
         }
       });
@@ -247,11 +289,17 @@ async function bgExecuteAgentAction(actionObj) {
   const tabId = await bgGetActiveTabId();
   if (!tabId) return { error: "No active tab" };
 
+  console.log("[BgRemoteAgent] Execute action:", actionObj.type, actionObj.description || "");
+
   if (actionObj.type === "navigate") {
     return new Promise(resolve => {
       chrome.tabs.update(tabId, { url: actionObj.url }, () => {
         if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
-        else resolve({ success: true });
+        else {
+          // Update activeTabId so subsequent actions target the right tab
+          chrome.storage.local.set({ activeTabId: tabId });
+          resolve({ success: true });
+        }
       });
     });
   }
