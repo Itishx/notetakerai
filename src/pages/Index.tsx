@@ -222,7 +222,7 @@ const Index = () => {
               <div>
                 <div className="flex items-center gap-2 mb-4">
                   <Bot className="w-5 h-5 text-primary" strokeWidth={1.5} />
-                  <span className="text-xs text-primary/60 font-medium uppercase tracking-widest">Experimental</span>
+                  <span className="text-xs text-primary/60 font-medium uppercase tracking-widest">Premium · Experimental</span>
                 </div>
                 <h3 className="text-2xl md:text-3xl font-normal text-foreground mb-3 leading-snug">SideBrain Delegate</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed mb-4">

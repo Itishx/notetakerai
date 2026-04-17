@@ -76,7 +76,7 @@ const Delegate = () => {
             style={{ animationDelay: "0.1s" }}
           >
             <FlaskConical className="w-3.5 h-3.5" />
-            Experimental · Premium bonus · Not the main feature
+            Experimental · Premium only
           </div>
 
           <h1
@@ -125,9 +125,9 @@ const Delegate = () => {
           <div className="flex items-start gap-4">
             <FlaskConical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <div>
-              <p className="text-sm font-medium text-foreground mb-1.5">A note before you try it</p>
+              <p className="text-sm font-medium text-foreground mb-1.5">Before you try it</p>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Delegate is experimental — shipped because it's genuinely useful when it works, not because it's polished. Simple tasks (send email, navigate, search) land well. Complex multi-step flows are hit or miss. It's a bonus on top of SideBrain's core — recording, chat, and Notion sync — not a reason to buy Premium on its own.
+                Delegate is experimental — it's genuinely powerful for the things it handles well. Simple tasks like sending emails, navigating, and searching work reliably. Complex multi-step flows are still improving. The more you use it, the better you'll learn what to ask it.
               </p>
             </div>
           </div>
@@ -322,16 +322,16 @@ const Delegate = () => {
           className="text-3xl md:text-5xl font-normal text-foreground mb-5 opacity-0 animate-fade-in"
           style={{ animationDelay: "0.1s" }}
         >
-          An unexpected bonus<br />
+          Delegate is<br />
           <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>
-            inside Premium
+            Premium only
           </em>
         </h2>
         <p
           className="text-muted-foreground max-w-md mx-auto mb-10 text-sm leading-relaxed opacity-0 animate-fade-in"
           style={{ animationDelay: "0.2s" }}
         >
-          Delegate comes with Premium alongside recording, notes, and Notion sync. Think of it as an extra — use it when it's useful, don't depend on it when it's not.
+          Delegate — plus recording, notes, Notion sync, and remote phone control — all come with Premium. One subscription, the full stack.
         </p>
         <div
           className="flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-fade-in"

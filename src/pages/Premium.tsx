@@ -178,7 +178,7 @@ const Premium = () => {
             <em className="text-primary not-italic">nothing held back</em>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            The free plan gets you started. Premium gets out of your way — unlimited recording, smarter AI, cloud history, and unrestricted chat. Delegate is an experimental bonus on top.
+            The free plan gets you started. Premium removes every limit — unlimited recording, smarter AI, cloud history, unrestricted chat, and Delegate, the browser automation that runs tasks for you.
           </p>
           <div className="mt-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.5s" }}>
             {isPremium ? (
@@ -218,7 +218,7 @@ const Premium = () => {
             <div className="flex items-center gap-2 mb-6">
               <Bot className="w-5 h-5 text-muted-foreground/60" strokeWidth={1.5} />
               <span className="text-xs px-3 py-1 rounded-full border text-muted-foreground/60 bg-muted/40 border-border/60 flex items-center gap-1.5">
-                <FlaskConical className="w-3 h-3" /> Experimental bonus
+                <FlaskConical className="w-3 h-3" /> Experimental · Premium only
               </span>
             </div>
 
@@ -264,7 +264,7 @@ const Premium = () => {
                 <Lock className="w-3 h-3" /> Free: Not included
               </span>
               <span className="flex items-center gap-1.5 text-muted-foreground/70">
-                <Zap className="w-3 h-3" /> Premium: Both included (experimental)
+                <Zap className="w-3 h-3" /> Premium: Both included
               </span>
             </div>
           </div>
