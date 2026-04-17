@@ -610,20 +610,60 @@ async function bgRunRemoteCommand(cmd, token) {
   await finish("error", "Ran out of steps. Check your desktop browser.");
 }
 
+// --- token refresh ---
+
+async function bgRefreshAuthToken() {
+  const { authRefreshToken } = await new Promise(r => chrome.storage.local.get("authRefreshToken", r));
+  if (!authRefreshToken) return null;
+  try {
+    const res = await fetch(`${BG_SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: BG_SUPABASE_ANON_KEY },
+      body: JSON.stringify({ refresh_token: authRefreshToken }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.access_token) return null;
+    chrome.storage.local.set({
+      authToken: json.access_token,
+      authRefreshToken: json.refresh_token || authRefreshToken,
+    });
+    return json.access_token;
+  } catch (e) {
+    return null;
+  }
+}
+
 // --- polling ---
 
 async function bgPollRemoteCommands() {
   const data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId", "remoteProcessingId"], r));
-  if (!data.authUserId || !data.authToken) {
+  if (!data.authUserId) {
     console.log("[BgRemoteAgent] Not logged in, skipping poll");
     return;
   }
 
+  let token = data.authToken;
+  if (!token) {
+    token = await bgRefreshAuthToken();
+    if (!token) { console.log("[BgRemoteAgent] No token, skipping poll"); return; }
+  }
+
   try {
-    const res = await fetch(
+    let res = await fetch(
       `${BG_SUPABASE_URL}/rest/v1/agent_commands?status=eq.pending&order=created_at.asc&limit=1`,
-      { headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${data.authToken}`, "Content-Type": "application/json" } }
+      { headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
     );
+    // JWT expired — refresh and retry once
+    if (res.status === 401) {
+      const newToken = await bgRefreshAuthToken();
+      if (!newToken) { console.warn("[BgRemoteAgent] Token refresh failed"); return; }
+      token = newToken;
+      res = await fetch(
+        `${BG_SUPABASE_URL}/rest/v1/agent_commands?status=eq.pending&order=created_at.asc&limit=1`,
+        { headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+      );
+    }
     if (!res.ok) {
       console.warn("[BgRemoteAgent] Poll failed:", res.status, await res.text());
       return;
@@ -640,7 +680,7 @@ async function bgPollRemoteCommands() {
     const forwarded = await forwardToSidePanel(cmd);
     if (!forwarded) {
       // Side panel closed — run the full agent loop here in background
-      bgRunRemoteCommand(cmd, data.authToken);
+      bgRunRemoteCommand(cmd, token);
     }
   } catch (e) {
     console.error("[BgRemoteAgent] Error:", e);

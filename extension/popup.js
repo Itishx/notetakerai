@@ -2483,27 +2483,39 @@ function clearRemoteProcessing() {
 async function getAuthToken() {
   const data = await getStorage(["authToken", "authRefreshToken", "authUserId"]);
   if (!data.authUserId) return null;
-  // Try refresh if token might be stale
   if (!data.authToken && data.authRefreshToken) {
-    const refreshed = await refreshAuthToken(data.authRefreshToken);
-    return refreshed?.access_token || null;
+    return (await refreshAuthToken(data.authRefreshToken)) || null;
   }
   return data.authToken || null;
 }
 
 async function pollRemoteCommands() {
   if (agentRunning) return; // don't stack if agent already running
-  const token = await getAuthToken();
+  let token = await getAuthToken();
   if (!token) {
     console.log("[RemoteAgent] No auth token — not logged in yet");
     return;
   }
 
   try {
-    const res = await fetch(
+    let res = await fetch(
       `${SUPABASE_URL}/rest/v1/agent_commands?status=eq.pending&order=created_at.asc&limit=1`,
       { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
     );
+    // JWT expired — refresh and retry once
+    if (res.status === 401) {
+      const data = await getStorage(["authRefreshToken"]);
+      if (data.authRefreshToken) {
+        const newToken = await refreshAuthToken(data.authRefreshToken);
+        if (newToken) {
+          token = newToken;
+          res = await fetch(
+            `${SUPABASE_URL}/rest/v1/agent_commands?status=eq.pending&order=created_at.asc&limit=1`,
+            { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
     if (!res.ok) {
       const text = await res.text();
       console.warn("[RemoteAgent] Poll failed:", res.status, text);
