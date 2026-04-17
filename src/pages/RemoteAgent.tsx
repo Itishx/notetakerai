@@ -178,7 +178,7 @@ export default function RemoteAgent() {
       if (error) throw error;
       // Replace optimistic entry with real one from DB
       if (data) {
-        setCommands(prev => prev.map(c => c.id === tempId ? data as Command : c));
+        setCommands(prev => prev.map(c => c.id === tempId ? (data as unknown as Command) : c));
       }
     } catch (e: any) {
       // Remove optimistic entry and restore input on failure
