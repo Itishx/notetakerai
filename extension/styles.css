@@ -1057,7 +1057,7 @@ body.sidepanel.home-layout #idleControls {
 .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 .chat-bubble {
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.75;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
@@ -1073,14 +1073,16 @@ body.sidepanel.home-layout #idleControls {
 
 .chat-user {
   align-self: flex-end;
-  max-width: 80%;
+  max-width: 82%;
   background: var(--text);
   color: #fff;
-  padding: 9px 14px;
+  padding: 9px 15px;
   border-radius: 18px 18px 4px 18px;
   word-break: break-word;
   overflow-wrap: break-word;
   white-space: pre-wrap;
+  font-size: 13.5px;
+  line-height: 1.6;
 }
 
 .chat-user .rendered-md strong { color: #fff; }
@@ -1093,6 +1095,17 @@ body.sidepanel.home-layout #idleControls {
   border-radius: 0;
   word-break: break-word;
   overflow-wrap: break-word;
+  font-family: 'TimesNewRomanMT', 'Times New Roman', Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.chat-assistant .rendered-md,
+.chat-assistant .rendered-md p,
+.chat-assistant .rendered-md li {
+  font-family: 'TimesNewRomanMT', 'Times New Roman', Georgia, serif;
+  font-style: italic;
 }
 
 .chat-msg-image {
@@ -1662,13 +1675,16 @@ body.sidepanel.theme-warm .chat-bottom-bar {
   background: linear-gradient(0deg, hsl(40,20%,97%) 70%, transparent);
 }
 
-body.sidepanel.theme-warm .onboarding-overlay,
+body.sidepanel.theme-warm .onboarding-overlay {
+  background: hsl(40,20%,97%);
+}
 body.sidepanel.theme-warm .history-overlay {
   background: rgba(44,35,24,0.15);
 }
 
 body.sidepanel.theme-warm .onboarding-slide,
-body.sidepanel.theme-warm .onboarding-panel {
+body.sidepanel.theme-warm .onboarding-panel,
+body.sidepanel.theme-warm .history-panel {
   background: hsl(40,20%,97%);
 }
 
@@ -1705,23 +1721,25 @@ body.sidepanel.theme-warm .btn-send {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 11px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   position: relative;
+  background: var(--bg);
 }
 .shell-header h1 {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;
+  font-size: 16px;
 }
 
 /* Chat area: fills remaining space, scrollable */
 .chat-area {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 16px 18px 12px;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -2199,33 +2217,35 @@ body.sidepanel.theme-warm .btn-send {
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
-/* Empty state — greeting + hints */
-.empty-state {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 32px 24px 24px;
-  gap: 10px;
-  animation: fadeInUp 0.4s ease-out;
-}
-
-.empty-state .greeting-hey {
-  font-size: 24px;
-  font-weight: 700;
+/* Persistent greeting — TimesNewRomanMT italic, always visible */
+.greeting-hey {
+  font-family: 'TimesNewRomanMT', 'Times New Roman', Georgia, serif;
+  font-style: italic;
+  font-size: 26px;
+  font-weight: 400;
   color: var(--text);
   line-height: 1.2;
+  padding: 20px 0 2px;
+  letter-spacing: -0.3px;
+  flex-shrink: 0;
 }
+
+/* Hints block — hidden once chat starts */
+.empty-state-hints-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+  flex-shrink: 0;
+}
+.empty-state-hints-block.hidden { display: none !important; }
 
 .empty-state-sub {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.5;
-  max-width: 260px;
-  margin-bottom: 4px;
-  font-weight: 500;
+  max-width: 280px;
+  font-weight: 400;
 }
 
 .mode-hint {
@@ -2234,9 +2254,15 @@ body.sidepanel.theme-warm .btn-send {
   opacity: 0.65;
   line-height: 1.55;
   max-width: 270px;
-  margin-top: 2px;
 }
 .mode-hint.hidden { display: none; }
+
+/* Legacy empty-state class — keep for any JS that adds it */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
 .empty-state-hints {
   display: flex;
@@ -2472,7 +2498,12 @@ body.sidepanel.theme-warm .mode-option-agent { color: #c2410c; }
   flex-shrink: 0;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.agent-thinking-label { flex: 1; font-style: italic; }
+.agent-thinking-label {
+  flex: 1;
+  font-style: italic;
+  font-family: 'TimesNewRomanMT', 'Times New Roman', Georgia, serif;
+  font-size: 13px;
+}
 .agent-thinking-chevron { font-size: 10px; opacity: 0.5; }
 
 .agent-thinking-steps {

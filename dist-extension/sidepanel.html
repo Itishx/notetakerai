@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="sidepanel">
+<body class="sidepanel theme-warm">
 
   <!-- History Overlay -->
   <div id="historyOverlay" class="history-overlay hidden">
@@ -168,9 +168,10 @@
 
     <!-- Chat Area — all content renders here -->
     <div id="chatArea" class="chat-area">
-      <!-- Empty state -->
-      <div id="emptyState" class="empty-state">
-        <p class="greeting-hey" id="userGreeting">Hey there 👋</p>
+      <!-- Persistent greeting — always visible -->
+      <p class="greeting-hey" id="userGreeting">Hey there</p>
+      <!-- Empty state sub-text/hints — hidden once chat starts -->
+      <div id="emptyState" class="empty-state-hints-block">
         <p class="empty-state-sub" id="emptyStateSub">Record tab audio, read any page, or just ask something.</p>
         <p class="mode-hint hidden" id="modeHint"></p>
       </div>

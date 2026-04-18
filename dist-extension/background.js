@@ -607,11 +607,27 @@ ${historyText}
 
 What actions should be taken next? Return a single JSON object, OR a JSON array of up to 3 objects for sequences that are certain to succeed in order (e.g. [type, pressKey] or [click, type]). Only batch when all steps are highly predictable. NEVER include navigate in a batch.`;
 
-  const response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ notes: agentSystemPrompt, message: userMessage }),
-  });
+  const fetchBody = JSON.stringify({ notes: agentSystemPrompt, message: userMessage });
+  let response;
+  try {
+    response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: fetchBody,
+    });
+  } catch (e) {
+    if (e instanceof TypeError) {
+      // Service worker woke cold — wait and retry once
+      await new Promise(r => setTimeout(r, 1200));
+      response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: fetchBody,
+      });
+    } else {
+      throw e;
+    }
+  }
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
