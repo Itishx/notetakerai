@@ -1130,8 +1130,16 @@ Buy Now: selector="#buy-now-button"`;
 
     if (/web\.whatsapp\.com/.test(url)) return `
 ── WHATSAPP WEB (you are here) ──
-Send message: click selector="[data-tab='3']" (search) → type contact name → wait 600
-  → click contact in list → type selector="[data-tab='10']" or [aria-label*="Type a message"] → pressKey Enter`;
+Send by contact name:
+  1. click selector="[data-testid='chat-list-search']" or selector="[data-tab='3']"
+  2. wait 400
+  3. type the contact name
+  4. wait 800  (wait for results to load)
+  5. click first matching contact row: selector="[data-testid='cell-frame-title']" or targetText=CONTACT_NAME
+  6. wait 400
+  7. type message in selector="[data-testid='conversation-compose-box-input']" or [aria-label*="Type a message"] or [data-tab='10']
+  8. pressKey Enter
+Send by phone: navigate → https://wa.me/91NUMBER?text=MESSAGE then click "Continue to Chat" button`;
 
     if (/open\.spotify\.com/.test(url)) return `
 ── SPOTIFY (you are here) ──
@@ -1231,7 +1239,8 @@ RULES:
 URL SHORTCUTS — single navigate, zero form interaction needed:
 ── EMAIL / MESSAGING ──
 Gmail compose:    https://mail.google.com/mail/?view=cm&to=TO&su=SUBJECT&body=BODY  (encode spaces as %20)
-WhatsApp message: https://wa.me/COUNTRYCODENUMBER?text=MESSAGE  (India: 91XXXXXXXXXX, encode spaces as %20)
+WhatsApp by phone#:  https://wa.me/COUNTRYCODENUMBER?text=MESSAGE  (India: 91XXXXXXXXXX, encode spaces as %20)
+WhatsApp by name:    navigate → https://web.whatsapp.com → search contact name → click → type → Enter
 Twitter/X post:   https://twitter.com/intent/tweet?text=TEXT
 
 ── MAPS / NAVIGATION ──
