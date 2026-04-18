@@ -1,4 +1,5 @@
-import { Mic, Download, ChevronRight, Leaf, ArrowRight, Users, Globe, Image, Bot, Zap } from "lucide-react";
+import { Mic, Download, ChevronRight, Leaf, ArrowRight, Users, Globe, Image, Bot, Zap, FileText, CheckCircle2, XCircle, Clock, NotebookText, Settings } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -37,6 +38,373 @@ const steps = [
   { num: "三", title: "Transform", desc: "Stop recording. AI transcribes and shapes your notes automatically." },
   { num: "四", title: "Flow", desc: "Sync to Notion or copy Markdown. Your knowledge, beautifully preserved." },
 ];
+
+// ─── Dashboard Mockup Components ─────────────────────────────────────────────
+
+function MockBadge({ children, color = "default" }: { children: React.ReactNode; color?: "default" | "green" | "orange" | "red" | "blue" }) {
+  const cls = {
+    default: "bg-muted/60 text-muted-foreground border-border/40",
+    green: "bg-green-500/10 text-green-600 border-green-500/20",
+    orange: "bg-primary/10 text-primary border-primary/20",
+    red: "bg-red-500/10 text-red-500 border-red-500/20",
+    blue: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  }[color];
+  return <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${cls}`}>{children}</span>;
+}
+
+function MockStatCard({ value, label, icon }: { value: string; label: string; icon: React.ReactNode }) {
+  return (
+    <div className="border border-border/50 rounded-xl p-3 bg-card/60 flex flex-col gap-1.5">
+      <div className="text-muted-foreground/60">{icon}</div>
+      <div className="text-xl font-semibold text-foreground">{value}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+function OverviewMockup() {
+  return (
+    <div className="flex flex-col gap-3 p-4 h-full overflow-hidden">
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-2">
+        <MockStatCard value="12" label="Total Notes" icon={<FileText className="w-3 h-3" />} />
+        <MockStatCard value="47" label="Tasks Run" icon={<Bot className="w-3 h-3" />} />
+        <MockStatCard value="8" label="This Month" icon={<Clock className="w-3 h-3" />} />
+        <MockStatCard value="41" label="Tasks Done" icon={<CheckCircle2 className="w-3 h-3" />} />
+      </div>
+      {/* Recent Notes */}
+      <div className="border border-border/50 rounded-xl p-3 bg-card/40">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-semibold text-foreground flex items-center gap-1.5"><NotebookText className="w-3 h-3 text-muted-foreground" />Recent Notes</span>
+          <span className="text-[10px] text-muted-foreground/50">View all →</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          {[
+            { title: "Microeconomics — Week 7", badge: "Lecture", time: "2h ago" },
+            { title: "Startup product review call", badge: "Meeting", time: "Yesterday" },
+            { title: "React Server Components deep dive", badge: "Chat", time: "2d ago" },
+          ].map(n => (
+            <div key={n.title} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/30">
+              <FileText className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+              <span className="text-[11px] text-foreground flex-1 truncate">{n.title}</span>
+              <MockBadge>{n.badge}</MockBadge>
+              <span className="text-[10px] text-muted-foreground/40">{n.time}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Recent Tasks */}
+      <div className="border border-border/50 rounded-xl p-3 bg-card/40">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-semibold text-foreground flex items-center gap-1.5"><Bot className="w-3 h-3 text-muted-foreground" />Recent Agent Tasks</span>
+          <span className="text-[10px] text-primary/60">New task →</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          {[
+            { task: "Book flights Mumbai → Goa for next Friday", status: "done" as const },
+            { task: "Search biryani places near Koregaon Park", status: "done" as const },
+            { task: "Find 3BHK apartments in Baner under 40k", status: "error" as const },
+          ].map(c => (
+            <div key={c.task} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border/30 bg-background/40">
+              <span className="text-[11px] text-foreground flex-1 truncate">{c.task}</span>
+              <MockBadge color={c.status === "done" ? "green" : "red"}>{c.status === "done" ? "Done" : "Error"}</MockBadge>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Notion */}
+      <div className="border border-border/50 rounded-xl px-3 py-2.5 bg-card/40 flex items-center gap-2">
+        <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+        <span className="text-[11px] text-foreground">Notion</span>
+        <span className="text-[10px] text-muted-foreground">Connected · My Workspace</span>
+      </div>
+    </div>
+  );
+}
+
+function NotesMockup() {
+  return (
+    <div className="flex flex-col gap-3 p-4 h-full overflow-hidden">
+      {/* Controls */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex items-center gap-2 border border-border/50 rounded-full px-3 py-1.5 bg-card/60">
+          <div className="w-3 h-3 rounded-full border border-border/60 flex-shrink-0" />
+          <span className="text-[11px] text-muted-foreground/50">Search notes...</span>
+        </div>
+        <div className="flex gap-1">
+          {["All", "Lecture", "Meeting", "Chat"].map((f, i) => (
+            <span key={f} className={`text-[10px] px-2.5 py-1 rounded-full border ${i === 0 ? "bg-foreground text-background border-foreground" : "border-border/50 text-muted-foreground/60"}`}>{f}</span>
+          ))}
+        </div>
+      </div>
+      {/* Notes list */}
+      <div className="flex flex-col gap-2 flex-1">
+        {[
+          { title: "Microeconomics — Week 7 Lecture", source: "nptel.ac.in", badge: "Lecture", time: "2h ago" },
+          { title: "Startup product review call", source: "Google Meet", badge: "Meeting", time: "Yesterday" },
+          { title: "React Server Components — deep dive", source: "react.dev", badge: "Chat", time: "2d ago" },
+          { title: "Design patterns for mobile apps", source: "YouTube", badge: "Lecture", time: "4d ago" },
+          { title: "Fintech startup investor call", source: "Zoom", badge: "Meeting", time: "1w ago" },
+        ].map(n => (
+          <div key={n.title} className="flex items-start gap-3 px-3 py-2.5 rounded-xl border border-border/40 bg-card/40 hover:bg-muted/30 cursor-pointer">
+            <FileText className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-medium text-foreground truncate">{n.title}</p>
+              <p className="text-[10px] text-muted-foreground/50 truncate">{n.source}</p>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <MockBadge>{n.badge}</MockBadge>
+              <span className="text-[10px] text-muted-foreground/40">{n.time}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TasksMockup() {
+  const [open, setOpen] = useState<number | null>(null);
+  return (
+    <div className="flex flex-col gap-3 p-4 h-full overflow-hidden">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {["All", "Done", "Error", "Running"].map((f, i) => (
+          <span key={f} className={`text-[10px] px-2.5 py-1 rounded-full border ${i === 0 ? "bg-foreground text-background border-foreground" : "border-border/50 text-muted-foreground/60"}`}>{f}</span>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2">
+        {[
+          { task: "Book flights Mumbai → Goa for next Friday", status: "done" as const, steps: ["Navigate to MakeMyTrip", "Enter flight details", "Results loaded"] },
+          { task: "Search biryani places near Koregaon Park", status: "done" as const, steps: ["Navigate to Zomato", "Search biryani", "Listed top results"] },
+          { task: "Open Gmail and compose to team@acme.co", status: "done" as const, steps: ["Navigate to Gmail compose", "Filled recipient + body"] },
+          { task: "Find 3BHK apartments in Baner under ₹40k", status: "error" as const, steps: ["Navigate to 99acres", "Filters applied — no results"] },
+        ].map((c, i) => (
+          <div key={i} className="border border-border/40 rounded-xl overflow-hidden">
+            <button className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/20 text-left" onClick={() => setOpen(open === i ? null : i)}>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-foreground truncate">{c.task}</p>
+              </div>
+              <MockBadge color={c.status === "done" ? "green" : "red"}>{c.status === "done" ? "Done" : "Error"}</MockBadge>
+              <ChevronRight className={`w-3 h-3 text-muted-foreground/40 flex-shrink-0 transition-transform ${open === i ? "rotate-90" : ""}`} />
+            </button>
+            {open === i && (
+              <div className="border-t border-border/40 bg-muted/10 px-3 py-2 flex flex-col gap-1">
+                {c.steps.map(s => (
+                  <div key={s} className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0" />
+                    {s}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsMockup() {
+  return (
+    <div className="flex flex-col gap-3 p-4 h-full overflow-hidden">
+      {/* Profile */}
+      <div className="border border-border/50 rounded-xl p-3 bg-card/40">
+        <p className="text-[10px] font-semibold text-foreground mb-2.5">Profile</p>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-sm font-semibold flex-shrink-0">I</div>
+          <div>
+            <p className="text-[11px] font-medium text-foreground">Itish Pande</p>
+            <p className="text-[10px] text-muted-foreground">itishpande21@gmail.com</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1 border border-border/50 rounded-lg px-2.5 py-1.5 text-[11px] text-foreground bg-background/60">Itish Pande</div>
+          <div className="border border-border/50 rounded-lg px-2.5 py-1.5 text-[11px] text-muted-foreground bg-card/60">Save</div>
+        </div>
+      </div>
+      {/* Notion */}
+      <div className="border border-border/50 rounded-xl p-3 bg-card/40">
+        <p className="text-[10px] font-semibold text-foreground mb-2">Notion</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            <span className="text-[11px] text-foreground">My Workspace</span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 text-muted-foreground">Manage</span>
+        </div>
+      </div>
+      {/* Plan */}
+      <div className="border border-border/50 rounded-xl p-3 bg-card/40 flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-semibold text-foreground">Plan</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">Free plan — limited agent tasks</p>
+        </div>
+        <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary text-primary-foreground font-medium flex items-center gap-1">
+          <Zap className="w-2.5 h-2.5" />Upgrade
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const dashTabs = [
+  {
+    id: "overview",
+    label: "Overview",
+    icon: <NotebookText className="w-3.5 h-3.5" />,
+    headline: "Everything at a glance",
+    desc: "Your personal command centre. See how many notes you've captured, how many browser tasks you've run, your success rate, and what's happened most recently — all in one quick scroll.",
+    points: [
+      "4 live stat cards pulled from your real data",
+      "Last 5 notes with source site and use-case badge",
+      "Last 5 agent tasks with status (done / error)",
+      "Notion connection status with one-click setup",
+    ],
+    mockup: <OverviewMockup />,
+  },
+  {
+    id: "notes",
+    label: "Notes",
+    icon: <FileText className="w-3.5 h-3.5" />,
+    headline: "Every note, searchable",
+    desc: "Every session you've ever recorded or chatted through lives here. Search by title, filter by type — lecture, meeting, chat, general — and click any note to read the full AI-generated markdown in a clean modal.",
+    points: [
+      "Full-text search across all note titles",
+      "Filter by use case: Lecture, Meeting, Chat, General",
+      "Click to open a full-screen rendered markdown view",
+      "Copy markdown or sync to Notion directly from the modal",
+    ],
+    mockup: <NotesMockup />,
+  },
+  {
+    id: "tasks",
+    label: "Agent Tasks",
+    icon: <Bot className="w-3.5 h-3.5" />,
+    headline: "Your agent's full history",
+    desc: "Every task you've ever delegated is here. Expand any row to see the exact steps the agent took — which pages it navigated, what it clicked, where it succeeded or failed. Filter by status to diagnose errors.",
+    points: [
+      "Complete history of all delegated browser tasks",
+      "Expand each task to see step-by-step agent actions",
+      "Filter by Done, Error, Running, or Pending",
+      "Result message shown when task finishes",
+    ],
+    mockup: <TasksMockup />,
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: <Settings className="w-3.5 h-3.5" />,
+    headline: "Account and connections",
+    desc: "Edit your display name, manage your Notion connection, see your plan, and sign out — everything in one tidy place without digging through menus.",
+    points: [
+      "Edit display name — updates everywhere instantly",
+      "Notion connection status with manage / connect links",
+      "Plan badge with one-click upgrade for free users",
+      "Sign out from the same page",
+    ],
+    mockup: <SettingsMockup />,
+  },
+];
+
+function DashboardShowcase() {
+  const [active, setActive] = useState("overview");
+  const tab = dashTabs.find(t => t.id === active)!;
+
+  return (
+    <section className="container mx-auto px-6 py-24">
+      <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
+
+      <div className="max-w-5xl mx-auto">
+        {/* Heading */}
+        <div className="mb-14 text-center">
+          <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-4">Dashboard</p>
+          <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15]">
+            Your SideBrain,<br />
+            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>at a glance</em>
+          </h2>
+          <p className="mt-5 text-muted-foreground text-base max-w-xl mx-auto leading-relaxed">
+            Sign in once and you get a personal dashboard — notes, agent history, account settings, all in one place. No digging around.
+          </p>
+        </div>
+
+        {/* Tab selector row */}
+        <div className="flex items-center gap-1 mb-8 border border-border/50 rounded-full p-1 bg-card/40 w-fit mx-auto">
+          {dashTabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActive(t.id)}
+              className={`flex items-center gap-1.5 text-sm px-4 py-2 rounded-full transition-all duration-200 ${active === t.id ? "bg-foreground text-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Main panel: left explanation + right mockup */}
+        <div className="grid md:grid-cols-[1fr_1.4fr] gap-6 items-start">
+
+          {/* Left: explanation */}
+          <div className="flex flex-col gap-5 py-2">
+            <div>
+              <h3 className="text-2xl font-normal text-foreground mb-3 leading-snug">{tab.headline}</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">{tab.desc}</p>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {tab.points.map(p => (
+                <div key={p} className="flex items-start gap-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary/50 flex-shrink-0 mt-1.5" />
+                  <span className="text-sm text-muted-foreground">{p}</span>
+                </div>
+              ))}
+            </div>
+            <Link
+              to="/dashboard"
+              className="inline-flex items-center gap-2 mt-2 text-sm text-primary hover:gap-3 transition-all duration-300 w-fit"
+            >
+              Open your dashboard <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {/* Right: mockup */}
+          <div className="rounded-2xl border border-border/60 bg-card/40 overflow-hidden shadow-sm" style={{ minHeight: 420 }}>
+            {/* Fake browser chrome */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50 bg-muted/20">
+              <div className="flex gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-border/80" />
+                <span className="w-2.5 h-2.5 rounded-full bg-border/80" />
+                <span className="w-2.5 h-2.5 rounded-full bg-border/80" />
+              </div>
+              <div className="flex-1 mx-3">
+                <div className="bg-background/60 border border-border/40 rounded-md px-3 py-1 text-[10px] text-muted-foreground/50 font-mono">
+                  sidebrain.app/dashboard
+                </div>
+              </div>
+            </div>
+            {/* Fake dashboard header */}
+            <div className="px-4 py-3 border-b border-border/40 bg-muted/10 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-foreground">Good evening, Itish</p>
+                <p className="text-[10px] text-muted-foreground">Free plan</p>
+              </div>
+              <div className="flex gap-1">
+                {dashTabs.map(t => (
+                  <span key={t.id} className={`text-[10px] px-2.5 py-1 rounded-full border ${t.id === active ? "bg-foreground text-background border-foreground" : "border-border/50 text-muted-foreground/60"}`}>
+                    {t.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            {/* Tab content */}
+            <div style={{ minHeight: 340 }}>
+              {tab.mockup}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 const Index = () => {
   const handleDownload = () => {
@@ -378,6 +746,9 @@ const Index = () => {
           </div>
         </div>
       </section>
+
+      {/* Dashboard showcase */}
+      <DashboardShowcase />
 
       {/* Install */}
       <section className="container mx-auto px-6 py-16">
