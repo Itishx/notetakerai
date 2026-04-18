@@ -103,9 +103,12 @@ const Navbar = () => {
         </button>
         {user ? (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground px-1">
+            <Link
+              to="/dashboard"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors px-1"
+            >
               {profile?.display_name?.split(" ")[0] || user.email}
-            </span>
+            </Link>
             <button
               onClick={() => signOut()}
               className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"

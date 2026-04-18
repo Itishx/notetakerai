@@ -17,6 +17,7 @@ import Premium from "./pages/Premium.tsx";
 import BrowserAgent from "./pages/BrowserAgent.tsx";
 import Delegate from "./pages/Delegate.tsx";
 import RemoteAgent from "./pages/RemoteAgent.tsx";
+import Dashboard from "./pages/Dashboard.tsx";
 import SidepanelTest from "./pages/SidepanelTest.tsx";
 import BuildPlan from "./pages/BuildPlan.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -46,6 +47,7 @@ const App = () => {
               <Route path="/browser-agent" element={<BrowserAgent />} />
               <Route path="/delegate" element={<Delegate />} />
               <Route path="/remote-agent" element={<RemoteAgent />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/sidepanel-test" element={<SidepanelTest />} />
               <Route path="/build-plan" element={<BuildPlan />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
