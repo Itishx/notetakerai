@@ -515,11 +515,12 @@ RULES:
 6. TODAY: ${today}. Calculate all relative dates yourself.
 7. Failed click → scroll to find element, then try different selector.
 8. Flights: IATA codes + DD/MM/YYYY. Never touch date pickers.
+9. WRONG SITE: If the current page is wrong for the task (e.g., on Spotify but asked about flights), your FIRST action MUST be navigate to the correct site. Never say "I can't do this here" — just navigate away immediately.
 
 ${bgGetPlatformGuide(currentUrl)}
 
 FAILURE RECOVERY:
-- Wrong page after navigate/click → go back or navigate directly to correct URL
+- Wrong page → navigate to the correct URL immediately, no explanation
 - Element not found → aria-label, data-testid, placeholder, then targetText
 - List selection uncertain → use read action first to see all options
 - Form not responding → click field first, then type`;
@@ -563,12 +564,24 @@ What actions should be taken next? Return a single JSON object, OR a JSON array 
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
+async function bgCheckStopped(id, token) {
+  try {
+    const res = await fetch(`${BG_SUPABASE_URL}/rest/v1/agent_commands?id=eq.${id}&select=status`, {
+      headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return false;
+    const rows = await res.json();
+    const s = rows[0]?.status;
+    return s !== "running" && s !== "pending";
+  } catch { return false; }
+}
+
 async function bgRunRemoteCommand(cmd, token) {
   console.log("[BgRemoteAgent] Running command in background:", cmd.task);
   await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
 
   // Resolve tab ID once — reuse for entire run to avoid repeated async lookups
-  let tabId = await bgGetActiveTabId();
+  const tabId = await bgGetActiveTabId();
   console.log("[BgRemoteAgent] Using tab:", tabId);
 
   const steps = [];
@@ -584,6 +597,13 @@ async function bgRunRemoteCommand(cmd, token) {
   };
 
   while (iterations++ < MAX) {
+    // Check if user stopped the task from phone
+    if (iterations > 1 && await bgCheckStopped(cmd.id, token)) {
+      console.log("[BgRemoteAgent] Task stopped externally");
+      chrome.storage.local.remove("remoteProcessingId");
+      return;
+    }
+
     const pageInfo = await bgGetAgentPageContext(tabId);
     let actions = bgTryFastPath(cmd.task, history);
     if (!actions) {
@@ -620,20 +640,21 @@ async function bgRunRemoteCommand(cmd, token) {
       if (!result?.error && BG_SNAPSHOT_ACTIONS.has(actionObj.type)) {
         if (actionObj.type === "navigate") {
           await bgWaitForTabReady(tabId, 5000);
-          await new Promise(r => setTimeout(r, 300));
+          await new Promise(r => setTimeout(r, 200));
         } else {
-          await new Promise(r => setTimeout(r, 400));
+          await new Promise(r => setTimeout(r, 200));
         }
         snapshot = await bgGetPageSnapshot(tabId);
-      } else {
-        await new Promise(r => setTimeout(r, 150));
+      } else if (result?.error) {
+        await new Promise(r => setTimeout(r, 400));
       }
 
       history.push({ ...actionObj, result, snapshot });
       steps.push({ description: actionObj.description || actionObj.type, ok: !result?.error, snapshot });
-      await bgUpdateRemoteCommand(cmd.id, token, { steps });
+      // Fire-and-forget step updates — don't block the loop on DB write
+      bgUpdateRemoteCommand(cmd.id, token, { steps });
 
-      if (result?.error) { await new Promise(r => setTimeout(r, 600)); break; }
+      if (result?.error) break;
     }
   }
 

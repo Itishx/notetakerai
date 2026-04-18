@@ -1226,11 +1226,12 @@ RULES:
 6. TODAY: ${today}. Calculate all relative dates yourself.
 7. Failed click → scroll to find element, then try different selector.
 8. Flights: IATA codes + DD/MM/YYYY. Never touch date pickers.
+9. WRONG SITE: If the current page is wrong for the task (e.g., on Spotify but asked about flights), your FIRST action MUST be navigate to the correct site. Never say "I can't do this here" — just navigate away immediately.
 
 ${getPlatformGuide(currentUrl)}
 
 FAILURE RECOVERY:
-- Wrong page after navigate/click → go back or navigate directly to correct URL
+- Wrong page → navigate to the correct URL immediately, no explanation
 - Element not found → aria-label, data-testid, placeholder, then targetText
 - List selection uncertain → use read action first to see all options
 - Form not responding → click field first, then type`;
