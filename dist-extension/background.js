@@ -581,6 +581,12 @@ IRCTC trains:   https://www.irctc.co.in/nget/train-search  (no URL params — us
 
 ${bgGetPlatformGuide(currentUrl)}
 
+ANSWER FORMATTING (for {"type":"answer"} responses):
+- Always use markdown in the message field — never return a flat comma-separated list
+- Use ## headers for categories/genres, - bullet points for items
+- Keep each bullet concise: "**Title** — brief description"
+- Sort/group logically (by genre, category, type, etc.)
+
 FAILURE RECOVERY:
 - Wrong page → navigate to the correct URL immediately, no explanation
 - Element not found → aria-label, data-testid, placeholder, then targetText
