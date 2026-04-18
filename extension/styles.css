@@ -1095,17 +1095,8 @@ body.sidepanel.home-layout #idleControls {
   border-radius: 0;
   word-break: break-word;
   overflow-wrap: break-word;
-  font-family: 'TimesNewRomanMT', 'Times New Roman', Georgia, serif;
-  font-style: italic;
-  font-size: 15px;
-  line-height: 1.8;
-}
-
-.chat-assistant .rendered-md,
-.chat-assistant .rendered-md p,
-.chat-assistant .rendered-md li {
-  font-family: 'TimesNewRomanMT', 'Times New Roman', Georgia, serif;
-  font-style: italic;
+  font-size: 14px;
+  line-height: 1.75;
 }
 
 .chat-msg-image {
@@ -1636,9 +1627,9 @@ body.sidepanel.home-layout #idleControls {
 
 /* ===== WARM THEME (amber-orange, parchment bg) ===== */
 body.sidepanel.theme-warm {
-  --bg: hsl(40, 20%, 97%);
-  --bg-body: hsl(40, 20%, 97%);
-  --bg-card: rgba(255, 255, 255, 0.72);
+  --bg: #f5f1eb;
+  --bg-body: #f5f1eb;
+  --bg-card: rgba(255, 255, 255, 0.75);
   --bg-input: rgba(255, 255, 255, 0.65);
   --text: #2c2318;
   --text-muted: #7a6e62;
@@ -1650,7 +1641,7 @@ body.sidepanel.theme-warm {
   --border: rgba(200, 185, 165, 0.45);
   --border-light: rgba(200, 185, 165, 0.25);
   --danger: #e53935;
-  background: linear-gradient(145deg, hsl(40,18%,93%) 0%, hsl(35,16%,88%) 50%, hsl(30,14%,90%) 100%);
+  background: #f5f1eb;
 }
 
 body.sidepanel.theme-warm .container {
@@ -1689,7 +1680,7 @@ body.sidepanel.theme-warm .history-panel {
 }
 
 body.sidepanel.theme-warm .home-chat-bar {
-  background: hsl(40,20%,97%);
+  background: #f5f1eb;
   border-top-color: rgba(200,185,165,0.3);
 }
 
@@ -2257,11 +2248,16 @@ body.sidepanel.theme-warm .btn-send {
 }
 .mode-hint.hidden { display: none; }
 
-/* Legacy empty-state class — keep for any JS that adds it */
+/* Empty state — greeting + hints, centered */
 .empty-state {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
   gap: 8px;
+  padding-bottom: 24px;
+  animation: fadeInUp 0.4s ease-out;
 }
 
 .empty-state-hints {
@@ -2287,11 +2283,11 @@ body.sidepanel.theme-warm .btn-send {
 .hint-row strong { color: var(--text); }
 
 /* Warm theme overrides for new UI */
-body.sidepanel.theme-warm .app-shell { background: hsl(40,20%,97%); }
-body.sidepanel.theme-warm .bottom-bar { background: hsl(40,20%,97%); }
+body.sidepanel.theme-warm .app-shell { background: #f5f1eb; }
+body.sidepanel.theme-warm .bottom-bar { background: #f5f1eb; }
 body.sidepanel.theme-warm .input-wrap { background: rgba(255,255,255,0.6); }
 body.sidepanel.theme-warm .input-wrap:focus-within { border-color: #d97234; }
-body.sidepanel.theme-warm .notes-overlay { background: hsl(40,20%,97%); }
+body.sidepanel.theme-warm .notes-overlay { background: #f5f1eb; }
 
 /* ===== VOICE MODE OVERLAY ===== */
 .voice-overlay {
