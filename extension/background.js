@@ -514,8 +514,11 @@ RULES:
 5. Forms: type → Tab → next field → submit.
 6. TODAY: ${today}. Calculate all relative dates yourself.
 7. Failed click → scroll to find element, then try different selector.
-8. Flights: IATA codes + DD/MM/YYYY. Never touch date pickers.
-9. WRONG SITE: If the current page is wrong for the task (e.g., on Spotify but asked about flights), your FIRST action MUST be navigate to the correct site. Never say "I can't do this here" — just navigate away immediately.
+8. FLIGHTS: Navigate directly — never touch date pickers.
+   MakeMyTrip one-way URL: https://www.makemytrip.com/flight/search?itinerary=FROM-TO-DD/MM/YYYY&tripType=O&paxType=A-1_C-0_I-0&cabinClass=E
+   Common IATA: BOM=Mumbai, DEL=Delhi, BLR=Bangalore, MAA=Chennai, PNQ=Pune, HYD=Hyderabad, CCU=Kolkata, DED=Dehradun, GOI=Goa, JAI=Jaipur, AMD=Ahmedabad, COK=Kochi, IXC=Chandigarh, PAT=Patna, BBI=Bhubaneswar
+   Example: Pune→Dehradun 19 Apr 2026 → itinerary=PNQ-DED-19/04/2026
+9. WRONG SITE: If the current page is unrelated to the task, your FIRST action MUST be navigate to the correct site. Never say "I can't do this here".
 
 ${bgGetPlatformGuide(currentUrl)}
 
