@@ -157,29 +157,46 @@ export default function RemoteAgent() {
       });
   }, [user]);
 
-  // Realtime subscription
+  // Realtime subscription + polling fallback (mobile WebSockets can die in background)
   useEffect(() => {
     if (!user) return;
-    const channelName = `agent_cmds_${user.id}`;
+
+    const applyUpdate = (updated: Command) => {
+      if (!updated?.id) return;
+      setCommands(prev => {
+        const idx = prev.findIndex(c => c.id === updated.id);
+        if (idx === -1) return [updated, ...prev];
+        if (JSON.stringify(prev[idx]) === JSON.stringify(updated)) return prev; // no change
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      });
+    };
+
+    // Realtime (fast path)
     const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "agent_commands", filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          const updated = payload.new as Command;
-          if (!updated?.id) return;
-          setCommands(prev => {
-            const idx = prev.findIndex(c => c.id === updated.id);
-            if (idx === -1) return [updated, ...prev];
-            const next = [...prev];
-            next[idx] = updated;
-            return next;
-          });
-        }
+      .channel(`agent_cmds_${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "agent_commands", filter: `user_id=eq.${user.id}` },
+        (payload) => applyUpdate(payload.new as Command)
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    // Polling fallback — fires every 3s while any command is active
+    const pollInterval = setInterval(async () => {
+      const { data } = await supabase
+        .from("agent_commands" as any)
+        .select("*")
+        .eq("user_id", user.id)
+        .in("status", ["pending", "running"])
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (data) (data as unknown as Command[]).forEach(applyUpdate);
+    }, 3000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+    };
   }, [user]);
 
   const sendCommand = async () => {

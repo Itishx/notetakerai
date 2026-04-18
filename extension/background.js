@@ -236,31 +236,19 @@ function bgFindScriptableTab(resolve) {
   });
 }
 
-async function bgGetAgentPageContext() {
-  const tabId = await bgGetActiveTabId();
+async function bgGetAgentPageContext(tabId) {
   const empty = { url: "", title: "", bodyText: "", interactiveEls: [] };
-  if (!tabId) {
-    console.log("[BgRemoteAgent] bgGetAgentPageContext: no scriptable tab found");
-    return empty;
-  }
-  console.log("[BgRemoteAgent] bgGetAgentPageContext: using tabId", tabId);
+  if (!tabId) return empty;
   return new Promise(resolve => {
     function sendMsg(retrying) {
       chrome.tabs.sendMessage(tabId, { action: "getAgentPageContext" }, res => {
         if (chrome.runtime.lastError) {
-          if (retrying) {
-            console.warn("[BgRemoteAgent] Content script failed even after inject:", chrome.runtime.lastError.message);
-            resolve(empty); return;
-          }
+          if (retrying) { resolve(empty); return; }
           chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
-            if (chrome.runtime.lastError) {
-              console.warn("[BgRemoteAgent] Script inject failed:", chrome.runtime.lastError.message);
-              resolve(empty); return;
-            }
+            if (chrome.runtime.lastError) { resolve(empty); return; }
             setTimeout(() => sendMsg(true), 250);
           });
         } else {
-          console.log("[BgRemoteAgent] Got page context:", res?.url);
           resolve(res || empty);
         }
       });
@@ -269,8 +257,7 @@ async function bgGetAgentPageContext() {
   });
 }
 
-async function bgGetPageSnapshot() {
-  const tabId = await bgGetActiveTabId();
+async function bgGetPageSnapshot(tabId) {
   if (!tabId) return null;
   try {
     const [result] = await chrome.scripting.executeScript({
@@ -285,21 +272,14 @@ async function bgGetPageSnapshot() {
   } catch(e) { return null; }
 }
 
-async function bgExecuteAgentAction(actionObj) {
-  const tabId = await bgGetActiveTabId();
+async function bgExecuteAgentAction(tabId, actionObj) {
   if (!tabId) return { error: "No active tab" };
-
-  console.log("[BgRemoteAgent] Execute action:", actionObj.type, actionObj.description || "");
 
   if (actionObj.type === "navigate") {
     return new Promise(resolve => {
       chrome.tabs.update(tabId, { url: actionObj.url }, () => {
         if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
-        else {
-          // Update activeTabId so subsequent actions target the right tab
-          chrome.storage.local.set({ activeTabId: tabId });
-          resolve({ success: true });
-        }
+        else resolve({ success: true });
       });
     });
   }
@@ -587,6 +567,10 @@ async function bgRunRemoteCommand(cmd, token) {
   console.log("[BgRemoteAgent] Running command in background:", cmd.task);
   await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
 
+  // Resolve tab ID once — reuse for entire run to avoid repeated async lookups
+  let tabId = await bgGetActiveTabId();
+  console.log("[BgRemoteAgent] Using tab:", tabId);
+
   const steps = [];
   const history = [];
   const MAX = 20;
@@ -595,13 +579,12 @@ async function bgRunRemoteCommand(cmd, token) {
   const finish = async (status, result) => {
     await bgUpdateRemoteCommand(cmd.id, token, { status, result, steps });
     chrome.storage.local.remove("remoteProcessingId");
-    // Notify side panel if it opens later
     chrome.runtime.sendMessage({ action: "remoteCommandComplete", cmdId: cmd.id, result }).catch(() => {});
     console.log("[BgRemoteAgent] Command finished:", status, result);
   };
 
   while (iterations++ < MAX) {
-    const pageInfo = await bgGetAgentPageContext();
+    const pageInfo = await bgGetAgentPageContext(tabId);
     let actions = bgTryFastPath(cmd.task, history);
     if (!actions) {
       try {
@@ -632,17 +615,16 @@ async function bgRunRemoteCommand(cmd, token) {
         return;
       }
 
-      const result = await bgExecuteAgentAction(actionObj);
+      const result = await bgExecuteAgentAction(tabId, actionObj);
       let snapshot = null;
       if (!result?.error && BG_SNAPSHOT_ACTIONS.has(actionObj.type)) {
         if (actionObj.type === "navigate") {
-          const tabId = await bgGetActiveTabId();
-          if (tabId) await bgWaitForTabReady(tabId, 5000);
+          await bgWaitForTabReady(tabId, 5000);
           await new Promise(r => setTimeout(r, 300));
         } else {
           await new Promise(r => setTimeout(r, 400));
         }
-        snapshot = await bgGetPageSnapshot();
+        snapshot = await bgGetPageSnapshot(tabId);
       } else {
         await new Promise(r => setTimeout(r, 150));
       }
