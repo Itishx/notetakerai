@@ -1225,11 +1225,61 @@ RULES:
 5. Forms: type → Tab → next field → submit.
 6. TODAY: ${today}. Calculate all relative dates yourself.
 7. Failed click → scroll to find element, then try different selector.
-8. FLIGHTS: Navigate directly — never touch date pickers.
-   MakeMyTrip one-way URL: https://www.makemytrip.com/flight/search?itinerary=FROM-TO-DD/MM/YYYY&tripType=O&paxType=A-1_C-0_I-0&cabinClass=E
-   Common IATA: BOM=Mumbai, DEL=Delhi, BLR=Bangalore, MAA=Chennai, PNQ=Pune, HYD=Hyderabad, CCU=Kolkata, DED=Dehradun, GOI=Goa, JAI=Jaipur, AMD=Ahmedabad, COK=Kochi, IXC=Chandigarh, PAT=Patna, BBI=Bhubaneswar
-   Example: Pune→Dehradun 19 Apr 2026 → itinerary=PNQ-DED-19/04/2026
+8. ALWAYS check URL SHORTCUTS below first — if a shortcut exists, use it as step 1.
 9. WRONG SITE: If the current page is unrelated to the task, your FIRST action MUST be navigate to the correct site. Never say "I can't do this here".
+
+URL SHORTCUTS — single navigate, zero form interaction needed:
+── EMAIL / MESSAGING ──
+Gmail compose:    https://mail.google.com/mail/?view=cm&to=TO&su=SUBJECT&body=BODY  (encode spaces as %20)
+WhatsApp message: https://wa.me/COUNTRYCODENUMBER?text=MESSAGE  (India: 91XXXXXXXXXX, encode spaces as %20)
+Twitter/X post:   https://twitter.com/intent/tweet?text=TEXT
+
+── MAPS / NAVIGATION ──
+Google Maps search:     https://www.google.com/maps/search/QUERY+with+spaces+as+plus
+Google Maps directions: https://www.google.com/maps/dir/ORIGIN/DESTINATION  (encode spaces as +)
+
+── FLIGHTS (IATA codes: BOM=Mumbai DEL=Delhi BLR=Bangalore MAA=Chennai PNQ=Pune HYD=Hyderabad CCU=Kolkata DED=Dehradun GOI=Goa JAI=Jaipur AMD=Ahmedabad COK=Kochi IXC=Chandigarh) ──
+MakeMyTrip one-way: https://www.makemytrip.com/flight/search?itinerary=FROM-TO-DD/MM/YYYY&tripType=O&paxType=A-1_C-0_I-0&cabinClass=E
+MakeMyTrip return:  itinerary=FROM-TO-DD/MM/YYYY,TO-FROM-DD/MM/YYYY&tripType=R&paxType=A-1_C-0_I-0&cabinClass=E
+Skyscanner:         https://www.skyscanner.co.in/transport/flights/FROM/TO/YYMMDD/  (date = last 2 digits of year + MM + DD)
+Example PNQ→DEL 19 Apr 2026: MakeMyTrip itinerary=PNQ-DEL-19/04/2026 · Skyscanner /PNQ/DEL/260419/
+
+── HOTELS ──
+Booking.com: https://www.booking.com/searchresults.html?ss=CITY&checkin=YYYY-MM-DD&checkout=YYYY-MM-DD&no_rooms=1&group_adults=2
+MakeMyTrip hotels: https://www.makemytrip.com/hotels/hotel-listing/?checkin=MM/DD/YYYY&checkout=MM/DD/YYYY&city=CITY_NAME&roomStayQualifier=2e0e
+
+── SHOPPING ──
+Amazon India:  https://www.amazon.in/s?k=QUERY+with+plus
+Flipkart:      https://www.flipkart.com/search?q=QUERY
+Myntra:        https://www.myntra.com/search?q=QUERY
+Meesho:        https://www.meesho.com/search?q=QUERY
+
+── FOOD / DELIVERY ──
+Zomato:  https://www.zomato.com/CITY/restaurants?q=QUERY  (city lowercase: mumbai, delhi, bangalore, pune, hyderabad)
+Swiggy:  https://www.swiggy.com/search?query=QUERY
+
+── JOBS ──
+LinkedIn jobs:  https://www.linkedin.com/jobs/search/?keywords=ROLE&location=CITY
+Naukri:         https://www.naukri.com/ROLE-jobs-in-CITY  (lowercase hyphenated e.g. software-engineer-jobs-in-bangalore)
+Indeed:         https://in.indeed.com/jobs?q=ROLE&l=CITY
+
+── PRODUCTIVITY ──
+Google Calendar new event: https://calendar.google.com/calendar/r/eventedit?text=EVENT+NAME&dates=YYYYMMDDTHHMMSS/YYYYMMDDTHHMMSS&location=PLACE&details=NOTES
+New Google Doc:   https://docs.new
+New Google Sheet: https://sheets.new
+New Google Slide: https://slides.new
+
+── MEDIA ──
+YouTube search:       https://www.youtube.com/results?search_query=QUERY
+Spotify search:       https://open.spotify.com/search/QUERY
+YouTube Music search: https://music.youtube.com/search?q=QUERY
+Netflix search:       https://www.netflix.com/search?q=QUERY
+
+── OTHER ──
+Google search:  https://www.google.com/search?q=QUERY
+Wikipedia:      https://en.wikipedia.org/wiki/Special:Search?search=QUERY
+Paytm:          https://paytm.com/search?q=QUERY
+IRCTC trains:   https://www.irctc.co.in/nget/train-search  (no URL params — use form)
 
 ${getPlatformGuide(currentUrl)}
 
