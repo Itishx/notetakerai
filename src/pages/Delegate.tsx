@@ -1,35 +1,91 @@
-import { Bot, ArrowRight, Zap, MousePointer, Mail, Globe, Plane, ChevronRight, FlaskConical, Smartphone, MonitorSmartphone } from "lucide-react";
+import { Bot, ArrowRight, Zap, Mail, Globe, Plane, ChevronRight, FlaskConical, Smartphone, MonitorSmartphone, MapPin, ShoppingBag, Utensils, Briefcase, Calendar, Music, Hotel } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 
 const examples = [
   {
-    label: "Send an email",
-    prompt: "Send a quick email to alex@gmail.com — tell him the meeting is moved to 4pm",
-    steps: ["Open Gmail", "Click Compose", "Fill recipient + message", "Send"],
-    works: "usually" as const,
+    category: "Email",
+    prompt: "Send an email to alex@work.com — subject 'Quick update', body 'Meeting pushed to 4pm today'",
+    steps: ["Build Gmail compose URL", "Open pre-filled draft", "Send"],
+    works: "great" as const,
     icon: Mail,
   },
   {
-    label: "Navigate anywhere",
-    prompt: "Go to youtube.com and search for Kanan Gill stand-up",
-    steps: ["Navigate to YouTube", "Type search query", "Press Enter"],
-    works: "usually" as const,
-    icon: Globe,
-  },
-  {
-    label: "Search flights on MakeMyTrip",
-    prompt: "Search for flights from Mumbai to Delhi next Friday on MakeMyTrip",
-    steps: ["Open MakeMyTrip", "Fill from/to", "Pick date", "Search"],
-    works: "usually" as const,
+    category: "Flights",
+    prompt: "Search for flights from Mumbai to Delhi for 25th April, economy on MakeMyTrip",
+    steps: ["Build MakeMyTrip URL", "Open with results"],
+    works: "great" as const,
     icon: Plane,
   },
   {
-    label: "Browse Amazon",
-    prompt: "Search for noise-cancelling headphones under ₹3000 on Amazon",
-    steps: ["Open Amazon", "Type search", "Apply price filter"],
-    works: "sometimes" as const,
+    category: "Hotels",
+    prompt: "Search for hotels in Goa from 1st May to 3rd May on Booking.com",
+    steps: ["Build Booking.com URL", "Open with results"],
+    works: "great" as const,
+    icon: Hotel,
+  },
+  {
+    category: "Shopping",
+    prompt: "Search for boAt Airdopes on Amazon India",
+    steps: ["Build Amazon search URL", "Open results"],
+    works: "great" as const,
+    icon: ShoppingBag,
+  },
+  {
+    category: "Shopping",
+    prompt: "Search for oversized t-shirts on Flipkart",
+    steps: ["Build Flipkart URL", "Open results"],
+    works: "great" as const,
+    icon: ShoppingBag,
+  },
+  {
+    category: "Food",
+    prompt: "Search for biryani places in Pune on Zomato",
+    steps: ["Build Zomato URL", "Open results"],
+    works: "great" as const,
+    icon: Utensils,
+  },
+  {
+    category: "Jobs",
+    prompt: "Search for product manager jobs in Bangalore on LinkedIn",
+    steps: ["Build LinkedIn jobs URL", "Open results"],
+    works: "great" as const,
+    icon: Briefcase,
+  },
+  {
+    category: "Maps",
+    prompt: "Get directions from Bandra to Juhu Beach on Google Maps",
+    steps: ["Build Maps directions URL", "Open route"],
+    works: "great" as const,
+    icon: MapPin,
+  },
+  {
+    category: "Productivity",
+    prompt: "Create a new Google Doc",
+    steps: ["Navigate to docs.new", "Doc opens instantly"],
+    works: "great" as const,
+    icon: Globe,
+  },
+  {
+    category: "Productivity",
+    prompt: "Create a calendar event — team standup, tomorrow at 10am",
+    steps: ["Build Calendar URL", "Open pre-filled event"],
+    works: "great" as const,
+    icon: Calendar,
+  },
+  {
+    category: "Media",
+    prompt: "Search for 'Tum Hi Ho' on Spotify",
+    steps: ["Build Spotify search URL", "Open results"],
+    works: "great" as const,
+    icon: Music,
+  },
+  {
+    category: "Media",
+    prompt: "Search for Kanan Gill stand-up on YouTube",
+    steps: ["Build YouTube search URL", "Open results"],
+    works: "great" as const,
     icon: Globe,
   },
 ];
@@ -52,13 +108,17 @@ const howItWorks = [
   },
 ];
 
-const WorksBadge = ({ works }: { works: "usually" | "sometimes" }) =>
-  works === "usually" ? (
-    <span className="text-xs px-2.5 py-1 rounded-full border border-green-500/25 text-green-600/70 bg-green-500/6">
+const WorksBadge = ({ works }: { works: "great" | "usually" | "sometimes" }) =>
+  works === "great" ? (
+    <span className="text-xs px-2.5 py-1 rounded-full border border-green-500/30 text-green-600/80 bg-green-500/8">
+      ✓ Works great
+    </span>
+  ) : works === "usually" ? (
+    <span className="text-xs px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground/60 bg-card/40">
       Usually works
     </span>
   ) : (
-    <span className="text-xs px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground/50 bg-card/40">
+    <span className="text-xs px-2.5 py-1 rounded-full border border-border/40 text-muted-foreground/40 bg-card/20">
       Hit or miss
     </span>
   );
@@ -241,43 +301,43 @@ const Delegate = () => {
 
       {/* Test Delegate section */}
       <section className="container mx-auto px-6 py-24">
-        <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-3">Test Delegate</p>
+        <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-3">What it can do</p>
         <h2 className="text-center text-3xl md:text-4xl font-normal text-foreground mb-4">
-          See if it can actually do things
+          12 things it handles well
         </h2>
         <p className="text-center text-sm text-muted-foreground max-w-md mx-auto mb-16 leading-relaxed">
-          These are real tasks we tested. Install the extension, unlock Premium, and try them — see for yourself how it performs.
+          All tested. These work reliably — try them yourself after installing the extension.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
           {examples.map((ex, i) => (
             <div
-              key={ex.label}
-              className="p-7 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in"
-              style={{ animationDelay: `${0.1 + i * 0.1}s` }}
+              key={i}
+              className="p-6 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in"
+              style={{ animationDelay: `${0.05 + i * 0.05}s` }}
             >
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <ex.icon className="w-3.5 h-3.5 text-primary" strokeWidth={1.5} />
+                  <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <ex.icon className="w-3 h-3 text-primary" strokeWidth={1.5} />
                   </div>
-                  <span className="text-xs font-medium text-foreground">{ex.label}</span>
+                  <span className="text-xs font-medium text-muted-foreground/60 uppercase tracking-wide">{ex.category}</span>
                 </div>
                 <WorksBadge works={ex.works} />
               </div>
 
-              <div className="bg-foreground text-background rounded-2xl rounded-tl-sm px-4 py-3 text-sm mb-5 inline-block max-w-full">
+              <p className="text-sm text-foreground leading-snug mb-4">
                 "{ex.prompt}"
-              </div>
+              </p>
 
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap">
                 {ex.steps.map((step, j) => (
                   <span key={step} className="contents">
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-card border border-border/60 text-muted-foreground">
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-card border border-border/50 text-muted-foreground/60">
                       {step}
                     </span>
                     {j < ex.steps.length - 1 && (
-                      <ChevronRight className="w-3 h-3 text-muted-foreground/30 flex-shrink-0" />
+                      <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/20 flex-shrink-0" />
                     )}
                   </span>
                 ))}
