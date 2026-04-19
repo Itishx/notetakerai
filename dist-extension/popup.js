@@ -1399,26 +1399,39 @@ async function speakText(text, onWordUpdate) {
     const url = URL.createObjectURL(blob);
     currentAudio = new Audio(url);
 
-    // Word-by-word reveal using .word / .word.said / .word.current spans
+    // Word-by-word reveal — wait for actual audio duration before starting timer
     if (onWordUpdate) {
-      // First render all word spans at dim opacity
-      onWordUpdate(clean, -1);
+      onWordUpdate(clean, -1); // render word spans first
       const wordSpans = voiceAgentText ? Array.from(voiceAgentText.querySelectorAll(".word")) : [];
-      const totalMs = Math.max((blob.size / 8000) * 1000, wordSpans.length * 200);
-      const msPerWord = Math.min(totalMs / Math.max(wordSpans.length, 1), 500);
-      let i = 0;
-      voiceWordIntervalId = setInterval(() => {
-        if (i < wordSpans.length) {
-          if (i > 0) { wordSpans[i-1].classList.remove("current"); wordSpans[i-1].classList.add("said"); }
-          wordSpans[i].classList.add("current");
-          i++;
-        } else {
-          // Mark last word as said
-          if (wordSpans.length > 0) { wordSpans[wordSpans.length-1].classList.remove("current"); wordSpans[wordSpans.length-1].classList.add("said"); }
-          clearInterval(voiceWordIntervalId);
-          voiceWordIntervalId = null;
+
+      const startWordTimer = (durationMs) => {
+        const msPerWord = Math.max(60, durationMs / Math.max(wordSpans.length, 1));
+        let i = 0;
+        voiceWordIntervalId = setInterval(() => {
+          if (i < wordSpans.length) {
+            if (i > 0) { wordSpans[i-1].classList.remove("current"); wordSpans[i-1].classList.add("said"); }
+            wordSpans[i].classList.add("current");
+            // Auto-scroll so current word is always visible
+            wordSpans[i].scrollIntoView({ block: "nearest", behavior: "smooth" });
+            i++;
+          } else {
+            if (wordSpans.length > 0) { wordSpans[wordSpans.length-1].classList.remove("current"); wordSpans[wordSpans.length-1].classList.add("said"); }
+            clearInterval(voiceWordIntervalId);
+            voiceWordIntervalId = null;
+          }
+        }, msPerWord);
+      };
+
+      // Use real audio duration once metadata loads for accurate sync
+      currentAudio.onloadedmetadata = () => {
+        startWordTimer(currentAudio.duration * 1000 * 0.92); // 0.92 slight lead so last word clears before audio ends
+      };
+      // Fallback if metadata never fires
+      setTimeout(() => {
+        if (voiceWordIntervalId === null && wordSpans.length > 0 && wordSpans[0].classList.contains("word") && !wordSpans[0].classList.contains("said")) {
+          startWordTimer(wordSpans.length * 300);
         }
-      }, msPerWord);
+      }, 600);
     }
 
     isVoiceSpeaking = true;
