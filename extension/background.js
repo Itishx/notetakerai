@@ -745,6 +745,66 @@ async function bgRunRemoteCommand(cmd, token) {
   await finish("error", "Ran out of steps. Check your desktop browser.");
 }
 
+// --- realtime subscription (keeps worker alive + instant pickup) ---
+
+const BG_REALTIME_URL = BG_SUPABASE_URL.replace("https://", "wss://") + "/realtime/v1/websocket";
+
+let bgRealtimeWs = null;
+let bgRealtimeHeartbeat = null;
+let bgRealtimeReconnectTimer = null;
+
+async function bgStartRealtime() {
+  clearInterval(bgRealtimeHeartbeat);
+  clearTimeout(bgRealtimeReconnectTimer);
+  if (bgRealtimeWs) { try { bgRealtimeWs.close(); } catch(e) {} bgRealtimeWs = null; }
+
+  const data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
+  if (!data.authUserId || !data.authToken) return;
+
+  const ws = new WebSocket(`${BG_REALTIME_URL}?apikey=${BG_SUPABASE_ANON_KEY}&vsn=1.0.0`);
+  bgRealtimeWs = ws;
+
+  ws.onopen = () => {
+    console.log("[BgRealtime] Connected");
+    ws.send(JSON.stringify({
+      topic: "realtime:public:agent_commands",
+      event: "phx_join",
+      payload: {
+        config: {
+          postgres_changes: [{ event: "INSERT", schema: "public", table: "agent_commands", filter: `user_id=eq.${data.authUserId}` }]
+        },
+        access_token: data.authToken
+      },
+      ref: "1"
+    }));
+    // Heartbeat every 25s — keeps WebSocket alive AND keeps service worker alive
+    bgRealtimeHeartbeat = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ topic: "phoenix", event: "heartbeat", payload: {}, ref: "hb" }));
+      }
+    }, 25000);
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.event === "postgres_changes" && msg.payload?.data?.type === "INSERT") {
+        console.log("[BgRealtime] New command → triggering poll immediately");
+        bgPollRemoteCommands();
+      }
+    } catch(_) {}
+  };
+
+  ws.onclose = () => {
+    console.log("[BgRealtime] Disconnected — reconnecting in 5s");
+    clearInterval(bgRealtimeHeartbeat);
+    bgRealtimeWs = null;
+    bgRealtimeReconnectTimer = setTimeout(bgStartRealtime, 5000);
+  };
+
+  ws.onerror = () => console.warn("[BgRealtime] WebSocket error");
+}
+
 // --- token refresh ---
 
 async function bgRefreshAuthToken() {
@@ -837,8 +897,9 @@ chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "remoteAgentPoll") bgPollRemoteCommands();
 });
-// Also poll immediately on service worker startup
+// Also poll + start realtime immediately on service worker startup
 bgPollRemoteCommands();
+bgStartRealtime();
 
 // ===== AUTH — onMessageExternal (backup, from website directly) =====
 chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
@@ -866,6 +927,8 @@ function storeAuthData(data) {
     authEmail: data.email,
     authUserId: data.userId,
   });
+  // Restart realtime with fresh credentials
+  bgStartRealtime();
 }
 
 async function ensureOffscreen() {
