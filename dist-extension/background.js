@@ -672,9 +672,11 @@ async function bgRunRemoteCommand(cmd, token) {
   const history = [];
   const MAX = 20;
   let iterations = 0;
+  const startedAt = Date.now();
 
   const finish = async (status, result) => {
-    await bgUpdateRemoteCommand(cmd.id, token, { status, result, steps });
+    const durationMs = Date.now() - startedAt;
+    await bgUpdateRemoteCommand(cmd.id, token, { status, result, steps: [...steps, { __meta: true, durationMs }] });
     chrome.storage.local.remove("remoteProcessingId");
     chrome.runtime.sendMessage({ action: "remoteCommandComplete", cmdId: cmd.id, result }).catch(() => {});
     console.log("[BgRemoteAgent] Command finished:", status, result);
