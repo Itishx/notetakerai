@@ -1431,6 +1431,7 @@ async function speakText(text, onWordUpdate) {
 
 // ===== VOICE MODE =====
 let voiceActive = false;
+let voiceTabId = null;
 
 const voiceOverlay  = document.getElementById("voiceOverlay");
 const voiceOrb      = document.getElementById("voiceOrb");
@@ -1438,14 +1439,18 @@ const voiceUserText = document.getElementById("voiceUserText");
 const voiceAgentText= document.getElementById("voiceAgentText");
 const voiceModeBtn  = document.getElementById("voiceModeBtn");
 const voiceCloseBtn = document.getElementById("voiceCloseBtn");
+const voiceStateTxt = document.getElementById("voiceStateTxt");
+
+const STATE_LABELS = { listening: "Listening", processing: "Thinking", speaking: "Speaking", idle: "Idle" };
 
 function setOrbState(state) {
   if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
+  if (voiceStateTxt) voiceStateTxt.textContent = STATE_LABELS[state] || state;
 }
 
 function setSubtitles(user, agent) {
   if (voiceUserText)  voiceUserText.textContent  = user  || "";
-  if (voiceAgentText) voiceAgentText.textContent = agent || "";
+  if (voiceAgentText) voiceAgentText.textContent = agent || "—";
 }
 
 function getActiveTabId() {
@@ -1472,7 +1477,7 @@ async function openVoiceMode() {
   voiceActive = true;
   voiceOverlay?.classList.remove("hidden");
   setOrbState("listening");
-  setSubtitles("", "Starting…");
+  setSubtitles("", "");
 
   const tabId = await getActiveTabId();
   if (!tabId) {
@@ -1481,6 +1486,7 @@ async function openVoiceMode() {
     return;
   }
 
+  voiceTabId = tabId;
   const res = await sendToContentScript(tabId, "startVoiceListening");
   if (res?.error) {
     setSubtitles("", "Could not start voice: " + res.error);
@@ -1493,7 +1499,8 @@ async function closeVoiceMode() {
   stopCurrentTTS();
   voiceOverlay?.classList.add("hidden");
   setOrbState("idle");
-  const tabId = await getActiveTabId();
+  const tabId = voiceTabId || await getActiveTabId();
+  voiceTabId = null;
   if (tabId) sendToContentScript(tabId, "stopVoiceListening");
 }
 
@@ -1605,6 +1612,8 @@ async function handleVoiceInput(text) {
 
     setOrbState("speaking");
     if (voiceAgentText) voiceAgentText.textContent = "";
+    // Stop mic so TTS audio isn't picked up as user input
+    if (voiceTabId) sendToContentScript(voiceTabId, "stopVoiceListening");
     await speakText(reply, (words) => {
       if (voiceAgentText) voiceAgentText.textContent = words;
     });
@@ -1612,10 +1621,11 @@ async function handleVoiceInput(text) {
     if (voiceAgentText) voiceAgentText.textContent = "Something went wrong. Try again.";
   }
 
-  // Content script auto-restarts recognition — just update orb state
-  if (voiceActive && !isVoiceSpeaking) {
+  // Restart mic after speaking ends so user can reply
+  if (voiceActive) {
     setOrbState("listening");
-    setSubtitles("", "Listening…");
+    setSubtitles(voiceUserText?.textContent || "", "");
+    if (voiceTabId) sendToContentScript(voiceTabId, "startVoiceListening");
   }
 }
 
