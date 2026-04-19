@@ -136,9 +136,16 @@ function NoteModal({ note, onClose }: { note: Note; onClose: () => void }) {
 
 // ─── Task Row ─────────────────────────────────────────────────────────────────
 
+function formatDuration(ms: number) {
+  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+}
+
 function TaskRow({ cmd }: { cmd: Command }) {
   const [expanded, setExpanded] = useState(false);
-  const steps = Array.isArray(cmd.steps) ? cmd.steps : [];
+  const allSteps = Array.isArray(cmd.steps) ? cmd.steps : [];
+  const meta = allSteps.find((s: any) => s.__meta);
+  const steps = allSteps.filter((s: any) => !s.__meta);
 
   return (
     <div className="border border-border/50 rounded-xl overflow-hidden">
@@ -150,7 +157,12 @@ function TaskRow({ cmd }: { cmd: Command }) {
           <p className="text-sm font-medium text-foreground truncate">{cmd.task}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(cmd.created_at)}</p>
         </div>
-        <StatusBadge status={cmd.status} />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <StatusBadge status={cmd.status} />
+          {meta?.durationMs && (
+            <span className="text-xs text-muted-foreground">{formatDuration(meta.durationMs)}</span>
+          )}
+        </div>
         {steps.length > 0 && (
           expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         )}
