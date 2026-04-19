@@ -1,5 +1,5 @@
 import { Mic, Download, ChevronRight, Leaf, ArrowRight, Users, Globe, Image, Bot, Zap, FileText, CheckCircle2, XCircle, Clock, NotebookText, Settings } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -306,6 +306,145 @@ const dashTabs = [
   },
 ];
 
+const pillarMockups = [
+  // Record Tab Audio
+  <div className="flex flex-col gap-3 p-4 bg-background/60 rounded-xl border border-border/50 font-mono text-xs">
+    <div className="flex items-center gap-2 text-muted-foreground">
+      <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+      Recording — 04:32
+    </div>
+    <div className="space-y-1.5">
+      {["Transcribing audio stream...", "Identifying key concepts", "Structuring into notes", "Syncing to Notion ✓"].map((l, i) => (
+        <div key={l} className="flex items-center gap-2 text-muted-foreground/70">
+          <span className="text-primary/50">›</span> {l}
+        </div>
+      ))}
+    </div>
+    <div className="mt-2 p-3 rounded-lg bg-primary/5 border border-primary/10 text-foreground/70 text-[11px] leading-relaxed">
+      <strong className="text-foreground">Key takeaway:</strong> Transformers use self-attention to weigh token relationships across the full sequence simultaneously...
+    </div>
+  </div>,
+  // Read Any Page
+  <div className="flex flex-col gap-3 p-4 bg-background/60 rounded-xl border border-border/50 text-xs">
+    <div className="p-2.5 rounded-lg bg-muted/40 border border-border/40 text-muted-foreground text-[11px]">
+      📄 <span className="text-foreground font-medium">leetcode.com</span> — Two Sum
+    </div>
+    <div className="space-y-2">
+      {[
+        { q: "What's the time complexity?", a: "O(n) with a hash map — single pass." },
+        { q: "Give me a hint", a: "Think about what complement you need for each number." },
+      ].map(({ q, a }) => (
+        <div key={q} className="space-y-1">
+          <div className="flex justify-end"><span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-[11px]">{q}</span></div>
+          <div className="text-muted-foreground text-[11px] pl-1">{a}</div>
+        </div>
+      ))}
+    </div>
+  </div>,
+  // Record Meetings
+  <div className="flex flex-col gap-3 p-4 bg-background/60 rounded-xl border border-border/50 text-xs">
+    <div className="flex items-center gap-2 text-muted-foreground text-[11px]">
+      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+      2 speakers detected
+    </div>
+    <div className="space-y-2">
+      {[
+        { speaker: "Alex", line: "We should ship the redesign by Friday." },
+        { speaker: "Priya", line: "Agreed. I'll handle QA on Thursday." },
+        { speaker: "Alex", line: "Perfect. Let's sync tomorrow at 10." },
+      ].map(({ speaker, line }) => (
+        <div key={line} className="flex gap-2">
+          <span className="text-primary/60 font-medium w-8 flex-shrink-0">{speaker[0]}</span>
+          <span className="text-muted-foreground/80">{line}</span>
+        </div>
+      ))}
+    </div>
+    <div className="mt-1 text-[10px] text-muted-foreground/50 flex gap-3">
+      <span>✓ Action items extracted</span><span>✓ Summary ready</span>
+    </div>
+  </div>,
+];
+
+function TabbedDemo() {
+  const [active, setActive] = useState(0);
+
+  return (
+    <section className="container mx-auto px-6 py-24">
+      <div className="max-w-4xl mx-auto mb-14 text-center">
+        <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
+          SideBrain does<br />
+          <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>3 things</em>
+        </h2>
+      </div>
+
+      <div className="max-w-4xl mx-auto">
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 p-1 rounded-2xl bg-muted/40 border border-border/50 mb-8">
+          {pillars.map((p, i) => (
+            <button
+              key={p.num}
+              onClick={() => setActive(i)}
+              className={`flex-1 flex items-center justify-center gap-2 h-10 rounded-xl text-sm transition-all duration-300 ${
+                active === i
+                  ? "bg-background shadow-sm border border-border/50 text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <p.icon className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.5} />
+              <span className="hidden sm:inline">{p.title}</span>
+              <span className="sm:hidden text-xs">{p.num}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Demo panel */}
+        <div className="overflow-hidden rounded-2xl border border-border/50 grid md:grid-cols-2 min-h-[320px]">
+          {/* Left — identity */}
+          <div className="relative bg-foreground p-10 flex flex-col justify-between overflow-hidden">
+            <span className="absolute -bottom-4 -right-2 text-[120px] font-bold leading-none select-none pointer-events-none text-white/[0.04]">
+              {pillars[active].num}
+            </span>
+            <div>
+              {(() => { const Icon = pillars[active].icon; return <Icon className="w-5 h-5 text-primary mb-6" strokeWidth={1.5} />; })()}
+              <h3 className="text-2xl md:text-3xl font-normal text-background leading-snug tracking-tight mb-3">
+                {pillars[active].title}
+              </h3>
+              <p className="text-sm text-background/50 leading-relaxed mb-6">{pillars[active].tagline}</p>
+              <div className="flex flex-wrap gap-2">
+                {pillars[active].useCases.map(uc => (
+                  <span key={uc} className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 text-background/50">{uc}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right — live mockup */}
+          <div className="bg-card/60 p-8 flex flex-col justify-center">
+            <p className="text-[10px] tracking-widest uppercase text-muted-foreground/40 mb-4">Live preview</p>
+            <div key={active} style={{ animation: "fadeUp 0.35s ease forwards" }}>
+              {pillarMockups[active]}
+            </div>
+          </div>
+        </div>
+
+        {/* Pipeline steps below */}
+        <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
+          {pillars[active].pipeline.map((step, si) => (
+            <span key={step} className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">{step}</span>
+              {si < pillars[active].pipeline.length - 1 && <span className="text-border/60 text-xs">→</span>}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+      `}</style>
+    </section>
+  );
+}
+
 function DashboardShowcase() {
   const [active, setActive] = useState("overview");
   const tab = dashTabs.find(t => t.id === active)!;
@@ -520,60 +659,11 @@ const Index = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
       </div>
 
-      {/* Three Things — Option A */}
-      <section className="container mx-auto px-6 py-24">
-        <div className="max-w-5xl mx-auto mb-12 text-center">
-          <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
-            SideBrain does<br />
-            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>3 things</em>
-          </h2>
-        </div>
-        <div className="space-y-4 max-w-5xl mx-auto">
-          {pillars.map((pillar, i) => (
-            <div
-              key={pillar.title}
-              className="relative overflow-hidden p-8 md:p-12 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 transition-all duration-500 opacity-0 animate-fade-in"
-              style={{ animationDelay: `${0.1 + i * 0.15}s` }}
-            >
-              {/* Giant number watermark */}
-              <span className="absolute top-6 right-8 text-[72px] font-normal text-foreground/4 leading-none select-none pointer-events-none">
-                {pillar.num}
-              </span>
-
-              <div className="relative grid md:grid-cols-2 gap-8 items-start">
-                {/* Left: identity */}
-                <div>
-                  <pillar.icon className="w-6 h-6 text-primary mb-4" strokeWidth={1.5} />
-                  <h3 className="text-2xl md:text-3xl font-normal text-foreground mb-3 leading-snug">{pillar.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{pillar.tagline}</p>
-                </div>
-
-                {/* Right: pipeline + use cases */}
-                <div className="space-y-6">
-                  <div>
-                    <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">Pipeline</p>
-                    <div className="flex flex-col gap-2">
-                      {pillar.pipeline.map((step) => (
-                        <div key={step} className="flex items-center gap-3">
-                          <span className="w-1.5 h-1.5 rounded-full bg-primary/40 flex-shrink-0" />
-                          <span className="text-sm text-muted-foreground">{step}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">Use cases</p>
-                    <p className="text-sm text-muted-foreground">{pillar.useCases.join(" · ")}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* Three Things — Tabbed Demo */}
+      <TabbedDemo />
 
 
-      {/* Delegate preview */}
+      {/* Delegate — Split Stage */}
       <section className="container mx-auto px-6 py-12">
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-20" />
         <div className="max-w-5xl mx-auto mb-10 text-center">
@@ -582,57 +672,49 @@ const Index = () => {
             <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>your browser obeys now</em>
           </h2>
         </div>
-        <div className="max-w-5xl mx-auto">
-          <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/4 p-8 md:p-12 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <span className="absolute top-6 right-8 text-[72px] font-normal text-primary/8 leading-none select-none pointer-events-none">04</span>
-
-            <div className="relative grid md:grid-cols-2 gap-8 items-start mb-8">
+        <div className="max-w-5xl mx-auto opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+          <div className="overflow-hidden rounded-2xl border border-primary/20 grid md:grid-cols-2">
+            {/* Left — dark */}
+            <div className="relative bg-foreground p-10 flex flex-col justify-between overflow-hidden min-h-[280px]">
+              <span className="absolute -bottom-4 -right-2 text-[120px] font-bold leading-none select-none pointer-events-none text-white/[0.04]">04</span>
               <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <Bot className="w-5 h-5 text-primary" strokeWidth={1.5} />
-                  <span className="text-xs text-primary/60 font-medium uppercase tracking-widest">Premium · Experimental</span>
+                <div className="flex items-center gap-2 mb-6">
+                  <Bot className="w-4 h-4 text-primary" strokeWidth={1.5} />
+                  <span className="text-[10px] text-primary/60 font-medium uppercase tracking-widest">Premium · Experimental</span>
                 </div>
-                <h3 className="text-2xl md:text-3xl font-normal text-foreground mb-3 leading-snug">SideBrain Delegate</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                <h3 className="text-2xl md:text-3xl font-normal text-background leading-snug tracking-tight mb-3">SideBrain Delegate</h3>
+                <p className="text-sm text-background/50 leading-relaxed mb-6">
                   Type a plain task. Delegate reads the page, clicks buttons, fills forms, and navigates — all from your sidebar. Works from your phone too.
                 </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground/50 bg-card/40">Experimental bonus</span>
-                  <span className="text-xs text-muted-foreground/40">· Premium only</span>
-                </div>
-              </div>
-
-              <div className="space-y-5">
-                <div>
-                  <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-3">What works well</p>
-                  <div className="flex flex-col gap-2">
-                    {[
-                      { text: "Send emails via Gmail", good: true },
-                      { text: "Navigate to any website", good: true },
-                      { text: "Search flights on MakeMyTrip", good: true },
-                    ].map((item) => (
-                      <div key={item.text} className="flex items-center gap-2.5">
-                        <span className="text-xs text-green-500 flex-shrink-0">✓</span>
-                        <span className="text-sm text-muted-foreground">{item.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs tracking-widest uppercase text-muted-foreground/40 mb-2">Also</p>
-                  <p className="text-sm text-muted-foreground">Control it from your phone via Remote Agent</p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 text-background/40">Experimental bonus</span>
+                  <span className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 text-background/40">Premium only</span>
                 </div>
               </div>
             </div>
 
-            <div className="relative flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <Zap className="w-3.5 h-3.5 text-primary/60" />
-                <span className="text-xs text-muted-foreground/60">Premium feature — <Link to="/premium" className="text-primary hover:underline">see what's included</Link></span>
+            {/* Right — light */}
+            <div className="bg-primary/[0.03] p-10 flex flex-col gap-7 border-l border-primary/10">
+              <div>
+                <p className="text-[10px] tracking-widest uppercase text-muted-foreground/40 mb-4">What it can do</p>
+                <div className="flex flex-col gap-2.5">
+                  {["Send emails via Gmail", "Navigate to any website", "Search flights & book forms", "Control from your phone"].map(item => (
+                    <div key={item} className="flex items-center gap-2.5">
+                      <span className="text-xs text-green-500 flex-shrink-0">✓</span>
+                      <span className="text-sm text-muted-foreground">{item}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <Link to="/delegate" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300 whitespace-nowrap">
-                See Delegate <ArrowRight className="w-4 h-4" />
-              </Link>
+              <div className="mt-auto flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="w-3 h-3 text-primary/50" />
+                  <Link to="/premium" className="text-xs text-primary/60 hover:text-primary transition-colors">See what's included</Link>
+                </div>
+                <Link to="/delegate" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300">
+                  See Delegate <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
             </div>
           </div>
         </div>
