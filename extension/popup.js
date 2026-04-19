@@ -780,6 +780,7 @@ function loadChatMessages(sessionId) {
   chrome.storage.local.get(key, (data) => {
     chatMessages = data[key] || [];
     renderChatMessages();
+    updateEmptyState();
   });
 }
 
@@ -1398,18 +1399,22 @@ async function speakText(text, onWordUpdate) {
     const url = URL.createObjectURL(blob);
     currentAudio = new Audio(url);
 
-    // Progressive subtitle: sliding window of last 10 words being spoken
+    // Word-by-word reveal using .word / .word.said / .word.current spans
     if (onWordUpdate) {
-      const words = clean.split(" ").filter(Boolean);
-      const totalMs = Math.max((blob.size / 8000) * 1000, words.length * 150);
-      const msPerWord = Math.min(totalMs / words.length, 500);
+      // First render all word spans at dim opacity
+      onWordUpdate(clean, -1);
+      const wordSpans = voiceAgentText ? Array.from(voiceAgentText.querySelectorAll(".word")) : [];
+      const totalMs = Math.max((blob.size / 8000) * 1000, wordSpans.length * 200);
+      const msPerWord = Math.min(totalMs / Math.max(wordSpans.length, 1), 500);
       let i = 0;
       voiceWordIntervalId = setInterval(() => {
-        if (i < words.length) {
+        if (i < wordSpans.length) {
+          if (i > 0) { wordSpans[i-1].classList.remove("current"); wordSpans[i-1].classList.add("said"); }
+          wordSpans[i].classList.add("current");
           i++;
-          // Show only the last 10 words currently being spoken
-          onWordUpdate(words.slice(Math.max(0, i - 10), i).join(" "));
         } else {
+          // Mark last word as said
+          if (wordSpans.length > 0) { wordSpans[wordSpans.length-1].classList.remove("current"); wordSpans[wordSpans.length-1].classList.add("said"); }
           clearInterval(voiceWordIntervalId);
           voiceWordIntervalId = null;
         }
@@ -1432,25 +1437,57 @@ async function speakText(text, onWordUpdate) {
 // ===== VOICE MODE =====
 let voiceActive = false;
 let voiceTabId = null;
+let voiceMuted = false;
 
-const voiceOverlay  = document.getElementById("voiceOverlay");
-const voiceOrb      = document.getElementById("voiceOrb");
-const voiceUserText = document.getElementById("voiceUserText");
-const voiceAgentText= document.getElementById("voiceAgentText");
-const voiceModeBtn  = document.getElementById("voiceModeBtn");
-const voiceCloseBtn = document.getElementById("voiceCloseBtn");
-const voiceStateTxt = document.getElementById("voiceStateTxt");
+const voiceOverlay      = document.getElementById("voiceOverlay");
+const voiceOrb          = document.getElementById("voiceOrb");
+const voiceUserText     = document.getElementById("voiceUserText");
+const voiceAgentText    = document.getElementById("voiceAgentText");
+const voiceModeBtn      = document.getElementById("voiceModeBtn");
+const voiceCloseBtn     = document.getElementById("voiceCloseBtn");
+const voiceCapLabelTxt  = document.getElementById("voiceCapLabelTxt");
+const voiceInterruptBtn = document.getElementById("voiceInterruptBtn");
+const voiceStopTaskBtn  = document.getElementById("voiceStopTaskBtn");
+const voiceMuteBtn      = document.getElementById("voiceMuteBtn");
+const voiceCtxTitle     = document.getElementById("voiceCtxTitle");
+const voiceCtxUrl       = document.getElementById("voiceCtxUrl");
+const voiceCtxFavicon   = document.getElementById("voiceCtxFavicon");
+const voiceCtxLiveTxt   = document.getElementById("voiceCtxLiveTxt");
 
-const STATE_LABELS = { listening: "Listening", processing: "Thinking", speaking: "Speaking", idle: "Idle" };
+const CAP_LABELS = { listening: "Listening", processing: "Thinking…", speaking: "Agent speaking", idle: "Ready", acting: "Acting on page" };
 
 function setOrbState(state) {
   if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
-  if (voiceStateTxt) voiceStateTxt.textContent = STATE_LABELS[state] || state;
+  if (voiceCapLabelTxt) voiceCapLabelTxt.textContent = CAP_LABELS[state] || state;
+}
+
+function updateVoicePageCtx() {
+  if (!currentPageContext) return;
+  if (voiceCtxTitle) voiceCtxTitle.textContent = currentPageContext.title || "Current page";
+  if (voiceCtxUrl) voiceCtxUrl.textContent = currentPageContext.url ? new URL(currentPageContext.url).hostname : "—";
+  if (voiceCtxFavicon && currentPageContext.url) {
+    const host = new URL(currentPageContext.url).hostname;
+    voiceCtxFavicon.innerHTML = `<img src="https://www.google.com/s2/favicons?domain=${host}&sz=20" onerror="this.parentElement.textContent='${(currentPageContext.title||'S')[0].toUpperCase()}'" />`;
+  }
+}
+
+function setCaption(text) {
+  if (!voiceAgentText) return;
+  voiceAgentText.innerHTML = "";
+  if (!text) return;
+  const tokens = text.split(/(\s+)/);
+  tokens.forEach(tok => {
+    if (/^\s+$/.test(tok)) { voiceAgentText.appendChild(document.createTextNode(tok)); return; }
+    const s = document.createElement("span");
+    s.className = "word";
+    s.textContent = tok;
+    voiceAgentText.appendChild(s);
+  });
 }
 
 function setSubtitles(user, agent) {
-  if (voiceUserText)  voiceUserText.textContent  = user  || "";
-  if (voiceAgentText) voiceAgentText.textContent = agent || "—";
+  if (voiceUserText) voiceUserText.textContent = user || "";
+  if (agent !== undefined) setCaption(agent);
 }
 
 function getActiveTabId() {
@@ -1478,10 +1515,11 @@ async function openVoiceMode() {
   voiceOverlay?.classList.remove("hidden");
   setOrbState("listening");
   setSubtitles("", "");
+  updateVoicePageCtx();
 
   const tabId = await getActiveTabId();
   if (!tabId) {
-    setSubtitles("", "No active tab. Open a webpage first, then try voice mode.");
+    setCaption("No active tab. Open a webpage first.");
     setOrbState("idle");
     return;
   }
@@ -1489,7 +1527,7 @@ async function openVoiceMode() {
   voiceTabId = tabId;
   const res = await sendToContentScript(tabId, "startVoiceListening");
   if (res?.error) {
-    setSubtitles("", "Could not start voice: " + res.error);
+    setCaption("Could not start voice: " + res.error);
     setOrbState("idle");
   }
 }
@@ -1520,28 +1558,26 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.action !== "voiceEvent" || !voiceActive) return;
 
   if (msg.event === "listening") {
-    // Only update UI if we're not mid-processing or speaking
     if (!isVoiceSpeaking) {
       setOrbState("listening");
-      setSubtitles("", "Listening…");
+      setCaption("");
     }
   } else if (msg.event === "transcript") {
     if (!msg.isFinal) {
-      // Interim: show what user is saying
-      if (voiceUserText) voiceUserText.textContent = msg.text || "";
+      // Interim: show live user speech in caption
+      setCaption(msg.text || "");
+      const wordSpans = voiceAgentText ? voiceAgentText.querySelectorAll(".word") : [];
+      wordSpans.forEach(w => { w.classList.remove("current"); w.classList.add("said"); });
     } else {
-      // Final transcript — interrupt TTS if speaking, then process
-      if (isVoiceSpeaking) {
-        stopCurrentTTS();
-        if (voiceAgentText) voiceAgentText.textContent = "";
-      }
+      // Final — interrupt TTS if speaking, then process
+      if (isVoiceSpeaking) { stopCurrentTTS(); setCaption(""); }
       handleVoiceInput(msg.text.trim());
     }
   } else if (msg.event === "error") {
     if (!isVoiceSpeaking) {
       setOrbState("idle");
-      setSubtitles("", msg.message === "not-allowed"
-        ? "Microphone blocked. Click the mic button again and allow access when prompted."
+      setCaption(msg.message === "not-allowed"
+        ? "Microphone blocked — allow access and try again."
         : `Error: ${msg.message}`);
     }
   }
@@ -1568,7 +1604,7 @@ async function handleVoiceInput(text) {
 
   setOrbState("processing");
   if (voiceUserText) voiceUserText.textContent = text;
-  if (voiceAgentText) voiceAgentText.textContent = "Thinking…";
+  setCaption("Thinking…");
 
   // Auto-route to agent if request sounds like a browser action
   // (even if mode isn't explicitly "agent", unless in lecture/meeting mode)
@@ -1611,20 +1647,20 @@ async function handleVoiceInput(text) {
     }
 
     setOrbState("speaking");
-    if (voiceAgentText) voiceAgentText.textContent = "";
     // Stop mic so TTS audio isn't picked up as user input
     if (voiceTabId) sendToContentScript(voiceTabId, "stopVoiceListening");
-    await speakText(reply, (words) => {
-      if (voiceAgentText) voiceAgentText.textContent = words;
+    await speakText(reply, (text, _idx) => {
+      if (_idx === -1) setCaption(text); // initial render of word spans
     });
   } catch(e) {
-    if (voiceAgentText) voiceAgentText.textContent = "Something went wrong. Try again.";
+    setCaption("Something went wrong. Try again.");
   }
 
   // Restart mic after speaking ends so user can reply
   if (voiceActive) {
     setOrbState("listening");
-    setSubtitles(voiceUserText?.textContent || "", "");
+    setCaption("");
+    if (voiceUserText) voiceUserText.textContent = "";
     if (voiceTabId) sendToContentScript(voiceTabId, "startVoiceListening");
   }
 }
@@ -1727,6 +1763,30 @@ function runAgentLoopForVoice(task) {
 
 voiceModeBtn?.addEventListener("click", openVoiceMode);
 voiceCloseBtn?.addEventListener("click", closeVoiceMode);
+
+voiceInterruptBtn?.addEventListener("click", () => {
+  stopCurrentTTS();
+  agentShouldStop = true;
+  setOrbState("listening");
+  setCaption("");
+  if (voiceUserText) voiceUserText.textContent = "";
+  if (voiceTabId) sendToContentScript(voiceTabId, "startVoiceListening");
+});
+
+voiceStopTaskBtn?.addEventListener("click", () => {
+  agentShouldStop = true;
+  stopCurrentTTS();
+  setOrbState("idle");
+  setCaption("Task stopped.");
+});
+
+voiceMuteBtn?.addEventListener("click", () => {
+  voiceMuted = !voiceMuted;
+  if (voiceTabId) {
+    sendToContentScript(voiceTabId, voiceMuted ? "stopVoiceListening" : "startVoiceListening");
+  }
+  if (voiceMuteBtn) voiceMuteBtn.style.opacity = voiceMuted ? "0.4" : "1";
+});
 
 // Poll until the active tab finishes loading (replaces fixed 3500ms navigate wait)
 async function waitForTabReady(maxMs = 5000) {
