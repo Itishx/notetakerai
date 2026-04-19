@@ -157,12 +157,7 @@ function TaskRow({ cmd }: { cmd: Command }) {
           <p className="text-sm font-medium text-foreground truncate">{cmd.task}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(cmd.created_at)}</p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <StatusBadge status={cmd.status} />
-          {meta?.durationMs && (
-            <span className="text-xs text-muted-foreground">{formatDuration(meta.durationMs)}</span>
-          )}
-        </div>
+        <StatusBadge status={cmd.status} />
         {steps.length > 0 && (
           expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         )}
@@ -177,6 +172,11 @@ function TaskRow({ cmd }: { cmd: Command }) {
           ))}
           {cmd.result && (
             <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/40 italic">{cmd.result}</p>
+          )}
+          {meta?.durationMs && (
+            <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/40 flex items-center gap-1">
+              <Clock className="w-3 h-3" /> Worked for: {formatDuration(meta.durationMs)}
+            </p>
           )}
         </div>
       )}
