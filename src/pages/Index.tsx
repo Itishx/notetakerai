@@ -419,6 +419,46 @@ function MeetingMockup() {
   );
 }
 
+function DelegateMockup() {
+  const steps = [
+    { done: true,    text: "Navigated to Gmail inbox" },
+    { done: true,    text: "Found email from Priya" },
+    { done: true,    text: "Opened compose window" },
+    { done: false,   text: "Drafting reply…", active: true },
+    { done: false,   text: "Send email", active: false },
+  ];
+  return (
+    <SidepanelShell ctx="mail.google.com — Inbox (24)">
+      {/* Task bubble */}
+      <div className="flex justify-end">
+        <span className="px-3 py-1.5 rounded-2xl rounded-br-sm text-[11px] leading-relaxed" style={{ background: "#1a1410", color: "#f5f1eb" }}>
+          Reply to Priya's email about the launch date
+        </span>
+      </div>
+      {/* Agent thinking */}
+      <div className="flex gap-2 items-start">
+        <span className="w-4 h-4 rounded-full flex-shrink-0 mt-0.5" style={{ background: "radial-gradient(circle at 35% 35%, #ffd9a8, #f39a42 50%, #d96e1a 80%)" }} />
+        <div className="flex-1 rounded-2xl rounded-bl-sm px-3 py-2" style={{ background: "#fffdf9", border: "1px solid #e8dfd3" }}>
+          <p className="text-[10px] font-mono uppercase tracking-wider mb-2" style={{ color: "#c2692a" }}>● Agent working</p>
+          <div className="flex flex-col gap-1.5">
+            {steps.map((s, i) => (
+              <div key={i} className="flex items-center gap-2">
+                {s.done
+                  ? <span className="text-green-500 text-[10px]">✓</span>
+                  : s.active
+                    ? <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse flex-shrink-0" />
+                    : <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#e8dfd3" }} />
+                }
+                <span className="text-[11px]" style={{ color: s.done ? "#4b413a" : s.active ? "#c2692a" : "#8a7f75" }}>{s.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SidepanelShell>
+  );
+}
+
 const pillarMockupComponents = [<RecordMockup />, <ReadMockup />, <MeetingMockup />];
 
 function ThreeThingsSection() {
@@ -703,59 +743,44 @@ const Index = () => {
       <ThreeThingsSection />
 
 
-      {/* Delegate — Split Stage */}
+      {/* Delegate */}
       <section className="container mx-auto px-6 py-12">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-20" />
-        <div className="max-w-5xl mx-auto mb-10 text-center">
-          <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
-            And one more thing —<br />
-            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>your browser obeys now</em>
-          </h2>
-        </div>
-        <div className="max-w-5xl mx-auto opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-          <div className="overflow-hidden rounded-2xl border border-primary/20 grid md:grid-cols-2">
-            {/* Left — dark */}
-            <div className="relative bg-foreground p-10 flex flex-col justify-between overflow-hidden min-h-[280px]">
-              <span className="absolute -bottom-4 -right-2 text-[120px] font-bold leading-none select-none pointer-events-none text-white/[0.04]">04</span>
-              <div>
-                <div className="flex items-center gap-2 mb-6">
-                  <Bot className="w-4 h-4 text-primary" strokeWidth={1.5} />
-                  <span className="text-[10px] text-primary/60 font-medium uppercase tracking-widest">Premium · Experimental</span>
-                </div>
-                <h3 className="text-2xl md:text-3xl font-normal text-background leading-snug tracking-tight mb-3">SideBrain Delegate</h3>
-                <p className="text-sm text-background/50 leading-relaxed mb-6">
-                  Type a plain task. Delegate reads the page, clicks buttons, fills forms, and navigates — all from your sidebar. Works from your phone too.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <span className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 text-background/40">Experimental bonus</span>
-                  <span className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 text-background/40">Premium only</span>
-                </div>
-              </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-14">
+          {/* Left: text */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs font-mono text-muted-foreground/30 tracking-widest">04</span>
+              <span className="text-xs px-2.5 py-1 rounded-full border border-primary/20 text-primary/60 bg-primary/5">Premium · Experimental</span>
             </div>
+            <h2 className="text-3xl md:text-4xl font-normal tracking-tight text-foreground leading-snug mb-4">
+              And one more thing —<br />
+              <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>your browser obeys now</em>
+            </h2>
+            <p className="text-base text-muted-foreground leading-relaxed mb-6">
+              Type a plain task. Delegate reads the page, clicks buttons, fills forms, and navigates — all from your sidebar. Works from your phone too.
+            </p>
+            <div className="flex flex-col gap-2 mb-8">
+              {["Send emails via Gmail", "Navigate to any website", "Search flights & fill forms", "Control remotely from your phone"].map(item => (
+                <div key={item} className="flex items-center gap-2.5">
+                  <span className="text-xs text-green-500 flex-shrink-0">✓</span>
+                  <span className="text-sm text-muted-foreground">{item}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-4">
+              <Link to="/delegate" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300">
+                See Delegate <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link to="/premium" className="text-sm text-muted-foreground/60 hover:text-foreground transition-colors">
+                What's in Premium →
+              </Link>
+            </div>
+          </div>
 
-            {/* Right — light */}
-            <div className="bg-primary/[0.03] p-10 flex flex-col gap-7 border-l border-primary/10">
-              <div>
-                <p className="text-[10px] tracking-widest uppercase text-muted-foreground/40 mb-4">What it can do</p>
-                <div className="flex flex-col gap-2.5">
-                  {["Send emails via Gmail", "Navigate to any website", "Search flights & book forms", "Control from your phone"].map(item => (
-                    <div key={item} className="flex items-center gap-2.5">
-                      <span className="text-xs text-green-500 flex-shrink-0">✓</span>
-                      <span className="text-sm text-muted-foreground">{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="mt-auto flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Zap className="w-3 h-3 text-primary/50" />
-                  <Link to="/premium" className="text-xs text-primary/60 hover:text-primary transition-colors">See what's included</Link>
-                </div>
-                <Link to="/delegate" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300">
-                  See Delegate <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
+          {/* Right: agent running mockup */}
+          <div className="flex-shrink-0 flex justify-center w-full md:w-auto">
+            <DelegateMockup />
           </div>
         </div>
       </section>
