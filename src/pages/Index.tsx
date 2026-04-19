@@ -306,140 +306,180 @@ const dashTabs = [
   },
 ];
 
-const pillarMockups = [
-  // Record Tab Audio
-  <div className="flex flex-col gap-3 p-4 bg-background/60 rounded-xl border border-border/50 font-mono text-xs">
-    <div className="flex items-center gap-2 text-muted-foreground">
-      <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-      Recording — 04:32
-    </div>
-    <div className="space-y-1.5">
-      {["Transcribing audio stream...", "Identifying key concepts", "Structuring into notes", "Syncing to Notion ✓"].map((l, i) => (
-        <div key={l} className="flex items-center gap-2 text-muted-foreground/70">
-          <span className="text-primary/50">›</span> {l}
+// Sidepanel UI shell used in mockups
+function SidepanelShell({ children, ctx }: { children: React.ReactNode; ctx?: string }) {
+  return (
+    <div className="rounded-2xl overflow-hidden border border-[#e8dfd3] shadow-xl" style={{ background: "#f5f1eb", fontFamily: "Inter, sans-serif", width: "100%", maxWidth: 340 }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#e8dfd3]" style={{ background: "#f5f1eb" }}>
+        <span className="text-[13px] font-semibold tracking-tight" style={{ color: "#1a1410" }}>
+          <span style={{ fontWeight: 400, fontStyle: "italic" }}>side</span><span>brain</span>
+        </span>
+        <div className="flex gap-1.5">
+          {[...Array(3)].map((_, i) => <span key={i} className="w-5 h-5 rounded-full border border-[#e8dfd3] flex items-center justify-center" style={{ background: "#fffdf9" }} />)}
         </div>
-      ))}
-    </div>
-    <div className="mt-2 p-3 rounded-lg bg-primary/5 border border-primary/10 text-foreground/70 text-[11px] leading-relaxed">
-      <strong className="text-foreground">Key takeaway:</strong> Transformers use self-attention to weigh token relationships across the full sequence simultaneously...
-    </div>
-  </div>,
-  // Read Any Page
-  <div className="flex flex-col gap-3 p-4 bg-background/60 rounded-xl border border-border/50 text-xs">
-    <div className="p-2.5 rounded-lg bg-muted/40 border border-border/40 text-muted-foreground text-[11px]">
-      📄 <span className="text-foreground font-medium">leetcode.com</span> — Two Sum
-    </div>
-    <div className="space-y-2">
-      {[
-        { q: "What's the time complexity?", a: "O(n) with a hash map — single pass." },
-        { q: "Give me a hint", a: "Think about what complement you need for each number." },
-      ].map(({ q, a }) => (
-        <div key={q} className="space-y-1">
-          <div className="flex justify-end"><span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-[11px]">{q}</span></div>
-          <div className="text-muted-foreground text-[11px] pl-1">{a}</div>
+      </div>
+      {/* Page context chip */}
+      {ctx && (
+        <div className="mx-3 mt-2.5 px-3 py-2 rounded-xl border border-[#e8dfd3] flex items-center gap-2.5" style={{ background: "#fffdf9" }}>
+          <span className="w-4 h-4 rounded bg-gradient-to-br from-red-400 to-red-600 flex-shrink-0 text-white text-[9px] font-bold flex items-center justify-center">G</span>
+          <span className="text-[11px] truncate" style={{ color: "#4b413a" }}>{ctx}</span>
+          <span className="ml-auto flex items-center gap-1 text-[9px] font-mono" style={{ color: "#c2692a" }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />reading
+          </span>
         </div>
-      ))}
+      )}
+      {/* Content */}
+      <div className="px-3 py-3 flex flex-col gap-2 min-h-[220px]">{children}</div>
+      {/* Bottom bar */}
+      <div className="border-t border-[#e8dfd3] px-3 py-2.5 flex items-center gap-2" style={{ background: "#f5f1eb" }}>
+        <span className="flex-1 rounded-full border border-[#e8dfd3] px-3 py-1.5 text-[11px]" style={{ color: "#8a7f75", background: "#fffdf9" }}>Ask anything…</span>
+        <span className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "#1a1410" }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </span>
+      </div>
     </div>
-  </div>,
-  // Record Meetings
-  <div className="flex flex-col gap-3 p-4 bg-background/60 rounded-xl border border-border/50 text-xs">
-    <div className="flex items-center gap-2 text-muted-foreground text-[11px]">
-      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-      2 speakers detected
-    </div>
-    <div className="space-y-2">
-      {[
-        { speaker: "Alex", line: "We should ship the redesign by Friday." },
-        { speaker: "Priya", line: "Agreed. I'll handle QA on Thursday." },
-        { speaker: "Alex", line: "Perfect. Let's sync tomorrow at 10." },
-      ].map(({ speaker, line }) => (
-        <div key={line} className="flex gap-2">
-          <span className="text-primary/60 font-medium w-8 flex-shrink-0">{speaker[0]}</span>
-          <span className="text-muted-foreground/80">{line}</span>
-        </div>
-      ))}
-    </div>
-    <div className="mt-1 text-[10px] text-muted-foreground/50 flex gap-3">
-      <span>✓ Action items extracted</span><span>✓ Summary ready</span>
-    </div>
-  </div>,
-];
+  );
+}
 
-function TabbedDemo() {
-  const [active, setActive] = useState(0);
+function RecordMockup() {
+  return (
+    <SidepanelShell>
+      <div className="flex flex-col items-center gap-3 py-4">
+        {/* Orb */}
+        <div className="relative flex items-center justify-center">
+          <div className="w-16 h-16 rounded-full" style={{ background: "radial-gradient(circle at 35% 35%, #ffd9a8, #f39a42 50%, #d96e1a 80%)", boxShadow: "0 0 30px rgba(243,154,66,0.55), 0 0 60px rgba(243,154,66,0.2)", animation: "orbBreathe 3.8s ease-in-out infinite" }} />
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] font-mono" style={{ color: "#c2692a" }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+          Recording — 04:32
+        </div>
+        <div className="flex gap-2">
+          <span className="px-3 py-1.5 rounded-full text-[11px] border border-[#e8dfd3] cursor-pointer" style={{ background: "#fffdf9", color: "#4b413a" }}>Pause & Save</span>
+          <span className="px-3 py-1.5 rounded-full text-[11px] border border-[#e8dfd3] opacity-40" style={{ color: "#8a7f75" }}>Convert to Notes</span>
+        </div>
+      </div>
+      <div className="rounded-xl border border-[#e8dfd3] px-3 py-2.5" style={{ background: "#fffdf9" }}>
+        <p className="text-[10px] font-mono uppercase tracking-widest mb-1" style={{ color: "#c2692a" }}>Transcribing</p>
+        <p className="text-[11px] leading-relaxed" style={{ color: "#4b413a" }}>
+          "…and that's why attention mechanisms allow the model to weigh each token's relationship to every other token in the sequence simultaneously…"
+        </p>
+      </div>
+    </SidepanelShell>
+  );
+}
+
+function ReadMockup() {
+  return (
+    <SidepanelShell ctx="leetcode.com — Two Sum">
+      <div className="flex justify-end">
+        <span className="px-3 py-1.5 rounded-2xl rounded-br-sm text-[11px] leading-relaxed" style={{ background: "#1a1410", color: "#f5f1eb" }}>What's the time complexity?</span>
+      </div>
+      <div className="flex gap-2 items-start">
+        <span className="w-4 h-4 rounded-full flex-shrink-0 mt-0.5" style={{ background: "radial-gradient(circle at 35% 35%, #ffd9a8, #f39a42 50%, #d96e1a 80%)" }} />
+        <span className="px-3 py-1.5 rounded-2xl rounded-bl-sm text-[11px] leading-relaxed flex-1" style={{ background: "#fffdf9", border: "1px solid #e8dfd3", color: "#4b413a" }}>
+          O(n) with a hash map — single pass. Store each number's complement as you iterate.
+        </span>
+      </div>
+      <div className="flex justify-end">
+        <span className="px-3 py-1.5 rounded-2xl rounded-br-sm text-[11px]" style={{ background: "#1a1410", color: "#f5f1eb" }}>Give me a hint to start</span>
+      </div>
+      <div className="flex gap-2 items-start">
+        <span className="w-4 h-4 rounded-full flex-shrink-0 mt-0.5" style={{ background: "radial-gradient(circle at 35% 35%, #ffd9a8, #f39a42 50%, #d96e1a 80%)" }} />
+        <span className="px-3 py-1.5 rounded-2xl rounded-bl-sm text-[11px] leading-relaxed flex-1" style={{ background: "#fffdf9", border: "1px solid #e8dfd3", color: "#4b413a" }}>
+          For each number, think about what value you'd need to reach the target. Have you seen that value before?
+        </span>
+      </div>
+    </SidepanelShell>
+  );
+}
+
+function MeetingMockup() {
+  return (
+    <SidepanelShell ctx="Google Meet — Sprint Planning">
+      <div className="flex items-center gap-1.5 mb-1 text-[10px] font-mono" style={{ color: "#4b9a6a" }}>
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+        2 speakers · live
+      </div>
+      {[
+        { s: "Alex", t: "We should ship the redesign by Friday." },
+        { s: "Priya", t: "Agreed. I'll handle QA on Thursday." },
+        { s: "Alex", t: "Perfect. Let's sync tomorrow at 10." },
+        { s: "Priya", t: "I'll send a calendar invite after this." },
+      ].map(({ s, t }) => (
+        <div key={t} className={`flex gap-2 items-start ${s === "Priya" ? "flex-row-reverse" : ""}`}>
+          <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-semibold mt-0.5" style={{ background: s === "Alex" ? "#1a1410" : "#f39a42", color: "#fff" }}>{s[0]}</span>
+          <span className="px-2.5 py-1.5 rounded-xl text-[11px] leading-snug" style={{ background: "#fffdf9", border: "1px solid #e8dfd3", color: "#4b413a", maxWidth: "80%" }}>{t}</span>
+        </div>
+      ))}
+      <div className="mt-1 flex gap-2 text-[10px]" style={{ color: "#8a7f75" }}>
+        <span>✓ Action items extracted</span><span>✓ Summary ready</span>
+      </div>
+    </SidepanelShell>
+  );
+}
+
+const pillarMockupComponents = [<RecordMockup />, <ReadMockup />, <MeetingMockup />];
+
+function ThreeThingsSection() {
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("tt-visible"); }),
+      { threshold: 0.15 }
+    );
+    itemRefs.current.filter(Boolean).forEach(el => observer.observe(el!));
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section className="container mx-auto px-6 py-24">
-      <div className="max-w-4xl mx-auto mb-14 text-center">
+      <div className="max-w-5xl mx-auto mb-20 text-center">
         <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
           SideBrain does<br />
           <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>3 things</em>
         </h2>
       </div>
 
-      <div className="max-w-4xl mx-auto">
-        {/* Tab bar */}
-        <div className="flex items-center gap-1 p-1 rounded-2xl bg-muted/40 border border-border/50 mb-8">
-          {pillars.map((p, i) => (
-            <button
-              key={p.num}
-              onClick={() => setActive(i)}
-              className={`flex-1 flex items-center justify-center gap-2 h-10 rounded-xl text-sm transition-all duration-300 ${
-                active === i
-                  ? "bg-background shadow-sm border border-border/50 text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <p.icon className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.5} />
-              <span className="hidden sm:inline">{p.title}</span>
-              <span className="sm:hidden text-xs">{p.num}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Demo panel */}
-        <div className="overflow-hidden rounded-2xl border border-border/50 grid md:grid-cols-2 min-h-[320px]">
-          {/* Left — identity */}
-          <div className="relative bg-foreground p-10 flex flex-col justify-between overflow-hidden">
-            <span className="absolute -bottom-4 -right-2 text-[120px] font-bold leading-none select-none pointer-events-none text-white/[0.04]">
-              {pillars[active].num}
-            </span>
-            <div>
-              {(() => { const Icon = pillars[active].icon; return <Icon className="w-5 h-5 text-primary mb-6" strokeWidth={1.5} />; })()}
-              <h3 className="text-2xl md:text-3xl font-normal text-background leading-snug tracking-tight mb-3">
-                {pillars[active].title}
-              </h3>
-              <p className="text-sm text-background/50 leading-relaxed mb-6">{pillars[active].tagline}</p>
-              <div className="flex flex-wrap gap-2">
-                {pillars[active].useCases.map(uc => (
-                  <span key={uc} className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 text-background/50">{uc}</span>
+      <div className="max-w-5xl mx-auto flex flex-col gap-24">
+        {pillars.map((pillar, i) => (
+          <div
+            key={pillar.title}
+            ref={el => { itemRefs.current[i] = el; }}
+            className={`tt-item flex flex-col md:flex-row items-center gap-12 ${i % 2 === 1 ? "md:flex-row-reverse" : ""}`}
+          >
+            {/* Left: text */}
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-mono text-muted-foreground/30 tracking-widest">{pillar.num}</span>
+              <h3 className="text-3xl md:text-4xl font-normal text-foreground mt-2 mb-4 leading-snug tracking-tight">{pillar.title}</h3>
+              <p className="text-base text-muted-foreground leading-relaxed mb-6">{pillar.tagline}</p>
+              <div className="flex flex-wrap gap-2 mb-6">
+                {pillar.useCases.map(uc => (
+                  <span key={uc} className="text-xs px-3 py-1.5 rounded-full border border-border/50 text-muted-foreground bg-background/60">{uc}</span>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {pillar.pipeline.map((step, si) => (
+                  <span key={step} className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground/60">{step}</span>
+                    {si < pillar.pipeline.length - 1 && <span className="text-border/50 text-xs">→</span>}
+                  </span>
                 ))}
               </div>
             </div>
-          </div>
 
-          {/* Right — live mockup */}
-          <div className="bg-card/60 p-8 flex flex-col justify-center">
-            <p className="text-[10px] tracking-widest uppercase text-muted-foreground/40 mb-4">Live preview</p>
-            <div key={active} style={{ animation: "fadeUp 0.35s ease forwards" }}>
-              {pillarMockups[active]}
+            {/* Right: sidepanel mockup */}
+            <div className="flex-shrink-0 flex justify-center w-full md:w-auto">
+              {pillarMockupComponents[i]}
             </div>
           </div>
-        </div>
-
-        {/* Pipeline steps below */}
-        <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
-          {pillars[active].pipeline.map((step, si) => (
-            <span key={step} className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{step}</span>
-              {si < pillars[active].pipeline.length - 1 && <span className="text-border/60 text-xs">→</span>}
-            </span>
-          ))}
-        </div>
+        ))}
       </div>
 
       <style>{`
-        @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        .tt-item { opacity: 0; transform: translateY(28px); transition: opacity 0.65s ease, transform 0.65s ease; }
+        .tt-item.tt-visible { opacity: 1; transform: translateY(0); }
+        @keyframes orbBreathe { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.06); } }
       `}</style>
     </section>
   );
@@ -659,8 +699,8 @@ const Index = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
       </div>
 
-      {/* Three Things — Tabbed Demo */}
-      <TabbedDemo />
+      {/* Three Things */}
+      <ThreeThingsSection />
 
 
       {/* Delegate — Split Stage */}
