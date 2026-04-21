@@ -1,4 +1,4 @@
-import { Mic, Download, ChevronRight, Leaf, ArrowRight, Users, Globe, Image, Bot, Zap, FileText, CheckCircle2, XCircle, Clock, NotebookText, Settings } from "lucide-react";
+import { Mic, Download, ChevronRight, Leaf, ArrowRight, Users, Globe, Bot, Zap, FileText, CheckCircle2, XCircle, Clock, NotebookText, Settings } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -30,13 +30,6 @@ const pillars = [
     pipeline: ["Record call", "Identify speakers", "AI meeting notes", "Sync to Notion"],
     useCases: ["Google Meet", "Zoom web", "Teams", "Sales calls"],
   },
-];
-
-const steps = [
-  { num: "一", title: "Download", desc: "Get the extension and load it into your browser in under a minute." },
-  { num: "二", title: "Capture", desc: "Open any tab with audio, courses, meetings, podcasts, and press record." },
-  { num: "三", title: "Transform", desc: "Stop recording. AI transcribes and shapes your notes automatically." },
-  { num: "四", title: "Flow", desc: "Sync to Notion or copy Markdown. Your knowledge, beautifully preserved." },
 ];
 
 // ─── Dashboard Mockup Components ─────────────────────────────────────────────
@@ -473,7 +466,7 @@ function ThreeThingsSection() {
   }, []);
 
   return (
-    <section className="container mx-auto px-6 py-24">
+    <section id="three-things" className="container mx-auto px-6 py-24">
       <div className="max-w-5xl mx-auto mb-20 text-center">
         <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-foreground leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
           SideBrain does<br />
@@ -715,7 +708,7 @@ const Index = () => {
             <Button
               variant="ghost"
               className="h-13 px-8 text-base text-muted-foreground hover:text-foreground transition-colors duration-300"
-              onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
+              onClick={() => document.getElementById("three-things")?.scrollIntoView({ behavior: "smooth" })}
             >
               Learn more
               <ChevronRight className="w-4 h-4 ml-1" />
@@ -781,115 +774,6 @@ const Index = () => {
           {/* Right: agent running mockup */}
           <div className="flex-shrink-0 flex justify-center w-full md:w-auto">
             <DelegateMockup />
-          </div>
-        </div>
-      </section>
-
-      {/* How it works, bento grid */}
-      <section id="how-it-works" className="container mx-auto px-6 py-24">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
-        <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">The flow</p>
-
-        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 grid-rows-2 gap-4 auto-rows-fr">
-
-          {/* Step 1, tall, spans 2 rows on md */}
-          <div className="col-span-1 row-span-2 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.1s", minHeight: 240 }}>
-            <span className="text-4xl text-primary/50 font-normal leading-none">1</span>
-            <div>
-              <h3 className="text-foreground text-base mb-2">Install</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">Add the extension to your browser. Takes under a minute, no setup required.</p>
-            </div>
-          </div>
-
-          {/* Step 2, wide, spans 2 cols */}
-          <div className="col-span-1 md:col-span-2 row-span-1 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            <span className="text-4xl text-primary/50 font-normal leading-none">2</span>
-            <div>
-              <h3 className="text-foreground text-base mb-2">Open</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">Pin it to your sidebar. Open on any tab — a lecture, a meeting, a docs page, a problem set.</p>
-            </div>
-          </div>
-
-          {/* Step 4, tall, spans 2 rows */}
-          <div className="col-span-1 row-span-2 p-8 rounded-2xl border border-border/60 bg-primary/8 border-primary/20 hover:bg-primary/12 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.3s", minHeight: 240 }}>
-            <span className="text-4xl text-primary/50 font-normal leading-none">4</span>
-            <div>
-              <h3 className="text-foreground text-base mb-2">Sync</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">Push notes to Notion in one click, or copy Markdown. Your knowledge, always somewhere useful.</p>
-            </div>
-          </div>
-
-          {/* Step 3, wide, spans 2 cols */}
-          <div className="col-span-1 md:col-span-2 row-span-1 p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 flex flex-col justify-between opacity-0 animate-fade-in" style={{ animationDelay: "0.35s" }}>
-            <span className="text-4xl text-primary/50 font-normal leading-none">3</span>
-            <div>
-              <h3 className="text-foreground text-base mb-2">Use</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">Record audio for structured notes, read a page and chat about it, or document a meeting with speaker breakdown.</p>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* Use Cases bridge */}
-      <section className="container mx-auto px-6 py-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-6" />
-        <div className="max-w-5xl mx-auto">
-          <div className="rounded-2xl border border-border/60 bg-card/40 p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <div>
-              <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-2">Use Cases</p>
-              <h2 className="text-2xl font-normal text-foreground">See how people use SideBrain</h2>
-              <p className="text-sm text-muted-foreground mt-1">Organized by feature, across every workflow.</p>
-            </div>
-            <Link to="/use-cases" className="inline-flex items-center gap-2 text-sm text-primary hover:gap-3 transition-all duration-300 flex-shrink-0">
-              View all use cases <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Notion Sync section */}
-      <section className="container mx-auto px-6 py-24">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
-        <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-6">
-
-          {/* Left: content */}
-          <div className="rounded-2xl border border-border/60 bg-card/40 p-8 md:p-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-4">Notion Sync</p>
-            <h2 className="text-3xl md:text-4xl font-normal text-foreground leading-snug mb-14">
-              Your knowledge,<br /><em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>at home in Notion</em>
-            </h2>
-
-            <div className="space-y-10">
-              {[
-                { stat: "1-click", label: "Sync to Notion", desc: "Connect once via OAuth. Every note syncs directly into your chosen page or database." },
-                { stat: "Native", label: "Notion blocks", desc: "Headings, bullets, bold terms, all converted to real Notion blocks, not pasted text." },
-                { stat: "Inline", label: "Images & diagrams", desc: "Screenshots are hosted and embedded inline, exactly where they belong in your notes." },
-                { stat: "Live", label: "Incremental updates", desc: "Record more, update the same Notion page, without overwriting what's already there." },
-              ].map(({ stat, label, desc }) => (
-                <div key={label} className="flex items-start gap-5 group">
-                  <div className="flex-shrink-0 w-10 text-right">
-                    <span className="text-sm font-normal text-primary tabular-nums">{stat}</span>
-                  </div>
-                  <div className="flex-1 border-l border-border/40 pl-5">
-                    <h3 className="text-foreground mb-1">{label}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <Link to="/notion-sync" className="inline-flex items-center gap-2 mt-12 text-sm text-primary hover:gap-3 transition-all duration-300">
-              How Notion sync works <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          {/* Right: image banner */}
-          <div className="rounded-2xl border-2 border-dashed border-border/50 bg-card/30 aspect-[4/5] flex flex-col items-center justify-center gap-3 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            <div className="w-10 h-10 rounded-full border border-border/50 flex items-center justify-center">
-              <Image className="w-4 h-4 text-muted-foreground/30" strokeWidth={1.5} />
-            </div>
-            <p className="text-xs text-muted-foreground/30 text-center px-6">Screenshot: synced notes rendered natively in Notion</p>
           </div>
         </div>
       </section>

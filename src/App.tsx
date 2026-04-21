@@ -16,6 +16,7 @@ import ExtensionAuth from "./pages/ExtensionAuth.tsx";
 import Premium from "./pages/Premium.tsx";
 import BrowserAgent from "./pages/BrowserAgent.tsx";
 import Delegate from "./pages/Delegate.tsx";
+import Compare from "./pages/Compare.tsx";
 import RemoteAgent from "./pages/RemoteAgent.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import SidepanelTest from "./pages/SidepanelTest.tsx";
@@ -46,6 +47,7 @@ const App = () => {
               <Route path="/premium" element={<Premium />} />
               <Route path="/browser-agent" element={<BrowserAgent />} />
               <Route path="/delegate" element={<Delegate />} />
+              <Route path="/compare" element={<Compare />} />
               <Route path="/remote-agent" element={<RemoteAgent />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/sidepanel-test" element={<SidepanelTest />} />
