@@ -754,20 +754,35 @@ const BG_REALTIME_URL = BG_SUPABASE_URL.replace("https://", "wss://") + "/realti
 let bgRealtimeWs = null;
 let bgRealtimeHeartbeat = null;
 let bgRealtimeReconnectTimer = null;
+let bgRealtimeBackoff = 5000; // exponential backoff, caps at 60s
 
 async function bgStartRealtime() {
   clearInterval(bgRealtimeHeartbeat);
   clearTimeout(bgRealtimeReconnectTimer);
   if (bgRealtimeWs) { try { bgRealtimeWs.close(); } catch(e) {} bgRealtimeWs = null; }
 
-  const data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
-  if (!data.authUserId || !data.authToken) return;
+  // Don't attempt while offline — the online event will restart us
+  if (!navigator.onLine) {
+    console.log("[BgRealtime] Offline — waiting for network");
+    return;
+  }
+
+  // Refresh token if it may have expired (try, fall through on failure)
+  let data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
+  if (!data.authUserId) return;
+  if (!data.authToken) {
+    const fresh = await bgRefreshAuthToken();
+    if (!fresh) return;
+    data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
+  }
+  if (!data.authToken) return;
 
   const ws = new WebSocket(`${BG_REALTIME_URL}?apikey=${BG_SUPABASE_ANON_KEY}&vsn=1.0.0`);
   bgRealtimeWs = ws;
 
   ws.onopen = () => {
     console.log("[BgRealtime] Connected");
+    bgRealtimeBackoff = 5000; // reset backoff on successful connect
     ws.send(JSON.stringify({
       topic: "realtime:public:agent_commands",
       event: "phx_join",
@@ -794,18 +809,40 @@ async function bgStartRealtime() {
         console.log("[BgRealtime] New command → triggering poll immediately");
         bgPollRemoteCommands();
       }
+      // Supabase sends phx_reply with status "error" when JWT is rejected
+      if (msg.event === "phx_reply" && msg.payload?.status === "error") {
+        console.warn("[BgRealtime] Join rejected — refreshing token and reconnecting");
+        bgRefreshAuthToken().then(() => {
+          bgRealtimeBackoff = 2000;
+          bgStartRealtime();
+        });
+      }
     } catch(_) {}
   };
 
   ws.onclose = () => {
-    console.log("[BgRealtime] Disconnected — reconnecting in 5s");
     clearInterval(bgRealtimeHeartbeat);
     bgRealtimeWs = null;
-    bgRealtimeReconnectTimer = setTimeout(bgStartRealtime, 5000);
+    if (!navigator.onLine) {
+      console.log("[BgRealtime] Closed while offline — will reconnect when online");
+      return;
+    }
+    const delay = bgRealtimeBackoff;
+    bgRealtimeBackoff = Math.min(bgRealtimeBackoff * 2, 60000);
+    console.log(`[BgRealtime] Disconnected — reconnecting in ${delay / 1000}s`);
+    bgRealtimeReconnectTimer = setTimeout(bgStartRealtime, delay);
   };
 
-  ws.onerror = () => console.warn("[BgRealtime] WebSocket error");
+  ws.onerror = () => {}; // onclose always fires after onerror, handled there
 }
+
+// Restart immediately when network comes back
+self.addEventListener("online", () => {
+  console.log("[BgRealtime] Network restored — reconnecting");
+  bgRealtimeBackoff = 5000;
+  bgStartRealtime();
+  bgPollRemoteCommands();
+});
 
 // --- token refresh ---
 
