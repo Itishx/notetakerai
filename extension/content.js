@@ -288,6 +288,84 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }
         }
 
+      } else if (type === "downloadImage") {
+        let img = null;
+        if (selector) { try { img = document.querySelector(selector); } catch(e) {} }
+        if (!img && targetText) {
+          img = Array.from(document.querySelectorAll("img")).find(i =>
+            (i.alt || i.src || "").toLowerCase().includes(targetText.toLowerCase())
+          );
+        }
+        if (!img) img = document.querySelector("img");
+        if (!img) { sendResponse({ error: "No image found on page" }); return true; }
+
+        const srcUrl = img.src || img.getAttribute("data-src") || img.getAttribute("data-lazy-src");
+        if (!srcUrl) { sendResponse({ error: "Image has no src" }); return true; }
+
+        const format = (msg.format || "png").replace("jpg", "jpeg");
+        const mimeType = format === "jpeg" ? "image/jpeg" : format === "webp" ? "image/webp" : "image/png";
+        const filename = msg.filename || `image.${format === "jpeg" ? "jpg" : format}`;
+
+        const drawAndDownload = (imgEl) => new Promise((resolve, reject) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = imgEl.naturalWidth || imgEl.width;
+          canvas.height = imgEl.naturalHeight || imgEl.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(imgEl, 0, 0);
+          canvas.toBlob((blob) => {
+            if (!blob) { reject(new Error("Canvas toBlob failed")); return; }
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            resolve();
+          }, mimeType, 0.95);
+        });
+
+        try {
+          // Try fetch → canvas (works for CORS-enabled images)
+          const resp = await fetch(srcUrl, { mode: "cors" });
+          const blob = await resp.blob();
+          const bitmap = await createImageBitmap(blob);
+          const canvas = document.createElement("canvas");
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          canvas.getContext("2d").drawImage(bitmap, 0, 0);
+          await new Promise((resolve, reject) => {
+            canvas.toBlob((outBlob) => {
+              if (!outBlob) { reject(new Error("toBlob failed")); return; }
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(outBlob);
+              a.download = filename;
+              a.click();
+              URL.revokeObjectURL(a.href);
+              resolve();
+            }, mimeType, 0.95);
+          });
+          sendResponse({ success: true });
+        } catch(_) {
+          try {
+            // CORS fallback: reload img with crossOrigin → canvas
+            const tempImg = new Image();
+            tempImg.crossOrigin = "anonymous";
+            await new Promise((res, rej) => {
+              tempImg.onload = res;
+              tempImg.onerror = rej;
+              tempImg.src = srcUrl + (srcUrl.includes("?") ? "&" : "?") + "_sb=" + Date.now();
+            });
+            await drawAndDownload(tempImg);
+            sendResponse({ success: true });
+          } catch(_2) {
+            // Last resort: direct link download (no format conversion)
+            const a = document.createElement("a");
+            a.href = srcUrl;
+            a.download = filename;
+            a.click();
+            sendResponse({ success: true, note: "Direct download — CORS blocked format conversion" });
+          }
+        }
+
       } else {
         sendResponse({ error: `Unknown action type: ${type}` });
       }

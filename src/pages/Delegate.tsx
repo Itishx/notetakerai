@@ -1,4 +1,4 @@
-import { Bot, ArrowRight, Zap, Mail, Globe, Plane, ChevronRight, FlaskConical, Smartphone, MonitorSmartphone, MapPin, ShoppingBag, Utensils, Briefcase, Calendar, Music, Hotel } from "lucide-react";
+import { Bot, ArrowRight, Zap, Mail, Globe, Plane, ChevronRight, FlaskConical, Smartphone, MonitorSmartphone, MapPin, ShoppingBag, Utensils, Briefcase, Calendar, Music, Hotel, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -87,6 +87,13 @@ const examples = [
     steps: ["Build YouTube search URL", "Open results"],
     works: "great" as const,
     icon: Globe,
+  },
+  {
+    category: "Images",
+    prompt: "Download the hero image on this page as a PNG",
+    steps: ["Find the hero <img> element", "Draw to canvas", "Download as PNG"],
+    works: "great" as const,
+    icon: Image,
   },
 ];
 

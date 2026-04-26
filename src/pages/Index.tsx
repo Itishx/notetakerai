@@ -414,18 +414,17 @@ function MeetingMockup() {
 
 function DelegateMockup() {
   const steps = [
-    { done: true,    text: "Navigated to Gmail inbox" },
-    { done: true,    text: "Found email from Priya" },
-    { done: true,    text: "Opened compose window" },
-    { done: false,   text: "Drafting reply…", active: true },
-    { done: false,   text: "Send email", active: false },
+    { done: true,    text: "Found hero image on page" },
+    { done: true,    text: "Fetched image via canvas" },
+    { done: false,   text: "Converting to PNG…", active: true },
+    { done: false,   text: "Trigger download", active: false },
   ];
   return (
-    <SidepanelShell ctx="mail.google.com — Inbox (24)">
+    <SidepanelShell ctx="unsplash.com — Free photos">
       {/* Task bubble */}
       <div className="flex justify-end">
         <span className="px-3 py-1.5 rounded-2xl rounded-br-sm text-[11px] leading-relaxed" style={{ background: "#1a1410", color: "#f5f1eb" }}>
-          Reply to Priya's email about the launch date
+          Download the hero image as PNG
         </span>
       </div>
       {/* Agent thinking */}

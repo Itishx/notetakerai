@@ -475,6 +475,7 @@ ACTIONS:
 {"type":"read","selector":"css","targetText":"fallback","description":"Read element to verify state"}
 {"type":"scroll","direction":"down","amount":400,"description":"..."}
 {"type":"wait","ms":1500,"description":"..."}
+{"type":"downloadImage","selector":"css","targetText":"fallback alt text","format":"png","filename":"image.png","description":"Download image as PNG/JPEG/WebP"}
 {"type":"done","message":"what was accomplished"}
 {"type":"answer","message":"..."}
 {"type":"clarify","message":"..."}  ← ONLY when genuinely blocked
