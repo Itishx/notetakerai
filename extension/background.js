@@ -426,6 +426,21 @@ View file: click file name in file tree`;
 ── GOOGLE SEARCH (you are here) ──
 New search: type selector="[name='q']" → pressKey Enter
 Direct: navigate → https://www.google.com/search?q=QUERY`;
+  if (/reddit\.com\/r\/[^/]+\/submit/.test(url)) return `
+── REDDIT SUBMIT (you are here) ──
+Follow these steps IN ORDER. Do not skip any step.
+1. wait 1200 (page must fully load)
+2. type into title: selector="textarea[name='title']" targetText="Title" — type the title text
+3. wait 400
+4. click body field: selector="div[data-lexical-editor='true']" targetText="Body text"
+5. wait 300
+6. type into body: selector="div[data-lexical-editor='true']" targetText="Body text" — type the body text
+7. wait 600
+8. click submit: selector="r-post-form-submit-button" targetText="Post"
+NOTES:
+- Title uses textarea[name='title'] (may be in shadow DOM — the agent handles this automatically)
+- Body uses div[data-lexical-editor='true'] — click it first, then type. It uses beforeinput events.
+- Submit is r-post-form-submit-button — if clicking fails, try selector="button[type='submit']" or targetText="Post"`;
   return `
 ── GENERAL SITE ──
 Prefer navigating to URLs over clicking search bars.

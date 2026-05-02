@@ -99,12 +99,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // ===== BROWSER AGENT: execute action on page =====
   if (msg.action === "agentAction") {
     const { type, selector, targetText, targetTag, text, url, direction, amount } = msg;
+
+    // Pierces open shadow roots so we can find elements inside web components
+    function deepQuery(sel, root) {
+      root = root || document;
+      let el = null;
+      try { el = root.querySelector(sel); } catch(e) {}
+      if (el) return el;
+      for (const host of root.querySelectorAll('*')) {
+        if (host.shadowRoot) {
+          el = deepQuery(sel, host.shadowRoot);
+          if (el) return el;
+        }
+      }
+      return null;
+    }
     (async () => { try {
       if (type === "click") {
         let el = null;
-        // Try CSS selector first
+        // Try CSS selector first (with shadow DOM piercing)
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
+          if (!el) el = deepQuery(selector);
         }
         // Try by visible text
         if (!el && targetText) {
@@ -141,6 +157,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         let el = null;
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
+          if (!el) el = deepQuery(selector);
         }
         // If a targetText hint was given, try finding by aria-label or placeholder
         if (!el && msg.targetText) {
@@ -169,13 +186,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await new Promise(r => setTimeout(r, 80));
 
         if (isContentEditable) {
-          // Gmail body, Notion, etc. — use execCommand for reliable typing
+          el.focus();
+          el.click();
+          await new Promise(r => setTimeout(r, 120));
+
+          // Clear existing content
           document.execCommand("selectAll", false, null);
           document.execCommand("delete", false, null);
-          // Type chunk by chunk using insertText
-          document.execCommand("insertText", false, text);
-          // Fallback: set textContent and fire input event
-          if (!el.textContent.includes(text.substring(0, 5))) {
+
+          // Primary: beforeinput with insertText — works with Lexical (Reddit, Notion, etc.)
+          const bi = new InputEvent("beforeinput", { inputType: "insertText", data: text, bubbles: true, cancelable: true });
+          el.dispatchEvent(bi);
+
+          await new Promise(r => setTimeout(r, 80));
+          const hasText = (el.textContent || "").replace(/\s/g, "").length > 0;
+
+          // Secondary: execCommand insertText — works with most other editors
+          if (!hasText) {
+            document.execCommand("insertText", false, text);
+          }
+
+          // Tertiary: synthetic ClipboardEvent paste — Lexical last resort
+          if (!(el.textContent || "").replace(/\s/g, "").length) {
+            try {
+              const dt = new DataTransfer();
+              dt.setData("text/plain", text);
+              el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+            } catch(e) {}
+          }
+
+          // Final fallback: set textContent directly
+          if (!(el.textContent || "").replace(/\s/g, "").length) {
             el.textContent = text;
             el.dispatchEvent(new Event("input", { bubbles: true }));
           }
