@@ -676,6 +676,137 @@ async function bgCheckStopped(id, token) {
   } catch { return false; }
 }
 
+// ── Reddit post — bypasses the AI planning loop entirely ──────────────────
+async function bgExecuteRedditPost(cmd, token, tabId) {
+  const subredditMatch = cmd.task.match(/r\/(\w+)/);
+  const titleMatch     = cmd.task.match(/TITLE:\n([\s\S]*?)\n\nBODY:/);
+  const bodyMatch      = cmd.task.match(/BODY:\n([\s\S]*)$/);
+  if (!subredditMatch || !titleMatch || !bodyMatch) return false;
+
+  const subreddit = subredditMatch[1];
+  const titleText = titleMatch[1].trim();
+  const bodyText  = bodyMatch[1].trim();
+
+  const addStep = async (steps) => {
+    await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps });
+  };
+
+  const steps = [];
+
+  // Step 1 — navigate
+  steps.push({ type: "navigate", description: `Navigate to r/${subreddit}/submit`, ok: true });
+  await addStep(steps);
+  await new Promise(resolve => chrome.tabs.update(tabId, { url: `https://www.reddit.com/r/${subreddit}/submit?type=TEXT` }, resolve));
+  await bgWaitForTabReady(tabId, 8000);
+  await new Promise(r => setTimeout(r, 2500)); // wait for React/Lit to hydrate
+
+  // Step 2 — fill title (injected script, pierces shadow DOM)
+  const fillTitle = await new Promise(resolve => {
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: (text) => {
+        function deepQuery(sel, root) {
+          root = root || document;
+          let el; try { el = root.querySelector(sel); } catch(e) {}
+          if (el) return el;
+          for (const host of root.querySelectorAll("*")) {
+            if (host.shadowRoot) { el = deepQuery(sel, host.shadowRoot); if (el) return el; }
+          }
+          return null;
+        }
+        const el = deepQuery('textarea[name="title"]') || deepQuery("#innerTextArea");
+        if (!el) return { error: "Title field not found" };
+        el.focus(); el.click();
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+        if (setter) setter.call(el, text); else el.value = text;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        return { success: true, value: el.value };
+      },
+      args: [titleText],
+    }, (res) => resolve(chrome.runtime.lastError ? { error: chrome.runtime.lastError.message } : (res?.[0]?.result || { error: "No result" })));
+  });
+
+  steps.push({ type: "type", description: `Fill title: "${titleText.slice(0, 60)}"`, ok: !fillTitle.error });
+  await addStep(steps);
+  if (fillTitle.error) {
+    await bgUpdateRemoteCommand(cmd.id, token, { status: "error", result: `Could not fill title: ${fillTitle.error}`, steps });
+    chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+    return true;
+  }
+
+  await new Promise(r => setTimeout(r, 400));
+
+  // Step 3 — fill body (Lexical editor: beforeinput → ClipboardEvent → textContent)
+  const fillBody = await new Promise(resolve => {
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: (text) => {
+        const el = document.querySelector('div[data-lexical-editor="true"]')
+                || document.querySelector('[aria-label="Post body text field"]');
+        if (!el) return { error: "Body field not found" };
+        el.focus(); el.click();
+
+        // 1. beforeinput — Lexical's primary handler
+        el.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: text, bubbles: true, cancelable: true }));
+
+        setTimeout(() => {
+          const filled = (el.textContent || "").replace(/\s/g, "").length > 0;
+          if (!filled) {
+            // 2. ClipboardEvent paste fallback
+            try {
+              const dt = new DataTransfer();
+              dt.setData("text/plain", text);
+              el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+            } catch(e) {}
+          }
+          setTimeout(() => {
+            const stillEmpty = (el.textContent || "").replace(/\s/g, "").length === 0;
+            if (stillEmpty) {
+              // 3. execCommand last resort
+              document.execCommand("insertText", false, text);
+            }
+          }, 300);
+        }, 300);
+
+        return { success: true };
+      },
+      args: [bodyText],
+    }, (res) => resolve(chrome.runtime.lastError ? { error: chrome.runtime.lastError.message } : (res?.[0]?.result || { error: "No result" })));
+  });
+
+  steps.push({ type: "type", description: "Fill body text", ok: !fillBody.error });
+  await addStep(steps);
+  await new Promise(r => setTimeout(r, 1500)); // let Lexical process the events
+
+  // Step 4 — click submit
+  const submit = await new Promise(resolve => {
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const btn = document.querySelector("r-post-form-submit-button")
+                 || document.querySelector('button[type="submit"]')
+                 || Array.from(document.querySelectorAll("button")).find(b => /^post$/i.test(b.innerText?.trim()));
+        if (!btn) return { error: "Submit button not found" };
+        btn.click();
+        return { success: true };
+      },
+      args: [],
+    }, (res) => resolve(chrome.runtime.lastError ? { error: chrome.runtime.lastError.message } : (res?.[0]?.result || { error: "No result" })));
+  });
+
+  steps.push({ type: "click", description: "Click Post button", ok: !submit.error });
+  await new Promise(r => setTimeout(r, 1500));
+
+  await bgUpdateRemoteCommand(cmd.id, token, {
+    status: submit.error ? "error" : "done",
+    result: submit.error ? `Failed to submit: ${submit.error}` : `Posted to r/${subreddit} successfully.`,
+    steps,
+  });
+  chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+  return true;
+}
+
 async function bgRunRemoteCommand(cmd, token) {
   console.log("[BgRemoteAgent] Running command in background:", cmd.task);
   await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
@@ -683,6 +814,12 @@ async function bgRunRemoteCommand(cmd, token) {
   // Resolve tab ID once — reuse for entire run to avoid repeated async lookups
   const tabId = await bgGetActiveTabId();
   console.log("[BgRemoteAgent] Using tab:", tabId);
+
+  // Reddit posts — skip the AI planning loop, inject directly
+  if (/reddit\.com\/r\/\w+\/submit|Post to Reddit/i.test(cmd.task)) {
+    const handled = await bgExecuteRedditPost(cmd, token, tabId);
+    if (handled) return;
+  }
 
   const steps = [];
   const history = [];
