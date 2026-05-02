@@ -678,17 +678,30 @@ async function bgCheckStopped(id, token) {
 
 // ── Reddit post — URL params pre-fill everything, agent just clicks Submit ─
 async function bgExecuteRedditPost(cmd, token, tabId) {
-  // Support both "TITLE:\n...\n\nBODY:\n..." and older step-based formats
-  const subredditMatch = cmd.task.match(/r\/(\w+)/);
-  const titleMatch     = cmd.task.match(/TITLE:\n([\s\S]*?)\n\nBODY:/)
-                      || cmd.task.match(/type this exact title:\n([\s\S]*?)\n\n/);
-  const bodyMatch      = cmd.task.match(/BODY:\n([\s\S]*)$/)
-                      || cmd.task.match(/type this exact body text:\n([\s\S]*)$/);
-  if (!subredditMatch || !titleMatch || !bodyMatch) return false;
+  const t = cmd.task;
+  let subreddit, titleText, bodyText;
 
-  const subreddit = subredditMatch[1];
-  const titleText = titleMatch[1].trim();
-  const bodyText  = bodyMatch[1].trim();
+  // Format 1 (current): @@REDDIT_POST@@\nsub:X\nttl:Y\nbdy:\nZ
+  if (t.startsWith("@@REDDIT_POST@@")) {
+    subreddit = (t.match(/\nsub:(.+)/) || [])[1]?.trim();
+    titleText = (t.match(/\nttl:(.+)/) || [])[1]?.trim();
+    bodyText  = (t.match(/\nbdy:\n([\s\S]*)$/) || [])[1]?.trim();
+
+  // Format 2: Post to Reddit r/X\n\nTITLE:\nY\n\nBODY:\nZ
+  } else if (/TITLE:\n/.test(t) && /BODY:\n/.test(t)) {
+    subreddit = (t.match(/r\/(\w+)/) || [])[1];
+    titleText = (t.match(/TITLE:\n([\s\S]*?)\n\nBODY:/) || [])[1]?.trim();
+    bodyText  = (t.match(/BODY:\n([\s\S]*)$/) || [])[1]?.trim();
+
+  // Format 3 (migration 3 step-based): "Create a Reddit text post in r/X"
+  } else if (/type this exact title:/.test(t)) {
+    subreddit = (t.match(/r\/(\w+)/) || [])[1];
+    titleText = (t.match(/type this exact title:\n([\s\S]*?)\n\n/) || [])[1]?.trim();
+    bodyText  = (t.match(/type this exact body text:\n([\s\S]*?)(?:\n\n\d+\.|$)/) || [])[1]?.trim();
+  }
+
+  if (!subreddit || !titleText || !bodyText) return false;
+
   const steps = [];
 
   // Step 1 — navigate to old.reddit.com with everything pre-filled via URL params
@@ -736,7 +749,7 @@ async function bgRunRemoteCommand(cmd, token) {
   console.log("[BgRemoteAgent] Using tab:", tabId);
 
   // Reddit posts — skip the AI planning loop, inject directly
-  if (/reddit\.com\/r\/\w+\/submit|Post to Reddit/i.test(cmd.task)) {
+  if (/@@REDDIT_POST@@|reddit\.com\/r\/\w+\/submit|Post to Reddit|Create a Reddit text post/i.test(cmd.task)) {
     const handled = await bgExecuteRedditPost(cmd, token, tabId);
     if (handled) return;
   }
