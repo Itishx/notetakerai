@@ -27,7 +27,7 @@ type Note = {
   created_at: string;
 };
 
-type AgentStep = { description: string; ok: boolean };
+type AgentStep = { description: string; ok: boolean; __meta?: boolean; durationMs?: number };
 type Command = {
   id: string;
   task: string;
@@ -220,7 +220,7 @@ export default function Dashboard() {
           .eq("user_identifier", user.id).maybeSingle(),
       ]);
       if (notesRes.data) setNotes(notesRes.data as Note[]);
-      if (cmdsRes.data) setCommands(cmdsRes.data as Command[]);
+      if (cmdsRes.data) setCommands(cmdsRes.data as unknown as Command[]);
       setNotionConn(notionRes.data as NotionConn);
       setDataLoading(false);
     };
