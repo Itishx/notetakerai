@@ -146,15 +146,10 @@ const Reddit = () => {
     }
   }
 
-  // Post now — new Reddit pre-fills title; body goes to clipboard
-  async function handlePostNow() {
-    await navigator.clipboard.writeText(postBody);
-    const url = `https://www.reddit.com/r/${activeSubreddit}/submit?title=${encodeURIComponent(postTitle)}&type=self`;
+  // Post now — old.reddit.com pre-fills both title and body via URL params
+  function handlePostNow() {
+    const url = `https://old.reddit.com/r/${activeSubreddit}/submit?title=${encodeURIComponent(postTitle)}&text=${encodeURIComponent(postBody)}&selftext=true`;
     window.open(url, "_blank");
-    toast({
-      title: "Body copied to clipboard",
-      description: "Title is pre-filled. Paste the body (⌘V) into the text field.",
-    });
   }
 
   // Schedule post
@@ -592,14 +587,17 @@ const Reddit = () => {
                   </Button>
 
                   {/* Post now button */}
-                  <Button
-                    onClick={handlePostNow}
-                    disabled={!postTitle.trim() || !postBody.trim()}
-                    className="rounded-full bg-orange-500 hover:bg-orange-500/90 text-white px-6"
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Post now
-                  </Button>
+                  <div className="flex flex-col items-end gap-1">
+                    <Button
+                      onClick={handlePostNow}
+                      disabled={!postTitle.trim() || !postBody.trim()}
+                      className="rounded-full bg-orange-500 hover:bg-orange-500/90 text-white px-6"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Post now
+                    </Button>
+                    <span className="text-xs text-muted-foreground/40">title & body pre-filled · just hit Submit</span>
+                  </div>
                 </div>
               </div>
             </div>
