@@ -906,10 +906,17 @@ async function bgPollRemoteCommands() {
     const rows = await res.json();
     const cmd = rows[0];
     if (!cmd) return;
-    if (cmd.id === data.remoteProcessingId) return;
+    if (cmd.id === data.remoteProcessingId) {
+      // Same command seen again — only skip if we picked it up recently (< 90s).
+      // If it's been longer, the previous attempt silently died; clear the lock and retry.
+      const elapsed = Date.now() - (data.remoteProcessingTime || 0);
+      if (elapsed < 90000) return;
+      console.log("[BgRemoteAgent] Clearing stale lock for:", cmd.id);
+      chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+    }
 
     console.log("[BgRemoteAgent] Found command:", cmd.id, cmd.task);
-    chrome.storage.local.set({ remoteProcessingId: cmd.id });
+    chrome.storage.local.set({ remoteProcessingId: cmd.id, remoteProcessingTime: Date.now() });
 
     // Try side panel first — if it's open, let it handle with UI
     const forwarded = await forwardToSidePanel(cmd);
