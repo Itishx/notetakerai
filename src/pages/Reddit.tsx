@@ -146,10 +146,15 @@ const Reddit = () => {
     }
   }
 
-  // Post now — old.reddit.com honours title + text URL params reliably
-  function handlePostNow() {
-    const url = `https://old.reddit.com/r/${activeSubreddit}/submit?title=${encodeURIComponent(postTitle)}&text=${encodeURIComponent(postBody)}&selftext=true`;
+  // Post now — new Reddit pre-fills title; body goes to clipboard
+  async function handlePostNow() {
+    await navigator.clipboard.writeText(postBody);
+    const url = `https://www.reddit.com/r/${activeSubreddit}/submit?title=${encodeURIComponent(postTitle)}&type=self`;
     window.open(url, "_blank");
+    toast({
+      title: "Body copied to clipboard",
+      description: "Title is pre-filled. Paste the body (⌘V) into the text field.",
+    });
   }
 
   // Schedule post
