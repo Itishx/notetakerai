@@ -152,12 +152,48 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_reddit_posts: {
+        Row: {
+          agent_command_id: string | null
+          body: string
+          created_at: string | null
+          id: string
+          scheduled_at: string
+          status: string
+          subreddit: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          agent_command_id?: string | null
+          body: string
+          created_at?: string | null
+          id?: string
+          scheduled_at: string
+          status?: string
+          subreddit: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          agent_command_id?: string | null
+          body?: string
+          created_at?: string | null
+          id?: string
+          scheduled_at?: string
+          status?: string
+          subreddit?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      dispatch_scheduled_reddit_posts: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
