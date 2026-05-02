@@ -138,7 +138,7 @@ Example format:
 [{"name":"entrepreneur","subscribers":"1.2M","type":"Startups","reason":"Founders here actively look for tools that solve real business problems","vibe":"Supportive"},...]`;
 
       const raw = await callAI(prompt);
-      const subreddits = JSON.parse(stripJsonFences(raw));
+      const subreddits = parseAIJson(raw);
 
       return new Response(JSON.stringify({ subreddits }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
