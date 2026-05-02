@@ -74,6 +74,7 @@ const Reddit = () => {
 
   // Scheduler state
   const [showScheduler, setShowScheduler] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined);
   const [scheduleTime, setScheduleTime] = useState(() => {
     const d = new Date(Date.now() + 5 * 60000);
@@ -145,9 +146,9 @@ const Reddit = () => {
     }
   }
 
-  // Post now
+  // Post now — old.reddit.com honours title + text URL params reliably
   function handlePostNow() {
-    const url = `https://www.reddit.com/r/${activeSubreddit}/submit?title=${encodeURIComponent(postTitle)}&type=self&text=${encodeURIComponent(postBody)}`;
+    const url = `https://old.reddit.com/r/${activeSubreddit}/submit?title=${encodeURIComponent(postTitle)}&text=${encodeURIComponent(postBody)}&selftext=true`;
     window.open(url, "_blank");
   }
 
@@ -188,10 +189,7 @@ const Reddit = () => {
         (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
       ));
       setShowScheduler(false);
-      toast({
-        title: "Scheduled",
-        description: `Will post to r/${activeSubreddit} ${formatScheduled(dt.toISOString())}. Keep this tab open.`,
-      });
+      setScheduledAt(dt);
     } catch (e: any) {
       toast({ title: "Error", description: e?.message || "Could not save schedule." });
     } finally {
@@ -225,6 +223,7 @@ const Reddit = () => {
     setPostBody("");
     setError(null);
     setShowScheduler(false);
+    setScheduledAt(null);
   }
 
   const vibeClass = (vibe: string) =>
@@ -460,8 +459,34 @@ const Reddit = () => {
         </section>
       )}
 
+      {/* Step 3 — Scheduled confirmation */}
+      {step === 3 && scheduledAt && (
+        <section className="container mx-auto px-6 pb-24">
+          <div className="max-w-3xl mx-auto opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
+            <div className="rounded-2xl border border-primary/20 bg-card/60 p-8 text-center">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-5">
+                <Check className="w-6 h-6 text-primary" />
+              </div>
+              <h2 className="text-foreground mb-2">Post scheduled</h2>
+              <p className="text-muted-foreground text-sm mb-1">
+                Will be posted to <span className="text-foreground font-medium">r/{activeSubreddit}</span> on
+              </p>
+              <p className="text-primary font-medium mb-6">
+                {scheduledAt.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} at{" "}
+                {scheduledAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <Button variant="outline" onClick={handleReset} className="rounded-full border-border/60 text-muted-foreground hover:text-foreground px-6">
+                  Write another post
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Step 3 — Review & post */}
-      {step === 3 && (
+      {step === 3 && !scheduledAt && (
         <section className="container mx-auto px-6 pb-24">
           <div className="max-w-3xl mx-auto opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
             <div className="rounded-2xl border border-primary/20 bg-card/60 p-8">
