@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowRight, Copy, Check, ExternalLink, Search, Loader2,
   RotateCcw, AlertCircle, CalendarIcon, Clock, Trash2, Bot,
@@ -99,49 +99,6 @@ const Reddit = () => {
       });
   }, [user]);
 
-  // Poll every 30s — dispatch any posts that are due
-  const checkAndDispatch = useCallback(async () => {
-    if (!user) return;
-    const now = new Date().toISOString();
-    const { data: due } = await supabase
-      .from("scheduled_reddit_posts" as any)
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "pending")
-      .lte("scheduled_at", now);
-
-    if (!due || (due as any[]).length === 0) return;
-
-    for (const post of due as unknown as ScheduledPost[]) {
-      const task = `Post to Reddit. Navigate to https://www.reddit.com/r/${post.subreddit}/submit, click the "Text" post tab, fill the title field with the exact title below, fill the body/text field with the exact body below, then click the Post button.\n\nSUBREDDIT: r/${post.subreddit}\n\nTITLE:\n${post.title}\n\nBODY:\n${post.body}`;
-
-      const { data: cmd, error: cmdErr } = await supabase
-        .from("agent_commands" as any)
-        .insert({ user_id: user.id, task, status: "pending", steps: [] })
-        .select()
-        .single();
-
-      if (!cmdErr) {
-        await supabase
-          .from("scheduled_reddit_posts" as any)
-          .update({ status: "triggered", agent_command_id: (cmd as any)?.id })
-          .eq("id", post.id);
-
-        setScheduledPosts((prev) => prev.filter((p) => p.id !== post.id));
-
-        toast({
-          title: "Agent dispatched",
-          description: `Posting to r/${post.subreddit} now…`,
-        });
-      }
-    }
-  }, [user, toast]);
-
-  useEffect(() => {
-    checkAndDispatch();
-    const interval = setInterval(checkAndDispatch, 30000);
-    return () => clearInterval(interval);
-  }, [checkAndDispatch]);
 
   // Wizard actions
   async function handleFindSubreddits() {
@@ -682,10 +639,6 @@ const Reddit = () => {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground/40 mt-4 flex items-center gap-1.5">
-              <AlertCircle className="w-3 h-3" />
-              Keep this tab open — the browser agent needs to be running to post automatically.
-            </p>
           </div>
         </section>
       )}
@@ -774,7 +727,7 @@ const Reddit = () => {
               <div className="flex items-start gap-2">
                 <Bot className="w-4 h-4 text-primary/60 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  When the time comes, the browser agent will navigate to Reddit, fill in your title and body, and submit the post automatically. Keep this tab open.
+                  When the time comes, Supabase triggers the browser agent automatically. Just make sure your extension is running — no need to keep any tab open.
                 </p>
               </div>
             </div>
