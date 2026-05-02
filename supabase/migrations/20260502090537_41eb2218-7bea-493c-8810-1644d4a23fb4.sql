@@ -1,0 +1,1 @@
+revoke execute on function public.dispatch_scheduled_reddit_posts() from public, anon, authenticated;
