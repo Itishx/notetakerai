@@ -7,26 +7,6 @@ const corsHeaders = {
 };
 
 async function callAI(prompt: string): Promise<string> {
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (anthropicKey) {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2048,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-    if (!res.ok) throw new Error(`Claude API error: ${res.status}`);
-    const data = await res.json();
-    return data.content?.[0]?.text || "";
-  }
-
   const lovableKey = Deno.env.get("LOVABLE_API_KEY");
   if (lovableKey) {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -40,9 +20,35 @@ async function callAI(prompt: string): Promise<string> {
         messages: [{ role: "user", content: prompt }],
       }),
     });
-    if (!res.ok) throw new Error(`Lovable AI error: ${res.status}`);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Lovable AI error ${res.status}: ${text}`);
+    }
     const data = await res.json();
     return data.choices?.[0]?.message?.content || "";
+  }
+
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (anthropicKey) {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 2048,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Claude API error ${res.status}: ${text}`);
+    }
+    const data = await res.json();
+    return data.content?.[0]?.text || "";
   }
 
   throw new Error("No AI API key configured");
