@@ -678,9 +678,12 @@ async function bgCheckStopped(id, token) {
 
 // ── Reddit post — URL params pre-fill everything, agent just clicks Submit ─
 async function bgExecuteRedditPost(cmd, token, tabId) {
+  // Support both "TITLE:\n...\n\nBODY:\n..." and older step-based formats
   const subredditMatch = cmd.task.match(/r\/(\w+)/);
-  const titleMatch     = cmd.task.match(/TITLE:\n([\s\S]*?)\n\nBODY:/);
-  const bodyMatch      = cmd.task.match(/BODY:\n([\s\S]*)$/);
+  const titleMatch     = cmd.task.match(/TITLE:\n([\s\S]*?)\n\nBODY:/)
+                      || cmd.task.match(/type this exact title:\n([\s\S]*?)\n\n/);
+  const bodyMatch      = cmd.task.match(/BODY:\n([\s\S]*)$/)
+                      || cmd.task.match(/type this exact body text:\n([\s\S]*)$/);
   if (!subredditMatch || !titleMatch || !bodyMatch) return false;
 
   const subreddit = subredditMatch[1];
