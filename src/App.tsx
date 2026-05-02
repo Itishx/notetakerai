@@ -21,6 +21,7 @@ import RemoteAgent from "./pages/RemoteAgent.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import SidepanelTest from "./pages/SidepanelTest.tsx";
 import BuildPlan from "./pages/BuildPlan.tsx";
+import Reddit from "./pages/Reddit.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/sidepanel-test" element={<SidepanelTest />} />
               <Route path="/build-plan" element={<BuildPlan />} />
+              <Route path="/reddit" element={<Reddit />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -1,0 +1,140 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+async function callAI(prompt: string): Promise<string> {
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (anthropicKey) {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2048,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) throw new Error(`Claude API error: ${res.status}`);
+    const data = await res.json();
+    return data.content?.[0]?.text || "";
+  }
+
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  if (lovableKey) {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) throw new Error(`Lovable AI error: ${res.status}`);
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || "";
+  }
+
+  throw new Error("No AI API key configured");
+}
+
+function stripJsonFences(text: string): string {
+  return text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { action, productDescription, subreddit } = await req.json();
+
+    if (action === "find_subreddits") {
+      if (!productDescription) {
+        return new Response(JSON.stringify({ error: "productDescription required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const prompt = `You are a Reddit expert and growth marketer. Given a product/project description, suggest 6 subreddits where a post about it would genuinely be welcome and get traction.
+
+Product/project description: "${productDescription}"
+
+Return ONLY a JSON array (no markdown fences, no explanation). Each item must have these exact keys:
+- name: subreddit name without r/ prefix
+- subscribers: approximate subscriber count as a string like "450K" or "1.2M"
+- type: category like "Startups", "Technology", "Productivity", "Design", "Gaming", etc.
+- reason: one sentence on why this community would genuinely care about this
+- vibe: one word describing the community tone, e.g. "Technical", "Casual", "Supportive", "Critical"
+
+Mix niche subreddits (highly targeted, 10k-100k), mid-size (100k-500k), and large ones (500k+). Use real subreddit names that actually exist. Prioritize communities where the post would be genuinely useful, not just promotional.
+
+Example format:
+[{"name":"entrepreneur","subscribers":"1.2M","type":"Startups","reason":"Founders here actively look for tools that solve real business problems","vibe":"Supportive"},...]`;
+
+      const raw = await callAI(prompt);
+      const subreddits = JSON.parse(stripJsonFences(raw));
+
+      return new Response(JSON.stringify({ subreddits }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "write_post") {
+      if (!productDescription || !subreddit) {
+        return new Response(JSON.stringify({ error: "productDescription and subreddit required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const prompt = `You are a skilled Reddit writer who understands Reddit culture deeply. Write an authentic post for r/${subreddit} about the following product/project.
+
+Product/project: "${productDescription}"
+
+Rules for a great Reddit post that won't get downvoted:
+- Title: Clear, specific, honest. Under 200 chars. No sensational claims. Avoid "I built X and Y happened" format unless the story is genuinely impressive. Don't use ALL CAPS.
+- Body: Conversational and genuine. Start with real context (why you built it, what problem it solves). No bullet-point intro. Be honest about limitations. End with a real question to spark discussion. Match r/${subreddit}'s tone.
+- Never sound like a press release or marketing copy.
+- If it's a personal project, mention that warmly — Reddit loves indie builders.
+- Keep body between 150-400 words. Don't be too long.
+
+Return ONLY JSON (no markdown fences, no extra text):
+{"title":"...","body":"..."}`;
+
+      const raw = await callAI(prompt);
+      const post = JSON.parse(stripJsonFences(raw));
+
+      return new Response(JSON.stringify(post), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: "Unknown action" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("reddit-assistant error:", e);
+    return new Response(
+      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
