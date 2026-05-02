@@ -62,6 +62,49 @@ function stripJsonFences(text: string): string {
     .trim();
 }
 
+// Fix common JSON issues from LLM output: unescaped newlines/tabs/control chars inside strings.
+function sanitizeJsonString(text: string): string {
+  let out = "";
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) {
+      out += ch;
+      escape = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      out += ch;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") { out += "\\r"; continue; }
+      if (ch === "\t") { out += "\\t"; continue; }
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) { out += "\\u" + code.toString(16).padStart(4, "0"); continue; }
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function parseAIJson(raw: string): any {
+  const cleaned = stripJsonFences(raw);
+  try {
+    return JSON.parse(cleaned);
+  } catch (_e) {
+    return JSON.parse(sanitizeJsonString(cleaned));
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -95,7 +138,7 @@ Example format:
 [{"name":"entrepreneur","subscribers":"1.2M","type":"Startups","reason":"Founders here actively look for tools that solve real business problems","vibe":"Supportive"},...]`;
 
       const raw = await callAI(prompt);
-      const subreddits = JSON.parse(stripJsonFences(raw));
+      const subreddits = parseAIJson(raw);
 
       return new Response(JSON.stringify({ subreddits }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -125,7 +168,7 @@ Return ONLY JSON (no markdown fences, no extra text):
 {"title":"...","body":"..."}`;
 
       const raw = await callAI(prompt);
-      const post = JSON.parse(stripJsonFences(raw));
+      const post = parseAIJson(raw);
 
       return new Response(JSON.stringify(post), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
