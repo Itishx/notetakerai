@@ -168,7 +168,7 @@ Return ONLY JSON (no markdown fences, no extra text):
 {"title":"...","body":"..."}`;
 
       const raw = await callAI(prompt);
-      const post = JSON.parse(stripJsonFences(raw));
+      const post = parseAIJson(raw);
 
       return new Response(JSON.stringify(post), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
