@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Download, Menu, X, Sun, Moon, User, LogOut } from "lucide-react";
+import { Bookmark, Menu, X, Sun, Moon, User, LogOut } from "lucide-react";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -12,22 +12,6 @@ const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { user, profile, signOut } = useAuth();
-
-  const handleDownload = () => {
-    fetch("/sidebrain-extension.zip")
-      .then((res) => {
-        if (!res.ok) throw new Error("Download failed");
-        return res.blob();
-      })
-      .then((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "sidebrain-extension.zip";
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch(() => alert("Extension not yet packaged. Please check back soon."));
-  };
 
   const links = [
     { to: "/use-cases", label: "Use Cases" },
@@ -127,14 +111,15 @@ const Navbar = () => {
             </Button>
           </Link>
         )}
-        <Button
-          onClick={handleDownload}
-          size="sm"
-          className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-5 text-sm"
-        >
-          <Download className="w-3.5 h-3.5 mr-1.5" />
-          Download Free
-        </Button>
+        <Link to="/bookmarklet">
+          <Button
+            size="sm"
+            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-5 text-sm"
+          >
+            <Bookmark className="w-3.5 h-3.5 mr-1.5" />
+            Install
+          </Button>
+        </Link>
       </div>
     </>
   );

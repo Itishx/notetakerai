@@ -1,4 +1,4 @@
-import { Mic, Download, ChevronRight, Leaf, ArrowRight, Users, Globe, Bot, Zap, FileText, CheckCircle2, XCircle, Clock, NotebookText, Settings } from "lucide-react";
+import { Mic, Bookmark, ChevronRight, Leaf, ArrowRight, Users, Globe, Bot, Zap, FileText, CheckCircle2, XCircle, Clock, NotebookText, Settings } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -618,22 +618,6 @@ function DashboardShowcase() {
 }
 
 const Index = () => {
-  const handleDownload = () => {
-    fetch("/sidebrain-extension.zip")
-      .then((res) => {
-        if (!res.ok) throw new Error("Download failed");
-        return res.blob();
-      })
-      .then((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "sidebrain-extension.zip";
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch(() => alert("Extension not yet packaged. Please check back soon."));
-  };
-
   return (
     <div className="min-h-screen bg-background selection:bg-primary/20">
       <Navbar />
@@ -693,17 +677,16 @@ const Index = () => {
           </div>
 
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-lg mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            Record tab audio. Read any page. Document meetings. Now control your browser with plain language. SideBrain is the AI layer that lives in your sidebar.
+            Save SideBrain to your bookmarks bar, click it on any page, and a compact AI assistant wakes up right there. It can read the page, answer questions, and handle simple browser actions without taking over the whole screen.
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-fade-in" style={{ animationDelay: "0.6s" }}>
-            <Button
-              onClick={handleDownload}
-              className="h-13 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Download Extension
-            </Button>
+            <Link to="/bookmarklet">
+              <Button className="h-13 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md">
+                <Bookmark className="w-4 h-4 mr-2" />
+                Install Bookmarklet
+              </Button>
+            </Link>
             <Button
               variant="ghost"
               className="h-13 px-8 text-base text-muted-foreground hover:text-foreground transition-colors duration-300"
@@ -715,11 +698,11 @@ const Index = () => {
           </div>
 
           <div className="mt-14 flex items-center justify-center gap-8 text-muted-foreground/60 text-sm opacity-0 animate-fade-in flex-wrap" style={{ animationDelay: "0.8s" }}>
-            <span>Record Tab Audio</span>
+            <span>Wake on Any Page</span>
             <span className="w-1 h-1 rounded-full bg-border" />
             <span>Read Any Page</span>
             <span className="w-1 h-1 rounded-full bg-border" />
-            <span>Record Meetings</span>
+            <span>Compact Dock</span>
             <span className="w-1 h-1 rounded-full bg-border" />
             <span className="text-primary flex items-center gap-1.5"><Bot className="w-3.5 h-3.5" /> Browser Agent</span>
           </div>
@@ -750,7 +733,7 @@ const Index = () => {
               <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>your browser obeys now</em>
             </h2>
             <p className="text-base text-muted-foreground leading-relaxed mb-6">
-              Type a plain task. Delegate reads the page, clicks buttons, fills forms, and navigates — all from your sidebar. Works from your phone too.
+              Type a plain task. Delegate reads the page, clicks buttons, fills forms, and navigates — now from a compact bookmark-triggered assistant instead of a permanent sidebar. Works from your phone too.
             </p>
             <div className="flex flex-col gap-2 mb-8">
               {["Send emails via Gmail", "Navigate to any website", "Search flights & fill forms", "Control remotely from your phone"].map(item => (
@@ -786,10 +769,10 @@ const Index = () => {
           <h2 className="text-2xl text-foreground mb-8">Getting started</h2>
           <ol className="space-y-5 text-muted-foreground">
             {[
-              "Download and unzip the extension file",
-              <>Open <code className="px-2 py-1 rounded-md bg-muted text-foreground text-sm">chrome://extensions</code></>,
-              <>Enable <strong className="text-foreground font-normal">Developer mode</strong></>,
-              <>Click <strong className="text-foreground font-normal">Load unpacked</strong> → select the folder</>,
+              "Open your bookmarks bar",
+              "Drag the SideBrain pill into it",
+              "Open any page where you want help",
+              "Click the bookmark to wake the assistant",
             ].map((text, i) => (
               <li key={i} className="flex gap-4 items-start">
                 <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center mt-0.5">
@@ -800,8 +783,16 @@ const Index = () => {
             ))}
           </ol>
           <p className="mt-8 text-xs text-muted-foreground/60">
-            Works with Chrome, Edge, Brave, Arc, and all Chromium browsers.
+            Works with Chrome, Edge, Brave, Arc, and other Chromium browsers. If a task opens a brand-new page, just click the bookmark again there.
           </p>
+          <div className="mt-8">
+            <Link to="/bookmarklet">
+              <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-6">
+                <Bookmark className="w-4 h-4 mr-2" />
+                Open Install Page
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -810,20 +801,19 @@ const Index = () => {
       <section className="container mx-auto px-6 py-24 text-center">
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-24" />
         <h2 className="text-3xl md:text-5xl font-normal text-foreground mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-          Ready to capture what matters?
+          Ready to keep SideBrain one click away?
         </h2>
         <p className="text-muted-foreground max-w-lg mx-auto mb-10 leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-          Turn your next lecture, meeting, or podcast into structured notes. One click to Notion.
+          Put it in your bookmarks bar once, then wake it up whenever you want page-aware help, a compact browser agent, or quick access to your dashboard.
         </p>
         <div className="opacity-0 animate-fade-in" style={{ animationDelay: "0.3s" }}>
-          <Button
-            onClick={handleDownload}
-            className="h-13 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Download Extension
-          </Button>
-          <p className="mt-5 text-xs text-muted-foreground/50">Free · Sign up in seconds · Works on all Chromium browsers</p>
+          <Link to="/bookmarklet">
+            <Button className="h-13 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md">
+              <Bookmark className="w-4 h-4 mr-2" />
+              Install Bookmarklet
+            </Button>
+          </Link>
+          <p className="mt-5 text-xs text-muted-foreground/50">Free to start · Sign in inside the assistant · Works on Chromium browsers</p>
         </div>
       </section>
 
@@ -847,8 +837,8 @@ const Index = () => {
               </div>
               <div className="flex flex-col gap-3">
                 <span className="text-muted-foreground/50 text-xs tracking-widest uppercase">Install</span>
-                <a href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">Chrome</a>
-                <span className="text-muted-foreground">Edge / Brave / Arc</span>
+                <Link to="/bookmarklet" className="text-muted-foreground hover:text-foreground transition-colors">Bookmarklet</Link>
+                <span className="text-muted-foreground">Chrome / Edge / Brave / Arc</span>
               </div>
             </div>
 

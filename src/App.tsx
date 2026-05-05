@@ -22,12 +22,17 @@ import Dashboard from "./pages/Dashboard.tsx";
 import SidepanelTest from "./pages/SidepanelTest.tsx";
 import BuildPlan from "./pages/BuildPlan.tsx";
 import Reddit from "./pages/Reddit.tsx";
+import Bookmarklet from "./pages/Bookmarklet.tsx";
+import AssistantPanel from "./pages/AssistantPanel.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  const [splashDone, setSplashDone] = useState(false);
+  const [splashDone, setSplashDone] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.location.pathname === "/assistant-panel";
+  });
 
   return (
   <QueryClientProvider client={queryClient}>
@@ -54,6 +59,8 @@ const App = () => {
               <Route path="/sidepanel-test" element={<SidepanelTest />} />
               <Route path="/build-plan" element={<BuildPlan />} />
               <Route path="/reddit" element={<Reddit />} />
+              <Route path="/bookmarklet" element={<Bookmarklet />} />
+              <Route path="/assistant-panel" element={<AssistantPanel />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
