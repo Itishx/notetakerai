@@ -2402,7 +2402,8 @@ body.sidepanel.theme-warm .notes-overlay { background: #f5f1eb; }
   flex-shrink: 0;
   overflow: hidden;
 }
-.voice-ctx-favicon img { width: 100%; height: 100%; object-fit: contain; }
+.voice-ctx-favicon.has-image { background: #fff; }
+.voice-ctx-favicon img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .voice-ctx-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .voice-ctx-title { color: #1B1713; font-weight: 500; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .voice-ctx-url { font-family: monospace; font-size: 10.5px; color: #8A7F75; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2785,6 +2786,21 @@ body.sidepanel.theme-warm .header-actions {
 }
 
 body.sidepanel.theme-warm .btn-icon,
+body.sidepanel.theme-warm .btn-icon-sm,
+body.sidepanel.theme-warm .page-context-chip,
+body.sidepanel.theme-warm .quick-action-card,
+body.sidepanel.theme-warm .recent-note-row,
+body.sidepanel.theme-warm .empty-library-link,
+body.sidepanel.theme-warm .btn-action,
+body.sidepanel.theme-warm .mode-selector-btn,
+body.sidepanel.theme-warm .model-chip,
+body.sidepanel.theme-warm .btn-send {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+}
+
+body.sidepanel.theme-warm .btn-icon,
 body.sidepanel.theme-warm .btn-icon-sm {
   background: transparent;
   border: none;
@@ -2826,6 +2842,7 @@ body.sidepanel.theme-warm .page-context-chip {
   width: calc(100% - 28px);
   color: inherit;
   cursor: pointer;
+  text-align: left;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
 
@@ -2845,6 +2862,7 @@ body.sidepanel.theme-warm .page-context-fav {
   font-size: 10.5px;
   font-family: "JetBrains Mono", monospace;
   background: linear-gradient(135deg, #7b5f44, #3e2c21);
+  overflow: hidden;
 }
 
 body.sidepanel.theme-warm .page-context-fav.tone-spotify {
@@ -2857,6 +2875,17 @@ body.sidepanel.theme-warm .page-context-fav.tone-gmail {
 
 body.sidepanel.theme-warm .page-context-fav.tone-gh {
   background: linear-gradient(135deg, #2b2b2b, #1f1f1f);
+}
+
+body.sidepanel.theme-warm .page-context-fav.has-image {
+  background: #fff;
+}
+
+body.sidepanel.theme-warm .page-context-fav img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 body.sidepanel.theme-warm .page-context-meta {
@@ -2958,14 +2987,34 @@ body.sidepanel.theme-warm .empty-state {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 10px 4px 6px;
-  align-items: flex-start;
+  padding: 8px 2px 6px;
+  align-items: stretch;
 }
 
-body.sidepanel.theme-warm .empty-state-copy {
+body.sidepanel.theme-warm .sb-empty {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 18px;
+  width: 100%;
+}
+
+body.sidepanel.theme-warm .sb-empty-page {
+  gap: 16px;
+}
+
+body.sidepanel.theme-warm .sb-empty-default {
+  align-items: stretch;
+  padding-top: 12px;
+}
+
+body.sidepanel.theme-warm .sb-empty-orb {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffd9a8 0%, #f39a42 45%, #d96e1a 80%);
+  box-shadow: 0 0 40px rgba(243, 154, 66, 0.4), inset 0 -12px 24px rgba(160, 60, 10, 0.25);
+  animation: orbBreathe 4.2s ease-in-out infinite;
 }
 
 body.sidepanel.theme-warm .welcome-eye {
@@ -2982,6 +3031,10 @@ body.sidepanel.theme-warm .welcome-eye {
 
 body.sidepanel.theme-warm .welcome-eye.compact {
   font-size: 9.5px;
+}
+
+body.sidepanel.theme-warm .welcome-eye-center {
+  align-self: center;
 }
 
 body.sidepanel.theme-warm .welcome-eye-dot {
@@ -3003,12 +3056,44 @@ body.sidepanel.theme-warm .greeting-hey {
   color: var(--sb-ink);
 }
 
+body.sidepanel.theme-warm .empty-hero {
+  margin: 0;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 36px;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  font-weight: 400;
+  color: var(--sb-ink);
+  text-wrap: balance;
+}
+
+body.sidepanel.theme-warm .empty-hero em {
+  color: var(--sb-accent-deep);
+  font-style: italic;
+}
+
+body.sidepanel.theme-warm .empty-hero-center {
+  text-align: center;
+  max-width: 320px;
+  align-self: center;
+}
+
 body.sidepanel.theme-warm .empty-state-sub {
   margin: 0;
   max-width: 320px;
   font-size: 13.5px;
   line-height: 1.55;
   color: var(--sb-ink-2);
+}
+
+body.sidepanel.theme-warm .empty-state-sub i {
+  font-family: "Instrument Serif", Georgia, serif;
+  color: var(--sb-accent-deep);
+}
+
+body.sidepanel.theme-warm .empty-state-sub-center {
+  text-align: center;
+  align-self: center;
 }
 
 body.sidepanel.theme-warm .mode-hint {
@@ -3058,6 +3143,14 @@ body.sidepanel.theme-warm .quick-action-icon {
   display: grid;
   place-items: center;
   font-size: 13px;
+}
+
+body.sidepanel.theme-warm .quick-action-icon svg,
+body.sidepanel.theme-warm .quick-action-arrow svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
 }
 
 body.sidepanel.theme-warm .quick-action-copy {
@@ -3130,6 +3223,10 @@ body.sidepanel.theme-warm .recent-note-row {
   cursor: pointer;
 }
 
+body.sidepanel.theme-warm .recent-note-row:hover {
+  color: var(--sb-ink);
+}
+
 body.sidepanel.theme-warm .recent-note-mark {
   width: 22px;
   height: 22px;
@@ -3169,8 +3266,33 @@ body.sidepanel.theme-warm .recent-note-meta {
 
 body.sidepanel.theme-warm .recent-note-arrow {
   color: var(--sb-ink-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.sidepanel.theme-warm .recent-note-arrow svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+}
+
+body.sidepanel.theme-warm .empty-library-link {
+  margin-top: 2px;
+  padding: 12px 4px 0;
+  border: none;
+  background: transparent;
+  color: var(--sb-ink-3);
+  cursor: pointer;
   font-family: "JetBrains Mono", monospace;
-  font-size: 12px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-align: left;
+}
+
+body.sidepanel.theme-warm .empty-library-link:hover {
+  color: var(--sb-ink);
 }
 
 body.sidepanel.theme-warm .empty-state-tip {

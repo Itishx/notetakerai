@@ -210,26 +210,7 @@
     <!-- Chat Area — all content renders here -->
     <div id="chatArea" class="chat-area">
       <!-- Empty state — hidden once chat starts -->
-      <div id="emptyState" class="empty-state">
-        <div class="empty-state-copy">
-          <p class="welcome-eye" id="emptyStateEyebrow">
-            <span class="welcome-eye-dot"></span>
-            <span id="emptyStateEyebrowText">AI Browser Companion</span>
-          </p>
-          <p class="greeting-hey" id="userGreeting">Hey there</p>
-          <p class="empty-state-sub" id="emptyStateSub">Record tab audio, read any page, or just ask something.</p>
-          <p class="mode-hint hidden" id="modeHint"></p>
-        </div>
-        <div id="emptyQuickActions" class="quick-action-list"></div>
-        <div id="emptyRecentSection" class="empty-recent-section hidden">
-          <div class="sb-section-h">Recent</div>
-          <div id="emptyRecentList" class="empty-recent-list"></div>
-        </div>
-        <div id="emptyStateTip" class="empty-state-tip">
-          <span class="empty-state-tip-mark" aria-hidden="true"></span>
-          <span><b>Tip.</b> Hit <span class="kbd">⌥ Space</span> from any tab to talk to SideBrain without opening this panel.</span>
-        </div>
-      </div>
+      <div id="emptyState" class="empty-state" data-variant="default"></div>
       <div id="chatMessages" class="chat-messages-inner"></div>
       <div id="loading" class="chat-loading hidden">
         <div class="spinner"></div>

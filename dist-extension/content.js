@@ -39,7 +39,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const text = (document.body?.innerText || "").substring(0, 12000);
     const title = document.title || "";
     const url = window.location.href || "";
-    sendResponse({ text, title, url });
+    const faviconUrl = document.querySelector("link[rel~='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']")?.href || "";
+    sendResponse({ text, title, url, faviconUrl });
     return true;
   }
 

@@ -46,6 +46,16 @@ const MODE_ICONS = {
   agent: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8V5"/><circle cx="12" cy="3.5" r="1.5"/><circle cx="8.5" cy="14" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="14" r="1.5" fill="currentColor" stroke="none"/><path d="M9 19h6"/></svg>`,
 };
 
+const PANEL_ICON_SVGS = {
+  voice: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>`,
+  delegate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="11" rx="2.5"/><path d="M12 8V4M8 4h8"/><circle cx="9" cy="13.5" r="1"/><circle cx="15" cy="13.5" r="1"/></svg>`,
+  record: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6"/></svg>`,
+  summary: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h16"/></svg>`,
+  question: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>`,
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`,
+  arrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>`,
+};
+
 // ===== DOM REFS =====
 const chatArea = document.getElementById("chatArea");
 const chatMessagesEl = document.getElementById("chatMessages");
@@ -75,15 +85,7 @@ const historyBackBtn = document.getElementById("historyBackBtn");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 
 const emptyState = document.getElementById("emptyState");
-const userGreeting = document.getElementById("userGreeting");
 const newSessionBtn = document.getElementById("newSessionBtn");
-const emptyStateSub = document.getElementById("emptyStateSub");
-const emptyStateEyebrowText = document.getElementById("emptyStateEyebrowText");
-const modeHintEl = document.getElementById("modeHint");
-const emptyQuickActions = document.getElementById("emptyQuickActions");
-const emptyRecentSection = document.getElementById("emptyRecentSection");
-const emptyRecentList = document.getElementById("emptyRecentList");
-const emptyStateTip = document.getElementById("emptyStateTip");
 const pageContextChip = document.getElementById("pageContextChip");
 const pageContextFav = document.getElementById("pageContextFav");
 const pageContextTitle = document.getElementById("pageContextTitle");
@@ -161,6 +163,50 @@ function getContextTone(host) {
   return "default";
 }
 
+function getTimeGreetingPrefix() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
+  if (hour >= 17 && hour < 23) return "Good evening";
+  return "It's late";
+}
+
+function getGreetingHeadingHtml() {
+  const firstName = currentAuthUser?.name?.split(" ")[0]?.trim();
+  const prefix = getTimeGreetingPrefix();
+  if (firstName) {
+    return `${escapeHtml(prefix)},<br><em>${escapeHtml(firstName)}.</em>`;
+  }
+  return `${escapeHtml(prefix)}.`;
+}
+
+function getFaviconUrlFromContext(context) {
+  const explicit = String(context?.faviconUrl || "").trim();
+  if (explicit) return explicit;
+  const host = getHostFromUrl(context?.url);
+  return host ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32` : "";
+}
+
+function buildFaviconMarkup(context) {
+  const fallback = escapeHtml(getInitialFromContext(context));
+  const faviconUrl = getFaviconUrlFromContext(context);
+  if (!faviconUrl) return fallback;
+  return `<img src="${escapeHtml(faviconUrl)}" alt="" referrerpolicy="no-referrer" onerror="this.remove(); this.parentElement.textContent='${fallback}'" />`;
+}
+
+function renderContextFavicon(el, context, baseClassName) {
+  if (!el) return;
+  const host = getHostFromUrl(context?.url);
+  const tone = getContextTone(host);
+  const hasImage = Boolean(getFaviconUrlFromContext(context));
+  el.className = `${baseClassName} tone-${tone}${hasImage ? " has-image" : ""}`;
+  el.innerHTML = buildFaviconMarkup(context);
+}
+
+function isTrueIdlePanel() {
+  return !currentPageContext && !hasExistingNotes() && chatMessages.length === 0 && !recordingCardEl;
+}
+
 function getPageContextState() {
   if (!currentPageContext || currentMode === "general") return { status: "ready", label: STATUS_LABELS.ready };
   if (voiceActive) {
@@ -180,7 +226,12 @@ function getPageContextState() {
 
 function updateModeSelectorButton() {
   if (!modeSelectorBtn) return;
-  const label = MODE_LABELS[currentMode] || MODE_LABELS.page;
+  let label = MODE_LABELS[currentMode] || MODE_LABELS.page;
+  if (isTrueIdlePanel() && currentMode === "page") {
+    label = "Auto";
+  } else if (notesMarkdown && !currentPageContext && currentMode !== "web" && currentMode !== "agent") {
+    label = MODE_LABELS.note;
+  }
   const icon = MODE_ICONS[currentMode] || MODE_ICONS.page;
   modeSelectorBtn.innerHTML = `
     <span class="mode-selector-icon">${icon}</span>
@@ -197,86 +248,107 @@ function updatePageContextChip() {
   }
 
   const host = getHostFromUrl(currentPageContext.url);
-  const tone = getContextTone(host);
   const state = getPageContextState();
 
   pageContextChip.classList.remove("hidden");
-  pageContextFav.className = `page-context-fav tone-${tone}`;
-  pageContextFav.textContent = getInitialFromContext(currentPageContext);
+  renderContextFavicon(pageContextFav, currentPageContext, "page-context-fav");
   pageContextTitle.textContent = currentPageContext.title || "Current page";
   pageContextUrl.textContent = host || currentPageContext.url || "—";
   pageContextStatus.className = `page-context-status is-${state.status}`;
   pageContextStatusLabel.textContent = state.label;
 }
 
-function getQuickActionsForState() {
-  if (currentMode === "lecture" || currentMode === "meeting") {
-    return [
-      { action: "record", icon: "🎙️", title: recordingCardEl ? "Continue recording" : "Record this tab's audio", meta: currentMode === "meeting" ? "Meeting · multi-speaker" : "Lecture · tab audio" },
-      { action: "fill", icon: "📝", title: "Summarize the last section", meta: "Ask after you convert to notes", prompt: "Summarize the last section in simple terms." },
-      { action: "fill", icon: "❓", title: "Explain the key idea", meta: "Turn audio into notes first", prompt: "What is the key idea here?" },
-    ];
-  }
+function getDefaultPanelActions() {
+  return [
+    {
+      action: "voice",
+      icon: "voice",
+      title: "Start a voice session",
+      meta: "⌥ Space · from any tab",
+      prompt: "",
+    },
+    {
+      action: "delegate",
+      icon: "delegate",
+      title: "Run a Delegate task",
+      meta: `"Reply to Priya saying I'm running late"`,
+      prompt: "Reply to Priya saying I'm running ten minutes late.",
+    },
+    {
+      action: "record",
+      icon: "record",
+      title: "Record this tab's audio",
+      meta: "Lecture, meeting, podcast",
+      prompt: "",
+    },
+  ];
+}
 
-  if (currentMode === "web") {
-    return [
-      { action: "fill", icon: "🔎", title: "Find the latest update", meta: "Live browser search", prompt: "Search the web for the latest update on this topic." },
-      { action: "fill", icon: "📚", title: "Compare 3 sources", meta: "Answer with links", prompt: "Search the web and compare the top 3 reliable sources for this." },
-      { action: "fill", icon: "🧭", title: "Find the official docs", meta: "Best for tools or products", prompt: "Search the web and find the official documentation for this." },
-    ];
-  }
+function getPageAwarePanelActions() {
+  const host = getHostFromUrl(currentPageContext?.url);
+  const title = String(currentPageContext?.title || "").trim();
+  const entityHint = title.split(/[-|:]/)[0]?.trim();
 
-  if (currentMode === "agent") {
+  if (/spotify/i.test(host)) {
     return [
-      { action: "fill", icon: "🤖", title: "Delegate a browser task", meta: "Click, type, navigate", prompt: "Reply to this person saying I'll be ten minutes late." },
-      { action: "fill", icon: "➡️", title: "Go where I tell you", meta: "Use the current tab", prompt: "Open the first useful result for this and summarize it." },
-      { action: "voice", icon: "🎧", title: "Use voice instead", meta: "Hands-free Delegate", prompt: "" },
-    ];
-  }
-
-  if (notesMarkdown) {
-    return [
-      { action: "open-notes", icon: "📝", title: "Open this note", meta: "Full markdown view" },
-      { action: "fill", icon: "📚", title: "Generate practice questions", meta: "For the saved note", prompt: "Generate 5 practice questions from these notes." },
-      { action: "fill", icon: "✍️", title: "Turn this into flashcards", meta: "Short Q&A format", prompt: "Turn these notes into concise flashcards." },
-    ];
-  }
-
-  if (currentPageContext && currentMode === "page") {
-    const host = getHostFromUrl(currentPageContext.url);
-    return [
-      { action: "fill", icon: "💬", title: `Explain this ${host ? `page on ${host}` : "page"}`, meta: "Summarize what you're seeing", prompt: "What am I looking at here?" },
-      { action: "delegate", icon: "🤖", title: "Do something on this page", meta: "Delegate on the current tab", prompt: "Do this task on the page for me." },
-      { action: "fill", icon: "🔎", title: "Ask a sharper follow-up", meta: "Page-aware chat", prompt: "What's the most important thing on this page?" },
-    ];
-  }
-
-  if (currentPageContext) {
-    return [
-      { action: "fill", icon: "💬", title: "Chat with this page", meta: "Read before you ask", prompt: "What's important on this page?" },
-      { action: "voice", icon: "🎧", title: "Start a voice session", meta: "Talk from any tab", prompt: "" },
-      { action: "record", icon: "🎙️", title: "Record tab audio", meta: "Lecture, meeting, podcast" },
+      {
+        action: "fill",
+        icon: "summary",
+        title: "Compare the top results",
+        meta: "Original · remix · live version",
+        prompt: "Compare the top 3 results on this page.",
+      },
+      {
+        action: "delegate",
+        icon: "delegate",
+        title: "Do this for me on Spotify",
+        meta: "Delegate · current tab",
+        prompt: "Add the original version to my Liked Songs.",
+      },
+      {
+        action: "fill",
+        icon: "search",
+        title: entityHint ? `What else is ${entityHint} in?` : "Search beyond this page",
+        meta: "Search the web",
+        prompt: entityHint ? `Search the web for more context about ${entityHint}.` : "Search the web for more context about what is on this page.",
+      },
     ];
   }
 
   return [
-    { action: "voice", icon: "🎧", title: "Start a voice session", meta: "⌥ Space · from any tab", prompt: "" },
-    { action: "delegate", icon: "🤖", title: "Run a Delegate task", meta: "Reply to Priya saying I'm running late", prompt: "Reply to Priya saying I'm running ten minutes late." },
-    { action: "record", icon: "🎙️", title: "Record this tab's audio", meta: "Lecture, meeting, podcast" },
+    {
+      action: "fill",
+      icon: "summary",
+      title: "Explain what's on this page",
+      meta: host ? `${host} · page summary` : "Page summary",
+      prompt: "Summarize what I'm looking at here and what matters.",
+    },
+    {
+      action: "delegate",
+      icon: "delegate",
+      title: "Do something on this page",
+      meta: "Delegate · current tab",
+      prompt: "Do this task on the current page for me.",
+    },
+    {
+      action: "fill",
+      icon: "search",
+      title: "Search beyond this page",
+      meta: "Live web results",
+      prompt: "Search the web for more context about what's on this page.",
+    },
   ];
 }
 
-function renderQuickActions() {
-  if (!emptyQuickActions) return;
-  const items = getQuickActionsForState();
-  emptyQuickActions.innerHTML = items.map((item) => `
+function buildQuickActionCards(items) {
+  return items.map((item) => `
     <button class="quick-action-card" type="button" data-action="${escapeHtml(item.action)}" data-prompt="${escapeHtml(item.prompt || "")}">
-      <span class="quick-action-icon" aria-hidden="true">${item.icon}</span>
+      <span class="quick-action-icon" aria-hidden="true">${PANEL_ICON_SVGS[item.icon] || ""}</span>
       <span class="quick-action-copy">
         <span class="quick-action-title">${escapeHtml(item.title)}</span>
-        <span class="quick-action-meta">${escapeHtml(item.meta)}</span>
+        <span class="quick-action-meta">${escapeHtml(item.meta || "")}</span>
       </span>
-      <span class="quick-action-arrow" aria-hidden="true">↵</span>
+      <span class="quick-action-arrow" aria-hidden="true">${PANEL_ICON_SVGS.arrow}</span>
     </button>
   `).join("");
 }
@@ -305,6 +377,19 @@ function parseNoteRecap(markdown) {
 
 function formatHistoryMeta(entry) {
   const date = new Date(entry.date);
+  const deltaMs = Date.now() - date.getTime();
+  const deltaMinutes = Math.max(1, Math.round(deltaMs / 60000));
+
+  if (deltaMinutes < 60) return `${deltaMinutes} min ago`;
+
+  const deltaHours = Math.round(deltaMinutes / 60);
+  if (deltaHours < 12) return `${deltaHours} hr ago`;
+
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) {
+    return `today, ${date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  }
+
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
@@ -315,68 +400,90 @@ function getHistoryTitle(entry) {
 }
 
 function renderRecentHistory() {
-  if (!emptyRecentList || !emptyRecentSection) return;
+  if (!emptyState) return;
+  const recentSection = emptyState.querySelector("[data-empty-recent-section]");
+  const recentList = emptyState.querySelector("[data-empty-recent-list]");
+  if (!recentSection || !recentList) return;
+
   chrome.storage.local.get("notesHistory", (data) => {
     const history = data.notesHistory || [];
     if (history.length === 0 || hasExistingNotes() || chatMessages.length > 0 || recordingCardEl) {
-      emptyRecentSection.classList.add("hidden");
-      emptyRecentList.innerHTML = "";
+      recentSection.classList.add("hidden");
+      recentList.innerHTML = "";
       return;
     }
 
-    emptyRecentSection.classList.remove("hidden");
-    emptyRecentList.innerHTML = history.slice(0, 3).map((entry) => `
+    recentSection.classList.remove("hidden");
+    recentList.innerHTML = history.slice(0, 3).map((entry) => `
       <button class="recent-note-row" type="button" data-history-id="${entry.id}">
         <span class="recent-note-mark">${escapeHtml(getHistoryTitle(entry).slice(0, 2).toUpperCase())}</span>
         <span class="recent-note-copy">
           <span class="recent-note-title">${escapeHtml(getHistoryTitle(entry))}</span>
           <span class="recent-note-meta">${escapeHtml(formatHistoryMeta(entry))}</span>
         </span>
-        <span class="recent-note-arrow" aria-hidden="true">›</span>
+        <span class="recent-note-arrow" aria-hidden="true">${PANEL_ICON_SVGS.arrow}</span>
       </button>
-    `).join("");
+    `).join("") + `
+      <button class="empty-library-link" type="button" data-empty-library-link="true">OPEN LIBRARY →</button>
+    `;
   });
 }
 
 function renderEmptyStateSurface() {
   const hasSession = hasExistingNotes() || chatMessages.length > 0 || !!recordingCardEl;
-  if (hasSession || !emptyState) return;
-
-  if (emptyStateEyebrowText) {
-    emptyStateEyebrowText.textContent = currentPageContext && currentMode !== "general" ? "AI Browser Companion" : "Ready when you are";
+  if (!emptyState) return;
+  if (hasSession) {
+    emptyState.innerHTML = "";
+    return;
   }
 
-  const info = MODE_HINTS[currentMode] || MODE_HINTS.page;
-  if (modeHintEl) modeHintEl.textContent = info.hint;
+  const showPageAwareWelcome = Boolean(currentPageContext && currentMode !== "general");
 
-  if (emptyStateSub) {
-    if (notesMarkdown) {
-      emptyStateSub.textContent = "Your latest note is saved below. Ask follow-up questions, open it, or turn it into study material.";
-    } else if (currentPageContext && currentMode === "page") {
-      const host = getHostFromUrl(currentPageContext.url);
-      emptyStateSub.textContent = `I've read this ${host || "page"}. Ask me anything about it, or tell me what to do next.`;
-    } else if (currentPageContext && currentMode === "agent") {
-      emptyStateSub.textContent = "Tell me what to do on this page and I’ll navigate, click, and type on your behalf.";
-    } else if (currentPageContext && (currentMode === "lecture" || currentMode === "meeting")) {
-      emptyStateSub.textContent = "Capture tab audio here, then turn the recording into structured notes and follow-up questions.";
-    } else {
-      emptyStateSub.textContent = info.sub || "Record tab audio, read any page, or just ask something.";
-    }
+  if (showPageAwareWelcome) {
+    const host = getHostFromUrl(currentPageContext.url);
+    const title = String(currentPageContext.title || "").trim();
+    const contextLabel = host ? `<b>${escapeHtml(host)}</b>` : "this page";
+    const detail = title ? `, <i>${escapeHtml(title)}</i>` : "";
+
+    emptyState.dataset.variant = "page";
+    emptyState.innerHTML = `
+      <div class="sb-empty sb-empty-page">
+        <div class="welcome">
+          <div class="welcome-eye"><span class="welcome-eye-dot"></span> AI Browser Companion</div>
+          <h2 class="empty-hero">${getGreetingHeadingHtml()}</h2>
+          <p class="empty-state-sub">I've read ${contextLabel}${detail}. Ask me anything about it, or tell me what to do.</p>
+        </div>
+        <div class="sb-section-h">Try one of these</div>
+        <div class="quick-action-list">
+          ${buildQuickActionCards(getPageAwarePanelActions())}
+        </div>
+        <div class="empty-state-tip">
+          <span class="empty-state-tip-mark" aria-hidden="true"></span>
+          <span><b>Tip.</b> Hit <span class="kbd">⌥ Space</span> from any tab to talk to SideBrain without opening this panel.</span>
+        </div>
+      </div>
+    `;
+    return;
   }
 
-  if (modeHintEl) {
-    modeHintEl.classList.toggle("hidden", false);
-  }
-
-  if (emptyStateTip) {
-    emptyStateTip.innerHTML = currentMode === "agent"
-      ? `<span class="empty-state-tip-mark" aria-hidden="true"></span><span><b>Tip.</b> Delegate works best when you name the site and the exact outcome you want.</span>`
-      : currentMode === "web"
-        ? `<span class="empty-state-tip-mark" aria-hidden="true"></span><span><b>Tip.</b> Ask for the <span class="kbd">latest</span> or <span class="kbd">official</span> source when you want live web results.</span>`
-        : `<span class="empty-state-tip-mark" aria-hidden="true"></span><span><b>Tip.</b> Hit <span class="kbd">⌥ Space</span> from any tab to talk to SideBrain without opening this panel.</span>`;
-  }
-
-  renderQuickActions();
+  emptyState.dataset.variant = "default";
+  const idleName = currentAuthUser?.name?.split(" ")[0]?.trim();
+  emptyState.innerHTML = `
+    <div class="sb-empty sb-empty-default">
+      <div class="sb-empty-orb" aria-hidden="true"></div>
+      <div class="welcome-eye welcome-eye-center"><span class="welcome-eye-dot"></span> Ready when you are</div>
+      <h2 class="empty-hero empty-hero-center">${idleName ? `What's on your mind,<br><em>${escapeHtml(idleName)}?</em>` : "What's on your mind?"}</h2>
+      <p class="empty-state-sub empty-state-sub-center">Open a tab and I'll read it with you. Or just start talking — I'm listening.</p>
+      <div class="sb-section-h">Quick start</div>
+      <div class="quick-action-list">
+        ${buildQuickActionCards(getDefaultPanelActions())}
+      </div>
+      <div class="empty-recent-section hidden" data-empty-recent-section="true">
+        <div class="sb-section-h">Recent</div>
+        <div class="empty-recent-list" data-empty-recent-list="true"></div>
+      </div>
+    </div>
+  `;
   renderRecentHistory();
 }
 
@@ -433,53 +540,57 @@ pageContextChip?.addEventListener("click", () => {
   chatInput?.focus();
 });
 
-emptyQuickActions?.addEventListener("click", (event) => {
+emptyState?.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
   const button = target.closest(".quick-action-card");
-  if (!button) return;
-  const action = button.dataset.action;
-  const prompt = button.dataset.prompt || "";
+  if (button) {
+    const action = button.dataset.action;
+    const prompt = button.dataset.prompt || "";
 
-  if (action === "voice") {
-    openVoiceMode();
-    return;
-  }
-
-  if (action === "record") {
-    if (currentMode !== "lecture" && currentMode !== "meeting") {
-      setMode(currentMode === "meeting" ? "meeting" : "lecture");
+    if (action === "voice") {
+      openVoiceMode();
+      return;
     }
-    startRecordingFlow();
+
+    if (action === "record") {
+      if (currentMode !== "lecture" && currentMode !== "meeting") {
+        setMode(currentMode === "meeting" ? "meeting" : "lecture");
+      }
+      startRecordingFlow();
+      return;
+    }
+
+    if (action === "open-notes") {
+      notesOverlay?.classList.remove("hidden");
+      return;
+    }
+
+    if (action === "delegate") {
+      setMode("agent");
+    }
+
+    if (prompt && chatInput) {
+      chatInput.value = prompt;
+      chatInput.focus();
+    }
     return;
   }
 
-  if (action === "open-notes") {
-    notesOverlay?.classList.remove("hidden");
-    return;
-  }
-
-  if (action === "delegate") {
-    setMode("agent");
-  }
-
-  if (prompt && chatInput) {
-    chatInput.value = prompt;
-    chatInput.focus();
-  }
-});
-
-emptyRecentList?.addEventListener("click", (event) => {
-  const target = event.target instanceof Element ? event.target : null;
-  if (!target) return;
   const row = target.closest(".recent-note-row");
-  if (!row) return;
-  const historyId = Number(row.dataset.historyId);
-  chrome.storage.local.get("notesHistory", (data) => {
-    const history = data.notesHistory || [];
-    const entry = history.find((item) => item.id === historyId);
-    if (entry) openHistoryEntry(entry);
-  });
+  if (row) {
+    const historyId = Number(row.dataset.historyId);
+    chrome.storage.local.get("notesHistory", (data) => {
+      const history = data.notesHistory || [];
+      const entry = history.find((item) => item.id === historyId);
+      if (entry) openHistoryEntry(entry);
+    });
+    return;
+  }
+
+  if (target.closest("[data-empty-library-link]")) {
+    openHistoryOverlay();
+  }
 });
 
 // Legacy hidden elements (kept for JS compatibility in unchanged functions)
@@ -922,7 +1033,7 @@ function fetchPageContext() {
       updateChatContextUI();
       return;
     }
-    currentPageContext = { title: res.title, url: res.url, text: res.text };
+    currentPageContext = { title: res.title, url: res.url, text: res.text, faviconUrl: res.faviconUrl || "" };
     updateChatContextUI();
   });
 }
@@ -930,7 +1041,7 @@ function fetchPageContext() {
 function updateChatContextUI() {
   if (!chatInput) return;
 
-  if (currentMode === "page") chatInput.placeholder = "Ask about this page…";
+  if (currentMode === "page") chatInput.placeholder = currentPageContext ? "Ask about this page…" : "Ask anything, or tell me what to do…";
   else if (currentMode === "lecture" || currentMode === "meeting") chatInput.placeholder = "Ask about what you just heard…";
   else if (currentMode === "web") chatInput.placeholder = "Search the web with sources…";
   else if (currentMode === "agent") chatInput.placeholder = "Tell SideBrain what to do…";
@@ -1125,11 +1236,13 @@ chrome.storage.local.get(["audioSegments", "totalRecordedSeconds", "currentSessi
 
 
 // ===== HISTORY =====
-historyBtn?.addEventListener("click", () => {
+function openHistoryOverlay() {
   loadHistory();
   historyOverlay.classList.remove("hidden");
   setTimeout(() => historyOverlay.classList.add("open"), 10);
-});
+}
+
+historyBtn?.addEventListener("click", openHistoryOverlay);
 
 historyBackBtn?.addEventListener("click", closeHistory);
 
@@ -2148,10 +2261,7 @@ function updateVoicePageCtx() {
   if (!currentPageContext) return;
   if (voiceCtxTitle) voiceCtxTitle.textContent = currentPageContext.title || "Current page";
   if (voiceCtxUrl) voiceCtxUrl.textContent = currentPageContext.url ? new URL(currentPageContext.url).hostname : "—";
-  if (voiceCtxFavicon && currentPageContext.url) {
-    const host = new URL(currentPageContext.url).hostname;
-    voiceCtxFavicon.innerHTML = `<img src="https://www.google.com/s2/favicons?domain=${host}&sz=20" onerror="this.parentElement.textContent='${(currentPageContext.title||'S')[0].toUpperCase()}'" />`;
-  }
+  renderContextFavicon(voiceCtxFavicon, currentPageContext, "voice-ctx-favicon");
 }
 
 function setCaption(text) {
@@ -3035,27 +3145,14 @@ const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 let currentAuthUser = null;
 
-function getTimeGreeting(name) {
-  const h = new Date().getHours();
-  let prefix;
-  if (h >= 5 && h < 12)       prefix = "Good morning";
-  else if (h >= 12 && h < 17) prefix = "Good afternoon";
-  else if (h >= 17 && h < 23) prefix = "Good evening";
-  else                         prefix = "It's late";
-  return name ? `${prefix}, ${name}` : prefix;
-}
-
 function updateAuthUI() {
   chrome.storage.local.get(["authToken", "authDisplayName", "authEmail", "authUserId"], (data) => {
     if (data.authToken && data.authDisplayName) {
       currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
-      const firstName = data.authDisplayName.split(" ")[0];
-      if (userGreeting) userGreeting.textContent = getTimeGreeting(firstName);
       void loadPremiumStatus(true);
     } else {
       currentAuthUser = null;
       isPremium = false;
-      if (userGreeting) userGreeting.textContent = getTimeGreeting(null);
       void removeStorage(["isPremium", "isPremiumCachedAt"]);
     }
     refreshPanelChrome();
