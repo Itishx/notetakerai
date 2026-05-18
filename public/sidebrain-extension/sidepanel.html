@@ -169,40 +169,41 @@
   <div class="app-shell">
     <!-- Header -->
     <header class="shell-header">
-      <div class="shell-brand">
-        <span class="shell-brand-mark" aria-hidden="true"></span>
-        <h1><span class="logo-side">side</span><span class="logo-brain">brain</span></h1>
+      <div class="sb-brand">
+        <span class="shell-brand-mark mark"></span>
+        <span class="wm"><b>side</b><span>brain</span></span>
       </div>
-      <div class="header-actions">
-        <!-- Info button with popover -->
+      <div class="sb-actions">
+        <button id="historyBtn" class="sb-iconbtn" title="History">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+        </button>
+        <button id="newSessionBtn" class="sb-iconbtn" title="New chat">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
         <div class="info-wrap" id="infoWrap">
-          <button id="infoBtn" class="btn-icon info-btn" title="How to use">i</button>
+          <button id="infoBtn" class="sb-iconbtn" title="More">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
           <div id="infoPopover" class="info-popover hidden">
-            <div class="hint-row"><span class="hint-icon">🎓</span><span>Select <strong>Lecture & Audio</strong> → press Enter to start recording</span></div>
-            <div class="hint-row"><span class="hint-icon">🤝</span><span>Select <strong>Meeting & Call</strong> → record multi-speaker calls</span></div>
+            <div class="hint-row"><span class="hint-icon">🎓</span><span>Select <strong>Lecture &amp; Audio</strong> → press Enter to start recording</span></div>
+            <div class="hint-row"><span class="hint-icon">🤝</span><span>Select <strong>Meeting &amp; Call</strong> → record multi-speaker calls</span></div>
             <div class="hint-row"><span class="hint-icon">💬</span><span>Select <strong>Chat with Page</strong> → ask about what's on screen</span></div>
             <div class="hint-row"><span class="hint-icon">🌐</span><span>Select <strong>General Chat</strong> → ask anything at all</span></div>
             <div class="hint-row"><span class="hint-icon">🔎</span><span>Select <strong>Web Search</strong> → SideBrain runs a real browser search and cites the results</span></div>
             <div class="hint-row"><span class="hint-icon">🤖</span><span>Select <strong>Browser Agent</strong> → AI clicks &amp; navigates the page for you</span></div>
           </div>
         </div>
-        <button id="historyBtn" class="btn-icon hidden" title="View History">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
-        </button>
-        <button id="newSessionBtn" class="btn-icon hidden" title="New session">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
       </div>
     </header>
 
-    <button id="pageContextChip" class="page-context-chip hidden" type="button" title="Current page context">
-      <span id="pageContextFav" class="page-context-fav">S</span>
-      <span class="page-context-meta">
-        <span id="pageContextTitle" class="page-context-title">Current page</span>
-        <span id="pageContextUrl" class="page-context-url">—</span>
-      </span>
-      <span id="pageContextStatus" class="page-context-status">
-        <span class="page-context-dot"></span>
+    <button id="pageContextChip" class="page-context-chip sb-ctx hidden" type="button">
+      <span id="pageContextFav" class="fav page-context-fav">S</span>
+      <div class="sb-ctx-meta page-context-meta">
+        <span id="pageContextTitle" class="sb-ctx-title page-context-title">Current page</span>
+        <span id="pageContextUrl" class="sb-ctx-sub page-context-url">—</span>
+      </div>
+      <span id="pageContextStatus" class="sb-ctx-status page-context-status">
+        <span class="d page-context-dot"></span>
         <span id="pageContextStatusLabel">ready</span>
       </span>
     </button>
@@ -252,9 +253,7 @@
                 <button class="mode-option mode-option-agent" data-mode="agent">🤖 Browser Agent</button>
               </div>
               <button id="modeSelectorBtn" class="btn-action mode-selector-btn" title="Select mode">
-                <span class="mode-selector-icon">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </span>
+                <span class="d mode-selector-dot"></span>
                 <span class="mode-selector-label">Chat with Page</span>
                 <svg class="mode-selector-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg>
               </button>
