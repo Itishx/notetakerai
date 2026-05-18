@@ -54,6 +54,8 @@
    DESIGN TOKENS
    ===================================================================== */
 :root {
+  color-scheme: light;
+
   /* New warm palette */
   --bg: #F6F1EA;
   --bg-2: #F1EADF;
@@ -186,6 +188,22 @@ body.sidepanel {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Global button reset — prevents Chrome dark mode from applying ButtonFace/ButtonText */
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+  line-height: inherit;
+  text-align: left;
 }
 
 /* Utility */
@@ -869,8 +887,19 @@ body.sidepanel {
   place-items: center;
   flex: 0 0 26px;
   font-size: 13px;
+  overflow: hidden;
 }
-.quick-action-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; }
+.quick-action-icon svg {
+  width: 13px;
+  height: 13px;
+  min-width: 13px;
+  min-height: 13px;
+  max-width: 13px;
+  max-height: 13px;
+  stroke: currentColor;
+  fill: none;
+  display: block;
+}
 
 .quick-action-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .quick-action-title { font-size: 13.5px; color: var(--ink); font-weight: 500; }
@@ -885,8 +914,24 @@ body.sidepanel {
   color: var(--ink-4);
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  overflow: hidden;
 }
-.quick-action-arrow svg { width: 13px; height: 13px; stroke: currentColor; fill: none; }
+.quick-action-arrow svg {
+  width: 13px;
+  height: 13px;
+  min-width: 13px;
+  min-height: 13px;
+  max-width: 13px;
+  max-height: 13px;
+  stroke: currentColor;
+  fill: none;
+  display: block;
+}
 
 /* Tip block */
 .empty-state-tip {
