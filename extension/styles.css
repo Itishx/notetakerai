@@ -781,9 +781,9 @@ button {
 .empty-hero {
   font-family: 'Instrument Serif', Georgia, serif;
   font-weight: 400;
-  font-size: 32px;
-  line-height: 1.05;
-  letter-spacing: -0.025em;
+  font-size: 42px;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
   margin: 0;
   color: var(--ink);
   text-wrap: balance;
@@ -1907,47 +1907,28 @@ button {
 /* =====================================================================
    VOICE OVERLAY
    ===================================================================== */
+/* Voice overlay — flex child of app-shell, sits below the header */
 .voice-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--panel-2);
-  z-index: 200;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  background: var(--panel-2);
   overflow: hidden;
+  min-height: 0;
 }
 
-/* Chrome bar */
-.voice-chrome {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line-2);
-  flex-shrink: 0;
+/* When voice overlay is visible, hide chat area and input bar */
+.voice-overlay:not(.hidden) ~ #chatArea,
+.voice-overlay:not(.hidden) ~ .bottom-bar {
+  display: none !important;
 }
 
-.voice-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
+/* Compat hidden elements — needed by JS but not rendered */
+.voice-compat-hidden {
+  display: none !important;
 }
 
-.voice-brand-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
-  flex-shrink: 0;
-}
-
-.voice-chrome-right { display: flex; gap: 6px; align-items: center; }
-
+/* Legacy — keep for any remaining references */
 .voice-icon-btn {
   width: 26px;
   height: 26px;
@@ -1955,46 +1936,13 @@ button {
   display: grid;
   place-items: center;
   color: var(--ink-3);
-  background: none;
-  border: none;
-  cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
 .voice-icon-btn:hover { background: var(--line-2); color: var(--ink); }
 
-/* Page context chip in voice */
-.voice-ctx {
-  margin: 14px 16px 0;
-  padding: 10px 12px;
-  background: var(--panel-2);
-  border: 1px solid var(--line-2);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.voice-ctx-favicon {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: linear-gradient(135deg, #E9413B, #D1453E);
-  display: grid;
-  place-items: center;
-  color: white;
-  font-weight: 700;
-  font-size: 11px;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.voice-ctx-favicon.has-image { background: #fff; }
-.voice-ctx-favicon img { width: 100%; height: 100%; object-fit: contain; display: block; }
-
-.voice-ctx-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.voice-ctx-title { color: var(--ink); font-weight: 500; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.voice-ctx-url  { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.voice-ctx-live { display: flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent-deep); flex-shrink: 0; }
+/* Page context IDs in compat hidden — no styles needed */
+.voice-ctx-favicon { display: none; }
+.voice-ctx-meta, .voice-ctx-title, .voice-ctx-url, .voice-ctx-live { display: none; }
 
 .voice-pulse {
   width: 6px;
@@ -2009,34 +1957,37 @@ button {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 18px 18px 0;
+  align-items: center;
+  padding: 0 24px;
   overflow: hidden;
 }
 
 .voice-orb-wrap {
   display: flex;
   justify-content: center;
-  padding: 18px 0 8px;
+  align-items: center;
+  flex: 1;
   flex-shrink: 0;
+  padding: 24px 0 16px;
 }
 
 .voice-orb {
-  width: 120px;
-  height: 120px;
+  width: 180px;
+  height: 180px;
   border-radius: 50%;
   position: relative;
-  background: radial-gradient(circle at 35% 35%, #FFD9A8 0%, #F39A42 45%, #D96E1A 80%);
+  background: radial-gradient(circle at 33% 30%, #FFE0B0 0%, #F7A84A 40%, #E07820 72%, #C05810 100%);
   box-shadow:
-    0 0 60px rgba(243, 154, 66, 0.55),
-    0 0 120px rgba(243, 154, 66, 0.25),
-    inset 0 -14px 30px rgba(160, 60, 10, 0.25);
+    0 0 80px rgba(243, 154, 66, 0.55),
+    0 0 160px rgba(243, 154, 66, 0.22),
+    inset 0 -20px 40px rgba(140, 50, 5, 0.22);
 }
 .voice-orb::after {
   content: "";
   position: absolute;
-  inset: -16px;
+  inset: -32px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(243, 154, 66, 0.25), transparent 60%);
+  background: radial-gradient(circle, rgba(243, 154, 66, 0.22), transparent 60%);
   pointer-events: none;
 }
 
@@ -2050,23 +2001,27 @@ button {
 
 /* Caption */
 .voice-caption-wrap {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 8px 4px 20px;
+  align-items: center;
+  text-align: center;
+  padding: 0 4px 28px;
+  width: 100%;
+  flex-shrink: 0;
+  max-height: 220px;
   overflow-y: auto;
-  scroll-behavior: smooth;
 }
 
 .voice-cap-label {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent-deep);
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 
@@ -2081,14 +2036,14 @@ button {
 
 .voice-caption {
   font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;
-  font-size: 28px;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  font-size: 30px;
+  line-height: 1.22;
+  letter-spacing: -0.015em;
   color: var(--ink);
   font-weight: 400;
-  min-height: 70px;
+  text-align: center;
 }
-.voice-caption .word { opacity: 0.18; transition: opacity 0.25s ease, color 0.25s ease; }
+.voice-caption .word { opacity: 0.2; transition: opacity 0.22s ease, color 0.22s ease; }
 .voice-caption .word.said { opacity: 1; }
 .voice-caption .word.current { opacity: 1; color: var(--accent-deep); }
 
@@ -2096,42 +2051,47 @@ button {
   font-size: 12px;
   color: var(--ink-3);
   line-height: 1.4;
-  margin-top: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-top: 10px;
+  text-align: center;
   min-height: 16px;
 }
 
-/* Controls */
+/* Controls — mic | interrupt | [spacer] | compose */
 .voice-controls {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
-  padding: 14px 16px 16px;
-  border-top: 1px solid var(--line-2);
+  padding: 12px 16px 18px;
   flex-shrink: 0;
 }
 
 .voice-ctrl {
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 10px;
-  background: var(--panel-2);
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  background: var(--panel);
   border: 1px solid var(--line-2);
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--ink-2);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
   font-family: inherit;
 }
 .voice-ctrl:hover { background: #fff; border-color: var(--line); color: var(--ink); }
-.voice-ctrl.voice-icon-only { width: 36px; padding: 0; justify-content: center; }
-.voice-ctrl.voice-primary { background: var(--ink); border-color: var(--ink); color: #FBF7F1; }
-.voice-ctrl.voice-primary:hover { background: #000; }
+.voice-ctrl.voice-icon-only { width: 44px; padding: 0; justify-content: center; }
+.voice-ctrl.voice-primary {
+  flex: 1;
+  justify-content: center;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #FBF7F1;
+  font-size: 14px;
+}
+.voice-ctrl.voice-primary:hover { background: #2A2018; }
 .voice-ctrl.voice-danger { color: var(--bad); }
 .voice-spacer { flex: 1; }
 

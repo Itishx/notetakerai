@@ -2250,7 +2250,7 @@ const voiceCtxUrl       = document.getElementById("voiceCtxUrl");
 const voiceCtxFavicon   = document.getElementById("voiceCtxFavicon");
 const voiceCtxLiveTxt   = document.getElementById("voiceCtxLiveTxt");
 
-const CAP_LABELS = { listening: "Listening", processing: "Thinking…", speaking: "Agent speaking", idle: "Ready", acting: "Acting on page" };
+const CAP_LABELS = { listening: "Sidebrain · Listening", processing: "Sidebrain · Thinking", speaking: "Sidebrain · Speaking", idle: "Sidebrain · Ready", acting: "Sidebrain · Acting" };
 
 function setOrbState(state) {
   if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
