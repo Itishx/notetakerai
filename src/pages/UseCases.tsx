@@ -1,250 +1,181 @@
-import {
-  Users, Globe, Mic, Search, BookOpen,
-  TrendingUp, Heart, GraduationCap, Radio, PenLine,
-  Building2, Leaf, ArrowRight, Download
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 
+// ─── shared styles ────────────────────────────────────────────────────────────
+const wrap: React.CSSProperties = { maxWidth: 1100, margin: "0 auto", padding: "0 32px" };
+const eyebrow: React.CSSProperties = {
+  fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+  letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-3)",
+  display: "inline-flex", alignItems: "center", gap: 8,
+};
+const pip: React.CSSProperties = {
+  width: 6, height: 6, borderRadius: "50%",
+  background: "var(--sb-accent)", boxShadow: "0 0 10px var(--sb-accent)", display: "inline-block",
+};
+const H2: React.CSSProperties = {
+  fontFamily: "'Instrument Serif', Georgia, serif",
+  fontWeight: 400, fontSize: "clamp(34px,4vw,56px)", lineHeight: 1.05,
+  margin: "12px 0 16px", letterSpacing: "-0.01em",
+};
 
-const UseCases = () => {
-  const handleDownload = () => {
-    fetch("/sidebrain-extension.zip")
-      .then((res) => {
-        if (!res.ok) throw new Error("Download failed");
-        return res.blob();
-      })
-      .then((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "sidebrain-extension.zip";
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch(() => alert("Extension not yet packaged. Please check back soon."));
-  };
+const USE_CASE_GROUPS = [
+  {
+    tag: "Record Tab Audio",
+    sub: "Capture any browser audio and get structured notes, ready to sync.",
+    count: 6,
+    items: [
+      { title: "Online Courses", body: "Turn any video lesson into structured notes with headings, key terms, and a glossary.", who: "Students · self-learners", big: true },
+      { title: "Podcast Summaries", body: "Capture the signal without sitting through the noise. Structured takeaways from any audio in your browser.", who: "Professionals · researchers" },
+      { title: "Language Learning", body: "Record foreign-language content and get a full transcript alongside structured vocabulary notes.", who: "Language learners · students" },
+      { title: "Journalism & Research", body: "Transcribe press conferences or academic talks. Key quotes highlighted, reference-ready.", who: "Journalists · researchers" },
+      { title: "Content Repurposing", body: "Record your video or podcast and generate show notes, blog drafts, or social summaries.", who: "Podcasters · YouTubers", big: true },
+      { title: "Corporate Training", body: "Convert training videos into SOPs, knowledge base articles, or onboarding docs automatically.", who: "L&D teams · HR" },
+    ],
+  },
+  {
+    tag: "Read Any Page",
+    sub: "Open SideBrain on any URL and chat about what's on screen.",
+    count: 4,
+    items: [
+      { title: "LeetCode & Problem Solving", body: "Ask for hints, step-by-step explanations, or talk through your approach without leaving the problem page.", who: "Engineers · students", big: true },
+      { title: "Reading Dense Docs", body: "Paste or open any PDF, article, or spec sheet. Ask SideBrain to summarise, explain, or quiz you on it.", who: "Anyone who reads" },
+      { title: "Research Synthesis", body: "Open 10 tabs, ask SideBrain to compare them, pull key stats, or draft a summary across all pages.", who: "Researchers · analysts" },
+      { title: "Code Review", body: "Paste a GitHub diff and ask SideBrain to explain the change, spot issues, or suggest improvements.", who: "Developers" },
+    ],
+  },
+  {
+    tag: "Delegate Browser Tasks",
+    sub: "Describe what you want. SideBrain operates your browser to get it done.",
+    count: 5,
+    items: [
+      { title: "Email Drafting", body: 'Say "Send an email to Priya saying I\'ll be ten minutes late." SideBrain opens Gmail, drafts the reply, and asks before sending.', who: "Everyone", big: true },
+      { title: "Job Applications", body: "Search for PM roles in Bangalore, open each one, and paste your details into forms. You review and submit.", who: "Job seekers" },
+      { title: "Research & Comparison", body: "Find the best noise-cancelling headphones under ₹10k. SideBrain reads product pages and writes you a comparison.", who: "Shoppers" },
+      { title: "Calendar & Scheduling", body: "Create events, check availability, and book meetings — all from a single sentence.", who: "Professionals" },
+      { title: "Form Filling", body: "Any repetitive form — address, application, order. Tell SideBrain once; it handles the clicking.", who: "Everyone", big: false },
+    ],
+  },
+];
 
+function UseCaseCard({ title, body, who, big }: { title: string; body: string; who: string; big?: boolean }) {
   return (
-    <div className="min-h-screen bg-background selection:bg-primary/20">
+    <div
+      style={{
+        gridColumn: big ? "span 2" : "span 1",
+        background: "var(--sb-panel-2)",
+        border: "1px solid var(--sb-line-2)",
+        borderRadius: 18,
+        padding: 28,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        transition: "border-color .2s, transform .2s",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--sb-line)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--sb-line-2)"; e.currentTarget.style.transform = ""; }}
+    >
+      <h3 style={{ fontFamily: "'Instrument Serif', serif", fontWeight: 400, fontSize: 22, lineHeight: 1.1, color: "var(--sb-ink)" }}>{title}</h3>
+      <p style={{ fontSize: 14.5, color: "var(--sb-ink-2)", lineHeight: 1.55, flex: 1 }}>{body}</p>
+      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, color: "var(--sb-ink-3)", letterSpacing: ".04em" }}>{who}</span>
+    </div>
+  );
+}
+
+export default function UseCases() {
+  return (
+    <div style={{ background: "var(--sb-bg)", color: "var(--sb-ink)", minHeight: "100vh" }}>
       <Navbar />
 
       {/* Hero */}
-      <section className="relative overflow-hidden pt-16">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-border/30 animate-breathe pointer-events-none" />
-
-        <div className="container relative mx-auto px-6 pt-24 pb-20 text-center">
-          <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            Use Cases
-          </p>
-          <h1 className="text-4xl md:text-6xl font-normal tracking-tight text-foreground max-w-3xl mx-auto leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            One tool,
-            <br />
-            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>every workflow</em>
+      <section style={{ padding: "140px 0 80px", textAlign: "center" }}>
+        <div style={wrap}>
+          <span style={eyebrow}><span style={pip} /> Use Cases</span>
+          <h1 style={{ ...H2, fontSize: "clamp(44px,6vw,80px)", maxWidth: 800, margin: "14px auto 20px" }}>
+            One tool,{" "}
+            <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>every workflow.</em>
           </h1>
-          <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            Three core features. Here's every workflow they unlock.
+          <p style={{ fontSize: 18, color: "var(--sb-ink-2)", maxWidth: 600, margin: "0 auto 48px", lineHeight: 1.55 }}>
+            Three core features. Here's every workflow they unlock — from students to engineers to teams.
           </p>
-        </div>
-      </section>
-
-      <div className="container mx-auto px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* Group 1: Record Tab Audio */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="max-w-5xl mx-auto mb-10">
-          <div className="flex items-center gap-3">
-            <Mic className="w-4 h-4 text-primary" strokeWidth={1.5} />
-            <h2 className="text-base text-foreground">Record Tab Audio</h2>
-            <div className="flex-1 h-px bg-border/40 ml-2" />
-            <span className="text-xs text-muted-foreground/40 tabular-nums">6 use cases</span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1 pl-7">Capture any browser audio and get structured notes, ready to sync.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
-
-          <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <GraduationCap className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Online Courses</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Turn any video lesson into structured notes with headings, key terms, and a glossary. Organized the way you'd want them.</p>
-            <p className="text-xs text-muted-foreground/50">Students · self-learners</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            <Radio className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Podcast Summaries</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Capture the signal without sitting through the noise. Get structured takeaways from any audio in your browser.</p>
-            <p className="text-xs text-muted-foreground/50">Professionals · researchers</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.25s" }}>
-            <Globe className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Language Learning</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Record foreign-language content and get a full transcript alongside structured vocabulary notes.</p>
-            <p className="text-xs text-muted-foreground/50">Language learners · students</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.3s" }}>
-            <Search className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Journalism & Research</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Transcribe press conferences or academic talks. Structured notes with key quotes highlighted, reference-ready.</p>
-            <p className="text-xs text-muted-foreground/50">Journalists · researchers · analysts</p>
-          </div>
-
-          <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.35s" }}>
-            <PenLine className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Content Repurposing</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Record your video or podcast and generate show notes, blog drafts, or social summaries. Your voice becomes structured text, ready to publish.</p>
-            <p className="text-xs text-muted-foreground/50">Podcasters · YouTubers · marketers</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            <Building2 className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Corporate Training</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Convert training videos into SOPs, knowledge base articles, or onboarding docs automatically.</p>
-            <p className="text-xs text-muted-foreground/50">L&D teams · HR · operations</p>
-          </div>
-
-        </div>
-      </section>
-
-      {/* Divider */}
-      <div className="container mx-auto px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* Group 2: Read Any Page */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="max-w-5xl mx-auto mb-10">
-          <div className="flex items-center gap-3">
-            <Globe className="w-4 h-4 text-primary" strokeWidth={1.5} />
-            <h2 className="text-base text-foreground">Read Any Page</h2>
-            <div className="flex-1 h-px bg-border/40 ml-2" />
-            <span className="text-xs text-muted-foreground/40 tabular-nums">4 use cases</span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1 pl-7">Open SideBrain on any URL and chat about what's on screen.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-5xl mx-auto">
-
-          <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <TrendingUp className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">LeetCode & Problem Solving</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Ask for hints, get step-by-step explanations, or talk through your approach without leaving the problem page.</p>
-            <p className="text-xs text-muted-foreground/50">Engineers · students</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            <BookOpen className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Documentation & APIs</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Ask SideBrain to explain a concept, compare options, or find a specific answer on any docs page.</p>
-            <p className="text-xs text-muted-foreground/50">Developers · technical writers</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.25s" }}>
-            <Search className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">News & Long-form Articles</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Ask SideBrain to summarize, extract key claims, or find the argument structure of any article.</p>
-            <p className="text-xs text-muted-foreground/50">Researchers · analysts · curious readers</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.3s" }}>
-            <GraduationCap className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Academic Papers</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Ask about methodology, request plain-language summaries, or pull out cited claims while reading a paper.</p>
-            <p className="text-xs text-muted-foreground/50">Researchers · students · academics</p>
-          </div>
-
-        </div>
-      </section>
-
-      {/* Divider */}
-      <div className="container mx-auto px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* Group 3: Record Meetings */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="max-w-5xl mx-auto mb-10">
-          <div className="flex items-center gap-3">
-            <Users className="w-4 h-4 text-primary" strokeWidth={1.5} />
-            <h2 className="text-base text-foreground">Record Meetings</h2>
-            <div className="flex-1 h-px bg-border/40 ml-2" />
-            <span className="text-xs text-muted-foreground/40 tabular-nums">3 use cases</span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1 pl-7">Multi-speaker recording with AI notes and Notion sync built in.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
-
-          <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <Users className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Meeting Documentation</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Record any browser-based call. SideBrain transcribes every speaker and generates summaries with decisions, action items, and key discussion points.</p>
-            <p className="text-xs text-muted-foreground/50">Remote teams · managers · consultants</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            <TrendingUp className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Sales Call Notes</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">AI surfaces objections raised, commitments made, and next steps, formatted for your CRM.</p>
-            <p className="text-xs text-muted-foreground/50">Sales reps · account managers</p>
-          </div>
-
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.25s" }}>
-            <Heart className="w-5 h-5 text-primary mb-5" strokeWidth={1.5} />
-            <h3 className="text-lg text-foreground mb-3">Accessibility Companion</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">Every meeting becomes readable, structured text automatically. Prefer reading to listening, or need to revisit at your own pace.</p>
-            <p className="text-xs text-muted-foreground/50">Anyone who prefers reading</p>
-          </div>
-
-        </div>
-      </section>
-
-      {/* Divider */}
-      <div className="container mx-auto px-6 py-8">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* CTA */}
-      <section className="container mx-auto px-6 py-20 text-center">
-        <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-6">Ready?</p>
-        <h2 className="text-3xl md:text-4xl font-normal text-foreground mb-6 max-w-xl mx-auto leading-snug">
-          Your workflow, your notes
-        </h2>
-        <p className="text-muted-foreground mb-10 max-w-md mx-auto text-sm leading-relaxed">
-          Free to download. Works in any Chromium browser. Sign up to get started.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button
-            onClick={() => {
-              fetch("/sidebrain-extension.zip")
-                .then((res) => { if (!res.ok) throw new Error(); return res.blob(); })
-                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "sidebrain-extension.zip"; a.click(); URL.revokeObjectURL(a.href); })
-                .catch(() => alert("Extension not yet packaged. Please check back soon."));
+          <Link
+            to="/#install"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "13px 24px", borderRadius: 999, fontSize: 14.5, fontWeight: 500,
+              background: "var(--sb-ink)", color: "var(--sb-on-ink)", textDecoration: "none",
+              transition: "transform .15s, background .15s",
             }}
-            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base"
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = "#000"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = "var(--sb-ink)"; }}
           >
-            <Download className="w-4 h-4 mr-2" />
-            Download Extension
-          </Button>
-          <Link to="/notion-sync">
-            <Button variant="ghost" className="rounded-full h-12 px-8 text-muted-foreground hover:text-foreground text-base">
-              See how Notion sync works <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
+            Install SideBrain free
           </Link>
         </div>
       </section>
 
+      {/* Groups */}
+      {USE_CASE_GROUPS.map((group, gi) => (
+        <section key={group.tag} style={{ padding: "80px 0", background: gi % 2 === 1 ? "var(--sb-bg-2)" : "var(--sb-bg)" }}>
+          <div style={wrap}>
+            {/* Group header */}
+            <div style={{ marginBottom: 40 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <span style={{ ...eyebrow }}><span style={pip} />{group.tag}</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: "var(--sb-ink-3)", marginLeft: 4 }}>{group.count} use cases</span>
+              </div>
+              <p style={{ fontSize: 15, color: "var(--sb-ink-2)", marginLeft: 14 }}>{group.sub}</p>
+            </div>
+
+            {/* Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
+              {group.items.map(item => (
+                <UseCaseCard key={item.title} {...item} />
+              ))}
+            </div>
+          </div>
+        </section>
+      ))}
+
+      {/* CTA */}
+      <section style={{ padding: "110px 0" }}>
+        <div style={wrap}>
+          <div style={{ background: "#14110E", color: "#FBF7F1", borderRadius: 24, padding: "64px 48px", textAlign: "center", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", right: -80, top: -80, width: 280, height: 280, borderRadius: "50%", background: "radial-gradient(circle, rgba(243,154,66,0.4), transparent 60%)", filter: "blur(20px)", pointerEvents: "none" }} />
+            <h2 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: "clamp(32px,4vw,52px)", margin: "0 auto 18px", maxWidth: 640, color: "#FBF7F1", position: "relative", zIndex: 1 }}>
+              Ready to try it?
+            </h2>
+            <p style={{ color: "rgba(251,247,241,0.65)", maxWidth: 440, margin: "0 auto 32px", fontSize: 16, position: "relative", zIndex: 1 }}>
+              Install SideBrain, sign in, and every workflow above is available in 30 seconds.
+            </p>
+            <Link
+              to="/#install"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "13px 24px", borderRadius: 999, fontSize: 14, fontWeight: 500,
+                background: "#FBF7F1", color: "#1B1713", textDecoration: "none",
+                transition: "transform .15s", position: "relative", zIndex: 1,
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+              onMouseLeave={e => e.currentTarget.style.transform = ""}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
+              Add to Chrome — it's free
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="py-12 border-t border-border/40">
-        <div className="container mx-auto px-6 text-center">
-          <Leaf className="w-5 h-5 text-primary/40 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground/50">SideBrain. Learn with calm intention.</p>
+      <footer style={{ padding: "48px 0", background: "var(--sb-bg)", borderTop: "1px solid var(--sb-line-2)" }}>
+        <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Link to="/" style={{ display: "flex", alignItems: "baseline", gap: 0, textDecoration: "none" }}>
+            <span style={{ fontFamily: "'TNR','Times New Roman',serif", fontStyle: "italic", fontWeight: 400, fontSize: 18, color: "var(--sb-ink)" }}>side</span>
+            <span style={{ fontFamily: "'BeVietnam',sans-serif", fontWeight: 800, fontSize: 18, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>brain</span>
+          </Link>
+          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>© 2026 SideBrain · Beta</div>
         </div>
       </footer>
     </div>
   );
-};
-
-export default UseCases;
+}

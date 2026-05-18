@@ -14,7 +14,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        charter: ["Charter", "Georgia", "'Times New Roman'", "serif"],
+        sans: ["'NeueHaas'", "'Neue Haas Grotesk Display'", "'Helvetica Neue'", "Arial", "sans-serif"],
+        neue: ["'NeueHaas'", "'Neue Haas Grotesk Display'", "'Helvetica Neue'", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

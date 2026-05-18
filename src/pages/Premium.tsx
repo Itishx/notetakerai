@@ -1,110 +1,40 @@
-import {
-  Mic, Cloud, Brain, Globe, MessageSquare, Camera, Bot,
-  Check, X, Leaf, Zap, Download, ArrowRight, Lock, Smartphone, FlaskConical
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import Navbar from "@/components/Navbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import Navbar from "@/components/Navbar";
 
-const premiumFeatures = [
-  {
-    icon: Mic,
-    tag: "Recording",
-    title: "Record without limits",
-    desc: "Free users hit a 5-minute cap per day. With Premium, record full lectures, long meetings, hour-long podcasts, however long the content runs, SideBrain keeps up.",
-    free: "5 min / day",
-    premium: "Unlimited",
-    size: "large",
-  },
-  {
-    icon: Cloud,
-    tag: "Storage",
-    title: "Cloud sync & note history",
-    desc: "Free notes live only on your device, reinstall the extension and they're gone. Premium saves every note to the cloud. Switch browsers, upgrade to a new version, log in anywhere, your entire history is waiting.",
-    free: "Local only",
-    premium: "Unlimited cloud history",
-    size: "small",
-  },
-  {
-    icon: Brain,
-    tag: "AI",
-    title: "Smarter AI, richer notes",
-    desc: "Premium runs your recordings through a more capable model. Better structure, sharper key points, more accurate glossaries, especially noticeable on dense or fast-paced content.",
-    free: "Basic model",
-    premium: "Advanced model",
-    size: "small",
-  },
-  {
-    icon: Globe,
-    tag: "AI",
-    title: "Multi-language transcription",
-    desc: "Recording content in Spanish, Hindi, Mandarin, or French? Premium transcribes and structures notes in 50+ languages, automatically detected, no setup needed.",
-    free: "English only",
-    premium: "50+ languages",
-    size: "small",
-  },
-  {
-    icon: MessageSquare,
-    tag: "Page Chat",
-    title: "Chat without limits, across any tab",
-    desc: "Free users get 5 questions per day. Premium unlocks unlimited chat, ask as many questions as you need, and switch between multiple open tabs in a single conversation. Reference your notes and the current page at the same time.",
-    free: "5 questions / day · single tab",
-    premium: "Unlimited · multi-tab",
-    size: "large",
-  },
-  {
-    icon: Camera,
-    tag: "Screenshots",
-    title: "Unlimited screenshots, auto-embedded",
-    desc: "Free lets you attach 2 screenshots per note. Premium removes the cap and automatically embeds every screenshot inline, right where it belongs in your structured notes.",
-    free: "2 per note",
-    premium: "Unlimited + auto-embed",
-    size: "small",
-  },
-];
-
-const freeItems = [
-  "Delegate: not included",
-  "5 min recording per day",
-  "5 AI questions per day",
-  "2 screenshots per note",
-  "Basic AI model",
-  "Notion sync",
-  "Local note storage",
-];
-
-const premiumItems = [
-  "Delegate — browser automation (experimental)",
-  "Remote control from phone",
-  "Unlimited recording time",
-  "Unlimited AI questions",
-  "Unlimited screenshots + auto-embed",
-  "Advanced AI model",
-  "Notion sync",
-  "Cloud sync across devices",
-  "Full note history, never lose a session",
-  "Multi-language transcription (50+ languages)",
-  "Chat across multiple tabs simultaneously",
-];
-
-const tagColor = (tag: string) => {
-  if (tag === "AI") return "text-primary bg-primary/8 border-primary/20";
-  if (tag === "Browser Agent") return "text-primary bg-primary/8 border-primary/20";
-  if (tag === "Page Chat") return "text-accent bg-accent/10 border-accent/20";
-  if (tag === "Recording") return "text-primary bg-primary/8 border-primary/20";
-  return "text-foreground/70 bg-muted border-border/60";
+// ─── shared styles ────────────────────────────────────────────────────────────
+const wrap: React.CSSProperties = { maxWidth: 1100, margin: "0 auto", padding: "0 32px" };
+const eyebrow: React.CSSProperties = {
+  fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+  letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-3)",
+  display: "inline-flex", alignItems: "center", gap: 8,
+};
+const pip: React.CSSProperties = {
+  width: 6, height: 6, borderRadius: "50%",
+  background: "var(--sb-accent)", boxShadow: "0 0 10px var(--sb-accent)", display: "inline-block",
 };
 
-const Premium = () => {
-  const large = premiumFeatures.filter((f) => f.size === "large");
-  const small = premiumFeatures.filter((f) => f.size === "small");
-  const { user, profile } = useAuth();
-  const isPremium = (profile as any)?.is_premium === true;
+const CheckIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
+);
+
+const FEATURES = [
+  { tag: "Recording", title: "Record without limits.", body: "Free users hit a 5-minute cap per day. With Pro, record full lectures, long meetings, hour-long podcasts — however long it runs, SideBrain keeps up.", free: "5 min / day", pro: "Unlimited", big: true },
+  { tag: "Storage", title: "Cloud sync & note history.", body: "Free notes live only on your device. Reinstall the extension and they're gone. Pro saves every note to the cloud — switch browsers, log in anywhere, your history is waiting.", free: "Local only", pro: "Unlimited cloud history" },
+  { tag: "AI", title: "Smarter AI, richer notes.", body: "Pro runs recordings through a more capable model. Better structure, sharper key points, more accurate glossaries — especially on dense or fast-paced content.", free: "Basic model", pro: "Advanced model" },
+  { tag: "Languages", title: "Multi-language transcription.", body: "Recording in Spanish, Hindi, Mandarin, or French? Pro transcribes and structures notes in 50+ languages, automatically detected.", free: "English only", pro: "50+ languages" },
+  { tag: "Chat", title: "Chat without limits.", body: "Free users get 5 questions per day. Pro unlocks unlimited chat — ask as many questions as you need and reference your notes and the current page simultaneously.", free: "5 questions / day", pro: "Unlimited", big: true },
+  { tag: "Delegate", title: "More Delegate tasks.", body: "Free users get 25 Delegate task runs per month. Pro gives you unlimited — automate as many workflows as you need, every day.", free: "25 tasks / month", pro: "Unlimited" },
+  { tag: "Memory", title: "Persistent memory.", body: "SideBrain remembers facts you tell it across sessions — your preferences, your context, your ongoing projects. Free users start fresh every session.", free: "Session only", pro: "Persistent across sessions" },
+];
+
+export default function Premium() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [isIndia, setIsIndia] = useState<boolean | null>(null);
+  const isSuccess = new URLSearchParams(window.location.search).get("success") === "true";
 
   useEffect(() => {
     fetch("https://ipapi.co/json/")
@@ -113,15 +43,11 @@ const Premium = () => {
       .catch(() => setIsIndia(false));
   }, []);
 
-  const priceLabel = isIndia === null ? "..." : isIndia ? "₹299/mo" : "$10/mo";
-  const priceDisplay = isIndia === null ? "..." : isIndia ? "₹299" : "$10";
+  const priceDisplay = isIndia === null ? "..." : isIndia ? "₹299" : "$12";
+  const pricePer = isIndia === null ? "" : isIndia ? "/ month" : "/ month";
 
-  const handleGetPremium = async () => {
-    if (!user) {
-      // Not logged in — send to auth first
-      window.location.href = "/auth?redirect=/premium";
-      return;
-    }
+  const handleGetPro = async () => {
+    if (!user) { window.location.href = "/auth?redirect=/premium"; return; }
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -129,362 +55,150 @@ const Premium = () => {
         `${import.meta.env.VITE_SUPABASE_URL || "https://ovapacfrzddnhrwvkbkr.supabase.co"}/functions/v1/create-checkout`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
           body: JSON.stringify({ successUrl: window.location.origin + "/premium?success=true" }),
         }
       );
       const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        alert("Could not start checkout. Please try again.");
-      }
-    } catch (e) {
-      alert("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+      if (data.url) { window.location.href = data.url; }
+      else { alert("Could not start checkout. Please try again."); }
+    } catch { alert("Something went wrong. Please try again."); }
+    finally { setLoading(false); }
   };
 
-  // Show success banner if redirected back from Polar
-  const isSuccess = new URLSearchParams(window.location.search).get("success") === "true";
-
   return (
-    <div className="min-h-screen bg-background selection:bg-primary/20">
+    <div style={{ background: "var(--sb-bg)", color: "var(--sb-ink)", minHeight: "100vh" }}>
       <Navbar />
 
       {/* Success banner */}
       {isSuccess && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 rounded-full px-6 py-3 text-sm shadow-lg">
-          <Check className="w-4 h-4" />
-          You're now a Premium member. Welcome!
+        <div style={{ position: "fixed", top: 80, left: "50%", transform: "translateX(-50%)", zIndex: 50, display: "flex", alignItems: "center", gap: 10, background: "rgba(76,175,125,0.12)", border: "1px solid rgba(76,175,125,0.3)", color: "var(--sb-ok)", borderRadius: 999, padding: "10px 22px", fontSize: 14, boxShadow: "0 4px 24px rgba(0,0,0,0.1)" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
+          You're now a Pro member. Welcome!
         </div>
       )}
 
       {/* Hero */}
-      <section className="relative overflow-hidden pt-16">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-border/30 animate-breathe pointer-events-none" />
-        <div className="container relative mx-auto px-6 pt-24 pb-20 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/6 px-5 py-2 text-sm text-primary mb-8 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <Zap className="w-3.5 h-3.5" />
-            SideBrain Premium
-          </div>
-          <h1 className="text-4xl md:text-6xl font-normal tracking-tight text-foreground max-w-3xl mx-auto leading-[1.15] opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            Everything you need,
-            <br />
-            <em className="text-primary not-italic">nothing held back</em>
+      <section style={{ padding: "140px 0 80px", textAlign: "center" }}>
+        <div style={{ ...wrap, maxWidth: 860 }}>
+          <span style={eyebrow}><span style={pip} /> Pricing</span>
+          <h1 style={{
+            fontFamily: "'Instrument Serif', Georgia, serif",
+            fontWeight: 400, fontSize: "clamp(44px,6vw,80px)", lineHeight: 1.0,
+            letterSpacing: "-0.025em", margin: "14px auto 24px",
+          }}>
+            Free forever.{" "}
+            <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Pro when you want more.</em>
           </h1>
-          <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            The free plan gets you started. Premium removes every limit — unlimited recording, smarter AI, cloud history, unrestricted chat, and Delegate, the browser automation that runs tasks for you.
+          <p style={{ fontSize: 18, color: "var(--sb-ink-2)", maxWidth: 600, margin: "0 auto", lineHeight: 1.55 }}>
+            SideBrain works in your browser. The model runs on us. Pro buys you faster models, unlimited recordings, and more Delegate runs.
           </p>
-          <div className="mt-10 opacity-0 animate-fade-in" style={{ animationDelay: "0.5s" }}>
-            {isPremium ? (
-              <div className="inline-flex items-center gap-2 h-12 px-10 text-base rounded-full border border-primary/30 bg-primary/8 text-primary">
-                <Check className="w-4 h-4" />
-                You're a Premium member
+        </div>
+      </section>
+
+      {/* Pricing cards */}
+      <section style={{ padding: "60px 0 110px", background: "var(--sb-bg-2)" }}>
+        <div style={{ ...wrap, maxWidth: 880 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 80 }}>
+            {/* Free */}
+            <div style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 24, padding: 36, display: "flex", flexDirection: "column", gap: 18 }}>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--sb-ink-3)" }}>Free</div>
+              <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 60, lineHeight: 1, letterSpacing: "-0.02em", display: "flex", alignItems: "baseline", gap: 6 }}>
+                $0<span style={{ fontSize: 16, fontFamily: "'Inter',sans-serif", color: "var(--sb-ink-3)", letterSpacing: 0 }}>&nbsp;/ forever</span>
               </div>
-            ) : (
-              <Button
-                onClick={handleGetPremium}
-                disabled={loading}
-                className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md"
+              <p style={{ color: "var(--sb-ink-2)", fontSize: 14.5, lineHeight: 1.5 }}>Everything you need to get started. No credit card.</p>
+              <ul style={{ display: "flex", flexDirection: "column", gap: 12, margin: "8px 0", padding: 0 }}>
+                {["Voice mode with live captions", "Read & summarize any page", "25 Delegate tasks / month", "5 min recording / day", "Dashboard & library (local)"].map(f => (
+                  <li key={f} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, listStyle: "none", color: "var(--sb-accent-deep)" }}>
+                    <CheckIcon /><span style={{ color: "var(--sb-ink)" }}>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to="/#install"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",
+                  padding: "12px 20px", borderRadius: 999, fontSize: 14, fontWeight: 500,
+                  background: "transparent", color: "var(--sb-ink)",
+                  border: "1px solid var(--sb-line)", textDecoration: "none", transition: "transform .15s, background .15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = "var(--sb-panel)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = "transparent"; }}
               >
-                <Zap className="w-4 h-4 mr-2" />
-                {loading ? "Loading..." : `Get Premium · ${priceLabel}`}
-              </Button>
-            )}
-            <p className="mt-4 text-xs text-muted-foreground/50">
-              {isPremium ? "Thanks for supporting SideBrain." : "Cancel anytime · Powered by Polar"}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <div className="container mx-auto px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* Feature cards, bento grid */}
-      <section className="container mx-auto px-6 py-20">
-        <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">What Premium unlocks</p>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
-
-          {/* Delegate + Remote Control */}
-          <div className="md:col-span-3 group p-8 md:p-10 rounded-2xl border border-border/60 bg-card/40 hover:bg-card/60 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.05s" }}>
-            <div className="flex items-center gap-2 mb-6">
-              <Bot className="w-5 h-5 text-muted-foreground/60" strokeWidth={1.5} />
-              <span className="text-xs px-3 py-1 rounded-full border text-muted-foreground/60 bg-muted/40 border-border/60 flex items-center gap-1.5">
-                <FlaskConical className="w-3 h-3" /> Experimental · Premium only
-              </span>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-8">
-              {/* Delegate */}
-              <div>
-                <h3 className="text-xl text-foreground mb-2">SideBrain Delegate</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                  Type a task in plain language — Delegate reads your browser, clicks buttons, fills forms, and navigates. Works reliably for simple tasks like sending emails, searching, and navigating to sites.
-                </p>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {["Send emails ✓", "Navigate sites ✓", "Search MakeMyTrip ✓", "Complex flows (~)"].map((cap) => (
-                    <span key={cap} className="text-xs px-3 py-1.5 rounded-full bg-muted/40 border border-border/60 text-muted-foreground/60">{cap}</span>
-                  ))}
-                </div>
-                <Link to="/delegate" className="flex items-center gap-1 text-sm text-primary/70 hover:text-primary transition-colors">
-                  See Delegate <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-
-              {/* Remote Control */}
-              <div className="md:border-l md:border-border/40 md:pl-8">
-                <div className="flex items-center gap-2 mb-2">
-                  <Smartphone className="w-4 h-4 text-muted-foreground/60" strokeWidth={1.5} />
-                  <h3 className="text-xl text-foreground">Remote Control</h3>
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                  Control Delegate from your phone. Open the SideBrain app, type a task, and watch it execute on your desktop browser in real time — even when you're away from your laptop.
-                </p>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {["Queue tasks remotely", "Live step updates", "Works from anywhere"].map((cap) => (
-                    <span key={cap} className="text-xs px-3 py-1.5 rounded-full bg-muted/40 border border-border/60 text-muted-foreground/60">{cap}</span>
-                  ))}
-                </div>
-                <Link to="/remote-agent" className="flex items-center gap-1 text-sm text-primary/70 hover:text-primary transition-colors">
-                  Try Remote Agent <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-
-            <div className="mt-6 pt-5 border-t border-border/40 flex items-center gap-6 text-xs flex-wrap">
-              <span className="flex items-center gap-1.5 text-muted-foreground/50">
-                <Lock className="w-3 h-3" /> Free: Not included
-              </span>
-              <span className="flex items-center gap-1.5 text-muted-foreground/70">
-                <Zap className="w-3 h-3" /> Premium: Both included
-              </span>
-            </div>
-          </div>
-
-          {/* Unlimited Recording, large */}
-          <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <div className="flex items-start justify-between mb-6">
-              <Mic className="w-6 h-6 text-primary" strokeWidth={1.5} />
-              <span className={`text-xs px-3 py-1 rounded-full border ${tagColor("Recording")}`}>Recording</span>
-            </div>
-            <h3 className="text-xl text-foreground mb-3">Record without limits</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Free users hit a 5-minute cap per day. With Premium, record full lectures, long meetings, hour-long podcasts, however long the content runs, SideBrain keeps up.
-            </p>
-            <div className="flex items-center gap-6 text-xs">
-              <span className="flex items-center gap-1.5 text-muted-foreground/50">
-                <Lock className="w-3 h-3" /> Free: 5 min / day
-              </span>
-              <span className="flex items-center gap-1.5 text-primary">
-                <Zap className="w-3 h-3" /> Premium: Unlimited
-              </span>
-            </div>
-          </div>
-
-          {/* Cloud Sync, small */}
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            <div className="flex items-start justify-between mb-6">
-              <Cloud className="w-5 h-5 text-primary" strokeWidth={1.5} />
-              <span className={`text-xs px-3 py-1 rounded-full border ${tagColor("Storage")}`}>Storage</span>
-            </div>
-            <h3 className="text-lg text-foreground mb-3">Cloud sync & note history</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Free notes live only on your device. Premium saves everything to the cloud, upgrade versions, switch browsers, log in anywhere, your history is there.
-            </p>
-            <div className="flex flex-col gap-2 text-xs">
-              <span className="flex items-center gap-1.5 text-muted-foreground/50"><Lock className="w-3 h-3" /> Free: Local only</span>
-              <span className="flex items-center gap-1.5 text-primary"><Zap className="w-3 h-3" /> Premium: Unlimited cloud history</span>
-            </div>
-          </div>
-
-          {/* Smarter AI, small */}
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.3s" }}>
-            <div className="flex items-start justify-between mb-6">
-              <Brain className="w-5 h-5 text-primary" strokeWidth={1.5} />
-              <span className={`text-xs px-3 py-1 rounded-full border ${tagColor("AI")}`}>AI</span>
-            </div>
-            <h3 className="text-lg text-foreground mb-3">Smarter AI, richer notes</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Premium runs on a more capable model. Better structure, sharper key points, more accurate glossaries, especially on dense or fast-paced content.
-            </p>
-            <div className="flex flex-col gap-2 text-xs">
-              <span className="flex items-center gap-1.5 text-muted-foreground/50"><Lock className="w-3 h-3" /> Free: Basic model</span>
-              <span className="flex items-center gap-1.5 text-primary"><Zap className="w-3 h-3" /> Premium: Advanced model</span>
-            </div>
-          </div>
-
-          {/* Multi-language, small */}
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.35s" }}>
-            <div className="flex items-start justify-between mb-6">
-              <Globe className="w-5 h-5 text-primary" strokeWidth={1.5} />
-              <span className={`text-xs px-3 py-1 rounded-full border ${tagColor("AI")}`}>AI</span>
-            </div>
-            <h3 className="text-lg text-foreground mb-3">Multi-language transcription</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Recording in Spanish, Hindi, Mandarin, or French? Premium transcribes and structures notes in 50+ languages, auto-detected, no setup needed.
-            </p>
-            <div className="flex flex-col gap-2 text-xs">
-              <span className="flex items-center gap-1.5 text-muted-foreground/50"><Lock className="w-3 h-3" /> Free: English only</span>
-              <span className="flex items-center gap-1.5 text-primary"><Zap className="w-3 h-3" /> Premium: 50+ languages</span>
-            </div>
-          </div>
-
-          {/* Page Chat, large */}
-          <div className="md:col-span-2 group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-accent/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            <div className="flex items-start justify-between mb-6">
-              <MessageSquare className="w-6 h-6 text-accent" strokeWidth={1.5} />
-              <span className={`text-xs px-3 py-1 rounded-full border ${tagColor("Page Chat")}`}>Page Chat</span>
-            </div>
-            <h3 className="text-xl text-foreground mb-3">Chat without limits, across any tab</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Free users get 5 questions per day. Premium unlocks unlimited chat, ask as much as you need, switch between multiple open tabs in one conversation, and reference both your notes and the current page simultaneously.
-            </p>
-            <div className="flex items-center gap-6 text-xs">
-              <span className="flex items-center gap-1.5 text-muted-foreground/50">
-                <Lock className="w-3 h-3" /> Free: 5 questions / day · single tab
-              </span>
-              <span className="flex items-center gap-1.5 text-accent">
-                <Zap className="w-3 h-3" /> Premium: Unlimited · multi-tab
-              </span>
-            </div>
-          </div>
-
-          {/* Screenshots, small */}
-          <div className="group p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.45s" }}>
-            <div className="flex items-start justify-between mb-6">
-              <Camera className="w-5 h-5 text-primary" strokeWidth={1.5} />
-              <span className={`text-xs px-3 py-1 rounded-full border ${tagColor("Screenshots")}`}>Screenshots</span>
-            </div>
-            <h3 className="text-lg text-foreground mb-3">Unlimited screenshots, auto-embedded</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Free lets you attach 2 screenshots per note. Premium removes the cap and embeds every screenshot inline, right where it belongs in your notes.
-            </p>
-            <div className="flex flex-col gap-2 text-xs">
-              <span className="flex items-center gap-1.5 text-muted-foreground/50"><Lock className="w-3 h-3" /> Free: 2 per note</span>
-              <span className="flex items-center gap-1.5 text-primary"><Zap className="w-3 h-3" /> Premium: Unlimited + auto-embed</span>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* Free vs Premium comparison */}
-      <section className="container mx-auto px-6 py-12">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-20" />
-        <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">Free vs Premium</p>
-
-        <div className="max-w-3xl mx-auto grid md:grid-cols-2 gap-6">
-
-          {/* Free */}
-          <div className="p-8 rounded-2xl border border-border/60 bg-card/40 opacity-0 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-1">Free</p>
-            <p className="text-3xl text-foreground mb-6">$0</p>
-            <ul className="space-y-3">
-              {freeItems.map((item) => (
-                <li key={item} className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <Check className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" strokeWidth={2} />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8">
-              <Link to="/">
-                <Button variant="outline" className="w-full rounded-full h-11 text-sm border-border/60">
-                  <Download className="w-3.5 h-3.5 mr-2" />
-                  Download Free
-                </Button>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
+                Install free
               </Link>
             </div>
+
+            {/* Pro */}
+            <div style={{ background: "#14110E", color: "#FBF7F1", borderRadius: 24, padding: 36, display: "flex", flexDirection: "column", gap: 18, outline: "1px solid var(--sb-accent)", outlineOffset: 0 }}>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--sb-accent-2)" }}>Pro</div>
+              <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 60, lineHeight: 1, letterSpacing: "-0.02em", color: "#FBF7F1", display: "flex", alignItems: "baseline", gap: 6 }}>
+                {priceDisplay}<span style={{ fontSize: 16, fontFamily: "'Inter',sans-serif", color: "rgba(251,247,241,0.5)", letterSpacing: 0 }}>&nbsp;{pricePer}</span>
+              </div>
+              <p style={{ color: "rgba(251,247,241,0.65)", fontSize: 14.5, lineHeight: 1.5 }}>For people who actually live in their browser. Pay yearly, save 20%.</p>
+              <ul style={{ display: "flex", flexDirection: "column", gap: 12, margin: "8px 0", padding: 0 }}>
+                {["Everything in Free", "Faster, smarter models", "Unlimited Delegate tasks", "Unlimited recording & transcription", "Cloud sync across devices", "Custom voices & 50+ languages", "Persistent memory across sessions", "Priority support"].map(f => (
+                  <li key={f} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, listStyle: "none", color: "var(--sb-accent-2)" }}>
+                    <CheckIcon /><span style={{ color: "rgba(251,247,241,0.9)" }}>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={handleGetPro}
+                disabled={loading}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",
+                  padding: "12px 20px", borderRadius: 999, fontSize: 14, fontWeight: 500,
+                  background: "#FBF7F1", color: "#1B1713", border: "1px solid transparent",
+                  cursor: loading ? "wait" : "pointer", transition: "transform .15s, opacity .15s",
+                  opacity: loading ? 0.7 : 1,
+                }}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.transform = "translateY(-1px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ""; }}
+              >
+                {loading ? "Redirecting…" : "Start Pro →"}
+              </button>
+            </div>
           </div>
 
-          {/* Premium */}
-          <div className="p-8 rounded-2xl border border-primary/30 bg-primary/5 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            <p className="text-xs tracking-widest uppercase text-primary/70 mb-1">Premium</p>
-            <div className="flex items-baseline gap-1 mb-6">
-              <p className="text-3xl text-foreground">{priceDisplay}</p>
-              <p className="text-sm text-muted-foreground">/ month</p>
-              {isIndia && <p className="text-xs text-muted-foreground/50 ml-1 self-end pb-1">India pricing</p>}
-            </div>
-            <ul className="space-y-3">
-              {premiumItems.map((item) => (
-                <li key={item} className="flex items-center gap-3 text-sm text-foreground">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" strokeWidth={2} />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8">
-              {isPremium ? (
-                <div className="w-full rounded-full h-11 text-sm border border-primary/30 bg-primary/8 text-primary flex items-center justify-center gap-2">
-                  <Check className="w-3.5 h-3.5" />
-                  You're already here
+          {/* Feature breakdown */}
+          <div style={{ textAlign: "center", marginBottom: 40 }}>
+            <h2 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: "clamp(28px,3.5vw,44px)", marginBottom: 12 }}>Everything Pro unlocks.</h2>
+            <p style={{ fontSize: 15, color: "var(--sb-ink-2)" }}>What changes when you go Pro, feature by feature.</p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
+            {FEATURES.map(({ tag, title, body, free, pro, big }) => (
+              <div key={title} style={{ gridColumn: big ? "span 2" : "span 1", background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 18, padding: 28, display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-accent-deep)" }}>{tag}</span>
+                <h3 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: 22, lineHeight: 1.1 }}>{title}</h3>
+                <p style={{ fontSize: 14.5, color: "var(--sb-ink-2)", lineHeight: 1.55, flex: 1 }}>{body}</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+                  <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sb-bg-2)", border: "1px solid var(--sb-line-2)" }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 4 }}>Free</div>
+                    <div style={{ fontSize: 13, color: "var(--sb-ink-2)" }}>{free}</div>
+                  </div>
+                  <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sb-accent-soft)", border: "1px solid rgba(240,168,107,0.3)" }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-accent-deep)", marginBottom: 4 }}>Pro</div>
+                    <div style={{ fontSize: 13, color: "var(--sb-ink)", fontWeight: 500 }}>{pro}</div>
+                  </div>
                 </div>
-              ) : (
-                <Button
-                  onClick={handleGetPremium}
-                  disabled={loading}
-                  className="w-full rounded-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  <Zap className="w-3.5 h-3.5 mr-2" />
-                  {loading ? "Loading..." : `Get Premium · ${priceLabel}`}
-                </Button>
-              )}
-            </div>
+              </div>
+            ))}
           </div>
-
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="container mx-auto px-6 py-20 text-center">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-20" />
-        <h2 className="text-3xl md:text-4xl font-normal text-foreground mb-5 max-w-xl mx-auto leading-snug">
-          Start free.<br /><em className="text-primary not-italic">Upgrade when you're ready.</em>
-        </h2>
-        <p className="text-muted-foreground mb-10 max-w-md mx-auto text-sm leading-relaxed">
-          No credit card needed to get started. The free plan is generous enough to get real value, Premium is there when you outgrow it.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          {isPremium ? (
-            <div className="rounded-full border border-primary/30 bg-primary/8 text-primary px-10 h-12 text-base flex items-center gap-2">
-              <Check className="w-4 h-4" />
-              You're already here
-            </div>
-          ) : (
-          <Button
-            onClick={handleGetPremium}
-            disabled={loading}
-            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base"
-          >
-            <Zap className="w-4 h-4 mr-2" />
-            {loading ? "Loading..." : `Get Premium · ${priceLabel}`}
-          </Button>
-          )}
-          <Link to="/">
-            <Button variant="ghost" className="rounded-full h-12 px-8 text-muted-foreground hover:text-foreground text-base">
-              Download free first <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Link>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-12 border-t border-border/40">
-        <div className="container mx-auto px-6 text-center">
-          <Leaf className="w-5 h-5 text-primary/40 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground/50">SideBrain, Learn with calm intention</p>
+      <footer style={{ padding: "48px 0", background: "var(--sb-bg)", borderTop: "1px solid var(--sb-line-2)" }}>
+        <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Link to="/" style={{ display: "flex", alignItems: "baseline", gap: 0, textDecoration: "none" }}>
+            <span style={{ fontFamily: "'TNR','Times New Roman',serif", fontStyle: "italic", fontWeight: 400, fontSize: 18, color: "var(--sb-ink)" }}>side</span>
+            <span style={{ fontFamily: "'BeVietnam',sans-serif", fontWeight: 800, fontSize: 18, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>brain</span>
+          </Link>
+          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>© 2026 SideBrain · Beta</div>
         </div>
       </footer>
     </div>
   );
-};
-
-export default Premium;
+}

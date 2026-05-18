@@ -543,3 +543,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     setTimeout(() => { observer.disconnect(); clearInterval(interval); }, 300000);
   }
 })();
+
+// ===== SELECTION TRACKING =====
+// Detect when user highlights text on the page and relay it to the side panel
+document.addEventListener('mouseup', () => {
+  const selected = window.getSelection()?.toString()?.trim();
+  if (selected && selected.length > 2) {
+    chrome.runtime.sendMessage({
+      action: 'selectionChanged',
+      text: selected,
+      url: window.location.href,
+      title: document.title,
+    }).catch(() => {}); // panel may not be open — ignore
+  }
+});

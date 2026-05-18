@@ -11,6 +11,196 @@ function doCapture(windowId, sendResponse) {
   });
 }
 
+function bgDelay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function bgExtractSearchResultsFromTab(tabId) {
+  if (!tabId) return { results: [] };
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        function cleanText(value) {
+          return String(value || "").replace(/\s+/g, " ").trim();
+        }
+
+        function normalizeUrl(rawUrl) {
+          if (!rawUrl) return "";
+          try {
+            const parsed = new URL(rawUrl, window.location.href);
+            if (parsed.hostname.includes("duckduckgo.com")) {
+              const redirected = parsed.searchParams.get("uddg");
+              if (redirected) return decodeURIComponent(redirected);
+            }
+            if (parsed.hostname.includes("google.") && parsed.pathname === "/url") {
+              const redirected = parsed.searchParams.get("q");
+              if (redirected) return redirected;
+            }
+            return parsed.href;
+          } catch {
+            return rawUrl;
+          }
+        }
+
+        function pushUnique(results, seen, rawTitle, rawUrl, rawSnippet) {
+          const title = cleanText(rawTitle);
+          const url = normalizeUrl(rawUrl);
+          const snippet = cleanText(rawSnippet);
+          if (!title || !url || seen.has(url)) return;
+          if (!/^https?:/i.test(url)) return;
+          seen.add(url);
+          results.push({ title, url, snippet });
+        }
+
+        function collectWithConfig(config) {
+          const results = [];
+          const seen = new Set();
+          const items = Array.from(document.querySelectorAll(config.item));
+
+          for (const item of items) {
+            const link = item.querySelector(config.link);
+            const titleEl = item.querySelector(config.title) || link;
+            const snippetEl = item.querySelector(config.snippet);
+            pushUnique(
+              results,
+              seen,
+              titleEl?.innerText || titleEl?.textContent,
+              link?.href || titleEl?.closest?.("a")?.href,
+              snippetEl?.innerText || snippetEl?.textContent,
+            );
+            if (results.length >= 8) break;
+          }
+
+          return results;
+        }
+
+        const configs = [
+          {
+            item: ".result.results_links_deep.web-result, .result",
+            title: ".result__title .result__a, a.result__a",
+            link: ".result__title .result__a, a.result__a",
+            snippet: ".result__snippet",
+          },
+          {
+            item: "article[data-testid='result'], [data-layout='organic']",
+            title: "h2 a, a[data-testid='result-title-a']",
+            link: "h2 a, a[data-testid='result-title-a']",
+            snippet: "[data-result='snippet'], [data-testid='result-snippet']",
+          },
+          {
+            item: "li.b_algo",
+            title: "h2 a",
+            link: "h2 a",
+            snippet: ".b_caption p, .b_snippet",
+          },
+          {
+            item: "div.g, div[data-snc]",
+            title: "a h3, h3",
+            link: "a[href]:has(h3), a[href]",
+            snippet: ".VwiC3b, .yXK7lf, .MUxGbd, .hgKElc",
+          },
+        ];
+
+        for (const config of configs) {
+          const results = collectWithConfig(config);
+          if (results.length > 0) return { results };
+        }
+
+        return { results: [] };
+      },
+    });
+
+    return result?.result || { results: [] };
+  } catch (e) {
+    return { results: [], error: e.message };
+  }
+}
+
+async function bgPerformRealWebSearch(query) {
+  const trimmedQuery = String(query || "").trim();
+  if (!trimmedQuery) return { error: "No search query provided." };
+
+  const engineAttempts = [
+    {
+      engine: "DuckDuckGo",
+      url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(trimmedQuery)}`,
+    },
+    {
+      engine: "Bing",
+      url: `https://www.bing.com/search?q=${encodeURIComponent(trimmedQuery)}`,
+    },
+  ];
+
+  const activeTabId = await bgGetActiveTabId();
+  let activeTab = null;
+  if (activeTabId) {
+    activeTab = await new Promise((resolve) => {
+      chrome.tabs.get(activeTabId, (tab) => {
+        if (chrome.runtime.lastError) resolve(null);
+        else resolve(tab || null);
+      });
+    });
+  }
+
+  const createProps = {
+    url: engineAttempts[0].url,
+    active: false,
+  };
+  if (typeof activeTab?.windowId === "number") createProps.windowId = activeTab.windowId;
+  if (typeof activeTab?.index === "number") createProps.index = activeTab.index + 1;
+
+  let tempTabId = null;
+
+  try {
+    const tempTab = await new Promise((resolve, reject) => {
+      chrome.tabs.create(createProps, (tab) => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(tab);
+      });
+    });
+
+    tempTabId = tempTab?.id || null;
+    if (!tempTabId) throw new Error("Could not create a temporary search tab.");
+
+    for (let i = 0; i < engineAttempts.length; i += 1) {
+      const attempt = engineAttempts[i];
+
+      if (i > 0) {
+        await new Promise((resolve, reject) => {
+          chrome.tabs.update(tempTabId, { url: attempt.url }, () => {
+            if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+            else resolve();
+          });
+        });
+      }
+
+      await bgWaitForTabReady(tempTabId, 8000);
+      await bgDelay(700);
+
+      const extracted = await bgExtractSearchResultsFromTab(tempTabId);
+      if (extracted?.results?.length) {
+        return {
+          query: trimmedQuery,
+          engine: attempt.engine,
+          searchUrl: attempt.url,
+          results: extracted.results.slice(0, 8),
+        };
+      }
+    }
+
+    return { error: "I couldn't extract usable results from the live search page." };
+  } catch (e) {
+    return { error: e.message || "Web search failed." };
+  } finally {
+    if (tempTabId) {
+      chrome.tabs.remove(tempTabId, () => {
+        void chrome.runtime.lastError;
+      });
+    }
+  }
+}
+
 // Open side panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   chrome.storage.local.set({ activeTabId: tab.id });
@@ -132,6 +322,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         tryActiveTab();
       }
     });
+    return true;
+  }
+  if (message.action === "performWebSearch") {
+    bgPerformRealWebSearch(message.query)
+      .then((result) => sendResponse(result))
+      .catch((e) => sendResponse({ error: e.message || "Web search failed." }));
     return true;
   }
   if (message.action === "agentAction" || message.action === "getAgentPageContext") {
@@ -426,6 +622,21 @@ View file: click file name in file tree`;
 ── GOOGLE SEARCH (you are here) ──
 New search: type selector="[name='q']" → pressKey Enter
 Direct: navigate → https://www.google.com/search?q=QUERY`;
+  if (/reddit\.com\/r\/[^/]+\/submit/.test(url)) return `
+── REDDIT SUBMIT (you are here) ──
+Follow these steps IN ORDER. Do not skip any step.
+1. wait 1200 (page must fully load)
+2. type into title: selector="textarea[name='title']" targetText="Title" — type the title text
+3. wait 400
+4. click body field: selector="div[data-lexical-editor='true']" targetText="Body text"
+5. wait 300
+6. type into body: selector="div[data-lexical-editor='true']" targetText="Body text" — type the body text
+7. wait 600
+8. click submit: selector="r-post-form-submit-button" targetText="Post"
+NOTES:
+- Title uses textarea[name='title'] (may be in shadow DOM — the agent handles this automatically)
+- Body uses div[data-lexical-editor='true'] — click it first, then type. It uses beforeinput events.
+- Submit is r-post-form-submit-button — if clicking fails, try selector="button[type='submit']" or targetText="Post"`;
   return `
 ── GENERAL SITE ──
 Prefer navigating to URLs over clicking search bars.
@@ -475,6 +686,7 @@ ACTIONS:
 {"type":"read","selector":"css","targetText":"fallback","description":"Read element to verify state"}
 {"type":"scroll","direction":"down","amount":400,"description":"..."}
 {"type":"wait","ms":1500,"description":"..."}
+{"type":"downloadImage","selector":"css","targetText":"fallback alt text","format":"png","filename":"image.png","description":"Download image as PNG/JPEG/WebP"}
 {"type":"done","message":"what was accomplished"}
 {"type":"answer","message":"..."}
 {"type":"clarify","message":"..."}  ← ONLY when genuinely blocked
@@ -660,6 +872,70 @@ async function bgCheckStopped(id, token) {
   } catch { return false; }
 }
 
+// ── Reddit post — URL params pre-fill everything, agent just clicks Submit ─
+async function bgExecuteRedditPost(cmd, token, tabId) {
+  const t = cmd.task;
+  let subreddit, titleText, bodyText;
+
+  // Format 1 (current): @@REDDIT_POST@@\nsub:X\nttl:Y\nbdy:\nZ
+  if (t.startsWith("@@REDDIT_POST@@")) {
+    subreddit = (t.match(/\nsub:(.+)/) || [])[1]?.trim();
+    titleText = (t.match(/\nttl:(.+)/) || [])[1]?.trim();
+    bodyText  = (t.match(/\nbdy:\n([\s\S]*)$/) || [])[1]?.trim();
+
+  // Format 2: Post to Reddit r/X\n\nTITLE:\nY\n\nBODY:\nZ
+  } else if (/TITLE:\n/.test(t) && /BODY:\n/.test(t)) {
+    subreddit = (t.match(/r\/(\w+)/) || [])[1];
+    titleText = (t.match(/TITLE:\n([\s\S]*?)\n\nBODY:/) || [])[1]?.trim();
+    bodyText  = (t.match(/BODY:\n([\s\S]*)$/) || [])[1]?.trim();
+
+  // Format 3 (migration 3 step-based): "Create a Reddit text post in r/X"
+  } else if (/type this exact title:/.test(t)) {
+    subreddit = (t.match(/r\/(\w+)/) || [])[1];
+    titleText = (t.match(/type this exact title:\n([\s\S]*?)\n\n/) || [])[1]?.trim();
+    bodyText  = (t.match(/type this exact body text:\n([\s\S]*?)(?:\n\n\d+\.|$)/) || [])[1]?.trim();
+  }
+
+  if (!subreddit || !titleText || !bodyText) return false;
+
+  const steps = [];
+
+  // Step 1 — navigate to old.reddit.com with everything pre-filled via URL params
+  const url = `https://old.reddit.com/r/${subreddit}/submit?title=${encodeURIComponent(titleText)}&text=${encodeURIComponent(bodyText)}&selftext=true`;
+  steps.push({ type: "navigate", description: `Open r/${subreddit}/submit with title & body pre-filled`, ok: true });
+  await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps });
+
+  await new Promise(resolve => chrome.tabs.update(tabId, { url }, resolve));
+  await bgWaitForTabReady(tabId, 8000);
+  await new Promise(r => setTimeout(r, 1500)); // let the form render
+
+  // Step 2 — click Submit (old Reddit has a plain input[type=submit])
+  const submit = await new Promise(resolve => {
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const btn = document.querySelector('button[type="submit"]')
+                 || document.querySelector('input[type="submit"]')
+                 || Array.from(document.querySelectorAll("button")).find(b => /submit|post/i.test(b.innerText));
+        if (!btn) return { error: "Submit button not found" };
+        btn.click();
+        return { success: true };
+      },
+    }, (res) => resolve(chrome.runtime.lastError ? { error: chrome.runtime.lastError.message } : (res?.[0]?.result || { error: "No result" })));
+  });
+
+  steps.push({ type: "click", description: "Click Submit", ok: !submit.error });
+  await new Promise(r => setTimeout(r, 2000));
+
+  await bgUpdateRemoteCommand(cmd.id, token, {
+    status: submit.error ? "error" : "done",
+    result: submit.error ? `Submit failed: ${submit.error}` : `Posted to r/${subreddit} successfully.`,
+    steps,
+  });
+  chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+  return true;
+}
+
 async function bgRunRemoteCommand(cmd, token) {
   console.log("[BgRemoteAgent] Running command in background:", cmd.task);
   await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
@@ -667,6 +943,12 @@ async function bgRunRemoteCommand(cmd, token) {
   // Resolve tab ID once — reuse for entire run to avoid repeated async lookups
   const tabId = await bgGetActiveTabId();
   console.log("[BgRemoteAgent] Using tab:", tabId);
+
+  // Reddit posts — skip the AI planning loop, inject directly
+  if (/@@REDDIT_POST@@|reddit\.com\/r\/\w+\/submit|Post to Reddit|Create a Reddit text post/i.test(cmd.task)) {
+    const handled = await bgExecuteRedditPost(cmd, token, tabId);
+    if (handled) return;
+  }
 
   const steps = [];
   const history = [];
@@ -754,20 +1036,35 @@ const BG_REALTIME_URL = BG_SUPABASE_URL.replace("https://", "wss://") + "/realti
 let bgRealtimeWs = null;
 let bgRealtimeHeartbeat = null;
 let bgRealtimeReconnectTimer = null;
+let bgRealtimeBackoff = 5000; // exponential backoff, caps at 60s
 
 async function bgStartRealtime() {
   clearInterval(bgRealtimeHeartbeat);
   clearTimeout(bgRealtimeReconnectTimer);
   if (bgRealtimeWs) { try { bgRealtimeWs.close(); } catch(e) {} bgRealtimeWs = null; }
 
-  const data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
-  if (!data.authUserId || !data.authToken) return;
+  // Don't attempt while offline — the online event will restart us
+  if (!navigator.onLine) {
+    console.log("[BgRealtime] Offline — waiting for network");
+    return;
+  }
+
+  // Refresh token if it may have expired (try, fall through on failure)
+  let data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
+  if (!data.authUserId) return;
+  if (!data.authToken) {
+    const fresh = await bgRefreshAuthToken();
+    if (!fresh) return;
+    data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
+  }
+  if (!data.authToken) return;
 
   const ws = new WebSocket(`${BG_REALTIME_URL}?apikey=${BG_SUPABASE_ANON_KEY}&vsn=1.0.0`);
   bgRealtimeWs = ws;
 
   ws.onopen = () => {
     console.log("[BgRealtime] Connected");
+    bgRealtimeBackoff = 5000; // reset backoff on successful connect
     ws.send(JSON.stringify({
       topic: "realtime:public:agent_commands",
       event: "phx_join",
@@ -794,18 +1091,40 @@ async function bgStartRealtime() {
         console.log("[BgRealtime] New command → triggering poll immediately");
         bgPollRemoteCommands();
       }
+      // Supabase sends phx_reply with status "error" when JWT is rejected
+      if (msg.event === "phx_reply" && msg.payload?.status === "error") {
+        console.warn("[BgRealtime] Join rejected — refreshing token and reconnecting");
+        bgRefreshAuthToken().then(() => {
+          bgRealtimeBackoff = 2000;
+          bgStartRealtime();
+        });
+      }
     } catch(_) {}
   };
 
   ws.onclose = () => {
-    console.log("[BgRealtime] Disconnected — reconnecting in 5s");
     clearInterval(bgRealtimeHeartbeat);
     bgRealtimeWs = null;
-    bgRealtimeReconnectTimer = setTimeout(bgStartRealtime, 5000);
+    if (!navigator.onLine) {
+      console.log("[BgRealtime] Closed while offline — will reconnect when online");
+      return;
+    }
+    const delay = bgRealtimeBackoff;
+    bgRealtimeBackoff = Math.min(bgRealtimeBackoff * 2, 60000);
+    console.log(`[BgRealtime] Disconnected — reconnecting in ${delay / 1000}s`);
+    bgRealtimeReconnectTimer = setTimeout(bgStartRealtime, delay);
   };
 
-  ws.onerror = () => console.warn("[BgRealtime] WebSocket error");
+  ws.onerror = () => {}; // onclose always fires after onerror, handled there
 }
+
+// Restart immediately when network comes back
+self.addEventListener("online", () => {
+  console.log("[BgRealtime] Network restored — reconnecting");
+  bgRealtimeBackoff = 5000;
+  bgStartRealtime();
+  bgPollRemoteCommands();
+});
 
 // --- token refresh ---
 
@@ -868,10 +1187,17 @@ async function bgPollRemoteCommands() {
     const rows = await res.json();
     const cmd = rows[0];
     if (!cmd) return;
-    if (cmd.id === data.remoteProcessingId) return;
+    if (cmd.id === data.remoteProcessingId) {
+      // Same command seen again — only skip if we picked it up recently (< 90s).
+      // If it's been longer, the previous attempt silently died; clear the lock and retry.
+      const elapsed = Date.now() - (data.remoteProcessingTime || 0);
+      if (elapsed < 90000) return;
+      console.log("[BgRemoteAgent] Clearing stale lock for:", cmd.id);
+      chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+    }
 
     console.log("[BgRemoteAgent] Found command:", cmd.id, cmd.task);
-    chrome.storage.local.set({ remoteProcessingId: cmd.id });
+    chrome.storage.local.set({ remoteProcessingId: cmd.id, remoteProcessingTime: Date.now() });
 
     // Try side panel first — if it's open, let it handle with UI
     const forwarded = await forwardToSidePanel(cmd);

@@ -1,432 +1,252 @@
-import { Bot, ArrowRight, Zap, Mail, Globe, Plane, ChevronRight, FlaskConical, Smartphone, MonitorSmartphone, MapPin, ShoppingBag, Utensils, Briefcase, Calendar, Music, Hotel, Image } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 
-const examples = [
+// ─── shared styles ────────────────────────────────────────────────────────────
+const wrap: React.CSSProperties = { maxWidth: 1100, margin: "0 auto", padding: "0 32px" };
+const eyebrow: React.CSSProperties = {
+  fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+  letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-3)",
+  display: "inline-flex", alignItems: "center", gap: 8,
+};
+const pip: React.CSSProperties = {
+  width: 6, height: 6, borderRadius: "50%",
+  background: "var(--sb-accent)", boxShadow: "0 0 10px var(--sb-accent)", display: "inline-block",
+};
+
+// ─── animated trace ───────────────────────────────────────────────────────────
+const EXAMPLES = [
   {
-    category: "Email",
-    prompt: "Send an email to alex@work.com — subject 'Quick update', body 'Meeting pushed to 4pm today'",
-    steps: ["Build Gmail compose URL", "Open pre-filled draft", "Send"],
-    works: "great" as const,
-    icon: Mail,
+    prompt: "Send an email to Priya saying I'll be ten minutes late",
+    steps: [
+      { label: "Open mail.google.com", ms: "~20ms" },
+      { label: 'Search contacts for "Priya"', ms: "~800ms" },
+      { label: "Click Compose", ms: "~150ms" },
+      { label: "Type subject + body", ms: "~300ms" },
+      { label: "Confirm before send", ms: "—" },
+    ],
   },
   {
-    category: "Flights",
-    prompt: "Search for flights from Mumbai to Delhi for 25th April, economy on MakeMyTrip",
-    steps: ["Build MakeMyTrip URL", "Open with results"],
-    works: "great" as const,
-    icon: Plane,
+    prompt: "Find boAt Airdopes on Amazon and check reviews",
+    steps: [
+      { label: "Navigate to Amazon.in", ms: "~20ms" },
+      { label: 'Search "boAt Airdopes"', ms: "~150ms" },
+      { label: "Open first result", ms: "~150ms" },
+      { label: "Extract review summary", ms: "~600ms" },
+    ],
   },
   {
-    category: "Hotels",
-    prompt: "Search for hotels in Goa from 1st May to 3rd May on Booking.com",
-    steps: ["Build Booking.com URL", "Open with results"],
-    works: "great" as const,
-    icon: Hotel,
-  },
-  {
-    category: "Shopping",
-    prompt: "Search for boAt Airdopes on Amazon India",
-    steps: ["Build Amazon search URL", "Open results"],
-    works: "great" as const,
-    icon: ShoppingBag,
-  },
-  {
-    category: "Shopping",
-    prompt: "Search for oversized t-shirts on Flipkart",
-    steps: ["Build Flipkart URL", "Open results"],
-    works: "great" as const,
-    icon: ShoppingBag,
-  },
-  {
-    category: "Food",
-    prompt: "Search for biryani places in Pune on Zomato",
-    steps: ["Build Zomato URL", "Open results"],
-    works: "great" as const,
-    icon: Utensils,
-  },
-  {
-    category: "Jobs",
-    prompt: "Search for product manager jobs in Bangalore on LinkedIn",
-    steps: ["Build LinkedIn jobs URL", "Open results"],
-    works: "great" as const,
-    icon: Briefcase,
-  },
-  {
-    category: "Maps",
-    prompt: "Get directions from Bandra to Juhu Beach on Google Maps",
-    steps: ["Build Maps directions URL", "Open route"],
-    works: "great" as const,
-    icon: MapPin,
-  },
-  {
-    category: "Productivity",
-    prompt: "Create a new Google Doc",
-    steps: ["Navigate to docs.new", "Doc opens instantly"],
-    works: "great" as const,
-    icon: Globe,
-  },
-  {
-    category: "Productivity",
-    prompt: "Create a calendar event — team standup, tomorrow at 10am",
-    steps: ["Build Calendar URL", "Open pre-filled event"],
-    works: "great" as const,
-    icon: Calendar,
-  },
-  {
-    category: "Media",
-    prompt: "Search for 'Tum Hi Ho' on Spotify",
-    steps: ["Build Spotify search URL", "Open results"],
-    works: "great" as const,
-    icon: Music,
-  },
-  {
-    category: "Media",
-    prompt: "Search for Kanan Gill stand-up on YouTube",
-    steps: ["Build YouTube search URL", "Open results"],
-    works: "great" as const,
-    icon: Globe,
-  },
-  {
-    category: "Images",
-    prompt: "Download the hero image on this page as a PNG",
-    steps: ["Find the hero <img> element", "Draw to canvas", "Download as PNG"],
-    works: "great" as const,
-    icon: Image,
+    prompt: "Book a 10am team standup on Google Calendar for tomorrow",
+    steps: [
+      { label: "Open Google Calendar", ms: "~20ms" },
+      { label: "Click new event", ms: "~150ms" },
+      { label: "Fill title, date, time", ms: "~400ms" },
+      { label: "Save event", ms: "~150ms" },
+    ],
   },
 ];
 
-const howItWorks = [
-  {
-    num: "01",
-    title: "Type a task in plain language",
-    desc: "In the SideBrain sidebar, switch to Delegate mode and describe what you want. No commands, no syntax — just plain English.",
-  },
-  {
-    num: "02",
-    title: "It reads the page and plans",
-    desc: "Delegate scans the current page — buttons, inputs, links, forms — and figures out the exact sequence of actions needed to complete your task.",
-  },
-  {
-    num: "03",
-    title: "It acts, step by step",
-    desc: "Clicks, types, navigates, submits — one action at a time. You can watch it work in real time in the sidebar, and stop it any time.",
-  },
-];
+function DelegateTrace({ steps }: { steps: { label: string; ms: string }[] }) {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setActive(p => (p + 1) % steps.length), 1800);
+    return () => clearInterval(t);
+  }, [steps.length]);
 
-const WorksBadge = ({ works }: { works: "great" | "usually" | "sometimes" }) =>
-  works === "great" ? (
-    <span className="text-xs px-2.5 py-1 rounded-full border border-green-500/30 text-green-600/80 bg-green-500/8">
-      ✓ Works great
-    </span>
-  ) : works === "usually" ? (
-    <span className="text-xs px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground/60 bg-card/40">
-      Usually works
-    </span>
-  ) : (
-    <span className="text-xs px-2.5 py-1 rounded-full border border-border/40 text-muted-foreground/40 bg-card/20">
-      Hit or miss
-    </span>
-  );
-
-const Delegate = () => {
   return (
-    <div className="min-h-screen bg-background selection:bg-primary/20">
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {steps.map((step, i) => {
+        const isDone = i < active;
+        const isCurrent = i === active;
+        const isPending = i > active;
+        return (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "10px 14px", borderRadius: 12,
+            background: isCurrent ? "oklch(0.97 0.025 75)" : "var(--sb-panel)",
+            border: `1px solid ${isCurrent ? "oklch(0.85 0.1 70)" : "var(--sb-line-2)"}`,
+            opacity: isPending ? 0.45 : 1, transition: "all .35s",
+          }}>
+            <span style={{
+              width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
+              display: "grid", placeItems: "center",
+              background: isDone ? "var(--sb-ok)" : isCurrent ? "transparent" : "var(--sb-line)",
+              color: isDone ? "#fff" : "transparent",
+              border: isCurrent ? "1.5px solid var(--sb-accent)" : "none",
+              borderTopColor: isCurrent ? "transparent" : undefined,
+              animation: isCurrent ? "sbSpin .9s linear infinite" : "none",
+              fontSize: 9,
+            }}>{isDone ? "✓" : ""}</span>
+            <span style={{ flex: 1, fontSize: 13, color: "var(--sb-ink)" }}>{step.label}</span>
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>{step.ms}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Delegate() {
+  const [activeExample, setActiveExample] = useState(0);
+  const ex = EXAMPLES[activeExample];
+
+  return (
+    <div style={{ background: "var(--sb-bg)", color: "var(--sb-ink)", minHeight: "100vh" }}>
       <Navbar />
 
       {/* Hero */}
-      <section className="relative overflow-hidden pt-16">
-        <div className="container relative mx-auto px-6 pt-28 pb-20 text-center">
-          <div
-            className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/6 px-5 py-2 text-sm text-primary mb-8 opacity-0 animate-fade-in"
-            style={{ animationDelay: "0.1s" }}
-          >
-            <FlaskConical className="w-3.5 h-3.5" />
-            Experimental · Premium only
-          </div>
-
-          <h1
-            className="text-4xl md:text-6xl lg:text-7xl font-normal tracking-tight text-foreground max-w-3xl mx-auto leading-[1.15] opacity-0 animate-fade-in"
-            style={{ animationDelay: "0.2s" }}
-          >
-            Meet
-            <br />
-            <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>
-              SideBrain Delegate
-            </em>
+      <section style={{ padding: "140px 0 100px" }}>
+        <div style={{ ...wrap, maxWidth: 900, textAlign: "center" }}>
+          <span style={eyebrow}><span style={pip} /> SideBrain Delegate</span>
+          <h1 style={{
+            fontFamily: "'Instrument Serif', Georgia, serif",
+            fontWeight: 400, fontSize: "clamp(44px,6vw,80px)", lineHeight: 1.0,
+            letterSpacing: "-0.025em", margin: "14px auto 24px", maxWidth: 800,
+          }}>
+            Hand it the keys to{" "}
+            <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>your browser.</em>
           </h1>
-
-          <p
-            className="mt-6 text-lg md:text-xl text-muted-foreground max-w-lg mx-auto leading-relaxed opacity-0 animate-fade-in"
-            style={{ animationDelay: "0.4s" }}
-          >
-            Tell your browser what to do in plain English — and watch it happen. Delegate navigates, clicks, fills forms, and sends emails so you don't have to.
+          <p style={{ fontSize: 18, color: "var(--sb-ink-2)", maxWidth: 620, margin: "0 auto 48px", lineHeight: 1.55 }}>
+            Tell Delegate what you want done — in plain language — and it operates your tabs the way you would. Clicks, types, scrolls, navigates. With your supervision, or on its own.
           </p>
-
-          <div
-            className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-fade-in"
-            style={{ animationDelay: "0.6s" }}
-          >
-            <Link to="/premium">
-              <Button className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md">
-                <Zap className="w-4 h-4 mr-2" />
-                Unlock with Premium
-              </Button>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <Link
+              to="/#install"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "13px 24px", borderRadius: 999, fontSize: 14.5, fontWeight: 500,
+                background: "var(--sb-ink)", color: "var(--sb-on-ink)", textDecoration: "none",
+                transition: "transform .15s, background .15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = "#000"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = "var(--sb-ink)"; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
+              Try Delegate free
             </Link>
-            <Link to="/">
-              <Button variant="ghost" className="h-12 px-8 text-base text-muted-foreground hover:text-foreground transition-colors">
-                Download free first <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
+            <Link
+              to="/compare"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "13px 24px", borderRadius: 999, fontSize: 14.5, fontWeight: 500,
+                background: "transparent", color: "var(--sb-ink)",
+                border: "1px solid var(--sb-line)", textDecoration: "none",
+                transition: "transform .15s, background .15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = "var(--sb-panel)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = "transparent"; }}
+            >
+              See how it compares
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Honest note */}
-      <section className="container mx-auto px-6 pb-12">
-        <div
-          className="max-w-3xl mx-auto rounded-2xl border border-border/60 bg-card/60 p-7 opacity-0 animate-fade-in"
-          style={{ animationDelay: "0.7s" }}
-        >
-          <div className="flex items-start gap-4">
-            <FlaskConical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+      {/* Live trace demo */}
+      <section style={{ padding: "80px 0", background: "var(--sb-bg-2)" }}>
+        <div style={wrap}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "start" }}>
             <div>
-              <p className="text-sm font-medium text-foreground mb-1.5">Before you try it</p>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Delegate is experimental — it's genuinely powerful for the things it handles well. Simple tasks like sending emails, navigating, and searching work reliably. Complex multi-step flows are still improving. The more you use it, the better you'll learn what to ask it.
+              <span style={eyebrow}><span style={pip} /> Live example</span>
+              <h2 style={{
+                fontFamily: "'Instrument Serif',serif", fontWeight: 400,
+                fontSize: "clamp(28px,3vw,44px)", lineHeight: 1.1, margin: "12px 0 24px",
+              }}>Watch it think and act.</h2>
+              <p style={{ fontSize: 15, color: "var(--sb-ink-2)", marginBottom: 32, lineHeight: 1.55 }}>
+                Pick a task and watch Delegate break it down step by step — exactly what you'd see in the side panel.
               </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="container mx-auto px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* How it works */}
-      <section className="container mx-auto px-6 py-24">
-        <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-16">How it works</p>
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
-          {howItWorks.map((item, i) => (
-            <div
-              key={item.num}
-              className="p-8 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 transition-all duration-500 opacity-0 animate-fade-in"
-              style={{ animationDelay: `${0.1 + i * 0.15}s` }}
-            >
-              <span className="text-3xl text-primary/40 font-normal leading-none block mb-6">{item.num}</span>
-              <h3 className="text-foreground mb-3">{item.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="container mx-auto px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* Phone control bonus */}
-      <section className="container mx-auto px-6 py-24">
-        <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-8 items-center">
-          <div>
-            <div className="inline-flex items-center gap-2 text-xs text-primary/70 bg-primary/8 border border-primary/15 rounded-full px-3 py-1 mb-6">
-              <Smartphone className="w-3 h-3" /> Bonus feature
-            </div>
-            <h2 className="text-3xl md:text-4xl font-normal text-foreground leading-snug mb-4">
-              Control it<br />
-              <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>from your phone</em>
-            </h2>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              Open the SideBrain app on your phone, type a task, and it runs on your desktop browser. Your laptop doesn't need to be in front of you.
-            </p>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-              On your commute? Ask it to open your inbox and draft a reply. Lying in bed? Tell it to queue up something on Netflix. Delegate does it while you're away.
-            </p>
-            <Link to="/remote-agent">
-              <Button variant="outline" className="h-10 px-6 text-sm rounded-full">
-                Try Remote Control <ArrowRight className="w-3.5 h-3.5 ml-2" />
-              </Button>
-            </Link>
-          </div>
-
-          {/* Phone mockup */}
-          <div className="flex justify-center">
-            <div className="w-64 rounded-[2rem] border-2 border-border/60 bg-card/60 overflow-hidden shadow-lg">
-              {/* Phone header */}
-              <div className="px-5 pt-6 pb-4 border-b border-border/40">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-5 h-5 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <MonitorSmartphone className="w-2.5 h-2.5 text-primary" />
-                  </div>
-                  <span className="text-xs font-medium text-foreground">SideBrain</span>
-                </div>
-                <p className="text-xs text-muted-foreground/60">Hey, what do you want me to do?</p>
-              </div>
-              {/* Command cards */}
-              <div className="px-4 py-4 space-y-2.5">
-                <div className="rounded-xl border border-green-500/20 bg-green-500/4 px-3 py-2.5">
-                  <p className="text-xs text-foreground font-medium mb-1 line-clamp-1">Play Kanan Gill on YouTube</p>
-                  <div className="flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    <span className="text-[10px] text-green-600/70">Done</span>
-                  </div>
-                </div>
-                <div className="rounded-xl border border-primary/15 bg-primary/4 px-3 py-2.5">
-                  <p className="text-xs text-foreground font-medium mb-1 line-clamp-1">Search flights to Goa on MakeMyTrip</p>
-                  <div className="flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                    <span className="text-[10px] text-primary/70">Running · step 2</span>
-                  </div>
-                </div>
-                <div className="rounded-xl border border-border/50 bg-card/40 px-3 py-2.5">
-                  <p className="text-xs text-foreground font-medium mb-1 line-clamp-1">Open Amazon, search headphones</p>
-                  <div className="flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
-                    <span className="text-[10px] text-muted-foreground/40">Waiting…</span>
-                  </div>
-                </div>
-              </div>
-              {/* Input */}
-              <div className="px-4 pb-5 pt-1">
-                <div className="flex items-center gap-2 bg-background/60 border border-border/40 rounded-xl px-3 py-2">
-                  <span className="text-[10px] text-muted-foreground/30 flex-1">Type a task…</span>
-                  <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
-                    <ArrowRight className="w-2.5 h-2.5 text-primary" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="container mx-auto px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* Test Delegate section */}
-      <section className="container mx-auto px-6 py-24">
-        <p className="text-center text-sm tracking-widest uppercase text-muted-foreground/60 mb-3">What it can do</p>
-        <h2 className="text-center text-3xl md:text-4xl font-normal text-foreground mb-4">
-          12 things it handles well
-        </h2>
-        <p className="text-center text-sm text-muted-foreground max-w-md mx-auto mb-16 leading-relaxed">
-          All tested. These work reliably — try them yourself after installing the extension.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
-          {examples.map((ex, i) => (
-            <div
-              key={i}
-              className="p-6 rounded-2xl border border-border/60 bg-card/40 hover:border-primary/20 hover:bg-card/80 transition-all duration-500 opacity-0 animate-fade-in"
-              style={{ animationDelay: `${0.05 + i * 0.05}s` }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <ex.icon className="w-3 h-3 text-primary" strokeWidth={1.5} />
-                  </div>
-                  <span className="text-xs font-medium text-muted-foreground/60 uppercase tracking-wide">{ex.category}</span>
-                </div>
-                <WorksBadge works={ex.works} />
-              </div>
-
-              <p className="text-sm text-foreground leading-snug mb-4">
-                "{ex.prompt}"
-              </p>
-
-              <div className="flex items-center gap-1 flex-wrap">
-                {ex.steps.map((step, j) => (
-                  <span key={step} className="contents">
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-card border border-border/50 text-muted-foreground/60">
-                      {step}
-                    </span>
-                    {j < ex.steps.length - 1 && (
-                      <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/20 flex-shrink-0" />
-                    )}
-                  </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {EXAMPLES.map((ex, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveExample(i)}
+                    style={{
+                      padding: "14px 18px", borderRadius: 14, textAlign: "left",
+                      background: activeExample === i ? "var(--sb-ink)" : "var(--sb-panel-2)",
+                      border: `1px solid ${activeExample === i ? "var(--sb-ink)" : "var(--sb-line-2)"}`,
+                      color: activeExample === i ? "var(--sb-on-ink)" : "var(--sb-ink)",
+                      fontSize: 14, cursor: "pointer", transition: "all .2s",
+                      fontFamily: "'Instrument Serif',serif",
+                    }}
+                  >
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, display: "block", marginBottom: 4, opacity: 0.6 }}>YOU SAY</span>
+                    "{ex.prompt}"
+                  </button>
                 ))}
               </div>
             </div>
-          ))}
-        </div>
-
-        {/* Live preview mock */}
-        <div className="max-w-xl mx-auto mt-16">
-          <p className="text-center text-xs tracking-widest uppercase text-muted-foreground/40 mb-8">What you see in the sidebar while it runs</p>
-          <div className="rounded-2xl border border-border/60 bg-card/40 p-7">
-            <div className="flex justify-end mb-4">
-              <div className="bg-foreground text-background rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm max-w-xs">
-                Send a hello to alex@gmail.com
+            <div style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line)", borderRadius: 22, padding: 24, boxShadow: "0 1px 2px rgba(40,28,18,.04), 0 20px 50px -20px rgba(40,28,18,.15)" }}>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-accent-deep)", marginBottom: 16 }}>Delegate trace</div>
+              <DelegateTrace key={activeExample} steps={ex.steps} />
+              <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px dashed var(--sb-line)", display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>
+                <span>{ex.steps.length} steps</span>
+                <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 22, color: "var(--sb-accent-deep)", fontStyle: "italic" }}>~{ex.steps.length * 2}s</span>
               </div>
             </div>
-            <div className="border border-border/60 rounded-xl overflow-hidden mb-4">
-              <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
-                <div className="w-3 h-3 rounded-full border border-muted-foreground/30 border-t-transparent animate-spin" />
-                <span className="italic">Delegate · working…</span>
-              </div>
-              <div className="border-t border-border/60 px-4 py-3 space-y-1.5">
-                <p className="text-xs text-muted-foreground">✓ Navigate to mail.google.com</p>
-                <p className="text-xs text-muted-foreground">✓ Click Compose</p>
-                <p className="text-xs text-muted-foreground">✓ Type recipient address</p>
-                <p className="text-xs text-muted-foreground/40 italic">Typing message…</p>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground px-1">✅ Email sent to alex@gmail.com</p>
           </div>
         </div>
       </section>
 
-      <div className="container mx-auto px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
+      {/* How it works */}
+      <section style={{ padding: "110px 0" }}>
+        <div style={wrap}>
+          <div style={{ textAlign: "center", marginBottom: 60 }}>
+            <span style={eyebrow}><span style={pip} /> How it works</span>
+            <h2 style={{
+              fontFamily: "'Instrument Serif',serif", fontWeight: 400,
+              fontSize: "clamp(32px,4vw,52px)", lineHeight: 1.05, margin: "12px auto 0", maxWidth: 700,
+            }}>Three steps from words to action.</h2>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 24 }}>
+            {[
+              { num: "01", title: "Type in plain language.", body: "Switch to Delegate mode and describe what you want. No commands, no syntax — just plain English." },
+              { num: "02", title: "It reads the page and plans.", body: "Delegate scans buttons, inputs, links, and forms — and figures out the exact sequence of actions needed." },
+              { num: "03", title: "It acts, step by step.", body: "Clicks, types, navigates, submits. Watch it work in real time. Stop it any time." },
+            ].map(({ num, title, body }) => (
+              <div key={num} style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 18, padding: 28 }}>
+                <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 52, lineHeight: 1, color: "var(--sb-accent-deep)", marginBottom: 16 }}>{num}</div>
+                <h3 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: 22, marginBottom: 10 }}>{title}</h3>
+                <p style={{ fontSize: 14.5, color: "var(--sb-ink-2)", lineHeight: 1.55 }}>{body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-      {/* CTA */}
-      <section className="container mx-auto px-6 py-20 text-center">
-        <h2
-          className="text-3xl md:text-5xl font-normal text-foreground mb-5 opacity-0 animate-fade-in"
-          style={{ animationDelay: "0.1s" }}
-        >
-          Delegate is<br />
-          <em className="text-primary" style={{ fontFamily: "'TimesNewRomanMT', 'Times New Roman', serif", fontStyle: "italic" }}>
-            Premium only
-          </em>
-        </h2>
-        <p
-          className="text-muted-foreground max-w-md mx-auto mb-10 text-sm leading-relaxed opacity-0 animate-fade-in"
-          style={{ animationDelay: "0.2s" }}
-        >
-          Delegate — plus recording, notes, Notion sync, and remote phone control — all come with Premium. One subscription, the full stack.
-        </p>
-        <div
-          className="flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-fade-in"
-          style={{ animationDelay: "0.3s" }}
-        >
-          <Link to="/premium">
-            <Button className="h-12 px-10 text-base rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-md">
-              <Zap className="w-4 h-4 mr-2" />
-              Get Premium
-            </Button>
-          </Link>
-          <Link to="/">
-            <Button variant="ghost" className="h-12 px-8 text-base text-muted-foreground hover:text-foreground">
-              Download free first <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Link>
+      {/* Why DOM-first */}
+      <section style={{ padding: "80px 0 110px", background: "var(--sb-bg-2)" }}>
+        <div style={wrap}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40 }}>
+            {[
+              { title: "DOM-first, not pixel-first.", body: "Reads the live structure of the page. No screenshots, no waiting for vision models to look at pixels. Every button and input comes back as structured text with selectors — the model acts immediately." },
+              { title: "About 1 second per step.", body: 'From "decide" to "click." A five-step task finishes in under fifteen seconds. Compare that to screenshot-based agents that spend 3–6s every step just waiting for a vision model.' },
+              { title: "Always on the page you're on.", body: "You can watch it work, correct it mid-task, or let it go. Your call. Nothing happens behind your back — Delegate asks before submitting forms or sending messages." },
+              { title: "Works on any site.", body: "Gmail, Amazon, LinkedIn, Google Docs, GitHub, your company's internal tools. If your browser can open it, Delegate can operate it." },
+            ].map(({ title, body }) => (
+              <div key={title} style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                <div style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 9, background: "var(--sb-accent-soft)", border: "1px solid rgba(240,168,107,0.35)", display: "grid", placeItems: "center", color: "var(--sb-accent-deep)" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
+                </div>
+                <div>
+                  <h4 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: 20, marginBottom: 8 }}>{title}</h4>
+                  <p style={{ fontSize: 14.5, color: "var(--sb-ink-2)", lineHeight: 1.55 }}>{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-10 border-t border-border/40">
-        <div className="container mx-auto px-6 text-center">
-          <FlaskConical className="w-5 h-5 text-primary/30 mx-auto mb-3" strokeWidth={1.5} />
-          <p className="text-xs text-muted-foreground/40">SideBrain Delegate — experimental, useful when it works, honest about when it doesn't</p>
+      <footer style={{ padding: "48px 0", background: "var(--sb-bg)", borderTop: "1px solid var(--sb-line-2)" }}>
+        <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Link to="/" style={{ display: "flex", alignItems: "baseline", gap: 0, textDecoration: "none" }}>
+            <span style={{ fontFamily: "'TNR','Times New Roman',serif", fontStyle: "italic", fontWeight: 400, fontSize: 18, color: "var(--sb-ink)" }}>side</span>
+            <span style={{ fontFamily: "'BeVietnam',sans-serif", fontWeight: 800, fontSize: 18, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>brain</span>
+          </Link>
+          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>© 2026 SideBrain · Beta</div>
         </div>
       </footer>
     </div>
   );
-};
-
-export default Delegate;
+}

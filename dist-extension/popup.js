@@ -16,11 +16,12 @@ let trackedActiveWindowId = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let currentPageContext = null;
-let currentMode = "page"; // "page" | "lecture" | "meeting" | "general" | "agent"
+let currentMode = "page"; // "page" | "lecture" | "meeting" | "general" | "web" | "agent"
 let currentAiProvider = "lovable"; // "lovable" | "claude"
 let agentRunning = false;
 let agentShouldStop = false;
 let isPremium = false;
+let currentSelection = null; // { text, url, title } — last text the user highlighted on the page
 
 // Daily usage counters (free tier limits)
 const FREE_RECORDING_SECONDS = 30 * 60; // 30 min/day
@@ -41,6 +42,7 @@ const MODE_ICONS = {
   lecture: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
   meeting: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   general: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  web: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/></svg>`,
   agent: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8V5"/><circle cx="12" cy="3.5" r="1.5"/><circle cx="8.5" cy="14" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="14" r="1.5" fill="currentColor" stroke="none"/><path d="M9 19h6"/></svg>`,
 };
 
@@ -75,6 +77,19 @@ const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const emptyState = document.getElementById("emptyState");
 const userGreeting = document.getElementById("userGreeting");
 const newSessionBtn = document.getElementById("newSessionBtn");
+const emptyStateSub = document.getElementById("emptyStateSub");
+const emptyStateEyebrowText = document.getElementById("emptyStateEyebrowText");
+const modeHintEl = document.getElementById("modeHint");
+const emptyQuickActions = document.getElementById("emptyQuickActions");
+const emptyRecentSection = document.getElementById("emptyRecentSection");
+const emptyRecentList = document.getElementById("emptyRecentList");
+const emptyStateTip = document.getElementById("emptyStateTip");
+const pageContextChip = document.getElementById("pageContextChip");
+const pageContextFav = document.getElementById("pageContextFav");
+const pageContextTitle = document.getElementById("pageContextTitle");
+const pageContextUrl = document.getElementById("pageContextUrl");
+const pageContextStatus = document.getElementById("pageContextStatus");
+const pageContextStatusLabel = document.getElementById("pageContextStatusLabel");
 const infoBtn = document.getElementById("infoBtn");
 const infoPopover = document.getElementById("infoPopover");
 const infoWrap = document.getElementById("infoWrap");
@@ -82,6 +97,294 @@ const modelBtn = document.getElementById("modelBtn");
 const modelPopover = document.getElementById("modelPopover");
 const modelWrap = document.getElementById("modelWrap");
 const modelLabel = document.getElementById("modelLabel");
+
+const MODE_LABELS = {
+  page: "Chat with Page",
+  lecture: "Lecture & Audio",
+  meeting: "Meeting & Call",
+  general: "General Chat",
+  web: "Web Search",
+  agent: "Delegate",
+  note: "Note",
+};
+
+const STATUS_LABELS = {
+  ready: "page read",
+  reading: "reading",
+  listening: "listening",
+  speaking: "speaking",
+  acting: "acting",
+  recording: "recording",
+  paused: "paused",
+  saved: "saved",
+};
+
+const MODE_HINTS = {
+  lecture:  { sub: "Lecture & Audio mode", hint: "Press Enter or tap send to start recording — audio from this tab will be captured and turned into notes." },
+  meeting:  { sub: "Meeting & Call mode",  hint: "Press Enter or tap send to start recording — great for multi-speaker calls. Pause & Save between segments." },
+  page:     { sub: "Chat with Page mode",  hint: "Ask anything about what's on the current page. SideBrain reads the page so you don't have to." },
+  general:  { sub: "General Chat mode",    hint: "Ask me anything — no page context, just a straight conversation." },
+  web:      { sub: "Web Search mode",      hint: "Ask a question and SideBrain will run a real browser search, read the results, and cite the sources." },
+  agent:    { sub: "Browser Agent mode",   hint: "Type a task and the agent will navigate, click, and fill forms on your behalf. Experimental — works best for simple tasks." },
+  note:     { sub: "Note mode",            hint: "Ask follow-up questions about this note, generate practice questions, or copy it out anywhere." },
+};
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function getHostFromUrl(url) {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function getInitialFromContext(context) {
+  const host = getHostFromUrl(context?.url);
+  if (host) return host.slice(0, 2).toUpperCase();
+  const title = String(context?.title || "S").trim();
+  return title.slice(0, 2).toUpperCase();
+}
+
+function getContextTone(host) {
+  if (/spotify/i.test(host)) return "spotify";
+  if (/mail|gmail/i.test(host)) return "gmail";
+  if (/github/i.test(host)) return "gh";
+  return "default";
+}
+
+function getPageContextState() {
+  if (!currentPageContext || currentMode === "general") return { status: "ready", label: STATUS_LABELS.ready };
+  if (voiceActive) {
+    const voiceState = voiceOrb?.className.match(/\b(idle|listening|speaking|processing|acting)\b/)?.[1];
+    if (voiceState === "listening") return { status: "listening", label: STATUS_LABELS.listening };
+    if (voiceState === "speaking") return { status: "speaking", label: STATUS_LABELS.speaking };
+    if (voiceState === "acting") return { status: "acting", label: STATUS_LABELS.acting };
+    if (voiceState === "processing") return { status: "reading", label: "thinking" };
+  }
+  if (agentRunning) return { status: "acting", label: STATUS_LABELS.acting };
+  if (recordingCardEl && isRecording) return { status: "recording", label: STATUS_LABELS.recording };
+  if (recordingCardEl && !isRecording && audioSegments.length > 0) return { status: "paused", label: STATUS_LABELS.paused };
+  if (notesMarkdown) return { status: "saved", label: STATUS_LABELS.saved };
+  if (!loadingEl?.classList.contains("hidden")) return { status: "reading", label: STATUS_LABELS.reading };
+  return { status: "ready", label: STATUS_LABELS.ready };
+}
+
+function updateModeSelectorButton() {
+  if (!modeSelectorBtn) return;
+  const label = MODE_LABELS[currentMode] || MODE_LABELS.page;
+  const icon = MODE_ICONS[currentMode] || MODE_ICONS.page;
+  modeSelectorBtn.innerHTML = `
+    <span class="mode-selector-icon">${icon}</span>
+    <span class="mode-selector-label">${escapeHtml(label)}</span>
+    <svg class="mode-selector-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg>
+  `;
+}
+
+function updatePageContextChip() {
+  if (!pageContextChip) return;
+  if (!currentPageContext || currentMode === "general") {
+    pageContextChip.classList.add("hidden");
+    return;
+  }
+
+  const host = getHostFromUrl(currentPageContext.url);
+  const tone = getContextTone(host);
+  const state = getPageContextState();
+
+  pageContextChip.classList.remove("hidden");
+  pageContextFav.className = `page-context-fav tone-${tone}`;
+  pageContextFav.textContent = getInitialFromContext(currentPageContext);
+  pageContextTitle.textContent = currentPageContext.title || "Current page";
+  pageContextUrl.textContent = host || currentPageContext.url || "—";
+  pageContextStatus.className = `page-context-status is-${state.status}`;
+  pageContextStatusLabel.textContent = state.label;
+}
+
+function getQuickActionsForState() {
+  if (currentMode === "lecture" || currentMode === "meeting") {
+    return [
+      { action: "record", icon: "🎙️", title: recordingCardEl ? "Continue recording" : "Record this tab's audio", meta: currentMode === "meeting" ? "Meeting · multi-speaker" : "Lecture · tab audio" },
+      { action: "fill", icon: "📝", title: "Summarize the last section", meta: "Ask after you convert to notes", prompt: "Summarize the last section in simple terms." },
+      { action: "fill", icon: "❓", title: "Explain the key idea", meta: "Turn audio into notes first", prompt: "What is the key idea here?" },
+    ];
+  }
+
+  if (currentMode === "web") {
+    return [
+      { action: "fill", icon: "🔎", title: "Find the latest update", meta: "Live browser search", prompt: "Search the web for the latest update on this topic." },
+      { action: "fill", icon: "📚", title: "Compare 3 sources", meta: "Answer with links", prompt: "Search the web and compare the top 3 reliable sources for this." },
+      { action: "fill", icon: "🧭", title: "Find the official docs", meta: "Best for tools or products", prompt: "Search the web and find the official documentation for this." },
+    ];
+  }
+
+  if (currentMode === "agent") {
+    return [
+      { action: "fill", icon: "🤖", title: "Delegate a browser task", meta: "Click, type, navigate", prompt: "Reply to this person saying I'll be ten minutes late." },
+      { action: "fill", icon: "➡️", title: "Go where I tell you", meta: "Use the current tab", prompt: "Open the first useful result for this and summarize it." },
+      { action: "voice", icon: "🎧", title: "Use voice instead", meta: "Hands-free Delegate", prompt: "" },
+    ];
+  }
+
+  if (notesMarkdown) {
+    return [
+      { action: "open-notes", icon: "📝", title: "Open this note", meta: "Full markdown view" },
+      { action: "fill", icon: "📚", title: "Generate practice questions", meta: "For the saved note", prompt: "Generate 5 practice questions from these notes." },
+      { action: "fill", icon: "✍️", title: "Turn this into flashcards", meta: "Short Q&A format", prompt: "Turn these notes into concise flashcards." },
+    ];
+  }
+
+  if (currentPageContext && currentMode === "page") {
+    const host = getHostFromUrl(currentPageContext.url);
+    return [
+      { action: "fill", icon: "💬", title: `Explain this ${host ? `page on ${host}` : "page"}`, meta: "Summarize what you're seeing", prompt: "What am I looking at here?" },
+      { action: "delegate", icon: "🤖", title: "Do something on this page", meta: "Delegate on the current tab", prompt: "Do this task on the page for me." },
+      { action: "fill", icon: "🔎", title: "Ask a sharper follow-up", meta: "Page-aware chat", prompt: "What's the most important thing on this page?" },
+    ];
+  }
+
+  if (currentPageContext) {
+    return [
+      { action: "fill", icon: "💬", title: "Chat with this page", meta: "Read before you ask", prompt: "What's important on this page?" },
+      { action: "voice", icon: "🎧", title: "Start a voice session", meta: "Talk from any tab", prompt: "" },
+      { action: "record", icon: "🎙️", title: "Record tab audio", meta: "Lecture, meeting, podcast" },
+    ];
+  }
+
+  return [
+    { action: "voice", icon: "🎧", title: "Start a voice session", meta: "⌥ Space · from any tab", prompt: "" },
+    { action: "delegate", icon: "🤖", title: "Run a Delegate task", meta: "Reply to Priya saying I'm running late", prompt: "Reply to Priya saying I'm running ten minutes late." },
+    { action: "record", icon: "🎙️", title: "Record this tab's audio", meta: "Lecture, meeting, podcast" },
+  ];
+}
+
+function renderQuickActions() {
+  if (!emptyQuickActions) return;
+  const items = getQuickActionsForState();
+  emptyQuickActions.innerHTML = items.map((item) => `
+    <button class="quick-action-card" type="button" data-action="${escapeHtml(item.action)}" data-prompt="${escapeHtml(item.prompt || "")}">
+      <span class="quick-action-icon" aria-hidden="true">${item.icon}</span>
+      <span class="quick-action-copy">
+        <span class="quick-action-title">${escapeHtml(item.title)}</span>
+        <span class="quick-action-meta">${escapeHtml(item.meta)}</span>
+      </span>
+      <span class="quick-action-arrow" aria-hidden="true">↵</span>
+    </button>
+  `).join("");
+}
+
+function parseNoteRecap(markdown) {
+  const titleMatch = markdown.match(/^#\s+(.+)$/m);
+  const title = titleMatch ? titleMatch[1].trim() : "Saved note";
+
+  const tldrMatch = markdown.match(/(?:^|\n)(?:\*\*)?TL;DR\.?(?:\*\*)?\s*[:.-]?\s*(.+)$/im);
+  let summary = tldrMatch ? tldrMatch[1].trim() : "";
+  if (!summary) {
+    const afterTitle = markdown.split(/\n+/).map((line) => line.trim()).filter(Boolean).find((line) => !/^#/.test(line) && !/^[*-]\s/.test(line));
+    summary = afterTitle || "Your note is saved and ready to explore.";
+  }
+
+  const bulletLines = markdown
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^[-*]\s+/.test(line))
+    .slice(0, 4)
+    .map((line) => line.replace(/^[-*]\s+/, "").trim());
+
+  const points = bulletLines.length ? bulletLines : [summary].filter(Boolean);
+  return { title, summary, points };
+}
+
+function formatHistoryMeta(entry) {
+  const date = new Date(entry.date);
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function getHistoryTitle(entry) {
+  const heading = entry.notes.match(/^#\s+(.+)$/m)?.[1];
+  if (heading) return heading.trim();
+  return (entry.notes.match(/^##?\s+(.+)$/m) || ["", entry.notes.substring(0, 60)])[1].trim();
+}
+
+function renderRecentHistory() {
+  if (!emptyRecentList || !emptyRecentSection) return;
+  chrome.storage.local.get("notesHistory", (data) => {
+    const history = data.notesHistory || [];
+    if (history.length === 0 || hasExistingNotes() || chatMessages.length > 0 || recordingCardEl) {
+      emptyRecentSection.classList.add("hidden");
+      emptyRecentList.innerHTML = "";
+      return;
+    }
+
+    emptyRecentSection.classList.remove("hidden");
+    emptyRecentList.innerHTML = history.slice(0, 3).map((entry) => `
+      <button class="recent-note-row" type="button" data-history-id="${entry.id}">
+        <span class="recent-note-mark">${escapeHtml(getHistoryTitle(entry).slice(0, 2).toUpperCase())}</span>
+        <span class="recent-note-copy">
+          <span class="recent-note-title">${escapeHtml(getHistoryTitle(entry))}</span>
+          <span class="recent-note-meta">${escapeHtml(formatHistoryMeta(entry))}</span>
+        </span>
+        <span class="recent-note-arrow" aria-hidden="true">›</span>
+      </button>
+    `).join("");
+  });
+}
+
+function renderEmptyStateSurface() {
+  const hasSession = hasExistingNotes() || chatMessages.length > 0 || !!recordingCardEl;
+  if (hasSession || !emptyState) return;
+
+  if (emptyStateEyebrowText) {
+    emptyStateEyebrowText.textContent = currentPageContext && currentMode !== "general" ? "AI Browser Companion" : "Ready when you are";
+  }
+
+  const info = MODE_HINTS[currentMode] || MODE_HINTS.page;
+  if (modeHintEl) modeHintEl.textContent = info.hint;
+
+  if (emptyStateSub) {
+    if (notesMarkdown) {
+      emptyStateSub.textContent = "Your latest note is saved below. Ask follow-up questions, open it, or turn it into study material.";
+    } else if (currentPageContext && currentMode === "page") {
+      const host = getHostFromUrl(currentPageContext.url);
+      emptyStateSub.textContent = `I've read this ${host || "page"}. Ask me anything about it, or tell me what to do next.`;
+    } else if (currentPageContext && currentMode === "agent") {
+      emptyStateSub.textContent = "Tell me what to do on this page and I’ll navigate, click, and type on your behalf.";
+    } else if (currentPageContext && (currentMode === "lecture" || currentMode === "meeting")) {
+      emptyStateSub.textContent = "Capture tab audio here, then turn the recording into structured notes and follow-up questions.";
+    } else {
+      emptyStateSub.textContent = info.sub || "Record tab audio, read any page, or just ask something.";
+    }
+  }
+
+  if (modeHintEl) {
+    modeHintEl.classList.toggle("hidden", false);
+  }
+
+  if (emptyStateTip) {
+    emptyStateTip.innerHTML = currentMode === "agent"
+      ? `<span class="empty-state-tip-mark" aria-hidden="true"></span><span><b>Tip.</b> Delegate works best when you name the site and the exact outcome you want.</span>`
+      : currentMode === "web"
+        ? `<span class="empty-state-tip-mark" aria-hidden="true"></span><span><b>Tip.</b> Ask for the <span class="kbd">latest</span> or <span class="kbd">official</span> source when you want live web results.</span>`
+        : `<span class="empty-state-tip-mark" aria-hidden="true"></span><span><b>Tip.</b> Hit <span class="kbd">⌥ Space</span> from any tab to talk to SideBrain without opening this panel.</span>`;
+  }
+
+  renderQuickActions();
+  renderRecentHistory();
+}
+
+function refreshPanelChrome() {
+  updateModeSelectorButton();
+  updatePageContextChip();
+  renderEmptyStateSurface();
+}
 
 // Info popover toggle
 infoBtn?.addEventListener("click", (e) => {
@@ -123,6 +426,62 @@ modelPopover?.querySelectorAll(".model-option").forEach((el) => {
   });
 });
 
+pageContextChip?.addEventListener("click", () => {
+  if (currentPageContext && currentMode === "general") {
+    setMode("page");
+  }
+  chatInput?.focus();
+});
+
+emptyQuickActions?.addEventListener("click", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const button = target.closest(".quick-action-card");
+  if (!button) return;
+  const action = button.dataset.action;
+  const prompt = button.dataset.prompt || "";
+
+  if (action === "voice") {
+    openVoiceMode();
+    return;
+  }
+
+  if (action === "record") {
+    if (currentMode !== "lecture" && currentMode !== "meeting") {
+      setMode(currentMode === "meeting" ? "meeting" : "lecture");
+    }
+    startRecordingFlow();
+    return;
+  }
+
+  if (action === "open-notes") {
+    notesOverlay?.classList.remove("hidden");
+    return;
+  }
+
+  if (action === "delegate") {
+    setMode("agent");
+  }
+
+  if (prompt && chatInput) {
+    chatInput.value = prompt;
+    chatInput.focus();
+  }
+});
+
+emptyRecentList?.addEventListener("click", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const row = target.closest(".recent-note-row");
+  if (!row) return;
+  const historyId = Number(row.dataset.historyId);
+  chrome.storage.local.get("notesHistory", (data) => {
+    const history = data.notesHistory || [];
+    const entry = history.find((item) => item.id === historyId);
+    if (entry) openHistoryEntry(entry);
+  });
+});
+
 // Legacy hidden elements (kept for JS compatibility in unchanged functions)
 const statusEl = document.getElementById("status") || { className: "", querySelector: () => ({ textContent: "" }) };
 const timerEl = document.getElementById("timer") || { textContent: "" };
@@ -151,6 +510,7 @@ function renderMarkdown(md) {
     .replace(/^-\s+(.+)$/gm, '<li>$1</li>')
     .replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>')
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:8px 0;">')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br>');
   html = html.replace(/((?:<li>.*<\/li>(?:<br>)?)+)/g, (match) => '<ul>' + match.replace(/<br>/g, '') + '</ul>');
@@ -173,6 +533,53 @@ function buildNotesContextForAI(markdown) {
     return `\n\n${placeholder}\n\n`;
   });
   return { sanitizedNotes, existingImages };
+}
+
+function isExplicitWebSearchRequest(text) {
+  return /\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|latest\b|current\b|news\b|search for\b)\b/i.test(text);
+}
+
+function formatWebSearchResults(query, searchData) {
+  const lines = (searchData?.results || []).map((result, index) => {
+    const title = String(result.title || "Untitled result").trim();
+    const url = String(result.url || "").trim();
+    const snippet = String(result.snippet || "").trim();
+    return `[${index + 1}] ${title}\nURL: ${url}\nSnippet: ${snippet || "(no snippet provided)"}`;
+  });
+
+  return [
+    `Live web search query: ${query}`,
+    searchData?.engine ? `Search engine: ${searchData.engine}` : "",
+    searchData?.searchUrl ? `Search page: ${searchData.searchUrl}` : "",
+    "",
+    lines.join("\n\n"),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildWebSearchPageContext(query, searchData) {
+  return {
+    title: `Web search results for "${query}"`,
+    url: searchData?.searchUrl || "",
+    text: formatWebSearchResults(query, searchData),
+  };
+}
+
+function appendSearchSources(reply, results) {
+  if (!results?.length) return reply;
+  if (/\n#{1,3}\s*Sources\b/i.test(reply) || /\nSources:\s*$/i.test(reply)) return reply;
+
+  const sources = results
+    .slice(0, 5)
+    .filter((result) => result?.url)
+    .map((result) => {
+      const cleanTitle = String(result.title || result.url).replace(/[\[\]]/g, "").trim();
+      return `- [${cleanTitle}](${result.url})`;
+    });
+
+  if (!sources.length) return reply;
+  return `${reply}\n\n## Sources\n${sources.join("\n")}`;
 }
 
 function looksLikeAnswerRequest(text) {
@@ -230,7 +637,22 @@ function updateEmptyState() {
   const hasSession = hasExistingNotes() || chatMessages.length > 0 || !!recordingCardEl;
   if (emptyState) emptyState.classList.toggle("hidden", hasSession);
   if (newSessionBtn) newSessionBtn.classList.toggle("hidden", !hasSession);
-  updateChatContextUI();
+  refreshPanelChrome();
+}
+
+// ===== SELECTION CHIP UI =====
+const selectionChipEl = document.getElementById("selectionChip");
+const selectionChipTextEl = document.getElementById("selectionChipText");
+document.getElementById("selectionChipClear")?.addEventListener("click", () => {
+  currentSelection = null;
+  if (selectionChipEl) selectionChipEl.classList.add("hidden");
+});
+
+function showSelectionChip(text) {
+  if (!selectionChipEl || !selectionChipTextEl) return;
+  const preview = text.length > 60 ? text.slice(0, 60) + "…" : text;
+  selectionChipTextEl.textContent = `"${preview}"`;
+  selectionChipEl.classList.remove("hidden");
 }
 
 // ===== ONBOARDING =====
@@ -297,7 +719,6 @@ if (onboardingOverlay && onboardingNextBtn) {
 function setMode(mode) {
   currentMode = mode;
   chrome.storage.local.set({ currentMode: mode });
-  if (modeSelectorBtn) modeSelectorBtn.innerHTML = MODE_ICONS[mode] || MODE_ICONS.page;
   modeDropup?.classList.add("hidden");
   updateChatContextUI();
 }
@@ -329,20 +750,37 @@ function createRecordingCard() {
   card.id = "recordingCard";
   card.className = "recording-card";
   card.innerHTML = `
-    <div class="orb-hero orb-recording"></div>
-    <div class="recording-meta">
-      <span id="recTimer">00:00</span>
-      <span class="sep">·</span>
-      <span id="recSegment">Recording...</span>
+    <div class="recording-card-top">
+      <div class="rec-mini">
+        <span class="d"></span>
+        <span class="l">REC · TAB AUDIO</span>
+        <span class="t" id="recTimer">00:00</span>
+      </div>
+      <div class="recording-orb-shell">
+        <div class="orb-hero orb-recording"></div>
+      </div>
+      <div class="recording-title-wrap">
+        <div class="welcome-eye compact"><span class="welcome-eye-dot"></span> Capture in progress</div>
+        <h3 class="recording-title">Turn this tab into a usable note.</h3>
+        <p class="recording-sub" id="recSegment">Recording...</p>
+      </div>
     </div>
-    <div class="recording-controls">
-      <button id="pauseBtn" class="btn btn-stop">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="4" height="12"/><rect x="14" y="6" width="4" height="12"/></svg>
-        Pause &amp; Save
-      </button>
-      <button id="convertBtn" class="btn btn-convert" disabled>
-        ${CONVERT_BUTTON_ICON} Convert to Notes
-      </button>
+    <div class="recording-surface">
+      <div class="recording-surface-head">Live capture</div>
+      <p class="recording-surface-copy">SideBrain is listening to this tab. Pause when you want to save a segment, then convert everything into structured notes.</p>
+      <div class="recording-suggested">
+        <span class="recording-pill">Highlights will be pulled into your note</span>
+        <span class="recording-pill">Ask follow-up questions after conversion</span>
+      </div>
+      <div class="recording-controls">
+        <button id="pauseBtn" class="btn btn-stop">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="4" height="12"/><rect x="14" y="6" width="4" height="12"/></svg>
+          Pause &amp; Save
+        </button>
+        <button id="convertBtn" class="btn btn-convert" disabled>
+          ${CONVERT_BUTTON_ICON} Convert to Notes
+        </button>
+      </div>
     </div>
   `;
 
@@ -370,30 +808,45 @@ function removeRecordingCard() {
   recSegmentEl = null;
   isRecording = false;
   stopTimer();
+  refreshPanelChrome();
 }
 
 function injectNotesReadyCard() {
   // Remove any existing notes-ready cards first
   chatArea.querySelectorAll(".notes-ready-card").forEach(el => el.remove());
+  const recap = parseNoteRecap(notesMarkdown);
 
   const card = document.createElement("div");
-  card.className = "notes-ready-card";
+  card.className = "notes-ready-card note-recap-card";
   card.innerHTML = `
-    <span class="notes-ready-icon">📝</span>
-    <span>Notes are ready</span>
-    <button class="open-notes-btn">Open Notes →</button>
+    <div class="note-recap-head">
+      <div class="welcome-eye compact"><span class="welcome-eye-dot"></span> Note saved</div>
+      <h3 class="note-recap-title">${escapeHtml(recap.title)}</h3>
+      <p class="note-recap-summary"><b>TL;DR.</b> ${escapeHtml(recap.summary)}</p>
+    </div>
+    <div class="note-recap-points">
+      ${recap.points.slice(0, 4).map((point, index) => `
+        <div class="note-recap-point">
+          <span class="note-recap-tag">P${index + 1}</span>
+          <span>${escapeHtml(point)}</span>
+        </div>
+      `).join("")}
+    </div>
+    <div class="note-recap-actions">
+      <button class="open-notes-btn">Open full note</button>
+      <button class="recap-secondary-btn copy-notes-btn">Copy markdown</button>
+      ${(currentMode === "lecture" || currentMode === "meeting") ? `<button class="recap-secondary-btn record-more-inline-btn">Record more</button>` : ""}
+    </div>
   `;
   card.querySelector(".open-notes-btn").addEventListener("click", () => {
     notesOverlay.classList.remove("hidden");
   });
+  card.querySelector(".copy-notes-btn")?.addEventListener("click", () => {
+    navigator.clipboard.writeText(notesMarkdown);
+  });
+  card.querySelector(".record-more-inline-btn")?.addEventListener("click", () => startRecordingFlow());
   chatArea.appendChild(card);
   chatArea.scrollTop = chatArea.scrollHeight;
-
-  // Auto-dismiss after 5 seconds
-  setTimeout(() => {
-    card.classList.add("notes-ready-fade");
-    setTimeout(() => { if (card.parentNode) card.remove(); }, 400);
-  }, 5000);
 }
 
 function injectRecordMoreCard() {
@@ -440,16 +893,17 @@ function updatePauseBtnState() {
     pauseBtn.classList.add("btn-record");
     recordingCardEl?.querySelector(".orb-hero")?.classList.remove("orb-recording");
   }
+  refreshPanelChrome();
 }
 
 function updateSegmentUI() {
   if (!recSegmentEl) return;
   if (audioSegments.length === 0) {
-    recSegmentEl.textContent = isRecording ? "Recording..." : "Ready";
+    recSegmentEl.textContent = isRecording ? "Listening to this tab in real time." : "Ready to capture a segment.";
   } else {
     const segNum = audioSegments.length;
     const total = formatTime(totalRecordedSeconds);
-    recSegmentEl.textContent = `${segNum} segment${segNum > 1 ? "s" : ""} · ${total}`;
+    recSegmentEl.textContent = `${segNum} saved segment${segNum > 1 ? "s" : ""} · ${total} captured so far.`;
   }
 }
 
@@ -473,34 +927,17 @@ function fetchPageContext() {
   });
 }
 
-const MODE_HINTS = {
-  lecture:  { sub: "Lecture & Audio mode", hint: "Press Enter or tap send to start recording — audio from this tab will be captured and turned into notes." },
-  meeting:  { sub: "Meeting & Call mode",  hint: "Press Enter or tap send to start recording — great for multi-speaker calls. Pause & Save between segments." },
-  page:     { sub: "Chat with Page mode",  hint: "Ask anything about what's on the current page. SideBrain reads the page so you don't have to." },
-  general:  { sub: "General Chat mode",    hint: "Ask me anything — no page context, just a straight conversation." },
-  agent:    { sub: "Browser Agent mode",   hint: "Type a task and the agent will navigate, click, and fill forms on your behalf. Experimental — works best for simple tasks." },
-};
-
 function updateChatContextUI() {
-  // Placeholder stays generic always
-  if (chatInput) chatInput.placeholder = "Ask anything...";
+  if (!chatInput) return;
 
-  // Show mode hint in the empty state instead
-  const modeHintEl = document.getElementById("modeHint");
-  const emptySubEl = document.getElementById("emptyStateSub");
-  const info = MODE_HINTS[currentMode];
+  if (currentMode === "page") chatInput.placeholder = "Ask about this page…";
+  else if (currentMode === "lecture" || currentMode === "meeting") chatInput.placeholder = "Ask about what you just heard…";
+  else if (currentMode === "web") chatInput.placeholder = "Search the web with sources…";
+  else if (currentMode === "agent") chatInput.placeholder = "Tell SideBrain what to do…";
+  else if (notesMarkdown) chatInput.placeholder = "Ask about this note…";
+  else chatInput.placeholder = "Ask anything…";
 
-  if (modeHintEl && info) {
-    const hasSession = hasExistingNotes() || chatMessages.length > 0 || !!recordingCardEl;
-    if (!hasSession) {
-      if (emptySubEl) emptySubEl.textContent = info.sub;
-      modeHintEl.textContent = info.hint;
-      modeHintEl.classList.remove("hidden");
-    } else {
-      modeHintEl.classList.add("hidden");
-      if (emptySubEl) emptySubEl.textContent = "Record tab audio, read any page, or just ask something.";
-    }
-  }
+  refreshPanelChrome();
 }
 
 fetchPageContext();
@@ -610,11 +1047,10 @@ async function handleConvertToNotes() {
     seconds = 0;
     chrome.storage.local.remove(["audioSegments", "totalRecordedSeconds"]);
 
-    // Update UI — remove recording card, show notes-ready + record-more option
+    // Update UI — remove recording card, show recap + record-more option
     removeRecordingCard();
     injectNotesReadyCard();
     injectRecordMoreCard();
-    notesOverlay.classList.remove("hidden");
     updateChatContextUI();
   } catch (e) {
     alert("Error: " + e.message);
@@ -714,6 +1150,7 @@ function updateHistoryBtnVisibility() {
     const history = data.notesHistory || [];
     if (history.length > 0) historyBtn?.classList.remove("hidden");
     else historyBtn?.classList.add("hidden");
+    renderRecentHistory();
   });
 }
 
@@ -742,6 +1179,18 @@ function saveToHistory(markdown) {
   });
 }
 
+function openHistoryEntry(entry) {
+  notesMarkdown = entry.notes;
+  currentSessionId = entry.id;
+  chrome.storage.local.set({ currentSessionId, currentNotes: notesMarkdown });
+  notesContent.innerHTML = renderMarkdown(notesMarkdown);
+  injectNotesReadyCard();
+  updateChatContextUI();
+  loadChatMessages(currentSessionId);
+  closeHistory();
+  notesOverlay.classList.remove("hidden");
+}
+
 function loadHistory() {
   chrome.storage.local.get("notesHistory", (data) => {
     const history = data.notesHistory || [];
@@ -757,17 +1206,7 @@ function loadHistory() {
       const dateStr = date.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
       const preview = (entry.notes.match(/^##?\s+(.+)$/m) || ["", entry.notes.substring(0, 60)])[1];
       item.innerHTML = `<div class="history-meta">${dateStr}</div><div class="history-preview">${preview}...</div>`;
-      item.addEventListener("click", () => {
-        notesMarkdown = entry.notes;
-        currentSessionId = entry.id;
-        chrome.storage.local.set({ currentSessionId, currentNotes: notesMarkdown });
-        notesContent.innerHTML = renderMarkdown(notesMarkdown);
-        injectNotesReadyCard();
-        updateChatContextUI();
-        loadChatMessages(currentSessionId);
-        closeHistory();
-        notesOverlay.classList.remove("hidden");
-      });
+      item.addEventListener("click", () => openHistoryEntry(entry));
       historyList.appendChild(item);
     });
   });
@@ -775,6 +1214,64 @@ function loadHistory() {
 
 
 // ===== CHAT =====
+function stripSourceSection(markdown) {
+  return String(markdown || "").replace(/\n##\s+Sources[\s\S]*$/i, "").trim();
+}
+
+function extractSourceLinks(markdown) {
+  const sourcesSection = String(markdown || "").match(/\n##\s+Sources[\s\S]*$/i)?.[0] || "";
+  const matches = Array.from(sourcesSection.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g));
+  return matches.slice(0, 5).map((match) => ({ title: match[1], url: match[2] }));
+}
+
+function getAssistantLabel() {
+  if (currentMode === "web") return "SideBrain · Web";
+  if (currentMode === "agent") return "SideBrain · Delegate";
+  if (notesMarkdown && !currentPageContext) return "SideBrain · Notes";
+  if (currentPageContext) return "SideBrain · Page";
+  return "SideBrain";
+}
+
+function getFollowupSuggestions() {
+  if (currentMode === "web") {
+    return [
+      "Compare the top 3 sources",
+      "Find the official source",
+      "What's the latest update here?",
+    ];
+  }
+
+  if (currentMode === "agent") {
+    return [
+      "Watch the current tab",
+      "Do the next step for me",
+      "Summarize what just happened",
+    ];
+  }
+
+  if (notesMarkdown) {
+    return [
+      "Generate practice questions",
+      "Summarize this note in plain English",
+      "Turn this into flashcards",
+    ];
+  }
+
+  if (currentPageContext) {
+    return [
+      "What's the key thing here?",
+      "Summarize this page",
+      "What should I do next?",
+    ];
+  }
+
+  return [
+    "Ask a follow-up question",
+    "Search the web for this",
+    "Use voice instead",
+  ];
+}
+
 function loadChatMessages(sessionId) {
   const key = `chat_${sessionId}`;
   chrome.storage.local.get(key, (data) => {
@@ -792,15 +1289,89 @@ function saveChatMessages() {
 
 function renderChatMessages() {
   chatMessagesEl.innerHTML = "";
-  chatMessages.forEach((msg) => {
+  chatMessages.forEach((msg, index) => {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble chat-${msg.role}`;
-    if (msg.image) bubble.innerHTML += `<img src="${msg.image}" alt="Attached image" class="chat-msg-image" />`;
-    bubble.innerHTML += `<div class="chat-bubble-text">${renderMarkdown(msg.content)}</div>`;
+
+    if (msg.role === "assistant") {
+      const sources = extractSourceLinks(msg.content);
+      const bodyMarkdown = stripSourceSection(msg.content);
+      const followups = index === chatMessages.length - 1 ? getFollowupSuggestions() : [];
+      bubble.classList.add("chat-assistant-rich");
+      bubble.innerHTML = `
+        <div class="assistant-bubble-shell">
+          <div class="assistant-bubble-head"><span class="assistant-bubble-dot"></span>${escapeHtml(getAssistantLabel())}</div>
+          ${msg.image ? `<img src="${msg.image}" alt="Attached image" class="chat-msg-image" />` : ""}
+          <div class="chat-bubble-text rendered-md">${renderMarkdown(bodyMarkdown)}</div>
+          ${sources.length ? `
+            <div class="chat-source-row">
+              ${sources.map((source, sourceIndex) => `
+                <a class="chat-source-pill" href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">
+                  <span class="chat-source-pill-num">${sourceIndex + 1}</span>
+                  <span>${escapeHtml(source.title)}</span>
+                </a>
+              `).join("")}
+            </div>
+          ` : ""}
+          ${followups.length ? `
+            <div class="chat-followups">
+              ${followups.map((followup) => `
+                <button class="chat-followup" type="button" data-followup="${escapeHtml(followup)}">
+                  <span>${escapeHtml(followup)}</span>
+                  <span class="chat-followup-arrow">→</span>
+                </button>
+              `).join("")}
+            </div>
+          ` : ""}
+          <div class="chat-assistant-tools">
+            <button class="chat-tool-btn" type="button" data-tool="copy" data-index="${index}">Copy</button>
+            <button class="chat-tool-btn" type="button" data-tool="reuse" data-index="${index}">Use again</button>
+          </div>
+        </div>
+      `;
+    } else {
+      if (msg.image) bubble.innerHTML += `<img src="${msg.image}" alt="Attached image" class="chat-msg-image" />`;
+      bubble.innerHTML += `<div class="chat-bubble-text rendered-md">${renderMarkdown(msg.content)}</div>`;
+    }
+
     chatMessagesEl.appendChild(bubble);
   });
   chatArea.scrollTop = chatArea.scrollHeight;
+  refreshPanelChrome();
 }
+
+chatMessagesEl?.addEventListener("click", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+
+  const followupBtn = target.closest(".chat-followup");
+  if (followupBtn && chatInput) {
+    chatInput.value = followupBtn.dataset.followup || "";
+    chatInput.focus();
+    return;
+  }
+
+  const toolBtn = target.closest(".chat-tool-btn");
+  if (!toolBtn) return;
+
+  const index = Number(toolBtn.dataset.index);
+  const tool = toolBtn.dataset.tool;
+  const msg = chatMessages[index];
+  if (!msg) return;
+
+  if (tool === "copy") {
+    navigator.clipboard.writeText(msg.content);
+    toolBtn.textContent = "Copied";
+    window.setTimeout(() => { toolBtn.textContent = "Copy"; }, 1200);
+    return;
+  }
+
+  if (tool === "reuse" && chatInput) {
+    const previousUser = [...chatMessages.slice(0, index).reverse()].find((entry) => entry.role === "user");
+    chatInput.value = previousUser ? previousUser.content.replace(/^🤖\s*/, "") : "";
+    chatInput.focus();
+  }
+});
 
 async function sendChatMessage(text, imageBase64) {
   if (!text && !imageBase64) return;
@@ -850,6 +1421,7 @@ async function sendChatMessage(text, imageBase64) {
       aiProvider: currentAiProvider,
     };
     if (currentPageContext) body.pageContext = currentPageContext;
+    if (currentSelection) body.selectedText = currentSelection;
     if (imageBase64) {
       body.existingImages = notesCtx.existingImages;
       body.imageBase64 = imageBase64;
@@ -890,6 +1462,94 @@ async function sendChatMessage(text, imageBase64) {
   }
 }
 
+async function fetchWebSearchReply(text, historyOverride) {
+  const searchData = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "performWebSearch", query: text }, (res) => {
+      if (chrome.runtime.lastError) {
+        resolve({ error: chrome.runtime.lastError.message });
+        return;
+      }
+      resolve(res || { error: "No search response" });
+    });
+  });
+
+  if (searchData?.error) {
+    throw new Error(searchData.error);
+  }
+  if (!searchData?.results?.length) {
+    throw new Error("I couldn't pull back any live results for that search.");
+  }
+
+  const response = await fetch(`${API_BASE}/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      aiProvider: currentAiProvider,
+      pageContext: buildWebSearchPageContext(text, searchData),
+      chatHistory: historyOverride,
+      message: `Answer the user's question using the live web search results in page context. Do not pretend you visited pages beyond these result snippets. If the results are insufficient, say that plainly.\n\nUser question: ${text}`,
+    }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Request failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const rawReply = String(data.reply || "I couldn't turn those web results into a useful answer.");
+  return appendSearchSources(rawReply, searchData.results);
+}
+
+async function sendWebSearchMessage(text) {
+  if (!text) return;
+  const allowed = await checkChatLimit();
+  if (!allowed) return;
+  await incrementChatCount();
+
+  chatMessages.push({ role: "user", content: text });
+  renderChatMessages();
+  saveChatMessages();
+  updateEmptyState();
+
+  const thinkingEl = document.createElement("div");
+  thinkingEl.className = "chat-bubble chat-assistant chat-thinking";
+  thinkingEl.innerHTML = `<div class="thinking-wave"><span class="thinking-wave-text">Searching the web...</span></div>`;
+  chatMessagesEl.appendChild(thinkingEl);
+  chatArea.scrollTop = chatArea.scrollHeight;
+
+  const thinkingLabels = ["Searching the web...", "Reading results...", "Writing response..."];
+  let labelIdx = 0;
+  const thinkingInterval = setInterval(() => {
+    labelIdx = (labelIdx + 1) % thinkingLabels.length;
+    const textEl = thinkingEl.querySelector(".thinking-wave-text");
+    if (!textEl) return;
+    textEl.style.opacity = "0";
+    textEl.style.transform = "translateY(4px)";
+    setTimeout(() => {
+      textEl.textContent = thinkingLabels[labelIdx];
+      textEl.style.opacity = "1";
+      textEl.style.transform = "translateY(0)";
+    }, 200);
+  }, 1800);
+
+  try {
+    const history = chatMessages.slice(0, -1).map((message) => ({ role: message.role, content: message.content }));
+    const reply = await fetchWebSearchReply(text, history);
+    clearInterval(thinkingInterval);
+    thinkingEl.remove();
+    chatMessages.push({ role: "assistant", content: reply });
+    renderChatMessages();
+    saveChatMessages();
+  } catch (e) {
+    clearInterval(thinkingInterval);
+    thinkingEl.remove();
+    chatMessages.push({ role: "assistant", content: `⚠️ Error: ${e.message}` });
+    renderChatMessages();
+    saveChatMessages();
+  }
+}
+
 
 // ===== BROWSER AGENT =====
 
@@ -908,23 +1568,26 @@ function setAgentRunningUI(running) {
     if (chatInput) chatInput.disabled = false;
     updateChatContextUI();
   }
+  refreshPanelChrome();
 }
 
 // ---- Agent thinking block (Claude-style collapsible) ----
-function createAgentThinkingBlock() {
+function createAgentThinkingBlock(task) {
   const block = document.createElement("div");
   block.className = "agent-thinking-block";
+  block.dataset.stepCount = "0";
   block.innerHTML = `
-    <div class="agent-thinking-header">
-      <span class="agent-thinking-spinner"></span>
-      <span class="agent-thinking-label">Agent is thinking…</span>
-      <span class="agent-thinking-chevron">▾</span>
+    <div class="delegate-banner">
+      <div class="lbl"><span class="d"></span> Delegate · running</div>
+      <div class="what">${escapeHtml(task)}</div>
     </div>
-    <div class="agent-thinking-steps"></div>
+    <div class="agent-plan-head">Plan · live trace</div>
+    <div class="agent-thinking-steps trace"></div>
+    <div class="trace-total">
+      <span class="trace-total-text">Starting…</span>
+      <span class="pill">DELEGATE</span>
+    </div>
   `;
-  block.querySelector(".agent-thinking-header").addEventListener("click", () => {
-    block.classList.toggle("collapsed");
-  });
   chatMessagesEl.appendChild(block);
   chatArea.scrollTop = chatArea.scrollHeight;
   return block;
@@ -932,40 +1595,46 @@ function createAgentThinkingBlock() {
 
 function agentAddStep(block, text, type = "step") {
   const steps = block.querySelector(".agent-thinking-steps");
-  steps.querySelectorAll(".agent-step-pending").forEach(el => el.remove());
+  const stepCount = Number(block.dataset.stepCount || "0") + 1;
+  block.dataset.stepCount = String(stepCount);
   const line = document.createElement("div");
-  line.className = `agent-step agent-step-${type}`;
-  line.textContent = text;
+  line.className = `trace-step active trace-step-${type}`;
+  line.innerHTML = `
+    <div class="ix">${String(stepCount).padStart(2, "0")}</div>
+    <div>
+      <div class="desc">${escapeHtml(text)}</div>
+      <div class="sub">${type === "error" ? "Blocked" : "Working…"}</div>
+    </div>
+    <div class="ic run"></div>
+  `;
   steps.appendChild(line);
-  const pending = document.createElement("div");
-  pending.className = "agent-step agent-step-pending";
-  pending.textContent = "Thinking…";
-  steps.appendChild(pending);
+  const totalText = block.querySelector(".trace-total-text");
+  if (totalText) totalText.textContent = `${stepCount} step${stepCount !== 1 ? "s" : ""} in progress`;
   chatArea.scrollTop = chatArea.scrollHeight;
   return line;
 }
 
 function agentMarkStepResult(stepEl, success, errorMsg) {
   if (!stepEl) return;
-  stepEl.textContent = (success ? "✓ " : "✗ ") + stepEl.textContent;
+  stepEl.classList.remove("active");
+  const icon = stepEl.querySelector(".ic");
+  const sub = stepEl.querySelector(".sub");
   if (!success) {
-    stepEl.classList.add("agent-step-error");
-    const err = document.createElement("div");
-    err.className = "agent-step agent-step-error agent-step-sub";
-    err.textContent = `  ↳ ${errorMsg}`;
-    stepEl.after(err);
+    stepEl.classList.add("trace-step-error");
+    if (icon) icon.className = "ic error";
+    if (icon) icon.innerHTML = "!";
+    if (sub) sub.textContent = errorMsg || "This step failed.";
+  } else {
+    if (icon) icon.className = "ic done";
+    if (icon) icon.innerHTML = "✓";
+    if (sub) sub.textContent = "Done";
   }
 }
 
 function agentFinalizeBlock(block, stepCount) {
-  // Remove pending line
-  block.querySelector(".agent-step-pending")?.remove();
-  // Collapse header to summary
-  block.classList.add("collapsed");
-  const header = block.querySelector(".agent-thinking-header");
-  header.querySelector(".agent-thinking-spinner").style.display = "none";
-  header.querySelector(".agent-thinking-label").textContent = `Agent · ${stepCount} step${stepCount !== 1 ? "s" : ""}`;
-  header.querySelector(".agent-thinking-chevron").textContent = "▸";
+  const totalText = block.querySelector(".trace-total-text");
+  if (totalText) totalText.textContent = `Completed · ${stepCount} step${stepCount !== 1 ? "s" : ""}`;
+  block.classList.add("agent-thinking-complete");
 }
 
 function getAgentPageContext() {
@@ -1185,6 +1854,7 @@ ACTIONS:
 {"type":"read","selector":"css","targetText":"fallback","description":"Read element to verify state"}
 {"type":"scroll","direction":"down","amount":400,"description":"..."}
 {"type":"wait","ms":1500,"description":"..."}
+{"type":"downloadImage","selector":"css","targetText":"fallback alt text","format":"png","filename":"image.png","description":"Download image as PNG/JPEG/WebP"}
 {"type":"done","message":"what was accomplished"}
 {"type":"answer","message":"..."}
 {"type":"clarify","message":"..."}  ← ONLY when genuinely blocked
@@ -1596,6 +2266,13 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
+// Receive page text selections from content script
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action !== "selectionChanged" || !msg.text) return;
+  currentSelection = { text: msg.text, url: msg.url, title: msg.title };
+  showSelectionChip(msg.text);
+});
+
 // Detect if a voice command is a browser action request
 function isBrowserActionCommand(text) {
   return /\b(open|go to|navigate to|search for|play|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|visit|book)\b/i.test(text);
@@ -1623,12 +2300,24 @@ async function handleVoiceInput(text) {
   // (even if mode isn't explicitly "agent", unless in lecture/meeting mode)
   const useAgent = currentMode === "agent" ||
     (isBrowserActionCommand(text) && currentMode !== "lecture" && currentMode !== "meeting");
+  const useWebSearch = currentMode === "web" ||
+    (currentMode !== "lecture" && currentMode !== "meeting" && !useAgent && isExplicitWebSearchRequest(text));
 
   let reply;
 
   try {
     if (useAgent) {
       reply = await runAgentLoopForVoice(text);
+    } else if (useWebSearch) {
+      reply = await fetchWebSearchReply(
+        text,
+        chatMessages.slice(-10).map((message) => ({ role: message.role, content: message.content })),
+      );
+
+      chatMessages.push({ role: "user", content: text });
+      chatMessages.push({ role: "assistant", content: reply });
+      saveChatMessages();
+      renderChatMessages();
     } else {
       // Use same rich context as sendChatMessage — notes + page context + chat history + mode
       const hasNotes = hasExistingNotes();
@@ -1644,6 +2333,7 @@ async function handleVoiceInput(text) {
       if (currentMode === "page" && currentPageContext) {
         body.pageContext = currentPageContext;
       }
+      if (currentSelection) body.selectedText = currentSelection;
 
       const res = await fetch(`${API_BASE}/chat-about-notes`, {
         method: "POST",
@@ -1694,7 +2384,7 @@ function runAgentLoopForVoice(task) {
     updateEmptyState();
 
     const history = [];
-    const thinkingBlock = createAgentThinkingBlock();
+    const thinkingBlock = createAgentThinkingBlock(task);
 
     const finish = (msg) => {
       agentFinalizeBlock(thinkingBlock, history.length);
@@ -1834,7 +2524,7 @@ async function runAgentLoop(task) {
   updateEmptyState();
 
   const history = [];
-  const thinkingBlock = createAgentThinkingBlock();
+  const thinkingBlock = createAgentThinkingBlock(task);
 
   const finish = (msg) => {
     agentFinalizeBlock(thinkingBlock, history.length);
@@ -1946,6 +2636,11 @@ function handleSend() {
 
   if (currentMode === "agent") {
     runAgentLoop(text);
+    return;
+  }
+
+  if (text && !img && (currentMode === "web" || ((currentMode === "page" || currentMode === "general") && isExplicitWebSearchRequest(text)))) {
+    sendWebSearchMessage(text);
     return;
   }
 
@@ -2363,6 +3058,7 @@ function updateAuthUI() {
       if (userGreeting) userGreeting.textContent = getTimeGreeting(null);
       void removeStorage(["isPremium", "isPremiumCachedAt"]);
     }
+    refreshPanelChrome();
   });
 }
 
@@ -2617,6 +3313,7 @@ newSessionBtn?.addEventListener("click", () => {
   removeRecordingCard();
   chatMessagesEl.innerHTML = "";
   chatArea.querySelectorAll(".notes-ready-card").forEach(el => el.remove());
+  chatArea.querySelectorAll(".record-more-card").forEach(el => el.remove());
   notesContent.innerHTML = "";
   updateChatContextUI();
   updateEmptyState();
@@ -2714,7 +3411,7 @@ async function runRemoteCommand(cmd, token) {
   remoteUserBubble.className = "chat-bubble chat-user";
   remoteUserBubble.innerHTML = `<div class="chat-bubble-text">📱 ${cmd.task}</div>`;
   chatMessagesEl.appendChild(remoteUserBubble);
-  const remoteBlock = createAgentThinkingBlock();
+  const remoteBlock = createAgentThinkingBlock(cmd.task);
   chatArea.scrollTop = chatArea.scrollHeight;
 
   const steps = [];
@@ -2855,5 +3552,3 @@ chrome.storage.local.get(["currentNotes", "currentSessionId", "pendingRemoteComm
     } catch (e) { console.error("[RemoteAgent] Failed to parse pending command", e); }
   }
 });
-
-

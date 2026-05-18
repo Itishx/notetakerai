@@ -99,12 +99,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // ===== BROWSER AGENT: execute action on page =====
   if (msg.action === "agentAction") {
     const { type, selector, targetText, targetTag, text, url, direction, amount } = msg;
+
+    // Pierces open shadow roots so we can find elements inside web components
+    function deepQuery(sel, root) {
+      root = root || document;
+      let el = null;
+      try { el = root.querySelector(sel); } catch(e) {}
+      if (el) return el;
+      for (const host of root.querySelectorAll('*')) {
+        if (host.shadowRoot) {
+          el = deepQuery(sel, host.shadowRoot);
+          if (el) return el;
+        }
+      }
+      return null;
+    }
     (async () => { try {
       if (type === "click") {
         let el = null;
-        // Try CSS selector first
+        // Try CSS selector first (with shadow DOM piercing)
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
+          if (!el) el = deepQuery(selector);
         }
         // Try by visible text
         if (!el && targetText) {
@@ -141,6 +157,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         let el = null;
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
+          if (!el) el = deepQuery(selector);
         }
         // If a targetText hint was given, try finding by aria-label or placeholder
         if (!el && msg.targetText) {
@@ -169,13 +186,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await new Promise(r => setTimeout(r, 80));
 
         if (isContentEditable) {
-          // Gmail body, Notion, etc. — use execCommand for reliable typing
+          el.focus();
+          el.click();
+          await new Promise(r => setTimeout(r, 120));
+
+          // Clear existing content
           document.execCommand("selectAll", false, null);
           document.execCommand("delete", false, null);
-          // Type chunk by chunk using insertText
-          document.execCommand("insertText", false, text);
-          // Fallback: set textContent and fire input event
-          if (!el.textContent.includes(text.substring(0, 5))) {
+
+          // Primary: beforeinput with insertText — works with Lexical (Reddit, Notion, etc.)
+          const bi = new InputEvent("beforeinput", { inputType: "insertText", data: text, bubbles: true, cancelable: true });
+          el.dispatchEvent(bi);
+
+          await new Promise(r => setTimeout(r, 80));
+          const hasText = (el.textContent || "").replace(/\s/g, "").length > 0;
+
+          // Secondary: execCommand insertText — works with most other editors
+          if (!hasText) {
+            document.execCommand("insertText", false, text);
+          }
+
+          // Tertiary: synthetic ClipboardEvent paste — Lexical last resort
+          if (!(el.textContent || "").replace(/\s/g, "").length) {
+            try {
+              const dt = new DataTransfer();
+              dt.setData("text/plain", text);
+              el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+            } catch(e) {}
+          }
+
+          // Final fallback: set textContent directly
+          if (!(el.textContent || "").replace(/\s/g, "").length) {
             el.textContent = text;
             el.dispatchEvent(new Event("input", { bubbles: true }));
           }
@@ -285,6 +326,84 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             sendResponse({ success: true, text: `Options: ${opts} | Selected: ${el.options[el.selectedIndex]?.text}` });
           } else {
             sendResponse({ success: true, text: (el.innerText || el.textContent || "").trim().slice(0, 500) });
+          }
+        }
+
+      } else if (type === "downloadImage") {
+        let img = null;
+        if (selector) { try { img = document.querySelector(selector); } catch(e) {} }
+        if (!img && targetText) {
+          img = Array.from(document.querySelectorAll("img")).find(i =>
+            (i.alt || i.src || "").toLowerCase().includes(targetText.toLowerCase())
+          );
+        }
+        if (!img) img = document.querySelector("img");
+        if (!img) { sendResponse({ error: "No image found on page" }); return true; }
+
+        const srcUrl = img.src || img.getAttribute("data-src") || img.getAttribute("data-lazy-src");
+        if (!srcUrl) { sendResponse({ error: "Image has no src" }); return true; }
+
+        const format = (msg.format || "png").replace("jpg", "jpeg");
+        const mimeType = format === "jpeg" ? "image/jpeg" : format === "webp" ? "image/webp" : "image/png";
+        const filename = msg.filename || `image.${format === "jpeg" ? "jpg" : format}`;
+
+        const drawAndDownload = (imgEl) => new Promise((resolve, reject) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = imgEl.naturalWidth || imgEl.width;
+          canvas.height = imgEl.naturalHeight || imgEl.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(imgEl, 0, 0);
+          canvas.toBlob((blob) => {
+            if (!blob) { reject(new Error("Canvas toBlob failed")); return; }
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            resolve();
+          }, mimeType, 0.95);
+        });
+
+        try {
+          // Try fetch → canvas (works for CORS-enabled images)
+          const resp = await fetch(srcUrl, { mode: "cors" });
+          const blob = await resp.blob();
+          const bitmap = await createImageBitmap(blob);
+          const canvas = document.createElement("canvas");
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          canvas.getContext("2d").drawImage(bitmap, 0, 0);
+          await new Promise((resolve, reject) => {
+            canvas.toBlob((outBlob) => {
+              if (!outBlob) { reject(new Error("toBlob failed")); return; }
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(outBlob);
+              a.download = filename;
+              a.click();
+              URL.revokeObjectURL(a.href);
+              resolve();
+            }, mimeType, 0.95);
+          });
+          sendResponse({ success: true });
+        } catch(_) {
+          try {
+            // CORS fallback: reload img with crossOrigin → canvas
+            const tempImg = new Image();
+            tempImg.crossOrigin = "anonymous";
+            await new Promise((res, rej) => {
+              tempImg.onload = res;
+              tempImg.onerror = rej;
+              tempImg.src = srcUrl + (srcUrl.includes("?") ? "&" : "?") + "_sb=" + Date.now();
+            });
+            await drawAndDownload(tempImg);
+            sendResponse({ success: true });
+          } catch(_2) {
+            // Last resort: direct link download (no format conversion)
+            const a = document.createElement("a");
+            a.href = srcUrl;
+            a.download = filename;
+            a.click();
+            sendResponse({ success: true, note: "Direct download — CORS blocked format conversion" });
           }
         }
 
@@ -424,3 +543,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     setTimeout(() => { observer.disconnect(); clearInterval(interval); }, 300000);
   }
 })();
+
+// ===== SELECTION TRACKING =====
+// Detect when user highlights text on the page and relay it to the side panel
+document.addEventListener('mouseup', () => {
+  const selected = window.getSelection()?.toString()?.trim();
+  if (selected && selected.length > 2) {
+    chrome.runtime.sendMessage({
+      action: 'selectionChanged',
+      text: selected,
+      url: window.location.href,
+      title: document.title,
+    }).catch(() => {}); // panel may not be open — ignore
+  }
+});

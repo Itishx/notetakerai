@@ -1,126 +1,194 @@
 import { Link, useLocation } from "react-router-dom";
-import { Bookmark, Menu, X, Sun, Moon, User, LogOut } from "lucide-react";
-import SideBrainLogo from "@/components/SideBrainLogo";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { useState } from "react";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+
+const NAV_LINKS = [
+  { href: "/use-cases", label: "Use Cases" },
+  { href: "/delegate", label: "Delegate" },
+  { href: "/compare", label: "vs Claude" },
+  { href: "/premium", label: "Pricing" },
+];
+
+const MoonIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z" />
+  </svg>
+);
+
+const SunIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="5" />
+    <line x1="12" y1="1" x2="12" y2="3" />
+    <line x1="12" y1="21" x2="12" y2="23" />
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+    <line x1="1" y1="12" x2="3" y2="12" />
+    <line x1="21" y1="12" x2="23" y2="12" />
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+  </svg>
+);
 
 const Navbar = () => {
   const { pathname } = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { user, profile, signOut } = useAuth();
+  const [scrolled, setScrolled] = useState(false);
+  const isDark = theme === "dark";
 
-  const links = [
-    { to: "/use-cases", label: "Use Cases" },
-    { to: "/delegate", label: "Delegate" },
-    { to: "/reddit", label: "Reddit" },
-    { to: "/compare", label: "vs Claude" },
-    { to: "/premium", label: "Premium" },
-  ];
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const pillBg = isDark
+    ? scrolled ? "rgba(22,18,13,0.97)" : "rgba(22,18,13,0.88)"
+    : scrolled ? "rgba(246,241,234,0.94)" : "rgba(246,241,234,0.82)";
+
+  const pillBorder = isDark
+    ? "1px solid rgba(60,45,28,0.55)"
+    : "1px solid rgba(180,160,130,0.3)";
+
+  const pillShadow = scrolled
+    ? isDark
+      ? "0 2px 20px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.3)"
+      : "0 2px 20px rgba(40,28,18,0.14), 0 1px 3px rgba(40,28,18,0.08)"
+    : isDark
+      ? "0 1px 8px rgba(0,0,0,0.3)"
+      : "0 1px 8px rgba(40,28,18,0.08)";
+
+  const pillStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 2,
+    borderRadius: 999,
+    flexWrap: "nowrap",
+    background: pillBg,
+    backdropFilter: "saturate(160%) blur(18px)",
+    WebkitBackdropFilter: "saturate(160%) blur(18px)",
+    border: pillBorder,
+    boxShadow: pillShadow,
+    transition: "background .2s, box-shadow .2s",
+  };
+
+  const linkStyle = (href: string): React.CSSProperties => ({
+    fontSize: 13.5,
+    color: pathname === href ? "var(--sb-ink)" : "var(--sb-ink-2)",
+    transition: "color .15s",
+    textDecoration: "none",
+    padding: "6px 10px",
+    borderRadius: 999,
+    whiteSpace: "nowrap",
+    fontWeight: pathname === href ? 500 : 400,
+  });
 
   return (
     <>
-    {/* Main nav pill — always perfectly centered */}
-    <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5">
-        <div className="px-8 h-14 flex items-center">
-          {/* Logo */}
-          <Link to="/" onClick={() => window.scrollTo(0, 0)} className="flex-shrink-0 flex items-center text-foreground hover:text-primary transition-colors duration-200">
-            <SideBrainLogo sizeClass="text-sm" />
+      {/* ── Main nav pill (centered) ── */}
+      <nav
+        style={{
+          position: "fixed",
+          top: 16,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 100,
+          width: "fit-content",
+          maxWidth: "calc(100vw - 220px)",
+        }}
+      >
+        <div style={{ ...pillStyle, padding: "7px 12px 7px 14px" }}>
+          <Link
+            to="/"
+            onClick={() => window.scrollTo(0, 0)}
+            style={{ display: "flex", alignItems: "baseline", gap: 0, textDecoration: "none", marginRight: 8, flexShrink: 0 }}
+          >
+            <span style={{ fontFamily: "'TNR', 'Times New Roman', serif", fontStyle: "italic", fontWeight: 400, fontSize: 17, color: "var(--sb-ink)" }}>side</span>
+            <span style={{ fontFamily: "'BeVietnam', sans-serif", fontWeight: 800, fontSize: 17, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>brain</span>
           </Link>
 
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-6 mx-8 whitespace-nowrap">
-            {links.map(({ to, label }) => (
-              <Link
-                key={to}
-                to={to}
-                onClick={() => window.scrollTo(0, 0)}
-                className={cn(
-                  "text-sm transition-colors duration-200",
-                  pathname === to
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {label}
-              </Link>
-            ))}
-          </div>
-
-          {/* Mobile menu toggle */}
-          <button
-            className="md:hidden ml-auto text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          {NAV_LINKS.map(({ href, label }) => (
+            <Link
+              key={href}
+              to={href}
+              style={linkStyle(href)}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--sb-ink)")}
+              onMouseLeave={e => (e.currentTarget.style.color = pathname === href ? "var(--sb-ink)" : "var(--sb-ink-2)")}
+            >
+              {label}
+            </Link>
+          ))}
         </div>
-
-        {/* Mobile menu */}
-        {menuOpen && (
-          <div className="md:hidden border-t border-border/40 bg-background/95 px-6 py-4 flex flex-col gap-4 rounded-b-3xl">
-            {links.map(({ to, label }) => (
-              <Link
-                key={to}
-                to={to}
-                onClick={() => { setMenuOpen(false); window.scrollTo(0, 0); }}
-                className={cn(
-                  "text-sm transition-colors duration-200",
-                  pathname === to ? "text-foreground" : "text-muted-foreground"
-                )}
-              >
-                {label}
-              </Link>
-            ))}
-          </div>
-        )}
       </nav>
-    {/* Actions pill — fixed to top-right, independent of nav */}
-    <div className="actions-pill hidden md:flex fixed top-4 right-4 z-50 items-center gap-2 rounded-full border border-border/40 bg-background/80 backdrop-blur-xl shadow-lg shadow-black/5 px-4 h-14">
-        <button
-          onClick={toggleTheme}
-          className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-          title="Toggle theme"
-        >
-          {theme === "default" ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
-        </button>
-        {user ? (
-          <div className="flex items-center gap-2">
+
+      {/* ── Secondary action pill (right) ── */}
+      <nav
+        style={{ position: "fixed", top: 16, right: 16, zIndex: 100 }}
+      >
+        <div style={{ ...pillStyle, padding: "5px 6px 5px 8px", gap: 2 }}>
+          {/* Dark mode toggle */}
+          <button
+            onClick={toggleTheme}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            style={{
+              width: 32, height: 32, borderRadius: 999,
+              background: "transparent", border: "none",
+              display: "grid", placeItems: "center",
+              color: "var(--sb-ink-3)", cursor: "pointer",
+              transition: "color .15s, background .15s",
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = "var(--sb-ink)"; e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.06)" : "rgba(40,28,18,0.06)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "var(--sb-ink-3)"; e.currentTarget.style.background = "transparent"; }}
+          >
+            {isDark ? <SunIcon /> : <MoonIcon />}
+          </button>
+
+          <span style={{ width: 1, height: 16, background: "var(--sb-line-2)", margin: "0 2px", flexShrink: 0 }} />
+
+          {user ? (
             <Link
               to="/dashboard"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors px-1"
+              style={linkStyle("/dashboard")}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--sb-ink)")}
+              onMouseLeave={e => (e.currentTarget.style.color = pathname === "/dashboard" ? "var(--sb-ink)" : "var(--sb-ink-2)")}
             >
-              {profile?.display_name?.split(" ")[0] || user.email}
+              Dashboard
             </Link>
-            <button
-              onClick={() => signOut()}
-              className="w-8 h-8 rounded-full border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-              title="Sign out"
+          ) : (
+            <Link
+              to="/auth"
+              style={{ ...linkStyle("/auth"), fontSize: 13 }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--sb-ink)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--sb-ink-2)")}
             >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ) : (
-          <Link to="/auth">
-            <Button size="sm" variant="outline" className="rounded-full px-4 text-sm">
-              <User className="w-3.5 h-3.5 mr-1.5" />
-              Login
-            </Button>
-          </Link>
-        )}
-        <Link to="/bookmarklet">
-          <Button
-            size="sm"
-            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-5 text-sm"
+              Sign in
+            </Link>
+          )}
+
+          <Link
+            to="/#install"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "7px 14px", borderRadius: 999,
+              fontSize: 13, fontWeight: 500,
+              background: "var(--sb-ink)", color: "var(--sb-on-ink)",
+              textDecoration: "none",
+              transition: "transform .15s, background .15s",
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.opacity = "0.85"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.opacity = "1"; }}
           >
-            <Bookmark className="w-3.5 h-3.5 mr-1.5" />
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" /><path d="M12 7v10M7 12h10" />
+            </svg>
             Install
-          </Button>
-        </Link>
-      </div>
+          </Link>
+        </div>
+      </nav>
     </>
   );
 };
