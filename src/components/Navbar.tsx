@@ -168,8 +168,9 @@ const Navbar = () => {
             </Link>
           )}
 
-          <Link
-            to="/#install"
+          <a
+            href="/sidebrain-extension.zip"
+            download
             style={{
               display: "inline-flex", alignItems: "center", gap: 5,
               padding: "7px 14px", borderRadius: 999,
@@ -186,7 +187,7 @@ const Navbar = () => {
               <circle cx="12" cy="12" r="9" /><path d="M12 7v10M7 12h10" />
             </svg>
             Install
-          </Link>
+          </a>
         </div>
       </nav>
     </>

@@ -377,7 +377,7 @@ export default function Index() {
 
           {/* CTAs */}
           <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 56, flexWrap: "wrap" }}>
-            <a href="#install" style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
+            <a href="/sidebrain-extension.zip" download style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
               Install for Chrome
             </a>
@@ -887,7 +887,7 @@ export default function Index() {
                   </li>
                 ))}
               </ul>
-              <a href="#install" style={{ ...btnGhost,alignSelf:"flex-start" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
+              <a href="/sidebrain-extension.zip" download style={{ ...btnGhost,alignSelf:"flex-start" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
                 Install free
               </a>
@@ -947,11 +947,11 @@ export default function Index() {
             </h2>
             <p style={{ color:"rgba(251,247,241,0.7)",maxWidth:540,margin:"0 auto 32px",fontSize:18,position:"relative",zIndex:1 }}>Free during beta. Sign up in 30 seconds. Everything you save is tied to your account, forever.</p>
             <div style={{ display:"flex",gap:12,justifyContent:"center",position:"relative",zIndex:1,flexWrap:"wrap" }}>
-              <a href="#" style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"#FBF7F1",color:"#1B1713",border:"1px solid transparent",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+              <a href="/sidebrain-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"#FBF7F1",color:"#1B1713",border:"1px solid transparent",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
                 Add to Chrome
               </a>
-              <a href="#" style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"transparent",color:"#FBF7F1",border:"1px solid rgba(251,247,241,0.2)",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+              <a href="/sidebrain-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"transparent",color:"#FBF7F1",border:"1px solid rgba(251,247,241,0.2)",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 Other browsers <ArrowRightIcon />
               </a>
             </div>
@@ -973,7 +973,7 @@ export default function Index() {
             </div>
             {[
               { heading:"Product",links:[["#features","Features"],["#delegate","Delegate"],["#speed","Speed"],["#dashboard","Dashboard"],["#pricing","Pricing"]] },
-              { heading:"Install",links:[["#","Chrome"],["#","Arc"],["#","Brave"],["#","Edge"],["#","Firefox (soon)"]] },
+              { heading:"Install",links:[["/sidebrain-extension.zip","Chrome"],["/sidebrain-extension.zip","Arc"],["/sidebrain-extension.zip","Brave"],["/sidebrain-extension.zip","Edge"],["#","Firefox (soon)"]] },
               { heading:"Company",links:[["#","Manifesto"],["#","Changelog"],["#","Privacy"],["#","Terms"],["#","Contact"]] },
             ].map(({heading,links})=>(
               <div key={heading}>

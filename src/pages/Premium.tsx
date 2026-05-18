@@ -114,8 +114,9 @@ export default function Premium() {
                   </li>
                 ))}
               </ul>
-              <Link
-                to="/#install"
+              <a
+                href="/sidebrain-extension.zip"
+                download
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",
                   padding: "12px 20px", borderRadius: 999, fontSize: 14, fontWeight: 500,
@@ -127,7 +128,7 @@ export default function Premium() {
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
                 Install free
-              </Link>
+              </a>
             </div>
 
             {/* Pro */}
