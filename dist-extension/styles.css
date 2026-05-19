@@ -1202,6 +1202,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: auto;
   height: 26px;
   padding: 0 8px 0 10px;
   background: var(--bg-2);
