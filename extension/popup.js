@@ -1040,12 +1040,13 @@ function updateChatContextUI() {
   if (!chatInput) return;
 
   if (currentMode === "page") chatInput.placeholder = currentPageContext ? "Ask about this page…" : "Ask anything, or tell me what to do…";
-  else if (currentMode === "lecture" || currentMode === "meeting") chatInput.placeholder = "Ask about what you just heard…";
+  else if (currentMode === "lecture" || currentMode === "meeting") chatInput.placeholder = recordingCardEl ? "Ask about what you just heard…" : "Press ↵ to start recording this tab…";
   else if (currentMode === "web") chatInput.placeholder = "Search the web with sources…";
   else if (currentMode === "agent") chatInput.placeholder = "Tell SideBrain what to do…";
   else if (notesMarkdown) chatInput.placeholder = "Ask about this note…";
   else chatInput.placeholder = "Ask anything…";
 
+  updateSendBtn();
   refreshPanelChrome();
 }
 
@@ -2761,6 +2762,15 @@ function handleSend() {
 
 const SEND_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>`;
 const STOP_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>`;
+const REC_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>`;
+
+function updateSendBtn() {
+  if (!chatSendBtn || agentRunning) return;
+  const isRecordMode = (currentMode === "lecture" || currentMode === "meeting") && !recordingCardEl;
+  chatSendBtn.innerHTML = isRecordMode ? REC_ICON : SEND_ICON;
+  chatSendBtn.classList.toggle("btn-record-ready", isRecordMode);
+  chatSendBtn.title = isRecordMode ? "Start recording" : "Send";
+}
 
 chatSendBtn?.addEventListener("click", () => {
   if (agentRunning) {
