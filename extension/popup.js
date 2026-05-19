@@ -448,11 +448,9 @@ function renderEmptyStateSurface() {
     emptyState.dataset.variant = "page";
     emptyState.innerHTML = `
       <div class="sb-empty sb-empty-page">
-        <div class="welcome">
-          <div class="welcome-eye"><span class="welcome-eye-dot"></span> AI Browser Companion</div>
-          <h2 class="empty-hero">${getGreetingHeadingHtml()}</h2>
-          <p class="empty-state-sub">I've read ${contextLabel}${detail}. Ask me anything about it, or tell me what to do.</p>
-        </div>
+        <div class="welcome-eye"><span class="welcome-eye-dot"></span> AI Browser Companion</div>
+        <h2 class="empty-hero">${getGreetingHeadingHtml()}</h2>
+        <p class="empty-state-sub">I've read ${contextLabel}${detail}. Ask me anything about it, or tell me what to do.</p>
         <div class="sb-section-h">Try one of these</div>
         <div class="quick-action-list">
           ${buildQuickActionCards(getPageAwarePanelActions())}

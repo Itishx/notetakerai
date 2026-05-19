@@ -737,6 +737,7 @@ button {
 .sb-empty-default {
   align-items: center;
   text-align: center;
+  gap: 20px;
 }
 
 .sb-empty-page {
@@ -744,16 +745,15 @@ button {
 }
 
 .sb-empty-orb {
-  width: 80px;
-  height: 80px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #FFD9A8 0%, #F39A42 45%, #D96E1A 80%);
-  box-shadow: 0 0 30px rgba(243, 154, 66, 0.4), inset 0 -10px 20px rgba(160, 60, 10, 0.22);
+  box-shadow: 0 0 40px rgba(243, 154, 66, 0.4), inset 0 -12px 24px rgba(160, 60, 10, 0.25);
   animation: orbBreathe 4.2s ease-in-out infinite;
   margin: 0 auto;
 }
 
-.welcome,
 .welcome-eye {
   display: inline-flex;
   align-items: center;
@@ -765,8 +765,7 @@ button {
   color: var(--accent-deep);
 }
 
-.welcome-eye-dot,
-.welcome-eye-center {
+.welcome-eye-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -790,7 +789,7 @@ button {
 }
 .empty-hero em { color: var(--accent-deep); font-style: italic; }
 
-.empty-hero-center { text-align: center; max-width: 320px; align-self: center; }
+.empty-hero-center { text-align: center; max-width: 320px; align-self: center; font-size: 30px; line-height: 1.05; letter-spacing: -0.02em; }
 
 /* Alias: greeting-hey */
 .greeting-hey {
@@ -838,6 +837,7 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
 }
 .sb-section-h::after {
   content: "";
