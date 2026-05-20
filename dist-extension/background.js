@@ -644,7 +644,7 @@ Use sel= selectors from INTERACTIVE ELEMENTS when available.
 For forms: click field → type → Tab to next field → submit.`;
 }
 
-async function bgCallAgentStep(task, pageInfo, history) {
+async function bgCallAgentStep(task, pageInfo, history, currentStep = null) {
   const historyText = history.length > 0
     ? history.map((h, i) => {
         const status = h.result?.success ? "✓ OK" : `✗ ${h.result?.error || "FAILED"}`;
@@ -819,7 +819,7 @@ ${pageInfo.bodyText?.substring(0, 4000) || "(empty — navigate first)"}
 
 INTERACTIVE ELEMENTS:
 ${elementsText}${selectsText}
-
+${currentStep ? `\nCURRENT PLAN STEP ${currentStep.id}: ${currentStep.goal}\nSuccess signal: ${currentStep.successSignal || "(none)"}\nFocus on THIS step only. Return {"type":"done","message":"step ${currentStep.id} complete: [summary]"} once the goal is achieved.\n` : ""}
 STEPS TAKEN SO FAR:
 ${historyText}
 
@@ -936,6 +936,80 @@ async function bgExecuteRedditPost(cmd, token, tabId) {
   return true;
 }
 
+// ── Workflow planning helpers ─────────────────────────────────────────────
+
+function bgIsMultiStepTask(task) {
+  const hasConnector = /\b(and then|after that|once you|when done|followed by)\b/i.test(task);
+  const hasNavigateThenAct = /\b(open|go to|navigate|visit)\b.+?\b(and|then)\b.+?\b(click|type|fill|send|submit|buy|book|post|search|find)\b/i.test(task);
+  const isComplexAction = /\b(send an email|send a message|book a|schedule a|fill out|sign up for|register|create a|post on|post to|upload|reply to|order a|buy a)\b/i.test(task);
+  return hasConnector || hasNavigateThenAct || (isComplexAction && task.split(/\s+/).length > 7);
+}
+
+async function bgPlanWorkflow(task, pageInfo) {
+  const systemPrompt = `You plan multi-step browser automation workflows.
+Return ONLY JSON. No prose. No markdown.
+Return: {"complexity":"simple"|"multi-step","steps":[{"id":1,"goal":"outcome description","successSignal":"url fragment or visible text confirming this step worked"}]}
+Rules:
+- "simple" if ≤2 actions on current page, no navigation required
+- "multi-step" for anything spanning navigation + on-page actions
+- Max 8 steps. Each step = one distinct phase (navigate, fill section, submit, confirm)
+- successSignal = specific observable: URL fragment, page title, or visible text
+- Write goals as outcomes: "Compose window open in Gmail" not "Click compose"`;
+
+  const userPrompt = `TASK: ${task}\nCURRENT PAGE:\nURL: ${pageInfo.url || "(unknown)"}\nTitle: ${pageInfo.title || "(unknown)"}\nPlan the workflow.`;
+
+  try {
+    const res = await fetch(`${BG_API_BASE}/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const reply = (data.reply || "").trim();
+    const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/([\[{][\s\S]*[\]}])/);
+    const json = match ? match[1].trim() : reply;
+    const parsed = JSON.parse(json);
+    if (!parsed.complexity || !Array.isArray(parsed.steps)) return null;
+    return parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+function bgVerifyStepHeuristic(step, pageInfo) {
+  const signal = (step.successSignal || "").toLowerCase().trim();
+  if (!signal) return null;
+  const url = (pageInfo.url || "").toLowerCase();
+  const title = (pageInfo.title || "").toLowerCase();
+  const text = (pageInfo.bodyText || "").slice(0, 800).toLowerCase();
+  if (url.includes(signal) || title.includes(signal) || text.includes(signal)) return true;
+  return null;
+}
+
+async function bgReplanWorkflow(task, completedSteps, remainingSteps, pageInfo, lastError) {
+  const systemPrompt = `You revise a browser automation plan after a step failed.\nReturn ONLY a JSON array. No prose.\n[{"id":N,"goal":"...","successSignal":"..."}]`;
+  const userPrompt = `ORIGINAL TASK: ${task}\nCOMPLETED:\n${completedSteps.map(s => `${s.id}. ${s.goal}`).join("\n") || "None."}\nFAILED AT: ${remainingSteps[0]?.goal || "unknown"} — Error: ${lastError}\nREMAINING:\n${remainingSteps.map(s => `${s.id}. ${s.goal}`).join("\n")}\nPAGE: ${pageInfo.url || ""} | ${pageInfo.title || ""}\nTEXT: ${(pageInfo.bodyText || "").slice(0, 500)}\nRevise remaining steps, starting from id ${(completedSteps.length || 0) + 1}.`;
+  try {
+    const res = await fetch(`${BG_API_BASE}/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
+    });
+    if (!res.ok) return remainingSteps;
+    const data = await res.json();
+    const reply = (data.reply || "").trim();
+    const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/(\[[\s\S]*\])/);
+    const json = match ? match[1].trim() : reply;
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : remainingSteps;
+  } catch (_) {
+    return remainingSteps;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+
 async function bgRunRemoteCommand(cmd, token) {
   console.log("[BgRemoteAgent] Running command in background:", cmd.task);
   await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
@@ -963,6 +1037,92 @@ async function bgRunRemoteCommand(cmd, token) {
     chrome.runtime.sendMessage({ action: "remoteCommandComplete", cmdId: cmd.id, result }).catch(() => {});
     console.log("[BgRemoteAgent] Command finished:", status, result);
   };
+
+  // ── Plan-driven loop for multi-step tasks ─────────────────────────────
+  if (bgIsMultiStepTask(cmd.task)) {
+    const initPage = await bgGetAgentPageContext(tabId);
+    let plan = null;
+    try { plan = await bgPlanWorkflow(cmd.task, initPage); } catch (_) {}
+
+    if (plan && plan.complexity === "multi-step" && plan.steps.length > 1) {
+      console.log("[BgRemoteAgent] Using plan-driven loop:", plan.steps.length, "steps");
+      let planSteps = [...plan.steps];
+      const completedSteps = [];
+      let consecutiveFailures = 0;
+
+      for (let stepIdx = 0; stepIdx < planSteps.length; stepIdx++) {
+        const step = planSteps[stepIdx];
+        steps.push({ description: `Step ${stepIdx + 1}/${planSteps.length}: ${step.goal}`, ok: null, isHeader: true });
+        bgUpdateRemoteCommand(cmd.id, token, { steps });
+
+        let stepDone = false;
+        let stepAttempts = 0;
+
+        while (!stepDone && stepAttempts < 3) {
+          if (stepIdx > 0 && await bgCheckStopped(cmd.id, token)) { chrome.storage.local.remove("remoteProcessingId"); return; }
+
+          const pageInfo = await bgGetAgentPageContext(tabId);
+
+          if (stepAttempts === 0 && bgVerifyStepHeuristic(step, pageInfo) === true) {
+            completedSteps.push(step); stepDone = true; break;
+          }
+
+          let actions = bgTryFastPath(cmd.task, history);
+          if (!actions) {
+            try { actions = await bgCallAgentStep(cmd.task, pageInfo, history, step); }
+            catch (e) { await finish("error", `Error: ${e.message}`); return; }
+          }
+
+          const first = actions[0];
+          if (first.type === "done" || first.type === "answer" || first.type === "clarify") {
+            await finish("done", first.message || "Done."); return;
+          }
+
+          let stepFailed = false;
+          for (const actionObj of actions) {
+            if (actionObj.type === "done" || actionObj.type === "answer" || actionObj.type === "clarify") {
+              await finish("done", actionObj.message || "Done."); return;
+            }
+            const result = await bgExecuteAgentAction(tabId, actionObj);
+            let snapshot = null;
+            if (!result?.error && BG_SNAPSHOT_ACTIONS.has(actionObj.type)) {
+              if (actionObj.type === "navigate") { await bgWaitForTabReady(tabId, 5000); await new Promise(r => setTimeout(r, 200)); }
+              else { await new Promise(r => setTimeout(r, 200)); }
+              snapshot = await bgGetPageSnapshot(tabId);
+            } else if (result?.error) {
+              await new Promise(r => setTimeout(r, 400));
+            }
+            history.push({ ...actionObj, result, snapshot });
+            steps.push({ description: actionObj.description || actionObj.type, ok: !result?.error, snapshot });
+            bgUpdateRemoteCommand(cmd.id, token, { steps });
+            if (result?.error) { stepFailed = true; consecutiveFailures++; break; }
+            else { consecutiveFailures = 0; }
+          }
+
+          stepAttempts++;
+
+          if (!stepFailed) {
+            const verifyPage = await bgGetAgentPageContext(tabId);
+            if (bgVerifyStepHeuristic(step, verifyPage) !== false) {
+              completedSteps.push(step); stepDone = true;
+            }
+          }
+
+          if (consecutiveFailures >= 2 && stepIdx < planSteps.length - 1) {
+            const verifyPage = await bgGetAgentPageContext(tabId);
+            const lastErr = history.filter(h => h.result?.error).slice(-1)[0];
+            const revised = await bgReplanWorkflow(cmd.task, completedSteps, planSteps.slice(stepIdx), verifyPage, lastErr?.result?.error || "Unknown failure");
+            planSteps = [...planSteps.slice(0, stepIdx + 1), ...revised];
+            consecutiveFailures = 0;
+          }
+        }
+      }
+
+      await finish("done", `Completed all ${planSteps.length} steps.`);
+      return;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────
 
   while (iterations++ < MAX) {
     // Check if user stopped the task from phone

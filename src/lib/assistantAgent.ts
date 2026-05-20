@@ -13,61 +13,39 @@ export type AssistantPageContext = {
 };
 
 export type AgentAction =
-  | {
-      type: "navigate";
-      url: string;
-      description?: string;
-    }
-  | {
-      type: "click" | "read";
-      selector?: string;
-      targetText?: string;
-      targetTag?: string;
-      description?: string;
-    }
-  | {
-      type: "type";
-      selector?: string;
-      targetText?: string;
-      text: string;
-      description?: string;
-    }
-  | {
-      type: "pressKey";
-      key: string;
-      description?: string;
-    }
-  | {
-      type: "scroll";
-      direction: "up" | "down";
-      amount?: number;
-      description?: string;
-    }
-  | {
-      type: "selectOption";
-      selector?: string;
-      value: string;
-      description?: string;
-    }
-  | {
-      type: "wait";
-      ms: number;
-      description?: string;
-    }
-  | {
-      type: "done" | "answer" | "clarify";
-      message: string;
-    };
+  | { type: "navigate"; url: string; description?: string }
+  | { type: "click" | "read"; selector?: string; targetText?: string; targetTag?: string; description?: string }
+  | { type: "type"; selector?: string; targetText?: string; text: string; description?: string }
+  | { type: "pressKey"; key: string; description?: string }
+  | { type: "scroll"; direction: "up" | "down"; amount?: number; description?: string }
+  | { type: "selectOption"; selector?: string; value: string; description?: string }
+  | { type: "wait"; ms: number; description?: string }
+  | { type: "done" | "answer" | "clarify"; message: string };
 
 export type AgentHistoryItem = {
   type: string;
   description?: string;
-  result?: {
-    success?: boolean;
-    error?: string;
-    text?: string;
-  };
+  result?: { success?: boolean; error?: string; text?: string };
 };
+
+export type WorkflowStep = {
+  id: number;
+  goal: string;
+  successSignal?: string;
+};
+
+export type WorkflowPlan = {
+  complexity: "simple" | "multi-step";
+  steps: WorkflowStep[];
+};
+
+// Detect tasks that involve navigating somewhere AND doing things there
+export function isMultiStepTask(task: string): boolean {
+  const hasConnector = /\b(and then|after that|once you|when done|followed by)\b/i.test(task);
+  const hasNavigateThenAct = /\b(open|go to|navigate|visit)\b.+?\b(and|then)\b.+?\b(click|type|fill|send|submit|buy|book|post|search|find)\b/i.test(task);
+  const isComplexAction = /\b(send an email|send a message|book a|schedule a|fill out|sign up for|register|create a|post on|post to|upload|reply to|order a|buy a)\b/i.test(task);
+  return hasConnector || hasNavigateThenAct || (isComplexAction && task.split(/\s+/).length > 7);
+}
 
 function parseJsonActions(reply: string) {
   const trimmed = reply.trim();
@@ -84,6 +62,7 @@ function buildAgentPrompt(
   pageContext: AssistantPageContext,
   history: AgentHistoryItem[],
   chatContext: Array<{ role: "user" | "assistant"; content: string }>,
+  currentStep?: WorkflowStep,
 ) {
   const historyText =
     history.length === 0
@@ -116,6 +95,10 @@ function buildAgentPrompt(
           .map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`)
           .join("\n")
       : "None.";
+
+  const stepHint = currentStep
+    ? `\nCURRENT PLAN STEP ${currentStep.id}: ${currentStep.goal}\nSuccess signal: ${currentStep.successSignal || "(none)"}\nFocus on THIS step only. Return {"type":"done","message":"step N complete: [summary]"} once the goal is achieved.\n`
+    : "";
 
   const systemPrompt = `You are SideBrain, a compact bookmark-triggered browser assistant.
 
@@ -173,7 +156,7 @@ ${pageContext.text?.slice(0, 3600) || "(empty)"}
 
 INTERACTIVE ELEMENTS:
 ${elementsText}
-
+${stepHint}
 STEPS TAKEN SO FAR:
 ${historyText}
 
@@ -207,14 +190,7 @@ export function tryFastPath(task: string) {
 
   if (/^scroll (down|up)/.test(text)) {
     const direction = text.includes("up") ? "up" : "down";
-    return [
-      {
-        type: "scroll",
-        direction,
-        amount: 560,
-        description: `Scroll ${direction}`,
-      },
-    ] satisfies AgentAction[];
+    return [{ type: "scroll", direction, amount: 560, description: `Scroll ${direction}` }] satisfies AgentAction[];
   }
 
   const googleMatch = task.match(/(?:search google for|google)\s+(.+)/i);
@@ -232,35 +208,167 @@ export function tryFastPath(task: string) {
   return null;
 }
 
+// ── Workflow planning ──────────────────────────────────────────────────────
+
+export async function planWorkflow({
+  apiBase,
+  task,
+  pageContext,
+  chatContext,
+}: {
+  apiBase: string;
+  task: string;
+  pageContext: AssistantPageContext;
+  chatContext: Array<{ role: "user" | "assistant"; content: string }>;
+}): Promise<WorkflowPlan> {
+  const systemPrompt = `You plan multi-step browser automation workflows.
+Return ONLY JSON. No prose. No markdown.
+
+Return: {"complexity":"simple"|"multi-step","steps":[{"id":1,"goal":"outcome description","successSignal":"url fragment or visible text confirming this step worked"}]}
+
+Rules:
+- "simple" if ≤2 actions on the current page, no navigation required
+- "multi-step" for anything spanning navigation + on-page actions
+- Max 8 steps. Each step = one distinct phase (navigate, fill section, submit, confirm)
+- successSignal = specific observable evidence: partial URL, page title fragment, or button/header text
+- Write goals as outcomes, not instructions: "Compose window open in Gmail" not "Click compose button"`;
+
+  const recentChat = chatContext
+    .slice(-4)
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+    .join("\n");
+
+  const userPrompt = `TASK: ${task}
+
+CURRENT PAGE:
+URL: ${pageContext.url || "(unknown)"}
+Title: ${pageContext.title || "(unknown)"}
+
+RECENT CONVERSATION:
+${recentChat || "None."}
+
+Plan the workflow.`;
+
+  const response = await fetch(`${apiBase}/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
+  });
+
+  if (!response.ok) throw new Error(`Workflow planning failed: ${response.status}`);
+
+  const data = await response.json();
+  const reply = String(data.reply || "").trim();
+  const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/([\[{][\s\S]*[\]}])/);
+  const json = (match?.[1] ?? reply).trim();
+  const parsed = JSON.parse(json) as WorkflowPlan;
+
+  if (!parsed.complexity || !Array.isArray(parsed.steps)) {
+    return { complexity: "simple", steps: [] };
+  }
+  return parsed;
+}
+
+// Lightweight heuristic: check successSignal against live page state — no LLM call
+export function verifyStepHeuristic(
+  step: WorkflowStep,
+  pageContext: AssistantPageContext,
+): boolean | null {
+  const signal = (step.successSignal ?? "").toLowerCase().trim();
+  if (!signal) return null;
+
+  const url = (pageContext.url ?? "").toLowerCase();
+  const title = (pageContext.title ?? "").toLowerCase();
+  const text = (pageContext.text ?? "").slice(0, 800).toLowerCase();
+
+  if (url.includes(signal) || title.includes(signal) || text.includes(signal)) return true;
+  return null; // inconclusive — caller should proceed optimistically
+}
+
+// Re-ask the LLM for a revised plan after a step fails
+export async function replanWorkflow({
+  apiBase,
+  task,
+  completedSteps,
+  remainingSteps,
+  pageContext,
+  lastError,
+}: {
+  apiBase: string;
+  task: string;
+  completedSteps: WorkflowStep[];
+  remainingSteps: WorkflowStep[];
+  pageContext: AssistantPageContext;
+  lastError: string;
+}): Promise<WorkflowStep[]> {
+  const systemPrompt = `You revise a browser automation plan after a step failed.
+Return ONLY a JSON array. No prose.
+[{"id":N,"goal":"...","successSignal":"..."}]`;
+
+  const userPrompt = `ORIGINAL TASK: ${task}
+
+COMPLETED STEPS:
+${completedSteps.map((s) => `${s.id}. ${s.goal}`).join("\n") || "None."}
+
+FAILED AT: ${remainingSteps[0]?.goal ?? "unknown"} — Error: ${lastError}
+
+REMAINING PLAN (now invalid):
+${remainingSteps.map((s) => `${s.id}. ${s.goal}`).join("\n")}
+
+CURRENT PAGE:
+URL: ${pageContext.url ?? "(unknown)"}
+Title: ${pageContext.title ?? "(unknown)"}
+Text: ${(pageContext.text ?? "").slice(0, 600)}
+
+Produce a revised plan for the remaining work. Start numbering from ${(completedSteps.length || 0) + 1}.`;
+
+  try {
+    const response = await fetch(`${apiBase}/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
+    });
+    if (!response.ok) return remainingSteps;
+
+    const data = await response.json();
+    const reply = String(data.reply || "").trim();
+    const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/(\[[\s\S]*\])/);
+    const json = (match?.[1] ?? reply).trim();
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as WorkflowStep[]) : remainingSteps;
+  } catch {
+    return remainingSteps;
+  }
+}
+
+// ── Per-step and reactive LLM execution ───────────────────────────────────
+
 export async function planAgentActions({
   apiBase,
   task,
   pageContext,
   history,
   chatContext,
+  currentStep,
 }: {
   apiBase: string;
   task: string;
   pageContext: AssistantPageContext;
   history: AgentHistoryItem[];
   chatContext: Array<{ role: "user" | "assistant"; content: string }>;
+  currentStep?: WorkflowStep;
 }) {
-  const { systemPrompt, userPrompt } = buildAgentPrompt(task, pageContext, history, chatContext);
+  const { systemPrompt, userPrompt } = buildAgentPrompt(task, pageContext, history, chatContext, currentStep);
 
   const response = await fetch(`${apiBase}/chat-about-notes`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      notes: systemPrompt,
-      message: userPrompt,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
   });
 
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({}));
-    throw new Error(errorPayload.error || `Planning failed with ${response.status}`);
+    throw new Error((errorPayload as { error?: string }).error || `Planning failed with ${response.status}`);
   }
 
   const data = await response.json();

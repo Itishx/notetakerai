@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useState } from "react";
 import SplashScreen from "@/components/SplashScreen";
+import BrainMascot from "@/components/BrainMascot";
 import Index from "./pages/Index.tsx";
 import UseCases from "./pages/UseCases.tsx";
 import NotionSync from "./pages/NotionSync.tsx";
@@ -41,6 +42,7 @@ const App = () => {
           <Toaster />
           <Sonner />
           {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
+          {splashDone && <BrainMascot />}
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />

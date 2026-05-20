@@ -213,8 +213,68 @@ export default function Delegate() {
         </div>
       </section>
 
+      {/* 12 things it handles well */}
+      <section style={{ padding: "80px 0 100px", background: "var(--sb-bg-2)" }}>
+        <div style={wrap}>
+          <div style={{ textAlign: "center", marginBottom: 48 }}>
+            <span style={eyebrow}><span style={pip} /> What it handles</span>
+            <h2 style={{
+              fontFamily: "'Instrument Serif',serif", fontWeight: 400,
+              fontSize: "clamp(28px,3.5vw,48px)", lineHeight: 1.05, margin: "12px auto 0", maxWidth: 640,
+            }}>
+              12 things it does <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>well.</em>
+            </h2>
+          </div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+            gap: 14,
+          }}>
+            {[
+              { icon: "✉️", title: "Send & reply to emails", detail: "Gmail, Outlook — compose, find threads, reply in context." },
+              { icon: "📅", title: "Book calendar events", detail: "Google Calendar — create, invite, set reminders." },
+              { icon: "🛒", title: "Search & compare products", detail: "Amazon, Flipkart — open listings, extract specs and reviews." },
+              { icon: "📝", title: "Fill & submit forms", detail: "Job applications, sign-ups, multi-step checkouts." },
+              { icon: "✈️", title: "Find flights & hotels", detail: "MakeMyTrip, Google Flights — filter, compare, copy details." },
+              { icon: "💼", title: "Post on LinkedIn / X", detail: "Draft, preview, and post — no copy-paste needed." },
+              { icon: "🛍️", title: "Add to cart & checkout", detail: "Navigates product pages, selects variants, proceeds to pay." },
+              { icon: "📄", title: "Edit Google Docs & Sheets", detail: "Update cells, add rows, format documents by instruction." },
+              { icon: "🔍", title: "Research & extract data", detail: "Reads any page and pulls out the facts you ask for." },
+              { icon: "📁", title: "Download files & attachments", detail: "Locates and triggers downloads without you hunting." },
+              { icon: "🐙", title: "Navigate GitHub", detail: "Browse issues, PRs, diffs — summarise and act on them." },
+              { icon: "🔐", title: "Multi-step sign-up flows", detail: "Handles email verify, profile fill, preference setup." },
+            ].map(({ icon, title, detail }) => (
+              <div
+                key={title}
+                style={{
+                  background: "var(--sb-panel-2)",
+                  border: "1px solid var(--sb-line-2)",
+                  borderRadius: 16,
+                  padding: "20px 22px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
+                  <span style={{
+                    fontFamily: "'Instrument Serif',serif",
+                    fontWeight: 400, fontSize: 17, lineHeight: 1.2,
+                  }}>{title}</span>
+                </div>
+                <p style={{
+                  fontSize: 13, color: "var(--sb-ink-2)", lineHeight: 1.5, margin: 0,
+                  paddingLeft: 32,
+                }}>{detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Why DOM-first */}
-      <section style={{ padding: "80px 0 110px", background: "var(--sb-bg-2)" }}>
+      <section style={{ padding: "80px 0 110px", background: "var(--sb-bg)" }}>
         <div style={wrap}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40 }}>
             {[

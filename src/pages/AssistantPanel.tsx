@@ -8,7 +8,12 @@ import {
   AssistantPageContext,
   AgentAction,
   AgentHistoryItem,
+  WorkflowStep,
   planAgentActions,
+  planWorkflow,
+  verifyStepHeuristic,
+  replanWorkflow,
+  isMultiStepTask,
   tryFastPath,
 } from "@/lib/assistantAgent";
 import {
@@ -311,7 +316,7 @@ export default function AssistantPanel() {
     setMessages((current) => {
       const next = [...current];
       const last = next[next.length - 1];
-      if (last?.role === "assistant" && last.content === "__sidebrain_busy__") {
+      if (last?.role === "assistant" && last.content.startsWith("__sidebrain_busy__")) {
         next[next.length - 1] = { role: "assistant", content };
         return next;
       }
@@ -360,8 +365,145 @@ export default function AssistantPanel() {
       return "Agent mode is part of **Premium** right now. Sign in, then upgrade from your dashboard when you're ready.";
     }
 
+    const chatCtx = messages
+      .filter((m) => m.role !== "system" && !m.content.startsWith("__sidebrain_busy__"))
+      .slice(-8)
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
     const history: AgentHistoryItem[] = [];
 
+    // ── Plan the workflow for multi-step tasks ──────────────────────────────
+    let planSteps: WorkflowStep[] = [];
+
+    if (isMultiStepTask(task)) {
+      replaceBusyMessage("__sidebrain_busy__:Planning workflow…");
+      try {
+        const freshCtx = await refreshPageContext();
+        const plan = await planWorkflow({ apiBase: FUNCTIONS_BASE, task, pageContext: freshCtx, chatContext: chatCtx });
+        if (plan.complexity === "multi-step" && plan.steps.length > 1) {
+          planSteps = plan.steps;
+        }
+      } catch {
+        // Planning failed — fall through to reactive loop
+      }
+    }
+
+    // ── Plan-driven execution loop ──────────────────────────────────────────
+    if (planSteps.length > 0) {
+      const completedSteps: WorkflowStep[] = [];
+      let consecutiveFailures = 0;
+
+      for (let stepIdx = 0; stepIdx < planSteps.length; stepIdx++) {
+        const step = planSteps[stepIdx];
+        replaceBusyMessage(`__sidebrain_busy__:Step ${stepIdx + 1}/${planSteps.length}: ${step.goal}`);
+
+        let stepDone = false;
+        let stepAttempts = 0;
+
+        while (!stepDone && stepAttempts < 3) {
+          const freshContext = await refreshPageContext();
+
+          // Skip if page already satisfies this step's success signal
+          if (stepAttempts === 0 && verifyStepHeuristic(step, freshContext) === true) {
+            completedSteps.push(step);
+            stepDone = true;
+            break;
+          }
+
+          const fastPath = history.length === 0 ? tryFastPath(task) : null;
+          const actions = fastPath || (await planAgentActions({
+            apiBase: FUNCTIONS_BASE,
+            task,
+            pageContext: freshContext,
+            history,
+            chatContext: chatCtx,
+            currentStep: step,
+          }));
+
+          if (!actions.length) break;
+
+          const first = actions[0];
+          if (first.type === "done" || first.type === "answer" || first.type === "clarify") {
+            setResumeState(null);
+            return first.message;
+          }
+
+          let stepFailed = false;
+          for (const action of actions) {
+            if (action.type === "done" || action.type === "answer" || action.type === "clarify") {
+              setResumeState(null);
+              return action.message;
+            }
+
+            if (action.type === "wait") {
+              await new Promise((r) => window.setTimeout(r, action.ms));
+              history.push({ type: "wait", description: action.description, result: { success: true } });
+              continue;
+            }
+
+            if (action.type === "navigate") {
+              const host = getHostname(action.url);
+              setResumeState({
+                task,
+                note: host
+                  ? `Relaunch SideBrain on ${host} and tap Resume last task.`
+                  : "Relaunch SideBrain on the next page and tap Resume last task.",
+              });
+              await runHostAction(action);
+              return `Opening **${action.url}**.\n\nRelaunch SideBrain from your bookmarks on the new page, then tap **Resume last task** to continue.`;
+            }
+
+            const result = await runHostAction(action);
+            const error = typeof result?.error === "string" ? result.error : "";
+            history.push({
+              type: action.type,
+              description: action.description,
+              result: error ? { success: false, error } : { success: true, text: typeof result?.text === "string" ? result.text : undefined },
+            });
+
+            if (error) {
+              stepFailed = true;
+              consecutiveFailures++;
+              break;
+            } else {
+              consecutiveFailures = 0;
+            }
+          }
+
+          stepAttempts++;
+
+          if (!stepFailed) {
+            // Verify — inconclusive null counts as a pass (proceed optimistically)
+            const verifyCtx = await refreshPageContext();
+            if (verifyStepHeuristic(step, verifyCtx) !== false) {
+              completedSteps.push(step);
+              stepDone = true;
+            }
+          }
+
+          // Re-plan remaining steps after 2 consecutive failures
+          if (consecutiveFailures >= 2 && stepIdx < planSteps.length - 1) {
+            const verifyCtx = await refreshPageContext();
+            const lastErr = history.filter((h) => h.result?.error).slice(-1)[0];
+            const revised = await replanWorkflow({
+              apiBase: FUNCTIONS_BASE,
+              task,
+              completedSteps,
+              remainingSteps: planSteps.slice(stepIdx),
+              pageContext: verifyCtx,
+              lastError: lastErr?.result?.error ?? "Unknown failure",
+            });
+            planSteps = [...planSteps.slice(0, stepIdx + 1), ...revised];
+            consecutiveFailures = 0;
+          }
+        }
+      }
+
+      setResumeState(null);
+      return `All ${planSteps.length} steps done.`;
+    }
+
+    // ── Fallback: reactive loop (simple / fast-path tasks) ──────────────────
     for (let iteration = 0; iteration < 7; iteration += 1) {
       const freshContext = await refreshPageContext();
       const fastPath = history.length === 0 ? tryFastPath(task) : null;
@@ -370,15 +512,10 @@ export default function AssistantPanel() {
         task,
         pageContext: freshContext,
         history,
-        chatContext: messages
-          .filter((message) => message.role !== "system" && message.content !== "__sidebrain_busy__")
-          .slice(-8)
-          .map((message) => ({ role: message.role as "user" | "assistant", content: message.content })),
+        chatContext: chatCtx,
       }));
 
-      if (!actions.length) {
-        return "I couldn't find a safe next step on this page.";
-      }
+      if (!actions.length) return "I couldn't find a safe next step on this page.";
 
       const first = actions[0];
       if (first.type === "done" || first.type === "answer" || first.type === "clarify") {
@@ -389,11 +526,7 @@ export default function AssistantPanel() {
       for (const action of actions) {
         if (action.type === "wait") {
           await new Promise((resolve) => window.setTimeout(resolve, action.ms));
-          history.push({
-            type: "wait",
-            description: action.description,
-            result: { success: true },
-          });
+          history.push({ type: "wait", description: action.description, result: { success: true } });
           continue;
         }
 
@@ -411,21 +544,14 @@ export default function AssistantPanel() {
 
         const result = await runHostAction(action);
         const error = typeof result?.error === "string" ? result.error : "";
-
         history.push({
           type: action.type,
           description: action.description,
           result: error
             ? { success: false, error }
-            : {
-                success: true,
-                text: typeof result?.text === "string" ? result.text : undefined,
-              },
+            : { success: true, text: typeof result?.text === "string" ? result.text : undefined },
         });
-
-        if (error) {
-          break;
-        }
+        if (error) break;
       }
     }
 
@@ -634,7 +760,8 @@ export default function AssistantPanel() {
 
           <div className="mt-4 flex flex-col gap-3">
             {messages.map((message, index) => {
-              if (message.content === "__sidebrain_busy__") {
+              if (message.content.startsWith("__sidebrain_busy__")) {
+                const busyLabel = message.content.slice("__sidebrain_busy__".length).replace(/^:/, "").trim();
                 return (
                   <div
                     key={`busy-${index}`}
@@ -642,7 +769,7 @@ export default function AssistantPanel() {
                   >
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin text-[#dc7f2f]" />
-                      <span>{mode === "agent" ? "Working through the page…" : "Thinking…"}</span>
+                      <span>{busyLabel || (mode === "agent" ? "Working through the page…" : "Thinking…")}</span>
                     </div>
                   </div>
                 );
