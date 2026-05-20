@@ -274,6 +274,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ isRecording });
     return true;
   }
+  if (message.action === "startInlineVoiceListening" || message.action === "stopInlineVoiceListening") {
+    const forwardAction = message.action === "startInlineVoiceListening"
+      ? "startVoiceListening"
+      : "stopVoiceListening";
+
+    const forwardToTab = (tabId) => {
+      if (!tabId) {
+        sendResponse({ error: "No active tab found" });
+        return;
+      }
+      chrome.storage.local.set({ activeTabId: tabId });
+      chrome.tabs.sendMessage(tabId, { action: forwardAction }, (res) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse(res || { success: true });
+        }
+      });
+    };
+
+    if (sender?.tab?.id) {
+      forwardToTab(sender.tab.id);
+      return true;
+    }
+
+    chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
+      if (activeTabId) {
+        forwardToTab(activeTabId);
+        return;
+      }
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        forwardToTab(tabs?.[0]?.id || null);
+      });
+    });
+    return true;
+  }
+  if (message.action === "voiceEvent") {
+    const tabId = sender?.tab?.id;
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, {
+        action: "sbVoiceEvent",
+        event: message.event,
+        text: message.text,
+        isFinal: message.isFinal,
+        error: message.message,
+      }, () => { void chrome.runtime.lastError; });
+    }
+    return false;
+  }
   if (message.action === "getPageContent") {
     // First try stored activeTabId, then fallback to querying active tab
     chrome.storage.local.get("activeTabId", (store) => {
