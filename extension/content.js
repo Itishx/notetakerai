@@ -654,14 +654,7 @@ let __sbInputOpen = false;
 let __sbIsRecording = false;
 let __sbChatHistory = [];
 
-// Auto-inject brain on every page
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", __sbBuildBrainUI);
-} else {
-  __sbBuildBrainUI();
-}
-
-// Extension icon click toggles input
+// Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.action === "toggleSideBrainPanel") {
