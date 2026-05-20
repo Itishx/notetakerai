@@ -814,101 +814,118 @@ function __sbBuildBrainUI() {
       position: fixed;
       z-index: 2147483648;
       width: 420px; max-width: calc(100vw - 100px);
-      min-width: 260px; min-height: 80px;
-      max-height: min(72vh, 600px);
+      height: 340px;
+      min-width: 260px; min-height: 140px;
       overflow: hidden; resize: both;
-      background: rgba(250, 246, 242, 0.48);
-      border-radius: 20px;
+      background: rgba(245, 240, 234, 0.52);
+      border-radius: 18px;
       color: #1B1713;
-      border: 1px solid rgba(255, 255, 255, 0.45);
-      box-shadow: 0 24px 60px rgba(27,23,19,0.18), 0 4px 16px rgba(27,23,19,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
-      backdrop-filter: blur(40px) saturate(220%);
-      -webkit-backdrop-filter: blur(40px) saturate(220%);
-      opacity: 0;
-      transition: opacity 0.2s;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 20px 60px rgba(27,23,19,0.2), 0 4px 14px rgba(27,23,19,0.08),
+                  inset 0 1px 0 rgba(255,255,255,0.65);
+      backdrop-filter: blur(44px) saturate(200%) brightness(1.06);
+      -webkit-backdrop-filter: blur(44px) saturate(200%) brightness(1.06);
+      opacity: 0; transition: opacity 0.2s;
       pointer-events: none;
     }
     #__sb_bubble__.visible { opacity: 1; pointer-events: all; }
-    .sb-bubble-head { cursor: grab; user-select: none; }
-    .sb-bubble-head:active { cursor: grabbing; }
-    .sb-bubble-card { display: flex; flex-direction: column; min-height: 0; }
-    .sb-bubble-head {
-      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-      padding: 14px 16px 12px; border-bottom: 1px solid rgba(65, 48, 40, 0.08);
-      background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,248,242,0.78));
+
+    /* ── card layout fills the resizable container ── */
+    .sb-bubble-card {
+      display: flex; flex-direction: column;
+      height: 100%; overflow: hidden;
     }
-    .sb-bubble-head-main { min-width: 0; }
+    .sb-bubble-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 10px 12px 10px 14px; flex-shrink: 0;
+      cursor: grab; user-select: none;
+      background: linear-gradient(160deg, rgba(255,255,255,0.5) 0%, rgba(250,244,238,0.38) 100%);
+      border-bottom: 1px solid rgba(200,170,150,0.18);
+    }
+    .sb-bubble-head:active { cursor: grabbing; }
+    /* drag grip dots */
+    .sb-bubble-head::before {
+      content: "⠿"; font-size: 14px; color: rgba(180,140,120,0.5); flex-shrink: 0; line-height: 1;
+    }
+    .sb-bubble-head-main { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
     .sb-bubble-kicker {
-      display: inline-flex; align-items: center; gap: 6px;
-      font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
-      color: #9C6A54; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: #B05A48; font-weight: 700; flex-shrink: 0;
     }
     .sb-bubble-kicker::before {
-      content: ""; width: 7px; height: 7px; border-radius: 50%;
-      background: linear-gradient(135deg, #F6A8A2, #C9544A); box-shadow: 0 0 10px rgba(201,84,74,0.35);
+      content: ""; width: 6px; height: 6px; border-radius: 50%;
+      background: linear-gradient(135deg, #F6A8A2, #C9544A);
+      box-shadow: 0 0 8px rgba(201,84,74,0.45);
+      flex-shrink: 0;
     }
     .sb-bubble-title {
-      margin-top: 5px; font-size: 14px; line-height: 1.35; font-weight: 600; color: #2B221D;
-      max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: 12.5px; line-height: 1.3; font-weight: 600; color: #2B221D;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .sb-bubble-actions { display: inline-flex; align-items: center; gap: 8px; }
+    .sb-bubble-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
     .sb-bubble-iconbtn {
-      border: none; background: rgba(67, 50, 42, 0.06); color: #6F5A4E;
-      width: 30px; height: 30px; border-radius: 999px; cursor: pointer;
+      border: none; background: rgba(67,50,42,0.07); color: #7A6157;
+      width: 26px; height: 26px; border-radius: 8px; cursor: pointer;
       display: inline-flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 600; transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+      font-size: 11px; font-weight: 600;
+      transition: background 0.12s, color 0.12s;
     }
-    .sb-bubble-iconbtn:hover {
-      background: rgba(201,84,74,0.12); color: #B44B42; transform: translateY(-1px);
-    }
-    .sb-bubble-prompt {
-      margin: 14px 16px 0;
-      padding: 10px 12px; border-radius: 14px;
-      background: rgba(201,84,74,0.08); color: #6D5145;
-      font-size: 12.5px; line-height: 1.45;
-      border: 1px solid rgba(201,84,74,0.12);
-    }
+    .sb-bubble-iconbtn:hover { background: rgba(201,84,74,0.14); color: #B44B42; }
+
+    /* ── scrollable body ── */
     .sb-bubble-body {
-      padding: 16px; overflow: auto;
-      font-size: 14px; line-height: 1.65; color: #2B221D;
+      flex: 1; min-height: 0;
+      padding: 14px 16px; overflow-y: auto;
+      font-size: 13.5px; line-height: 1.68; color: #241D18;
       word-break: break-word;
     }
-    .sb-bubble-card-status .sb-bubble-body {
-      padding-top: 14px; padding-bottom: 14px; font-size: 13px; color: #5B4A40;
+    .sb-bubble-body::-webkit-scrollbar { width: 4px; }
+    .sb-bubble-body::-webkit-scrollbar-track { background: transparent; }
+    .sb-bubble-body::-webkit-scrollbar-thumb {
+      background: rgba(180,140,120,0.35); border-radius: 99px;
     }
+    .sb-bubble-body::-webkit-scrollbar-thumb:hover { background: rgba(180,140,120,0.6); }
+
+    .sb-bubble-prompt {
+      margin: 0 0 12px;
+      padding: 9px 12px; border-radius: 10px;
+      background: rgba(201,84,74,0.08); color: #6D5145;
+      font-size: 12px; line-height: 1.45;
+      border: 1px solid rgba(201,84,74,0.14);
+    }
+    .sb-bubble-card-status .sb-bubble-body { font-size: 13px; color: #5B4A40; }
     .sb-bubble-markdown > :first-child { margin-top: 0; }
     .sb-bubble-markdown > :last-child { margin-bottom: 0; }
-    .sb-bubble-markdown h1,
-    .sb-bubble-markdown h2,
-    .sb-bubble-markdown h3 {
-      margin: 0 0 10px; color: #1E1713; line-height: 1.25;
+    .sb-bubble-markdown h1, .sb-bubble-markdown h2, .sb-bubble-markdown h3 {
+      margin: 0 0 8px; color: #1E1713; line-height: 1.25;
     }
-    .sb-bubble-markdown h1 { font-size: 18px; }
-    .sb-bubble-markdown h2 { font-size: 16px; }
-    .sb-bubble-markdown h3 { font-size: 14px; }
-    .sb-bubble-markdown p { margin: 0 0 12px; }
-    .sb-bubble-markdown ul,
-    .sb-bubble-markdown ol { margin: 0 0 12px 18px; padding: 0; }
-    .sb-bubble-markdown li { margin: 0 0 6px; }
+    .sb-bubble-markdown h1 { font-size: 17px; }
+    .sb-bubble-markdown h2 { font-size: 15px; }
+    .sb-bubble-markdown h3 { font-size: 13.5px; }
+    .sb-bubble-markdown p { margin: 0 0 10px; }
+    .sb-bubble-markdown ul, .sb-bubble-markdown ol { margin: 0 0 10px 16px; padding: 0; }
+    .sb-bubble-markdown li { margin: 0 0 5px; }
     .sb-bubble-markdown a { color: #B44B42; text-decoration: none; }
     .sb-bubble-markdown a:hover { text-decoration: underline; }
     .sb-bubble-markdown code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px; padding: 2px 6px; border-radius: 8px;
-      background: rgba(67, 50, 42, 0.08); color: #7C352E;
+      font-size: 11.5px; padding: 2px 5px; border-radius: 6px;
+      background: rgba(67,50,42,0.1); color: #7C352E;
     }
     .sb-bubble-markdown pre {
-      margin: 0 0 12px; padding: 12px 14px; border-radius: 14px;
-      background: #241B17; color: #FBF7F1; overflow: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.55;
+      margin: 0 0 10px; padding: 11px 13px; border-radius: 12px;
+      background: rgba(30,20,14,0.82); color: #FBF7F1; overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11.5px; line-height: 1.55;
     }
     .sb-bubble-markdown pre code { background: transparent; color: inherit; padding: 0; }
     .sb-bubble-markdown blockquote {
-      margin: 0 0 12px; padding: 0 0 0 12px; border-left: 3px solid rgba(201,84,74,0.28);
-      color: #705C50;
+      margin: 0 0 10px; padding: 0 0 0 11px;
+      border-left: 3px solid rgba(201,84,74,0.3); color: #705C50;
     }
     .sb-bubble-markdown hr {
-      border: none; border-top: 1px solid rgba(65, 48, 40, 0.1); margin: 14px 0;
+      border: none; border-top: 1px solid rgba(65,48,40,0.1); margin: 12px 0;
     }
   `;
   document.head.appendChild(style);
@@ -1337,14 +1354,13 @@ function __sbBindBubbleActions() {
 function __sbCenterBubble(bubble) {
   if (bubble.dataset.positioned) return;
   const w = Math.min(420, window.innerWidth - 100);
-  // Anchor just above the brain (bottom-right), same side as the input pill
-  const right = 20;
-  const bottom = 90; // above the pill + brain stack
-  bubble.style.right = right + "px";
-  bubble.style.bottom = bottom + "px";
+  // Anchor above the brain+pill stack (bottom-right)
+  bubble.style.right = "20px";
+  bubble.style.bottom = "148px"; // brain(52) + gap(8) + pill(52) + gap(8) + margin(28)
   bubble.style.left = "auto";
   bubble.style.top = "auto";
   bubble.style.width = w + "px";
+  bubble.style.height = "340px";
   bubble.dataset.positioned = "1";
   __sbInitDrag(bubble);
 }
