@@ -874,14 +874,12 @@ async function __sbSendMessage() {
       notes: stored.currentNotes || "",
       aiProvider: "anthropic",
       chatHistory: __sbChatHistory.slice(-6, -1),
-    };
-    if (isPageQuery) {
-      body.pageContext = {
+      pageContext: {
         url: location.href,
         title: document.title,
-        text: document.body.innerText?.slice(0, 8000) || "",
-      };
-    }
+        text: isPageQuery ? (document.body.innerText?.slice(0, 8000) || "") : "",
+      },
+    };
 
     const resp = await fetch(`${__SB_API}/chat-about-notes`, {
       method: "POST",
