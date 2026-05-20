@@ -794,25 +794,23 @@ async function __sbSendMessage() {
   __sbChatHistory.push({ role: "user", content: text });
 
   try {
-    const session = await new Promise((res) => chrome.storage.local.get("supabaseSession", (d) => res(d.supabaseSession)));
-    const headers = { "Content-Type": "application/json" };
-    if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-
     const resp = await fetch(`${__SB_API}/chat-about-notes`, {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: text,
-        history: __sbChatHistory.slice(-6),
-        context: { url: location.href, title: document.title, text: document.body.innerText?.slice(0, 2000) },
+        notes: "",
+        aiProvider: "anthropic",
+        chatHistory: __sbChatHistory.slice(-6, -1),
+        pageContext: { url: location.href, title: document.title, text: document.body.innerText?.slice(0, 2000) },
       }),
     });
     const json = await resp.json();
-    const reply = json.response || json.message || json.answer || "Done.";
+    const reply = json.reply || json.response || json.message || json.answer || JSON.stringify(json);
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbShowBubble(reply, true);
-  } catch {
-    __sbShowBubble("Couldn't reach SideBrain — are you signed in?", true);
+  } catch (err) {
+    __sbShowBubble("Error: " + (err.message || "couldn't reach SideBrain"), true);
   }
 }
 
