@@ -381,7 +381,7 @@ export default function Index() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
               Install for Chrome
             </a>
-            <a href="/sidebrain-mac.dmg" download style={btnGhost} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
+            <a href="https://github.com/Itishx/notetakerai/releases/download/v1.0.0-mac/SideBrain-1.0.0-universal.dmg" download style={btnGhost} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3C7 3 3 7 3 12s4 9 9 9 9-4 9-9-4-9-9-9z"/><path d="M12 8v8M9 14l3 3 3-3"/></svg>
               Download for Mac
             </a>
@@ -977,7 +977,7 @@ export default function Index() {
             </div>
             {[
               { heading:"Product",links:[["#features","Features"],["#delegate","Delegate"],["#speed","Speed"],["#dashboard","Dashboard"],["#pricing","Pricing"]] },
-              { heading:"Install",links:[["/sidebrain-extension.zip","Chrome"],["/sidebrain-extension.zip","Arc"],["/sidebrain-extension.zip","Brave"],["/sidebrain-extension.zip","Edge"],["/sidebrain-mac.dmg","Mac App (invisible in screen share)"],["#","Firefox (soon)"]] },
+              { heading:"Install",links:[["/sidebrain-extension.zip","Chrome"],["/sidebrain-extension.zip","Arc"],["/sidebrain-extension.zip","Brave"],["/sidebrain-extension.zip","Edge"],["https://github.com/Itishx/notetakerai/releases/download/v1.0.0-mac/SideBrain-1.0.0-universal.dmg","Mac App (invisible in screen share)"],["#","Firefox (soon)"]] },
               { heading:"Company",links:[["#","Manifesto"],["#","Changelog"],["#","Privacy"],["#","Terms"],["#","Contact"]] },
             ].map(({heading,links})=>(
               <div key={heading}>
