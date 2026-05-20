@@ -274,10 +274,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ isRecording });
     return true;
   }
-  if (message.action === "startInlineVoiceListening" || message.action === "stopInlineVoiceListening") {
-    const forwardAction = message.action === "startInlineVoiceListening"
+  if (
+    message.action === "startInlineVoiceListening" ||
+    message.action === "startInlineWakeListening" ||
+    message.action === "stopInlineVoiceListening"
+  ) {
+    const isStart = message.action !== "stopInlineVoiceListening";
+    const forwardAction = isStart
       ? "startVoiceListening"
       : "stopVoiceListening";
+    const mode = message.action === "startInlineWakeListening" ? "wake" : "manual";
+    const source = message.action === "startInlineWakeListening" ? "inline-wake" : "inline";
 
     const forwardToTab = (tabId) => {
       if (!tabId) {
@@ -285,7 +292,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       chrome.storage.local.set({ activeTabId: tabId });
-      chrome.tabs.sendMessage(tabId, { action: forwardAction }, (res) => {
+      const payload = isStart
+        ? { action: forwardAction, mode, source }
+        : { action: forwardAction, source };
+      chrome.tabs.sendMessage(tabId, payload, (res) => {
         if (chrome.runtime.lastError) {
           sendResponse({ error: chrome.runtime.lastError.message });
         } else {
@@ -319,6 +329,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         text: message.text,
         isFinal: message.isFinal,
         error: message.message,
+        source: message.source,
       }, () => { void chrome.runtime.lastError; });
     }
     return false;
