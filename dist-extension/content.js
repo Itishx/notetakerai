@@ -761,11 +761,23 @@ function __sbBuildBrainUI() {
 }
 
 function __sbToggleInput(open) {
-  __sbInputOpen = open;
-  const pill = document.getElementById("__sb_pill__");
-  if (!pill) return;
-  pill.classList.toggle("open", open);
-  if (open) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+  if (open) {
+    chrome.storage.local.get("authToken", ({ authToken }) => {
+      if (!authToken) {
+        __sbShowSignIn();
+        return;
+      }
+      __sbInputOpen = true;
+      const pill = document.getElementById("__sb_pill__");
+      if (pill) {
+        pill.classList.add("open");
+        setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+      }
+    });
+  } else {
+    __sbInputOpen = false;
+    document.getElementById("__sb_pill__")?.classList.remove("open");
+  }
 }
 
 let __sbBubbleTimer = null;
@@ -781,12 +793,29 @@ function __sbShowBubble(text, autoHide = true) {
 function __sbShowSignIn() {
   const bubble = document.getElementById("__sb_bubble__");
   if (!bubble) return;
-  bubble.innerHTML = `Sign in to use SideBrain. <a href="#" id="__sb_signin_link__" style="color:#E8786E;text-decoration:underline;cursor:pointer">Open sign-in</a>`;
+  bubble.innerHTML = `
+    <div style="font-size:13px;line-height:1.5;color:#1B1713">
+      Sign in to get started with SideBrain.
+    </div>
+    <button id="__sb_signin_btn__" style="
+      margin-top:10px;width:100%;padding:8px 0;border:none;border-radius:20px;
+      background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;
+    ">Sign in</button>
+  `;
   bubble.classList.add("visible");
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-  document.getElementById("__sb_signin_link__")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    window.open(chrome.runtime.getURL("sidepanel.html"), "_blank", "width=420,height=680,menubar=no,toolbar=no");
+
+  document.getElementById("__sb_signin_btn__")?.addEventListener("click", () => {
+    window.open(chrome.runtime.getURL("sidepanel.html"), "_blank", "width=420,height=680,menubar=no,toolbar=no,resizable=no");
+  });
+
+  // Auto-unlock once auth token lands in storage
+  const unwatch = chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.authToken?.newValue) {
+      chrome.storage.onChanged.removeListener(unwatch);
+      bubble.classList.remove("visible");
+      __sbShowBubble("You're signed in! Click the brain to chat.", true);
+    }
   });
 }
 
