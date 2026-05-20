@@ -813,17 +813,17 @@ function __sbBuildBrainUI() {
     #__sb_bubble__ {
       position: fixed;
       z-index: 2147483648;
-      width: 500px; max-width: calc(100vw - 48px);
-      min-width: 280px; min-height: 100px;
-      max-height: min(72vh, 640px);
+      width: 420px; max-width: calc(100vw - 100px);
+      min-width: 260px; min-height: 80px;
+      max-height: min(72vh, 600px);
       overflow: hidden; resize: both;
-      background: rgba(250, 246, 242, 0.82);
+      background: rgba(250, 246, 242, 0.48);
       border-radius: 20px;
       color: #1B1713;
-      border: 1px solid rgba(255, 255, 255, 0.55);
-      box-shadow: 0 32px 80px rgba(27,23,19,0.22), 0 8px 24px rgba(27,23,19,0.1), inset 0 1px 0 rgba(255,255,255,0.7);
-      backdrop-filter: blur(36px) saturate(200%);
-      -webkit-backdrop-filter: blur(36px) saturate(200%);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      box-shadow: 0 24px 60px rgba(27,23,19,0.18), 0 4px 16px rgba(27,23,19,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+      backdrop-filter: blur(40px) saturate(220%);
+      -webkit-backdrop-filter: blur(40px) saturate(220%);
       opacity: 0;
       transition: opacity 0.2s;
       pointer-events: none;
@@ -1336,10 +1336,14 @@ function __sbBindBubbleActions() {
 
 function __sbCenterBubble(bubble) {
   if (bubble.dataset.positioned) return;
-  const w = Math.min(500, window.innerWidth - 48);
-  const h = 300;
-  bubble.style.left = Math.round((window.innerWidth - w) / 2) + "px";
-  bubble.style.top = Math.round((window.innerHeight - h) / 2) + "px";
+  const w = Math.min(420, window.innerWidth - 100);
+  // Anchor just above the brain (bottom-right), same side as the input pill
+  const right = 20;
+  const bottom = 90; // above the pill + brain stack
+  bubble.style.right = right + "px";
+  bubble.style.bottom = bottom + "px";
+  bubble.style.left = "auto";
+  bubble.style.top = "auto";
   bubble.style.width = w + "px";
   bubble.dataset.positioned = "1";
   __sbInitDrag(bubble);
@@ -1354,6 +1358,11 @@ function __sbInitDrag(bubble) {
     if (e.button !== 0) return;
     dragging = true;
     const r = bubble.getBoundingClientRect();
+    // Convert right/bottom anchoring to left/top so drag math works
+    bubble.style.left = r.left + "px";
+    bubble.style.top = r.top + "px";
+    bubble.style.right = "auto";
+    bubble.style.bottom = "auto";
     bl = r.left; bt = r.top; ox = e.clientX; oy = e.clientY;
     e.preventDefault();
   });
