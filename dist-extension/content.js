@@ -860,7 +860,7 @@ async function __sbSendMessage() {
       return;
     }
     __sbShowBubble("Delegating…", false);
-    __sbRunAgent(text, stored.authToken);
+    __sbRunAgent(task);
     return;
   }
 
@@ -914,24 +914,10 @@ function __sbShowUpgrade(feature) {
   });
 }
 
-async function __sbRunAgent(task, authToken) {
-  const agentPrompt = `You are SideBrain Browser Agent. The user asked: "${task}". Current page: ${document.title} (${location.href}). Respond with what you will do or what was accomplished in 1-2 sentences.`;
-  try {
-    const headers = { "Content-Type": "application/json" };
-    if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
-    const resp = await fetch(`${__SB_API}/chat-about-notes`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ message: task, notes: agentPrompt, aiProvider: "anthropic" }),
-    });
-    const json = await resp.json();
-    const reply = json.reply || json.response || json.message || "Task received.";
-    __sbShowBubble(reply, true);
-    // Forward to background agent for actual execution
-    chrome.runtime.sendMessage({ action: "sbAgentTask", task, pageUrl: location.href, pageTitle: document.title }, () => { void chrome.runtime.lastError; });
-  } catch (err) {
-    __sbShowBubble("Agent error: " + err.message, true);
-  }
+function __sbRunAgent(task) {
+  if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect SideBrain.", true); return; }
+  // Hand off to background — it runs the full agent loop and sends sbAgentUpdate messages back
+  chrome.runtime.sendMessage({ action: "runBrainAgent", task }, () => { void chrome.runtime.lastError; });
 }
 
 function __sbToggleRecording() {

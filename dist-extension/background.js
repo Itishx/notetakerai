@@ -344,6 +344,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message || "Web search failed." }));
     return true;
   }
+  if (message.action === "runBrainAgent") {
+    const task = message.task;
+    chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
+      const tabId = activeTabId || message.senderTabId;
+      if (!tabId) { sendResponse({ ok: true }); return; }
+      bgRunBrainAgent(tabId, task);
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
   if (message.action === "agentAction" || message.action === "getAgentPageContext") {
     chrome.storage.local.get("activeTabId", (store) => {
       const tabId = store.activeTabId;
@@ -528,6 +538,76 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 }
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
+
+function bgBrainUpdate(tabId, text) {
+  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text }, () => { void chrome.runtime.lastError; });
+}
+
+async function bgRunBrainAgent(tabId, task) {
+  const MAX_STEPS = 10;
+  const history = [];
+
+  bgBrainUpdate(tabId, "Planning…");
+
+  // Fast path — no AI needed
+  const fastActions = bgTryFastPath(task, []);
+  if (fastActions) {
+    for (const action of fastActions) {
+      bgBrainUpdate(tabId, `→ ${action.description}`);
+      if (action.type === "navigate") {
+        await new Promise(r => chrome.tabs.update(tabId, { url: action.url }, () => setTimeout(r, 2000)));
+        await bgWaitForTabReady(tabId, 5000);
+      } else {
+        await bgExecuteAgentAction(tabId, action);
+      }
+    }
+    bgBrainUpdate(tabId, "Done!");
+    return;
+  }
+
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const pageInfo = await bgGetAgentPageContext(tabId);
+
+    let actions;
+    try {
+      actions = await bgCallAgentStep(task, pageInfo, history);
+    } catch (e) {
+      bgBrainUpdate(tabId, "Agent error: " + (e.message || e));
+      return;
+    }
+
+    for (const action of actions) {
+      if (action.type === "done" || action.type === "answer") {
+        bgBrainUpdate(tabId, action.message || "Done!");
+        return;
+      }
+      if (action.type === "clarify") {
+        bgBrainUpdate(tabId, action.message || "Need more info.");
+        return;
+      }
+
+      bgBrainUpdate(tabId, `→ ${action.description || action.type}`);
+
+      const result = await bgExecuteAgentAction(tabId, action);
+
+      let snapshot = null;
+      if (BG_SNAPSHOT_ACTIONS.has(action.type)) {
+        if (action.type === "navigate") await bgWaitForTabReady(tabId, 5000);
+        else await new Promise(r => setTimeout(r, 600));
+        snapshot = await bgGetPageSnapshot(tabId);
+      }
+
+      history.push({ ...action, result, snapshot });
+
+      if (result?.error && !result.error.includes("No response")) {
+        bgBrainUpdate(tabId, `Step failed: ${result.error}`);
+        return;
+      }
+    }
+  }
+
+  bgBrainUpdate(tabId, "Reached max steps — task may need the full panel.");
+}
 
 async function bgUpdateRemoteCommand(id, token, patch) {
   await fetch(`${BG_SUPABASE_URL}/rest/v1/agent_commands?id=eq.${id}`, {
