@@ -650,10 +650,11 @@ if (document.readyState === "loading") {
 }
 
 // Extension icon click toggles input
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.action === "toggleSideBrainPanel") {
     if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
     __sbToggleInput(!__sbInputOpen);
+    sendResponse({ ok: true });
   }
   if (msg.action === "sbAgentUpdate") __sbShowBubble(msg.text, false);
   if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);

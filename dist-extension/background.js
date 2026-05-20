@@ -209,9 +209,10 @@ chrome.action.onClicked.addListener((tab) => {
 
   chrome.storage.local.set({ activeTabId: tab.id });
   chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => {
-    void chrome.runtime.lastError; // suppress unchecked error
-    if (chrome.runtime.lastError) {
-      // Content script not yet ready — inject then toggle
+    const err = chrome.runtime.lastError?.message || "";
+    // Only re-inject if the content script genuinely isn't there.
+    // "message port closed" means it IS there but didn't call sendResponse — don't re-inject.
+    if (err.includes("Receiving end does not exist") || err.includes("Could not establish connection")) {
       chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }, () => {
         void chrome.runtime.lastError;
         chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => { void chrome.runtime.lastError; });
