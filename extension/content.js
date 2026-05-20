@@ -53,7 +53,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // Collect interactive elements with their visible text
     const interactiveEls = [];
     const seen = new Set();
-    const selectors = ['button', 'a', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]'];
+    const selectors = ['button', 'a', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]', '[role="textbox"]'];
     document.querySelectorAll(selectors.join(",")).forEach(el => {
       // Skip hidden elements
       const style = window.getComputedStyle(el);
@@ -115,6 +115,109 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       return null;
     }
+
+    const EDITABLE_SELECTOR = 'textarea, input:not([type="hidden"]):not([type="submit"]):not([type="button"]), [contenteditable="true"], [role="textbox"]';
+
+    function isDirectEditableElement(el) {
+      if (!el) return false;
+      const tag = el.tagName?.toLowerCase();
+      return tag === "input" || tag === "textarea" || el.isContentEditable || el.getAttribute("contenteditable") === "true";
+    }
+
+    function resolveEditableTarget(el) {
+      if (!el) return null;
+      if (isDirectEditableElement(el)) return el;
+
+      let nested = null;
+      try { nested = el.querySelector(EDITABLE_SELECTOR); } catch(e) {}
+      if (!nested) nested = deepQuery(EDITABLE_SELECTOR, el);
+      if (nested) return nested;
+
+      if (el.getAttribute?.("role") === "textbox") return el;
+      return null;
+    }
+
+    function dispatchBeforeInputEvent(target, inputType, data) {
+      try {
+        target.dispatchEvent(new InputEvent("beforeinput", {
+          inputType,
+          data,
+          bubbles: true,
+          cancelable: true,
+        }));
+      } catch(e) {}
+    }
+
+    function dispatchInputEvent(target, inputType, data) {
+      try {
+        target.dispatchEvent(new InputEvent("input", {
+          inputType,
+          data,
+          bubbles: true,
+        }));
+      } catch(e) {
+        target.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+
+    function normalizeText(value) {
+      return (value || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+    }
+
+    function selectAllEditableContent(target) {
+      const selection = window.getSelection();
+      if (!selection) return;
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    function clearContentEditable(target) {
+      target.focus();
+      target.click();
+      selectAllEditableContent(target);
+      dispatchBeforeInputEvent(target, "deleteContentBackward", null);
+      document.execCommand("delete", false, null);
+      if (normalizeText(target.innerText || target.textContent)) {
+        target.textContent = "";
+      }
+      dispatchInputEvent(target, "deleteContentBackward", null);
+    }
+
+    function typeIntoContentEditable(target, value) {
+      target.focus();
+      target.click();
+
+      if (normalizeText(target.innerText || target.textContent)) {
+        clearContentEditable(target);
+      }
+
+      dispatchBeforeInputEvent(target, "insertText", value);
+      const inserted = document.execCommand("insertText", false, value);
+      if (inserted) {
+        dispatchInputEvent(target, "insertText", value);
+      }
+
+      if (!normalizeText(target.innerText || target.textContent)) {
+        try {
+          const dt = new DataTransfer();
+          dt.setData("text/plain", value);
+          target.dispatchEvent(new ClipboardEvent("paste", {
+            clipboardData: dt,
+            bubbles: true,
+            cancelable: true,
+          }));
+        } catch(e) {}
+        dispatchInputEvent(target, "insertFromPaste", value);
+      }
+
+      if (!normalizeText(target.innerText || target.textContent)) {
+        target.textContent = value;
+        dispatchInputEvent(target, "insertText", value);
+      }
+    }
+
     (async () => { try {
       if (type === "click") {
         let el = null;
@@ -160,27 +263,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           try { el = document.querySelector(selector); } catch (e) {}
           if (!el) el = deepQuery(selector);
         }
+        el = resolveEditableTarget(el);
         // If a targetText hint was given, try finding by aria-label or placeholder
         if (!el && msg.targetText) {
           const hint = msg.targetText.toLowerCase();
-          el = Array.from(document.querySelectorAll('input, textarea, [contenteditable="true"]')).find(e => {
+          el = Array.from(document.querySelectorAll(EDITABLE_SELECTOR)).find(e => {
             const label = (e.getAttribute("aria-label") || e.getAttribute("placeholder") || e.getAttribute("name") || "").toLowerCase();
             return label.includes(hint);
           });
+          el = resolveEditableTarget(el);
         }
         if (!el) {
           // Use focused element if it's an input, otherwise find the most relevant visible one
           const active = document.activeElement;
           const tag = active?.tagName?.toLowerCase();
-          if (active && (["input","textarea"].includes(tag) || active.contentEditable === "true")) {
-            el = active;
+          if (active && (["input","textarea"].includes(tag) || active.isContentEditable || active.getAttribute?.("role") === "textbox")) {
+            el = resolveEditableTarget(active);
           } else {
-            el = document.querySelector('[contenteditable="true"], textarea, input:not([type="hidden"]):not([type="submit"]):not([type="button"])');
+            el = resolveEditableTarget(document.querySelector(EDITABLE_SELECTOR));
           }
         }
         if (!el) { sendResponse({ error: "No input element found" }); return true; }
 
-        const isContentEditable = el.contentEditable === "true" || el.getAttribute("contenteditable") === "true";
+        const isContentEditable = el.isContentEditable || el.getAttribute("contenteditable") === "true" || (el.getAttribute("role") === "textbox" && !["input", "textarea"].includes(el.tagName.toLowerCase()));
 
         el.focus();
         el.click();
@@ -190,37 +295,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           el.focus();
           el.click();
           await new Promise(r => setTimeout(r, 120));
-
-          // Clear existing content
-          document.execCommand("selectAll", false, null);
-          document.execCommand("delete", false, null);
-
-          // Primary: beforeinput with insertText — works with Lexical (Reddit, Notion, etc.)
-          const bi = new InputEvent("beforeinput", { inputType: "insertText", data: text, bubbles: true, cancelable: true });
-          el.dispatchEvent(bi);
-
-          await new Promise(r => setTimeout(r, 80));
-          const hasText = (el.textContent || "").replace(/\s/g, "").length > 0;
-
-          // Secondary: execCommand insertText — works with most other editors
-          if (!hasText) {
-            document.execCommand("insertText", false, text);
-          }
-
-          // Tertiary: synthetic ClipboardEvent paste — Lexical last resort
-          if (!(el.textContent || "").replace(/\s/g, "").length) {
-            try {
-              const dt = new DataTransfer();
-              dt.setData("text/plain", text);
-              el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
-            } catch(e) {}
-          }
-
-          // Final fallback: set textContent directly
-          if (!(el.textContent || "").replace(/\s/g, "").length) {
-            el.textContent = text;
-            el.dispatchEvent(new Event("input", { bubbles: true }));
-          }
+          typeIntoContentEditable(el, text);
         } else {
           // Regular input/textarea — use native value setter for React compatibility
           const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
@@ -250,7 +325,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } else if (type === "pressEnter" || type === "pressKey") {
         const key = msg.key || "Enter";
         const keyCode = key === "Enter" ? 13 : key === "Tab" ? 9 : key.charCodeAt(0);
-        const el = document.activeElement || document.querySelector("input, textarea");
+        const el = document.activeElement || document.querySelector('input, textarea, [contenteditable="true"], [role="textbox"]');
         if (el) {
           el.dispatchEvent(new KeyboardEvent("keydown", { key, keyCode, bubbles: true, cancelable: true }));
           el.dispatchEvent(new KeyboardEvent("keypress", { key, keyCode, bubbles: true, cancelable: true }));
@@ -261,7 +336,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }
           if (key === "Tab") {
             // Move focus to next focusable element
-            const focusables = Array.from(document.querySelectorAll('input, textarea, button, [contenteditable], [tabindex]:not([tabindex="-1"])'))
+            const focusables = Array.from(document.querySelectorAll('input, textarea, button, [contenteditable], [role="textbox"], [tabindex]:not([tabindex="-1"])'))
               .filter(e => !e.disabled && e.offsetParent !== null);
             const idx = focusables.indexOf(el);
             if (idx !== -1 && focusables[idx + 1]) focusables[idx + 1].focus();

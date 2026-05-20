@@ -1375,6 +1375,8 @@ button {
 .btn-send:hover { background: #000; }
 .btn-send.btn-agent-stop { background: oklch(0.55 0.18 25); }
 .btn-send.btn-agent-stop:hover { background: oklch(0.48 0.20 25); }
+.btn-send.btn-record-ready { background: var(--bad); }
+.btn-send.btn-record-ready:hover { background: oklch(0.48 0.20 25); }
 
 /* Image preview */
 .chat-image-preview {

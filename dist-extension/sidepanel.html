@@ -174,7 +174,6 @@
     <div id="voiceOverlay" class="voice-overlay hidden">
       <!-- Hidden compat elements — JS reads/writes these but they don't render -->
       <div class="voice-compat-hidden" aria-hidden="true">
-        <button id="voiceCloseBtn"></button>
         <button id="voiceStopTaskBtn"></button>
         <div id="voiceCtxFavicon" class="voice-ctx-favicon">S</div>
         <div id="voiceCtxTitle"></div>
@@ -207,6 +206,9 @@
         <div class="voice-spacer"></div>
         <button class="voice-ctrl voice-icon-only" title="Type instead" id="voiceTypeBtn">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><path d="M17.5 3.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 7.5-7.5z"/></svg>
+        </button>
+        <button id="voiceCloseBtn" class="voice-ctrl voice-icon-only" title="End voice session">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
     </div>
