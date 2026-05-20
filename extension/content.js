@@ -662,7 +662,10 @@ if (__sbContextOk()) {
       __sbToggleInput(!__sbInputOpen);
       sendResponse({ ok: true });
     }
-    if (msg.action === "sbAgentUpdate") __sbShowBubble(msg.text, false);
+    if (msg.action === "sbAgentUpdate") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbShowBubble(msg.text, false, { tone: "status" });
+    }
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
   });
 }
@@ -695,10 +698,12 @@ function __sbBuildBrainUI() {
     }
     #__sb_pill__ {
       display: flex; align-items: center; gap: 6px;
-      background: #ffffff; border-radius: 28px;
-      padding: 7px 7px 7px 16px;
-      box-shadow: 0 4px 24px rgba(27,23,19,0.18), 0 1px 4px rgba(27,23,19,0.08);
-      width: 288px; max-width: calc(100vw - 90px);
+      background: rgba(255, 251, 247, 0.96); border-radius: 22px;
+      padding: 9px 9px 9px 16px;
+      border: 1px solid rgba(65, 48, 40, 0.1);
+      box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08);
+      width: 368px; max-width: calc(100vw - 40px);
+      backdrop-filter: blur(18px);
       opacity: 0; transform: translateY(6px) scale(0.97);
       transition: opacity 0.18s, transform 0.18s;
       pointer-events: none;
@@ -708,11 +713,11 @@ function __sbBuildBrainUI() {
     }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
-      font-size: 13.5px; color: #1B1713; min-width: 0; padding: 0;
+      font-size: 14px; color: #1B1713; min-width: 0; padding: 0;
     }
-    #__sb_input__::placeholder { color: #B0A89E; }
+    #__sb_input__::placeholder { color: #A79B92; }
     #__sb_send_btn__, #__sb_rec_btn__ {
-      width: 32px; height: 32px; border-radius: 50%; border: none;
+      width: 34px; height: 34px; border-radius: 50%; border: none;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
     }
@@ -722,23 +727,106 @@ function __sbBuildBrainUI() {
     #__sb_rec_btn__:hover { background: #ebe8e5; }
     #__sb_rec_btn__.active { background: #fee2e2; }
     #__sb_bubble__ {
-      background: #ffffff; border-radius: 14px;
-      padding: 11px 14px; font-size: 13px; line-height: 1.55;
-      color: #1B1713; max-width: 288px;
-      box-shadow: 0 4px 20px rgba(27,23,19,0.14);
+      width: 376px; max-width: calc(100vw - 32px);
+      max-height: min(58vh, 560px);
+      overflow: hidden;
+      background: rgba(255, 251, 247, 0.97);
+      border-radius: 22px;
+      color: #1B1713;
+      border: 1px solid rgba(65, 48, 40, 0.1);
+      box-shadow: 0 24px 60px rgba(27,23,19,0.2), 0 8px 18px rgba(27,23,19,0.1);
+      backdrop-filter: blur(22px);
       opacity: 0; transform: translateY(4px);
       transition: opacity 0.18s, transform 0.18s;
       pointer-events: none;
-      white-space: pre-wrap; word-break: break-word;
       position: relative;
     }
     #__sb_bubble__::after {
       content: ''; position: absolute; bottom: -7px; right: 18px;
-      width: 14px; height: 8px; background: #ffffff;
+      width: 14px; height: 8px; background: rgba(255, 251, 247, 0.97);
       clip-path: polygon(0 0, 100% 0, 50% 100%);
     }
     #__sb_bubble__.visible {
       opacity: 1; transform: translateY(0); pointer-events: all;
+    }
+    .sb-bubble-card { display: flex; flex-direction: column; min-height: 0; }
+    .sb-bubble-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+      padding: 14px 16px 12px; border-bottom: 1px solid rgba(65, 48, 40, 0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,248,242,0.78));
+    }
+    .sb-bubble-head-main { min-width: 0; }
+    .sb-bubble-kicker {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: #9C6A54; font-weight: 700;
+    }
+    .sb-bubble-kicker::before {
+      content: ""; width: 7px; height: 7px; border-radius: 50%;
+      background: linear-gradient(135deg, #F6A8A2, #C9544A); box-shadow: 0 0 10px rgba(201,84,74,0.35);
+    }
+    .sb-bubble-title {
+      margin-top: 5px; font-size: 14px; line-height: 1.35; font-weight: 600; color: #2B221D;
+      max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sb-bubble-actions { display: inline-flex; align-items: center; gap: 8px; }
+    .sb-bubble-iconbtn {
+      border: none; background: rgba(67, 50, 42, 0.06); color: #6F5A4E;
+      width: 30px; height: 30px; border-radius: 999px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 600; transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    }
+    .sb-bubble-iconbtn:hover {
+      background: rgba(201,84,74,0.12); color: #B44B42; transform: translateY(-1px);
+    }
+    .sb-bubble-prompt {
+      margin: 14px 16px 0;
+      padding: 10px 12px; border-radius: 14px;
+      background: rgba(201,84,74,0.08); color: #6D5145;
+      font-size: 12.5px; line-height: 1.45;
+      border: 1px solid rgba(201,84,74,0.12);
+    }
+    .sb-bubble-body {
+      padding: 16px; overflow: auto;
+      font-size: 14px; line-height: 1.65; color: #2B221D;
+      word-break: break-word;
+    }
+    .sb-bubble-card-status .sb-bubble-body {
+      padding-top: 14px; padding-bottom: 14px; font-size: 13px; color: #5B4A40;
+    }
+    .sb-bubble-markdown > :first-child { margin-top: 0; }
+    .sb-bubble-markdown > :last-child { margin-bottom: 0; }
+    .sb-bubble-markdown h1,
+    .sb-bubble-markdown h2,
+    .sb-bubble-markdown h3 {
+      margin: 0 0 10px; color: #1E1713; line-height: 1.25;
+    }
+    .sb-bubble-markdown h1 { font-size: 18px; }
+    .sb-bubble-markdown h2 { font-size: 16px; }
+    .sb-bubble-markdown h3 { font-size: 14px; }
+    .sb-bubble-markdown p { margin: 0 0 12px; }
+    .sb-bubble-markdown ul,
+    .sb-bubble-markdown ol { margin: 0 0 12px 18px; padding: 0; }
+    .sb-bubble-markdown li { margin: 0 0 6px; }
+    .sb-bubble-markdown a { color: #B44B42; text-decoration: none; }
+    .sb-bubble-markdown a:hover { text-decoration: underline; }
+    .sb-bubble-markdown code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px; padding: 2px 6px; border-radius: 8px;
+      background: rgba(67, 50, 42, 0.08); color: #7C352E;
+    }
+    .sb-bubble-markdown pre {
+      margin: 0 0 12px; padding: 12px 14px; border-radius: 14px;
+      background: #241B17; color: #FBF7F1; overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.55;
+    }
+    .sb-bubble-markdown pre code { background: transparent; color: inherit; padding: 0; }
+    .sb-bubble-markdown blockquote {
+      margin: 0 0 12px; padding: 0 0 0 12px; border-left: 3px solid rgba(201,84,74,0.28);
+      color: #705C50;
+    }
+    .sb-bubble-markdown hr {
+      border: none; border-top: 1px solid rgba(65, 48, 40, 0.1); margin: 14px 0;
     }
   `;
   document.head.appendChild(style);
@@ -765,35 +853,215 @@ function __sbBuildBrainUI() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
     if (e.key === "Escape") __sbToggleInput(false);
   });
+
+  __sbStorageGet(["sbBrainExpanded", "authToken"]).then(({ sbBrainExpanded, authToken }) => {
+    if (sbBrainExpanded && authToken) {
+      setTimeout(() => __sbToggleInput(true, { skipPersist: true, suppressFocus: true }), 60);
+    }
+  });
 }
 
-function __sbToggleInput(open) {
+function __sbToggleInput(open, options = {}) {
   if (open) {
     if (!__sbContextOk()) {
-      __sbShowBubble("Reload this page to reconnect SideBrain.", true);
+      __sbShowBubble("Reload this page to reconnect SideBrain.", true, { tone: "status" });
       return;
     }
     chrome.storage.local.get("authToken", ({ authToken }) => {
-      if (!authToken) { __sbShowSignIn(); return; }
+      if (!authToken) {
+        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+        __sbShowSignIn();
+        return;
+      }
       __sbInputOpen = true;
+      if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       const pill = document.getElementById("__sb_pill__");
       if (pill) {
         pill.classList.add("open");
-        setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+        if (!options.suppressFocus) {
+          setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+        }
       }
     });
   } else {
     __sbInputOpen = false;
+    if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
     document.getElementById("__sb_pill__")?.classList.remove("open");
   }
 }
 
 let __sbBubbleTimer = null;
-function __sbShowBubble(text, autoHide = true) {
+let __sbLastBubbleRaw = "";
+
+function __sbEscapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function __sbFormatInlineMarkdown(value) {
+  let html = __sbEscapeHtml(value);
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return html;
+}
+
+function __sbRenderMarkdown(md) {
+  const codeBlocks = [];
+  let text = String(md || "").replace(/\r/g, "");
+  text = text.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_match, lang, code) => {
+    const placeholder = `__SB_CODE_BLOCK_${codeBlocks.length}__`;
+    codeBlocks.push(
+      `<pre><code>${__sbEscapeHtml(code)}</code></pre>`
+    );
+    return placeholder;
+  });
+
+  const lines = text.split("\n");
+  let html = "";
+  let listType = null;
+
+  const closeList = () => {
+    if (listType) {
+      html += listType === "ol" ? "</ol>" : "</ul>";
+      listType = null;
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      closeList();
+      continue;
+    }
+
+    const codeMatch = line.match(/^__SB_CODE_BLOCK_(\d+)__$/);
+    if (codeMatch) {
+      closeList();
+      html += codeBlocks[Number(codeMatch[1])] || "";
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
+    if (headingMatch) {
+      closeList();
+      const level = Math.min(headingMatch[1].length, 3);
+      html += `<h${level}>${__sbFormatInlineMarkdown(headingMatch[2])}</h${level}>`;
+      continue;
+    }
+
+    if (/^---+$/.test(line)) {
+      closeList();
+      html += "<hr />";
+      continue;
+    }
+
+    const quoteMatch = line.match(/^>\s?(.*)$/);
+    if (quoteMatch) {
+      closeList();
+      html += `<blockquote>${__sbFormatInlineMarkdown(quoteMatch[1])}</blockquote>`;
+      continue;
+    }
+
+    const orderedMatch = line.match(/^\d+\.\s+(.*)$/);
+    if (orderedMatch) {
+      if (listType !== "ol") {
+        closeList();
+        html += "<ol>";
+        listType = "ol";
+      }
+      html += `<li>${__sbFormatInlineMarkdown(orderedMatch[1])}</li>`;
+      continue;
+    }
+
+    const bulletMatch = line.match(/^[-*]\s+(.*)$/);
+    if (bulletMatch) {
+      if (listType !== "ul") {
+        closeList();
+        html += "<ul>";
+        listType = "ul";
+      }
+      html += `<li>${__sbFormatInlineMarkdown(bulletMatch[1])}</li>`;
+      continue;
+    }
+
+    closeList();
+    html += `<p>${__sbFormatInlineMarkdown(line)}</p>`;
+  }
+
+  closeList();
+  return html || `<p>${__sbEscapeHtml(String(md || ""))}</p>`;
+}
+
+function __sbBindBubbleActions() {
   const bubble = document.getElementById("__sb_bubble__");
   if (!bubble) return;
-  bubble.textContent = text;
+
+  bubble.querySelector("[data-sb-close]")?.addEventListener("click", () => {
+    bubble.classList.remove("visible");
+  });
+
+  bubble.querySelector("[data-sb-copy]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (!(button instanceof HTMLElement)) return;
+    try {
+      await navigator.clipboard.writeText(__sbLastBubbleRaw);
+      const previous = button.textContent;
+      button.textContent = "Copied";
+      setTimeout(() => { button.textContent = previous || "Copy"; }, 1200);
+    } catch {}
+  });
+}
+
+function __sbShowBubble(text, autoHide = true, options = {}) {
+  const bubble = document.getElementById("__sb_bubble__");
+  if (!bubble) return;
+  __sbLastBubbleRaw = String(text || "");
+  const tone = options.tone || "status";
+  const title = options.title || document.title || "Current page";
+  const prompt = options.prompt ? `<div class="sb-bubble-prompt">${__sbEscapeHtml(options.prompt)}</div>` : "";
+  const rich = Boolean(options.rich);
+
+  bubble.innerHTML = rich
+    ? `
+      <div class="sb-bubble-card">
+        <div class="sb-bubble-head">
+          <div class="sb-bubble-head-main">
+            <div class="sb-bubble-kicker">${__sbEscapeHtml(options.kicker || "SideBrain")}</div>
+            <div class="sb-bubble-title">${__sbEscapeHtml(title)}</div>
+          </div>
+          <div class="sb-bubble-actions">
+            <button class="sb-bubble-iconbtn" type="button" data-sb-copy>Copy</button>
+            <button class="sb-bubble-iconbtn" type="button" data-sb-close>×</button>
+          </div>
+        </div>
+        ${prompt}
+        <div class="sb-bubble-body sb-bubble-markdown">${__sbRenderMarkdown(text)}</div>
+      </div>
+    `
+    : `
+      <div class="sb-bubble-card sb-bubble-card-status">
+        <div class="sb-bubble-head">
+          <div class="sb-bubble-head-main">
+            <div class="sb-bubble-kicker">${__sbEscapeHtml(options.kicker || "SideBrain")}</div>
+            <div class="sb-bubble-title">${__sbEscapeHtml(options.title || "Working")}</div>
+          </div>
+          <div class="sb-bubble-actions">
+            <button class="sb-bubble-iconbtn" type="button" data-sb-close>×</button>
+          </div>
+        </div>
+        <div class="sb-bubble-body">${__sbEscapeHtml(text)}</div>
+      </div>
+    `;
   bubble.classList.add("visible");
+  bubble.dataset.tone = tone;
+  __sbBindBubbleActions();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (autoHide) __sbBubbleTimer = setTimeout(() => bubble.classList.remove("visible"), 8000);
 }
@@ -823,7 +1091,7 @@ function __sbShowSignIn() {
       if (area === "local" && changes.authToken?.newValue) {
         chrome.storage.onChanged.removeListener(handleStorageChange);
         bubble.classList.remove("visible");
-        __sbShowBubble("You're signed in! Click the brain to chat.", true);
+        __sbShowBubble("You're signed in! Click the brain to chat.", true, { tone: "status", title: "Signed in" });
       }
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
@@ -993,7 +1261,11 @@ async function __sbSendMessage() {
 
       const finalReply = __sbAppendSearchSources(String(reply), searchData.results || []);
       __sbChatHistory.push({ role: "assistant", content: finalReply });
-      __sbShowBubble(finalReply, true);
+      __sbShowBubble(finalReply, false, {
+        rich: true,
+        prompt: text,
+        title: `Web results · ${location.hostname.replace(/^www\./, "") || "current page"}`,
+      });
     } catch (err) {
       __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
     }
@@ -1016,7 +1288,11 @@ async function __sbSendMessage() {
     const { reply } = await __sbFetchAssistantReply(body);
     if (!reply) return;
     __sbChatHistory.push({ role: "assistant", content: reply });
-    __sbShowBubble(reply, true);
+    __sbShowBubble(reply, false, {
+      rich: true,
+      prompt: text,
+      title: pageContext.title || location.hostname.replace(/^www\./, "") || "Current page",
+    });
   } catch (err) {
     __sbShowBubble("Error: " + (err.message || "couldn't reach SideBrain"), true);
   }
@@ -1070,16 +1346,22 @@ function __sbStopRecording() {
 
 function __sbHandleRecordingUpdate(msg) {
   if (msg.status === "transcript") {
-    __sbShowBubble(msg.text || "Transcribing…", false);
+    __sbShowBubble(msg.text || "Transcribing…", false, { tone: "status", title: "Recording" });
   } else if (msg.status === "done") {
     __sbIsRecording = false;
     document.getElementById("__sb_rec_btn__")?.classList.remove("active");
     document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
-    __sbShowBubble(msg.text || "Recording saved to dashboard.", true);
+    __sbShowBubble(msg.text || "Recording saved to dashboard.", true, { tone: "status", title: "Recording saved" });
   } else if (msg.status === "error") {
     __sbIsRecording = false;
     document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
-    __sbShowBubble("Recording error: " + (msg.error || "unknown"), true);
+    __sbShowBubble("Recording error: " + (msg.error || "unknown"), true, { tone: "status", title: "Recording error" });
   }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => __sbBuildBrainUI(), { once: true });
+} else {
+  __sbBuildBrainUI();
 }
 } // end window.__sbLoaded guard
