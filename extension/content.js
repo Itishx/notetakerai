@@ -777,6 +777,18 @@ function __sbShowBubble(text, autoHide = true) {
   if (autoHide) __sbBubbleTimer = setTimeout(() => bubble.classList.remove("visible"), 8000);
 }
 
+function __sbShowSignIn() {
+  const bubble = document.getElementById("__sb_bubble__");
+  if (!bubble) return;
+  bubble.innerHTML = `Sign in to use SideBrain. <a href="#" id="__sb_signin_link__" style="color:#E8786E;text-decoration:underline;cursor:pointer">Open sign-in</a>`;
+  bubble.classList.add("visible");
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  document.getElementById("__sb_signin_link__")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    window.open(chrome.runtime.getURL("sidepanel.html"), "_blank", "width=420,height=680,menubar=no,toolbar=no");
+  });
+}
+
 async function __sbSendMessage() {
   const input = document.getElementById("__sb_input__");
   if (!input) return;
@@ -794,17 +806,26 @@ async function __sbSendMessage() {
   __sbChatHistory.push({ role: "user", content: text });
 
   try {
+    const stored = await new Promise((res) => chrome.storage.local.get(["currentNotes", "authToken"], res));
+    const notes = stored.currentNotes || "";
+
     const resp = await fetch(`${__SB_API}/chat-about-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: text,
-        notes: "",
+        notes,
         aiProvider: "anthropic",
         chatHistory: __sbChatHistory.slice(-6, -1),
         pageContext: { url: location.href, title: document.title, text: document.body.innerText?.slice(0, 2000) },
       }),
     });
+
+    if (resp.status === 401 || resp.status === 403) {
+      __sbShowSignIn();
+      return;
+    }
+
     const json = await resp.json();
     const reply = json.reply || json.response || json.message || json.answer || JSON.stringify(json);
     __sbChatHistory.push({ role: "assistant", content: reply });
