@@ -34,6 +34,140 @@ function getStableSelector(el) {
   return null;
 }
 
+const __SB_WAKE_WORD_RE = /^\s*(?:hey|hi|okay|ok)\s+side\s*brain\b[\s,.:;-]*/i;
+
+function __sbSendPageVoiceEvent(event, payload = {}) {
+  try {
+    chrome.runtime.sendMessage({
+      action: "voiceEvent",
+      event,
+      text: payload.text,
+      isFinal: payload.isFinal,
+      message: payload.message,
+      source: payload.source,
+    });
+  } catch {}
+}
+
+function __sbExtractWakeCommand(text) {
+  const original = String(text || "").trim();
+  const match = original.match(__SB_WAKE_WORD_RE);
+  if (!match) return { matched: false, command: "" };
+  return {
+    matched: true,
+    command: original.slice(match[0].length).trim(),
+  };
+}
+
+function __sbStopPageVoiceRecognition() {
+  window.__sideBrainShouldListen = false;
+  window.__sideBrainVoiceMode = "off";
+  window.__sideBrainVoiceSource = null;
+  if (window.__sideBrainRecognition) {
+    try { window.__sideBrainRecognition.abort(); } catch(e) {}
+    window.__sideBrainRecognition = null;
+  }
+}
+
+function __sbStartPageVoiceRecognition(mode = "manual", source = "generic") {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    return { error: "not-supported" };
+  }
+
+  window.__sideBrainShouldListen = true;
+  window.__sideBrainVoiceMode = mode;
+  window.__sideBrainVoiceSource = source;
+
+  if (window.__sideBrainRecognition) {
+    try { window.__sideBrainRecognition.abort(); } catch(e) {}
+    window.__sideBrainRecognition = null;
+  }
+
+  function buildAndStart() {
+    if (!window.__sideBrainShouldListen) return;
+
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.maxAlternatives = 1;
+    window.__sideBrainRecognition = rec;
+
+    rec.onresult = (e) => {
+      const text = Array.from(e.results).map((r) => r[0].transcript).join("");
+      const isFinal = e.results[e.results.length - 1].isFinal;
+      const currentMode = window.__sideBrainVoiceMode || mode;
+      const currentSource = window.__sideBrainVoiceSource || source;
+
+      if (currentMode === "wake") {
+        const wake = __sbExtractWakeCommand(text);
+        if (!wake.matched) return;
+
+        window.__sideBrainVoiceMode = "manual";
+        __sbSendPageVoiceEvent("wakeDetected", { source: currentSource });
+        if (wake.command) {
+          __sbSendPageVoiceEvent("transcript", {
+            text: wake.command,
+            isFinal,
+            source: currentSource,
+          });
+        }
+        return;
+      }
+
+      __sbSendPageVoiceEvent("transcript", {
+        text,
+        isFinal,
+        source: currentSource,
+      });
+    };
+
+    rec.onerror = (e) => {
+      if (e.error === "aborted") return;
+      if (e.error === "no-speech") {
+        window.__sideBrainRecognition = null;
+        setTimeout(buildAndStart, 100);
+        return;
+      }
+      __sbSendPageVoiceEvent("error", {
+        message: e.error,
+        source: window.__sideBrainVoiceSource || source,
+      });
+      window.__sideBrainRecognition = null;
+      window.__sideBrainShouldListen = false;
+      window.__sideBrainVoiceMode = "off";
+      window.__sideBrainVoiceSource = null;
+    };
+
+    rec.onstart = () => {
+      const currentMode = window.__sideBrainVoiceMode || mode;
+      const currentSource = window.__sideBrainVoiceSource || source;
+      __sbSendPageVoiceEvent(currentMode === "wake" ? "wakeReady" : "listening", {
+        source: currentSource,
+      });
+    };
+
+    rec.onend = () => {
+      window.__sideBrainRecognition = null;
+      if (window.__sideBrainShouldListen) {
+        setTimeout(buildAndStart, 150);
+      }
+    };
+
+    try {
+      rec.start();
+    } catch(e) {
+      if (window.__sideBrainShouldListen) {
+        setTimeout(buildAndStart, 500);
+      }
+    }
+  }
+
+  buildAndStart();
+  return { success: true };
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "extractPageContent") {
     const text = (document.body?.innerText || "").substring(0, 12000);
@@ -496,76 +630,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Content scripts inherit the page's mic permissions — this is the only
   // reliable way to get mic access in an MV3 extension side panel.
   if (msg.action === "startVoiceListening") {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      sendResponse({ error: "not-supported" });
-      return true;
-    }
-    // Abort any existing session
-    window.__sideBrainShouldListen = true;
-    if (window.__sideBrainRecognition) {
-      try { window.__sideBrainRecognition.abort(); } catch(e) {}
-      window.__sideBrainRecognition = null;
-    }
-
-    function buildAndStart() {
-      if (!window.__sideBrainShouldListen) return;
-      const rec = new SR();
-      rec.lang = "en-US";
-      rec.interimResults = true;
-      rec.continuous = true; // keep listening through natural pauses; onend restarts on unexpected stop
-      rec.maxAlternatives = 1;
-      window.__sideBrainRecognition = rec;
-
-      rec.onresult = (e) => {
-        const text = Array.from(e.results).map(r => r[0].transcript).join("");
-        const isFinal = e.results[e.results.length - 1].isFinal;
-        chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text, isFinal });
-      };
-
-      rec.onerror = (e) => {
-        if (e.error === "aborted") return;
-        // no-speech is normal (user didn't speak) — just restart silently
-        if (e.error === "no-speech") {
-          window.__sideBrainRecognition = null;
-          setTimeout(buildAndStart, 100);
-          return;
-        }
-        chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: e.error });
-        window.__sideBrainRecognition = null;
-        window.__sideBrainShouldListen = false;
-      };
-
-      rec.onstart = () => {
-        chrome.runtime.sendMessage({ action: "voiceEvent", event: "listening" });
-      };
-
-      rec.onend = () => {
-        window.__sideBrainRecognition = null;
-        // Auto-restart so user can speak again after the current utterance is processed
-        if (window.__sideBrainShouldListen) {
-          setTimeout(buildAndStart, 150);
-        }
-      };
-
-      try {
-        rec.start();
-      } catch(e) {
-        if (window.__sideBrainShouldListen) setTimeout(buildAndStart, 500);
-      }
-    }
-
-    buildAndStart();
-    sendResponse({ success: true });
+    sendResponse(__sbStartPageVoiceRecognition(msg.mode || "manual", msg.source || "generic"));
     return true;
   }
 
   if (msg.action === "stopVoiceListening") {
-    window.__sideBrainShouldListen = false;
-    if (window.__sideBrainRecognition) {
-      try { window.__sideBrainRecognition.abort(); } catch(e) {}
-      window.__sideBrainRecognition = null;
-    }
+    __sbStopPageVoiceRecognition();
     sendResponse({ success: true });
     return true;
   }
@@ -658,6 +728,10 @@ let __sbIsSpeaking = false;
 let __sbCurrentSpeechAudio = null;
 let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
+let __sbWakeArmed = false;
+let __sbVoiceSessionActive = false;
+let __sbVoiceSessionTimer = null;
+let __sbWakeStartTimer = null;
 
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
@@ -732,29 +806,31 @@ function __sbBuildBrainUI() {
     #__sb_rec_btn__ { background: #f3f0ee; font-size: 13px; }
     #__sb_rec_btn__:hover { background: #ebe8e5; }
     #__sb_rec_btn__.active { background: #fee2e2; }
+    #__sb_rec_btn__.wake {
+      background: #fff3e2; color: #a7602d;
+      box-shadow: inset 0 0 0 1px rgba(167, 96, 45, 0.16);
+    }
     #__sb_bubble__ {
-      width: 376px; max-width: calc(100vw - 32px);
-      max-height: min(58vh, 560px);
-      overflow: hidden;
-      background: rgba(255, 251, 247, 0.97);
-      border-radius: 22px;
+      position: fixed;
+      z-index: 2147483648;
+      width: 500px; max-width: calc(100vw - 48px);
+      min-width: 280px; min-height: 100px;
+      max-height: min(72vh, 640px);
+      overflow: hidden; resize: both;
+      background: rgba(250, 246, 242, 0.82);
+      border-radius: 20px;
       color: #1B1713;
-      border: 1px solid rgba(65, 48, 40, 0.1);
-      box-shadow: 0 24px 60px rgba(27,23,19,0.2), 0 8px 18px rgba(27,23,19,0.1);
-      backdrop-filter: blur(22px);
-      opacity: 0; transform: translateY(4px);
-      transition: opacity 0.18s, transform 0.18s;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      box-shadow: 0 32px 80px rgba(27,23,19,0.22), 0 8px 24px rgba(27,23,19,0.1), inset 0 1px 0 rgba(255,255,255,0.7);
+      backdrop-filter: blur(36px) saturate(200%);
+      -webkit-backdrop-filter: blur(36px) saturate(200%);
+      opacity: 0;
+      transition: opacity 0.2s;
       pointer-events: none;
-      position: relative;
     }
-    #__sb_bubble__::after {
-      content: ''; position: absolute; bottom: -7px; right: 18px;
-      width: 14px; height: 8px; background: rgba(255, 251, 247, 0.97);
-      clip-path: polygon(0 0, 100% 0, 50% 100%);
-    }
-    #__sb_bubble__.visible {
-      opacity: 1; transform: translateY(0); pointer-events: all;
-    }
+    #__sb_bubble__.visible { opacity: 1; pointer-events: all; }
+    .sb-bubble-head { cursor: grab; user-select: none; }
+    .sb-bubble-head:active { cursor: grabbing; }
     .sb-bubble-card { display: flex; flex-direction: column; min-height: 0; }
     .sb-bubble-head {
       display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
@@ -864,7 +940,26 @@ function __sbBuildBrainUI() {
     if (sbBrainExpanded && authToken) {
       setTimeout(() => __sbToggleInput(true, { skipPersist: true, suppressFocus: true }), 60);
     }
+    if (authToken) {
+      __sbScheduleWakeMode();
+    }
   });
+
+  if (__sbContextOk() && !window.__sbWakeStorageBound) {
+    window.__sbWakeStorageBound = true;
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local") return;
+      if (changes.authToken?.newValue) {
+        __sbScheduleWakeMode(600);
+      }
+      if (changes.authToken && !changes.authToken.newValue) {
+        __sbWakeArmed = false;
+        __sbVoiceSessionActive = false;
+        __sbClearVoiceSessionTimer();
+        __sbSetVoiceButtonState(false);
+      }
+    });
+  }
 }
 
 function __sbToggleInput(open, options = {}) {
@@ -1008,8 +1103,82 @@ function __sbRenderMarkdown(md) {
 function __sbSetVoiceButtonState(active) {
   const recBtn = document.getElementById("__sb_rec_btn__");
   recBtn?.classList.toggle("active", active);
+  recBtn?.classList.toggle("wake", !active && __sbWakeArmed && !__sbIsSpeaking);
   document.getElementById("__sb_brain_btn__")?.classList.toggle("recording", active);
-  if (recBtn) recBtn.title = active ? "Stop listening" : (__sbIsSpeaking ? "Stop speaking" : "Speak to SideBrain");
+  if (recBtn) {
+    recBtn.title = active
+      ? "Stop listening"
+      : (__sbIsSpeaking
+        ? "Stop speaking"
+        : (__sbWakeArmed ? "Wake word ready: say 'Hey SideBrain'" : "Speak to SideBrain"));
+  }
+}
+
+function __sbClearVoiceSessionTimer() {
+  if (__sbVoiceSessionTimer) {
+    clearTimeout(__sbVoiceSessionTimer);
+    __sbVoiceSessionTimer = null;
+  }
+}
+
+function __sbResetVoiceSessionTimer() {
+  __sbClearVoiceSessionTimer();
+  if (!__sbVoiceSessionActive) return;
+  __sbVoiceSessionTimer = setTimeout(() => {
+    if (__sbIsRecording || __sbVoicePendingReply || __sbIsSpeaking) {
+      __sbResetVoiceSessionTimer();
+      return;
+    }
+    __sbVoiceSessionActive = false;
+    void __sbStartWakeMode();
+  }, 25000);
+}
+
+function __sbScheduleWakeMode(delay = 1200) {
+  if (!__sbContextOk()) return;
+  if (__sbWakeStartTimer) clearTimeout(__sbWakeStartTimer);
+  __sbWakeStartTimer = setTimeout(() => {
+    __sbWakeStartTimer = null;
+    void __sbStartWakeMode();
+  }, delay);
+}
+
+async function __sbStartWakeMode() {
+  if (!__sbContextOk()) return false;
+  if (__sbWakeArmed || __sbIsRecording || __sbVoicePendingReply || __sbIsSpeaking) return false;
+  if (window.__sideBrainShouldListen && window.__sideBrainVoiceSource && !String(window.__sideBrainVoiceSource).startsWith("inline")) {
+    return false;
+  }
+
+  const { authToken } = await __sbStorageGet(["authToken"]);
+  if (!authToken) return false;
+
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "startInlineWakeListening" }, (res) => {
+      if (chrome.runtime.lastError || res?.error) {
+        resolve(false);
+        return;
+      }
+      __sbWakeArmed = true;
+      __sbSetVoiceButtonState(false);
+      resolve(true);
+    });
+  });
+}
+
+async function __sbResumeConversationAfterReply() {
+  __sbVoicePendingReply = false;
+  if (!__sbVoiceSessionActive) {
+    await __sbStartWakeMode();
+    return;
+  }
+
+  __sbResetVoiceSessionTimer();
+  const restarted = await __sbStartRecording({ silent: true, keepSession: true });
+  if (!restarted) {
+    __sbVoiceSessionActive = false;
+    await __sbStartWakeMode();
+  }
 }
 
 function __sbStripMarkdownForSpeech(text) {
@@ -1165,9 +1334,41 @@ function __sbBindBubbleActions() {
   __sbSyncSpeakButtons();
 }
 
+function __sbCenterBubble(bubble) {
+  if (bubble.dataset.positioned) return;
+  const w = Math.min(500, window.innerWidth - 48);
+  const h = 300;
+  bubble.style.left = Math.round((window.innerWidth - w) / 2) + "px";
+  bubble.style.top = Math.round((window.innerHeight - h) / 2) + "px";
+  bubble.style.width = w + "px";
+  bubble.dataset.positioned = "1";
+  __sbInitDrag(bubble);
+}
+
+function __sbInitDrag(bubble) {
+  if (bubble.dataset.dragBound) return;
+  bubble.dataset.dragBound = "1";
+  let dragging = false, ox = 0, oy = 0, bl = 0, bt = 0;
+  bubble.addEventListener("mousedown", (e) => {
+    if (!e.target.closest(".sb-bubble-head")) return;
+    if (e.button !== 0) return;
+    dragging = true;
+    const r = bubble.getBoundingClientRect();
+    bl = r.left; bt = r.top; ox = e.clientX; oy = e.clientY;
+    e.preventDefault();
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    bubble.style.left = Math.max(0, bl + e.clientX - ox) + "px";
+    bubble.style.top = Math.max(0, bt + e.clientY - oy) + "px";
+  });
+  document.addEventListener("mouseup", () => { dragging = false; });
+}
+
 function __sbShowBubble(text, autoHide = true, options = {}) {
   const bubble = document.getElementById("__sb_bubble__");
   if (!bubble) return;
+  __sbCenterBubble(bubble);
   __sbLastBubbleRaw = String(text || "");
   const tone = options.tone || "status";
   const title = options.title || document.title || "Current page";
@@ -1216,6 +1417,7 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
 function __sbShowSignIn() {
   const bubble = document.getElementById("__sb_bubble__");
   if (!bubble) return;
+  __sbCenterBubble(bubble);
   bubble.innerHTML = `
     <div style="font-size:13px;line-height:1.5;color:#1B1713">
       Sign in to get started with SideBrain.
@@ -1239,6 +1441,7 @@ function __sbShowSignIn() {
         chrome.storage.onChanged.removeListener(handleStorageChange);
         bubble.classList.remove("visible");
         __sbShowBubble("You're signed in! Click the brain to chat.", true, { tone: "status", title: "Signed in" });
+        __sbScheduleWakeMode(600);
       }
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
@@ -1371,7 +1574,7 @@ async function __sbProcessPrompt(text, options = {}) {
   if (intent === "record") {
     __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
     if (fromVoice) __sbVoicePendingReply = false;
-    __sbStartRecording();
+    await __sbStartRecording({ keepSession: true });
     return;
   }
 
@@ -1382,12 +1585,19 @@ async function __sbProcessPrompt(text, options = {}) {
     if (!stored.isPremium) {
       if (fromVoice) __sbVoicePendingReply = false;
       __sbShowUpgrade("Browser Agent (Delegate)");
+      if (fromVoice) {
+        __sbVoiceSessionActive = false;
+        await __sbSpeakText("Browser agent requires premium.");
+        await __sbStartWakeMode();
+      }
       return;
     }
     __sbShowBubble("Delegating…", false);
     __sbRunAgent(promptText);
-    if (fromVoice) void __sbSpeakText("On it.");
-    if (fromVoice) __sbVoicePendingReply = false;
+    if (fromVoice) {
+      await __sbSpeakText("On it.");
+      await __sbResumeConversationAfterReply();
+    }
     return;
   }
 
@@ -1408,7 +1618,14 @@ async function __sbProcessPrompt(text, options = {}) {
         chatHistory: previousHistory,
         message: `Answer the user's question using the live web search results in page context. Do not pretend you visited pages beyond these result snippets. If the results are insufficient, say that plainly.\n\nUser question: ${promptText}`,
       });
-      if (!reply) return;
+      if (!reply) {
+        if (fromVoice) {
+          __sbVoiceSessionActive = false;
+          await __sbSpeakText("Please sign in to continue.");
+          await __sbStartWakeMode();
+        }
+        return;
+      }
 
       const finalReply = __sbAppendSearchSources(String(reply), searchData.results || []);
       __sbChatHistory.push({ role: "assistant", content: finalReply });
@@ -1417,12 +1634,17 @@ async function __sbProcessPrompt(text, options = {}) {
         prompt: promptText,
         title: `Web results · ${location.hostname.replace(/^www\./, "") || "current page"}`,
       });
-      if (fromVoice) void __sbSpeakText(finalReply);
+      if (fromVoice) {
+        await __sbSpeakText(finalReply);
+      }
     } catch (err) {
       __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
-      if (fromVoice) void __sbSpeakText("Something went wrong while searching the web.");
+      if (fromVoice) {
+        __sbVoiceSessionActive = false;
+        await __sbSpeakText("Something went wrong while searching the web.");
+      }
     } finally {
-      if (fromVoice) __sbVoicePendingReply = false;
+      if (fromVoice) await __sbResumeConversationAfterReply();
     }
     return;
   }
@@ -1441,19 +1663,31 @@ async function __sbProcessPrompt(text, options = {}) {
     if (selectedText) body.selectedText = selectedText;
 
     const { reply } = await __sbFetchAssistantReply(body);
-    if (!reply) return;
+    if (!reply) {
+      if (fromVoice) {
+        __sbVoiceSessionActive = false;
+        await __sbSpeakText("Please sign in to continue.");
+        await __sbStartWakeMode();
+      }
+      return;
+    }
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbShowBubble(reply, false, {
       rich: true,
       prompt: promptText,
       title: pageContext.title || location.hostname.replace(/^www\./, "") || "Current page",
     });
-    if (fromVoice) void __sbSpeakText(reply);
+    if (fromVoice) {
+      await __sbSpeakText(reply);
+    }
   } catch (err) {
     __sbShowBubble("Error: " + (err.message || "couldn't reach SideBrain"), true);
-    if (fromVoice) void __sbSpeakText("Something went wrong.");
+    if (fromVoice) {
+      __sbVoiceSessionActive = false;
+      await __sbSpeakText("Something went wrong.");
+    }
   } finally {
-    if (fromVoice) __sbVoicePendingReply = false;
+    if (fromVoice) await __sbResumeConversationAfterReply();
   }
 }
 
@@ -1497,43 +1731,67 @@ function __sbToggleRecording() {
   }
   if (__sbIsSpeaking) {
     __sbStopSpeech();
+    __sbVoiceSessionActive = false;
+    __sbWakeArmed = false;
     __sbShowBubble("Voice playback stopped.", true, { tone: "status", title: "Voice" });
+    __sbScheduleWakeMode(300);
     return;
   }
-  __sbStartRecording();
+  void __sbStartRecording({ keepSession: true });
 }
 
-function __sbStartRecording() {
+function __sbStartRecording(options = {}) {
   if (!__sbContextOk()) {
     __sbShowBubble("Reload this page to reconnect SideBrain.", true, { tone: "status", title: "Voice" });
-    return;
+    return Promise.resolve(false);
   }
 
   __sbStopSpeech();
+  __sbWakeArmed = false;
   const input = document.getElementById("__sb_input__");
   if (input) input.value = "";
 
+  __sbVoiceSessionActive = options.keepSession !== false;
+  __sbResetVoiceSessionTimer();
   __sbIsRecording = true;
   __sbSetVoiceButtonState(true);
-  __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
+  if (!options.silent) {
+    __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
+  }
 
-  chrome.runtime.sendMessage({ action: "startInlineVoiceListening" }, (res) => {
-    if (chrome.runtime.lastError || res?.error) {
-      __sbIsRecording = false;
-      __sbSetVoiceButtonState(false);
-      const errorMessage = chrome.runtime.lastError?.message || res?.error || "Could not start voice capture.";
-      __sbShowBubble(`Voice error: ${errorMessage}`, true, { tone: "status", title: "Voice" });
-      return;
-    }
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "startInlineVoiceListening" }, (res) => {
+      if (chrome.runtime.lastError || res?.error) {
+        __sbIsRecording = false;
+        __sbVoiceSessionActive = false;
+        __sbSetVoiceButtonState(false);
+        const errorMessage = chrome.runtime.lastError?.message || res?.error || "Could not start voice capture.";
+        if (!options.silent) {
+          __sbShowBubble(`Voice error: ${errorMessage}`, true, { tone: "status", title: "Voice" });
+        }
+        __sbScheduleWakeMode(300);
+        resolve(false);
+        return;
+      }
+      resolve(true);
+    });
   });
 }
 
 function __sbStopRecording(options = {}) {
   chrome.runtime.sendMessage({ action: "stopInlineVoiceListening" }, () => { void chrome.runtime.lastError; });
+  __sbWakeArmed = false;
   __sbIsRecording = false;
+  if (options.keepSession !== true) {
+    __sbVoiceSessionActive = false;
+    __sbClearVoiceSessionTimer();
+  }
   __sbSetVoiceButtonState(false);
   if (!options.silent) {
     __sbShowBubble("Voice capture stopped.", true, { tone: "status", title: "Voice" });
+  }
+  if (!options.silent) {
+    __sbScheduleWakeMode(300);
   }
 }
 
@@ -1553,11 +1811,36 @@ function __sbHandleRecordingUpdate(msg) {
 }
 
 function __sbHandleVoiceEvent(msg) {
-  if (!__sbIsRecording && !__sbVoicePendingReply) return;
+  if (msg.source !== "inline" && msg.source !== "inline-wake") return;
 
   const input = document.getElementById("__sb_input__");
 
+  if (msg.event === "wakeReady") {
+    __sbWakeArmed = true;
+    __sbSetVoiceButtonState(false);
+    return;
+  }
+
+  if (msg.event === "wakeDetected") {
+    __sbWakeArmed = false;
+    __sbVoiceSessionActive = true;
+    __sbResetVoiceSessionTimer();
+    __sbIsRecording = true;
+    __sbSetVoiceButtonState(true);
+    if (!__sbInputOpen) {
+      __sbToggleInput(true, { skipPersist: true, suppressFocus: true });
+    }
+    __sbShowBubble("Yes?", false, { tone: "status", title: "Wake word heard" });
+    return;
+  }
+
+  if (!__sbIsRecording && !__sbVoicePendingReply && !__sbVoiceSessionActive) return;
+
   if (msg.event === "listening") {
+    __sbWakeArmed = false;
+    __sbIsRecording = true;
+    __sbResetVoiceSessionTimer();
+    __sbSetVoiceButtonState(true);
     __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
     return;
   }
@@ -1565,6 +1848,7 @@ function __sbHandleVoiceEvent(msg) {
   if (msg.event === "transcript") {
     const transcript = String(msg.text || "").trim();
     if (!transcript) return;
+    __sbResetVoiceSessionTimer();
     if (input) input.value = transcript;
 
     if (!msg.isFinal) {
@@ -1573,7 +1857,7 @@ function __sbHandleVoiceEvent(msg) {
     }
 
     __sbVoicePendingReply = true;
-    __sbStopRecording({ silent: true });
+    __sbStopRecording({ silent: true, keepSession: true });
     if (input) input.value = "";
     __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
     void __sbProcessPrompt(transcript, { fromVoice: true });
@@ -1582,11 +1866,13 @@ function __sbHandleVoiceEvent(msg) {
 
   if (msg.event === "error") {
     __sbVoicePendingReply = false;
+    __sbVoiceSessionActive = false;
     __sbStopRecording({ silent: true });
     const errorText = msg.error === "not-allowed"
       ? "Microphone access is blocked. Allow mic access and try again."
       : `Voice error: ${msg.error || "unknown error"}`;
     __sbShowBubble(errorText, true, { tone: "status", title: "Voice" });
+    __sbScheduleWakeMode(600);
   }
 }
 
