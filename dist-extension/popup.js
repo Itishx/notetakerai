@@ -80,6 +80,16 @@ const modeOptions = document.querySelectorAll(".mode-option");
 
 const historyOverlay = document.getElementById("historyOverlay");
 const historyList = document.getElementById("historyList");
+const closePanelBtn = document.getElementById("closePanelBtn");
+
+// If running inside an injected iframe (not a Chrome side panel), show close button
+if (window.parent !== window) {
+  closePanelBtn?.style && (closePanelBtn.style.display = "");
+  closePanelBtn?.addEventListener("click", () => {
+    window.parent.postMessage({ type: "sidebrain-close" }, "*");
+  });
+}
+
 const historyBtn = document.getElementById("historyBtn");
 const historyBackBtn = document.getElementById("historyBackBtn");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");

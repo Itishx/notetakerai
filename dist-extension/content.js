@@ -633,3 +633,69 @@ document.addEventListener('mouseup', () => {
     }).catch(() => {}); // panel may not be open — ignore
   }
 });
+
+// ===== INJECTED PANEL =====
+let __sbInjected = false;
+let __sbVisible = false;
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action === "toggleSideBrainPanel") {
+    if (!__sbInjected) __sbInjectPanel();
+    else __sbSetVisible(!__sbVisible);
+  }
+});
+
+function __sbInjectPanel() {
+  if (document.getElementById("__sidebrain_panel__")) return;
+
+  // Orb toggle button
+  const btn = document.createElement("div");
+  btn.id = "__sidebrain_toggle__";
+  btn.title = "SideBrain";
+  Object.assign(btn.style, {
+    position: "fixed", bottom: "20px", right: "20px",
+    width: "46px", height: "46px", borderRadius: "50%",
+    background: "radial-gradient(circle at 35% 35%, #FFD9A8 0%, #F39A42 45%, #D96E1A 80%)",
+    boxShadow: "0 2px 16px rgba(243,154,66,0.55), 0 1px 4px rgba(27,23,19,0.18)",
+    cursor: "pointer", zIndex: "2147483646",
+    transition: "transform 0.15s",
+  });
+  btn.addEventListener("mouseenter", () => btn.style.transform = "scale(1.1)");
+  btn.addEventListener("mouseleave", () => btn.style.transform = "");
+  btn.addEventListener("click", () => __sbSetVisible(!__sbVisible));
+  document.body.appendChild(btn);
+
+  // Panel iframe
+  const iframe = document.createElement("iframe");
+  iframe.id = "__sidebrain_panel__";
+  iframe.src = chrome.runtime.getURL("sidepanel.html");
+  iframe.allow = "microphone";
+  Object.assign(iframe.style, {
+    position: "fixed", top: "0", right: "0",
+    width: "400px", height: "100vh",
+    border: "none", borderRadius: "0",
+    zIndex: "2147483647",
+    boxShadow: "-2px 0 32px rgba(27,23,19,0.14)",
+    transform: "translateX(100%)",
+    transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
+    display: "block",
+  });
+  document.body.appendChild(iframe);
+
+  // Listen for close signal from iframe
+  window.addEventListener("message", (e) => {
+    if (e.data?.type === "sidebrain-close") __sbSetVisible(false);
+  });
+
+  __sbInjected = true;
+  // Slide in after next paint
+  requestAnimationFrame(() => requestAnimationFrame(() => __sbSetVisible(true)));
+}
+
+function __sbSetVisible(visible) {
+  const iframe = document.getElementById("__sidebrain_panel__");
+  const btn = document.getElementById("__sidebrain_toggle__");
+  if (iframe) iframe.style.transform = visible ? "translateX(0)" : "translateX(100%)";
+  if (btn) btn.style.transform = visible ? "translateX(-408px) scale(1)" : "";
+  __sbVisible = visible;
+}

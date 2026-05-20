@@ -201,10 +201,17 @@ async function bgPerformRealWebSearch(query) {
   }
 }
 
-// Open side panel when extension icon is clicked
+// Toggle injected panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   chrome.storage.local.set({ activeTabId: tab.id });
-  chrome.sidePanel.open({ windowId: tab.windowId });
+  chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => {
+    if (chrome.runtime.lastError) {
+      // Content script not yet ready on this tab — inject it first then toggle
+      chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }, () => {
+        chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" });
+      });
+    }
+  });
 });
 
 // Auto-update activeTabId when user switches tabs
