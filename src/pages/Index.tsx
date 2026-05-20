@@ -381,15 +381,10 @@ export default function Index() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
               Install for Chrome
             </a>
-            <a href="https://github.com/Itishx/notetakerai/releases/download/v1.0.0-mac/SideBrain-1.0.0-universal.dmg" download style={btnGhost} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3C7 3 3 7 3 12s4 9 9 9 9-4 9-9-4-9-9-9z"/><path d="M12 8v8M9 14l3 3 3-3"/></svg>
-              Download for Mac
-            </a>
             <a href="#delegate" style={{ ...btnGhost, color: "var(--sb-ink-3)" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
               Watch a 60s demo <ArrowRightIcon />
             </a>
           </div>
-
           {/* Browser support line */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: -32, marginBottom: 56, color: "var(--sb-ink-3)", fontSize: 12.5, fontFamily: "'JetBrains Mono',monospace" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{ opacity: .7 }}>
@@ -977,14 +972,20 @@ export default function Index() {
             </div>
             {[
               { heading:"Product",links:[["#features","Features"],["#delegate","Delegate"],["#speed","Speed"],["#dashboard","Dashboard"],["#pricing","Pricing"]] },
-              { heading:"Install",links:[["/sidebrain-extension.zip","Chrome"],["/sidebrain-extension.zip","Arc"],["/sidebrain-extension.zip","Brave"],["/sidebrain-extension.zip","Edge"],["https://github.com/Itishx/notetakerai/releases/download/v1.0.0-mac/SideBrain-1.0.0-universal.dmg","Mac App (invisible in screen share)"],["#","Firefox (soon)"]] },
+              { heading:"Install",links:[["/sidebrain-extension.zip","Chrome"],["/sidebrain-extension.zip","Arc"],["/sidebrain-extension.zip","Brave"],["/sidebrain-extension.zip","Edge"],["","Desktop app (coming later)"],["#","Firefox (soon)"]] },
               { heading:"Company",links:[["#","Manifesto"],["#","Changelog"],["#","Privacy"],["#","Terms"],["#","Contact"]] },
             ].map(({heading,links})=>(
               <div key={heading}>
                 <h5 style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:"var(--sb-ink-3)",margin:"0 0 14px" }}>{heading}</h5>
                 <ul style={{ listStyle:"none",padding:0,margin:0,display:"flex",flexDirection:"column",gap:8 }}>
                   {links.map(([href,label])=>(
-                    <li key={label}><a href={href} style={{ fontSize:14,color:"var(--sb-ink-2)",textDecoration:"none",transition:"color .15s" }} onMouseEnter={e=>e.currentTarget.style.color="var(--sb-ink)"} onMouseLeave={e=>e.currentTarget.style.color="var(--sb-ink-2)"}>{label}</a></li>
+                    <li key={label}>
+                      {href ? (
+                        <a href={href} style={{ fontSize:14,color:"var(--sb-ink-2)",textDecoration:"none",transition:"color .15s" }} onMouseEnter={e=>e.currentTarget.style.color="var(--sb-ink)"} onMouseLeave={e=>e.currentTarget.style.color="var(--sb-ink-2)"}>{label}</a>
+                      ) : (
+                        <span style={{ fontSize:14,color:"var(--sb-ink-3)" }}>{label}</span>
+                      )}
+                    </li>
                   ))}
                 </ul>
               </div>
