@@ -819,6 +819,14 @@ function __sbShowSignIn() {
   });
 }
 
+function __sbDetectIntent(text) {
+  const t = text.toLowerCase();
+  if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
+  if (/\b(go to|navigate to|open tab|click on|fill in|fill out|book|buy|order|search for|find on|do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
+  if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
+  return "chat";
+}
+
 async function __sbSendMessage() {
   const input = document.getElementById("__sb_input__");
   if (!input) return;
@@ -826,35 +834,52 @@ async function __sbSendMessage() {
   if (!text) return;
   input.value = "";
 
-  if (/\b(record|start recording|transcribe|capture audio)\b/i.test(text)) {
+  const intent = __sbDetectIntent(text);
+
+  if (intent === "record") {
     __sbShowBubble("Starting recording…", false);
     __sbStartRecording();
     return;
   }
 
-  __sbShowBubble("Thinking…", false);
+  const stored = await new Promise((res) => chrome.storage.local.get(["currentNotes", "authToken", "isPremium"], res));
+
+  if (intent === "agent") {
+    if (!stored.isPremium) {
+      __sbShowUpgrade("Browser Agent (Delegate)");
+      return;
+    }
+    __sbShowBubble("Delegating…", false);
+    __sbRunAgent(text, stored.authToken);
+    return;
+  }
+
+  const isPageQuery = intent === "page";
+  __sbShowBubble(isPageQuery ? "Reading page…" : "Thinking…", false);
   __sbChatHistory.push({ role: "user", content: text });
 
   try {
-    const stored = await new Promise((res) => chrome.storage.local.get(["currentNotes", "authToken"], res));
-    const notes = stored.currentNotes || "";
+    const body = {
+      message: text,
+      notes: stored.currentNotes || "",
+      aiProvider: "anthropic",
+      chatHistory: __sbChatHistory.slice(-6, -1),
+    };
+    if (isPageQuery) {
+      body.pageContext = {
+        url: location.href,
+        title: document.title,
+        text: document.body.innerText?.slice(0, 8000) || "",
+      };
+    }
 
     const resp = await fetch(`${__SB_API}/chat-about-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: text,
-        notes,
-        aiProvider: "anthropic",
-        chatHistory: __sbChatHistory.slice(-6, -1),
-        pageContext: { url: location.href, title: document.title, text: document.body.innerText?.slice(0, 2000) },
-      }),
+      body: JSON.stringify(body),
     });
 
-    if (resp.status === 401 || resp.status === 403) {
-      __sbShowSignIn();
-      return;
-    }
+    if (resp.status === 401 || resp.status === 403) { __sbShowSignIn(); return; }
 
     const json = await resp.json();
     const reply = json.reply || json.response || json.message || json.answer || JSON.stringify(json);
@@ -862,6 +887,40 @@ async function __sbSendMessage() {
     __sbShowBubble(reply, true);
   } catch (err) {
     __sbShowBubble("Error: " + (err.message || "couldn't reach SideBrain"), true);
+  }
+}
+
+function __sbShowUpgrade(feature) {
+  const bubble = document.getElementById("__sb_bubble__");
+  if (!bubble) return;
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  bubble.innerHTML = `
+    <div style="font-size:13px;line-height:1.5;color:#1B1713">⚡ <strong>${feature}</strong> is a Premium feature.</div>
+    <button id="__sb_upgrade_btn__" style="margin-top:10px;width:100%;padding:8px 0;border:none;border-radius:20px;background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;">Upgrade to Premium</button>
+  `;
+  bubble.classList.add("visible");
+  document.getElementById("__sb_upgrade_btn__")?.addEventListener("click", () => {
+    window.open("https://notetakerai.lovable.app/#pricing", "_blank");
+  });
+}
+
+async function __sbRunAgent(task, authToken) {
+  const agentPrompt = `You are SideBrain Browser Agent. The user asked: "${task}". Current page: ${document.title} (${location.href}). Respond with what you will do or what was accomplished in 1-2 sentences.`;
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+    const resp = await fetch(`${__SB_API}/chat-about-notes`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ message: task, notes: agentPrompt, aiProvider: "anthropic" }),
+    });
+    const json = await resp.json();
+    const reply = json.reply || json.response || json.message || "Task received.";
+    __sbShowBubble(reply, true);
+    // Forward to background agent for actual execution
+    chrome.runtime.sendMessage({ action: "sbAgentTask", task, pageUrl: location.href, pageTitle: document.title }, () => { void chrome.runtime.lastError; });
+  } catch (err) {
+    __sbShowBubble("Agent error: " + err.message, true);
   }
 }
 
