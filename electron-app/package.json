@@ -1,0 +1,48 @@
+{
+  "name": "sidebrain",
+  "productName": "SideBrain",
+  "version": "1.0.0",
+  "description": "AI side panel that lives inside your browser",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac --universal",
+    "build:mac-arm": "electron-builder --mac --arm64",
+    "build:mac-x64": "electron-builder --mac --x64"
+  },
+  "build": {
+    "appId": "info.sidebrain.app",
+    "productName": "SideBrain",
+    "copyright": "Copyright © 2026 SideBrain",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        { "target": "dmg", "arch": ["universal"] }
+      ],
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
+    },
+    "dmg": {
+      "title": "SideBrain",
+      "background": "assets/dmg-background.png",
+      "window": { "width": 540, "height": 380 }
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "assets/**/*",
+      "!assets/dmg-background.png"
+    ],
+    "extraMetadata": {
+      "main": "main.js"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.3.0",
+    "electron-builder": "^25.1.8"
+  }
+}
