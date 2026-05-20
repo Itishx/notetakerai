@@ -203,12 +203,18 @@ async function bgPerformRealWebSearch(query) {
 
 // Toggle injected panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
+  // Can't inject into chrome://, file://, or extension pages
+  const url = tab.url || "";
+  if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) return;
+
   chrome.storage.local.set({ activeTabId: tab.id });
   chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => {
+    void chrome.runtime.lastError; // suppress unchecked error
     if (chrome.runtime.lastError) {
-      // Content script not yet ready on this tab — inject it first then toggle
+      // Content script not yet ready — inject then toggle
       chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }, () => {
-        chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" });
+        void chrome.runtime.lastError;
+        chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => { void chrome.runtime.lastError; });
       });
     }
   });
