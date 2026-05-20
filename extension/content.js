@@ -634,103 +634,225 @@ document.addEventListener('mouseup', () => {
   }
 });
 
-// ===== INJECTED PANEL =====
-let __sbInjected = false;
-let __sbVisible = false;
+// ===== BRAIN INLINE UI =====
+const __SB_API = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
+const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.action === "toggleSideBrainPanel") {
-    if (!__sbInjected) __sbInjectPanel();
-    else __sbSetVisible(!__sbVisible);
-  }
-});
+let __sbInputOpen = false;
+let __sbIsRecording = false;
+let __sbChatHistory = [];
 
-function __sbInjectPanel() {
-  if (document.getElementById("__sidebrain_panel__")) return;
-
-  // Brain SVG toggle button
-  const btn = document.createElement("div");
-  btn.id = "__sidebrain_toggle__";
-  btn.title = "SideBrain";
-  Object.assign(btn.style, {
-    position: "fixed", bottom: "20px", right: "20px",
-    width: "52px", height: "52px",
-    cursor: "pointer", zIndex: "2147483646",
-    transition: "transform 0.15s",
-    filter: "drop-shadow(0 2px 8px rgba(200,84,74,0.45))",
-  });
-  btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52">
-  <defs>
-    <linearGradient id="sb-fill" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/>
-    </linearGradient>
-    <linearGradient id="sb-dark" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/>
-    </linearGradient>
-    <radialGradient id="sb-glow" cx="35%" cy="30%" r="50%">
-      <stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/>
-  <path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/>
-  <path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/>
-  <path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/>
-  <path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/>
-  <path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sb-dark)"/>
-  <path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sb-dark)"/>
-  <path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/>
-  <path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/>
-  <path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sb-fill)"/>
-  <path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sb-glow)"/>
-  <path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/>
-  <path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/>
-  <path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/>
-  <path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sb-fill)" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="6" cy="63" r="5.5" fill="url(#sb-fill)"/>
-  <path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sb-fill)" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="94" cy="63" r="5.5" fill="url(#sb-fill)"/>
-  <circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/>
-  <circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>
-  <ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>
-  <ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>
-  <path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>
-</svg>`;
-  btn.addEventListener("mouseenter", () => btn.style.transform = "scale(1.1)");
-  btn.addEventListener("mouseleave", () => btn.style.transform = "");
-  btn.addEventListener("click", () => __sbSetVisible(!__sbVisible));
-  document.body.appendChild(btn);
-
-  // Panel iframe
-  const iframe = document.createElement("iframe");
-  iframe.id = "__sidebrain_panel__";
-  iframe.src = chrome.runtime.getURL("sidepanel.html");
-  iframe.allow = "microphone";
-  Object.assign(iframe.style, {
-    position: "fixed", top: "0", right: "0",
-    width: "400px", height: "100vh",
-    border: "none", borderRadius: "0",
-    zIndex: "2147483647",
-    boxShadow: "-2px 0 32px rgba(27,23,19,0.14)",
-    transform: "translateX(100%)",
-    transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
-    display: "block",
-  });
-  document.body.appendChild(iframe);
-
-  // Listen for close signal from iframe
-  window.addEventListener("message", (e) => {
-    if (e.data?.type === "sidebrain-close") __sbSetVisible(false);
-  });
-
-  __sbInjected = true;
-  // Slide in after next paint
-  requestAnimationFrame(() => requestAnimationFrame(() => __sbSetVisible(true)));
+// Auto-inject brain on every page
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", __sbBuildBrainUI);
+} else {
+  __sbBuildBrainUI();
 }
 
-function __sbSetVisible(visible) {
-  const iframe = document.getElementById("__sidebrain_panel__");
-  const btn = document.getElementById("__sidebrain_toggle__");
-  if (iframe) iframe.style.transform = visible ? "translateX(0)" : "translateX(100%)";
-  if (btn) btn.style.transform = visible ? "translateX(-408px) scale(1)" : "";
-  __sbVisible = visible;
+// Extension icon click toggles input
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action === "toggleSideBrainPanel") {
+    if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+    __sbToggleInput(!__sbInputOpen);
+  }
+  if (msg.action === "sbAgentUpdate") __sbShowBubble(msg.text, false);
+  if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
+});
+
+function __sbBuildBrainUI() {
+  if (document.getElementById("__sb_root__")) return;
+
+  const style = document.createElement("style");
+  style.id = "__sb_styles__";
+  style.textContent = `
+    #__sb_root__ {
+      position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      pointer-events: none;
+    }
+    #__sb_brain_btn__ {
+      width: 52px; height: 52px; cursor: pointer; pointer-events: all;
+      filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5));
+      transition: transform 0.15s, filter 0.15s;
+      flex-shrink: 0;
+    }
+    #__sb_brain_btn__:hover { transform: scale(1.1); filter: drop-shadow(0 4px 16px rgba(200,84,74,0.7)); }
+    #__sb_brain_btn__.recording {
+      animation: __sb_pulse__ 1s ease-in-out infinite;
+    }
+    @keyframes __sb_pulse__ {
+      0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5)); }
+      50% { filter: drop-shadow(0 0 22px rgba(220,50,50,0.95)) drop-shadow(0 0 8px rgba(220,50,50,0.7)); }
+    }
+    #__sb_pill__ {
+      display: flex; align-items: center; gap: 6px;
+      background: #ffffff; border-radius: 28px;
+      padding: 7px 7px 7px 16px;
+      box-shadow: 0 4px 24px rgba(27,23,19,0.18), 0 1px 4px rgba(27,23,19,0.08);
+      width: 288px; max-width: calc(100vw - 90px);
+      opacity: 0; transform: translateY(6px) scale(0.97);
+      transition: opacity 0.18s, transform 0.18s;
+      pointer-events: none;
+    }
+    #__sb_pill__.open {
+      opacity: 1; transform: translateY(0) scale(1); pointer-events: all;
+    }
+    #__sb_input__ {
+      flex: 1; border: none; outline: none; background: transparent;
+      font-size: 13.5px; color: #1B1713; min-width: 0; padding: 0;
+    }
+    #__sb_input__::placeholder { color: #B0A89E; }
+    #__sb_send_btn__, #__sb_rec_btn__ {
+      width: 32px; height: 32px; border-radius: 50%; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.15s; padding: 0;
+    }
+    #__sb_send_btn__ { background: #E8786E; color: white; }
+    #__sb_send_btn__:hover { background: #C9544A; }
+    #__sb_rec_btn__ { background: #f3f0ee; font-size: 13px; }
+    #__sb_rec_btn__:hover { background: #ebe8e5; }
+    #__sb_rec_btn__.active { background: #fee2e2; }
+    #__sb_bubble__ {
+      background: #ffffff; border-radius: 14px;
+      padding: 11px 14px; font-size: 13px; line-height: 1.55;
+      color: #1B1713; max-width: 288px;
+      box-shadow: 0 4px 20px rgba(27,23,19,0.14);
+      opacity: 0; transform: translateY(4px);
+      transition: opacity 0.18s, transform 0.18s;
+      pointer-events: none;
+      white-space: pre-wrap; word-break: break-word;
+      position: relative;
+    }
+    #__sb_bubble__::after {
+      content: ''; position: absolute; bottom: -7px; right: 18px;
+      width: 14px; height: 8px; background: #ffffff;
+      clip-path: polygon(0 0, 100% 0, 50% 100%);
+    }
+    #__sb_bubble__.visible {
+      opacity: 1; transform: translateY(0); pointer-events: all;
+    }
+  `;
+  document.head.appendChild(style);
+
+  const root = document.createElement("div");
+  root.id = "__sb_root__";
+  root.innerHTML = `
+    <div id="__sb_bubble__"></div>
+    <div id="__sb_pill__">
+      <input id="__sb_input__" placeholder="What do you want to do?" autocomplete="off" spellcheck="false" />
+      <button id="__sb_rec_btn__" title="Record tab audio">🎙</button>
+      <button id="__sb_send_btn__" title="Send">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+    <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
+  `;
+  document.body.appendChild(root);
+
+  document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
+  document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
+  document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
+  document.getElementById("__sb_input__").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
+    if (e.key === "Escape") __sbToggleInput(false);
+  });
+}
+
+function __sbToggleInput(open) {
+  __sbInputOpen = open;
+  const pill = document.getElementById("__sb_pill__");
+  if (!pill) return;
+  pill.classList.toggle("open", open);
+  if (open) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+}
+
+let __sbBubbleTimer = null;
+function __sbShowBubble(text, autoHide = true) {
+  const bubble = document.getElementById("__sb_bubble__");
+  if (!bubble) return;
+  bubble.textContent = text;
+  bubble.classList.add("visible");
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  if (autoHide) __sbBubbleTimer = setTimeout(() => bubble.classList.remove("visible"), 8000);
+}
+
+async function __sbSendMessage() {
+  const input = document.getElementById("__sb_input__");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+
+  if (/\b(record|start recording|transcribe|capture audio)\b/i.test(text)) {
+    __sbShowBubble("Starting recording…", false);
+    __sbStartRecording();
+    return;
+  }
+
+  __sbShowBubble("Thinking…", false);
+  __sbChatHistory.push({ role: "user", content: text });
+
+  try {
+    const session = await new Promise((res) => chrome.storage.local.get("supabaseSession", (d) => res(d.supabaseSession)));
+    const headers = { "Content-Type": "application/json" };
+    if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
+    const resp = await fetch(`${__SB_API}/chat-about-notes`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        message: text,
+        history: __sbChatHistory.slice(-6),
+        context: { url: location.href, title: document.title, text: document.body.innerText?.slice(0, 2000) },
+      }),
+    });
+    const json = await resp.json();
+    const reply = json.response || json.message || json.answer || "Done.";
+    __sbChatHistory.push({ role: "assistant", content: reply });
+    __sbShowBubble(reply, true);
+  } catch {
+    __sbShowBubble("Couldn't reach SideBrain — are you signed in?", true);
+  }
+}
+
+function __sbToggleRecording() {
+  if (__sbIsRecording) __sbStopRecording(); else __sbStartRecording();
+}
+
+function __sbStartRecording() {
+  chrome.runtime.sendMessage({ action: "getStreamId" }, (res) => {
+    if (chrome.runtime.lastError || !res?.streamId) {
+      __sbShowBubble("Could not access tab audio.", true);
+      return;
+    }
+    chrome.runtime.sendMessage({ action: "startRecording", streamId: res.streamId, tabId: res.tabId }, () => { void chrome.runtime.lastError; });
+    __sbIsRecording = true;
+    document.getElementById("__sb_rec_btn__")?.classList.add("active");
+    document.getElementById("__sb_brain_btn__")?.classList.add("recording");
+    __sbShowBubble("Recording… speak now.", false);
+  });
+}
+
+function __sbStopRecording() {
+  chrome.runtime.sendMessage({ action: "stopRecording" }, () => { void chrome.runtime.lastError; });
+  __sbIsRecording = false;
+  document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+  document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
+  __sbShowBubble("Stopped. Processing…", false);
+}
+
+function __sbHandleRecordingUpdate(msg) {
+  if (msg.status === "transcript") {
+    __sbShowBubble(msg.text || "Transcribing…", false);
+  } else if (msg.status === "done") {
+    __sbIsRecording = false;
+    document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+    document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
+    __sbShowBubble(msg.text || "Recording saved to dashboard.", true);
+  } else if (msg.status === "error") {
+    __sbIsRecording = false;
+    document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
+    __sbShowBubble("Recording error: " + (msg.error || "unknown"), true);
+  }
 }
