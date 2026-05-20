@@ -80,6 +80,16 @@ const modeOptions = document.querySelectorAll(".mode-option");
 
 const historyOverlay = document.getElementById("historyOverlay");
 const historyList = document.getElementById("historyList");
+const closePanelBtn = document.getElementById("closePanelBtn");
+
+// If running inside an injected iframe (not a Chrome side panel), show close button
+if (window.parent !== window) {
+  closePanelBtn?.style && (closePanelBtn.style.display = "");
+  closePanelBtn?.addEventListener("click", () => {
+    window.parent.postMessage({ type: "sidebrain-close" }, "*");
+  });
+}
+
 const historyBtn = document.getElementById("historyBtn");
 const historyBackBtn = document.getElementById("historyBackBtn");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
@@ -1892,9 +1902,11 @@ Episode: click episode card by targetText`;
 
     if (/x\.com|twitter\.com/.test(url)) return `
 ── TWITTER/X (you are here) ──
-Post tweet: navigate → https://x.com/compose/tweet → wait 1000
-  → type selector="[data-testid='tweetTextarea_0']"
-  → click selector="[data-testid='tweetButtonInline']"
+Post tweet: navigate → https://x.com/compose/tweet → wait 1200
+  → type selector="[data-testid='tweetTextarea_0']" or selector="[role='textbox']"
+  → wait 300
+  → click selector="[data-testid='tweetButtonInline']" or selector="[data-testid='tweetButton']"
+If the post button stays disabled, re-focus the actual textbox and type there. Do not use intent/tweet URLs.
 Search: navigate → https://x.com/search?q=QUERY&src=typed_query
 Like: click [data-testid="like"] on the tweet row`;
 
@@ -2024,7 +2036,7 @@ URL SHORTCUTS — single navigate, zero form interaction needed:
 Gmail compose:    https://mail.google.com/mail/?view=cm&to=TO&su=SUBJECT&body=BODY  (encode spaces as %20)
 WhatsApp by phone#:  https://wa.me/COUNTRYCODENUMBER?text=MESSAGE  (India: 91XXXXXXXXXX, encode spaces as %20)
 WhatsApp by name:    navigate → https://web.whatsapp.com → search contact name → click → type → Enter
-Twitter/X post:   https://twitter.com/intent/tweet?text=TEXT
+Twitter/X post:   navigate → https://x.com/compose/tweet  (type into the composer)
 
 ── MAPS / NAVIGATION ──
 Google Maps search:     https://www.google.com/maps/search/QUERY+with+spaces+as+plus

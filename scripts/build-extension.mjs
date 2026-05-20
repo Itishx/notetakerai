@@ -3,6 +3,7 @@ import archiver from "archiver";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { syncExtensionAssets } from "./sync-extension-assets.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -26,6 +27,8 @@ const COPY_FILES = [
 const COPY_DIRS = ["fonts"];
 
 // ── Clean & recreate dist ──────────────────────────────────────────────────
+syncExtensionAssets();
+
 if (fs.existsSync(DIST)) fs.rmSync(DIST, { recursive: true });
 fs.mkdirSync(DIST, { recursive: true });
 

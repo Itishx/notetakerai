@@ -819,22 +819,129 @@ function __sbShowSignIn() {
 
   // Auto-unlock once auth token lands in storage
   if (__sbContextOk()) {
-    const unwatch = chrome.storage.onChanged.addListener((changes, area) => {
+    const handleStorageChange = (changes, area) => {
       if (area === "local" && changes.authToken?.newValue) {
-        chrome.storage.onChanged.removeListener(unwatch);
+        chrome.storage.onChanged.removeListener(handleStorageChange);
         bubble.classList.remove("visible");
         __sbShowBubble("You're signed in! Click the brain to chat.", true);
       }
-    });
+    };
+    chrome.storage.onChanged.addListener(handleStorageChange);
   }
+}
+
+function __sbGetSelectedText() {
+  return window.getSelection?.()?.toString?.()?.trim?.() || "";
+}
+
+function __sbGetPageContext(maxChars = 12000) {
+  const pageText = (document.body?.innerText || "").trim().slice(0, maxChars);
+  const selectedText = __sbGetSelectedText();
+  return {
+    url: location.href,
+    title: document.title,
+    text: pageText,
+    selectedText,
+  };
+}
+
+function __sbIsExplicitWebSearchRequest(text) {
+  return /\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|latest\b|current\b|news\b|search for\b)\b/i.test(text);
+}
+
+function __sbIsBrowserActionCommand(text) {
+  return /\b(open|go to|navigate to|visit|search for|play|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
 }
 
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
-  if (/\b(go to|navigate to|open tab|click on|fill in|fill out|book|buy|order|search for|find on|do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
+  if (__sbIsExplicitWebSearchRequest(t)) return "web";
+  if (__sbIsBrowserActionCommand(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
   return "chat";
+}
+
+function __sbFormatWebSearchResults(query, searchData) {
+  const lines = (searchData?.results || []).map((result, index) => {
+    const title = String(result.title || "Untitled result").trim();
+    const url = String(result.url || "").trim();
+    const snippet = String(result.snippet || "").trim();
+    return `[${index + 1}] ${title}\nURL: ${url}\nSnippet: ${snippet || "(no snippet provided)"}`;
+  });
+
+  return [
+    `Live web search query: ${query}`,
+    searchData?.engine ? `Search engine: ${searchData.engine}` : "",
+    searchData?.searchUrl ? `Search page: ${searchData.searchUrl}` : "",
+    "",
+    lines.join("\n\n"),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function __sbBuildWebSearchPageContext(query, searchData) {
+  return {
+    title: `Web search results for "${query}"`,
+    url: searchData?.searchUrl || "",
+    text: __sbFormatWebSearchResults(query, searchData),
+  };
+}
+
+function __sbAppendSearchSources(reply, results) {
+  if (!results?.length) return reply;
+  if (/\n#{1,3}\s*Sources\b/i.test(reply) || /\nSources:\s*$/i.test(reply)) return reply;
+
+  const sources = results
+    .slice(0, 5)
+    .filter((result) => result?.url)
+    .map((result) => {
+      const cleanTitle = String(result.title || result.url).replace(/[\[\]]/g, "").trim();
+      return `- ${cleanTitle}: ${result.url}`;
+    });
+
+  if (!sources.length) return reply;
+  return `${reply}\n\nSources\n${sources.join("\n")}`;
+}
+
+async function __sbPerformWebSearch(query) {
+  if (!__sbContextOk()) throw new Error("Reload page to reconnect SideBrain.");
+
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ action: "performWebSearch", query }, (res) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      if (res?.error) {
+        reject(new Error(res.error));
+        return;
+      }
+      resolve(res || { results: [] });
+    });
+  });
+}
+
+async function __sbFetchAssistantReply(body) {
+  const resp = await fetch(`${__SB_API}/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (resp.status === 401 || resp.status === 403) {
+    __sbShowSignIn();
+    return { reply: null };
+  }
+
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({}));
+    throw new Error(errData.error || `Request failed: ${resp.status}`);
+  }
+
+  const json = await resp.json();
+  return { reply: json.reply || json.response || json.message || json.answer || "" };
 }
 
 async function __sbSendMessage() {
@@ -852,7 +959,8 @@ async function __sbSendMessage() {
     return;
   }
 
-  const stored = await __sbStorageGet(["currentNotes", "authToken", "isPremium"]);
+  const stored = await __sbStorageGet(["currentNotes", "authToken", "isPremium", "aiProvider"]);
+  const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
 
   if (intent === "agent") {
     if (!stored.isPremium) {
@@ -860,37 +968,53 @@ async function __sbSendMessage() {
       return;
     }
     __sbShowBubble("Delegating…", false);
-    __sbRunAgent(task);
+    __sbRunAgent(text);
     return;
   }
 
-  const isPageQuery = intent === "page";
-  __sbShowBubble(isPageQuery ? "Reading page…" : "Thinking…", false);
+  const pageContext = __sbGetPageContext();
+  const hasPageText = Boolean(pageContext.text);
+  const selectedText = pageContext.selectedText || undefined;
+  const previousHistory = __sbChatHistory.slice(-10);
+
+  if (intent === "web") {
+    __sbShowBubble("Searching the web…", false);
+    __sbChatHistory.push({ role: "user", content: text });
+
+    try {
+      const searchData = await __sbPerformWebSearch(text);
+      const { reply } = await __sbFetchAssistantReply({
+        aiProvider,
+        pageContext: __sbBuildWebSearchPageContext(text, searchData),
+        chatHistory: previousHistory,
+        message: `Answer the user's question using the live web search results in page context. Do not pretend you visited pages beyond these result snippets. If the results are insufficient, say that plainly.\n\nUser question: ${text}`,
+      });
+      if (!reply) return;
+
+      const finalReply = __sbAppendSearchSources(String(reply), searchData.results || []);
+      __sbChatHistory.push({ role: "assistant", content: finalReply });
+      __sbShowBubble(finalReply, true);
+    } catch (err) {
+      __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
+    }
+    return;
+  }
+
+  __sbShowBubble(hasPageText ? "Reading page…" : "Thinking…", false);
   __sbChatHistory.push({ role: "user", content: text });
 
   try {
-    const body = {
+      const body = {
       message: text,
       notes: stored.currentNotes || "",
-      aiProvider: "anthropic",
-      chatHistory: __sbChatHistory.slice(-6, -1),
-      pageContext: {
-        url: location.href,
-        title: document.title,
-        text: isPageQuery ? (document.body.innerText?.slice(0, 8000) || "") : "",
-      },
-    };
+      aiProvider,
+      chatHistory: previousHistory,
+      };
+    if (hasPageText) body.pageContext = { url: pageContext.url, title: pageContext.title, text: pageContext.text };
+    if (selectedText) body.selectedText = selectedText;
 
-    const resp = await fetch(`${__SB_API}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (resp.status === 401 || resp.status === 403) { __sbShowSignIn(); return; }
-
-    const json = await resp.json();
-    const reply = json.reply || json.response || json.message || json.answer || JSON.stringify(json);
+    const { reply } = await __sbFetchAssistantReply(body);
+    if (!reply) return;
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbShowBubble(reply, true);
   } catch (err) {

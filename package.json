@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "sync:extension": "node scripts/sync-extension-assets.mjs",
     "build:extension": "node scripts/build-extension.mjs",
     "lint": "eslint .",
     "preview": "vite preview",

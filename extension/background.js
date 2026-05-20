@@ -346,9 +346,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "runBrainAgent") {
     const task = message.task;
+    const senderTabId = sender?.tab?.id || null;
     chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
-      const tabId = activeTabId || message.senderTabId;
+      const tabId = senderTabId || activeTabId || message.senderTabId;
       if (!tabId) { sendResponse({ ok: true }); return; }
+      chrome.storage.local.set({ activeTabId: tabId });
       bgRunBrainAgent(tabId, task);
       sendResponse({ ok: true });
     });
