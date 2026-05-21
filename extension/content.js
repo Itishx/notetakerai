@@ -34,7 +34,7 @@ function getStableSelector(el) {
   return null;
 }
 
-const __SB_WAKE_WORD_RE = /^\s*(?:hey|hi|okay|ok)\s+side\s*brain\b[\s,.:;-]*/i;
+const __SB_WAKE_WORD_RE = /(?:hey|hi|okay|ok)\s*[,.:;!?-]*\s*side[\s-]*brain\b\s*[,.:;!?-]*/i;
 
 function __sbSendPageVoiceEvent(event, payload = {}) {
   try {
@@ -51,11 +51,20 @@ function __sbSendPageVoiceEvent(event, payload = {}) {
 
 function __sbExtractWakeCommand(text) {
   const original = String(text || "").trim();
+  const normalized = original
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!/(?:^|\s)(?:hey|hi|okay|ok)\s+side(?:\s|-)?brain\b/.test(normalized)) {
+    return { matched: false, command: "" };
+  }
   const match = original.match(__SB_WAKE_WORD_RE);
-  if (!match) return { matched: false, command: "" };
+  if (!match) return { matched: true, command: "" };
+  const start = (match.index || 0) + match[0].length;
   return {
     matched: true,
-    command: original.slice(match[0].length).trim(),
+    command: original.slice(start).trim(),
   };
 }
 
@@ -112,6 +121,13 @@ function __sbStartPageVoiceRecognition(mode = "manual", source = "generic") {
             isFinal,
             source: currentSource,
           });
+        } else if (isFinal) {
+          const activeRecognition = rec;
+          setTimeout(() => {
+            if (window.__sideBrainShouldListen && window.__sideBrainRecognition === activeRecognition) {
+              try { activeRecognition.stop(); } catch(e) {}
+            }
+          }, 0);
         }
         return;
       }
@@ -1855,7 +1871,7 @@ function __sbHandleVoiceEvent(msg) {
     if (!__sbInputOpen) {
       __sbToggleInput(true, { skipPersist: true, suppressFocus: true });
     }
-    __sbShowBubble("Yes?", false, { tone: "status", title: "Wake word heard" });
+    __sbShowBubble("Heard you. Listening…", false, { tone: "status", title: "Wake word heard" });
     return;
   }
 
