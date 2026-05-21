@@ -401,12 +401,7 @@ export default function Index() {
             boxShadow: "0 1px 2px rgba(40,28,18,.04), 0 4px 12px -4px rgba(40,28,18,.08)",
             display: "flex", gap: 16, alignItems: "center",
           }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-              background: "radial-gradient(circle at 35% 35%, #FFD9A8 0%, #F39A42 45%, #D96E1A 80%)",
-              boxShadow: "0 0 12px rgba(243,154,66,0.5)",
-              animation: "sbOrbBreathe 3s ease-in-out infinite",
-            }} />
+            <img src="/favicon.svg" width={36} height={36} alt="SideBrain" style={{ flexShrink: 0, animation: "sbOrbBreathe 3s ease-in-out infinite" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-accent-deep)", display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--sb-accent)", animation: "sbPulse 1.6s infinite", display: "inline-block" }} />
@@ -481,7 +476,7 @@ export default function Index() {
                   </div>
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 16 }}>
                     <div style={{ display: "flex", justifyContent: "center", padding: "14px 0 12px" }}>
-                      <div style={{ width: 96, height: 96, borderRadius: "50%", background: "radial-gradient(circle at 35% 35%, #FFD9A8 0%, #F39A42 45%, #D96E1A 80%)", boxShadow: "0 0 50px rgba(243,154,66,0.45), inset 0 -12px 22px rgba(160,60,10,.25)", animation: "sbOrbBreathe 3.5s ease-in-out infinite" }} />
+                      <img src="/favicon.svg" width={96} height={96} alt="SideBrain" style={{ animation: "sbOrbBreathe 3.5s ease-in-out infinite", filter: "drop-shadow(0 0 18px rgba(201,84,74,0.5))" }} />
                     </div>
                     <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--sb-accent-deep)", display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
                       <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--sb-accent)", animation: "sbPulse 1.6s infinite", display: "inline-block" }} />
@@ -526,7 +521,7 @@ export default function Index() {
                 <div style={{ width: "92%", height: 36, borderRadius: 8, background: "linear-gradient(180deg, #F8F4ED, #EFE7DB)", border: "1px solid var(--sb-line)", display: "flex", alignItems: "center", gap: 8, padding: "0 10px" }}>
                   <div style={{ display: "flex", gap: 4 }}>{["#DDD3C5","#DDD3C5","#DDD3C5"].map((c,i)=><span key={i} style={{ width:7,height:7,borderRadius:"50%",background:c,display:"inline-block" }} />)}</div>
                   <div style={{ flex:1,height:16,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:6 }} />
-                  <div style={{ width:18,height:18,borderRadius:"50%",background:"radial-gradient(circle at 35% 35%, #FFD9A8, #F39A42, #D96E1A)",boxShadow:"0 0 8px rgba(243,154,66,0.55)",animation:"sbPop 1.8s ease-in-out infinite" }} />
+                  <img src="/favicon.svg" width={18} height={18} alt="SideBrain" style={{ animation: "sbPop 1.8s ease-in-out infinite", flexShrink: 0 }} />
                 </div>
               </div>
             </StepCard>
@@ -541,10 +536,10 @@ export default function Index() {
               </div>
             </StepCard>
 
-            <StepCard num="03" title="Click the orb." body="The side panel wakes up. Ask it anything, or just speak. It reads what you're looking at, answers questions, runs tasks, and saves everything to your account automatically.">
+            <StepCard num="03" title="Click the brain." body="The side panel wakes up. Ask it anything, or just speak. It reads what you're looking at, answers questions, runs tasks, and saves everything to your account automatically.">
               <div style={{ height: 130, borderRadius: 12, background: "var(--sb-bg-2)", border: "1px solid var(--sb-line-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-                  <div style={{ width:36,height:36,borderRadius:"50%",background:"radial-gradient(circle at 35% 35%, #FFD9A8, #F39A42, #D96E1A)",boxShadow:"0 0 14px rgba(243,154,66,0.5)" }} />
+                  <img src="/favicon.svg" width={36} height={36} alt="SideBrain" style={{ filter: "drop-shadow(0 0 8px rgba(201,84,74,0.4))" }} />
                   <span style={{ color:"var(--sb-ink-3)",fontFamily:"'JetBrains Mono',monospace" }}>→</span>
                   <div style={{ width:60,height:90,borderRadius:8,background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",padding:8,display:"flex",flexDirection:"column",gap:5 }}>
                     <div style={{ width:16,height:16,borderRadius:"50%",background:"var(--sb-accent)",boxShadow:"0 0 8px var(--sb-accent)",margin:"6px auto" }} />
@@ -582,7 +577,7 @@ export default function Index() {
             {/* Voice — small */}
             <FeatureCard tag="02 — Speaks" title="Talk to it like a person." body="Voice in, voice out, with live word-by-word captions while it talks. Interrupt anytime." span={5}>
               <div style={{ width:"100%",display:"flex",alignItems:"center",gap:14,padding:14,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:12 }}>
-                <div style={{ width:48,height:48,borderRadius:"50%",flexShrink:0,background:"radial-gradient(circle at 35% 35%, #FFD9A8, #F39A42, #D96E1A)",boxShadow:"0 0 16px rgba(243,154,66,0.5)",animation:"sbOrbBreathe 3s ease-in-out infinite" }} />
+                <img src="/favicon.svg" width={48} height={48} alt="SideBrain" style={{ flexShrink: 0, animation: "sbOrbBreathe 3s ease-in-out infinite", filter: "drop-shadow(0 0 10px rgba(201,84,74,0.45))" }} />
                 <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:17,lineHeight:1.25,color:"var(--sb-ink)" }}>
                   I've opened Gmail and I'm <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>drafting your reply</em> to Priya now.
                 </div>
@@ -790,7 +785,7 @@ export default function Index() {
               {/* Sidebar */}
               <aside style={{ width:240,flexShrink:0,background:"#F0E9DF",borderRight:"1px solid #E2D8CC",padding:"18px 14px",display:"flex",flexDirection:"column",gap:4 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,padding:"4px 8px 18px" }}>
-                  <span style={{ width:20,height:20,borderRadius:"50%",background:"radial-gradient(circle at 35% 35%, #FFD9A8 0%, #F39A42 45%, #D96E1A 80%)",display:"inline-block",flexShrink:0 }} />
+                  <img src="/favicon.svg" width={20} height={20} alt="SideBrain" style={{ display: "inline-block", flexShrink: 0 }} />
                   <span style={{ fontWeight:600,fontSize:14 }}>SideBrain</span>
                 </div>
                 {[
@@ -1013,7 +1008,7 @@ function BrowserBar({ url }: { url: string }) {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity:.7 }}><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         <strong style={{ color:"var(--sb-ink-2)",fontWeight:500 }}>https://</strong>{url}
       </div>
-      <span style={{ width:22,height:22,borderRadius:"50%",background:"radial-gradient(circle at 35% 35%, #FFD9A8 0%, #F39A42 45%, #D96E1A 80%)",boxShadow:"0 0 6px rgba(243,154,66,0.4)",border:"2px solid #fff",display:"inline-block" }} />
+      <img src="/favicon.svg" width={22} height={22} alt="SideBrain" style={{ display: "inline-block", flexShrink: 0 }} />
     </div>
   );
 }
