@@ -1583,18 +1583,6 @@ async function bgSyncToNotion(markdown, title) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
   if (!stored.authToken || !stored.authUserId) return { error: "Not signed in" };
 
-  const statusRes = await fetch(`${BG_API_BASE}/notion-connection-status`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${stored.authToken}`,
-      apikey: BG_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ userIdentifier: stored.authUserId }),
-  });
-  const statusJson = await statusRes.json().catch(() => ({}));
-  if (!statusJson.connected) return { error: "not_connected" };
-
   const syncRes = await fetch(`${BG_API_BASE}/sync-to-notion`, {
     method: "POST",
     headers: {
@@ -1604,10 +1592,11 @@ async function bgSyncToNotion(markdown, title) {
     },
     body: JSON.stringify({ userIdentifier: stored.authUserId, title: title || "Lecture Notes", markdown }),
   });
-  if (!syncRes.ok) {
-    const j = await syncRes.json().catch(() => ({}));
-    return { error: j.error || "Notion sync failed" };
-  }
   const syncJson = await syncRes.json().catch(() => ({}));
+  if (!syncRes.ok) {
+    const msg = syncJson.error || "";
+    if (syncRes.status === 401 || msg.toLowerCase().includes("not connected")) return { error: "not_connected" };
+    return { error: msg || "Notion sync failed" };
+  }
   return { success: true, url: syncJson.url };
 }
