@@ -141,22 +141,26 @@ const Navbar = () => {
         style={{ position: "fixed", top: 16, left: 16, zIndex: 100 }}
       >
         <div style={{ ...pillStyle, padding: "5px 10px" }}>
-          {/* Braino logo — click to expand */}
-          <button
+          {/* Brain icon — click goes home */}
+          <Link
+            to="/"
+            onClick={() => window.scrollTo(0, 0)}
             className="braino-glow"
-            onClick={toggle}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: "none",
-              border: "none",
-              padding: 0,
-              flexShrink: 0,
-              cursor: "pointer",
-            }}
+            style={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0 }}
           >
             <img src="/favicon.svg" width={28} height={28} alt="Braino" style={{ flexShrink: 0 }} />
+          </Link>
+
+          {/* Chevron — click to expand/collapse */}
+          <button
+            onClick={toggle}
+            style={{
+              display: "flex", alignItems: "center",
+              background: "none", border: "none",
+              padding: "0 2px 0 4px", cursor: "pointer", flexShrink: 0,
+            }}
+            title={expanded ? "Collapse menu" : "Expand menu"}
+          >
             <svg
               className={`braino-chevron${expanded ? " open" : ""}`}
               width="10" height="10"
