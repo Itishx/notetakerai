@@ -15,189 +15,44 @@ function bgDelay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function bgExtractSearchResultsFromTab(tabId) {
-  if (!tabId) return { results: [] };
-  try {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        function cleanText(value) {
-          return String(value || "").replace(/\s+/g, " ").trim();
-        }
-
-        function normalizeUrl(rawUrl) {
-          if (!rawUrl) return "";
-          try {
-            const parsed = new URL(rawUrl, window.location.href);
-            if (parsed.hostname.includes("duckduckgo.com")) {
-              const redirected = parsed.searchParams.get("uddg");
-              if (redirected) return decodeURIComponent(redirected);
-            }
-            if (parsed.hostname.includes("google.") && parsed.pathname === "/url") {
-              const redirected = parsed.searchParams.get("q");
-              if (redirected) return redirected;
-            }
-            return parsed.href;
-          } catch {
-            return rawUrl;
-          }
-        }
-
-        function pushUnique(results, seen, rawTitle, rawUrl, rawSnippet) {
-          const title = cleanText(rawTitle);
-          const url = normalizeUrl(rawUrl);
-          const snippet = cleanText(rawSnippet);
-          if (!title || !url || seen.has(url)) return;
-          if (!/^https?:/i.test(url)) return;
-          seen.add(url);
-          results.push({ title, url, snippet });
-        }
-
-        function collectWithConfig(config) {
-          const results = [];
-          const seen = new Set();
-          const items = Array.from(document.querySelectorAll(config.item));
-
-          for (const item of items) {
-            const link = item.querySelector(config.link);
-            const titleEl = item.querySelector(config.title) || link;
-            const snippetEl = item.querySelector(config.snippet);
-            pushUnique(
-              results,
-              seen,
-              titleEl?.innerText || titleEl?.textContent,
-              link?.href || titleEl?.closest?.("a")?.href,
-              snippetEl?.innerText || snippetEl?.textContent,
-            );
-            if (results.length >= 8) break;
-          }
-
-          return results;
-        }
-
-        const configs = [
-          {
-            item: ".result.results_links_deep.web-result, .result",
-            title: ".result__title .result__a, a.result__a",
-            link: ".result__title .result__a, a.result__a",
-            snippet: ".result__snippet",
-          },
-          {
-            item: "article[data-testid='result'], [data-layout='organic']",
-            title: "h2 a, a[data-testid='result-title-a']",
-            link: "h2 a, a[data-testid='result-title-a']",
-            snippet: "[data-result='snippet'], [data-testid='result-snippet']",
-          },
-          {
-            item: "li.b_algo",
-            title: "h2 a",
-            link: "h2 a",
-            snippet: ".b_caption p, .b_snippet",
-          },
-          {
-            item: "div.g, div[data-snc]",
-            title: "a h3, h3",
-            link: "a[href]:has(h3), a[href]",
-            snippet: ".VwiC3b, .yXK7lf, .MUxGbd, .hgKElc",
-          },
-        ];
-
-        for (const config of configs) {
-          const results = collectWithConfig(config);
-          if (results.length > 0) return { results };
-        }
-
-        return { results: [] };
-      },
-    });
-
-    return result?.result || { results: [] };
-  } catch (e) {
-    return { results: [], error: e.message };
-  }
-}
 
 async function bgPerformRealWebSearch(query) {
   const trimmedQuery = String(query || "").trim();
   if (!trimmedQuery) return { error: "No search query provided." };
 
-  const engineAttempts = [
-    {
-      engine: "DuckDuckGo",
-      url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(trimmedQuery)}`,
-    },
-    {
-      engine: "Bing",
-      url: `https://www.bing.com/search?q=${encodeURIComponent(trimmedQuery)}`,
-    },
-  ];
-
-  const activeTabId = await bgGetActiveTabId();
-  let activeTab = null;
-  if (activeTabId) {
-    activeTab = await new Promise((resolve) => {
-      chrome.tabs.get(activeTabId, (tab) => {
-        if (chrome.runtime.lastError) resolve(null);
-        else resolve(tab || null);
-      });
-    });
-  }
-
-  const createProps = {
-    url: engineAttempts[0].url,
-    active: false,
-  };
-  if (typeof activeTab?.windowId === "number") createProps.windowId = activeTab.windowId;
-  if (typeof activeTab?.index === "number") createProps.index = activeTab.index + 1;
-
-  let tempTabId = null;
+  const searchUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(trimmedQuery)}`;
 
   try {
-    const tempTab = await new Promise((resolve, reject) => {
-      chrome.tabs.create(createProps, (tab) => {
-        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-        else resolve(tab);
-      });
+    const resp = await fetch(searchUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" },
     });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-    tempTabId = tempTab?.id || null;
-    if (!tempTabId) throw new Error("Could not create a temporary search tab.");
+    const html = await resp.text();
+    const results = [];
+    const seen = new Set();
 
-    for (let i = 0; i < engineAttempts.length; i += 1) {
-      const attempt = engineAttempts[i];
-
-      if (i > 0) {
-        await new Promise((resolve, reject) => {
-          chrome.tabs.update(tempTabId, { url: attempt.url }, () => {
-            if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-            else resolve();
-          });
-        });
-      }
-
-      await bgWaitForTabReady(tempTabId, 8000);
-      await bgDelay(700);
-
-      const extracted = await bgExtractSearchResultsFromTab(tempTabId);
-      if (extracted?.results?.length) {
-        return {
-          query: trimmedQuery,
-          engine: attempt.engine,
-          searchUrl: attempt.url,
-          results: extracted.results.slice(0, 8),
-        };
-      }
+    // DuckDuckGo Lite: results are table rows with class "result-link" and "result-snippet"
+    const rowRe = /<td[^>]*class="result-link"[^>]*>\s*<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<td[^>]*class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi;
+    let m;
+    while ((m = rowRe.exec(html)) !== null && results.length < 8) {
+      let url = m[1];
+      const title = m[2].replace(/<[^>]+>/g, "").trim();
+      const snippet = m[3].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+      try {
+        const uddg = new URL("https://duckduckgo.com" + url).searchParams.get("uddg");
+        if (uddg) url = decodeURIComponent(uddg);
+      } catch { /* keep raw url */ }
+      if (!title || !url || !/^https?:/i.test(url) || seen.has(url)) continue;
+      seen.add(url);
+      results.push({ title, url, snippet });
     }
 
-    return { error: "I couldn't extract usable results from the live search page." };
+    if (!results.length) return { error: "No results found for that query." };
+
+    return { query: trimmedQuery, engine: "DuckDuckGo", searchUrl, results };
   } catch (e) {
     return { error: e.message || "Web search failed." };
-  } finally {
-    if (tempTabId) {
-      chrome.tabs.remove(tempTabId, () => {
-        void chrome.runtime.lastError;
-      });
-    }
   }
 }
 
