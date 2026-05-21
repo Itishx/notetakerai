@@ -350,7 +350,7 @@ export default function Index() {
         <div style={{ ...wrap, position: "relative", zIndex: 1 }}>
           {/* Eyebrow */}
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
-            <span style={eyebrowStyle}><span style={pip} /> AI side panel for your browser</span>
+            <span style={eyebrowStyle}><span style={pip} /> Your AI agent — on every page</span>
           </div>
 
           {/* H1 */}
@@ -365,14 +365,14 @@ export default function Index() {
             maxWidth: 1100,
             margin: "0 auto 28px",
           }}>
-            An AI side panel that lives{" "}
-            <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>inside</em>
-            {" "}your browser.
+            An AI agent that floats on{" "}
+            <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>every page</em>
+            {" "}you open.
           </h1>
 
           {/* Sub */}
           <p style={{ textAlign: "center", maxWidth: 720, margin: "0 auto 36px", fontSize: 19, color: "var(--sb-ink-2)", lineHeight: 1.55 }}>
-            Install SideBrain, open any page, click the icon. A side panel wakes up right there — reads the page, answers questions, records lectures, and handles browser tasks for you.
+            Install SideBrain and a small brain appears on every tab. Click it, type what you want — chat about the page, delegate a browser task, record a lecture, search the web. One agent, fully in context, always there.
           </p>
 
           {/* CTAs */}
@@ -511,8 +511,8 @@ export default function Index() {
         <div style={wrap}>
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Getting started</span>
-            <h2 style={H2}>Three steps. <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Then you're talking.</em></h2>
-            <p style={subText}>Install, sign in, and open any page. Your account keeps everything saved and tied to you across devices.</p>
+            <h2 style={H2}>Three steps. <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Then it's yours.</em></h2>
+            <p style={subText}>Install once, sign in, and your agent is live on every tab. Everything it learns is saved to your account across devices.</p>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
@@ -536,7 +536,7 @@ export default function Index() {
               </div>
             </StepCard>
 
-            <StepCard num="03" title="Click the brain." body="The side panel wakes up. Ask it anything, or just speak. It reads what you're looking at, answers questions, runs tasks, and saves everything to your account automatically.">
+            <StepCard num="03" title="Click the brain." body="Your agent wakes up inline. Chat about the page, delegate a task, search the web, or record audio — it knows exactly where you are and acts accordingly.">
               <div style={{ height: 130, borderRadius: 12, background: "var(--sb-bg-2)", border: "1px solid var(--sb-line-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ display:"flex",alignItems:"center",gap:12 }}>
                   <img src="/favicon.svg" width={36} height={36} alt="SideBrain" style={{ filter: "drop-shadow(0 0 8px rgba(201,84,74,0.4))" }} />
@@ -557,8 +557,8 @@ export default function Index() {
         <div style={wrap}>
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Features</span>
-            <h2 style={H2}>Everything happens <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>right there</em> in the panel.</h2>
-            <p style={subText}>No new app, no copy-pasting URLs. SideBrain reads the tab you're already on and acts where you are.</p>
+            <h2 style={H2}>One agent. <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Every mode.</em> Already on your page.</h2>
+            <p style={subText}>No new app, no tab-switching, no copy-pasting. SideBrain floats on whatever you're already looking at — reading it, acting on it, remembering it.</p>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 18 }}>
