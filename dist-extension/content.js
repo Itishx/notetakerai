@@ -765,7 +765,7 @@ function __sbBuildBrainUI() {
       display: flex; align-items: flex-end; gap: 8px;
     }
     #__sb_pill_bottom__ {
-      display: flex; align-items: center; justify-content: space-between;
+      display: flex; align-items: center; gap: 6px;
       margin-top: 9px; padding-top: 8px;
       border-top: 1px solid rgba(65,48,40,0.07);
     }
@@ -783,18 +783,17 @@ function __sbBuildBrainUI() {
       flex-shrink: 0; transition: background 0.15s; padding: 0;
     }
     #__sb_send_btn__:hover { background: #C9544A; }
-    #__sb_model_toggle__ {
-      display: flex; gap: 3px;
-      background: rgba(65,48,40,0.07); border-radius: 10px; padding: 3px;
-    }
-    .sb-model-btn {
-      border: none; background: transparent;
-      padding: 4px 11px; border-radius: 7px;
-      font-size: 11px; font-weight: 600; color: #A08878;
-      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    .sb-pill-dropdown-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      border: none; background: rgba(65,48,40,0.07); border-radius: 8px;
+      padding: 4px 8px 4px 9px; cursor: pointer; transition: background 0.15s;
+      font-size: 11px; font-weight: 600; color: #6B5248; white-space: nowrap;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    .sb-model-btn.active { background: #E8786E; color: white; box-shadow: 0 1px 4px rgba(201,84,74,0.3); }
+    .sb-pill-dropdown-btn:hover { background: rgba(65,48,40,0.12); }
+    .sb-pill-dropdown-btn.active-mode { color: #C9544A; background: rgba(201,84,74,0.1); }
+    .sb-pill-dropdown-btn svg { flex-shrink: 0; opacity: 0.5; }
+    .sb-pill-spacer { flex: 1; }
     #__sb_rec_btn__ {
       width: 30px; height: 30px; border-radius: 50%; border: none;
       background: transparent; font-size: 15px; cursor: pointer;
@@ -803,6 +802,40 @@ function __sbBuildBrainUI() {
     }
     #__sb_rec_btn__:hover { background: rgba(65,48,40,0.08); }
     #__sb_rec_btn__.active { background: #fee2e2; }
+    /* ── dropdowns ── */
+    .sb-dropdown {
+      position: fixed; z-index: 2147483649;
+      background: rgba(252,249,245,0.97);
+      border: 1px solid rgba(65,48,40,0.12);
+      border-radius: 14px;
+      box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08);
+      backdrop-filter: blur(20px);
+      padding: 5px;
+      min-width: 170px;
+      opacity: 0; transform: translateY(6px) scale(0.97);
+      transition: opacity 0.15s, transform 0.15s;
+      pointer-events: none;
+    }
+    .sb-dropdown.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: all; }
+    .sb-dropdown-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 10px; border-radius: 9px; cursor: pointer;
+      font-size: 12.5px; font-weight: 500; color: #2B221D;
+      transition: background 0.1s;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      border: none; background: transparent; width: 100%; text-align: left;
+    }
+    .sb-dropdown-item:hover { background: rgba(65,48,40,0.07); }
+    .sb-dropdown-item.selected { color: #C9544A; font-weight: 700; }
+    .sb-dropdown-item .sb-di-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+    .sb-dropdown-item .sb-di-label { flex: 1; }
+    .sb-dropdown-item .sb-di-check { font-size: 11px; color: #C9544A; opacity: 0; }
+    .sb-dropdown-item.selected .sb-di-check { opacity: 1; }
+    .sb-dropdown-divider { border: none; border-top: 1px solid rgba(65,48,40,0.08); margin: 4px 5px; }
+    .sb-dropdown-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      color: #B09080; padding: 6px 10px 2px;
+    }
     #__sb_bubble__ {
       position: fixed;
       z-index: 2147483648;
@@ -936,11 +969,31 @@ function __sbBuildBrainUI() {
         </button>
       </div>
       <div id="__sb_pill_bottom__">
-        <div id="__sb_model_toggle__">
-          <button class="sb-model-btn active" data-model="lovable">SideBrain AI</button>
-          <button class="sb-model-btn" data-model="claude">Claude</button>
-        </div>
+        <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
+          <span id="__sb_mode_label__">⚡ Auto</span>
+          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+        </button>
+        <button id="__sb_model_btn__" class="sb-pill-dropdown-btn" title="Model">
+          <span id="__sb_model_label__">🧠 SideBrain AI</span>
+          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+        </button>
+        <div class="sb-pill-spacer"></div>
         <button id="__sb_rec_btn__" title="Voice">🎙</button>
+      </div>
+      <!-- mode dropdown -->
+      <div id="__sb_mode_dropdown__" class="sb-dropdown">
+        <div class="sb-dropdown-label">Mode</div>
+        <button class="sb-dropdown-item selected" data-mode="auto"><span class="sb-di-icon">⚡</span><span class="sb-di-label">Auto-detect</span><span class="sb-di-check">✓</span></button>
+        <button class="sb-dropdown-item" data-mode="chat"><span class="sb-di-icon">💬</span><span class="sb-di-label">Chat</span><span class="sb-di-check">✓</span></button>
+        <button class="sb-dropdown-item" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Summarize / Chat page</span><span class="sb-di-check">✓</span></button>
+        <button class="sb-dropdown-item" data-mode="web"><span class="sb-di-icon">🔍</span><span class="sb-di-label">Web search</span><span class="sb-di-check">✓</span></button>
+        <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate (Browser Agent)</span><span class="sb-di-check">✓</span></button>
+      </div>
+      <!-- model dropdown -->
+      <div id="__sb_model_dropdown__" class="sb-dropdown">
+        <div class="sb-dropdown-label">AI Model</div>
+        <button class="sb-dropdown-item selected" data-model="lovable"><span class="sb-di-icon">🧠</span><span class="sb-di-label">SideBrain AI</span><span class="sb-di-check">✓</span></button>
+        <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
       </div>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
@@ -950,13 +1003,72 @@ function __sbBuildBrainUI() {
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
-  document.querySelectorAll(".sb-model-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".sb-model-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      if (__sbContextOk()) chrome.storage.local.set({ aiProvider: btn.dataset.model });
+
+  // ── dropdown helpers ──
+  let __sbOpenDropdown = null;
+  function __sbCloseAllDropdowns() {
+    document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_model_dropdown__")?.classList.remove("open");
+    __sbOpenDropdown = null;
+  }
+  function __sbPositionDropdown(ddEl, triggerEl) {
+    const tr = triggerEl.getBoundingClientRect();
+    const dd = ddEl;
+    dd.style.left = tr.left + "px";
+    dd.style.bottom = (window.innerHeight - tr.top + 6) + "px";
+    dd.style.top = "auto";
+  }
+
+  // ── mode dropdown ──
+  const modeBtn = document.getElementById("__sb_mode_btn__");
+  const modeDd  = document.getElementById("__sb_mode_dropdown__");
+  modeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = modeDd.classList.contains("open");
+    __sbCloseAllDropdowns();
+    if (!isOpen) { __sbPositionDropdown(modeDd, modeBtn); modeDd.classList.add("open"); __sbOpenDropdown = "mode"; }
+  });
+  modeDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const mode = item.dataset.mode;
+      window.__sbForcedMode = mode;
+      modeDd.querySelectorAll(".sb-dropdown-item").forEach(i => i.classList.remove("selected"));
+      item.classList.add("selected");
+      const labels = { auto: "⚡ Auto", chat: "💬 Chat", page: "📄 Page", web: "🔍 Web", agent: "🤖 Delegate" };
+      document.getElementById("__sb_mode_label__").textContent = labels[mode] || "⚡ Auto";
+      modeBtn.classList.toggle("active-mode", mode !== "auto");
+      __sbCloseAllDropdowns();
     });
   });
+
+  // ── model dropdown ──
+  const modelBtn = document.getElementById("__sb_model_btn__");
+  const modelDd  = document.getElementById("__sb_model_dropdown__");
+  modelBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = modelDd.classList.contains("open");
+    __sbCloseAllDropdowns();
+    if (!isOpen) { __sbPositionDropdown(modelDd, modelBtn); modelDd.classList.add("open"); __sbOpenDropdown = "model"; }
+  });
+  modelDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const model = item.dataset.model;
+      modelDd.querySelectorAll(".sb-dropdown-item").forEach(i => i.classList.remove("selected"));
+      item.classList.add("selected");
+      const labels = { lovable: "🧠 SideBrain AI", claude: "✦ Claude" };
+      document.getElementById("__sb_model_label__").textContent = labels[model] || "🧠 SideBrain AI";
+      if (__sbContextOk()) chrome.storage.local.set({ aiProvider: model });
+      __sbCloseAllDropdowns();
+    });
+  });
+
+  // close dropdowns on outside click
+  document.addEventListener("click", (e) => {
+    if (__sbOpenDropdown && !e.target.closest("#__sb_mode_dropdown__,#__sb_model_dropdown__,#__sb_mode_btn__,#__sb_model_btn__")) {
+      __sbCloseAllDropdowns();
+    }
+  });
+
   const inputEl = document.getElementById("__sb_input__");
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
@@ -1011,7 +1123,11 @@ function __sbToggleInput(open, options = {}) {
       __sbSetGreetingPlaceholder(authToken);
       __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
         const model = aiProvider === "claude" ? "claude" : "lovable";
-        document.querySelectorAll(".sb-model-btn").forEach(b => b.classList.toggle("active", b.dataset.model === model));
+        const labels = { lovable: "🧠 SideBrain AI", claude: "✦ Claude" };
+        const labelEl = document.getElementById("__sb_model_label__");
+        if (labelEl) labelEl.textContent = labels[model] || "🧠 SideBrain AI";
+        document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
+          b.classList.toggle("selected", b.dataset.model === model));
       });
       const pill = document.getElementById("__sb_pill__");
       if (pill) {
@@ -1542,7 +1658,8 @@ async function __sbProcessPrompt(text, options = {}) {
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
 
-  const intent = __sbDetectIntent(promptText);
+  const forcedMode = window.__sbForcedMode || "auto";
+  const intent = (forcedMode !== "auto") ? forcedMode : __sbDetectIntent(promptText);
 
   if (intent === "record") {
     __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
