@@ -628,7 +628,7 @@ export default function Index() {
 
           <div style={{ display: "grid", gridTemplateColumns: "0.95fr 1.05fr", gap: 80, alignItems: "center" }}>
             <div>
-              <h2 style={{ ...H2, textAlign: "left", margin: "0 0 24px" }}>Hand it the keys to your browser.</h2>
+              <h2 style={{ ...H2, textAlign: "left", margin: "0 0 24px" }}>Hand Braino the keys to your browser.</h2>
               <p style={{ fontSize: 19, color: "var(--sb-ink-2)", lineHeight: 1.55, marginBottom: 28 }}>
                 Delegate is Braino's autonomous agent. Tell it what you want done — in plain language — and it operates your tabs the way you would. Clicks, types, scrolls, navigates. With your supervision, or on its own.
               </p>
