@@ -1012,6 +1012,18 @@ function __sbBuildBrainUI() {
   document.body.appendChild(modelDd);
 
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
+
+  // ⌘B / Ctrl+B — toggle pill (skip when user is typing in an editable element)
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === "b") {
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      const isEditing = ["input", "textarea"].includes(tag) || document.activeElement?.isContentEditable;
+      if (isEditing) return;
+      e.preventDefault();
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbToggleInput(!__sbInputOpen);
+    }
+  }, true);
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
 
