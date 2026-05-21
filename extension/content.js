@@ -675,8 +675,9 @@ document.addEventListener('mouseup', () => {
 });
 
 // ===== BRAIN INLINE UI =====
-if (window.__sbLoaded) { /* already running — skip re-injection */ } else {
-window.__sbLoaded = true;
+// Guard: prevent duplicate setup when injected more than once in the same runtime context
+if (window.__sbSetupDone === chrome?.runtime?.id) { /* same extension context — already wired */ } else {
+window.__sbSetupDone = chrome?.runtime?.id;
 const __SB_API = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
 function __sbContextOk() {
@@ -1030,7 +1031,7 @@ function __sbBuildBrainUI() {
 
   // ⌘B / Ctrl+B — show/hide the whole brain UI
   document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === "b") {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
       const tag = document.activeElement?.tagName?.toLowerCase();
       const isEditing = ["input", "textarea"].includes(tag) || document.activeElement?.isContentEditable;
       if (isEditing) return;
@@ -1965,4 +1966,4 @@ if (document.readyState === "loading") {
 } else {
   __sbBuildBrainUI();
 }
-} // end window.__sbLoaded guard
+} // end guard
