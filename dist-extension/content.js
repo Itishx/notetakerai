@@ -747,9 +747,9 @@ function __sbBuildBrainUI() {
       50% { filter: drop-shadow(0 0 22px rgba(220,50,50,0.95)) drop-shadow(0 0 8px rgba(220,50,50,0.7)); }
     }
     #__sb_pill__ {
-      display: flex; align-items: center; gap: 6px;
-      background: rgba(255, 251, 247, 0.96); border-radius: 22px;
-      padding: 9px 9px 9px 16px;
+      display: flex; flex-direction: column;
+      background: rgba(255, 251, 247, 0.96); border-radius: 20px;
+      padding: 12px 10px 10px 14px;
       border: 1px solid rgba(65, 48, 40, 0.1);
       box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08);
       width: 368px; max-width: calc(100vw - 40px);
@@ -761,6 +761,14 @@ function __sbBuildBrainUI() {
     #__sb_pill__.open {
       opacity: 1; transform: translateY(0) scale(1); pointer-events: all;
     }
+    #__sb_pill_top__ {
+      display: flex; align-items: flex-end; gap: 8px;
+    }
+    #__sb_pill_bottom__ {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 9px; padding-top: 8px;
+      border-top: 1px solid rgba(65,48,40,0.07);
+    }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
       font-size: 14px; color: #1B1713; min-width: 0; padding: 0;
@@ -768,15 +776,32 @@ function __sbBuildBrainUI() {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #__sb_input__::placeholder { color: #A79B92; }
-    #__sb_send_btn__, #__sb_rec_btn__ {
-      width: 34px; height: 34px; border-radius: 50%; border: none;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    #__sb_send_btn__ {
+      width: 32px; height: 32px; border-radius: 50%; border: none;
+      background: #E8786E; color: white; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
     }
-    #__sb_send_btn__ { background: #E8786E; color: white; }
     #__sb_send_btn__:hover { background: #C9544A; }
-    #__sb_rec_btn__ { background: #f3f0ee; font-size: 13px; }
-    #__sb_rec_btn__:hover { background: #ebe8e5; }
+    #__sb_model_toggle__ {
+      display: flex; gap: 3px;
+      background: rgba(65,48,40,0.07); border-radius: 10px; padding: 3px;
+    }
+    .sb-model-btn {
+      border: none; background: transparent;
+      padding: 4px 11px; border-radius: 7px;
+      font-size: 11px; font-weight: 600; color: #A08878;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .sb-model-btn.active { background: #E8786E; color: white; box-shadow: 0 1px 4px rgba(201,84,74,0.3); }
+    #__sb_rec_btn__ {
+      width: 30px; height: 30px; border-radius: 50%; border: none;
+      background: transparent; font-size: 15px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.15s; padding: 0;
+    }
+    #__sb_rec_btn__:hover { background: rgba(65,48,40,0.08); }
     #__sb_rec_btn__.active { background: #fee2e2; }
     #__sb_bubble__ {
       position: fixed;
@@ -904,11 +929,19 @@ function __sbBuildBrainUI() {
   root.innerHTML = `
     <div id="__sb_bubble__"></div>
     <div id="__sb_pill__">
-      <textarea id="__sb_input__" placeholder="What do you want to do?" autocomplete="off" spellcheck="false" rows="1"></textarea>
-      <button id="__sb_rec_btn__" title="Speak to SideBrain">🎙</button>
-      <button id="__sb_send_btn__" title="Send">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      </button>
+      <div id="__sb_pill_top__">
+        <textarea id="__sb_input__" placeholder="What do you want to do?" autocomplete="off" spellcheck="false" rows="1"></textarea>
+        <button id="__sb_send_btn__" title="Send">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+      </div>
+      <div id="__sb_pill_bottom__">
+        <div id="__sb_model_toggle__">
+          <button class="sb-model-btn active" data-model="lovable">SideBrain AI</button>
+          <button class="sb-model-btn" data-model="claude">Claude</button>
+        </div>
+        <button id="__sb_rec_btn__" title="Voice">🎙</button>
+      </div>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
@@ -917,6 +950,13 @@ function __sbBuildBrainUI() {
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
+  document.querySelectorAll(".sb-model-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".sb-model-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      if (__sbContextOk()) chrome.storage.local.set({ aiProvider: btn.dataset.model });
+    });
+  });
   const inputEl = document.getElementById("__sb_input__");
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
@@ -969,6 +1009,10 @@ function __sbToggleInput(open, options = {}) {
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       __sbSetGreetingPlaceholder(authToken);
+      __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
+        const model = aiProvider === "claude" ? "claude" : "lovable";
+        document.querySelectorAll(".sb-model-btn").forEach(b => b.classList.toggle("active", b.dataset.model === model));
+      });
       const pill = document.getElementById("__sb_pill__");
       if (pill) {
         pill.classList.add("open");
