@@ -274,6 +274,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ isRecording });
     return true;
   }
+  if (message.action === "startInlineVoiceListening" || message.action === "stopInlineVoiceListening") {
+    const isStart = message.action === "startInlineVoiceListening";
+    const forwardAction = isStart ? "startVoiceListening" : "stopVoiceListening";
+
+    const forwardToTab = (tabId) => {
+      if (!tabId) {
+        sendResponse({ error: "No active tab found" });
+        return;
+      }
+      chrome.storage.local.set({ activeTabId: tabId });
+      const payload = isStart
+        ? { action: forwardAction, mode: "manual", source: "inline" }
+        : { action: forwardAction, source: "inline" };
+      chrome.tabs.sendMessage(tabId, payload, (res) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse(res || { success: true });
+        }
+      });
+    };
+
+    if (sender?.tab?.id) {
+      forwardToTab(sender.tab.id);
+      return true;
+    }
+
+    chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
+      if (activeTabId) {
+        forwardToTab(activeTabId);
+        return;
+      }
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        forwardToTab(tabs?.[0]?.id || null);
+      });
+    });
+    return true;
+  }
+  if (message.action === "voiceEvent") {
+    const tabId = sender?.tab?.id;
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, {
+        action: "sbVoiceEvent",
+        event: message.event,
+        text: message.text,
+        isFinal: message.isFinal,
+        error: message.message,
+        source: message.source,
+      }, () => { void chrome.runtime.lastError; });
+    }
+    return false;
+  }
   if (message.action === "getPageContent") {
     // First try stored activeTabId, then fallback to querying active tab
     chrome.storage.local.get("activeTabId", (store) => {
@@ -346,9 +398,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "runBrainAgent") {
     const task = message.task;
+    const senderTabId = sender?.tab?.id || null;
     chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
-      const tabId = activeTabId || message.senderTabId;
+      const tabId = senderTabId || activeTabId || message.senderTabId;
       if (!tabId) { sendResponse({ ok: true }); return; }
+      chrome.storage.local.set({ activeTabId: tabId });
       bgRunBrainAgent(tabId, task);
       sendResponse({ ok: true });
     });
@@ -539,74 +593,82 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 
-function bgBrainUpdate(tabId, text) {
-  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text }, () => { void chrome.runtime.lastError; });
+function bgBrainUpdate(tabId, text, final = false) {
+  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final }, () => { void chrome.runtime.lastError; });
 }
 
 async function bgRunBrainAgent(tabId, task) {
+  let currentTabId = tabId;
   const MAX_STEPS = 10;
   const history = [];
 
-  bgBrainUpdate(tabId, "Planning…");
+  bgBrainUpdate(currentTabId, "Planning…");
 
   // Fast path — no AI needed
   const fastActions = bgTryFastPath(task, []);
   if (fastActions) {
     for (const action of fastActions) {
-      bgBrainUpdate(tabId, `→ ${action.description}`);
+      bgBrainUpdate(currentTabId, `→ ${action.description}`);
       if (action.type === "navigate") {
-        await new Promise(r => chrome.tabs.update(tabId, { url: action.url }, () => setTimeout(r, 2000)));
-        await bgWaitForTabReady(tabId, 5000);
+        await new Promise(r => chrome.tabs.update(currentTabId, { url: action.url }, () => setTimeout(r, 2000)));
+        await bgWaitForTabReady(currentTabId, 5000);
       } else {
-        await bgExecuteAgentAction(tabId, action);
+        await bgExecuteAgentAction(currentTabId, action);
       }
     }
-    bgBrainUpdate(tabId, "Done!");
+    bgBrainUpdate(currentTabId, "Done!");
     return;
   }
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const pageInfo = await bgGetAgentPageContext(tabId);
+    const pageInfo = await bgGetAgentPageContext(currentTabId);
 
     let actions;
     try {
       actions = await bgCallAgentStep(task, pageInfo, history);
     } catch (e) {
-      bgBrainUpdate(tabId, "Agent error: " + (e.message || e));
+      bgBrainUpdate(currentTabId, "Agent error: " + (e.message || e));
       return;
     }
 
     for (const action of actions) {
       if (action.type === "done" || action.type === "answer") {
-        bgBrainUpdate(tabId, action.message || "Done!");
+        bgBrainUpdate(currentTabId, action.message || "Done!", true);
         return;
       }
       if (action.type === "clarify") {
-        bgBrainUpdate(tabId, action.message || "Need more info.");
+        bgBrainUpdate(currentTabId, action.message || "Need more info.", true);
         return;
       }
 
-      bgBrainUpdate(tabId, `→ ${action.description || action.type}`);
+      bgBrainUpdate(currentTabId, `→ ${action.description || action.type}`);
 
-      const result = await bgExecuteAgentAction(tabId, action);
+      const result = await bgExecuteAgentAction(currentTabId, action);
+
+      const latestActiveTabId = await bgGetActiveTabId();
+      if (latestActiveTabId && latestActiveTabId !== currentTabId) {
+        currentTabId = latestActiveTabId;
+        chrome.storage.local.set({ activeTabId: currentTabId });
+        bgBrainUpdate(currentTabId, "Continuing in the new tab…");
+      }
 
       let snapshot = null;
       if (BG_SNAPSHOT_ACTIONS.has(action.type)) {
-        if (action.type === "navigate") await bgWaitForTabReady(tabId, 5000);
+        if (action.type === "navigate") await bgWaitForTabReady(currentTabId, 5000);
         else await new Promise(r => setTimeout(r, 600));
-        snapshot = await bgGetPageSnapshot(tabId);
+        snapshot = await bgGetPageSnapshot(currentTabId);
       }
 
       history.push({ ...action, result, snapshot });
 
       if (result?.error && !result.error.includes("No response")) {
-        bgBrainUpdate(tabId, `Step failed: ${result.error}`);
+        bgBrainUpdate(currentTabId, `Step failed: ${result.error}`);
         return;
       }
     }
   }
 
-  bgBrainUpdate(tabId, "Reached max steps — task may need the full panel.");
+  bgBrainUpdate(currentTabId, "Reached max steps — task may need the full panel.");
 }
 
 async function bgUpdateRemoteCommand(id, token, patch) {

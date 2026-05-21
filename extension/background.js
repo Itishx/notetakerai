@@ -274,17 +274,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ isRecording });
     return true;
   }
-  if (
-    message.action === "startInlineVoiceListening" ||
-    message.action === "startInlineWakeListening" ||
-    message.action === "stopInlineVoiceListening"
-  ) {
-    const isStart = message.action !== "stopInlineVoiceListening";
-    const forwardAction = isStart
-      ? "startVoiceListening"
-      : "stopVoiceListening";
-    const mode = message.action === "startInlineWakeListening" ? "wake" : "manual";
-    const source = message.action === "startInlineWakeListening" ? "inline-wake" : "inline";
+  if (message.action === "startInlineVoiceListening" || message.action === "stopInlineVoiceListening") {
+    const isStart = message.action === "startInlineVoiceListening";
+    const forwardAction = isStart ? "startVoiceListening" : "stopVoiceListening";
 
     const forwardToTab = (tabId) => {
       if (!tabId) {
@@ -293,8 +285,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       chrome.storage.local.set({ activeTabId: tabId });
       const payload = isStart
-        ? { action: forwardAction, mode, source }
-        : { action: forwardAction, source };
+        ? { action: forwardAction, mode: "manual", source: "inline" }
+        : { action: forwardAction, source: "inline" };
       chrome.tabs.sendMessage(tabId, payload, (res) => {
         if (chrome.runtime.lastError) {
           sendResponse({ error: chrome.runtime.lastError.message });
@@ -601,8 +593,8 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 
-function bgBrainUpdate(tabId, text) {
-  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text }, () => { void chrome.runtime.lastError; });
+function bgBrainUpdate(tabId, text, final = false) {
+  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final }, () => { void chrome.runtime.lastError; });
 }
 
 async function bgRunBrainAgent(tabId, task) {
@@ -641,11 +633,11 @@ async function bgRunBrainAgent(tabId, task) {
 
     for (const action of actions) {
       if (action.type === "done" || action.type === "answer") {
-        bgBrainUpdate(currentTabId, action.message || "Done!");
+        bgBrainUpdate(currentTabId, action.message || "Done!", true);
         return;
       }
       if (action.type === "clarify") {
-        bgBrainUpdate(currentTabId, action.message || "Need more info.");
+        bgBrainUpdate(currentTabId, action.message || "Need more info.", true);
         return;
       }
 

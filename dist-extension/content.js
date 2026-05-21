@@ -709,7 +709,11 @@ if (__sbContextOk()) {
     }
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-      __sbShowBubble(msg.text, false, { tone: "status" });
+      if (msg.final) {
+        __sbShowBubble(msg.text, false, { rich: true, kicker: "SideBrain" });
+      } else {
+        __sbShowBubble(msg.text, false, { tone: "status" });
+      }
     }
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
