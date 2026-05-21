@@ -517,6 +517,16 @@ async function bgRunBrainAgent(tabId, task) {
         return;
       }
 
+      if (action.type === "web_search") {
+        bgBrainUpdate(currentTabId, `Searching: "${action.query}"…`);
+        const searchData = await bgPerformRealWebSearch(action.query);
+        const resultsText = searchData.results
+          ? searchData.results.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet}`).join("\n\n")
+          : searchData.error || "No results.";
+        history.push({ type: "web_search", query: action.query, description: action.description || `Search: "${action.query}"`, result: { success: !searchData.error, text: resultsText } });
+        continue;
+      }
+
       bgBrainUpdate(currentTabId, `→ ${action.description || action.type}`);
 
       const result = await bgExecuteAgentAction(currentTabId, action);
@@ -681,6 +691,12 @@ For forms: click field → type → Tab to next field → submit.`;
 async function bgCallAgentStep(task, pageInfo, history, currentStep = null) {
   const historyText = history.length > 0
     ? history.map((h, i) => {
+        if (h.type === "web_search") {
+          const resultText = h.result?.success
+            ? "Results:\n" + (h.result.text || "").slice(0, 1500)
+            : (h.result?.text || "No results");
+          return `Step ${i + 1}: [web_search] "${h.query}" → ${resultText}`;
+        }
         const status = h.result?.success ? "✓ OK" : `✗ ${h.result?.error || "FAILED"}`;
         const snap = h.snapshot ? ` → page after: "${h.snapshot.title}" | ${h.snapshot.url}` : "";
         const readVal = h.type === "read" && h.result?.text ? ` → content: "${h.result.text.slice(0, 200)}"` : "";
@@ -721,9 +737,17 @@ ACTIONS:
 {"type":"scroll","direction":"down","amount":400,"description":"..."}
 {"type":"wait","ms":1500,"description":"..."}
 {"type":"downloadImage","selector":"css","targetText":"fallback alt text","format":"png","filename":"image.png","description":"Download image as PNG/JPEG/WebP"}
+{"type":"web_search","query":"search terms","description":"Search the web for information before acting"}
 {"type":"done","message":"what was accomplished"}
 {"type":"answer","message":"..."}
 {"type":"clarify","message":"..."}  ← ONLY when genuinely blocked
+
+WEB SEARCH USAGE:
+- Use {"type":"web_search"} FIRST when a task requires up-to-date information, research, or content you don't know.
+- Results are injected into your history so you can read them and use that knowledge in subsequent actions.
+- Example flow: web_search → read results from history → navigate to Google Docs → type article using those facts.
+- You can web_search multiple times in one task (for different sub-topics).
+- web_search does NOT navigate the browser tab — it is a background fetch. Your current tab stays open.
 
 SELECTOR PRIORITY:
 1. sel= value from INTERACTIVE ELEMENTS
