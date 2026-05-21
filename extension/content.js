@@ -793,7 +793,7 @@ function __sbBuildBrainUI() {
       50% { filter: drop-shadow(0 0 22px rgba(220,50,50,0.95)) drop-shadow(0 0 8px rgba(220,50,50,0.7)); }
     }
     #__sb_pill__ {
-      display: flex; align-items: center; gap: 6px;
+      display: flex; align-items: flex-end; gap: 6px;
       background: rgba(255, 251, 247, 0.96); border-radius: 22px;
       padding: 9px 9px 9px 16px;
       border: 1px solid rgba(65, 48, 40, 0.1);
@@ -810,6 +810,8 @@ function __sbBuildBrainUI() {
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
       font-size: 14px; color: #1B1713; min-width: 0; padding: 0;
+      resize: none; line-height: 1.5; max-height: 120px; overflow-y: auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #__sb_input__::placeholder { color: #A79B92; }
     #__sb_send_btn__, #__sb_rec_btn__ {
@@ -830,8 +832,8 @@ function __sbBuildBrainUI() {
       position: fixed;
       z-index: 2147483648;
       width: 420px; max-width: calc(100vw - 100px);
-      height: 340px;
-      min-width: 260px; min-height: 140px;
+      height: auto; max-height: min(62vh, 520px);
+      min-width: 260px; min-height: 80px;
       overflow: hidden; resize: both;
       background: rgba(245, 240, 234, 0.52);
       border-radius: 18px;
@@ -951,7 +953,7 @@ function __sbBuildBrainUI() {
   root.innerHTML = `
     <div id="__sb_bubble__"></div>
     <div id="__sb_pill__">
-      <input id="__sb_input__" placeholder="What do you want to do?" autocomplete="off" spellcheck="false" />
+      <textarea id="__sb_input__" placeholder="What do you want to do?" autocomplete="off" spellcheck="false" rows="1"></textarea>
       <button id="__sb_rec_btn__" title="Speak to SideBrain">🎙</button>
       <button id="__sb_send_btn__" title="Send">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -964,9 +966,14 @@ function __sbBuildBrainUI() {
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
-  document.getElementById("__sb_input__").addEventListener("keydown", (e) => {
+  const inputEl = document.getElementById("__sb_input__");
+  inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
     if (e.key === "Escape") __sbToggleInput(false);
+  });
+  inputEl.addEventListener("input", () => {
+    inputEl.style.height = "auto";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
   });
 
   __sbStorageGet(["sbBrainExpanded", "authToken"]).then(({ sbBrainExpanded, authToken }) => {
@@ -1376,7 +1383,6 @@ function __sbCenterBubble(bubble) {
   bubble.style.left = "auto";
   bubble.style.top = "auto";
   bubble.style.width = w + "px";
-  bubble.style.height = "340px";
   bubble.dataset.positioned = "1";
   __sbInitDrag(bubble);
 }
@@ -1738,6 +1744,7 @@ async function __sbSendMessage() {
   const text = input.value.trim();
   if (!text) return;
   input.value = "";
+  input.style.height = "auto";
   await __sbProcessPrompt(text);
 }
 
