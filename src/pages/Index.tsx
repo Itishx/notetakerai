@@ -372,12 +372,12 @@ export default function Index() {
 
           {/* Sub */}
           <p style={{ textAlign: "center", maxWidth: 720, margin: "0 auto 36px", fontSize: 19, color: "var(--sb-ink-2)", lineHeight: 1.55 }}>
-            Install SideBrain and a small brain appears on every tab. Click it, type what you want — chat about the page, delegate a browser task, record a lecture, search the web. One agent, fully in context, always there.
+            Install Braino and a small brain appears on every tab. Click it, type what you want — chat about the page, delegate a browser task, record a lecture, search the web. One agent, fully in context, always there.
           </p>
 
           {/* CTAs */}
           <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 56, flexWrap: "wrap" }}>
-            <a href="/sidebrain-extension.zip" download style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
+            <a href="/braino-extension.zip" download style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
               Install for Chrome
             </a>
@@ -401,11 +401,11 @@ export default function Index() {
             boxShadow: "0 1px 2px rgba(40,28,18,.04), 0 4px 12px -4px rgba(40,28,18,.08)",
             display: "flex", gap: 16, alignItems: "center",
           }}>
-            <img src="/favicon.svg" width={36} height={36} alt="SideBrain" style={{ flexShrink: 0, animation: "sbOrbBreathe 3s ease-in-out infinite" }} />
+            <img src="/favicon.svg" width={36} height={36} alt="Braino" style={{ flexShrink: 0, animation: "sbOrbBreathe 3s ease-in-out infinite" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-accent-deep)", display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--sb-accent)", animation: "sbPulse 1.6s infinite", display: "inline-block" }} />
-                SideBrain is speaking
+                Braino is speaking
               </div>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 22, lineHeight: 1.3, color: "var(--sb-ink)", letterSpacing: "-0.005em" }}>
                 {displayText}
@@ -459,7 +459,7 @@ export default function Index() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid var(--sb-line-2)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--sb-accent)", boxShadow: "0 0 10px var(--sb-accent)", display: "inline-block" }} />
-                      SideBrain
+                      Braino
                     </div>
                     <span style={{ color: "var(--sb-ink-3)", fontSize: 18 }}>×</span>
                   </div>
@@ -476,7 +476,7 @@ export default function Index() {
                   </div>
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 16 }}>
                     <div style={{ display: "flex", justifyContent: "center", padding: "14px 0 12px" }}>
-                      <img src="/favicon.svg" width={96} height={96} alt="SideBrain" style={{ animation: "sbOrbBreathe 3.5s ease-in-out infinite", filter: "drop-shadow(0 0 18px rgba(201,84,74,0.5))" }} />
+                      <img src="/favicon.svg" width={96} height={96} alt="Braino" style={{ animation: "sbOrbBreathe 3.5s ease-in-out infinite", filter: "drop-shadow(0 0 18px rgba(201,84,74,0.5))" }} />
                     </div>
                     <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--sb-accent-deep)", display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
                       <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--sb-accent)", animation: "sbPulse 1.6s infinite", display: "inline-block" }} />
@@ -521,7 +521,7 @@ export default function Index() {
                 <div style={{ width: "92%", height: 36, borderRadius: 8, background: "linear-gradient(180deg, #F8F4ED, #EFE7DB)", border: "1px solid var(--sb-line)", display: "flex", alignItems: "center", gap: 8, padding: "0 10px" }}>
                   <div style={{ display: "flex", gap: 4 }}>{["#DDD3C5","#DDD3C5","#DDD3C5"].map((c,i)=><span key={i} style={{ width:7,height:7,borderRadius:"50%",background:c,display:"inline-block" }} />)}</div>
                   <div style={{ flex:1,height:16,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:6 }} />
-                  <img src="/favicon.svg" width={18} height={18} alt="SideBrain" style={{ animation: "sbPop 1.8s ease-in-out infinite", flexShrink: 0 }} />
+                  <img src="/favicon.svg" width={18} height={18} alt="Braino" style={{ animation: "sbPop 1.8s ease-in-out infinite", flexShrink: 0 }} />
                 </div>
               </div>
             </StepCard>
@@ -539,7 +539,7 @@ export default function Index() {
             <StepCard num="03" title="Click the brain." body="Your agent wakes up inline. Chat about the page, delegate a task, search the web, or record audio — it knows exactly where you are and acts accordingly.">
               <div style={{ height: 130, borderRadius: 12, background: "var(--sb-bg-2)", border: "1px solid var(--sb-line-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-                  <img src="/favicon.svg" width={36} height={36} alt="SideBrain" style={{ filter: "drop-shadow(0 0 8px rgba(201,84,74,0.4))" }} />
+                  <img src="/favicon.svg" width={36} height={36} alt="Braino" style={{ filter: "drop-shadow(0 0 8px rgba(201,84,74,0.4))" }} />
                   <span style={{ color:"var(--sb-ink-3)",fontFamily:"'JetBrains Mono',monospace" }}>→</span>
                   <div style={{ width:60,height:90,borderRadius:8,background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",padding:8,display:"flex",flexDirection:"column",gap:5 }}>
                     <div style={{ width:16,height:16,borderRadius:"50%",background:"var(--sb-accent)",boxShadow:"0 0 8px var(--sb-accent)",margin:"6px auto" }} />
@@ -558,12 +558,12 @@ export default function Index() {
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Features</span>
             <h2 style={H2}>One agent. <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Every mode.</em> Already on your page.</h2>
-            <p style={subText}>No new app, no tab-switching, no copy-pasting. SideBrain floats on whatever you're already looking at — reading it, acting on it, remembering it.</p>
+            <p style={subText}>No new app, no tab-switching, no copy-pasting. Braino floats on whatever you're already looking at — reading it, acting on it, remembering it.</p>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 18 }}>
             {/* Reads pages — large */}
-            <FeatureCard tag="01 — Reads" title="Reads any page." body="Selection or full document. Long article, dense doc, tabular dashboard, gnarly PDF — SideBrain parses the live DOM, not a screenshot, so it understands structure as well as content." span={7}>
+            <FeatureCard tag="01 — Reads" title="Reads any page." body="Selection or full document. Long article, dense doc, tabular dashboard, gnarly PDF — Braino parses the live DOM, not a screenshot, so it understands structure as well as content." span={7}>
               <div style={{ width:"100%",padding:14,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:12,display:"flex",flexDirection:"column",gap:7 }}>
                 {[["95%",false],["85%",true],["95%",false],["70%",false]].map(([w,highlight],i)=>(
                   <div key={i}>
@@ -577,7 +577,7 @@ export default function Index() {
             {/* Voice — small */}
             <FeatureCard tag="02 — Speaks" title="Talk to it like a person." body="Voice in, voice out, with live word-by-word captions while it talks. Interrupt anytime." span={5}>
               <div style={{ width:"100%",display:"flex",alignItems:"center",gap:14,padding:14,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:12 }}>
-                <img src="/favicon.svg" width={48} height={48} alt="SideBrain" style={{ flexShrink: 0, animation: "sbOrbBreathe 3s ease-in-out infinite", filter: "drop-shadow(0 0 10px rgba(201,84,74,0.45))" }} />
+                <img src="/favicon.svg" width={48} height={48} alt="Braino" style={{ flexShrink: 0, animation: "sbOrbBreathe 3s ease-in-out infinite", filter: "drop-shadow(0 0 10px rgba(201,84,74,0.45))" }} />
                 <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:17,lineHeight:1.25,color:"var(--sb-ink)" }}>
                   I've opened Gmail and I'm <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>drafting your reply</em> to Priya now.
                 </div>
@@ -623,14 +623,14 @@ export default function Index() {
       <section style={{ padding: "110px 0" }} id="delegate">
         <div style={wrap}>
           <div style={{ ...secHead, textAlign: "left" }}>
-            <span style={eyebrowStyle}><span style={pip} /> SideBrain Delegate</span>
+            <span style={eyebrowStyle}><span style={pip} /> Braino Delegate</span>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "0.95fr 1.05fr", gap: 80, alignItems: "center" }}>
             <div>
               <h2 style={{ ...H2, textAlign: "left", margin: "0 0 24px" }}>Hand it the keys to your browser.</h2>
               <p style={{ fontSize: 19, color: "var(--sb-ink-2)", lineHeight: 1.55, marginBottom: 28 }}>
-                Delegate is SideBrain's autonomous agent. Tell it what you want done — in plain language — and it operates your tabs the way you would. Clicks, types, scrolls, navigates. With your supervision, or on its own.
+                Delegate is Braino's autonomous agent. Tell it what you want done — in plain language — and it operates your tabs the way you would. Clicks, types, scrolls, navigates. With your supervision, or on its own.
               </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 18, marginTop: 32 }}>
                 {[
@@ -667,15 +667,15 @@ export default function Index() {
         <div style={wrap}>
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Why it's fast</span>
-            <h2 style={H2}>Most browser agents see your page <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>through a camera.</em><br />SideBrain reads it like a developer.</h2>
-            <p style={subText}>Computer Use takes a screenshot, sends it to a vision model, and asks "what should I click?" — every step. SideBrain reads the live DOM directly. That difference compounds with every single action.</p>
+            <h2 style={H2}>Most browser agents see your page <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>through a camera.</em><br />Braino reads it like a developer.</h2>
+            <p style={subText}>Computer Use takes a screenshot, sends it to a vision model, and asks "what should I click?" — every step. Braino reads the live DOM directly. That difference compounds with every single action.</p>
           </div>
 
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24 }}>
             {/* SideBrain col */}
             <div style={{ borderRadius:24,padding:32,display:"flex",flexDirection:"column",border:"1px solid var(--sb-line)",background:"var(--sb-panel-2)" }}>
               <h3 style={{ fontFamily:"'Instrument Serif',serif",fontWeight:400,fontSize:28,display:"flex",alignItems:"center",gap:10,marginBottom:4 }}>
-                <span style={{ width:12,height:12,borderRadius:"50%",background:"var(--sb-accent)",boxShadow:"0 0 12px var(--sb-accent)",display:"inline-block",flexShrink:0 }} /> SideBrain
+                <span style={{ width:12,height:12,borderRadius:"50%",background:"var(--sb-accent)",boxShadow:"0 0 12px var(--sb-accent)",display:"inline-block",flexShrink:0 }} /> Braino
               </h3>
               <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:13,color:"var(--sb-ink-3)",marginBottom:24 }}>
                 <strong style={{ color:"var(--sb-accent-deep)" }}>~1s</strong> per step
@@ -727,7 +727,7 @@ export default function Index() {
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,marginTop:60 }}>
             {[
               { title:"Why screenshots are slow.", body:'Computer Use treats the browser like a human would — it can only see what\'s on the screen. That\'s elegant, but every step costs a full screenshot round-trip to a vision model: two or three seconds. Every time. No exceptions. Click an obvious "Send" button? Same cost as parsing a complex chart.' },
-              { title:"Why reading the DOM is faster.", body:"SideBrain's content script reads the live DOM directly. Every button, input, and link comes back as structured text with selectors — not pixels. The model gets a clean element list and acts immediately. No screenshot. No vision model. No waiting for frames to render." },
+              { title:"Why reading the DOM is faster.", body:"Braino's content script reads the live DOM directly. Every button, input, and link comes back as structured text with selectors — not pixels. The model gets a clean element list and acts immediately. No screenshot. No vision model. No waiting for frames to render." },
             ].map(({title,body})=>(
               <div key={title} style={{ background:"var(--sb-panel-2)",border:"1px solid var(--sb-line-2)",borderRadius:18,padding:28 }}>
                 <h4 style={{ fontFamily:"'Instrument Serif',serif",fontSize:24,fontWeight:400,marginBottom:12 }}>{title}</h4>
@@ -739,7 +739,7 @@ export default function Index() {
           {/* Comparison table */}
           <div style={{ marginTop:60,background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",borderRadius:18,overflow:"hidden" }}>
             {[
-              { feature:"How they compare",us:"SideBrain",them:"Claude Computer Use",isHeader:true },
+              { feature:"How they compare",us:"Braino",them:"Claude Computer Use",isHeader:true },
               { feature:"Step decision time",us:"~1s",them:"~6s" },
               { feature:"Page understanding",us:"DOM + text",them:"Screenshot pixels" },
               { feature:"Works on any site",us:"check",them:"check" },
@@ -780,13 +780,13 @@ export default function Index() {
           </div>
 
           <div style={{ background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",borderRadius:24,overflow:"hidden",boxShadow:"0 1px 2px rgba(40,28,18,.04), 0 40px 80px -30px rgba(40,28,18,.25)" }}>
-            <BrowserBar url="app.sidebrain.info/library" />
+            <BrowserBar url="app.braino.info/library" />
             <div style={{ display:"flex",minHeight:600 }}>
               {/* Sidebar */}
               <aside style={{ width:240,flexShrink:0,background:"#F0E9DF",borderRight:"1px solid #E2D8CC",padding:"18px 14px",display:"flex",flexDirection:"column",gap:4 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,padding:"4px 8px 18px" }}>
-                  <img src="/favicon.svg" width={20} height={20} alt="SideBrain" style={{ display: "inline-block", flexShrink: 0 }} />
-                  <span style={{ fontWeight:600,fontSize:14 }}>SideBrain</span>
+                  <img src="/favicon.svg" width={20} height={20} alt="Braino" style={{ display: "inline-block", flexShrink: 0 }} />
+                  <span style={{ fontWeight:600,fontSize:14 }}>Braino</span>
                 </div>
                 {[
                   { icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 12h18M3 18h12"/></svg>,label:"Library",badge:"124",active:true },
@@ -863,7 +863,7 @@ export default function Index() {
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Pricing</span>
             <h2 style={H2}>Free forever. <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>Pro when you want more.</em></h2>
-            <p style={subText}>SideBrain works in your browser. The model runs on us. Pro buys you faster models, more Delegate tasks, and unlimited recording.</p>
+            <p style={subText}>Braino works in your browser. The model runs on us. Pro buys you faster models, more Delegate tasks, and unlimited recording.</p>
           </div>
 
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,maxWidth:880,margin:"0 auto" }}>
@@ -881,7 +881,7 @@ export default function Index() {
                   </li>
                 ))}
               </ul>
-              <a href="/sidebrain-extension.zip" download style={{ ...btnGhost,alignSelf:"flex-start" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
+              <a href="/braino-extension.zip" download style={{ ...btnGhost,alignSelf:"flex-start" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
                 Install free
               </a>
@@ -915,8 +915,8 @@ export default function Index() {
           <div style={{ background:"var(--sb-bg)",borderRadius:24,padding:"72px 64px",textAlign:"center",border:"1px solid var(--sb-line-2)" }}>
             <span style={eyebrowStyle}><span style={pip} /> A note on parallel discovery</span>
             <h3 style={{ fontFamily:"'Instrument Serif',serif",fontStyle:"italic",fontSize:44,lineHeight:1.05,margin:"14px auto 24px",textWrap:"balance" as React.CSSProperties["textWrap"],maxWidth:700 }}>A coincidence of ideas.</h3>
-            <p style={{ maxWidth:660,margin:"0 auto 14px",fontSize:16,color:"var(--sb-ink-2)" }}>Yes — SideBrain and Claude Computer Use are solving the same problem. We know how that looks.</p>
-            <p style={{ maxWidth:660,margin:"0 auto 14px",fontSize:16,color:"var(--sb-ink-2)" }}>SideBrain was built independently, from scratch, before Claude's browser agent was publicly known. Parallel discovery is as old as science itself.</p>
+            <p style={{ maxWidth:660,margin:"0 auto 14px",fontSize:16,color:"var(--sb-ink-2)" }}>Yes — Braino and Claude Computer Use are solving the same problem. We know how that looks.</p>
+            <p style={{ maxWidth:660,margin:"0 auto 14px",fontSize:16,color:"var(--sb-ink-2)" }}>Braino was built independently, from scratch, before Claude's browser agent was publicly known. Parallel discovery is as old as science itself.</p>
             <div style={{ fontFamily:"'Instrument Serif',serif",fontStyle:"italic",color:"var(--sb-ink-3)",margin:"24px 0" }}>The telephone. Calculus. Natural selection.</div>
             <p style={{ maxWidth:660,margin:"0 auto 14px",fontSize:16,color:"var(--sb-ink-2)" }}>What matters now isn't who thought of it first. It's who executes best. We think a smaller, faster, more accessible tool has a real place in the world alongside a well-funded research lab's flagship product.</p>
             <p style={{ maxWidth:660,margin:"18px auto 0",fontSize:16 }}>
@@ -937,15 +937,15 @@ export default function Index() {
               Ready in 6 seconds
             </span>
             <h2 style={{ fontFamily:"'Instrument Serif',serif",fontWeight:400,fontSize:"clamp(38px,5vw,64px)",margin:"20px auto 18px",maxWidth:780,textWrap:"balance" as React.CSSProperties["textWrap"],position:"relative",zIndex:1,color:"#FBF7F1" }}>
-              Install SideBrain. <em style={{ fontStyle:"italic",color:"var(--sb-accent-2)" }}>Talk to the web.</em>
+              Install Braino. <em style={{ fontStyle:"italic",color:"var(--sb-accent-2)" }}>Talk to the web.</em>
             </h2>
             <p style={{ color:"rgba(251,247,241,0.7)",maxWidth:540,margin:"0 auto 32px",fontSize:18,position:"relative",zIndex:1 }}>Free during beta. Sign up in 30 seconds. Everything you save is tied to your account, forever.</p>
             <div style={{ display:"flex",gap:12,justifyContent:"center",position:"relative",zIndex:1,flexWrap:"wrap" }}>
-              <a href="/sidebrain-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"#FBF7F1",color:"#1B1713",border:"1px solid transparent",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+              <a href="/braino-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"#FBF7F1",color:"#1B1713",border:"1px solid transparent",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
                 Add to Chrome
               </a>
-              <a href="/sidebrain-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"transparent",color:"#FBF7F1",border:"1px solid rgba(251,247,241,0.2)",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+              <a href="/braino-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"transparent",color:"#FBF7F1",border:"1px solid rgba(251,247,241,0.2)",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 Other browsers <ArrowRightIcon />
               </a>
             </div>
@@ -959,15 +959,14 @@ export default function Index() {
           <div style={{ display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:40,marginBottom:60 }}>
             <div>
               <div style={{ display:"flex",alignItems:"baseline",gap:0 }}>
-                <span style={{ fontFamily:"'TNR','Times New Roman',serif",fontStyle:"italic",fontWeight:400,fontSize:18,color:"var(--sb-ink)" }}>side</span>
-                <span style={{ fontFamily:"'BeVietnam',sans-serif",fontWeight:800,fontSize:18,color:"var(--sb-ink)",letterSpacing:"-0.03em" }}>brain</span>
+                <span style={{ fontFamily:"'BeVietnam',sans-serif",fontWeight:800,fontSize:18,color:"var(--sb-ink)",letterSpacing:"-0.03em" }}>Braino</span>
               </div>
               <p style={{ fontSize:14,maxWidth:280,marginTop:14,color:"var(--sb-ink-2)" }}>An AI side panel that lives in your browser. Reads pages. Speaks back. Handles tasks. Free during beta.</p>
               <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:60,color:"var(--sb-ink-3)",marginTop:32,letterSpacing:"-0.02em",lineHeight:1 }}>↳ talk to&nbsp;the&nbsp;web.</div>
             </div>
             {[
               { heading:"Product",links:[["#features","Features"],["#delegate","Delegate"],["#speed","Speed"],["#dashboard","Dashboard"],["#pricing","Pricing"]] },
-              { heading:"Install",links:[["/sidebrain-extension.zip","Chrome"],["/sidebrain-extension.zip","Arc"],["/sidebrain-extension.zip","Brave"],["/sidebrain-extension.zip","Edge"],["","Desktop app (coming later)"],["#","Firefox (soon)"]] },
+              { heading:"Install",links:[["/braino-extension.zip","Chrome"],["/braino-extension.zip","Arc"],["/braino-extension.zip","Brave"],["/braino-extension.zip","Edge"],["","Desktop app (coming later)"],["#","Firefox (soon)"]] },
               { heading:"Company",links:[["#","Manifesto"],["#","Changelog"],["#","Privacy"],["#","Terms"],["#","Contact"]] },
             ].map(({heading,links})=>(
               <div key={heading}>
@@ -987,7 +986,7 @@ export default function Index() {
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:24,borderTop:"1px solid var(--sb-line-2)",fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"var(--sb-ink-3)",letterSpacing:".04em" }}>
-            <div>© 2026 SideBrain · Built by a solo founder, somewhere with good coffee.</div>
+            <div>© 2026 Braino · Built by a solo founder, somewhere with good coffee.</div>
             <div>v0.9.2 · Beta</div>
           </div>
         </div>
@@ -1008,7 +1007,7 @@ function BrowserBar({ url }: { url: string }) {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity:.7 }}><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         <strong style={{ color:"var(--sb-ink-2)",fontWeight:500 }}>https://</strong>{url}
       </div>
-      <img src="/favicon.svg" width={22} height={22} alt="SideBrain" style={{ display: "inline-block", flexShrink: 0 }} />
+      <img src="/favicon.svg" width={22} height={22} alt="Braino" style={{ display: "inline-block", flexShrink: 0 }} />
     </div>
   );
 }

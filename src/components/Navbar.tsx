@@ -105,8 +105,7 @@ const Navbar = () => {
             onClick={() => window.scrollTo(0, 0)}
             style={{ display: "flex", alignItems: "baseline", gap: 0, textDecoration: "none", marginRight: 8, flexShrink: 0 }}
           >
-            <span style={{ fontFamily: "'TNR', 'Times New Roman', serif", fontStyle: "italic", fontWeight: 400, fontSize: 17, color: "var(--sb-ink)" }}>side</span>
-            <span style={{ fontFamily: "'BeVietnam', sans-serif", fontWeight: 800, fontSize: 17, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>brain</span>
+            <span style={{ fontFamily: "'BeVietnam', sans-serif", fontWeight: 800, fontSize: 17, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>Braino</span>
           </Link>
 
           {NAV_LINKS.map(({ href, label }) => (
@@ -169,7 +168,7 @@ const Navbar = () => {
           )}
 
           <a
-            href="/sidebrain-extension.zip"
+            href="/braino-extension.zip"
             download
             style={{
               display: "inline-flex", alignItems: "center", gap: 5,
