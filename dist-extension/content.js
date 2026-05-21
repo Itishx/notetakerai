@@ -1032,7 +1032,6 @@ function __sbBuildBrainUI() {
 
   // ── mode dropdown ──
   const modeBtn = document.getElementById("__sb_mode_btn__");
-  const modeDd  = document.getElementById("__sb_mode_dropdown__");
   modeBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     const isOpen = modeDd.classList.contains("open");
@@ -1054,7 +1053,6 @@ function __sbBuildBrainUI() {
 
   // ── model dropdown ──
   const modelBtn = document.getElementById("__sb_model_btn__");
-  const modelDd  = document.getElementById("__sb_model_dropdown__");
   modelBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     const isOpen = modelDd.classList.contains("open");
