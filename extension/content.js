@@ -980,25 +980,36 @@ function __sbBuildBrainUI() {
         <div class="sb-pill-spacer"></div>
         <button id="__sb_rec_btn__" title="Voice">🎙</button>
       </div>
-      <!-- mode dropdown -->
-      <div id="__sb_mode_dropdown__" class="sb-dropdown">
-        <div class="sb-dropdown-label">Mode</div>
-        <button class="sb-dropdown-item selected" data-mode="auto"><span class="sb-di-icon">⚡</span><span class="sb-di-label">Auto-detect</span><span class="sb-di-check">✓</span></button>
-        <button class="sb-dropdown-item" data-mode="chat"><span class="sb-di-icon">💬</span><span class="sb-di-label">Chat</span><span class="sb-di-check">✓</span></button>
-        <button class="sb-dropdown-item" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Summarize / Chat page</span><span class="sb-di-check">✓</span></button>
-        <button class="sb-dropdown-item" data-mode="web"><span class="sb-di-icon">🔍</span><span class="sb-di-label">Web search</span><span class="sb-di-check">✓</span></button>
-        <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate (Browser Agent)</span><span class="sb-di-check">✓</span></button>
-      </div>
-      <!-- model dropdown -->
-      <div id="__sb_model_dropdown__" class="sb-dropdown">
-        <div class="sb-dropdown-label">AI Model</div>
-        <button class="sb-dropdown-item selected" data-model="lovable"><span class="sb-di-icon">🧠</span><span class="sb-di-label">SideBrain AI</span><span class="sb-di-check">✓</span></button>
-        <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
-      </div>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
   document.body.appendChild(root);
+
+  // ── dropdowns appended directly to body so backdrop-filter on pill doesn't trap fixed positioning ──
+  const modeDd = document.createElement("div");
+  modeDd.id = "__sb_mode_dropdown__";
+  modeDd.className = "sb-dropdown";
+  modeDd.innerHTML = `
+    <div class="sb-dropdown-label">Mode</div>
+    <button class="sb-dropdown-item selected" data-mode="auto"><span class="sb-di-icon">⚡</span><span class="sb-di-label">Auto-detect</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Chat with Page</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="chat"><span class="sb-di-icon">💬</span><span class="sb-di-label">General Chat</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="web"><span class="sb-di-icon">🔍</span><span class="sb-di-label">Web Search</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
+  `;
+  document.body.appendChild(modeDd);
+
+  const modelDd = document.createElement("div");
+  modelDd.id = "__sb_model_dropdown__";
+  modelDd.className = "sb-dropdown";
+  modelDd.innerHTML = `
+    <div class="sb-dropdown-label">AI Model</div>
+    <button class="sb-dropdown-item selected" data-model="lovable"><span class="sb-di-icon">🧠</span><span class="sb-di-label">SideBrain AI</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
+  `;
+  document.body.appendChild(modelDd);
 
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
@@ -1034,7 +1045,7 @@ function __sbBuildBrainUI() {
       window.__sbForcedMode = mode;
       modeDd.querySelectorAll(".sb-dropdown-item").forEach(i => i.classList.remove("selected"));
       item.classList.add("selected");
-      const labels = { auto: "⚡ Auto", chat: "💬 Chat", page: "📄 Page", web: "🔍 Web", agent: "🤖 Delegate" };
+      const labels = { auto: "⚡ Auto", page: "📄 Chat with Page", chat: "💬 General Chat", web: "🔍 Web Search", lecture: "🎙 Lecture", meeting: "👥 Meeting", agent: "🤖 Delegate" };
       document.getElementById("__sb_mode_label__").textContent = labels[mode] || "⚡ Auto";
       modeBtn.classList.toggle("active-mode", mode !== "auto");
       __sbCloseAllDropdowns();
@@ -1659,7 +1670,9 @@ async function __sbProcessPrompt(text, options = {}) {
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
 
   const forcedMode = window.__sbForcedMode || "auto";
-  const intent = (forcedMode !== "auto") ? forcedMode : __sbDetectIntent(promptText);
+  const rawIntent = (forcedMode !== "auto") ? forcedMode : __sbDetectIntent(promptText);
+  // lecture and meeting both drive the recording flow
+  const intent = (rawIntent === "lecture" || rawIntent === "meeting") ? "record" : rawIntent;
 
   if (intent === "record") {
     __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
