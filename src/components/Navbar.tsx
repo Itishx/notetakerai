@@ -30,11 +30,52 @@ const SunIcon = () => (
   </svg>
 );
 
+const GLOW_CSS = `
+  @keyframes brainoGlow {
+    0%, 100% { filter: drop-shadow(0 0 5px rgba(201,84,74,0.4)) drop-shadow(0 0 12px rgba(201,84,74,0.15)); }
+    50%       { filter: drop-shadow(0 0 10px rgba(201,84,74,0.75)) drop-shadow(0 0 24px rgba(201,84,74,0.35)); }
+  }
+  .braino-glow {
+    animation: brainoGlow 2.4s ease-in-out infinite;
+    cursor: pointer;
+  }
+  .braino-chevron {
+    transition: transform 0.35s cubic-bezier(0.34, 1.4, 0.64, 1);
+    flex-shrink: 0;
+  }
+  .braino-chevron.open {
+    transform: rotate(90deg);
+  }
+  .braino-links-wrap {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    overflow: hidden;
+    max-width: 0;
+    opacity: 0;
+    transition: max-width 0.48s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.28s ease;
+  }
+  .braino-links-wrap.open {
+    max-width: 440px;
+    opacity: 1;
+  }
+  .braino-link-item {
+    opacity: 0;
+    transform: translateX(-6px);
+    transition: color .15s, opacity .18s, transform .22s;
+  }
+  .braino-links-wrap.open .braino-link-item {
+    opacity: 1;
+    transform: translateX(0);
+  }
+`;
+
 const Navbar = () => {
   const { pathname } = useLocation();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
+  const [expanded, setExpanded] = useState(() => localStorage.getItem("braino-nav-open") !== "false");
   const isDark = theme === "dark";
 
   useEffect(() => {
@@ -43,6 +84,13 @@ const Navbar = () => {
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Persist expanded state across pages
+  const toggle = () => setExpanded(v => {
+    const next = !v;
+    localStorage.setItem("braino-nav-open", String(next));
+    return next;
+  });
 
   const pillBg = isDark
     ? scrolled ? "rgba(22,18,13,0.97)" : "rgba(22,18,13,0.88)"
@@ -63,21 +111,19 @@ const Navbar = () => {
   const pillStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
-    gap: 2,
     borderRadius: 999,
-    flexWrap: "nowrap",
     background: pillBg,
     backdropFilter: "saturate(160%) blur(18px)",
     WebkitBackdropFilter: "saturate(160%) blur(18px)",
     border: pillBorder,
     boxShadow: pillShadow,
     transition: "background .2s, box-shadow .2s",
+    overflow: "hidden",
   };
 
   const linkStyle = (href: string): React.CSSProperties => ({
     fontSize: 13.5,
     color: pathname === href ? "var(--sb-ink)" : "var(--sb-ink-2)",
-    transition: "color .15s",
     textDecoration: "none",
     padding: "6px 10px",
     borderRadius: 999,
@@ -87,47 +133,69 @@ const Navbar = () => {
 
   return (
     <>
-      {/* ── Main nav pill (centered) ── */}
-      <nav
-        style={{
-          position: "fixed",
-          top: 16,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 100,
-          width: "fit-content",
-          maxWidth: "calc(100vw - 220px)",
-        }}
-      >
-        <div style={{ ...pillStyle, padding: "7px 12px 7px 14px" }}>
-          <Link
-            to="/"
-            onClick={() => window.scrollTo(0, 0)}
-            style={{ display: "flex", alignItems: "baseline", gap: 0, textDecoration: "none", marginRight: 8, flexShrink: 0 }}
-          >
-            <span style={{ fontFamily: "'BeVietnam', sans-serif", fontWeight: 800, fontSize: 17, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>Braino</span>
-          </Link>
+      <style>{GLOW_CSS}</style>
 
-          {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              to={href}
-              style={linkStyle(href)}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--sb-ink)")}
-              onMouseLeave={e => (e.currentTarget.style.color = pathname === href ? "var(--sb-ink)" : "var(--sb-ink-2)")}
+      {/* ── Main nav pill (left-anchored, expands right) ── */}
+      <nav
+        id="braino-main-nav"
+        style={{ position: "fixed", top: 16, left: 16, zIndex: 100 }}
+      >
+        <div style={{ ...pillStyle, padding: "5px 10px" }}>
+          {/* Braino logo — click to expand */}
+          <button
+            className="braino-glow"
+            onClick={toggle}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: "none",
+              border: "none",
+              padding: 0,
+              flexShrink: 0,
+              cursor: "pointer",
+            }}
+          >
+            <img src="/favicon.svg" width={28} height={28} alt="Braino" style={{ flexShrink: 0 }} />
+            <svg
+              className={`braino-chevron${expanded ? " open" : ""}`}
+              width="10" height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              stroke="var(--sb-ink-3)"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              {label}
-            </Link>
-          ))}
+              <polyline points="3 1 7 5 3 9" />
+            </svg>
+          </button>
+
+          {/* Expandable links */}
+          <div className={`braino-links-wrap${expanded ? " open" : ""}`}>
+            <span style={{ width: 1, height: 16, background: "var(--sb-line-2)", margin: "0 8px 0 10px", flexShrink: 0 }} />
+            {NAV_LINKS.map(({ href, label }, i) => (
+              <Link
+                key={href}
+                to={href}
+                className="braino-link-item"
+                style={{
+                  ...linkStyle(href),
+                  transitionDelay: expanded ? `${0.06 + i * 0.055}s` : "0s",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--sb-ink)")}
+                onMouseLeave={e => (e.currentTarget.style.color = pathname === href ? "var(--sb-ink)" : "var(--sb-ink-2)")}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
         </div>
       </nav>
 
       {/* ── Secondary action pill (right) ── */}
-      <nav
-        style={{ position: "fixed", top: 16, right: 16, zIndex: 100 }}
-      >
+      <nav style={{ position: "fixed", top: 16, right: 16, zIndex: 100 }}>
         <div style={{ ...pillStyle, padding: "5px 6px 5px 8px", gap: 2 }}>
-          {/* Dark mode toggle */}
           <button
             onClick={toggleTheme}
             title={isDark ? "Switch to light mode" : "Switch to dark mode"}
@@ -176,7 +244,7 @@ const Navbar = () => {
               fontSize: 13, fontWeight: 500,
               background: "var(--sb-ink)", color: "var(--sb-on-ink)",
               textDecoration: "none",
-              transition: "transform .15s, background .15s",
+              transition: "transform .15s, opacity .15s",
               whiteSpace: "nowrap", flexShrink: 0,
             }}
             onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.opacity = "0.85"; }}
