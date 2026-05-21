@@ -701,6 +701,9 @@ let __sbIsSpeaking = false;
 let __sbCurrentSpeechAudio = null;
 let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
+let __sbIsLectureRecording = false;
+let __sbLectureNotes = "";
+let __sbLectureInterval = null;
 
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
@@ -965,6 +968,39 @@ function __sbBuildBrainUI() {
     .sb-bubble-markdown hr {
       border: none; border-top: 1px solid rgba(65,48,40,0.1); margin: 12px 0;
     }
+    #__sb_rec_bar__ {
+      display: none; align-items: center; gap: 8px;
+      padding: 8px 14px 8px 14px;
+      border-top: 1px solid rgba(65,48,40,0.08);
+    }
+    #__sb_rec_bar__.active { display: flex; }
+    #__sb_rec_timer__ {
+      color: #C9544A; font-weight: 700; font-size: 12px;
+      font-variant-numeric: tabular-nums; min-width: 36px;
+    }
+    #__sb_capture_btn__ {
+      border: none; border-radius: 12px; padding: 4px 10px; font-size: 11px;
+      cursor: pointer; font-weight: 500; transition: background 0.15s, opacity 0.15s;
+      background: rgba(65,48,40,0.08); color: #413028;
+    }
+    #__sb_capture_btn__:hover { background: rgba(65,48,40,0.15); }
+    #__sb_capture_btn__.loading { opacity: 0.45; pointer-events: none; }
+    #__sb_rec_stop_btn__ {
+      border: none; border-radius: 12px; padding: 4px 10px; font-size: 11px;
+      cursor: pointer; font-weight: 500; transition: background 0.15s;
+      background: #fee2e2; color: #C9544A;
+    }
+    #__sb_rec_stop_btn__:hover { background: #fecaca; }
+    .sb-lecture-notion-row {
+      padding: 8px 14px 12px; border-top: 1px solid rgba(65,48,40,0.08); flex-shrink: 0;
+    }
+    .sb-notion-btn {
+      width: 100%; padding: 7px 0; border-radius: 20px; border: 1px solid rgba(65,48,40,0.18);
+      background: transparent; color: #413028; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .sb-notion-btn:hover { background: rgba(65,48,40,0.06); }
+    .sb-notion-btn:disabled { opacity: 0.55; cursor: default; }
   `;
   document.head.appendChild(style);
 
@@ -993,6 +1029,11 @@ function __sbBuildBrainUI() {
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
         </button>
         <button id="__sb_rec_btn__" title="Voice">🎙</button>
+      </div>
+      <div id="__sb_rec_bar__">
+        <span id="__sb_rec_timer__">00:00</span>
+        <button id="__sb_capture_btn__" title="Capture notes from recording so far">✂ Capture</button>
+        <button id="__sb_rec_stop_btn__" title="Stop recording">⏹ Stop</button>
       </div>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
@@ -1045,6 +1086,8 @@ function __sbBuildBrainUI() {
     __sbVoiceOnlyMode = !__sbVoiceOnlyMode;
     document.getElementById("__sb_voice_mode_btn__").classList.toggle("active", __sbVoiceOnlyMode);
   });
+  document.getElementById("__sb_capture_btn__").addEventListener("click", () => void __sbCaptureLectureSegment());
+  document.getElementById("__sb_rec_stop_btn__").addEventListener("click", () => void __sbStopLectureRecording());
 
   // ── dropdown helpers ──
   let __sbOpenDropdown = null;
@@ -1719,7 +1762,11 @@ async function __sbProcessPrompt(text, options = {}) {
 
   if (intent === "record") {
     if (fromVoice) __sbVoicePendingReply = false;
-    await __sbStartRecording();
+    if (forcedMode === "lecture" || forcedMode === "meeting") {
+      void __sbStartLectureRecording();
+    } else {
+      await __sbStartRecording();
+    }
     return;
   }
 
@@ -1852,7 +1899,186 @@ function __sbRunAgent(task) {
   chrome.runtime.sendMessage({ action: "runBrainAgent", task }, () => { void chrome.runtime.lastError; });
 }
 
+function __sbShowLectureRecordingBar(show) {
+  document.getElementById("__sb_rec_bar__")?.classList.toggle("active", show);
+  const timerEl = document.getElementById("__sb_rec_timer__");
+  if (!show && timerEl) timerEl.textContent = "00:00";
+}
+
+async function __sbStartLectureRecording() {
+  if (!__sbContextOk()) {
+    __sbShowBubble("Reload this page to reconnect SideBrain.", true);
+    return;
+  }
+  if (__sbIsLectureRecording) return;
+  __sbIsLectureRecording = true;
+  __sbLectureNotes = "";
+
+  const mode = window.__sbForcedMode || "auto";
+  const withMic = (mode === "meeting");
+
+  try {
+    await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ action: "startRecording", withMic }, (res) => {
+        if (chrome.runtime.lastError || res?.error) reject(new Error(res?.error || chrome.runtime.lastError?.message || "Failed to start"));
+        else resolve();
+      });
+    });
+  } catch (err) {
+    __sbIsLectureRecording = false;
+    __sbShowBubble("Could not start recording: " + (err.message || "unknown error"), true);
+    return;
+  }
+
+  document.getElementById("__sb_brain_btn__")?.classList.add("recording");
+  __sbShowLectureRecordingBar(true);
+
+  let seconds = 0;
+  __sbLectureInterval = setInterval(() => {
+    seconds++;
+    const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+    const s = String(seconds % 60).padStart(2, "0");
+    const timerEl = document.getElementById("__sb_rec_timer__");
+    if (timerEl) timerEl.textContent = `${m}:${s}`;
+  }, 1000);
+
+  const modeLabel = withMic ? "Meeting" : "Lecture";
+  __sbShowBubble(`${modeLabel} recording started — brain is listening. Press ✂ Capture to save notes from what's been said.`, true, { tone: "status", title: `${modeLabel} Recording` });
+}
+
+async function __sbCaptureLectureSegment() {
+  const captureBtn = document.getElementById("__sb_capture_btn__");
+  if (captureBtn) captureBtn.classList.add("loading");
+
+  try {
+    const res = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes }, (r) => resolve(r || {}));
+    });
+
+    if (res.error) {
+      __sbShowBubble("Capture failed: " + res.error, true, { tone: "status", title: "Recording" });
+      return;
+    }
+    if (res.empty) {
+      __sbShowBubble("Nothing recorded yet — speak a bit longer before capturing.", true, { tone: "status", title: "Recording" });
+      return;
+    }
+
+    __sbLectureNotes = res.notes || __sbLectureNotes;
+    if (__sbLectureNotes) __sbShowLectureNotes(__sbLectureNotes, false);
+  } finally {
+    if (captureBtn) captureBtn.classList.remove("loading");
+  }
+}
+
+async function __sbStopLectureRecording() {
+  if (__sbLectureInterval) { clearInterval(__sbLectureInterval); __sbLectureInterval = null; }
+  document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
+  __sbShowLectureRecordingBar(false);
+  __sbIsLectureRecording = false;
+
+  // Get final segment and stop recording simultaneously
+  const [segRes] = await Promise.allSettled([
+    new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes }, (r) => resolve(r || {}));
+    }),
+    new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "stopRecording" }, () => resolve());
+    }),
+  ]);
+
+  const seg = segRes.status === "fulfilled" ? segRes.value : {};
+  if (seg.notes) __sbLectureNotes = seg.notes;
+
+  if (__sbLectureNotes) {
+    __sbShowLectureNotes(__sbLectureNotes, true);
+  } else {
+    __sbShowBubble("Recording stopped. No content was captured — try using ✂ Capture during next session.", true, { tone: "status", title: "Recording" });
+  }
+}
+
+function __sbShowLectureNotes(notes, isFinal) {
+  const bubble = document.getElementById("__sb_bubble__");
+  if (!bubble) return;
+  __sbCenterBubble(bubble);
+  __sbLastBubbleRaw = notes;
+
+  const notionRow = isFinal ? `
+    <div class="sb-lecture-notion-row">
+      <button id="__sb_notion_sync_btn__" class="sb-notion-btn">Sync to Notion</button>
+    </div>
+  ` : "";
+
+  bubble.innerHTML = `
+    <div class="sb-bubble-card">
+      <div class="sb-bubble-head">
+        <div class="sb-bubble-head-main">
+          <div class="sb-bubble-kicker">SideBrain</div>
+          <div class="sb-bubble-title">${isFinal ? "Lecture Notes" : "Notes so far…"}</div>
+        </div>
+        <div class="sb-bubble-actions">
+          <button class="sb-bubble-iconbtn" type="button" data-sb-speak>Speak</button>
+          <button class="sb-bubble-iconbtn" type="button" data-sb-copy>Copy</button>
+          <button class="sb-bubble-iconbtn" type="button" data-sb-close>×</button>
+        </div>
+      </div>
+      <div class="sb-bubble-body sb-bubble-markdown">${__sbRenderMarkdown(notes)}</div>
+      ${notionRow}
+    </div>
+  `;
+  bubble.classList.add("visible");
+  bubble.dataset.tone = "status";
+  __sbBindBubbleActions();
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+
+  if (isFinal) {
+    document.getElementById("__sb_notion_sync_btn__")?.addEventListener("click", __sbSyncNotesToNotion);
+  }
+}
+
+async function __sbSyncNotesToNotion() {
+  const btn = document.getElementById("__sb_notion_sync_btn__");
+  if (btn) { btn.textContent = "Syncing…"; btn.disabled = true; }
+
+  const title = "Lecture Notes — " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  try {
+    const res = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "syncLectureToNotion", markdown: __sbLectureNotes, title }, (r) => resolve(r || {}));
+    });
+
+    if (res.error === "not_connected") {
+      if (btn) { btn.textContent = "Connect Notion →"; btn.disabled = false; }
+      btn?.addEventListener("click", () => window.open("https://notetakerai.lovable.app/notion-sync", "_blank"), { once: true });
+    } else if (res.error) {
+      if (btn) { btn.textContent = "Sync failed — retry?"; btn.disabled = false; }
+      btn?.addEventListener("click", __sbSyncNotesToNotion, { once: true });
+    } else {
+      if (btn) {
+        btn.textContent = "✓ Synced to Notion";
+        btn.style.background = "rgba(34,197,94,0.1)";
+        btn.style.color = "#16a34a";
+        btn.style.borderColor = "rgba(34,197,94,0.25)";
+      }
+    }
+  } catch (err) {
+    if (btn) { btn.textContent = "Sync failed — retry?"; btn.disabled = false; }
+    btn?.addEventListener("click", __sbSyncNotesToNotion, { once: true });
+  }
+}
+
 function __sbToggleRecording() {
+  const mode = window.__sbForcedMode || "auto";
+  const isLectureMode = (mode === "lecture" || mode === "meeting");
+
+  if (__sbIsLectureRecording) {
+    void __sbStopLectureRecording();
+    return;
+  }
+  if (isLectureMode) {
+    void __sbStartLectureRecording();
+    return;
+  }
   if (__sbIsRecording) {
     __sbStopRecording();
     return;

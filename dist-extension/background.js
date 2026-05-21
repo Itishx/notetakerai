@@ -135,13 +135,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "startRecording") {
-    startRecording(message.tabId, message.streamId, message.withMic)
+    const tabId = message.tabId || sender?.tab?.id;
+    startRecording(tabId, message.streamId, message.withMic)
       .then(() => sendResponse({ success: true }))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
   if (message.action === "stopRecording") {
     stopRecording()
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+  if (message.action === "getLectureSegment") {
+    bgGetAndTranscribeSegment(message.existingNotes || "")
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+  if (message.action === "syncLectureToNotion") {
+    bgSyncToNotion(message.markdown, message.title)
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -1526,4 +1539,75 @@ async function stopRecording() {
       }
     );
   });
+}
+
+async function bgGetAudioSegment() {
+  await ensureOffscreen();
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ target: "offscreen", action: "getSegment" }, (res) => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+      else resolve(res || {});
+    });
+  });
+}
+
+async function bgGetAndTranscribeSegment(existingNotes) {
+  const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
+  if (!stored.authToken) return { error: "Not signed in", notes: existingNotes };
+
+  const segRes = await bgGetAudioSegment();
+  if (!segRes?.audioBase64) return { notes: existingNotes, empty: true };
+
+  try {
+    const res = await fetch(`${BG_API_BASE}/transcribe-and-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${stored.authToken}`,
+        apikey: BG_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ audioSegments: [segRes.audioBase64], existingNotes }),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      return { error: `Transcription failed (${res.status})`, notes: existingNotes };
+    }
+    const json = await res.json();
+    return { notes: json.notes || existingNotes };
+  } catch (e) {
+    return { error: e.message || "Transcription failed", notes: existingNotes };
+  }
+}
+
+async function bgSyncToNotion(markdown, title) {
+  const stored = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId"], r));
+  if (!stored.authToken || !stored.authUserId) return { error: "Not signed in" };
+
+  const statusRes = await fetch(`${BG_API_BASE}/notion-connection-status`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${stored.authToken}`,
+      apikey: BG_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ userIdentifier: stored.authUserId }),
+  });
+  const statusJson = await statusRes.json().catch(() => ({}));
+  if (!statusJson.connected) return { error: "not_connected" };
+
+  const syncRes = await fetch(`${BG_API_BASE}/sync-to-notion`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${stored.authToken}`,
+      apikey: BG_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ userIdentifier: stored.authUserId, title: title || "Lecture Notes", markdown }),
+  });
+  if (!syncRes.ok) {
+    const j = await syncRes.json().catch(() => ({}));
+    return { error: j.error || "Notion sync failed" };
+  }
+  const syncJson = await syncRes.json().catch(() => ({}));
+  return { success: true, url: syncJson.url };
 }

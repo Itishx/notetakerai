@@ -94,6 +94,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
+
+  if (message.action === "getSegment") {
+    if (!mediaRecorder || audioChunks.length === 0) {
+      sendResponse({ audioBase64: null });
+      return true;
+    }
+    const chunksToProcess = audioChunks.slice();
+    audioChunks = [];
+    const blob = new Blob(chunksToProcess, { type: "audio/webm" });
+    const reader = new FileReader();
+    reader.onload = () => sendResponse({ audioBase64: reader.result.split(",")[1] });
+    reader.onerror = () => sendResponse({ audioBase64: null });
+    reader.readAsDataURL(blob);
+    return true;
+  }
 });
 
 async function startCapture(streamId, withMic) {
