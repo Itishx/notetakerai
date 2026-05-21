@@ -693,6 +693,7 @@ const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
+let __sbVoiceOnlyMode = false;
 let __sbChatHistory = [];
 let __sbVoicePendingReply = false;
 let __sbIsSpeaking = false;
@@ -803,6 +804,14 @@ function __sbBuildBrainUI() {
     }
     #__sb_rec_btn__:hover { background: rgba(65,48,40,0.08); }
     #__sb_rec_btn__.active { background: #fee2e2; }
+    #__sb_voice_mode_btn__ {
+      width: 30px; height: 30px; border-radius: 50%; border: none;
+      background: transparent; cursor: pointer; color: #6B5248;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.15s, color 0.15s; padding: 0;
+    }
+    #__sb_voice_mode_btn__:hover { background: rgba(65,48,40,0.08); }
+    #__sb_voice_mode_btn__.active { background: #fee2e2; color: #C9544A; }
     /* ── dropdowns ── */
     .sb-dropdown {
       position: fixed; z-index: 2147483649;
@@ -979,6 +988,9 @@ function __sbBuildBrainUI() {
           <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
         </button>
         <div class="sb-pill-spacer"></div>
+        <button id="__sb_voice_mode_btn__" title="Voice mode — spoken replies only">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        </button>
         <button id="__sb_rec_btn__" title="Voice">🎙</button>
       </div>
     </div>
@@ -1028,6 +1040,10 @@ function __sbBuildBrainUI() {
   }, true);
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
+  document.getElementById("__sb_voice_mode_btn__").addEventListener("click", () => {
+    __sbVoiceOnlyMode = !__sbVoiceOnlyMode;
+    document.getElementById("__sb_voice_mode_btn__").classList.toggle("active", __sbVoiceOnlyMode);
+  });
 
   // ── dropdown helpers ──
   let __sbOpenDropdown = null;
@@ -1372,9 +1388,10 @@ function __sbSpeakWithBrowser(text) {
 
 async function __sbSpeakText(text) {
   const clean = __sbStripMarkdownForSpeech(text);
-  if (!clean) return;
+  if (!clean) return false;
 
   __sbStopSpeech();
+  let spoke = false;
 
   try {
     const resp = await fetch(`${__SB_API}/elevenlabs-tts`, {
@@ -1403,9 +1420,9 @@ async function __sbSpeakText(text) {
       audio.onerror = reject;
       audio.play().catch(reject);
     });
+    spoke = true;
   } catch (_err) {
-    await __sbSpeakWithBrowser(clean);
-    return;
+    spoke = await __sbSpeakWithBrowser(clean);
   } finally {
     if (__sbCurrentSpeechAudio) {
       try { __sbCurrentSpeechAudio.pause(); } catch {}
@@ -1419,6 +1436,7 @@ async function __sbSpeakText(text) {
     __sbSetVoiceButtonState(__sbIsRecording);
     __sbSyncSpeakButtons();
   }
+  return spoke;
 }
 
 function __sbBindBubbleActions() {
@@ -1714,7 +1732,7 @@ async function __sbProcessPrompt(text, options = {}) {
       if (fromVoice) await __sbSpeakText("Browser agent requires premium.");
       return;
     }
-    __sbShowBubble("Delegating…", false);
+    if (!fromVoice || !__sbVoiceOnlyMode) __sbShowBubble("Delegating…", false);
     __sbRunAgent(promptText);
     if (fromVoice) {
       __sbVoicePendingReply = false;
@@ -1729,7 +1747,8 @@ async function __sbProcessPrompt(text, options = {}) {
   const previousHistory = __sbChatHistory.slice(-10);
 
   if (intent === "web") {
-    __sbShowBubble("Searching the web…", false);
+    const voiceOnly = fromVoice && __sbVoiceOnlyMode;
+    if (!voiceOnly) __sbShowBubble("Searching the web…", false);
     __sbChatHistory.push({ role: "user", content: promptText });
 
     try {
@@ -1747,12 +1766,13 @@ async function __sbProcessPrompt(text, options = {}) {
 
       const finalReply = __sbAppendSearchSources(String(reply), searchData.results || []);
       __sbChatHistory.push({ role: "assistant", content: finalReply });
-      __sbShowBubble(finalReply, false, {
-        rich: true,
-        prompt: promptText,
-        title: `Web results · ${location.hostname.replace(/^www\./, "") || "current page"}`,
-      });
-      if (fromVoice) await __sbSpeakText(finalReply);
+      if (voiceOnly) {
+        const spoke = await __sbSpeakText(finalReply);
+        if (!spoke) __sbShowBubble(finalReply, false, { rich: true, prompt: promptText, title: "Couldn't speak — tap to read" });
+      } else {
+        __sbShowBubble(finalReply, false, { rich: true, prompt: promptText, title: `Web results · ${location.hostname.replace(/^www\./, "") || "current page"}` });
+        if (fromVoice) await __sbSpeakText(finalReply);
+      }
     } catch (err) {
       __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
       if (fromVoice) await __sbSpeakText("Something went wrong while searching the web.");
@@ -1762,16 +1782,17 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
-  __sbShowBubble(hasPageText ? "Reading page…" : "Thinking…", false);
+  const voiceOnly = fromVoice && __sbVoiceOnlyMode;
+  if (!voiceOnly) __sbShowBubble(hasPageText ? "Reading page…" : "Thinking…", false);
   __sbChatHistory.push({ role: "user", content: promptText });
 
   try {
-      const body = {
+    const body = {
       message: promptText,
       notes: stored.currentNotes || "",
       aiProvider,
       chatHistory: previousHistory,
-      };
+    };
     if (hasPageText) body.pageContext = { url: pageContext.url, title: pageContext.title, text: pageContext.text };
     if (selectedText) body.selectedText = selectedText;
 
@@ -1781,12 +1802,17 @@ async function __sbProcessPrompt(text, options = {}) {
       return;
     }
     __sbChatHistory.push({ role: "assistant", content: reply });
-    __sbShowBubble(reply, false, {
-      rich: true,
-      prompt: promptText,
-      title: pageContext.title || location.hostname.replace(/^www\./, "") || "Current page",
-    });
-    if (fromVoice) await __sbSpeakText(reply);
+    if (voiceOnly) {
+      const spoke = await __sbSpeakText(reply);
+      if (!spoke) __sbShowBubble(reply, false, { rich: true, prompt: promptText, title: "Couldn't speak — tap to read" });
+    } else {
+      __sbShowBubble(reply, false, {
+        rich: true,
+        prompt: promptText,
+        title: pageContext.title || location.hostname.replace(/^www\./, "") || "Current page",
+      });
+      if (fromVoice) await __sbSpeakText(reply);
+    }
   } catch (err) {
     __sbShowBubble("Error: " + (err.message || "couldn't reach SideBrain"), true);
     if (fromVoice) await __sbSpeakText("Something went wrong.");
@@ -1919,7 +1945,7 @@ function __sbHandleVoiceEvent(msg) {
     __sbVoicePendingReply = true;
     __sbStopRecording({ silent: true });
     if (input) input.value = "";
-    __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
+    if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
     void __sbProcessPrompt(transcript, { fromVoice: true });
     return;
   }
