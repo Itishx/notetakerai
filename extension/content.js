@@ -793,7 +793,7 @@ function __sbBuildBrainUI() {
       50% { filter: drop-shadow(0 0 22px rgba(220,50,50,0.95)) drop-shadow(0 0 8px rgba(220,50,50,0.7)); }
     }
     #__sb_pill__ {
-      display: flex; align-items: flex-end; gap: 6px;
+      display: flex; align-items: center; gap: 6px;
       background: rgba(255, 251, 247, 0.96); border-radius: 22px;
       padding: 9px 9px 9px 16px;
       border: 1px solid rgba(65, 48, 40, 0.1);
@@ -1002,6 +1002,26 @@ function __sbBuildBrainUI() {
   }
 }
 
+function __sbTimeGreeting() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return "Good morning";
+  if (h >= 12 && h < 17) return "Good afternoon";
+  if (h >= 17 && h < 23) return "Good evening";
+  return "It's late";
+}
+
+function __sbSetGreetingPlaceholder() {
+  __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
+    const input = document.getElementById("__sb_input__");
+    if (!input) return;
+    const firstName = authDisplayName?.split(" ")[0]?.trim();
+    const greeting = __sbTimeGreeting();
+    input.placeholder = firstName
+      ? `${greeting}, ${firstName} — what's on your mind?`
+      : `${greeting} — what's on your mind?`;
+  });
+}
+
 function __sbToggleInput(open, options = {}) {
   if (open) {
     if (!__sbContextOk()) {
@@ -1016,6 +1036,7 @@ function __sbToggleInput(open, options = {}) {
       }
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
+      __sbSetGreetingPlaceholder(authToken);
       const pill = document.getElementById("__sb_pill__");
       if (pill) {
         pill.classList.add("open");
