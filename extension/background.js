@@ -20,11 +20,14 @@ async function bgPerformRealWebSearch(query) {
   const trimmedQuery = String(query || "").trim();
   if (!trimmedQuery) return { error: "No search query provided." };
 
-  const searchUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(trimmedQuery)}`;
+  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(trimmedQuery)}&kl=us-en`;
 
   try {
     const resp = await fetch(searchUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
@@ -32,24 +35,42 @@ async function bgPerformRealWebSearch(query) {
     const results = [];
     const seen = new Set();
 
-    // DuckDuckGo Lite: results are table rows with class "result-link" and "result-snippet"
-    const rowRe = /<td[^>]*class="result-link"[^>]*>\s*<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<td[^>]*class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi;
-    let m;
-    while ((m = rowRe.exec(html)) !== null && results.length < 8) {
-      let url = m[1];
-      const title = m[2].replace(/<[^>]+>/g, "").trim();
-      const snippet = m[3].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+    const clean = s => s
+      .replace(/<[^>]+>/g, "")
+      .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+      .replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g," ").trim();
+
+    const decodeUrl = raw => {
       try {
-        const uddg = new URL("https://duckduckgo.com" + url).searchParams.get("uddg");
-        if (uddg) url = decodeURIComponent(uddg);
-      } catch { /* keep raw url */ }
-      if (!title || !url || !/^https?:/i.test(url) || seen.has(url)) continue;
+        const base = raw.startsWith("//") ? "https:" + raw : raw.startsWith("/") ? "https://duckduckgo.com" + raw : raw;
+        const uddg = new URL(base).searchParams.get("uddg");
+        return uddg ? decodeURIComponent(uddg) : raw;
+      } catch { return raw; }
+    };
+
+    // Split on result blocks — each web result starts with class="result results_links
+    const blocks = html.split(/(?=<div[^>]+class="result\s)/);
+    for (const block of blocks) {
+      if (results.length >= 8) break;
+      // title anchor: class="result__a" (attr order may vary)
+      const aTag = block.match(/<a\b([^>]*\bclass="[^"]*\bresult__a\b[^"]*"[^>]*|[^>]*\bhref="[^"]*"[^>]*\bclass="[^"]*\bresult__a\b[^"]*")>([\s\S]*?)<\/a>/);
+      if (!aTag) continue;
+      const hrefM = aTag[1].match(/href="([^"]*)"/);
+      if (!hrefM) continue;
+      const url = decodeUrl(hrefM[1]);
+      if (!url || !/^https?:/i.test(url) || seen.has(url)) continue;
+
+      const title = clean(aTag[2]);
+      if (!title) continue;
+
+      const snipM = block.match(/<a\b[^>]*\bclass="[^"]*\bresult__snippet\b[^"]*"[^>]*>([\s\S]*?)<\/a>/);
+      const snippet = snipM ? clean(snipM[1]) : "";
+
       seen.add(url);
       results.push({ title, url, snippet });
     }
 
     if (!results.length) return { error: "No results found for that query." };
-
     return { query: trimmedQuery, engine: "DuckDuckGo", searchUrl, results };
   } catch (e) {
     return { error: e.message || "Web search failed." };
