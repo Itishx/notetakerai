@@ -1673,7 +1673,6 @@ async function __sbProcessPrompt(text, options = {}) {
   const intent = (rawIntent === "lecture" || rawIntent === "meeting") ? "record" : rawIntent;
 
   if (intent === "record") {
-    __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
     if (fromVoice) __sbVoicePendingReply = false;
     await __sbStartRecording();
     return;
@@ -1691,7 +1690,10 @@ async function __sbProcessPrompt(text, options = {}) {
     }
     __sbShowBubble("Delegating…", false);
     __sbRunAgent(promptText);
-    if (fromVoice) await __sbSpeakText("On it.");
+    if (fromVoice) {
+      __sbVoicePendingReply = false;
+      await __sbSpeakText("On it.");
+    }
     return;
   }
 
@@ -1826,9 +1828,6 @@ function __sbStartRecording(options = {}) {
 
   __sbIsRecording = true;
   __sbSetVoiceButtonState(true);
-  if (!options.silent) {
-    __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
-  }
 
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ action: "startInlineVoiceListening" }, (res) => {
@@ -1880,17 +1879,14 @@ function __sbHandleVoiceEvent(msg) {
   if (msg.event === "listening") {
     __sbIsRecording = true;
     __sbSetVoiceButtonState(true);
-    __sbShowBubble("Listening… speak now.", false, { tone: "status", title: "Voice" });
     return;
   }
 
   if (msg.event === "transcript") {
     const transcript = String(msg.text || "").trim();
     if (!transcript) return;
-    if (input) input.value = transcript;
 
     if (!msg.isFinal) {
-      __sbShowBubble(transcript, false, { tone: "status", title: "Listening" });
       return;
     }
 
