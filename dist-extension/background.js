@@ -1,4 +1,4 @@
-// Background service worker for SideBrain (MV3)
+// Background service worker for Braino (MV3)
 let isRecording = false;
 
 function doCapture(windowId, sendResponse) {
@@ -486,6 +486,37 @@ function bgBrainUpdate(tabId, text, final = false) {
   chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final }, () => { void chrome.runtime.lastError; });
 }
 
+async function bgSaveAgentTask(tabId, task, result) {
+  try {
+    const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
+    if (!stored.authToken) return;
+    let sourceUrl = "", sourceTitle = "";
+    try {
+      const tab = await new Promise(r => chrome.tabs.get(tabId, r));
+      sourceUrl = tab?.url || "";
+      sourceTitle = tab?.title || "";
+    } catch (_) {}
+    await fetch(`${BG_API_BASE}/save-note`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${stored.authToken}`,
+        apikey: BG_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        action: "save",
+        session_id: crypto.randomUUID(),
+        title: task.length > 120 ? task.slice(0, 117) + "…" : task,
+        transcript: task,
+        structured_notes: result || "Task completed.",
+        source_url: sourceUrl,
+        source_title: sourceTitle,
+        use_case: "agent",
+      }),
+    });
+  } catch (_) {}
+}
+
 async function bgRunBrainAgent(tabId, task) {
   let currentTabId = tabId;
   const MAX_STEPS = 10;
@@ -506,6 +537,7 @@ async function bgRunBrainAgent(tabId, task) {
       }
     }
     bgBrainUpdate(currentTabId, "Done!");
+    bgSaveAgentTask(currentTabId, task, "Done.");
     return;
   }
 
@@ -523,10 +555,12 @@ async function bgRunBrainAgent(tabId, task) {
     for (const action of actions) {
       if (action.type === "done" || action.type === "answer") {
         bgBrainUpdate(currentTabId, action.message || "Done!", true);
+        bgSaveAgentTask(currentTabId, task, action.message || "Done.");
         return;
       }
       if (action.type === "clarify") {
         bgBrainUpdate(currentTabId, action.message || "Need more info.", true);
+        bgSaveAgentTask(currentTabId, task, action.message || "Needs clarification.");
         return;
       }
 
@@ -568,6 +602,7 @@ async function bgRunBrainAgent(tabId, task) {
   }
 
   bgBrainUpdate(currentTabId, "Reached max steps — task may need the full panel.");
+  bgSaveAgentTask(currentTabId, task, "Reached max steps.");
 }
 
 async function bgUpdateRemoteCommand(id, token, patch) {
@@ -730,7 +765,7 @@ async function bgCallAgentStep(task, pageInfo, history, currentStep = null) {
   const today = new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const currentUrl = pageInfo.url || "";
 
-  const agentSystemPrompt = `You are SideBrain Browser Agent. Automate a real Chrome browser by returning JSON actions.
+  const agentSystemPrompt = `You are Braino Browser Agent. Automate a real Chrome browser by returning JSON actions.
 Respond ONLY with a JSON object or array. Zero prose. Zero explanation. Zero markdown fences.
 
 MINDSET: You are a browser robot. Every task is solved by executing and verifying actions.
