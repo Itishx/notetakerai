@@ -304,53 +304,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "generateXReply") {
     const { tweetText, handle } = message;
-    // Use chatHistory to establish the reply-writer persona before the actual tweet.
-    // Passing instructions as `notes` confused the AI (it treated them as "lecture notes").
-    const cleanXReply = (value) => {
-      let reply = String(value || "").trim();
-      if (!reply) return "";
-
-      reply = reply
-        .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, "").trim())
-        .replace(/^["'`]+|["'`]+$/g, "")
-        .trim();
-
-      reply = reply
-        .replace(/^(draft|option|reply)\s*#?\d+\s*[:.)-]?\s*/i, "")
-        .replace(/^(draft|option|reply)\s*[:.)-]?\s*/i, "")
-        .trim();
-
-      const nonEmptyLines = reply
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .filter((line) => !/^(draft|option)\s*#?\d+\s*[:.)-]?$/i.test(line));
-
-      reply = nonEmptyLines.join(" ").replace(/\s+/g, " ").trim();
-      reply = reply.replace(/^(draft|option|reply)\s*#?\d+\s*[:.)-]?\s*/i, "").trim();
-      return reply.slice(0, 240);
-    };
-
-    const xReplyPrompt = `You write replies on X that sound like a real person in the feed, not a bot, brand intern, customer support rep, or LinkedIn commenter.
-
-Write ONE reply to the tweet.
-
-Rules:
-1. Max 180 characters total.
-2. Reply to one specific detail, implication, or phrase from the tweet. Do not give generic praise plus a paraphrase.
-3. Sound human: conversational, concrete, a little imperfect is okay. One or two short sentences is ideal. Fragments are okay.
-4. Match the tweet's energy. If the tweet is sharp, be sharp. If it's thoughtful, be thoughtful. If it's playful, be playful. Do not force slang.
-5. Do not start with @${handle || 'user'} unless the meaning would be unclear without it.
-6. No em dashes, hashtags, list formatting, or quotes around the whole reply.
-7. Avoid canned openings like "great point", "love this", "totally agree", "well said", "interesting take", or "thanks for sharing".
-8. Avoid AI-sounding phrasing like "this highlights", "this underscores", "important conversation", "valuable insight", "in today's world", or "I couldn't agree more".
-9. Ask a follow-up question only if it is genuinely specific and improves the reply. Do not ask a question by default.
-10. At most one emoji, and only if it feels native to the tweet.
-11. Do not sound promotional. Do not mention Braino or trybraino.com unless the tweet is directly about AI browser agents or workflow automation and the mention feels natural.
-12. Return ONLY the reply text.
-13. Never output labels like "Draft 1", "Draft 2", "Option 1", "Reply:", or multiple candidates.
-
-Before answering, silently draft 3 candidate replies and choose the one that is most specific, least generic, and most likely to be posted by a real person on X.`;
+    const builderPrompt = Boolean(message.builderPrompt) || bgIsBuilderPromptTweet(tweetText);
+    const xReplyPrompt = bgBuildXReplyPrompt({ handle, builderPrompt });
 
     fetch(`${BG_API_BASE}/chat-about-notes`, {
       method: "POST",
@@ -371,13 +326,21 @@ Before answering, silently draft 3 candidate replies and choose the one that is 
           { role: 'assistant', content: 'mostly true. enterprise is the annoying exception, but even there the payoff has to be obvious fast' },
           { role: 'user', content: '@pm: "The best PMs write better bug reports than specs."' },
           { role: 'assistant', content: 'because they notice where reality breaks, not just where the roadmap sounds neat' },
+          { role: 'user', content: '@maker: "what are you building right now? drop it below"' },
+          { role: 'assistant', content: 'building Braino right now. ai browser companion that can actually act on the tab for you. trybraino.com' },
         ],
         message: `@${handle || 'user'}: "${tweetText}"`,
       }),
     })
       .then(r => r.json())
-      .then(data => sendResponse({ reply: cleanXReply(data?.reply || data?.response || null) || null }))
+      .then(data => sendResponse({ reply: bgCleanXReply(data?.reply || data?.response || null) || null }))
       .catch(() => sendResponse({ reply: null }));
+    return true;
+  }
+  if (message.action === "recordXAutomationRunStats") {
+    bgRecordXAutomationRunStats(message)
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: e.message || "Could not save X automation stats." }));
     return true;
   }
   if (message.action === "runBrainAgent") {
@@ -462,6 +425,162 @@ const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd
 const BG_API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
 // --- helpers ---
+
+function bgIsBuilderPromptTweet(tweetText) {
+  return /\b(what(?:'s| is)?\s+(?:everyone|everybody|yall|you all|you)\s+building|what are you building|what(?:'re| are)\s+you building|drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links|website)|share\s+what\s+you(?:'re| are)\s+building|show\s+me\s+what\s+you(?:'re| are)\s+building|plug\s+your\s+(?:startup|product|app|tool|project)|builders?\s+drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links))\b/i.test(String(tweetText || ""));
+}
+
+function bgBuildXReplyPrompt({ handle, builderPrompt }) {
+  const promoRule = builderPrompt
+    ? "11. This tweet is explicitly inviting builders to share what they are making. It is okay to mention Braino and include trybraino.com once, naturally and briefly, like a real builder reply."
+    : "11. Do not sound promotional. Do not mention Braino or trybraino.com unless the tweet is directly about AI browser agents or workflow automation and the mention feels natural.";
+
+  return `You write replies on X that sound like a real person in the feed, not a bot, brand intern, customer support rep, or LinkedIn commenter.
+
+Write ONE reply to the tweet.
+
+Rules:
+1. Max 180 characters total.
+2. Reply to one specific detail, implication, or phrase from the tweet. Do not give generic praise plus a paraphrase.
+3. Sound human: conversational, concrete, a little imperfect is okay. One or two short sentences is ideal. Fragments are okay.
+4. Match the tweet's energy. If the tweet is sharp, be sharp. If it's thoughtful, be thoughtful. If it's playful, be playful. Do not force slang.
+5. Do not start with @${handle || 'user'} unless the meaning would be unclear without it.
+6. No em dashes, hashtags, list formatting, or quotes around the whole reply.
+7. Avoid canned openings like "great point", "love this", "totally agree", "well said", "interesting take", or "thanks for sharing".
+8. Avoid AI-sounding phrasing like "this highlights", "this underscores", "important conversation", "valuable insight", "in today's world", or "I couldn't agree more".
+9. Ask a follow-up question only if it is genuinely specific and improves the reply. Do not ask a question by default.
+10. At most one emoji, and only if it feels native to the tweet.
+${promoRule}
+12. Return ONLY the reply text.
+13. Never output labels or prefixes like "Draft 1", "Draft 2", "Option 1", "Reply:", "Candidate 1", or multiple candidates.
+14. Never reveal your internal drafting process. Draft silently and output only the final chosen reply.
+
+Before answering, silently draft 3 candidate replies and choose the one that is most specific, least generic, and most likely to be posted by a real person on X.`;
+}
+
+function bgCleanXReply(value) {
+  let reply = String(value || "").trim();
+  if (!reply) return "";
+
+  reply = reply
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, "").trim())
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .trim();
+
+  const candidateLines = reply
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const extractedCandidates = candidateLines
+    .map((line) => {
+      const labeled = line.match(/^(?:draft|option|reply|candidate)\s*#?\d*\s*[:.)-]?\s*(.+)$/i);
+      if (labeled?.[1]) return labeled[1].trim();
+
+      const numbered = line.match(/^\d+\s*[:.)-]\s*(.+)$/);
+      if (numbered?.[1]) return numbered[1].trim();
+
+      return null;
+    })
+    .filter(Boolean);
+
+  if (extractedCandidates.length) {
+    reply = extractedCandidates[0];
+  } else {
+    reply = candidateLines
+      .filter((line) => !/^(?:here(?:'s| are)|options?|choices?|candidates?)\b/i.test(line))
+      .join(" ")
+      .trim();
+  }
+
+  reply = reply
+    .split(/\s+(?=(?:draft|option|reply|candidate)\s*#?\d+\s*[:.)-]?\s)/i)[0]
+    .replace(/^(?:draft|option|reply|candidate)\s*#?\d*\s*[:.)-]?\s*/i, "")
+    .replace(/^\d+\s*[:.)-]\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return reply.slice(0, 240);
+}
+
+async function bgAuthedSupabaseFetch(url, options = {}) {
+  const stored = await new Promise((resolve) => chrome.storage.local.get(["authToken", "authUserId"], resolve));
+  let token = stored.authToken;
+  if (!token) token = await bgRefreshAuthToken();
+  if (!token) throw new Error("Not signed in");
+
+  const makeRequest = (jwt) =>
+    fetch(url, {
+      ...options,
+      headers: {
+        apikey: BG_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${jwt}`,
+        ...(options.headers || {}),
+      },
+    });
+
+  let res = await makeRequest(token);
+  if (res.status === 401) {
+    const refreshed = await bgRefreshAuthToken();
+    if (!refreshed) throw new Error("Auth expired");
+    token = refreshed;
+    res = await makeRequest(token);
+  }
+
+  return { res, token, userId: stored.authUserId || null };
+}
+
+async function bgRecordXAutomationRunStats({ repliedCount, durationMs, startedAt, finishedAt }) {
+  const safeReplyCount = Math.max(0, Number(repliedCount) || 0);
+  const safeDurationMs = Math.max(0, Number(durationMs) || 0);
+  const authState = await new Promise((resolve) => chrome.storage.local.get(["authUserId"], resolve));
+  const userId = authState.authUserId;
+  if (!userId) throw new Error("No signed-in user");
+
+  const selectUrl = `${BG_SUPABASE_URL}/rest/v1/x_automation_stats?user_id=eq.${encodeURIComponent(userId)}&select=id,total_replies,total_runs,total_runtime_ms&limit=1`;
+  const { res: selectRes } = await bgAuthedSupabaseFetch(selectUrl, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!selectRes.ok) throw new Error(`Could not load X automation stats (${selectRes.status})`);
+
+  const existingRows = await selectRes.json();
+  const current = Array.isArray(existingRows) ? existingRows[0] : null;
+  const payload = {
+    user_id: userId,
+    total_replies: (Number(current?.total_replies) || 0) + safeReplyCount,
+    total_runs: (Number(current?.total_runs) || 0) + 1,
+    total_runtime_ms: (Number(current?.total_runtime_ms) || 0) + safeDurationMs,
+    last_run_reply_count: safeReplyCount,
+    last_run_duration_ms: safeDurationMs,
+    last_run_started_at: startedAt || null,
+    last_run_finished_at: finishedAt || null,
+  };
+
+  if (current?.id) {
+    const updateUrl = `${BG_SUPABASE_URL}/rest/v1/x_automation_stats?id=eq.${current.id}`;
+    const { res: updateRes } = await bgAuthedSupabaseFetch(updateUrl, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!updateRes.ok) throw new Error(`Could not update X automation stats (${updateRes.status})`);
+    return;
+  }
+
+  const insertUrl = `${BG_SUPABASE_URL}/rest/v1/x_automation_stats`;
+  const { res: insertRes } = await bgAuthedSupabaseFetch(insertUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!insertRes.ok) throw new Error(`Could not create X automation stats (${insertRes.status})`);
+}
 
 function bgIsScriptableUrl(url) {
   if (!url) return false;
