@@ -306,6 +306,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const { tweetText, handle } = message;
     // Use chatHistory to establish the reply-writer persona before the actual tweet.
     // Passing instructions as `notes` confused the AI (it treated them as "lecture notes").
+    const xReplyPrompt = `You write replies on X that sound like a real person in the feed, not a bot, brand intern, customer support rep, or LinkedIn commenter.
+
+Write ONE reply to the tweet.
+
+Rules:
+1. Max 180 characters total.
+2. Reply to one specific detail, implication, or phrase from the tweet. Do not give generic praise plus a paraphrase.
+3. Sound human: conversational, concrete, a little imperfect is okay. One or two short sentences is ideal. Fragments are okay.
+4. Match the tweet's energy. If the tweet is sharp, be sharp. If it's thoughtful, be thoughtful. If it's playful, be playful. Do not force slang.
+5. Do not start with @${handle || 'user'} unless the meaning would be unclear without it.
+6. No em dashes, hashtags, list formatting, or quotes around the whole reply.
+7. Avoid canned openings like "great point", "love this", "totally agree", "well said", "interesting take", or "thanks for sharing".
+8. Avoid AI-sounding phrasing like "this highlights", "this underscores", "important conversation", "valuable insight", "in today's world", or "I couldn't agree more".
+9. Ask a follow-up question only if it is genuinely specific and improves the reply. Do not ask a question by default.
+10. At most one emoji, and only if it feels native to the tweet.
+11. Do not sound promotional. Do not mention Braino or trybraino.com unless the tweet is directly about AI browser agents or workflow automation and the mention feels natural.
+12. Return ONLY the reply text.
+
+Before answering, silently draft 3 candidate replies and choose the one that is most specific, least generic, and most likely to be posted by a real person on X.`;
+
     fetch(`${BG_API_BASE}/chat-about-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -314,9 +334,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chatHistory: [
           {
             role: 'user',
-            content: 'You are a Twitter reply writer. I will give you tweets and you will reply. Rules: (1) MAX 200 characters total — count carefully and rewrite shorter if needed. (2) Sound human — warm, direct, conversational. (3) Directly engage with the tweet topic — add a thought, ask a question, or agree with a specific point. (4) No more than 1 emoji. (5) Return ONLY the reply text — no quotes, no labels, nothing else.',
+            content: xReplyPrompt,
           },
           { role: 'assistant', content: 'Got it. Give me the tweet.' },
+          { role: 'user', content: '@founder: "Most startup advice is survivorship bias with better branding."' },
+          { role: 'assistant', content: 'yeah a lot of it is just luck wearing a framework costume' },
+          { role: 'user', content: '@manager: "Remote work isn\'t dying. Bad management is."' },
+          { role: 'assistant', content: 'a lot of return-to-office panic really is management debt with better PR' },
+          { role: 'user', content: '@builder: "If onboarding needs a meeting, the product probably isn\'t ready."' },
+          { role: 'assistant', content: 'mostly true. enterprise is the annoying exception, but even there the payoff has to be obvious fast' },
+          { role: 'user', content: '@pm: "The best PMs write better bug reports than specs."' },
+          { role: 'assistant', content: 'because they notice where reality breaks, not just where the roadmap sounds neat' },
         ],
         message: `@${handle || 'user'}: "${tweetText}"`,
       }),
