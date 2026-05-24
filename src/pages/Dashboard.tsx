@@ -66,7 +66,17 @@ type NotionConn = {
   workspace_id: string | null;
 } | null;
 
-type DashboardTab = "overview" | "notes" | "tasks" | "settings" | "memory" | "highlights";
+type XAutomationStats = {
+  total_replies: number;
+  total_runs: number;
+  total_runtime_ms: number;
+  last_run_reply_count: number;
+  last_run_duration_ms: number;
+  last_run_started_at: string | null;
+  last_run_finished_at: string | null;
+} | null;
+
+type DashboardTab = "overview" | "notes" | "tasks" | "xAutomation" | "settings" | "memory" | "highlights";
 type NoteView = "list" | "grid";
 
 type ActivityPoint = {
@@ -79,6 +89,13 @@ type ActivityPoint = {
 
 const serifStyle = { fontFamily: "Instrument Serif, Georgia, serif" } as const;
 const monoStyle = { fontFamily: "JetBrains Mono, monospace" } as const;
+
+function dashboardTabLabel(tab: DashboardTab) {
+  if (tab === "tasks") return "Agent Tasks";
+  if (tab === "xAutomation") return "X Automation";
+  if (tab === "highlights") return "Highlights";
+  return tab.charAt(0).toUpperCase() + tab.slice(1);
+}
 
 function greeting() {
   const hour = new Date().getHours();
@@ -103,6 +120,16 @@ function formatDuration(ms?: number) {
   if (!ms) return null;
   if (ms < 60000) return `${Math.max(1, Math.round(ms / 1000))}s`;
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+}
+
+function formatDateTime(iso?: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function renderMarkdown(md: string): string {
@@ -649,6 +676,7 @@ export default function Dashboard() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [commands, setCommands] = useState<Command[]>([]);
   const [notionConn, setNotionConn] = useState<NotionConn>(null);
+  const [xAutomationStats, setXAutomationStats] = useState<XAutomationStats>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -668,7 +696,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, xStatsRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -686,11 +714,17 @@ export default function Dashboard() {
           .select("workspace_name,workspace_id")
           .eq("user_identifier", user.id)
           .maybeSingle(),
+        supabase
+          .from("x_automation_stats")
+          .select("total_replies,total_runs,total_runtime_ms,last_run_reply_count,last_run_duration_ms,last_run_started_at,last_run_finished_at")
+          .eq("user_id", user.id)
+          .maybeSingle(),
       ]);
 
       if (notesRes.data) setNotes(notesRes.data as Note[]);
       if (commandsRes.data) setCommands(commandsRes.data as unknown as Command[]);
       setNotionConn(notionRes.data as NotionConn);
+      setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
       setDataLoading(false);
     };
 
@@ -720,6 +754,10 @@ export default function Dashboard() {
   const doneTasks = commands.filter((command) => command.status === "done").length;
   const runningTasks = commands.filter((command) => command.status === "running");
   const successRate = commands.length ? Math.round((doneTasks / commands.length) * 100) : 0;
+  const xTotalReplies = xAutomationStats?.total_replies || 0;
+  const xTotalRuns = xAutomationStats?.total_runs || 0;
+  const xTotalRuntime = formatDuration(xAutomationStats?.total_runtime_ms) || "0s";
+  const xLastRunDuration = formatDuration(xAutomationStats?.last_run_duration_ms) || "0s";
 
   const lastActivity = useMemo(() => {
     const latest = [notes[0]?.created_at, commands[0]?.created_at]
@@ -829,6 +867,8 @@ export default function Dashboard() {
       ? "Search notes..."
       : activeTab === "tasks"
         ? "Search tasks..."
+        : activeTab === "xAutomation"
+          ? "Search X automation stats..."
         : activeTab === "settings"
           ? "Search account settings..."
           : activeTab === "memory"
@@ -936,6 +976,19 @@ export default function Dashboard() {
               badge={
                 runningTasks.length > 0 ? (
                   <span className={cn("h-2 w-2 rounded-full", activeTab === "tasks" ? "bg-white" : "bg-[var(--sb-accent)]")} />
+                ) : undefined
+              }
+            />
+            <SidebarItem
+              label="X Automation"
+              active={activeTab === "xAutomation"}
+              onClick={() => setActiveTab("xAutomation")}
+              icon={<Zap className="h-3.5 w-3.5" />}
+              badge={
+                xTotalReplies > 0 ? (
+                  <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "xAutomation" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
+                    {xTotalReplies}
+                  </span>
                 ) : undefined
               }
             />
@@ -1060,7 +1113,7 @@ export default function Dashboard() {
             <div style={monoStyle} className="hidden items-center gap-2 text-[11px] text-[var(--sb-ink-3)] md:flex">
               <span>SideBrain</span>
               <span className="text-[var(--sb-ink-4)]">/</span>
-              <b className="font-medium text-[var(--sb-ink)]">{activeTab === "tasks" ? "Agent Tasks" : activeTab === "highlights" ? "Highlights" : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</b>
+              <b className="font-medium text-[var(--sb-ink)]">{dashboardTabLabel(activeTab)}</b>
             </div>
 
             <div className="flex max-w-[540px] flex-1 items-center gap-2 rounded-[10px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-3 py-2 text-[13px] text-[var(--sb-ink-3)]">
@@ -1133,6 +1186,7 @@ export default function Dashboard() {
                 { key: "overview", label: "Overview", icon: LayoutGrid, count: null },
                 { key: "notes", label: "Notes", icon: FileText, count: notes.length },
                 { key: "tasks", label: "Agent Tasks", icon: Bot, count: commands.length },
+                { key: "xAutomation", label: "X Automation", icon: Zap, count: xTotalReplies },
                 { key: "settings", label: "Settings", icon: Settings, count: null },
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -1718,6 +1772,140 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === "xAutomation" && (
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    {
+                      label: "Total replies",
+                      value: xTotalReplies.toLocaleString("en-US"),
+                      hint: "Lifetime across synced X Auto runs",
+                      icon: <Zap className="h-3.5 w-3.5" />,
+                    },
+                    {
+                      label: "Automation runs",
+                      value: xTotalRuns.toLocaleString("en-US"),
+                      hint: "Each finished or stopped session",
+                      icon: <Bot className="h-3.5 w-3.5" />,
+                    },
+                    {
+                      label: "Total runtime",
+                      value: xTotalRuntime,
+                      hint: "Time spent scanning and replying",
+                      icon: <Clock3 className="h-3.5 w-3.5" />,
+                    },
+                    {
+                      label: "Last run",
+                      value: `${xAutomationStats?.last_run_reply_count || 0} replies`,
+                      hint: `Duration ${xLastRunDuration}`,
+                      icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+                    },
+                  ].map((card) => (
+                    <div key={card.label} className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-5">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span style={monoStyle} className="text-[10.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+                          {card.label}
+                        </span>
+                        <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-[var(--sb-bg-2)] text-[var(--sb-ink-2)]">
+                          {card.icon}
+                        </span>
+                      </div>
+                      <div style={serifStyle} className="mb-1 text-4xl leading-none tracking-[-0.03em] italic text-[var(--sb-accent-deep)]">
+                        {card.value}
+                      </div>
+                      <div className="text-[13px] text-[var(--sb-ink-2)]">{card.hint}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-5 xl:grid-cols-[1.2fr_1fr]">
+                  <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                    <div className="mb-4">
+                      <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                        X Auto <em className="text-[var(--sb-accent-deep)]">summary.</em>
+                      </h3>
+                      <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                        Synced from the extension
+                      </div>
+                    </div>
+
+                    {xAutomationStats ? (
+                      <div className="space-y-4">
+                        <div className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                          <div className="mb-2 text-sm font-medium text-[var(--sb-ink)]">Last automation run</div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.1em] text-[var(--sb-ink-3)]">
+                                Replies posted
+                              </div>
+                              <div className="mt-1 text-[14px] text-[var(--sb-ink)]">{xAutomationStats.last_run_reply_count}</div>
+                            </div>
+                            <div>
+                              <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.1em] text-[var(--sb-ink-3)]">
+                                Runtime
+                              </div>
+                              <div className="mt-1 text-[14px] text-[var(--sb-ink)]">{xLastRunDuration}</div>
+                            </div>
+                            <div>
+                              <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.1em] text-[var(--sb-ink-3)]">
+                                Started
+                              </div>
+                              <div className="mt-1 text-[14px] text-[var(--sb-ink)]">{formatDateTime(xAutomationStats.last_run_started_at)}</div>
+                            </div>
+                            <div>
+                              <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.1em] text-[var(--sb-ink-3)]">
+                                Finished
+                              </div>
+                              <div className="mt-1 text-[14px] text-[var(--sb-ink)]">{formatDateTime(xAutomationStats.last_run_finished_at)}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                          <div className="mb-2 text-sm font-medium text-[var(--sb-ink)]">What the current automation does</div>
+                          <div className="space-y-2 text-[13px] text-[var(--sb-ink-2)]">
+                            <p>Skips promoted posts and ad-labeled tweets.</p>
+                            <p>Skips Narendra Modi and broader political posts.</p>
+                            <p>Waits 3 seconds before posting each generated reply.</p>
+                            <p>Special-cases builder prompts so Braino can mention what it is building more naturally.</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-[18px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-6 py-14 text-center text-sm text-[var(--sb-ink-3)]">
+                        No X automation history yet. Run X Auto once from the extension and the stats will appear here.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                    <div className="mb-4">
+                      <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                        Guardrails
+                      </h3>
+                      <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                        Current pacing and filter rules
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {[
+                        "One reply per surfaced post key to avoid timeline loops.",
+                        "Ads and promoted posts are ignored before a reply is generated.",
+                        "Political handles and political-language tweets are skipped.",
+                        "Draft / option labels are stripped before anything is posted.",
+                      ].map((item) => (
+                        <div key={item} className="flex items-start gap-3 rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                          <span className="mt-0.5 h-2.5 w-2.5 rounded-full bg-[var(--sb-accent)]" />
+                          <div className="text-[13px] leading-6 text-[var(--sb-ink-2)]">{item}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -2209,7 +2209,17 @@ function __sbSetStopBtn(visible) {
 const __sbXReplied = new WeakSet();
 const __sbXProcessedKeys = new Set();
 let __sbXRunning = false;
+let __sbXStopReason = 'finished';
+const __sbXPreReplyDelayMs = 3000;
 const __sbXPostReplySettleMs = 1500;
+const __sbXPoliticalHandleBlocklist = new Set([
+  'narendramodi',
+  'potus',
+  'vp',
+  'whitehouse',
+]);
+const __sbXPoliticalTextPattern = /\b(election|elections|vote|voting|voter|ballot|campaign|candidate|politic|political|politician|president|prime minister|minister|parliament|congress|senate|democrat|republican|bjp|aap|conservative|labour party|government|governance|policy|policies|manifesto|opposition|cabinet|lok sabha|rajya sabha|chief minister|cm\b|mp\b|mla\b|senator|governor)\b/i;
+const __sbXBuilderPromptPattern = /\b(what(?:'s| is)?\s+(?:everyone|everybody|yall|you all|you)\s+building|what are you building|what(?:'re| are)\s+you building|drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links|website)|share\s+what\s+you(?:'re| are)\s+building|show\s+me\s+what\s+you(?:'re| are)\s+building|plug\s+your\s+(?:startup|product|app|tool|project)|builders?\s+drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links))\b/i;
 
 function __sbSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -2280,19 +2290,39 @@ function __sbXGetTweetKey(article, handle, text) {
   return normalizedHandle || normalizedText ? `${normalizedHandle}::${normalizedText}` : '';
 }
 
-function __sbXIsAdTweet(article) {
-  const socialContext = __sbXNormalizeText(
+function __sbXGetSocialContextText(article) {
+  return __sbXNormalizeText(
     article.querySelector('[data-testid="socialContext"]')?.innerText ||
     article.querySelector('[data-testid="socialContext"]')?.textContent ||
     ''
   );
-  if (/\b(ad|promoted)\b/.test(socialContext)) return true;
+}
 
-  const headerText = __sbXNormalizeText(
+function __sbXGetUserNameText(article) {
+  return __sbXNormalizeText(
     article.querySelector('[data-testid="User-Name"]')?.innerText ||
     article.querySelector('[data-testid="User-Name"]')?.textContent ||
     ''
   );
+}
+
+function __sbXGetDisplayName(article) {
+  const block = article.querySelector('[data-testid="User-Name"]');
+  if (!block) return '';
+
+  const text = String(block.innerText || block.textContent || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith('@'));
+
+  return text || '';
+}
+
+function __sbXIsAdTweet(article) {
+  const socialContext = __sbXGetSocialContextText(article);
+  if (/\b(ad|promoted)\b/.test(socialContext)) return true;
+
+  const headerText = __sbXGetUserNameText(article);
   if (/\b(ad|promoted)\b/.test(headerText)) return true;
 
   const lines = String(article.innerText || article.textContent || '')
@@ -2302,13 +2332,52 @@ function __sbXIsAdTweet(article) {
   return lines.some((line) => line === 'ad' || line === 'promoted');
 }
 
+function __sbXIsBuilderPrompt(text) {
+  return __sbXBuilderPromptPattern.test(String(text || ''));
+}
+
+function __sbXIsPoliticalTweet(article, data) {
+  const handle = String(data?.handle || '').toLowerCase();
+  if (handle && __sbXPoliticalHandleBlocklist.has(handle)) return true;
+
+  const context = [
+    data?.text || '',
+    data?.displayName || '',
+    data?.handle || '',
+    __sbXGetSocialContextText(article),
+    __sbXGetUserNameText(article),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  if (__sbXPoliticalTextPattern.test(context)) return true;
+
+  return /\b(modi|narendra modi|bjp|congress|aap|politics|political|prime minister|president)\b/i.test(context);
+}
+
+function __sbXFormatRunMinutes(durationMs) {
+  const minutes = Math.max(0.1, Math.round((Math.max(0, durationMs) / 60000) * 10) / 10);
+  const formatted = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
+  return `${formatted} minute${formatted === '1' ? '' : 's'}`;
+}
+
+async function __sbXRecordRunStats(payload) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'recordXAutomationRunStats', ...payload }, (res) => {
+      void chrome.runtime.lastError;
+      resolve(res || { ok: false });
+    });
+  });
+}
+
 function __sbXFindTweets(selfHandles) {
   return [...document.querySelectorAll('article[data-testid="tweet"]')]
     .map((article) => ({ article, data: __sbXGetTweetData(article) }))
     .filter(({ article, data }) => {
-      const socialContext = __sbXNormalizeText(article.querySelector('[data-testid="socialContext"]')?.innerText || article.querySelector('[data-testid="socialContext"]')?.textContent || '');
+      const socialContext = __sbXGetSocialContextText(article);
       if (__sbXReplied.has(article)) return false;
       if (__sbXIsAdTweet(article)) return false;
+      if (__sbXIsPoliticalTweet(article, data)) return false;
       if (!article.querySelector('[data-testid="reply"]')) return false;
       if (!data.key) return false;
       if (__sbXProcessedKeys.has(data.key)) return false;
@@ -2327,12 +2396,13 @@ function __sbXGetTweetData(article) {
     '';
   const handle = __sbXExtractHandleFromHref(handleHref);
   const key = __sbXGetTweetKey(article, handle, text);
-  return { text, handle, key };
+  const displayName = __sbXGetDisplayName(article);
+  return { text, handle, key, displayName, isBuilderPrompt: __sbXIsBuilderPrompt(text) };
 }
 
-async function __sbXGenerateReply(tweetText, handle) {
+async function __sbXGenerateReply(tweetText, handle, options = {}) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: 'generateXReply', tweetText, handle }, (res) => {
+    chrome.runtime.sendMessage({ action: 'generateXReply', tweetText, handle, ...options }, (res) => {
       void chrome.runtime.lastError;
       resolve(res?.reply || null);
     });
@@ -2611,6 +2681,7 @@ async function __sbRunXAutomation() {
     return;
   }
   if (__sbXRunning) {
+    __sbXStopReason = 'manual';
     __sbXRunning = false;
     const btn = document.getElementById('__sb_x_auto_btn__');
     if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
@@ -2619,6 +2690,7 @@ async function __sbRunXAutomation() {
   }
 
   __sbXRunning = true;
+  __sbXStopReason = 'finished';
   __sbXProcessedKeys.clear();
   const btn = document.getElementById('__sb_x_auto_btn__');
   if (btn) { btn.classList.add('running'); document.getElementById('__sb_x_auto_label__').textContent = 'Stop'; }
@@ -2627,6 +2699,7 @@ async function __sbRunXAutomation() {
 
   let count = 0;
   let scrollStreak = 0;
+  const runStartedAt = Date.now();
 
   while (__sbXRunning) {
     const selfHandles = __sbXGetCurrentUserHandles();
@@ -2643,12 +2716,19 @@ async function __sbRunXAutomation() {
     __sbXReplied.add(article);
     if (data.key) __sbXProcessedKeys.add(data.key);
 
-    const { text, handle } = data;
+    const { text, handle, isBuilderPrompt } = data;
     if (!text || text.length < 8) continue;
 
     __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
-    const reply = await __sbXGenerateReply(text, handle);
+    const reply = await __sbXGenerateReply(text, handle, { builderPrompt: isBuilderPrompt });
     if (!reply) { await __sbSleep(2000); continue; }
+
+    if (__sbXPreReplyDelayMs > 0) {
+      const waitSeconds = Math.round(__sbXPreReplyDelayMs / 1000);
+      __sbShowBubble(`@${handle}: reply ready — waiting ${waitSeconds}s before posting`, false, { tone: 'status', title: 'X Automation' });
+      await __sbSleep(__sbXPreReplyDelayMs);
+      if (!__sbXRunning) break;
+    }
 
     const ok = await __sbXPostReply(article, reply.slice(0, 240));
     if (ok) {
@@ -2663,7 +2743,16 @@ async function __sbRunXAutomation() {
   __sbXRunning = false;
   if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
   __sbSetStopBtn(false);
-  __sbShowBubble(`Automation finished — replied to ${count} post${count !== 1 ? 's' : ''}.`, true, { tone: 'status', title: 'Done' });
+  const runFinishedAt = Date.now();
+  const durationMs = Math.max(0, runFinishedAt - runStartedAt);
+  await __sbXRecordRunStats({
+    repliedCount: count,
+    durationMs,
+    startedAt: new Date(runStartedAt).toISOString(),
+    finishedAt: new Date(runFinishedAt).toISOString(),
+  });
+  const label = __sbXStopReason === 'manual' ? 'Automation stopped' : 'Automation finished';
+  __sbShowBubble(`${label} — replied to ${count} post${count !== 1 ? 's' : ''} in ${__sbXFormatRunMinutes(durationMs)}.`, true, { tone: 'status', title: 'Done' });
 }
 // ===== END X AUTOMATION =====
 

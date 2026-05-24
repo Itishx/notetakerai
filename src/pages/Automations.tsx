@@ -12,7 +12,7 @@ const steps = [
   "Install Braino and sign in at trybraino.com.",
   "Go to X (twitter.com) — your timeline, any tab.",
   'Open the Braino bar (click the brain or press ⌘I), hit "X Auto".',
-  "Braino reads each tweet, writes a human reply that mentions trybraino.com, and posts — 10 seconds apart so X doesn't rate-limit you.",
+  "Braino reads each eligible tweet, skips ads and political posts, writes a human reply, and waits 3 seconds before posting.",
   'Hit "⏹ Stop" in the brain card at any time to pause.',
 ];
 
@@ -38,7 +38,7 @@ export default function Automations() {
           <em className="text-primary" style={{ fontStyle: "italic" }}>autopilot.</em>
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-10">
-          Braino runs repeatable workflows while you focus on building. First up: X auto-reply — engage your entire timeline with genuine, human-sounding replies every 10 seconds.
+          Braino runs repeatable workflows while you focus on building. First up: X auto-reply — engage your timeline with more human-sounding replies, safer pacing, and live stats synced back to your dashboard.
         </p>
         <Link
           to="/"
@@ -62,7 +62,7 @@ export default function Automations() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-foreground text-lg">X Timeline Auto-Reply</div>
-              <div className="text-sm text-muted-foreground mt-0.5">Replies to posts in your timeline, 10 s apart, AI-generated.</div>
+              <div className="text-sm text-muted-foreground mt-0.5">Replies to posts in your timeline with a 3-second pacing rule and synced run stats.</div>
             </div>
             <span className="text-xs font-semibold px-3 py-1 rounded-full border border-green-500/20 text-green-600/80 bg-green-500/5 flex-shrink-0">Live</span>
           </div>
@@ -83,8 +83,8 @@ export default function Automations() {
           <div className="mx-8 mb-8 flex items-start gap-3 rounded-xl border border-border/50 bg-muted/30 px-5 py-4">
             <Zap className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" strokeWidth={2} />
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Capped at <strong className="text-foreground">30 replies per session</strong>. Each reply naturally mentions{" "}
-              <strong className="text-foreground">trybraino.com</strong> so followers discover the product organically — never spammy.
+              Capped at <strong className="text-foreground">30 replies per session</strong>. Builder-invite posts can mention{" "}
+              <strong className="text-foreground">trybraino.com</strong>, while promoted posts, political posts, and duplicate-looking drafts are filtered out before posting.
             </p>
           </div>
         </div>
