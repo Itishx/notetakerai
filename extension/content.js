@@ -1567,8 +1567,8 @@ function __sbSetGreetingPlaceholder() {
     const firstName = authDisplayName?.split(" ")[0]?.trim();
     const greeting = __sbTimeGreeting();
     input.placeholder = firstName
-      ? `${greeting}, ${firstName} — what's on your mind?`
-      : `${greeting} — what's on your mind?`;
+      ? `${greeting}, ${firstName} — ask anything`
+      : `${greeting} — ask anything`;
   });
 }
 
