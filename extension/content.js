@@ -2221,8 +2221,8 @@ function __sbXFindTweets() {
 }
 
 function __sbXGetTweetData(article) {
-  const spans = [...(article.querySelector('[data-testid="tweetText"]')?.querySelectorAll('span') || [])];
-  const text = spans.map(s => s.textContent).join('').trim();
+  const tweetTextEl = article.querySelector('[data-testid="tweetText"]');
+  const text = tweetTextEl ? (tweetTextEl.innerText || tweetTextEl.textContent || '').trim() : '';
   const handle = article.querySelector('[data-testid="User-Name"] a[href^="/"]')?.getAttribute('href')?.replace('/', '') || '';
   return { text, handle };
 }
@@ -2253,19 +2253,21 @@ async function __sbXFindReplyEditor() {
 async function __sbXInsertText(editable, text) {
   editable.focus();
   await __sbSleep(200);
-  // Place cursor at end
-  try {
-    const range = document.createRange();
-    range.selectNodeContents(editable);
-    range.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-  } catch(e) {}
-  await __sbSleep(100);
-  // Single execCommand call — avoids per-char doubling issues
+
+  // Select all existing content so insertText replaces rather than appends
+  document.execCommand('selectAll', false, null);
+  await __sbSleep(80);
+
+  // Block the browser's native contenteditable insertion so only Draft.js handles it.
+  // execCommand fires a trusted `beforeinput` event — Draft.js processes it and updates
+  // its EditorState, but (in Twitter's version) does not call e.preventDefault(), so the
+  // browser ALSO inserts natively → text appears twice. Our capturing listener prevents that.
+  const blockNative = (e) => { if (e.inputType === 'insertText') e.preventDefault(); };
+  document.addEventListener('beforeinput', blockNative, { capture: true });
   try { document.execCommand('insertText', false, text); } catch(e) {}
-  await __sbSleep(500);
+  document.removeEventListener('beforeinput', blockNative, { capture: true });
+
+  await __sbSleep(600);
 }
 
 async function __sbXWaitForSubmit() {
@@ -2368,7 +2370,7 @@ async function __sbRunXAutomation() {
     const { text, handle } = __sbXGetTweetData(article);
     if (!text || text.length < 8) continue;
 
-    __sbShowBubble(`Generating reply for @${handle || 'user'}…`, false, { tone: 'status', title: 'X Automation' });
+    __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
     const reply = await __sbXGenerateReply(text, handle);
     if (!reply) { await __sbSleep(2000); continue; }
 

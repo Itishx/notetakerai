@@ -304,17 +304,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "generateXReply") {
     const { tweetText, handle } = message;
-    const systemPrompt = `You write short Twitter/X replies. STRICT RULES:
-1. MAX 200 CHARACTERS TOTAL. Count every character. If your reply exceeds 200 chars, rewrite it shorter.
-2. Sound human — warm, direct, no fluff.
-3. Actually engage with what the tweet says in 1 sentence.
-4. End with a natural mention of trybraino.com (the product you're building).
-5. NEVER use more than 1 emoji.
-6. Return ONLY the reply text — no quotes, no explanation, no preamble. Just the reply itself.`;
+    // Use chatHistory to establish the reply-writer persona before the actual tweet.
+    // Passing instructions as `notes` confused the AI (it treated them as "lecture notes").
     fetch(`${BG_API_BASE}/chat-about-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: systemPrompt, message: `Tweet by @${handle || 'user'}: "${tweetText}"` }),
+      body: JSON.stringify({
+        notes: '',
+        chatHistory: [
+          {
+            role: 'user',
+            content: 'You are a Twitter reply writer. I will give you tweets and you will reply. Rules: (1) MAX 200 characters total — count carefully and rewrite shorter if needed. (2) Sound human — warm, direct, conversational. (3) Directly engage with the tweet topic in 1 sentence. (4) End naturally with a mention of trybraino.com. (5) No more than 1 emoji. (6) Return ONLY the reply text — no quotes, no labels, nothing else.',
+          },
+          { role: 'assistant', content: 'Got it. Give me the tweet.' },
+        ],
+        message: `@${handle || 'user'}: "${tweetText}"`,
+      }),
     })
       .then(r => r.json())
       .then(data => sendResponse({ reply: data?.reply || data?.response || null }))
