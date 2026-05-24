@@ -1,4 +1,4 @@
-// SideBrain Popup Controller — Unified Chat UI
+// Braino Popup Controller — Unified Chat UI
 const API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
 // ===== GLOBALS =====
@@ -134,9 +134,9 @@ const STATUS_LABELS = {
 const MODE_HINTS = {
   lecture:  { sub: "Lecture & Audio mode", hint: "Press Enter or tap send to start recording — audio from this tab will be captured and turned into notes." },
   meeting:  { sub: "Meeting & Call mode",  hint: "Press Enter or tap send to start recording — great for multi-speaker calls. Pause & Save between segments." },
-  page:     { sub: "Chat with Page mode",  hint: "Ask anything about what's on the current page. SideBrain reads the page so you don't have to." },
+  page:     { sub: "Chat with Page mode",  hint: "Ask anything about what's on the current page. Braino reads the page so you don't have to." },
   general:  { sub: "General Chat mode",    hint: "Ask me anything — no page context, just a straight conversation." },
-  web:      { sub: "Web Search mode",      hint: "Ask a question and SideBrain will run a real browser search, read the results, and cite the sources." },
+  web:      { sub: "Web Search mode",      hint: "Ask a question and Braino will run a real browser search, read the results, and cite the sources." },
   agent:    { sub: "Browser Agent mode",   hint: "Type a task and the agent will navigate, click, and fill forms on your behalf. Experimental — works best for simple tasks." },
   note:     { sub: "Note mode",            hint: "Ask follow-up questions about this note, generate practice questions, or copy it out anywhere." },
 };
@@ -467,7 +467,7 @@ function renderEmptyStateSurface() {
         </div>
         <div class="empty-state-tip">
           <span class="empty-state-tip-mark" aria-hidden="true"></span>
-          <span><b>Tip.</b> Hit <span class="kbd">⌥ Space</span> from any tab to talk to SideBrain without opening this panel.</span>
+          <span><b>Tip.</b> Hit <span class="kbd">⌥ Space</span> from any tab to talk to Braino without opening this panel.</span>
         </div>
       </div>
     `;
@@ -526,7 +526,7 @@ chrome.storage.local.get(["aiProvider"], (r) => {
 });
 
 function updateModelUI() {
-  if (modelLabel) modelLabel.textContent = currentAiProvider === "claude" ? "Claude Sonnet 4.6" : "SideBrain AI";
+  if (modelLabel) modelLabel.textContent = currentAiProvider === "claude" ? "Claude Sonnet 4.6" : "Braino AI";
   modelPopover?.querySelectorAll(".model-option").forEach((el) => {
     el.classList.toggle("active", el.dataset.provider === currentAiProvider);
   });
@@ -821,13 +821,13 @@ if (onboardingOverlay && onboardingNextBtn) {
 
     document.getElementById("onboardingSignUpBtn")?.addEventListener("click", () => {
       const extId = chrome.runtime.id;
-      chrome.tabs.create({ url: `https://notetakerai.lovable.app/auth/extension?ext=${extId}&mode=signup` });
+      chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}&mode=signup` });
       finishOnboarding();
     });
 
     document.getElementById("onboardingSignInBtn")?.addEventListener("click", () => {
       const extId = chrome.runtime.id;
-      chrome.tabs.create({ url: `https://notetakerai.lovable.app/auth/extension?ext=${extId}&mode=signin` });
+      chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}&mode=signin` });
       finishOnboarding();
     });
   });
@@ -886,7 +886,7 @@ function createRecordingCard() {
     </div>
     <div class="recording-surface">
       <div class="recording-surface-head">Live capture</div>
-      <p class="recording-surface-copy">SideBrain is listening to this tab. Pause when you want to save a segment, then convert everything into structured notes.</p>
+      <p class="recording-surface-copy">Braino is listening to this tab. Pause when you want to save a segment, then convert everything into structured notes.</p>
       <div class="recording-suggested">
         <span class="recording-pill">Highlights will be pulled into your note</span>
         <span class="recording-pill">Ask follow-up questions after conversion</span>
@@ -1052,7 +1052,7 @@ function updateChatContextUI() {
   if (currentMode === "page") chatInput.placeholder = currentPageContext ? "Ask about this page…" : "Ask anything, or tell me what to do…";
   else if (currentMode === "lecture" || currentMode === "meeting") chatInput.placeholder = recordingCardEl ? "Ask about what you just heard…" : "Press ↵ to start recording this tab…";
   else if (currentMode === "web") chatInput.placeholder = "Search the web with sources…";
-  else if (currentMode === "agent") chatInput.placeholder = "Tell SideBrain what to do…";
+  else if (currentMode === "agent") chatInput.placeholder = "Tell Braino what to do…";
   else if (notesMarkdown) chatInput.placeholder = "Ask about this note…";
   else chatInput.placeholder = "Ask anything…";
 
@@ -1347,11 +1347,11 @@ function extractSourceLinks(markdown) {
 }
 
 function getAssistantLabel() {
-  if (currentMode === "web") return "SideBrain · Web";
-  if (currentMode === "agent") return "SideBrain · Delegate";
-  if (notesMarkdown && !currentPageContext) return "SideBrain · Notes";
-  if (currentPageContext) return "SideBrain · Page";
-  return "SideBrain";
+  if (currentMode === "web") return "Braino · Web";
+  if (currentMode === "agent") return "Braino · Delegate";
+  if (notesMarkdown && !currentPageContext) return "Braino · Notes";
+  if (currentPageContext) return "Braino · Page";
+  return "Braino";
 }
 
 function getFollowupSuggestions() {
@@ -1959,7 +1959,7 @@ Use sel= selectors from INTERACTIVE ELEMENTS when available.
 For forms: click field → type → Tab to next field → submit.`;
   }
 
-  const agentSystemPrompt = `You are SideBrain Browser Agent. Automate a real Chrome browser by returning JSON actions.
+  const agentSystemPrompt = `You are Braino Browser Agent. Automate a real Chrome browser by returning JSON actions.
 Respond ONLY with a JSON object or array. Zero prose. Zero explanation. Zero markdown fences.
 
 MINDSET: You are a browser robot. Every task is solved by executing and verifying actions.
@@ -2261,7 +2261,7 @@ const voiceCtxUrl       = document.getElementById("voiceCtxUrl");
 const voiceCtxFavicon   = document.getElementById("voiceCtxFavicon");
 const voiceCtxLiveTxt   = document.getElementById("voiceCtxLiveTxt");
 
-const CAP_LABELS = { listening: "Sidebrain · Listening", processing: "Sidebrain · Thinking", speaking: "Sidebrain · Speaking", idle: "Sidebrain · Ready", acting: "Sidebrain · Acting" };
+const CAP_LABELS = { listening: "Braino · Listening", processing: "Braino · Thinking", speaking: "Braino · Speaking", idle: "Braino · Ready", acting: "Braino · Acting" };
 
 function setOrbState(state) {
   if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
@@ -3099,7 +3099,7 @@ function showUpgradePrompt(feature) {
     <button class="upgrade-prompt-btn">Upgrade</button>
   `;
   el.querySelector(".upgrade-prompt-btn").addEventListener("click", () => {
-    chrome.tabs.create({ url: "https://notetakerai.lovable.app/premium" });
+    chrome.tabs.create({ url: "https://trybraino.com/premium" });
   });
   chatArea.appendChild(el);
   chatArea.scrollTop = chatArea.scrollHeight;
@@ -3160,7 +3160,7 @@ function stopTrackingRecordingTime() {
 }
 
 // ===== AUTH =====
-const WEBSITE_URL = "https://notetakerai.lovable.app";
+const WEBSITE_URL = "https://trybraino.com";
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 let currentAuthUser = null;
@@ -3356,7 +3356,7 @@ syncNotionBtn?.addEventListener("click", async () => {
 
   try {
     const titleMatch = notesMarkdown.match(/^#\s+(.+)$/m);
-    const title = titleMatch ? titleMatch[1] : "SideBrain Notes";
+    const title = titleMatch ? titleMatch[1] : "Braino Notes";
 
     const images = [];
     const imgRegex = /!\[[^\]]*\]\((data:image\/[^)]+)\)/g;

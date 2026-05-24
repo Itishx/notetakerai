@@ -2099,7 +2099,7 @@ function __sbShowUpgrade(feature) {
   `;
   __sbOpenCard({ rich: false });
   document.getElementById("__sb_upgrade_btn__")?.addEventListener("click", () => {
-    window.open("https://notetakerai.lovable.app/#pricing", "_blank");
+    window.open("https://trybraino.com/#pricing", "_blank");
   });
 }
 
@@ -2237,7 +2237,7 @@ async function __sbSyncNotesToNotion() {
 
     if (res.error === "not_connected") {
       if (btn) { btn.textContent = "Connect Notion →"; btn.disabled = false; }
-      btn?.addEventListener("click", () => window.open("https://notetakerai.lovable.app/notion-sync", "_blank"), { once: true });
+      btn?.addEventListener("click", () => window.open("https://trybraino.com/notion-sync", "_blank"), { once: true });
     } else if (res.error) {
       if (btn) { btn.textContent = "Sync failed — retry?"; btn.disabled = false; }
       btn?.addEventListener("click", __sbSyncNotesToNotion, { once: true });
