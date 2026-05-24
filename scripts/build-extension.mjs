@@ -10,6 +10,10 @@ const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "extension");
 const DIST = path.join(ROOT, "dist-extension");
 const OUT_ZIP = path.join(ROOT, "public", "sidebrain-extension.zip");
+const BRAINO_ZIPS = [
+  path.join(ROOT, "public", "braino-extension.zip"),
+  path.join(ROOT, "dist", "braino-extension.zip"),
+];
 
 // JS files to minify (simple whitespace removal, no obfuscation — Chrome flags obfuscated code as malware)
 const JS_FILES = ["popup.js", "background.js", "offscreen.js", "content.js"];
@@ -65,8 +69,14 @@ const archive = archiver("zip", { zlib: { level: 9 } });
 
 output.on("close", () => {
   const kb = (archive.pointer() / 1024).toFixed(1);
-  console.log(`\n  📦  sidebrain-extension.zip → ${kb} KB`);
-  console.log(`      ${OUT_ZIP}\n`);
+  // Also copy to braino-extension.zip locations
+  for (const dest of BRAINO_ZIPS) {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(OUT_ZIP, dest);
+  }
+  console.log(`\n  📦  braino-extension.zip → ${kb} KB`);
+  console.log(`      ${BRAINO_ZIPS[0]}`);
+  console.log(`      ${BRAINO_ZIPS[1]}\n`);
 });
 
 archive.on("error", (err) => { throw err; });
