@@ -2207,6 +2207,7 @@ function __sbSetStopBtn(visible) {
 
 // ===== X / TWITTER AUTOMATION =====
 const __sbXReplied = new WeakSet();
+const __sbXProcessedKeys = new Set();
 let __sbXRunning = false;
 
 function __sbSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -2215,16 +2216,94 @@ function __sbIsOnX() {
   return /^(twitter|x)\.com$/.test(location.hostname);
 }
 
-function __sbXFindTweets() {
+function __sbXExtractHandleFromHref(href) {
+  if (!href) return '';
+  try {
+    const url = new URL(href, location.origin);
+    const first = url.pathname.split('/').filter(Boolean)[0] || '';
+    if (!first) return '';
+    if (/^(home|explore|notifications|messages|compose|search|settings|i)$/.test(first)) return '';
+    return first.replace(/^@/, '').toLowerCase();
+  } catch(e) {
+    return '';
+  }
+}
+
+function __sbXGetCurrentUserHandles() {
+  const handles = new Set();
+  const hrefSelectors = [
+    'a[data-testid="AppTabBar_Profile_Link"]',
+    '[data-testid="SideNav_AccountSwitcher_Button"] a[href^="/"]',
+    'a[aria-label*="Profile"][href^="/"]',
+    'header a[href^="/"]',
+    'nav a[href^="/"]',
+  ];
+
+  for (const selector of hrefSelectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      const handle = __sbXExtractHandleFromHref(el.getAttribute('href') || '');
+      if (handle) handles.add(handle);
+    }
+  }
+
+  const textSelectors = [
+    '[data-testid="SideNav_AccountSwitcher_Button"]',
+    '[data-testid="AppTabBar_Profile_Link"]',
+  ];
+
+  for (const selector of textSelectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      const match = String(el.innerText || el.textContent || '').match(/@([a-z0-9_]{1,32})/i);
+      if (match?.[1]) handles.add(match[1].toLowerCase());
+    }
+  }
+
+  return handles;
+}
+
+function __sbXGetTweetKey(article, handle, text) {
+  const permalink =
+    article.querySelector('a[href*="/status/"] time')?.closest('a[href*="/status/"]') ||
+    [...article.querySelectorAll('a[href*="/status/"]')].find((el) => /\/status\/\d+/.test(el.getAttribute('href') || ''));
+
+  const href = permalink?.getAttribute('href') || '';
+  if (href) {
+    try {
+      const url = new URL(href, location.origin);
+      return url.pathname.replace(/\/analytics$/, '');
+    } catch(e) {}
+  }
+
+  const normalizedHandle = String(handle || '').trim().toLowerCase();
+  const normalizedText = __sbXNormalizeText(text).slice(0, 140);
+  return normalizedHandle || normalizedText ? `${normalizedHandle}::${normalizedText}` : '';
+}
+
+function __sbXFindTweets(selfHandles) {
   return [...document.querySelectorAll('article[data-testid="tweet"]')]
-    .filter(a => !__sbXReplied.has(a) && a.querySelector('[data-testid="reply"]'));
+    .map((article) => ({ article, data: __sbXGetTweetData(article) }))
+    .filter(({ article, data }) => {
+      const socialContext = __sbXNormalizeText(article.querySelector('[data-testid="socialContext"]')?.innerText || article.querySelector('[data-testid="socialContext"]')?.textContent || '');
+      if (__sbXReplied.has(article)) return false;
+      if (!article.querySelector('[data-testid="reply"]')) return false;
+      if (!data.key) return false;
+      if (__sbXProcessedKeys.has(data.key)) return false;
+      if (/you replied|you reposted|you posted/.test(socialContext)) return false;
+      if (data.handle && selfHandles.has(data.handle.toLowerCase())) return false;
+      return true;
+    });
 }
 
 function __sbXGetTweetData(article) {
   const tweetTextEl = article.querySelector('[data-testid="tweetText"]');
   const text = tweetTextEl ? (tweetTextEl.innerText || tweetTextEl.textContent || '').trim() : '';
-  const handle = article.querySelector('[data-testid="User-Name"] a[href^="/"]')?.getAttribute('href')?.replace('/', '') || '';
-  return { text, handle };
+  const handleHref =
+    article.querySelector('[data-testid="User-Name"] a[href^="/"]')?.getAttribute('href') ||
+    article.querySelector('a[href^="/"][role="link"]')?.getAttribute('href') ||
+    '';
+  const handle = __sbXExtractHandleFromHref(handleHref);
+  const key = __sbXGetTweetKey(article, handle, text);
+  return { text, handle, key };
 }
 
 async function __sbXGenerateReply(tweetText, handle) {
@@ -2511,6 +2590,7 @@ async function __sbRunXAutomation() {
   }
 
   __sbXRunning = true;
+  __sbXProcessedKeys.clear();
   const btn = document.getElementById('__sb_x_auto_btn__');
   if (btn) { btn.classList.add('running'); document.getElementById('__sb_x_auto_label__').textContent = 'Stop'; }
   __sbSetStopBtn(true);
@@ -2520,7 +2600,8 @@ async function __sbRunXAutomation() {
   let scrollStreak = 0;
 
   while (__sbXRunning) {
-    const tweets = __sbXFindTweets();
+    const selfHandles = __sbXGetCurrentUserHandles();
+    const tweets = __sbXFindTweets(selfHandles);
     if (!tweets.length) {
       if (++scrollStreak > 8) break; // gave up after ~24s of no new tweets
       window.scrollBy(0, 700);
@@ -2529,10 +2610,11 @@ async function __sbRunXAutomation() {
     }
     scrollStreak = 0;
 
-    const article = tweets[0];
+    const { article, data } = tweets[0];
     __sbXReplied.add(article);
+    if (data.key) __sbXProcessedKeys.add(data.key);
 
-    const { text, handle } = __sbXGetTweetData(article);
+    const { text, handle } = data;
     if (!text || text.length < 8) continue;
 
     __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
