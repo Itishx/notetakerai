@@ -1115,6 +1115,7 @@ function __sbBuildBrainUI() {
       pointer-events: none; opacity: 0; transition: opacity 0.25s;
     }
     #__sb_card_wrap__.visible { opacity: 1; pointer-events: all; }
+    #__sb_card_wrap__.visible #__sb_bubble__ { opacity: 1; pointer-events: all; }
     #__sb_card_wrap__.animating-in #__sb_bubble__ {
       animation: __sb_card_in__ 0.38s cubic-bezier(0.34,1.15,0.64,1) both;
     }
