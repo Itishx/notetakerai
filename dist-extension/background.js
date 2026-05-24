@@ -319,7 +319,7 @@ Return ONLY the reply text. No quotes, no explanation.`;
       body: JSON.stringify({ notes: systemPrompt, message: `Tweet by @${handle || 'user'}: "${tweetText}"` }),
     })
       .then(r => r.json())
-      .then(data => sendResponse({ reply: data?.response || data?.answer || null }))
+      .then(data => sendResponse({ reply: data?.reply || data?.response || null }))
       .catch(() => sendResponse({ reply: null }));
     return true;
   }
