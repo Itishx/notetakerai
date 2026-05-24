@@ -2221,8 +2221,8 @@ function __sbXFindTweets() {
 }
 
 function __sbXGetTweetData(article) {
-  const spans = [...(article.querySelector('[data-testid="tweetText"]')?.querySelectorAll('span') || [])];
-  const text = spans.map(s => s.textContent).join('').trim();
+  const tweetTextEl = article.querySelector('[data-testid="tweetText"]');
+  const text = tweetTextEl ? (tweetTextEl.innerText || tweetTextEl.textContent || '').trim() : '';
   const handle = article.querySelector('[data-testid="User-Name"] a[href^="/"]')?.getAttribute('href')?.replace('/', '') || '';
   return { text, handle };
 }
@@ -2236,15 +2236,29 @@ async function __sbXGenerateReply(tweetText, handle) {
   });
 }
 
+function __sbXGetReplyEditorNow() {
+  const dialogCandidates = [
+    ...document.querySelectorAll('[role="dialog"] [data-testid="tweetTextarea_0"]'),
+    ...document.querySelectorAll('[role="dialog"] [role="textbox"][contenteditable="true"]'),
+  ];
+  const inDialog = dialogCandidates.find((el) => el?.isContentEditable);
+  if (inDialog) return inDialog;
+
+  const all = [
+    ...document.querySelectorAll('[data-testid="tweetTextarea_0"]'),
+    ...document.querySelectorAll('[role="textbox"][contenteditable="true"]'),
+  ].filter((el) => el?.isContentEditable);
+  if (all.length > 1) return all[all.length - 1];
+  return null;
+}
+
 async function __sbXFindReplyEditor() {
   // Poll up to 6s for the reply composer to appear.
   // Priority: inside [role="dialog"] → last textarea on page (> 1 means reply opened)
   const t0 = Date.now();
   while (Date.now() - t0 < 6000) {
-    const inDialog = document.querySelector('[role="dialog"] [data-testid="tweetTextarea_0"]');
-    if (inDialog?.isContentEditable) return inDialog;
-    const all = [...document.querySelectorAll('[data-testid="tweetTextarea_0"]')];
-    if (all.length > 1 && all[all.length - 1].isContentEditable) return all[all.length - 1];
+    const editor = __sbXGetReplyEditorNow();
+    if (editor) return editor;
     await __sbSleep(300);
   }
   return null;
@@ -2253,32 +2267,127 @@ async function __sbXFindReplyEditor() {
 async function __sbXInsertText(editable, text) {
   editable.focus();
   await __sbSleep(200);
-  // Place cursor at end
-  try {
-    const range = document.createRange();
-    range.selectNodeContents(editable);
-    range.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-  } catch(e) {}
-  await __sbSleep(100);
-  // Single execCommand call — avoids per-char doubling issues
+
+  // Select all existing content so insertText replaces rather than appends
+  document.execCommand('selectAll', false, null);
+  await __sbSleep(80);
+
+  // React 17+ (Twitter) registers its event listeners in CAPTURE phase at the root element.
+  // So the order for a beforeinput event is:
+  //   1. Capture at React root → Draft.js fires, updates EditorState (text inserted once)
+  //   2. Bubble up to document → our listener fires, calls e.preventDefault()
+  //   3. execCommand sees defaultPrevented → cancels browser's NATIVE DOM insertion
+  // Result: Draft.js has the text once, browser doesn't double-insert.
+  // Using capture:true would run BEFORE Draft.js, blocking both Draft.js and browser.
+  const blockNative = (e) => { if (e.inputType === 'insertText') e.preventDefault(); };
+  document.addEventListener('beforeinput', blockNative); // bubble phase — runs after Draft.js
   try { document.execCommand('insertText', false, text); } catch(e) {}
-  await __sbSleep(500);
+  document.removeEventListener('beforeinput', blockNative);
+
+  await __sbSleep(600);
+}
+
+function __sbXFindSubmitButton() {
+  const roots = [
+    document.querySelector('[role="dialog"]'),
+    document.querySelector('main'),
+    document,
+  ].filter(Boolean);
+
+  const selectors = [
+    '[data-testid="tweetButton"]',
+    '[data-testid="tweetButtonInline"]',
+    'button[role="button"]',
+  ];
+
+  for (const root of roots) {
+    for (const selector of selectors) {
+      const buttons = [...root.querySelectorAll(selector)];
+      for (const btn of buttons) {
+        const text = (btn.textContent || btn.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const testId = (btn.getAttribute('data-testid') || '').toLowerCase();
+        if (testId === 'tweetbutton' || testId === 'tweetbuttoninline' || /^(reply|post|tweet)$/.test(text)) {
+          return btn;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function __sbXIsSubmitEnabled(btn) {
+  if (!btn) return false;
+  if (btn.disabled) return false;
+  if (btn.getAttribute('aria-disabled') === 'true') return false;
+  const style = window.getComputedStyle(btn);
+  if (style.visibility === 'hidden' || style.display === 'none' || style.pointerEvents === 'none') return false;
+  return true;
 }
 
 async function __sbXWaitForSubmit() {
   for (let i = 0; i < 12; i++) {
-    const btn = document.querySelector('[data-testid="tweetButton"]') ||
-                document.querySelector('[data-testid="tweetButtonInline"]');
-    if (btn) {
-      const rgb = window.getComputedStyle(btn).backgroundColor.match(/\d+/g);
-      if (rgb && +rgb[0] < 200) return btn; // dark bg = enabled
-    }
+    const btn = __sbXFindSubmitButton();
+    if (btn && __sbXIsSubmitEnabled(btn)) return btn;
     await __sbSleep(400);
   }
   return null;
+}
+
+function __sbXForceClick(el) {
+  if (!el) return;
+  try { el.focus?.(); } catch(e) {}
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    try {
+      el.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+      }));
+    } catch(e) {}
+  }
+  try { el.click?.(); } catch(e) {}
+}
+
+async function __sbXWaitForComposerToClose() {
+  for (let i = 0; i < 16; i++) {
+    const editor = __sbXGetReplyEditorNow();
+    if (!editor) return true;
+    await __sbSleep(250);
+  }
+  return false;
+}
+
+async function __sbXSubmitWithShortcut(editable) {
+  if (!editable) return false;
+  try { editable.focus(); } catch(e) {}
+  await __sbSleep(100);
+
+  const combos = [
+    { metaKey: true, ctrlKey: false },
+    { metaKey: false, ctrlKey: true },
+  ];
+
+  for (const combo of combos) {
+    for (const type of ['keydown', 'keypress', 'keyup']) {
+      try {
+        editable.dispatchEvent(new KeyboardEvent(type, {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true,
+          metaKey: combo.metaKey,
+          ctrlKey: combo.ctrlKey,
+        }));
+      } catch(e) {}
+    }
+
+    if (await __sbXWaitForComposerToClose()) return true;
+  }
+
+  return false;
 }
 
 async function __sbXPostReply(article, replyText) {
@@ -2317,9 +2426,22 @@ async function __sbXPostReply(article, replyText) {
     return false;
   }
 
-  submit.click();
+  __sbShowBubble('X Auto: sending reply…', false, { tone: 'status', title: 'X Automation' });
+  __sbXForceClick(submit);
+  let sent = await __sbXWaitForComposerToClose();
+
+  if (!sent) {
+    __sbShowBubble('X Auto: click did not send, trying shortcut…', false, { tone: 'status', title: 'X Automation' });
+    sent = await __sbXSubmitWithShortcut(editable);
+  }
+
+  if (!sent) {
+    __sbShowBubble('X Auto: reply was written but not sent.', false, { tone: 'status', title: 'X Automation' });
+    return false;
+  }
+
   __sbShowBubble('X Auto: reply posted ✓', false, { tone: 'status', title: 'X Automation' });
-  await __sbSleep(2000);
+  await __sbSleep(1200);
 
   // If we navigated to /compose/post, go back to the timeline
   if (navigated) {
@@ -2368,7 +2490,7 @@ async function __sbRunXAutomation() {
     const { text, handle } = __sbXGetTweetData(article);
     if (!text || text.length < 8) continue;
 
-    __sbShowBubble(`Generating reply for @${handle || 'user'}…`, false, { tone: 'status', title: 'X Automation' });
+    __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
     const reply = await __sbXGenerateReply(text, handle);
     if (!reply) { await __sbSleep(2000); continue; }
 
