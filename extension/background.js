@@ -84,17 +84,33 @@ chrome.action.onClicked.addListener((tab) => {
   if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) return;
 
   chrome.storage.local.set({ activeTabId: tab.id });
-  chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => {
-    const err = chrome.runtime.lastError?.message || "";
-    // Only re-inject if the content script genuinely isn't there.
-    // "message port closed" means it IS there but didn't call sendResponse — don't re-inject.
-    if (err.includes("Receiving end does not exist") || err.includes("Could not establish connection")) {
+
+  const sendToggle = (allowRetry, allowInject) => {
+    chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => {
+      const err = chrome.runtime.lastError?.message || "";
+      const missingReceiver =
+        err.includes("Receiving end does not exist") ||
+        err.includes("Could not establish connection");
+
+      if (!missingReceiver) return;
+
+      // Give the manifest-injected content script a moment to finish loading
+      // before we fall back to a manual injection.
+      if (allowRetry) {
+        setTimeout(() => sendToggle(false, allowInject), 180);
+        return;
+      }
+
+      if (!allowInject) return;
+
       chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }, () => {
         void chrome.runtime.lastError;
         chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => { void chrome.runtime.lastError; });
       });
-    }
-  });
+    });
+  };
+
+  sendToggle(true, true);
 });
 
 // Auto-update activeTabId when user switches tabs
