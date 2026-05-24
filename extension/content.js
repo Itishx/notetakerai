@@ -1,3 +1,7 @@
+if (globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ !== `${chrome.runtime?.id || "no-runtime"}:${chrome.runtime?.getManifest?.().version || "0"}`) {
+  globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ = `${chrome.runtime?.id || "no-runtime"}:${chrome.runtime?.getManifest?.().version || "0"}`;
+
+  (() => {
 // Braino Content Script — extracts page text for AI context
 
 // Generate a stable, unique CSS selector for an element (used by browser agent)
@@ -3061,3 +3065,5 @@ if (document.readyState === "loading") {
   __sbBuildBrainUI();
 }
 } // end guard
+  })();
+}
