@@ -1,5 +1,6 @@
 // Background service worker for Braino (MV3)
 let isRecording = false;
+let bgAgentShouldStop = false;
 
 function doCapture(windowId, sendResponse) {
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
@@ -329,9 +330,15 @@ Return ONLY the reply text. No quotes, no explanation.`;
       const tabId = senderTabId || activeTabId || message.senderTabId;
       if (!tabId) { sendResponse({ ok: true }); return; }
       chrome.storage.local.set({ activeTabId: tabId });
+      bgAgentShouldStop = false;
       bgRunBrainAgent(tabId, task);
       sendResponse({ ok: true });
     });
+    return true;
+  }
+  if (message.action === "stopBrainAgent") {
+    bgAgentShouldStop = true;
+    sendResponse({ ok: true });
     return true;
   }
   if (
@@ -634,7 +641,7 @@ async function bgRunBrainAgent(tabId, task) {
       onProgress: async (description) => {
         bgBrainUpdate(currentTabId, `→ ${description}`);
       },
-      shouldStop: () => false,
+      shouldStop: () => bgAgentShouldStop,
     });
     if (adapterMessage) {
       bgBrainUpdate(currentTabId, adapterMessage, true);
@@ -647,6 +654,10 @@ async function bgRunBrainAgent(tabId, task) {
   }
 
   for (let step = 0; step < MAX_STEPS; step++) {
+    if (bgAgentShouldStop) {
+      bgBrainUpdate(currentTabId, "Task stopped.", true);
+      return;
+    }
     const pageInfo = await bgGetAgentPageContext(currentTabId);
 
     let actions;

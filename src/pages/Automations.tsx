@@ -1,85 +1,114 @@
-import { Zap, Twitter, ChevronRight, Download, Play, Square } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Zap, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 
+const XIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
 const steps = [
-  { n: "1", text: "Install the Braino extension and sign in." },
-  { n: "2", text: "Navigate to X (twitter.com) and open your timeline." },
-  { n: "3", text: 'Click the brain button to open Braino, then click "X Auto" in the bar.' },
-  { n: "4", text: "Braino reads each tweet, generates a human reply that subtly mentions trybraino.com, and posts it — 10 seconds apart so X doesn't rate-limit you." },
-  { n: "5", text: 'Click "Stop" in the bar to pause at any time.' },
+  "Install Braino and sign in at trybraino.com.",
+  "Go to X (twitter.com) — your timeline, any tab.",
+  'Open the Braino bar (click the brain or press ⌘I), hit "X Auto".',
+  "Braino reads each tweet, writes a human reply that mentions trybraino.com, and posts — 10 seconds apart so X doesn't rate-limit you.",
+  'Hit "⏹ Stop" in the brain card at any time to pause.',
+];
+
+const coming = [
+  { emoji: "💼", name: "LinkedIn Auto-Comment", desc: "Engage posts in your feed with thoughtful, on-topic comments." },
+  { emoji: "📧", name: "Gmail Auto-Reply Drafts", desc: "Draft replies to unread emails and queue them for your approval." },
+  { emoji: "🔴", name: "Reddit Auto-Comment", desc: "Jump into threads in your subreddits with value-adding replies." },
 ];
 
 export default function Automations() {
   return (
-    <div style={{ minHeight: "100vh", background: "var(--sb-surface, #faf8f5)", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div className="min-h-screen bg-background text-foreground">
       <Navbar />
 
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "80px 24px 120px" }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <span style={{ background: "#fee2e2", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#C9544A", letterSpacing: "0.05em" }}>BETA</span>
-          <span style={{ fontSize: 12, color: "#9B8579", fontWeight: 600, letterSpacing: "0.06em" }}>AUTOMATIONS</span>
-        </div>
-        <h1 style={{ fontSize: "clamp(32px, 5vw, 52px)", fontWeight: 800, lineHeight: 1.1, color: "#1B1410", margin: "0 0 16px", fontFamily: "Georgia, serif" }}>
-          Put your outreach<br />on autopilot.
+      {/* Hero */}
+      <section className="container mx-auto px-6 pt-32 pb-20 text-center max-w-3xl">
+        <p className="text-xs tracking-widest uppercase text-muted-foreground/60 mb-6 font-medium">Automations</p>
+        <h1
+          className="text-4xl md:text-6xl font-normal tracking-tight leading-[1.1] mb-6"
+          style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+        >
+          Outreach on{" "}
+          <em className="text-primary" style={{ fontStyle: "italic" }}>autopilot.</em>
         </h1>
-        <p style={{ fontSize: 18, color: "#6B5248", lineHeight: 1.65, maxWidth: 560, margin: "0 0 48px" }}>
-          Braino can run repeatable workflows for you while you focus on other things. First up: X (Twitter) auto-reply — engage your entire timeline with genuine, human-sounding replies.
+        <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-10">
+          Braino runs repeatable workflows while you focus on building. First up: X auto-reply — engage your entire timeline with genuine, human-sounding replies every 10 seconds.
         </p>
-
-        <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#1B1410", color: "#fff", padding: "12px 20px", borderRadius: 12, fontWeight: 600, fontSize: 14, textDecoration: "none", marginBottom: 64 }}>
-          <Download size={14} /> Get the extension
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 bg-foreground text-background px-6 py-3 rounded-full text-sm font-semibold hover:opacity-90 transition-opacity"
+        >
+          Get the extension
         </Link>
+      </section>
 
-        {/* X Automation card */}
-        <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.08)", padding: "32px 32px 28px", boxShadow: "0 2px 16px rgba(0,0,0,0.06)", marginBottom: 32 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 28 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Twitter size={20} color="#fff" />
+      <div className="container mx-auto px-6">
+        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+      </div>
+
+      {/* X Automation card */}
+      <section className="container mx-auto px-6 py-20 max-w-3xl">
+        <div className="rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+          {/* Card header */}
+          <div className="flex items-center gap-4 p-8 border-b border-border/40">
+            <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center text-background flex-shrink-0">
+              <XIcon />
             </div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#1B1410" }}>X Timeline Auto-Reply</h2>
-              <p style={{ margin: "4px 0 0", fontSize: 14, color: "#9B8579" }}>Replies to posts in your timeline — 10 seconds apart, fully AI-generated.</p>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-foreground text-lg">X Timeline Auto-Reply</div>
+              <div className="text-sm text-muted-foreground mt-0.5">Replies to posts in your timeline, 10 s apart, AI-generated.</div>
             </div>
-            <span style={{ marginLeft: "auto", background: "#f0fdf4", color: "#16a34a", borderRadius: 8, padding: "3px 10px", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>Active</span>
+            <span className="text-xs font-semibold px-3 py-1 rounded-full border border-green-500/20 text-green-600/80 bg-green-500/5 flex-shrink-0">Live</span>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 28 }}>
-            {steps.map((s) => (
-              <div key={s.n} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <span style={{ width: 24, height: 24, borderRadius: "50%", background: "#1B1410", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{s.n}</span>
-                <p style={{ margin: 0, fontSize: 14, color: "#3D2D24", lineHeight: 1.6 }}>{s.text}</p>
+          {/* Steps */}
+          <div className="p-8 flex flex-col gap-5">
+            {steps.map((s, i) => (
+              <div key={i} className="flex gap-4 items-start">
+                <span className="w-6 h-6 rounded-full bg-foreground text-background text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                  {i + 1}
+                </span>
+                <p className="text-sm text-muted-foreground leading-relaxed">{s}</p>
               </div>
             ))}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", background: "#faf8f5", borderRadius: 12, border: "1px solid rgba(0,0,0,0.06)" }}>
-            <Zap size={14} color="#C9544A" />
-            <span style={{ fontSize: 13, color: "#6B5248", lineHeight: 1.5 }}>
-              Replies are capped at 30 per session. Each reply subtly includes <strong>trybraino.com</strong> so followers discover the product organically.
-            </span>
+          {/* Note strip */}
+          <div className="mx-8 mb-8 flex items-start gap-3 rounded-xl border border-border/50 bg-muted/30 px-5 py-4">
+            <Zap className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" strokeWidth={2} />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Capped at <strong className="text-foreground">30 replies per session</strong>. Each reply naturally mentions{" "}
+              <strong className="text-foreground">trybraino.com</strong> so followers discover the product organically — never spammy.
+            </p>
           </div>
         </div>
+      </section>
 
-        {/* Coming soon cards */}
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: "#9B8579", letterSpacing: "0.07em", margin: "48px 0 16px" }}>COMING SOON</h3>
-        {[
-          { icon: "💼", name: "LinkedIn Auto-Comment", desc: "Engage posts in your LinkedIn feed with thoughtful comments." },
-          { icon: "📧", name: "Gmail Auto-Reply Drafts", desc: "Draft replies to unread emails and queue them for your approval." },
-          { icon: "🔴", name: "Reddit Auto-Comment", desc: "Join threads in your subreddits with relevant, value-adding replies." },
-        ].map((a) => (
-          <div key={a.name} style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.07)", padding: "20px 24px", marginBottom: 12, display: "flex", alignItems: "center", gap: 16, opacity: 0.6 }}>
-            <span style={{ fontSize: 24 }}>{a.icon}</span>
-            <div>
-              <div style={{ fontWeight: 700, color: "#1B1410", fontSize: 15 }}>{a.name}</div>
-              <div style={{ fontSize: 13, color: "#9B8579", marginTop: 2 }}>{a.desc}</div>
+      {/* Coming soon */}
+      <section className="container mx-auto px-6 pb-32 max-w-3xl">
+        <p className="text-xs tracking-widest uppercase text-muted-foreground/50 mb-6 font-medium">Coming soon</p>
+        <div className="flex flex-col gap-3">
+          {coming.map((a) => (
+            <div
+              key={a.name}
+              className="flex items-center gap-4 p-5 rounded-2xl border border-border/40 bg-card/20 opacity-60 cursor-default"
+            >
+              <span className="text-2xl">{a.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-foreground text-sm">{a.name}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{a.desc}</div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
             </div>
-            <ChevronRight size={16} color="#C9544A" style={{ marginLeft: "auto" }} />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

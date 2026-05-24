@@ -1389,8 +1389,10 @@ if (__sbContextOk()) {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
         __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino" });
+        __sbSetStopBtn(false);
       } else {
         __sbShowBubble(msg.text, false, { tone: "status" });
+        __sbSetStopBtn(true);
       }
     }
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
@@ -1876,6 +1878,7 @@ function __sbBuildBrainUI() {
       <div class="sb-card-header">
         <button class="sb-card-header-btn" type="button" data-sb-speak>Speak</button>
         <button class="sb-card-header-btn" type="button" data-sb-copy>Copy</button>
+        <button class="sb-card-header-btn" id="__sb_stop_btn__" type="button" data-sb-stop style="display:none;background:#fee2e2;color:#C9544A;">⏹ Stop</button>
         <button class="sb-card-header-btn" type="button" data-sb-close>×</button>
       </div>
       <div class="sb-card-scroll"></div>
@@ -1968,6 +1971,14 @@ function __sbBuildBrainUI() {
   // Card header buttons (wired once, not per-show)
   const bubble = document.getElementById("__sb_bubble__");
   bubble.querySelector("[data-sb-close]").addEventListener("click", () => __sbCollapseCard());
+  document.getElementById("__sb_stop_btn__").addEventListener("click", () => {
+    if (__sbXRunning) {
+      __sbXRunning = false;
+    }
+    chrome.runtime.sendMessage({ action: "stopBrainAgent" }, () => { void chrome.runtime.lastError; });
+    __sbSetStopBtn(false);
+    __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
+  });
   bubble.querySelector("[data-sb-copy]").addEventListener("click", async (ev) => {
     const btn = ev.currentTarget;
     try {
@@ -2189,6 +2200,11 @@ function __sbInitCardDrag(wrap) {
   });
 }
 
+function __sbSetStopBtn(visible) {
+  const btn = document.getElementById("__sb_stop_btn__");
+  if (btn) btn.style.display = visible ? "inline-flex" : "none";
+}
+
 // ===== X / TWITTER AUTOMATION =====
 const __sbXReplied = new WeakSet();
 let __sbXRunning = false;
@@ -2294,7 +2310,7 @@ async function __sbRunXAutomation() {
   __sbXRunning = true;
   const btn = document.getElementById('__sb_x_auto_btn__');
   if (btn) { btn.classList.add('running'); document.getElementById('__sb_x_auto_label__').textContent = 'Stop'; }
-
+  __sbSetStopBtn(true);
   __sbShowBubble('X Automation started — scanning your timeline…', false, { tone: 'status', title: 'X Automation' });
 
   let count = 0;
@@ -2332,6 +2348,7 @@ async function __sbRunXAutomation() {
 
   __sbXRunning = false;
   if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
+  __sbSetStopBtn(false);
   __sbShowBubble(`Automation finished — replied to ${count} post${count !== 1 ? 's' : ''}.`, true, { tone: 'status', title: 'Done' });
 }
 // ===== END X AUTOMATION =====
