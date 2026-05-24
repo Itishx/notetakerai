@@ -2292,20 +2292,12 @@ async function __sbXPostReply(article, replyText) {
 
   __sbShowBubble(`X Auto: typing ${replyText.length} chars…`, false, { tone: 'status', title: 'X Automation' });
 
-  // Type char-by-char — execCommand('insertText') triggers Draft.js onChange
-  // without being detected as paste (paste disables the Reply button)
+  // Type char-by-char using execCommand only — no synthetic keyboard events
+  // (dispatching keydown + execCommand was doubling each character)
   for (const char of replyText) {
     if (!__sbXRunning) return false;
-    try {
-      document.execCommand('insertText', false, char);
-    } catch(e) {
-      try {
-        editable.dispatchEvent(new InputEvent('beforeinput', {
-          inputType: 'insertText', data: char, bubbles: true, cancelable: true,
-        }));
-      } catch(e2) {}
-    }
-    await __sbSleep(20);
+    try { document.execCommand('insertText', false, char); } catch(e) {}
+    await __sbSleep(25);
   }
   await __sbSleep(700);
 

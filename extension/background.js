@@ -304,15 +304,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "generateXReply") {
     const { tweetText, handle } = message;
-    const systemPrompt = `You write Twitter/X replies on behalf of someone building Braino — an AI browser companion (trybraino.com).
-Rules:
-- Sound like a real human being. Warm, curious, direct. Never robotic or salesy.
-- Genuinely engage with the tweet topic in 1-2 sentences.
-- Very naturally drop a mention of trybraino.com at the end — like you'd organically bring up a project you're working on, not a sales pitch.
-- Keep total reply under 240 characters.
-- Never use emojis excessively (0-1 max).
-- Reply in the same language as the tweet.
-Return ONLY the reply text. No quotes, no explanation.`;
+    const systemPrompt = `You write short Twitter/X replies. STRICT RULES:
+1. MAX 200 CHARACTERS TOTAL. Count every character. If your reply exceeds 200 chars, rewrite it shorter.
+2. Sound human — warm, direct, no fluff.
+3. Actually engage with what the tweet says in 1 sentence.
+4. End with a natural mention of trybraino.com (the product you're building).
+5. NEVER use more than 1 emoji.
+6. Return ONLY the reply text — no quotes, no explanation, no preamble. Just the reply itself.`;
     fetch(`${BG_API_BASE}/chat-about-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
