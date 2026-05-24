@@ -144,7 +144,7 @@ export default function BrainMascot() {
     flipX: false,
     lastT: 0,
     scrolling: false,
-    scrollTimer: 0 as ReturnType<typeof setTimeout>,
+    scrollTimer: null as ReturnType<typeof setTimeout> | null,
   });
 
   // RAF physics + animation loop

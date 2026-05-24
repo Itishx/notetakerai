@@ -295,7 +295,7 @@ export default function AssistantPanel() {
   }
 
   async function refreshPageContext() {
-    const payload = await requestFromHost("sidebrain:request-page-context");
+    const payload = (await requestFromHost("sidebrain:request-page-context")) as any;
     if (payload?.pageContext) {
       setPageContext(payload.pageContext as AssistantPageContext);
       return payload.pageContext as AssistantPageContext;
@@ -304,7 +304,7 @@ export default function AssistantPanel() {
   }
 
   async function runHostAction(action: AgentAction) {
-    const payload = await requestFromHost("sidebrain:run-action", { action });
+    const payload = (await requestFromHost("sidebrain:run-action", { action })) as any;
     return payload?.result || payload;
   }
 
@@ -457,7 +457,7 @@ export default function AssistantPanel() {
             const error = typeof result?.error === "string" ? result.error : "";
             history.push({
               type: action.type,
-              description: action.description,
+              description: (action as any).description,
               result: error ? { success: false, error } : { success: true, text: typeof result?.text === "string" ? result.text : undefined },
             });
 
@@ -546,7 +546,7 @@ export default function AssistantPanel() {
         const error = typeof result?.error === "string" ? result.error : "";
         history.push({
           type: action.type,
-          description: action.description,
+          description: (action as any).description,
           result: error
             ? { success: false, error }
             : { success: true, text: typeof result?.text === "string" ? result.text : undefined },
