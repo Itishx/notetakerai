@@ -312,7 +312,7 @@ export default function Index() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const proPrice = isIndia === null ? "…" : isIndia ? "₹299" : "$12";
+  const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
   const proPer = isIndia === null ? "" : "/ month";
 
   return (
@@ -380,6 +380,10 @@ export default function Index() {
             <a href="/braino-extension.zip" download style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
               Install for Chrome
+            </a>
+            <a href="https://raw.githubusercontent.com/Itishx/notetakerai/main/public/braino-extension.zip" download="braino-extension.zip" style={{ ...btnGhost, color: "var(--sb-ink-3)" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13M7 12l5 5 5-5"/><path d="M5 21h14"/></svg>
+              Download latest
             </a>
             <a href="#delegate" style={{ ...btnGhost, color: "var(--sb-ink-3)" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
               Watch a 60s demo <ArrowRightIcon />
@@ -967,7 +971,7 @@ export default function Index() {
             {[
               { heading:"Product",links:[["#features","Features"],["#delegate","Delegate"],["#speed","Speed"],["#dashboard","Dashboard"],["#pricing","Pricing"]] },
               { heading:"Install",links:[["/braino-extension.zip","Chrome"],["/braino-extension.zip","Arc"],["/braino-extension.zip","Brave"],["/braino-extension.zip","Edge"],["","Desktop app (coming later)"],["#","Firefox (soon)"]] },
-              { heading:"Company",links:[["#","Manifesto"],["#","Changelog"],["#","Privacy"],["#","Terms"],["#","Contact"]] },
+              { heading:"Company",links:[["#","Manifesto"],["#","Changelog"],["/privacy","Privacy"],["/terms","Terms"],["/contact","Contact"]] },
             ].map(({heading,links})=>(
               <div key={heading}>
                 <h5 style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:"var(--sb-ink-3)",margin:"0 0 14px" }}>{heading}</h5>
