@@ -2209,6 +2209,7 @@ function __sbSetStopBtn(visible) {
 const __sbXReplied = new WeakSet();
 const __sbXProcessedKeys = new Set();
 let __sbXRunning = false;
+const __sbXReplyDelayMs = 5000;
 
 function __sbSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -2279,12 +2280,35 @@ function __sbXGetTweetKey(article, handle, text) {
   return normalizedHandle || normalizedText ? `${normalizedHandle}::${normalizedText}` : '';
 }
 
+function __sbXIsAdTweet(article) {
+  const socialContext = __sbXNormalizeText(
+    article.querySelector('[data-testid="socialContext"]')?.innerText ||
+    article.querySelector('[data-testid="socialContext"]')?.textContent ||
+    ''
+  );
+  if (/\b(ad|promoted)\b/.test(socialContext)) return true;
+
+  const headerText = __sbXNormalizeText(
+    article.querySelector('[data-testid="User-Name"]')?.innerText ||
+    article.querySelector('[data-testid="User-Name"]')?.textContent ||
+    ''
+  );
+  if (/\b(ad|promoted)\b/.test(headerText)) return true;
+
+  const lines = String(article.innerText || article.textContent || '')
+    .split('\n')
+    .map((line) => __sbXNormalizeText(line))
+    .filter(Boolean);
+  return lines.some((line) => line === 'ad' || line === 'promoted');
+}
+
 function __sbXFindTweets(selfHandles) {
   return [...document.querySelectorAll('article[data-testid="tweet"]')]
     .map((article) => ({ article, data: __sbXGetTweetData(article) }))
     .filter(({ article, data }) => {
       const socialContext = __sbXNormalizeText(article.querySelector('[data-testid="socialContext"]')?.innerText || article.querySelector('[data-testid="socialContext"]')?.textContent || '');
       if (__sbXReplied.has(article)) return false;
+      if (__sbXIsAdTweet(article)) return false;
       if (!article.querySelector('[data-testid="reply"]')) return false;
       if (!data.key) return false;
       if (__sbXProcessedKeys.has(data.key)) return false;
@@ -2621,6 +2645,10 @@ async function __sbRunXAutomation() {
 
     const { text, handle } = data;
     if (!text || text.length < 8) continue;
+
+    __sbShowBubble(`@${handle}: waiting 5s before reply…`, false, { tone: 'status', title: 'X Automation' });
+    await __sbSleep(__sbXReplyDelayMs);
+    if (!__sbXRunning) break;
 
     __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
     const reply = await __sbXGenerateReply(text, handle);
