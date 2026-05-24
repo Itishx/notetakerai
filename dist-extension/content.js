@@ -1133,12 +1133,11 @@ function __sbBuildBrainUI() {
       position: relative; width: 100%;
       height: auto; max-height: min(72vh, 700px); min-height: 120px;
       display: flex; flex-direction: column; overflow: hidden;
-      background: rgba(255,255,255,0.14); border-radius: 24px;
-      border: 1px solid rgba(255,255,255,0.38);
-      box-shadow: 0 40px 100px rgba(27,23,19,0.28), 0 8px 24px rgba(27,23,19,0.12),
-                  inset 0 1px 0 rgba(255,255,255,0.65), inset 0 -1px 0 rgba(255,255,255,0.12);
-      backdrop-filter: blur(64px) saturate(200%) brightness(1.08);
-      -webkit-backdrop-filter: blur(64px) saturate(200%) brightness(1.08);
+      background: rgba(252,248,244,0.97); border-radius: 24px;
+      border: 1px solid rgba(65,48,40,0.1);
+      box-shadow: 0 40px 100px rgba(27,23,19,0.32), 0 8px 24px rgba(27,23,19,0.14);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       color: #1B1713; resize: none;
     }
     .sb-card-header {
@@ -1313,12 +1312,11 @@ function __sbBuildBrainUI() {
   document.getElementById("__sb_brain_btn__").style.display = "none";
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
 
-  // ⌘B / Ctrl+B — toggle brain
+  // ⌘I / Ctrl+I — toggle brain
   document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
-      const tag = document.activeElement?.tagName?.toLowerCase();
-      const isEditing = ["input", "textarea"].includes(tag) || document.activeElement?.isContentEditable;
-      if (isEditing) return;
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "i") {
+      // Only block if typing inside the extension's own inputs — not page inputs
+      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__")) return;
       e.preventDefault();
       __sbToggleBrain();
     }
@@ -1438,10 +1436,13 @@ function __sbOpenCard(options = {}) {
   const wrap = document.getElementById("__sb_card_wrap__");
   if (!wrap) return;
   __sbRefreshInlineOwner();
+  // Hide the bar — card has its own follow-up input
+  document.getElementById("__sb_bar__")?.classList.remove("open");
   wrap.classList.add("visible", "animating-in");
   requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
   if (options.rich) setTimeout(() => __sbStartOrbit(), 60);
   else __sbStopOrbit();
+  __sbInitCardDrag(wrap);
 }
 
 function __sbCollapseCard() {
@@ -1479,6 +1480,68 @@ function __sbStopOrbit() {
   // Restore main brain visibility
   const mainBrain = document.getElementById("__sb_brain_btn__");
   if (mainBrain) mainBrain.style.visibility = "";
+}
+
+function __sbInitCardDrag(wrap) {
+  if (wrap.dataset.dragBound) return;
+  wrap.dataset.dragBound = "1";
+  const header = wrap.querySelector(".sb-card-header");
+  const bubble = document.getElementById("__sb_bubble__");
+  if (!header || !bubble) return;
+
+  // Add resize grip in bottom-right corner
+  if (!wrap.querySelector(".sb-resize-handle")) {
+    const grip = document.createElement("div");
+    grip.className = "sb-resize-handle";
+    grip.style.cssText = "position:absolute;bottom:4px;right:4px;width:14px;height:14px;cursor:se-resize;z-index:10;opacity:0.4;";
+    grip.innerHTML = `<svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 3 L3 9 M9 6 L6 9"/></svg>`;
+    wrap.appendChild(grip);
+
+    let rw = 0, rh = 0, rx = 0, ry = 0, resizing = false;
+    grip.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      resizing = true;
+      const rect = bubble.getBoundingClientRect();
+      rw = rect.width; rh = rect.height; rx = e.clientX; ry = e.clientY;
+      e.preventDefault(); e.stopPropagation();
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!resizing) return;
+      bubble.style.width = Math.max(280, rw + e.clientX - rx) + "px";
+      bubble.style.height = Math.max(120, rh + e.clientY - ry) + "px";
+      bubble.style.maxHeight = bubble.style.height;
+    });
+    document.addEventListener("mouseup", () => { resizing = false; });
+  }
+
+  // Drag from header
+  header.style.cursor = "grab";
+  let dragging = false, ox = 0, oy = 0;
+
+  function pin() {
+    const rect = wrap.getBoundingClientRect();
+    wrap.style.left = rect.left + "px";
+    wrap.style.top = rect.top + "px";
+    wrap.style.transform = "none";
+  }
+
+  header.addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || e.target.closest("button")) return;
+    dragging = true;
+    pin();
+    ox = e.clientX - wrap.getBoundingClientRect().left;
+    oy = e.clientY - wrap.getBoundingClientRect().top;
+    header.style.cursor = "grabbing";
+    e.preventDefault();
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    wrap.style.left = (e.clientX - ox) + "px";
+    wrap.style.top = (e.clientY - oy) + "px";
+  });
+  document.addEventListener("mouseup", () => {
+    if (dragging) { dragging = false; header.style.cursor = "grab"; }
+  });
 }
 
 function __sbTimeGreeting() {
