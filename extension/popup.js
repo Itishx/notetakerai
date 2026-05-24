@@ -1781,6 +1781,28 @@ function executeAgentAction(actionObj) {
   });
 }
 
+function getSiteAdapterContext() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "getSiteAdapterContext" }, (res) => {
+      if (chrome.runtime.lastError || res?.error) {
+        resolve({ site: "generic", url: "", title: "" });
+      } else {
+        resolve(res || { site: "generic", url: "", title: "" });
+      }
+    });
+  });
+}
+
+function executeSiteAdapterAction(actionObj) {
+  return new Promise((resolve) => {
+    const msg = { action: "siteAdapterAction", ...actionObj };
+    chrome.runtime.sendMessage(msg, (res) => {
+      if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
+      else resolve(res || { error: "No response" });
+    });
+  });
+}
+
 // Lightweight page snapshot — URL, title, first 500 chars of visible text
 // Used to verify the agent actually landed where it intended
 async function getPageSnapshot() {
@@ -1804,6 +1826,278 @@ async function getPageSnapshot() {
 
 // Actions after which we capture a snapshot so the agent can verify landing
 const SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
+
+function parseAdapterTask(task, siteContext) {
+  const raw = String(task || "").trim();
+  const text = raw.toLowerCase();
+  const currentSite = siteContext?.site || "generic";
+  const onSpotify = currentSite === "spotify" || /\bspotify\b/.test(text);
+  const wantsGoogleDoc = /\bgoogle docs?\b|\bgdoc\b/.test(text);
+
+  const quotedAdd = raw.match(/add\s+["“](.+?)["”]\s+to\s+(?:my\s+)?playlist\s+["“](.+?)["”](?:\s+on\s+spotify)?/i);
+  if (onSpotify && quotedAdd) {
+    return { adapter: "spotify", intent: "addSongToPlaylist", song: quotedAdd[1].trim(), playlist: quotedAdd[2].trim() };
+  }
+
+  const addMatch = raw.match(/add\s+(?:the\s+song\s+|song\s+)?(.+?)\s+to\s+(?:my\s+)?playlist\s+(.+?)(?:\s+on\s+spotify)?$/i);
+  if (onSpotify && addMatch) {
+    return { adapter: "spotify", intent: "addSongToPlaylist", song: addMatch[1].trim(), playlist: addMatch[2].trim() };
+  }
+
+  const quotedPlay = raw.match(/play\s+["“](.+?)["”]\s+from\s+(?:my\s+)?playlist\s+["“](.+?)["”](?:\s+on\s+spotify)?/i);
+  if (onSpotify && quotedPlay) {
+    return { adapter: "spotify", intent: "playSongFromPlaylist", song: quotedPlay[1].trim(), playlist: quotedPlay[2].trim() };
+  }
+
+  const playMatch = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)\s+from\s+(?:my\s+)?playlist\s+(.+?)(?:\s+on\s+spotify)?$/i);
+  if (onSpotify && playMatch) {
+    return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
+  }
+
+  const articlePatterns = [
+    /search for\s+(.+?)\s+and\s+(?:write|draft|make)\s+(?:about it\s+)?(?:as\s+an?\s+article\s+)?in\s+(?:a\s+)?google docs?/i,
+    /research\s+(.+?)\s+and\s+(?:write|draft|make)\s+(?:an?\s+article\s+)?in\s+(?:a\s+)?google docs?/i,
+    /write\s+an?\s+article\s+about\s+(.+?)\s+in\s+(?:a\s+)?google docs?/i,
+  ];
+
+  if (wantsGoogleDoc) {
+    for (const pattern of articlePatterns) {
+      const match = raw.match(pattern);
+      if (match) {
+        return { adapter: "google-docs", intent: "researchArticle", topic: match[1].trim() };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function buildArticleDraftFromWebSearch(topic) {
+  const searchData = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "performWebSearch", query: topic }, (res) => {
+      if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
+      else resolve(res || { error: "No search response" });
+    });
+  });
+
+  if (searchData?.error) throw new Error(searchData.error);
+  if (!searchData?.results?.length) throw new Error(`I couldn't find enough live results for "${topic}".`);
+
+  const response = await fetch(`${API_BASE}/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      aiProvider: currentAiProvider,
+      pageContext: buildWebSearchPageContext(topic, searchData),
+      message: `Use the live web search results in page context to draft an article for a Google Doc.
+
+Return ONLY JSON. No markdown fences. Format:
+{"title":"short article title","body":"multi-paragraph article body"}
+
+Rules:
+- The title must be concise and human-readable.
+- The body must be 4-7 paragraphs of clean prose.
+- Do not include a byline.
+- Only use facts supported by the provided search snippets.
+- If the snippets are thin, write a shorter and more cautious article.`,
+    }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Article drafting failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const reply = String(data.reply || "").trim();
+  const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/(\{[\s\S]*\})/);
+  const json = (match?.[1] ?? match?.[0] ?? reply).trim();
+  const parsed = JSON.parse(json);
+
+  if (!parsed?.title || !parsed?.body) {
+    throw new Error("The article draft came back in an unexpected format.");
+  }
+
+  return {
+    title: String(parsed.title).trim(),
+    body: String(parsed.body).trim(),
+  };
+}
+
+async function runPopupAdapterStep({ thinkingBlock, history, description, type, run, onStatus }) {
+  if (onStatus) onStatus(description);
+  const stepEl = agentAddStep(thinkingBlock, description);
+  const result = await run();
+  history.push({ type: type || "adapter", description, result });
+  agentMarkStepResult(stepEl, !result?.error, result?.error);
+  if (result?.error) throw new Error(result.error);
+  return result;
+}
+
+async function tryRunPopupSiteAdapter(task, thinkingBlock, history, options = {}) {
+  const siteContext = await getSiteAdapterContext();
+  const parsed = parseAdapterTask(task, siteContext);
+  if (!parsed) return null;
+
+  const onStatus = options.onStatus;
+  const shouldStop = options.shouldStop || (() => false);
+
+  if (parsed.adapter === "spotify" && parsed.intent === "addSongToPlaylist") {
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Open Spotify search for "${parsed.song}"`,
+      type: "navigate",
+      onStatus,
+      run: async () => {
+        const result = await executeAgentAction({
+          type: "navigate",
+          url: `https://open.spotify.com/search/${encodeURIComponent(parsed.song)}`,
+          description: `Open Spotify search for "${parsed.song}"`,
+        });
+        if (!result?.error) {
+          await waitForTabReady(6000);
+          await new Promise((resolve) => setTimeout(resolve, 900));
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop()) throw new Error("Stopped.");
+
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Add "${parsed.song}" to the exact playlist "${parsed.playlist}"`,
+      type: "spotifyAddTrackToPlaylist",
+      onStatus,
+      run: () => executeSiteAdapterAction({
+        type: "spotifyAddTrackToPlaylist",
+        songName: parsed.song,
+        playlistName: parsed.playlist,
+      }),
+    });
+
+    return `Added **${parsed.song}** to **${parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "spotify" && parsed.intent === "playSongFromPlaylist") {
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: "Open your Spotify playlists library",
+      type: "navigate",
+      onStatus,
+      run: async () => {
+        const result = await executeAgentAction({
+          type: "navigate",
+          url: "https://open.spotify.com/collection/playlists",
+          description: "Open your Spotify playlists library",
+        });
+        if (!result?.error) {
+          await waitForTabReady(6000);
+          await new Promise((resolve) => setTimeout(resolve, 900));
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop()) throw new Error("Stopped.");
+
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Open the exact playlist "${parsed.playlist}"`,
+      type: "spotifyOpenPlaylist",
+      onStatus,
+      run: async () => {
+        const result = await executeSiteAdapterAction({
+          type: "spotifyOpenPlaylist",
+          playlistName: parsed.playlist,
+        });
+        if (!result?.error) {
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          const verify = await getSiteAdapterContext();
+          if (!verify?.currentPlaylistName || verify.currentPlaylistName.trim().toLowerCase() !== parsed.playlist.trim().toLowerCase()) {
+            return { error: `Opened the wrong playlist. Expected "${parsed.playlist}", got "${verify?.currentPlaylistName || "unknown"}".` };
+          }
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop()) throw new Error("Stopped.");
+
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Play "${parsed.song}" from "${parsed.playlist}"`,
+      type: "spotifyPlayTrackFromCurrentPlaylist",
+      onStatus,
+      run: () => executeSiteAdapterAction({
+        type: "spotifyPlayTrackFromCurrentPlaylist",
+        songName: parsed.song,
+      }),
+    });
+
+    return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "google-docs" && parsed.intent === "researchArticle") {
+    const draft = await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Research "${parsed.topic}" on the live web`,
+      type: "web_search",
+      onStatus,
+      run: async () => {
+        const article = await buildArticleDraftFromWebSearch(parsed.topic);
+        return { success: true, ...article };
+      },
+    });
+
+    if (shouldStop()) throw new Error("Stopped.");
+
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: "Open a fresh Google Doc",
+      type: "navigate",
+      onStatus,
+      run: async () => {
+        const result = await executeAgentAction({
+          type: "navigate",
+          url: "https://docs.new",
+          description: "Open a fresh Google Doc",
+        });
+        if (!result?.error) {
+          await waitForTabReady(8000);
+          await new Promise((resolve) => setTimeout(resolve, 1800));
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop()) throw new Error("Stopped.");
+
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Write the article into the Google Doc body`,
+      type: "googleDocsWriteArticle",
+      onStatus,
+      run: () => executeSiteAdapterAction({
+        type: "googleDocsWriteArticle",
+        title: draft.title,
+        body: draft.body,
+      }),
+    });
+
+    return `Drafted an article about **${parsed.topic}** in a Google Doc.`;
+  }
+
+  return null;
+}
 
 // Zero-LLM fast paths for simple deterministic tasks
 function tryFastPath(task, history) {
@@ -2519,6 +2813,21 @@ function runAgentLoopForVoice(task) {
     const MAX = 20;
     let iterations = 0;
 
+    try {
+      const adapterMessage = await tryRunPopupSiteAdapter(task, thinkingBlock, history, {
+        shouldStop: () => agentShouldStop || !voiceActive,
+        onStatus: (description) => setSubtitles(task, description),
+      });
+      if (adapterMessage) {
+        finish(adapterMessage);
+        return;
+      }
+    } catch (e) {
+      agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
+      finish(`Error: ${e.message}`);
+      return;
+    }
+
     while (iterations++ < MAX) {
       if (agentShouldStop || !voiceActive) { finish("Stopped."); return; }
 
@@ -2654,6 +2963,24 @@ async function runAgentLoop(task) {
     saveChatMessages();
     setAgentRunningUI(false);
   };
+
+  try {
+    const adapterMessage = await tryRunPopupSiteAdapter(task, thinkingBlock, history, {
+      shouldStop: () => agentShouldStop,
+    });
+    if (adapterMessage) {
+      agentFinalizeBlock(thinkingBlock, history.length);
+      chatMessages.push({ role: "assistant", content: adapterMessage });
+      renderChatMessages();
+      saveChatMessages();
+      setAgentRunningUI(false);
+      return;
+    }
+  } catch (e) {
+    agentAddStep(thinkingBlock, `⚠️ ${e.message}`, "error");
+    finish(`⚠️ Adapter error: ${e.message}`);
+    return;
+  }
 
   while (true) {
     if (agentShouldStop) { finish("⏹ Stopped."); return; }
@@ -3543,6 +3870,112 @@ async function runRemoteCommand(cmd, token) {
     agentAddStep(remoteBlock, description, ok ? "step" : "error");
     await updateRemoteCommand(cmd.id, token, { steps });
   };
+
+  try {
+    const adapterMessage = await (async () => {
+      const siteContext = await getSiteAdapterContext();
+      const parsed = parseAdapterTask(cmd.task, siteContext);
+      if (!parsed) return null;
+
+      const runRemoteAdapterStep = async (description, type, run) => {
+        const result = await run();
+        history.push({ type: type || "adapter", description, result });
+        await pushStep(description, !result?.error, result?.snapshot || null);
+        if (result?.error) throw new Error(result.error);
+        return result;
+      };
+
+      if (parsed.adapter === "spotify" && parsed.intent === "addSongToPlaylist") {
+        await runRemoteAdapterStep(`Open Spotify search for "${parsed.song}"`, "navigate", async () => {
+          const result = await executeAgentAction({
+            type: "navigate",
+            url: `https://open.spotify.com/search/${encodeURIComponent(parsed.song)}`,
+            description: `Open Spotify search for "${parsed.song}"`,
+          });
+          if (!result?.error) {
+            await waitForTabReady(6000);
+            await new Promise(r => setTimeout(r, 900));
+          }
+          return result;
+        });
+        await runRemoteAdapterStep(`Add "${parsed.song}" to the exact playlist "${parsed.playlist}"`, "spotifyAddTrackToPlaylist", () =>
+          executeSiteAdapterAction({ type: "spotifyAddTrackToPlaylist", songName: parsed.song, playlistName: parsed.playlist })
+        );
+        return `Added **${parsed.song}** to **${parsed.playlist}** on Spotify.`;
+      }
+
+      if (parsed.adapter === "spotify" && parsed.intent === "playSongFromPlaylist") {
+        await runRemoteAdapterStep("Open your Spotify playlists library", "navigate", async () => {
+          const result = await executeAgentAction({
+            type: "navigate",
+            url: "https://open.spotify.com/collection/playlists",
+            description: "Open your Spotify playlists library",
+          });
+          if (!result?.error) {
+            await waitForTabReady(6000);
+            await new Promise(r => setTimeout(r, 900));
+          }
+          return result;
+        });
+        await runRemoteAdapterStep(`Open the exact playlist "${parsed.playlist}"`, "spotifyOpenPlaylist", async () => {
+          const result = await executeSiteAdapterAction({ type: "spotifyOpenPlaylist", playlistName: parsed.playlist });
+          if (!result?.error) {
+            await new Promise(r => setTimeout(r, 1200));
+            const verify = await getSiteAdapterContext();
+            if (!verify?.currentPlaylistName || verify.currentPlaylistName.trim().toLowerCase() !== parsed.playlist.trim().toLowerCase()) {
+              return { error: `Opened the wrong playlist. Expected "${parsed.playlist}", got "${verify?.currentPlaylistName || "unknown"}".` };
+            }
+          }
+          return result;
+        });
+        await runRemoteAdapterStep(`Play "${parsed.song}" from "${parsed.playlist}"`, "spotifyPlayTrackFromCurrentPlaylist", () =>
+          executeSiteAdapterAction({ type: "spotifyPlayTrackFromCurrentPlaylist", songName: parsed.song })
+        );
+        return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+      }
+
+      if (parsed.adapter === "google-docs" && parsed.intent === "researchArticle") {
+        const draft = await runRemoteAdapterStep(`Research "${parsed.topic}" on the live web`, "web_search", async () => {
+          const article = await buildArticleDraftFromWebSearch(parsed.topic);
+          return { success: true, ...article };
+        });
+        await runRemoteAdapterStep("Open a fresh Google Doc", "navigate", async () => {
+          const result = await executeAgentAction({
+            type: "navigate",
+            url: "https://docs.new",
+            description: "Open a fresh Google Doc",
+          });
+          if (!result?.error) {
+            await waitForTabReady(8000);
+            await new Promise(r => setTimeout(r, 1800));
+          }
+          return result;
+        });
+        await runRemoteAdapterStep("Write the article into the Google Doc body", "googleDocsWriteArticle", () =>
+          executeSiteAdapterAction({ type: "googleDocsWriteArticle", title: draft.title, body: draft.body })
+        );
+        return `Drafted an article about **${parsed.topic}** in a Google Doc.`;
+      }
+
+      return null;
+    })();
+
+    if (adapterMessage) {
+      agentFinalizeBlock(remoteBlock, stepCount);
+      const doneBubble = document.createElement("div");
+      doneBubble.className = "chat-bubble chat-assistant";
+      doneBubble.innerHTML = `<div class="chat-bubble-text">✅ ${adapterMessage}</div>`;
+      chatMessagesEl.appendChild(doneBubble);
+      chatArea.scrollTop = chatArea.scrollHeight;
+      await updateRemoteCommand(cmd.id, token, { status: "done", result: adapterMessage, steps });
+      clearRemoteProcessing();
+      return;
+    }
+  } catch (e) {
+    await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
+    clearRemoteProcessing();
+    return;
+  }
 
   while (iterations++ < MAX) {
     if (agentShouldStop) break;

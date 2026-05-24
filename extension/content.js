@@ -138,6 +138,354 @@ function __sbStartPageVoiceRecognition(mode = "manual", source = "generic") {
   return { success: true };
 }
 
+function __sbAdapterNormalizeText(value) {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function __sbAdapterTextEquals(a, b) {
+  return __sbAdapterNormalizeText(a) === __sbAdapterNormalizeText(b);
+}
+
+function __sbAdapterTextIncludes(haystack, needle) {
+  const left = __sbAdapterNormalizeText(haystack);
+  const right = __sbAdapterNormalizeText(needle);
+  return !!left && !!right && left.includes(right);
+}
+
+function __sbAdapterWait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function __sbAdapterIsVisible(el) {
+  if (!el || !(el instanceof Element)) return false;
+  const rect = el.getBoundingClientRect();
+  if (!rect.width || !rect.height) return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+}
+
+function __sbAdapterClick(el) {
+  if (!el) return;
+  try {
+    el.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
+  } catch(e) {}
+  try { el.focus?.(); } catch(e) {}
+  try { el.click(); } catch(e) {}
+}
+
+function __sbAdapterDeepQueryAll(selector, root) {
+  const results = [];
+  const seen = new Set();
+
+  function visit(node) {
+    if (!node?.querySelectorAll) return;
+    let found = [];
+    try { found = Array.from(node.querySelectorAll(selector)); } catch(e) { found = []; }
+    for (const el of found) {
+      if (!seen.has(el)) {
+        seen.add(el);
+        results.push(el);
+      }
+    }
+
+    let descendants = [];
+    try { descendants = Array.from(node.querySelectorAll("*")); } catch(e) { descendants = []; }
+    for (const el of descendants) {
+      if (el.shadowRoot) visit(el.shadowRoot);
+    }
+  }
+
+  visit(root || document);
+  return results;
+}
+
+function __sbAdapterFindTextTarget(text, selector) {
+  const candidates = __sbAdapterDeepQueryAll(selector || "button, a, [role='button'], [role='menuitem'], [role='option'], div, span");
+  const exact = candidates.find((el) => __sbAdapterIsVisible(el) && __sbAdapterTextEquals(el.innerText || el.textContent || "", text));
+  if (exact) return exact.closest("button, a, [role='button'], [role='menuitem'], [role='option']") || exact;
+
+  const fuzzy = candidates.find((el) => __sbAdapterIsVisible(el) && __sbAdapterTextIncludes(el.innerText || el.textContent || "", text));
+  if (fuzzy) return fuzzy.closest("button, a, [role='button'], [role='menuitem'], [role='option']") || fuzzy;
+  return null;
+}
+
+function __sbAdapterGetScrollContainer() {
+  return document.querySelector("main") ||
+    document.querySelector("[data-overlayscrollbars-viewport]") ||
+    document.scrollingElement ||
+    document.documentElement ||
+    document.body;
+}
+
+function __sbSpotifyGetPlaylistLinks() {
+  const links = __sbAdapterDeepQueryAll('a[href*="/playlist/"]')
+    .filter((el) => __sbAdapterIsVisible(el))
+    .map((el) => ({
+      el,
+      href: el.getAttribute("href") || "",
+      text: (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim(),
+    }))
+    .filter((entry) => entry.text);
+
+  const seen = new Set();
+  return links.filter((entry) => {
+    const key = `${entry.href}::${__sbAdapterNormalizeText(entry.text)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function __sbSpotifyGetCurrentPlaylistName() {
+  const h1 = __sbAdapterDeepQueryAll("h1").find((el) => __sbAdapterIsVisible(el) && __sbAdapterNormalizeText(el.innerText || el.textContent));
+  if (h1) return (h1.innerText || h1.textContent || "").replace(/\s+/g, " ").trim();
+
+  const fromTitle = document.title.replace(/\s*[-|].*$/, "").trim();
+  return fromTitle;
+}
+
+function __sbSpotifyGetVisibleTrackEntries() {
+  const anchors = __sbAdapterDeepQueryAll('a[href*="/track/"]')
+    .filter((el) => __sbAdapterIsVisible(el))
+    .map((anchor) => {
+      const title = (anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
+      if (!title) return null;
+      const row =
+        anchor.closest('[data-testid="tracklist-row"]') ||
+        anchor.closest('[role="row"]') ||
+        anchor.closest("div");
+      return row ? { row, anchor, title } : null;
+    })
+    .filter(Boolean);
+
+  const seen = new Set();
+  return anchors.filter((entry) => {
+    const key = __sbAdapterNormalizeText(entry.title);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function __sbSpotifyOpenPlaylistByName(playlistName) {
+  const scrollEl = __sbAdapterGetScrollContainer();
+  const seenTexts = new Set();
+
+  for (let attempt = 0; attempt < 14; attempt++) {
+    const links = __sbSpotifyGetPlaylistLinks();
+    for (const link of links) seenTexts.add(link.text);
+
+    const exact = links.find((entry) => __sbAdapterTextEquals(entry.text, playlistName));
+    if (exact) {
+      __sbAdapterClick(exact.el);
+      return { success: true, playlist: exact.text };
+    }
+
+    const before = scrollEl.scrollTop;
+    scrollEl.scrollBy({ top: Math.max(scrollEl.clientHeight * 0.8, 420), behavior: "auto" });
+    await __sbAdapterWait(220);
+    if (Math.abs(scrollEl.scrollTop - before) < 8) break;
+  }
+
+  const suggestions = Array.from(seenTexts).slice(0, 8);
+  return {
+    error: suggestions.length
+      ? `Playlist "${playlistName}" was not found exactly. Visible playlists: ${suggestions.join(", ")}`
+      : `Playlist "${playlistName}" was not found on this page.`,
+  };
+}
+
+async function __sbSpotifyPlayTrackFromCurrentPlaylist(songName) {
+  const scrollEl = __sbAdapterGetScrollContainer();
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const entries = __sbSpotifyGetVisibleTrackEntries();
+    const exact = entries.find((entry) => __sbAdapterTextEquals(entry.title, songName));
+    if (exact) {
+      const playButton =
+        exact.row.querySelector('button[aria-label*="Play"]') ||
+        exact.row.querySelector('[data-testid="play-button"]') ||
+        exact.row.querySelector('button[aria-label*="play"]');
+
+      if (playButton) __sbAdapterClick(playButton);
+      else __sbAdapterClick(exact.anchor);
+      return { success: true, track: exact.title };
+    }
+
+    const before = scrollEl.scrollTop;
+    scrollEl.scrollBy({ top: Math.max(scrollEl.clientHeight * 0.75, 360), behavior: "auto" });
+    await __sbAdapterWait(180);
+    if (Math.abs(scrollEl.scrollTop - before) < 8) break;
+  }
+
+  return { error: `Track "${songName}" was not found in the open playlist.` };
+}
+
+async function __sbSpotifyAddTrackToPlaylist(songName, playlistName) {
+  const scrollEl = __sbAdapterGetScrollContainer();
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const entries = __sbSpotifyGetVisibleTrackEntries();
+    const target =
+      entries.find((entry) => __sbAdapterTextEquals(entry.title, songName)) ||
+      entries.find((entry) => __sbAdapterTextIncludes(entry.title, songName));
+
+    if (target) {
+      const moreButton =
+        target.row.querySelector('button[aria-label*="More"]') ||
+        target.row.querySelector('button[aria-label*="more"]') ||
+        target.row.querySelector('[data-testid="more-button"]');
+
+      if (!moreButton) {
+        return { error: `Found "${target.title}" but could not find its more-actions button.` };
+      }
+
+      __sbAdapterClick(moreButton);
+      await __sbAdapterWait(220);
+
+      const addMenuItem = __sbAdapterFindTextTarget("Add to playlist", "button, [role='menuitem'], [role='button'], span, div");
+      if (!addMenuItem) {
+        return { error: 'The "Add to playlist" menu item did not appear.' };
+      }
+      __sbAdapterClick(addMenuItem);
+      await __sbAdapterWait(260);
+
+      const playlistTarget = __sbAdapterFindTextTarget(playlistName, "button, [role='menuitemcheckbox'], [role='option'], [role='button'], span, div, a");
+      if (!playlistTarget || !__sbAdapterTextEquals(playlistTarget.innerText || playlistTarget.textContent || "", playlistName)) {
+        return { error: `Playlist "${playlistName}" was not found exactly in the add-to-playlist dialog.` };
+      }
+
+      __sbAdapterClick(playlistTarget);
+      await __sbAdapterWait(220);
+      return { success: true, track: target.title, playlist: playlistName };
+    }
+
+    const before = scrollEl.scrollTop;
+    scrollEl.scrollBy({ top: Math.max(scrollEl.clientHeight * 0.8, 420), behavior: "auto" });
+    await __sbAdapterWait(180);
+    if (Math.abs(scrollEl.scrollTop - before) < 8) break;
+  }
+
+  return { error: `Track "${songName}" was not found in the current Spotify view.` };
+}
+
+function __sbGoogleDocsGetEditorSurface() {
+  const selectors = [
+    ".kix-appview-editor",
+    ".kix-appview-editor-container",
+    ".kix-page",
+    '[role="textbox"][contenteditable="true"]',
+  ];
+
+  for (const selector of selectors) {
+    const candidate = __sbAdapterDeepQueryAll(selector).find((el) => __sbAdapterIsVisible(el));
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function __sbGoogleDocsGetInputTarget() {
+  const candidates = [
+    ...__sbAdapterDeepQueryAll("textarea"),
+    ...__sbAdapterDeepQueryAll('[role="textbox"][contenteditable="true"]'),
+    ...__sbAdapterDeepQueryAll('[contenteditable="true"]'),
+  ].filter((el) => __sbAdapterIsVisible(el) || /kix-clipboard-target/.test(el.className || ""));
+
+  return candidates.find((el) => {
+    const label = __sbAdapterNormalizeText(el.getAttribute?.("aria-label") || "");
+    const classes = String(el.className || "");
+    if (/title|document name/.test(label)) return false;
+    if (/kix-clipboard-target/.test(classes)) return true;
+    return true;
+  }) || null;
+}
+
+async function __sbGoogleDocsWriteArticle(title, body) {
+  const payload = `${String(title || "").trim()}\n\n${String(body || "").trim()}`.trim();
+  if (!payload) return { error: "No article content to write." };
+
+  const surface = __sbGoogleDocsGetEditorSurface();
+  if (!surface) return { error: "Google Docs editor surface was not found." };
+
+  __sbAdapterClick(surface);
+  await __sbAdapterWait(180);
+
+  const target = __sbGoogleDocsGetInputTarget();
+  if (target) {
+    try { target.focus(); } catch(e) {}
+  }
+
+  let inserted = false;
+  try {
+    inserted = document.execCommand("insertText", false, payload);
+  } catch(e) {}
+
+  if (!inserted && target) {
+    try {
+      const setter =
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set ||
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+
+      if (setter && "value" in target) setter.call(target, payload);
+      else if ("value" in target) target.value = payload;
+      else if (target.isContentEditable) target.textContent = payload;
+
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      target.dispatchEvent(new Event("change", { bubbles: true }));
+      inserted = true;
+    } catch(e) {}
+  }
+
+  await __sbAdapterWait(220);
+
+  const pageText = __sbAdapterNormalizeText(document.body?.innerText || "");
+  const bodySnippet = __sbAdapterNormalizeText(String(body || "").slice(0, 80));
+  const titleSnippet = __sbAdapterNormalizeText(String(title || "").slice(0, 40));
+  const looksInserted =
+    (bodySnippet && pageText.includes(bodySnippet)) ||
+    (titleSnippet && pageText.includes(titleSnippet));
+
+  if (!inserted && !looksInserted) {
+    return { error: "The article text could not be inserted into the Google Doc body." };
+  }
+
+  return { success: true, chars: payload.length };
+}
+
+function __sbGetSiteAdapterContext() {
+  const url = window.location.href;
+  const host = window.location.hostname;
+
+  if (/spotify\.com$/.test(host)) {
+    return {
+      site: "spotify",
+      url,
+      title: document.title,
+      currentPlaylistName: __sbSpotifyGetCurrentPlaylistName(),
+      visiblePlaylists: __sbSpotifyGetPlaylistLinks().slice(0, 20).map((entry) => entry.text),
+      visibleTracks: __sbSpotifyGetVisibleTrackEntries().slice(0, 15).map((entry) => entry.title),
+    };
+  }
+
+  if (/docs\.google\.com$/.test(host) && /\/document\//.test(url)) {
+    return {
+      site: "google-docs",
+      url,
+      title: document.title,
+      hasEditorSurface: Boolean(__sbGoogleDocsGetEditorSurface()),
+      hasInputTarget: Boolean(__sbGoogleDocsGetInputTarget()),
+    };
+  }
+
+  return { site: "generic", url, title: document.title };
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "extractPageContent") {
     const text = (document.body?.innerText || "").substring(0, 12000);
@@ -198,6 +546,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
 
     sendResponse({ url, title, bodyText, interactiveEls: interactiveEls.slice(0, 80), selectEls });
+    return true;
+  }
+
+  if (msg.action === "getSiteAdapterContext") {
+    sendResponse(__sbGetSiteAdapterContext());
+    return true;
+  }
+
+  if (msg.action === "siteAdapterAction") {
+    (async () => {
+      try {
+        if (msg.type === "spotifyOpenPlaylist") {
+          sendResponse(await __sbSpotifyOpenPlaylistByName(msg.playlistName || ""));
+          return;
+        }
+        if (msg.type === "spotifyPlayTrackFromCurrentPlaylist") {
+          sendResponse(await __sbSpotifyPlayTrackFromCurrentPlaylist(msg.songName || ""));
+          return;
+        }
+        if (msg.type === "spotifyAddTrackToPlaylist") {
+          sendResponse(await __sbSpotifyAddTrackToPlaylist(msg.songName || "", msg.playlistName || ""));
+          return;
+        }
+        if (msg.type === "googleDocsWriteArticle") {
+          sendResponse(await __sbGoogleDocsWriteArticle(msg.title || "", msg.body || ""));
+          return;
+        }
+        sendResponse({ error: `Unknown site adapter action: ${msg.type}` });
+      } catch (e) {
+        sendResponse({ error: e.message || "Site adapter action failed." });
+      }
+    })();
     return true;
   }
 

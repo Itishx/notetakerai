@@ -313,7 +313,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
-  if (message.action === "agentAction" || message.action === "getAgentPageContext") {
+  if (
+    message.action === "agentAction" ||
+    message.action === "getAgentPageContext" ||
+    message.action === "siteAdapterAction" ||
+    message.action === "getSiteAdapterContext"
+  ) {
     chrome.storage.local.get("activeTabId", (store) => {
       const tabId = store.activeTabId;
       if (!tabId) { sendResponse({ error: "No active tab" }); return; }
@@ -436,6 +441,28 @@ async function bgGetAgentPageContext(tabId) {
   });
 }
 
+async function bgGetSiteAdapterContext(tabId) {
+  const empty = { site: "generic", url: "", title: "" };
+  if (!tabId) return empty;
+
+  return new Promise(resolve => {
+    function sendMsg(retrying) {
+      chrome.tabs.sendMessage(tabId, { action: "getSiteAdapterContext" }, res => {
+        if (chrome.runtime.lastError) {
+          if (retrying) { resolve(empty); return; }
+          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+            if (chrome.runtime.lastError) { resolve(empty); return; }
+            setTimeout(() => sendMsg(true), 250);
+          });
+        } else {
+          resolve(res || empty);
+        }
+      });
+    }
+    sendMsg(false);
+  });
+}
+
 async function bgGetPageSnapshot(tabId) {
   if (!tabId) return null;
   try {
@@ -466,6 +493,27 @@ async function bgExecuteAgentAction(tabId, actionObj) {
   return new Promise(resolve => {
     function sendToContent(retrying) {
       chrome.tabs.sendMessage(tabId, { action: "agentAction", ...actionObj }, res => {
+        if (chrome.runtime.lastError) {
+          if (retrying) { resolve({ error: chrome.runtime.lastError.message }); return; }
+          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+            if (chrome.runtime.lastError) { resolve({ error: chrome.runtime.lastError.message }); return; }
+            setTimeout(() => sendToContent(true), 250);
+          });
+        } else {
+          resolve(res || { error: "No response from content script" });
+        }
+      });
+    }
+    sendToContent(false);
+  });
+}
+
+async function bgExecuteSiteAdapterAction(tabId, actionObj) {
+  if (!tabId) return { error: "No active tab" };
+
+  return new Promise(resolve => {
+    function sendToContent(retrying) {
+      chrome.tabs.sendMessage(tabId, { action: "siteAdapterAction", ...actionObj }, res => {
         if (chrome.runtime.lastError) {
           if (retrying) { resolve({ error: chrome.runtime.lastError.message }); return; }
           chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
@@ -557,6 +605,26 @@ async function bgRunBrainAgent(tabId, task) {
     return;
   }
 
+  try {
+    const adapterMessage = await bgTryHandleSiteAdapterTask({
+      tabId: currentTabId,
+      task,
+      history,
+      onProgress: async (description) => {
+        bgBrainUpdate(currentTabId, `→ ${description}`);
+      },
+      shouldStop: () => false,
+    });
+    if (adapterMessage) {
+      bgBrainUpdate(currentTabId, adapterMessage, true);
+      bgSaveAgentTask(currentTabId, task, adapterMessage);
+      return;
+    }
+  } catch (e) {
+    bgBrainUpdate(currentTabId, "Adapter error: " + (e.message || e), true);
+    return;
+  }
+
   for (let step = 0; step < MAX_STEPS; step++) {
     const pageInfo = await bgGetAgentPageContext(currentTabId);
 
@@ -632,6 +700,277 @@ async function bgUpdateRemoteCommand(id, token, patch) {
     },
     body: JSON.stringify(patch),
   });
+}
+
+function bgParseAdapterTask(task, siteContext) {
+  const raw = String(task || "").trim();
+  const text = raw.toLowerCase();
+  const currentSite = siteContext?.site || "generic";
+  const onSpotify = currentSite === "spotify" || /\bspotify\b/.test(text);
+  const wantsGoogleDoc = /\bgoogle docs?\b|\bgdoc\b/.test(text);
+
+  const quotedAdd = raw.match(/add\s+["“](.+?)["”]\s+to\s+(?:my\s+)?playlist\s+["“](.+?)["”](?:\s+on\s+spotify)?/i);
+  if (onSpotify && quotedAdd) {
+    return { adapter: "spotify", intent: "addSongToPlaylist", song: quotedAdd[1].trim(), playlist: quotedAdd[2].trim() };
+  }
+
+  const addMatch = raw.match(/add\s+(?:the\s+song\s+|song\s+)?(.+?)\s+to\s+(?:my\s+)?playlist\s+(.+?)(?:\s+on\s+spotify)?$/i);
+  if (onSpotify && addMatch) {
+    return { adapter: "spotify", intent: "addSongToPlaylist", song: addMatch[1].trim(), playlist: addMatch[2].trim() };
+  }
+
+  const quotedPlay = raw.match(/play\s+["“](.+?)["”]\s+from\s+(?:my\s+)?playlist\s+["“](.+?)["”](?:\s+on\s+spotify)?/i);
+  if (onSpotify && quotedPlay) {
+    return { adapter: "spotify", intent: "playSongFromPlaylist", song: quotedPlay[1].trim(), playlist: quotedPlay[2].trim() };
+  }
+
+  const playMatch = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)\s+from\s+(?:my\s+)?playlist\s+(.+?)(?:\s+on\s+spotify)?$/i);
+  if (onSpotify && playMatch) {
+    return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
+  }
+
+  const articlePatterns = [
+    /search for\s+(.+?)\s+and\s+(?:write|draft|make)\s+(?:about it\s+)?(?:as\s+an?\s+article\s+)?in\s+(?:a\s+)?google docs?/i,
+    /research\s+(.+?)\s+and\s+(?:write|draft|make)\s+(?:an?\s+article\s+)?in\s+(?:a\s+)?google docs?/i,
+    /write\s+an?\s+article\s+about\s+(.+?)\s+in\s+(?:a\s+)?google docs?/i,
+  ];
+
+  if (wantsGoogleDoc) {
+    for (const pattern of articlePatterns) {
+      const match = raw.match(pattern);
+      if (match) {
+        return { adapter: "google-docs", intent: "researchArticle", topic: match[1].trim() };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function bgBuildArticleDraftFromSearch(topic) {
+  const searchData = await bgPerformRealWebSearch(topic);
+  if (searchData?.error) throw new Error(searchData.error);
+  if (!searchData?.results?.length) throw new Error(`I couldn't find enough live results for "${topic}".`);
+
+  const response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      pageContext: {
+        title: `Web search results for "${topic}"`,
+        url: searchData.searchUrl || "",
+        text: [
+          `Live web search query: ${topic}`,
+          "",
+          searchData.results.map((result, index) =>
+            `[${index + 1}] ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet || "(no snippet provided)"}`
+          ).join("\n\n"),
+        ].join("\n"),
+      },
+      message: `Use the live web search results in page context to draft an article for a Google Doc.
+
+Return ONLY JSON. No markdown fences. Format:
+{"title":"short article title","body":"multi-paragraph article body"}
+
+Rules:
+- The title must be concise and human-readable.
+- The body must be 4-7 paragraphs of clean prose.
+- Do not include a byline.
+- Only use facts supported by the provided search snippets.
+- If the snippets are thin, write a shorter and more cautious article.`,
+    }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Article drafting failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const reply = String(data.reply || "").trim();
+  const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/(\{[\s\S]*\})/);
+  const json = (match?.[1] ?? match?.[0] ?? reply).trim();
+  const parsed = JSON.parse(json);
+
+  if (!parsed?.title || !parsed?.body) {
+    throw new Error("The article draft came back in an unexpected format.");
+  }
+
+  return {
+    title: String(parsed.title).trim(),
+    body: String(parsed.body).trim(),
+  };
+}
+
+async function bgRunAdapterStep({ history, description, type, run, onProgress, onResult }) {
+  if (onProgress) await onProgress(description);
+  const result = await run();
+  history.push({ type: type || "adapter", description, result });
+  if (onResult) await onResult({ description, type: type || "adapter", result });
+  if (result?.error) throw new Error(result.error);
+  return result;
+}
+
+async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, onResult, shouldStop }) {
+  const siteContext = await bgGetSiteAdapterContext(tabId);
+  const parsed = bgParseAdapterTask(task, siteContext);
+  if (!parsed) return null;
+
+  if (parsed.adapter === "spotify" && parsed.intent === "addSongToPlaylist") {
+    await bgRunAdapterStep({
+      history,
+      description: `Open Spotify search for "${parsed.song}"`,
+      type: "navigate",
+      onProgress,
+      onResult,
+      run: async () => {
+        const result = await bgExecuteAgentAction(tabId, {
+          type: "navigate",
+          url: `https://open.spotify.com/search/${encodeURIComponent(parsed.song)}`,
+          description: `Open Spotify search for "${parsed.song}"`,
+        });
+        if (!result?.error) {
+          await bgWaitForTabReady(tabId, 6000);
+          await bgDelay(900);
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop?.()) throw new Error("Stopped.");
+
+    await bgRunAdapterStep({
+      history,
+      description: `Add "${parsed.song}" to the exact playlist "${parsed.playlist}"`,
+      type: "spotifyAddTrackToPlaylist",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "spotifyAddTrackToPlaylist",
+        songName: parsed.song,
+        playlistName: parsed.playlist,
+      }),
+    });
+
+    return `Added **${parsed.song}** to **${parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "spotify" && parsed.intent === "playSongFromPlaylist") {
+    await bgRunAdapterStep({
+      history,
+      description: "Open your Spotify playlists library",
+      type: "navigate",
+      onProgress,
+      onResult,
+      run: async () => {
+        const result = await bgExecuteAgentAction(tabId, {
+          type: "navigate",
+          url: "https://open.spotify.com/collection/playlists",
+          description: "Open your Spotify playlists library",
+        });
+        if (!result?.error) {
+          await bgWaitForTabReady(tabId, 6000);
+          await bgDelay(900);
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop?.()) throw new Error("Stopped.");
+
+    await bgRunAdapterStep({
+      history,
+      description: `Open the exact playlist "${parsed.playlist}"`,
+      type: "spotifyOpenPlaylist",
+      onProgress,
+      onResult,
+      run: async () => {
+        const result = await bgExecuteSiteAdapterAction(tabId, {
+          type: "spotifyOpenPlaylist",
+          playlistName: parsed.playlist,
+        });
+        if (!result?.error) {
+          await bgDelay(1200);
+          const verify = await bgGetSiteAdapterContext(tabId);
+          if (!verify?.currentPlaylistName || verify.currentPlaylistName.trim().toLowerCase() !== parsed.playlist.trim().toLowerCase()) {
+            return { error: `Opened the wrong playlist. Expected "${parsed.playlist}", got "${verify?.currentPlaylistName || "unknown"}".` };
+          }
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop?.()) throw new Error("Stopped.");
+
+    await bgRunAdapterStep({
+      history,
+      description: `Play "${parsed.song}" from "${parsed.playlist}"`,
+      type: "spotifyPlayTrackFromCurrentPlaylist",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "spotifyPlayTrackFromCurrentPlaylist",
+        songName: parsed.song,
+      }),
+    });
+
+    return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "google-docs" && parsed.intent === "researchArticle") {
+    const draft = await bgRunAdapterStep({
+      history,
+      description: `Research "${parsed.topic}" on the live web`,
+      type: "web_search",
+      onProgress,
+      onResult,
+      run: async () => {
+        const article = await bgBuildArticleDraftFromSearch(parsed.topic);
+        return { success: true, ...article };
+      },
+    });
+
+    if (shouldStop?.()) throw new Error("Stopped.");
+
+    await bgRunAdapterStep({
+      history,
+      description: "Open a fresh Google Doc",
+      type: "navigate",
+      onProgress,
+      onResult,
+      run: async () => {
+        const result = await bgExecuteAgentAction(tabId, {
+          type: "navigate",
+          url: "https://docs.new",
+          description: "Open a fresh Google Doc",
+        });
+        if (!result?.error) {
+          await bgWaitForTabReady(tabId, 8000);
+          await bgDelay(1800);
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop?.()) throw new Error("Stopped.");
+
+    await bgRunAdapterStep({
+      history,
+      description: "Write the article into the Google Doc body",
+      type: "googleDocsWriteArticle",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "googleDocsWriteArticle",
+        title: draft.title,
+        body: draft.body,
+      }),
+    });
+
+    return `Drafted an article about **${parsed.topic}** in a Google Doc.`;
+  }
+
+  return null;
 }
 
 function bgTryFastPath(task, history) {
@@ -1159,6 +1498,27 @@ async function bgRunRemoteCommand(cmd, token) {
     chrome.runtime.sendMessage({ action: "remoteCommandComplete", cmdId: cmd.id, result }).catch(() => {});
     console.log("[BgRemoteAgent] Command finished:", status, result);
   };
+
+  try {
+    const adapterMessage = await bgTryHandleSiteAdapterTask({
+      tabId,
+      task: cmd.task,
+      history,
+      onProgress: null,
+      onResult: async ({ description, result }) => {
+        steps.push({ description, ok: !result?.error });
+        bgUpdateRemoteCommand(cmd.id, token, { steps });
+      },
+      shouldStop: () => false,
+    });
+    if (adapterMessage) {
+      await finish("done", adapterMessage);
+      return;
+    }
+  } catch (e) {
+    await finish("error", `Error: ${e.message}`);
+    return;
+  }
 
   // ── Plan-driven loop for multi-step tasks ─────────────────────────────
   if (bgIsMultiStepTask(cmd.task)) {
