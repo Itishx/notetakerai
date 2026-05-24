@@ -2567,10 +2567,15 @@ async function __sbXPostReply(article, replyText) {
   }
   await __sbSleep(1200);
 
-  // If we navigated to /compose/post, go back to the timeline
-  if (navigated) {
-    history.back();
-    await __sbSleep(1500);
+  // If X moved us onto a compose route, return to the exact page we started from.
+  // Using history.back() is too loose because X's client-side history can point at a profile or detail page.
+  if (navigated && location.href !== urlBefore) {
+    try {
+      window.location.replace(urlBefore);
+    } catch(e) {
+      window.location.href = urlBefore;
+    }
+    await __sbSleep(1800);
   }
 
   return true;
