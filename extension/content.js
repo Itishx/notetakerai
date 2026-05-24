@@ -2236,15 +2236,29 @@ async function __sbXGenerateReply(tweetText, handle) {
   });
 }
 
+function __sbXGetReplyEditorNow() {
+  const dialogCandidates = [
+    ...document.querySelectorAll('[role="dialog"] [data-testid="tweetTextarea_0"]'),
+    ...document.querySelectorAll('[role="dialog"] [role="textbox"][contenteditable="true"]'),
+  ];
+  const inDialog = dialogCandidates.find((el) => el?.isContentEditable);
+  if (inDialog) return inDialog;
+
+  const all = [
+    ...document.querySelectorAll('[data-testid="tweetTextarea_0"]'),
+    ...document.querySelectorAll('[role="textbox"][contenteditable="true"]'),
+  ].filter((el) => el?.isContentEditable);
+  if (all.length > 1) return all[all.length - 1];
+  return null;
+}
+
 async function __sbXFindReplyEditor() {
   // Poll up to 6s for the reply composer to appear.
   // Priority: inside [role="dialog"] → last textarea on page (> 1 means reply opened)
   const t0 = Date.now();
   while (Date.now() - t0 < 6000) {
-    const inDialog = document.querySelector('[role="dialog"] [data-testid="tweetTextarea_0"]');
-    if (inDialog?.isContentEditable) return inDialog;
-    const all = [...document.querySelectorAll('[data-testid="tweetTextarea_0"]')];
-    if (all.length > 1 && all[all.length - 1].isContentEditable) return all[all.length - 1];
+    const editor = __sbXGetReplyEditorNow();
+    if (editor) return editor;
     await __sbSleep(300);
   }
   return null;
@@ -2273,24 +2287,107 @@ async function __sbXInsertText(editable, text) {
   await __sbSleep(600);
 }
 
-async function __sbXWaitForSubmit() {
-  // The reply composer's submit button says "Reply", not "Post".
-  // Scope search to [role="dialog"] first to avoid grabbing the timeline's Post button.
-  for (let i = 0; i < 12; i++) {
-    const dialog = document.querySelector('[role="dialog"]');
-    const btn = dialog?.querySelector('[data-testid="tweetButton"]') ||
-                dialog?.querySelector('[data-testid="tweetButtonInline"]') ||
-                // Fallback: any button with text "Reply" near the composer
-                [...(dialog?.querySelectorAll('button') || [])].find(b => b.textContent.trim() === 'Reply') ||
-                document.querySelector('[data-testid="tweetButton"]') ||
-                document.querySelector('[data-testid="tweetButtonInline"]');
-    if (btn) {
-      const rgb = window.getComputedStyle(btn).backgroundColor.match(/\d+/g);
-      if (rgb && +rgb[0] < 200) return btn; // dark bg = enabled
+function __sbXFindSubmitButton() {
+  const roots = [
+    document.querySelector('[role="dialog"]'),
+    document.querySelector('main'),
+    document,
+  ].filter(Boolean);
+
+  const selectors = [
+    '[data-testid="tweetButton"]',
+    '[data-testid="tweetButtonInline"]',
+    'button[role="button"]',
+  ];
+
+  for (const root of roots) {
+    for (const selector of selectors) {
+      const buttons = [...root.querySelectorAll(selector)];
+      for (const btn of buttons) {
+        const text = (btn.textContent || btn.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const testId = (btn.getAttribute('data-testid') || '').toLowerCase();
+        if (testId === 'tweetbutton' || testId === 'tweetbuttoninline' || /^(reply|post|tweet)$/.test(text)) {
+          return btn;
+        }
+      }
     }
+  }
+
+  return null;
+}
+
+function __sbXIsSubmitEnabled(btn) {
+  if (!btn) return false;
+  if (btn.disabled) return false;
+  if (btn.getAttribute('aria-disabled') === 'true') return false;
+  const style = window.getComputedStyle(btn);
+  if (style.visibility === 'hidden' || style.display === 'none' || style.pointerEvents === 'none') return false;
+  return true;
+}
+
+async function __sbXWaitForSubmit() {
+  for (let i = 0; i < 12; i++) {
+    const btn = __sbXFindSubmitButton();
+    if (btn && __sbXIsSubmitEnabled(btn)) return btn;
     await __sbSleep(400);
   }
   return null;
+}
+
+function __sbXForceClick(el) {
+  if (!el) return;
+  try { el.focus?.(); } catch(e) {}
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    try {
+      el.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+      }));
+    } catch(e) {}
+  }
+  try { el.click?.(); } catch(e) {}
+}
+
+async function __sbXWaitForComposerToClose() {
+  for (let i = 0; i < 16; i++) {
+    const editor = __sbXGetReplyEditorNow();
+    if (!editor) return true;
+    await __sbSleep(250);
+  }
+  return false;
+}
+
+async function __sbXSubmitWithShortcut(editable) {
+  if (!editable) return false;
+  try { editable.focus(); } catch(e) {}
+  await __sbSleep(100);
+
+  const combos = [
+    { metaKey: true, ctrlKey: false },
+    { metaKey: false, ctrlKey: true },
+  ];
+
+  for (const combo of combos) {
+    for (const type of ['keydown', 'keypress', 'keyup']) {
+      try {
+        editable.dispatchEvent(new KeyboardEvent(type, {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true,
+          metaKey: combo.metaKey,
+          ctrlKey: combo.ctrlKey,
+        }));
+      } catch(e) {}
+    }
+
+    if (await __sbXWaitForComposerToClose()) return true;
+  }
+
+  return false;
 }
 
 async function __sbXPostReply(article, replyText) {
@@ -2329,9 +2426,22 @@ async function __sbXPostReply(article, replyText) {
     return false;
   }
 
-  submit.click();
+  __sbShowBubble('X Auto: sending reply…', false, { tone: 'status', title: 'X Automation' });
+  __sbXForceClick(submit);
+  let sent = await __sbXWaitForComposerToClose();
+
+  if (!sent) {
+    __sbShowBubble('X Auto: click did not send, trying shortcut…', false, { tone: 'status', title: 'X Automation' });
+    sent = await __sbXSubmitWithShortcut(editable);
+  }
+
+  if (!sent) {
+    __sbShowBubble('X Auto: reply was written but not sent.', false, { tone: 'status', title: 'X Automation' });
+    return false;
+  }
+
   __sbShowBubble('X Auto: reply posted ✓', false, { tone: 'status', title: 'X Automation' });
-  await __sbSleep(2000);
+  await __sbSleep(1200);
 
   // If we navigated to /compose/post, go back to the timeline
   if (navigated) {
