@@ -1703,6 +1703,7 @@ function __sbBuildBrainUI() {
     }
     .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
     .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
     #__sb_send_btn__ { background: #E8786E !important; color: white !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
@@ -1857,6 +1858,10 @@ function __sbBuildBrainUI() {
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
       </button>
+      <button id="__sb_x_auto_btn__" class="sb-bar-icon-btn" title="X Automation" style="display:none;gap:4px;padding:0 8px;font-size:11px;font-weight:600;width:auto;">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <span id="__sb_x_auto_label__">X Auto</span>
+      </button>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
@@ -1943,6 +1948,11 @@ function __sbBuildBrainUI() {
   // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
+
+  // X Auto button — show only on X/Twitter
+  const xAutoBtn = document.getElementById("__sb_x_auto_btn__");
+  if (__sbIsOnX()) xAutoBtn.style.display = "flex";
+  xAutoBtn.addEventListener("click", () => void __sbRunXAutomation());
 
   // Card footer buttons
   document.getElementById("__sb_card_send__").addEventListener("click", __sbSendMessage);
@@ -2178,6 +2188,147 @@ function __sbInitCardDrag(wrap) {
     resizing = false;
   });
 }
+
+// ===== X / TWITTER AUTOMATION =====
+const __sbXReplied = new WeakSet();
+let __sbXRunning = false;
+
+function __sbSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function __sbIsOnX() {
+  return /^(twitter|x)\.com$/.test(location.hostname);
+}
+
+function __sbXFindTweets() {
+  return [...document.querySelectorAll('article[data-testid="tweet"]')]
+    .filter(a => !__sbXReplied.has(a) && a.querySelector('[data-testid="reply"]'));
+}
+
+function __sbXGetTweetData(article) {
+  const spans = [...(article.querySelector('[data-testid="tweetText"]')?.querySelectorAll('span') || [])];
+  const text = spans.map(s => s.textContent).join('').trim();
+  const handle = article.querySelector('[data-testid="User-Name"] a[href^="/"]')?.getAttribute('href')?.replace('/', '') || '';
+  return { text, handle };
+}
+
+async function __sbXGenerateReply(tweetText, handle) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'generateXReply', tweetText, handle }, (res) => {
+      void chrome.runtime.lastError;
+      resolve(res?.reply || null);
+    });
+  });
+}
+
+async function __sbXTypeIntoContentEditable(el, text) {
+  el.focus();
+  await __sbSleep(120);
+  // Use execCommand which fires the React synthetic events Twitter listens to
+  document.execCommand('selectAll', false, null);
+  document.execCommand('delete', false, null);
+  document.execCommand('insertText', false, text);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  await __sbSleep(400);
+}
+
+async function __sbXPostReply(article, replyText) {
+  const replyBtn = article.querySelector('[data-testid="reply"]');
+  if (!replyBtn) return false;
+
+  article.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await __sbSleep(600);
+  replyBtn.click();
+  await __sbSleep(2000);
+
+  // Find textarea — could be inline or in a modal
+  const selectors = [
+    '[data-testid="tweetTextarea_0"]',
+    '[role="dialog"] [data-testid="tweetTextarea_0"]',
+    '[aria-label="Tweet text"]',
+    '[aria-label="Post text"]',
+  ];
+  let el = null;
+  for (const sel of selectors) {
+    const found = document.querySelector(sel);
+    if (found) { el = found; break; }
+  }
+  if (!el) return false;
+
+  const editable = el.querySelector('[contenteditable="true"]') || (el.isContentEditable ? el : null);
+  if (!editable) return false;
+
+  await __sbXTypeIntoContentEditable(editable, replyText);
+
+  // Wait for submit to enable
+  await __sbSleep(600);
+  const submit = document.querySelector('[data-testid="tweetButtonInline"]');
+  if (!submit || submit.disabled || submit.getAttribute('aria-disabled') === 'true') return false;
+
+  submit.click();
+  await __sbSleep(1500);
+
+  // Close any open modal (Escape)
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  return true;
+}
+
+async function __sbRunXAutomation() {
+  if (!__sbIsOnX()) {
+    __sbShowBubble('Navigate to X (twitter.com) first, then start the automation.', true, { tone: 'status', title: 'X Automation' });
+    return;
+  }
+  if (__sbXRunning) {
+    __sbXRunning = false;
+    const btn = document.getElementById('__sb_x_auto_btn__');
+    if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
+    __sbShowBubble('Automation stopped.', true, { tone: 'status', title: 'Stopped' });
+    return;
+  }
+
+  __sbXRunning = true;
+  const btn = document.getElementById('__sb_x_auto_btn__');
+  if (btn) { btn.classList.add('running'); document.getElementById('__sb_x_auto_label__').textContent = 'Stop'; }
+
+  __sbShowBubble('X Automation started — scanning your timeline…', false, { tone: 'status', title: 'X Automation' });
+
+  let count = 0;
+  let scrollStreak = 0;
+
+  while (__sbXRunning) {
+    const tweets = __sbXFindTweets();
+    if (!tweets.length) {
+      if (++scrollStreak > 8) break; // gave up after ~24s of no new tweets
+      window.scrollBy(0, 700);
+      await __sbSleep(3000);
+      continue;
+    }
+    scrollStreak = 0;
+
+    const article = tweets[0];
+    __sbXReplied.add(article);
+
+    const { text, handle } = __sbXGetTweetData(article);
+    if (!text || text.length < 8) continue;
+
+    __sbShowBubble(`Generating reply for @${handle || 'user'}…`, false, { tone: 'status', title: 'X Automation' });
+    const reply = await __sbXGenerateReply(text, handle);
+    if (!reply) { await __sbSleep(2000); continue; }
+
+    const ok = await __sbXPostReply(article, reply);
+    if (ok) {
+      count++;
+      __sbShowBubble(`Replied to ${count} post${count !== 1 ? 's' : ''} — waiting 10s…`, false, { tone: 'status', title: 'X Automation' });
+      await __sbSleep(10000);
+    } else {
+      await __sbSleep(3000);
+    }
+  }
+
+  __sbXRunning = false;
+  if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
+  __sbShowBubble(`Automation finished — replied to ${count} post${count !== 1 ? 's' : ''}.`, true, { tone: 'status', title: 'Done' });
+}
+// ===== END X AUTOMATION =====
 
 function __sbTimeGreeting() {
   const h = new Date().getHours();

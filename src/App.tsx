@@ -24,6 +24,11 @@ import SidepanelTest from "./pages/SidepanelTest.tsx";
 import BuildPlan from "./pages/BuildPlan.tsx";
 import Reddit from "./pages/Reddit.tsx";
 import AssistantPanel from "./pages/AssistantPanel.tsx";
+import Privacy from "./pages/Privacy.tsx";
+import Terms from "./pages/Terms.tsx";
+import Contact from "./pages/Contact.tsx";
+import ProductOverview from "./pages/ProductOverview.tsx";
+import Automations from "./pages/Automations.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -61,6 +66,11 @@ const App = () => {
               <Route path="/build-plan" element={<BuildPlan />} />
               <Route path="/reddit" element={<Reddit />} />
               <Route path="/assistant-panel" element={<AssistantPanel />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/product-overview" element={<ProductOverview />} />
+              <Route path="/automations" element={<Automations />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

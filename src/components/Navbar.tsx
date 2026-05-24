@@ -5,6 +5,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 
 const NAV_LINKS = [
   { href: "/use-cases", label: "Use Cases" },
+  { href: "/automations", label: "Automations" },
   { href: "/delegate", label: "Delegate" },
   { href: "/compare", label: "vs Claude" },
   { href: "/premium", label: "Pricing" },

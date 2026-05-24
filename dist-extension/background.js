@@ -301,6 +301,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message || "Web search failed." }));
     return true;
   }
+  if (message.action === "generateXReply") {
+    const { tweetText, handle } = message;
+    const systemPrompt = `You write Twitter/X replies on behalf of someone building Braino — an AI browser companion (trybraino.com).
+Rules:
+- Sound like a real human being. Warm, curious, direct. Never robotic or salesy.
+- Genuinely engage with the tweet topic in 1-2 sentences.
+- Very naturally drop a mention of trybraino.com at the end — like you'd organically bring up a project you're working on, not a sales pitch.
+- Keep total reply under 240 characters.
+- Never use emojis excessively (0-1 max).
+- Reply in the same language as the tweet.
+Return ONLY the reply text. No quotes, no explanation.`;
+    fetch(`${BG_API_BASE}/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: systemPrompt, message: `Tweet by @${handle || 'user'}: "${tweetText}"` }),
+    })
+      .then(r => r.json())
+      .then(data => sendResponse({ reply: data?.response || data?.answer || null }))
+      .catch(() => sendResponse({ reply: null }));
+    return true;
+  }
   if (message.action === "runBrainAgent") {
     const task = message.task;
     const senderTabId = sender?.tab?.id || null;
