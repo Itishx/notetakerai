@@ -702,6 +702,10 @@ async function bgUpdateRemoteCommand(id, token, patch) {
   });
 }
 
+function bgBuildSpotifyTrackSearchUrl(songName) {
+  return `https://open.spotify.com/search/${encodeURIComponent(songName)}/tracks`;
+}
+
 function bgParseAdapterTask(task, siteContext) {
   const raw = String(task || "").trim();
   const text = raw.toLowerCase();
@@ -826,7 +830,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       run: async () => {
         const result = await bgExecuteAgentAction(tabId, {
           type: "navigate",
-          url: `https://open.spotify.com/search/${encodeURIComponent(parsed.song)}`,
+          url: bgBuildSpotifyTrackSearchUrl(parsed.song),
           description: `Open Spotify search for "${parsed.song}"`,
         });
         if (!result?.error) {
