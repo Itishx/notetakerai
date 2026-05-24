@@ -1828,12 +1828,14 @@ function __sbShowSignIn() {
   `;
   __sbOpenCard({ rich: false });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  let __sbSignInClicked = false;
   document.getElementById("__sb_signin_btn__")?.addEventListener("click", () => {
+    __sbSignInClicked = true;
     window.open(chrome.runtime.getURL("sidepanel.html"), "_blank", "width=420,height=680,menubar=no,toolbar=no,resizable=no");
   });
   if (__sbContextOk()) {
     const handleStorageChange = (changes, area) => {
-      if (area === "local" && changes.authToken?.newValue) {
+      if (area === "local" && changes.authToken?.newValue && __sbSignInClicked) {
         chrome.storage.onChanged.removeListener(handleStorageChange);
         __sbCollapseCard();
         __sbShowBubble("You're signed in! Click the brain to chat.", true, { tone: "status", title: "Signed in" });
