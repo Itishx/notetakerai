@@ -471,6 +471,23 @@ function __sbGoogleDocsGetInputTarget() {
   }) || null;
 }
 
+function __sbGoogleDocsSetTitleValue(titleTarget, value) {
+  if (!titleTarget) return;
+  try {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    if (setter) setter.call(titleTarget, value);
+    else titleTarget.value = value;
+    titleTarget.dispatchEvent(new Event("input", { bubbles: true }));
+    titleTarget.dispatchEvent(new Event("change", { bubbles: true }));
+  } catch(e) {}
+}
+
+function __sbGoogleDocsValueContainsBody(titleTarget, bodySnippet) {
+  if (!titleTarget || !bodySnippet) return false;
+  const titleValue = __sbAdapterNormalizeText(titleTarget.value || titleTarget.textContent || "");
+  return !!titleValue && titleValue.includes(bodySnippet);
+}
+
 async function __sbGoogleDocsFocusBodySurface(surface) {
   const titleTarget = __sbGoogleDocsGetTitleTarget();
   if (titleTarget && document.activeElement === titleTarget) {
@@ -512,22 +529,39 @@ async function __sbGoogleDocsFocusBodySurface(surface) {
   return !(titleTarget && active === titleTarget);
 }
 
-async function __sbGoogleDocsWriteArticle(title, body) {
-  const payload = `${String(title || "").trim()}\n\n${String(body || "").trim()}`.trim();
-  if (!payload) return { error: "No article content to write." };
+async function __sbGoogleDocsInsertBodyPayload(target, payload) {
+  if (!target || !payload) return false;
 
-  const surface = __sbGoogleDocsGetEditorSurface();
-  if (!surface) return { error: "Google Docs editor surface was not found." };
+  try { target.focus?.(); } catch(e) {}
+  await __sbAdapterWait(80);
 
-  const focusedBody = await __sbGoogleDocsFocusBodySurface(surface);
-  if (!focusedBody) {
-    return { error: "Google Docs stayed focused on the title field instead of the document body." };
-  }
+  try {
+    target.dispatchEvent(new InputEvent("beforeinput", {
+      inputType: "insertText",
+      data: payload,
+      bubbles: true,
+      cancelable: true,
+    }));
+  } catch(e) {}
 
-  const titleTarget = __sbGoogleDocsGetTitleTarget();
-  const target = __sbGoogleDocsGetInputTarget();
-  if (target) {
-    try { target.focus(); } catch(e) {}
+  try {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", payload);
+    target.dispatchEvent(new ClipboardEvent("paste", {
+      clipboardData: dt,
+      bubbles: true,
+      cancelable: true,
+    }));
+  } catch(e) {}
+
+  try {
+    target.dispatchEvent(new InputEvent("input", {
+      inputType: "insertFromPaste",
+      data: payload,
+      bubbles: true,
+    }));
+  } catch(e) {
+    try { target.dispatchEvent(new Event("input", { bubbles: true })); } catch(_) {}
   }
 
   let inserted = false;
@@ -535,7 +569,7 @@ async function __sbGoogleDocsWriteArticle(title, body) {
     inserted = document.execCommand("insertText", false, payload);
   } catch(e) {}
 
-  if (!inserted && target) {
+  if (!inserted) {
     try {
       const setter =
         Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set ||
@@ -552,13 +586,46 @@ async function __sbGoogleDocsWriteArticle(title, body) {
   }
 
   await __sbAdapterWait(220);
+  return inserted;
+}
+
+async function __sbGoogleDocsWriteArticle(title, body) {
+  const cleanTitle = String(title || "").trim();
+  const cleanBody = String(body || "").trim();
+  if (!cleanBody) return { error: "No article content to write." };
+
+  const surface = __sbGoogleDocsGetEditorSurface();
+  if (!surface) return { error: "Google Docs editor surface was not found." };
+
+  const titleTarget = __sbGoogleDocsGetTitleTarget();
+  const originalTitleValue = String(titleTarget?.value || titleTarget?.textContent || "");
+  if (titleTarget && cleanTitle) {
+    __sbGoogleDocsSetTitleValue(titleTarget, cleanTitle);
+    await __sbAdapterWait(120);
+  }
+
+  const focusedBody = await __sbGoogleDocsFocusBodySurface(surface);
+  if (!focusedBody) {
+    return { error: "Google Docs stayed focused on the title field instead of the document body." };
+  }
+
+  const target = __sbGoogleDocsGetInputTarget();
+  const bodyPayload = cleanTitle ? `${cleanTitle}\n\n${cleanBody}` : cleanBody;
+  const bodySnippet = __sbAdapterNormalizeText(cleanBody.slice(0, 80));
+  const titleSnippet = __sbAdapterNormalizeText(cleanTitle.slice(0, 40));
+
+  if (target) {
+    try { target.focus(); } catch(e) {}
+  }
+
+  const inserted = await __sbGoogleDocsInsertBodyPayload(target, bodyPayload);
 
   const bodyText = __sbAdapterNormalizeText(surface.innerText || surface.textContent || "");
-  const bodySnippet = __sbAdapterNormalizeText(String(body || "").slice(0, 80));
-  const titleSnippet = __sbAdapterNormalizeText(String(title || "").slice(0, 40));
-  const titleValue = __sbAdapterNormalizeText(titleTarget?.value || titleTarget?.textContent || "");
-
-  if (bodySnippet && titleValue.includes(bodySnippet)) {
+  if (__sbGoogleDocsValueContainsBody(titleTarget, bodySnippet)) {
+    if (titleTarget) {
+      __sbGoogleDocsSetTitleValue(titleTarget, cleanTitle || originalTitleValue);
+      await __sbAdapterWait(80);
+    }
     return { error: "The article text was inserted into the Google Doc title field instead of the body." };
   }
 
