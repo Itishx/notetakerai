@@ -2274,8 +2274,15 @@ async function __sbXInsertText(editable, text) {
 }
 
 async function __sbXWaitForSubmit() {
+  // The reply composer's submit button says "Reply", not "Post".
+  // Scope search to [role="dialog"] first to avoid grabbing the timeline's Post button.
   for (let i = 0; i < 12; i++) {
-    const btn = document.querySelector('[data-testid="tweetButton"]') ||
+    const dialog = document.querySelector('[role="dialog"]');
+    const btn = dialog?.querySelector('[data-testid="tweetButton"]') ||
+                dialog?.querySelector('[data-testid="tweetButtonInline"]') ||
+                // Fallback: any button with text "Reply" near the composer
+                [...(dialog?.querySelectorAll('button') || [])].find(b => b.textContent.trim() === 'Reply') ||
+                document.querySelector('[data-testid="tweetButton"]') ||
                 document.querySelector('[data-testid="tweetButtonInline"]');
     if (btn) {
       const rgb = window.getComputedStyle(btn).backgroundColor.match(/\d+/g);
