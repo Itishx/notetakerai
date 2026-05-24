@@ -2349,16 +2349,56 @@ function __sbXForceClick(el) {
   try { el.click?.(); } catch(e) {}
 }
 
-async function __sbXWaitForComposerToClose() {
-  for (let i = 0; i < 16; i++) {
-    const editor = __sbXGetReplyEditorNow();
-    if (!editor) return true;
-    await __sbSleep(250);
-  }
-  return false;
+function __sbXNormalizeText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-async function __sbXSubmitWithShortcut(editable) {
+function __sbXGetStatusText() {
+  const selectors = [
+    '[role="alert"]',
+    '[role="status"]',
+    '[aria-live="assertive"]',
+    '[aria-live="polite"]',
+    '[data-testid="toast"]',
+  ];
+
+  const texts = [];
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      const text = __sbXNormalizeText(el.innerText || el.textContent || '');
+      if (text) texts.push(text);
+    }
+  }
+
+  return texts.join(' ');
+}
+
+async function __sbXWaitForSendOutcome(expectedReplyText) {
+  const expected = __sbXNormalizeText(expectedReplyText).slice(0, 80);
+
+  for (let i = 0; i < 20; i++) {
+    const editor = __sbXGetReplyEditorNow();
+    const submit = __sbXFindSubmitButton();
+    const submitEnabled = __sbXIsSubmitEnabled(submit);
+    const editorText = __sbXNormalizeText(editor?.innerText || editor?.textContent || '');
+    const statusText = __sbXGetStatusText();
+
+    if (!editor) return { sent: true, reason: 'composer-closed' };
+    if (/already said that|duplicate/.test(statusText)) return { sent: true, reason: 'duplicate-warning' };
+    if (/your (reply|post) was sent|reply sent|post sent|posted your reply/.test(statusText)) {
+      return { sent: true, reason: 'sent-toast' };
+    }
+    if (expected && !editorText.includes(expected) && !submitEnabled) {
+      return { sent: true, reason: 'editor-cleared' };
+    }
+
+    await __sbSleep(250);
+  }
+
+  return { sent: false, reason: 'timeout' };
+}
+
+async function __sbXSubmitWithShortcut(editable, expectedReplyText) {
   if (!editable) return false;
   try { editable.focus(); } catch(e) {}
   await __sbSleep(100);
@@ -2384,10 +2424,11 @@ async function __sbXSubmitWithShortcut(editable) {
       } catch(e) {}
     }
 
-    if (await __sbXWaitForComposerToClose()) return true;
+    const outcome = await __sbXWaitForSendOutcome(expectedReplyText);
+    if (outcome.sent) return outcome;
   }
 
-  return false;
+  return { sent: false, reason: 'timeout' };
 }
 
 async function __sbXPostReply(article, replyText) {
@@ -2428,19 +2469,23 @@ async function __sbXPostReply(article, replyText) {
 
   __sbShowBubble('X Auto: sending reply…', false, { tone: 'status', title: 'X Automation' });
   __sbXForceClick(submit);
-  let sent = await __sbXWaitForComposerToClose();
+  let outcome = await __sbXWaitForSendOutcome(replyText);
 
-  if (!sent) {
+  if (!outcome.sent) {
     __sbShowBubble('X Auto: click did not send, trying shortcut…', false, { tone: 'status', title: 'X Automation' });
-    sent = await __sbXSubmitWithShortcut(editable);
+    outcome = await __sbXSubmitWithShortcut(editable, replyText);
   }
 
-  if (!sent) {
+  if (!outcome.sent) {
     __sbShowBubble('X Auto: reply was written but not sent.', false, { tone: 'status', title: 'X Automation' });
     return false;
   }
 
-  __sbShowBubble('X Auto: reply posted ✓', false, { tone: 'status', title: 'X Automation' });
+  if (outcome.reason === 'duplicate-warning') {
+    __sbShowBubble('X Auto: reply was already sent ✓', false, { tone: 'status', title: 'X Automation' });
+  } else {
+    __sbShowBubble('X Auto: reply posted ✓', false, { tone: 'status', title: 'X Automation' });
+  }
   await __sbSleep(1200);
 
   // If we navigated to /compose/post, go back to the timeline
