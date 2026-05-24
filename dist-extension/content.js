@@ -251,26 +251,63 @@ function __sbSpotifyGetCurrentPlaylistName() {
 }
 
 function __sbSpotifyGetVisibleTrackEntries() {
-  const anchors = __sbAdapterDeepQueryAll('a[href*="/track/"]')
-    .filter((el) => __sbAdapterIsVisible(el))
-    .map((anchor) => {
-      const title = (anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
-      if (!title) return null;
-      const row =
-        anchor.closest('[data-testid="tracklist-row"]') ||
-        anchor.closest('[role="row"]') ||
-        anchor.closest("div");
-      return row ? { row, anchor, title } : null;
-    })
-    .filter(Boolean);
-
+  const entries = [];
   const seen = new Set();
-  return anchors.filter((entry) => {
-    const key = __sbAdapterNormalizeText(entry.title);
-    if (seen.has(key)) return false;
+
+  const addEntry = (row, anchor, titleSource) => {
+    if (!row) return;
+
+    const title = String(titleSource || "").replace(/\s+/g, " ").trim();
+    const rowText = String(row.innerText || row.textContent || "").replace(/\s+/g, " ").trim();
+    const normalizedTitle = __sbAdapterNormalizeText(title);
+    const normalizedRow = __sbAdapterNormalizeText(rowText);
+    if (!normalizedTitle && !normalizedRow) return;
+
+    const key = `${normalizedTitle}::${normalizedRow.slice(0, 160)}`;
+    if (seen.has(key)) return;
     seen.add(key);
-    return true;
-  });
+
+    entries.push({
+      row,
+      anchor: anchor || row.querySelector('a[href*="/track/"]') || row,
+      title: title || rowText,
+      rowText,
+    });
+  };
+
+  const rows = __sbAdapterDeepQueryAll('[data-testid="tracklist-row"], [role="row"]')
+    .filter((row) => __sbAdapterIsVisible(row));
+
+  for (const row of rows) {
+    const anchor =
+      row.querySelector('a[href*="/track/"]') ||
+      row.querySelector('[data-testid="internal-track-link"]') ||
+      row.querySelector('[aria-colindex="2"] a') ||
+      row.querySelector('[aria-colindex="2"] span');
+
+    const title =
+      anchor?.innerText ||
+      anchor?.textContent ||
+      row.querySelector('[data-testid="entityTitle"]')?.innerText ||
+      row.querySelector('[data-testid="entityTitle"]')?.textContent ||
+      row.querySelector('img[alt]')?.getAttribute("alt") ||
+      "";
+
+    addEntry(row, anchor, title);
+  }
+
+  const anchors = __sbAdapterDeepQueryAll('a[href*="/track/"]')
+    .filter((el) => __sbAdapterIsVisible(el));
+
+  for (const anchor of anchors) {
+    const row =
+      anchor.closest('[data-testid="tracklist-row"]') ||
+      anchor.closest('[role="row"]') ||
+      anchor.closest("div");
+    addEntry(row, anchor, anchor.innerText || anchor.textContent || "");
+  }
+
+  return entries;
 }
 
 async function __sbSpotifyOpenPlaylistByName(playlistName) {
@@ -306,7 +343,9 @@ async function __sbSpotifyPlayTrackFromCurrentPlaylist(songName) {
 
   for (let attempt = 0; attempt < 20; attempt++) {
     const entries = __sbSpotifyGetVisibleTrackEntries();
-    const exact = entries.find((entry) => __sbAdapterTextEquals(entry.title, songName));
+    const exact =
+      entries.find((entry) => __sbAdapterTextEquals(entry.title, songName)) ||
+      entries.find((entry) => __sbAdapterTextIncludes(entry.rowText, songName));
     if (exact) {
       const playButton =
         exact.row.querySelector('button[aria-label*="Play"]') ||
@@ -334,7 +373,8 @@ async function __sbSpotifyAddTrackToPlaylist(songName, playlistName) {
     const entries = __sbSpotifyGetVisibleTrackEntries();
     const target =
       entries.find((entry) => __sbAdapterTextEquals(entry.title, songName)) ||
-      entries.find((entry) => __sbAdapterTextIncludes(entry.title, songName));
+      entries.find((entry) => __sbAdapterTextIncludes(entry.title, songName)) ||
+      entries.find((entry) => __sbAdapterTextIncludes(entry.rowText, songName));
 
     if (target) {
       const moreButton =

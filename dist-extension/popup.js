@@ -1803,6 +1803,10 @@ function executeSiteAdapterAction(actionObj) {
   });
 }
 
+function buildSpotifyTrackSearchUrl(songName) {
+  return `https://open.spotify.com/search/${encodeURIComponent(songName)}/tracks`;
+}
+
 // Lightweight page snapshot — URL, title, first 500 chars of visible text
 // Used to verify the agent actually landed where it intended
 async function getPageSnapshot() {
@@ -1952,7 +1956,7 @@ async function tryRunPopupSiteAdapter(task, thinkingBlock, history, options = {}
       run: async () => {
         const result = await executeAgentAction({
           type: "navigate",
-          url: `https://open.spotify.com/search/${encodeURIComponent(parsed.song)}`,
+          url: buildSpotifyTrackSearchUrl(parsed.song),
           description: `Open Spotify search for "${parsed.song}"`,
         });
         if (!result?.error) {
@@ -3889,7 +3893,7 @@ async function runRemoteCommand(cmd, token) {
         await runRemoteAdapterStep(`Open Spotify search for "${parsed.song}"`, "navigate", async () => {
           const result = await executeAgentAction({
             type: "navigate",
-            url: `https://open.spotify.com/search/${encodeURIComponent(parsed.song)}`,
+            url: buildSpotifyTrackSearchUrl(parsed.song),
             description: `Open Spotify search for "${parsed.song}"`,
           });
           if (!result?.error) {
