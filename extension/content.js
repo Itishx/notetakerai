@@ -390,12 +390,37 @@ function __sbGoogleDocsGetEditorSurface() {
   return null;
 }
 
+function __sbGoogleDocsGetTitleTarget() {
+  const selectors = [
+    "#docs-title-input",
+    "input.docs-title-input",
+    'input[aria-label*="Document name"]',
+    'input[aria-label*="Rename"]',
+    'input[aria-label*="Title"]',
+  ];
+
+  for (const selector of selectors) {
+    const target = __sbAdapterDeepQueryAll(selector).find((el) => {
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return false;
+      return __sbAdapterIsVisible(el) || document.activeElement === el;
+    });
+    if (target) return target;
+  }
+  return null;
+}
+
 function __sbGoogleDocsGetInputTarget() {
+  const clipboardTarget = __sbAdapterDeepQueryAll("textarea").find((el) =>
+    /kix-clipboard-target/.test(String(el.className || ""))
+  );
+  if (clipboardTarget) return clipboardTarget;
+
+  const titleTarget = __sbGoogleDocsGetTitleTarget();
   const candidates = [
     ...__sbAdapterDeepQueryAll("textarea"),
     ...__sbAdapterDeepQueryAll('[role="textbox"][contenteditable="true"]'),
     ...__sbAdapterDeepQueryAll('[contenteditable="true"]'),
-  ].filter((el) => __sbAdapterIsVisible(el) || /kix-clipboard-target/.test(el.className || ""));
+  ].filter((el) => (el !== titleTarget) && (__sbAdapterIsVisible(el) || /kix-clipboard-target/.test(el.className || "")));
 
   return candidates.find((el) => {
     const label = __sbAdapterNormalizeText(el.getAttribute?.("aria-label") || "");
@@ -406,6 +431,47 @@ function __sbGoogleDocsGetInputTarget() {
   }) || null;
 }
 
+async function __sbGoogleDocsFocusBodySurface(surface) {
+  const titleTarget = __sbGoogleDocsGetTitleTarget();
+  if (titleTarget && document.activeElement === titleTarget) {
+    try { titleTarget.blur(); } catch(e) {}
+  }
+
+  const clickTarget =
+    surface.querySelector(".kix-page") ||
+    surface.querySelector(".kix-page-content-wrapper") ||
+    surface.querySelector(".kix-appview-editor") ||
+    surface;
+
+  const rect = clickTarget.getBoundingClientRect();
+  const clientX = Math.max(rect.left + Math.min(rect.width * 0.18, 120), rect.left + 24);
+  const clientY = Math.max(rect.top + Math.min(rect.height * 0.16, 90), rect.top + 24);
+
+  for (const type of ["mousedown", "mouseup", "click"]) {
+    try {
+      clickTarget.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX,
+        clientY,
+      }));
+    } catch(e) {}
+  }
+
+  try { clickTarget.focus?.(); } catch(e) {}
+  await __sbAdapterWait(200);
+
+  const inputTarget = __sbGoogleDocsGetInputTarget();
+  if (inputTarget) {
+    try { inputTarget.focus(); } catch(e) {}
+  }
+
+  await __sbAdapterWait(150);
+  const active = document.activeElement;
+  return !(titleTarget && active === titleTarget);
+}
+
 async function __sbGoogleDocsWriteArticle(title, body) {
   const payload = `${String(title || "").trim()}\n\n${String(body || "").trim()}`.trim();
   if (!payload) return { error: "No article content to write." };
@@ -413,9 +479,12 @@ async function __sbGoogleDocsWriteArticle(title, body) {
   const surface = __sbGoogleDocsGetEditorSurface();
   if (!surface) return { error: "Google Docs editor surface was not found." };
 
-  __sbAdapterClick(surface);
-  await __sbAdapterWait(180);
+  const focusedBody = await __sbGoogleDocsFocusBodySurface(surface);
+  if (!focusedBody) {
+    return { error: "Google Docs stayed focused on the title field instead of the document body." };
+  }
 
+  const titleTarget = __sbGoogleDocsGetTitleTarget();
   const target = __sbGoogleDocsGetInputTarget();
   if (target) {
     try { target.focus(); } catch(e) {}
@@ -444,12 +513,18 @@ async function __sbGoogleDocsWriteArticle(title, body) {
 
   await __sbAdapterWait(220);
 
-  const pageText = __sbAdapterNormalizeText(document.body?.innerText || "");
+  const bodyText = __sbAdapterNormalizeText(surface.innerText || surface.textContent || "");
   const bodySnippet = __sbAdapterNormalizeText(String(body || "").slice(0, 80));
   const titleSnippet = __sbAdapterNormalizeText(String(title || "").slice(0, 40));
+  const titleValue = __sbAdapterNormalizeText(titleTarget?.value || titleTarget?.textContent || "");
+
+  if (bodySnippet && titleValue.includes(bodySnippet)) {
+    return { error: "The article text was inserted into the Google Doc title field instead of the body." };
+  }
+
   const looksInserted =
-    (bodySnippet && pageText.includes(bodySnippet)) ||
-    (titleSnippet && pageText.includes(titleSnippet));
+    (bodySnippet && bodyText.includes(bodySnippet)) ||
+    (titleSnippet && bodyText.includes(titleSnippet));
 
   if (!inserted && !looksInserted) {
     return { error: "The article text could not be inserted into the Google Doc body." };
