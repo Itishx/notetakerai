@@ -2236,105 +2236,98 @@ async function __sbXGenerateReply(tweetText, handle) {
   });
 }
 
-async function __sbXWaitFor(sel, timeout = 5000) {
-  const t0 = Date.now();
-  while (Date.now() - t0 < timeout) {
-    const el = document.querySelector(sel);
-    if (el) return el;
-    await __sbSleep(250);
-  }
-  return null;
-}
-
 async function __sbXPostReply(article, replyText) {
-  if (!document.body.contains(article)) {
-    __sbShowBubble('X Auto: tweet left DOM, skipping.', false, { tone: 'status', title: 'X Automation' });
-    return false;
-  }
+  if (!document.body.contains(article)) return false;
 
   const replyBtn = article.querySelector('[data-testid="reply"]');
   if (!replyBtn) {
-    __sbShowBubble('X Auto: no reply button found.', false, { tone: 'status', title: 'X Automation' });
+    __sbShowBubble('X Auto: reply button not found on tweet.', false, { tone: 'status', title: 'X Automation' });
     return false;
   }
 
   article.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  await __sbSleep(700);
+  await __sbSleep(800);
   replyBtn.click();
-  __sbShowBubble('X Auto: clicked reply, waiting for composer…', false, { tone: 'status', title: 'X Automation' });
+  __sbShowBubble('X Auto: waiting for reply composer…', false, { tone: 'status', title: 'X Automation' });
 
-  // Poll for the textarea — up to 6s
-  const textarea = await __sbXWaitFor('[data-testid="tweetTextarea_0"]', 6000);
-  if (!textarea) {
-    __sbShowBubble('X Auto: reply composer never appeared.', false, { tone: 'status', title: 'X Automation' });
-    return false;
+  // tweetTextarea_0 IS the contenteditable on Twitter (Draft.js) — poll up to 7s
+  let editable = null;
+  const t0 = Date.now();
+  while (Date.now() - t0 < 7000) {
+    try {
+      const el = document.querySelector('[data-testid="tweetTextarea_0"]');
+      if (el && el.isContentEditable) { editable = el; break; }
+      // Also try aria-label fallback
+      const el2 = document.querySelector('[aria-label="Post text"][contenteditable="true"]') ||
+                  document.querySelector('[role="textbox"][contenteditable="true"]');
+      if (el2) { editable = el2; break; }
+    } catch(e) {}
+    await __sbSleep(300);
   }
-
-  // Find the actual contenteditable (Twitter nests it inside tweetTextarea_0)
-  const editable =
-    textarea.querySelector('[contenteditable="true"][role="textbox"]') ||
-    textarea.querySelector('[contenteditable="true"]') ||
-    (textarea.isContentEditable ? textarea : null);
   if (!editable) {
-    __sbShowBubble('X Auto: contenteditable not found inside composer.', false, { tone: 'status', title: 'X Automation' });
+    __sbShowBubble('X Auto: reply composer never appeared (timeout 7s).', false, { tone: 'status', title: 'X Automation' });
     return false;
   }
 
-  // Focus properly — execCommand needs this element to be the active element
-  editable.scrollIntoView({ block: 'nearest' });
-  await __sbSleep(150);
-  editable.click();
-  await __sbSleep(150);
-  editable.focus();
+  // Focus the Draft.js editor
+  try { editable.focus(); } catch(e) {}
   await __sbSleep(300);
 
-  // Place cursor
-  const sel = window.getSelection();
-  const range = document.createRange();
-  range.selectNodeContents(editable);
-  range.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(range);
-  await __sbSleep(100);
+  // Set cursor at end via Selection API
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(editable);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch(e) {}
+  await __sbSleep(150);
 
-  __sbShowBubble(`X Auto: typing reply (${replyText.length} chars)…`, false, { tone: 'status', title: 'X Automation' });
+  __sbShowBubble(`X Auto: typing ${replyText.length} chars…`, false, { tone: 'status', title: 'X Automation' });
 
-  // Type char-by-char — execCommand('insertText') is the only approach that
-  // triggers Twitter's Draft.js editor without being flagged as paste
+  // Type char-by-char — execCommand('insertText') triggers Draft.js onChange
+  // without being detected as paste (paste disables the Reply button)
   for (const char of replyText) {
-    if (!__sbXRunning) return false; // stop mid-typing if user hit Stop
-    editable.dispatchEvent(new KeyboardEvent('keydown', { key: char, bubbles: true, cancelable: true }));
-    document.execCommand('insertText', false, char);
-    editable.dispatchEvent(new KeyboardEvent('keyup', { key: char, bubbles: true }));
-    await __sbSleep(18);
-  }
-  await __sbSleep(600);
-
-  // Look for any reply/post button variant
-  let submit = null;
-  const submitSelectors = [
-    '[data-testid="tweetButtonInline"]',
-    '[data-testid="tweetButton"]',
-  ];
-  for (let i = 0; i < 10; i++) {
-    for (const s of submitSelectors) {
-      const btn = document.querySelector(s);
-      if (btn && btn.getAttribute('aria-disabled') !== 'true' && !btn.disabled) {
-        submit = btn; break;
-      }
+    if (!__sbXRunning) return false;
+    try {
+      document.execCommand('insertText', false, char);
+    } catch(e) {
+      try {
+        editable.dispatchEvent(new InputEvent('beforeinput', {
+          inputType: 'insertText', data: char, bubbles: true, cancelable: true,
+        }));
+      } catch(e2) {}
     }
-    if (submit) break;
+    await __sbSleep(20);
+  }
+  await __sbSleep(700);
+
+  // Twitter's Reply button: data-testid="tweetButton" (disabled = gray bg rgb(239,243,244))
+  let submit = null;
+  for (let i = 0; i < 12; i++) {
+    try {
+      const btn = document.querySelector('[data-testid="tweetButton"]') ||
+                  document.querySelector('[data-testid="tweetButtonInline"]');
+      if (btn) {
+        const bg = window.getComputedStyle(btn).backgroundColor;
+        // Enabled = dark bg; disabled = light gray rgb(239,243,244)
+        const rgb = bg.match(/\d+/g);
+        const isEnabled = rgb && +rgb[0] < 200;
+        if (isEnabled) { submit = btn; break; }
+        __sbShowBubble(`X Auto: Reply btn still gray (attempt ${i+1}/12), editor text: "${editable.textContent?.slice(0,30)}"`, false, { tone: 'status', title: 'X Automation' });
+      }
+    } catch(e) {}
     await __sbSleep(500);
   }
 
   if (!submit) {
-    const anyBtn = document.querySelector('[data-testid="tweetButtonInline"]') || document.querySelector('[data-testid="tweetButton"]');
-    __sbShowBubble(`X Auto: Post button not enabled. aria-disabled=${anyBtn?.getAttribute('aria-disabled')} text="${editable.textContent?.slice(0,40)}"`, false, { tone: 'status', title: 'X Automation' });
+    __sbShowBubble(`X Auto: Reply button never enabled. Editor has: "${editable.textContent?.slice(0,60)}"`, false, { tone: 'status', title: 'X Automation' });
     return false;
   }
 
-  submit.click();
-  __sbShowBubble('X Auto: posted reply!', false, { tone: 'status', title: 'X Automation' });
+  try { submit.click(); } catch(e) {}
+  __sbShowBubble('X Auto: reply posted ✓', false, { tone: 'status', title: 'X Automation' });
   await __sbSleep(2000);
   return true;
 }
