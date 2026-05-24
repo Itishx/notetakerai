@@ -2209,7 +2209,6 @@ function __sbSetStopBtn(visible) {
 const __sbXReplied = new WeakSet();
 const __sbXProcessedKeys = new Set();
 let __sbXRunning = false;
-const __sbXReplyDelayMs = 5000;
 const __sbXPostReplySettleMs = 1500;
 
 function __sbSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -2646,10 +2645,6 @@ async function __sbRunXAutomation() {
 
     const { text, handle } = data;
     if (!text || text.length < 8) continue;
-
-    __sbShowBubble(`@${handle}: waiting 5s before reply…`, false, { tone: 'status', title: 'X Automation' });
-    await __sbSleep(__sbXReplyDelayMs);
-    if (!__sbXRunning) break;
 
     __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
     const reply = await __sbXGenerateReply(text, handle);

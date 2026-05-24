@@ -306,6 +306,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const { tweetText, handle } = message;
     // Use chatHistory to establish the reply-writer persona before the actual tweet.
     // Passing instructions as `notes` confused the AI (it treated them as "lecture notes").
+    const cleanXReply = (value) => {
+      let reply = String(value || "").trim();
+      if (!reply) return "";
+
+      reply = reply
+        .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, "").trim())
+        .replace(/^["'`]+|["'`]+$/g, "")
+        .trim();
+
+      reply = reply
+        .replace(/^(draft|option|reply)\s*#?\d+\s*[:.)-]?\s*/i, "")
+        .replace(/^(draft|option|reply)\s*[:.)-]?\s*/i, "")
+        .trim();
+
+      const nonEmptyLines = reply
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .filter((line) => !/^(draft|option)\s*#?\d+\s*[:.)-]?$/i.test(line));
+
+      reply = nonEmptyLines.join(" ").replace(/\s+/g, " ").trim();
+      reply = reply.replace(/^(draft|option|reply)\s*#?\d+\s*[:.)-]?\s*/i, "").trim();
+      return reply.slice(0, 240);
+    };
+
     const xReplyPrompt = `You write replies on X that sound like a real person in the feed, not a bot, brand intern, customer support rep, or LinkedIn commenter.
 
 Write ONE reply to the tweet.
@@ -323,6 +348,7 @@ Rules:
 10. At most one emoji, and only if it feels native to the tweet.
 11. Do not sound promotional. Do not mention Braino or trybraino.com unless the tweet is directly about AI browser agents or workflow automation and the mention feels natural.
 12. Return ONLY the reply text.
+13. Never output labels like "Draft 1", "Draft 2", "Option 1", "Reply:", or multiple candidates.
 
 Before answering, silently draft 3 candidate replies and choose the one that is most specific, least generic, and most likely to be posted by a real person on X.`;
 
@@ -350,7 +376,7 @@ Before answering, silently draft 3 candidate replies and choose the one that is 
       }),
     })
       .then(r => r.json())
-      .then(data => sendResponse({ reply: data?.reply || data?.response || null }))
+      .then(data => sendResponse({ reply: cleanXReply(data?.reply || data?.response || null) || null }))
       .catch(() => sendResponse({ reply: null }));
     return true;
   }
