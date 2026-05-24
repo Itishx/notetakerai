@@ -2221,54 +2221,60 @@ async function __sbXGenerateReply(tweetText, handle) {
 }
 
 async function __sbXTypeIntoContentEditable(el, text) {
+  el.click();
+  await __sbSleep(150);
   el.focus();
-  await __sbSleep(120);
-  // Use execCommand which fires the React synthetic events Twitter listens to
+  await __sbSleep(150);
+  // Clear any existing draft
   document.execCommand('selectAll', false, null);
-  document.execCommand('delete', false, null);
-  document.execCommand('insertText', false, text);
-  el.dispatchEvent(new Event('input', { bubbles: true }));
+  await __sbSleep(40);
+  // Type character by character — paste disables the Post button on X,
+  // so we simulate real keystrokes which React's onChange handler accepts
+  for (const char of text) {
+    const kd = new KeyboardEvent('keydown', { key: char, bubbles: true, cancelable: true });
+    el.dispatchEvent(kd);
+    document.execCommand('insertText', false, char);
+    el.dispatchEvent(new KeyboardEvent('keyup', { key: char, bubbles: true }));
+    await __sbSleep(14);
+  }
   await __sbSleep(400);
 }
 
 async function __sbXPostReply(article, replyText) {
+  if (!document.body.contains(article)) return false;
+
   const replyBtn = article.querySelector('[data-testid="reply"]');
   if (!replyBtn) return false;
 
   article.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  await __sbSleep(600);
+  await __sbSleep(800);
   replyBtn.click();
-  await __sbSleep(2000);
+  await __sbSleep(2500);
 
-  // Find textarea — could be inline or in a modal
-  const selectors = [
-    '[data-testid="tweetTextarea_0"]',
-    '[role="dialog"] [data-testid="tweetTextarea_0"]',
-    '[aria-label="Tweet text"]',
-    '[aria-label="Post text"]',
-  ];
-  let el = null;
-  for (const sel of selectors) {
-    const found = document.querySelector(sel);
-    if (found) { el = found; break; }
-  }
+  // Use the last tweetTextarea_0 on the page (the most recently opened reply composer)
+  const all = [...document.querySelectorAll('[data-testid="tweetTextarea_0"]')];
+  const el = all[all.length - 1] || null;
   if (!el) return false;
 
-  const editable = el.querySelector('[contenteditable="true"]') || (el.isContentEditable ? el : null);
+  // Twitter's contenteditable is nested inside tweetTextarea_0
+  const editable = el.querySelector('[contenteditable="true"][role="textbox"]') ||
+                   el.querySelector('[contenteditable="true"]') ||
+                   (el.isContentEditable ? el : null);
   if (!editable) return false;
 
   await __sbXTypeIntoContentEditable(editable, replyText);
 
-  // Wait for submit to enable
-  await __sbSleep(600);
-  const submit = document.querySelector('[data-testid="tweetButtonInline"]');
-  if (!submit || submit.disabled || submit.getAttribute('aria-disabled') === 'true') return false;
+  // Wait up to 4s for the Post button to become enabled
+  let submit = null;
+  for (let i = 0; i < 8; i++) {
+    submit = document.querySelector('[data-testid="tweetButtonInline"]');
+    if (submit && submit.getAttribute('aria-disabled') !== 'true' && !submit.disabled) break;
+    await __sbSleep(500);
+  }
+  if (!submit || submit.getAttribute('aria-disabled') === 'true' || submit.disabled) return false;
 
   submit.click();
-  await __sbSleep(1500);
-
-  // Close any open modal (Escape)
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await __sbSleep(2000);
   return true;
 }
 
