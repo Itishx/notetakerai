@@ -421,6 +421,8 @@ async function __sbSpotifyAddTrackToPlaylist(songName, playlistName) {
 
 function __sbGoogleDocsGetEditorSurface() {
   const selectors = [
+    'div[aria-label="Document content"]',
+    'div[aria-label*="Document content"]',
     ".kix-appview-editor",
     ".kix-appview-editor-container",
     ".kix-page",
@@ -453,26 +455,25 @@ function __sbGoogleDocsGetTitleTarget() {
   return null;
 }
 
-function __sbGoogleDocsGetInputTarget() {
-  const clipboardTarget = __sbAdapterDeepQueryAll("textarea").find((el) =>
-    /kix-clipboard-target/.test(String(el.className || ""))
-  );
-  if (clipboardTarget) return clipboardTarget;
+function __sbGoogleDocsGetBodyTarget() {
+  const selectors = [
+    'div[aria-label="Document content"]',
+    'div[aria-label*="Document content"]',
+    '[role="textbox"][contenteditable="true"]',
+    '[contenteditable="true"]',
+  ];
 
-  const titleTarget = __sbGoogleDocsGetTitleTarget();
-  const candidates = [
-    ...__sbAdapterDeepQueryAll("textarea"),
-    ...__sbAdapterDeepQueryAll('[role="textbox"][contenteditable="true"]'),
-    ...__sbAdapterDeepQueryAll('[contenteditable="true"]'),
-  ].filter((el) => (el !== titleTarget) && (__sbAdapterIsVisible(el) || /kix-clipboard-target/.test(el.className || "")));
+  for (const selector of selectors) {
+    const target = __sbAdapterDeepQueryAll(selector).find((el) => {
+      if (!el) return false;
+      if (!(__sbAdapterIsVisible(el) || document.activeElement === el)) return false;
+      const label = __sbAdapterNormalizeText(el.getAttribute?.("aria-label") || "");
+      return !/title|document name|rename/.test(label);
+    });
+    if (target) return target;
+  }
 
-  return candidates.find((el) => {
-    const label = __sbAdapterNormalizeText(el.getAttribute?.("aria-label") || "");
-    const classes = String(el.className || "");
-    if (/title|document name/.test(label)) return false;
-    if (/kix-clipboard-target/.test(classes)) return true;
-    return true;
-  }) || null;
+  return null;
 }
 
 function __sbGoogleDocsSetTitleValue(titleTarget, value) {
@@ -523,9 +524,9 @@ async function __sbGoogleDocsFocusBodySurface(surface) {
   try { clickTarget.focus?.(); } catch(e) {}
   await __sbAdapterWait(200);
 
-  const inputTarget = __sbGoogleDocsGetInputTarget();
-  if (inputTarget) {
-    try { inputTarget.focus(); } catch(e) {}
+  const bodyTarget = __sbGoogleDocsGetBodyTarget();
+  if (bodyTarget) {
+    try { bodyTarget.focus(); } catch(e) {}
   }
 
   await __sbAdapterWait(150);
@@ -533,60 +534,81 @@ async function __sbGoogleDocsFocusBodySurface(surface) {
   return !(titleTarget && active === titleTarget);
 }
 
+function __sbGoogleDocsPlaceCaretAtStart(target) {
+  if (!target) return;
+  try {
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } catch(e) {}
+}
+
 async function __sbGoogleDocsInsertBodyPayload(target, payload) {
   if (!target || !payload) return false;
 
   try { target.focus?.(); } catch(e) {}
   await __sbAdapterWait(80);
-
-  try {
-    target.dispatchEvent(new InputEvent("beforeinput", {
-      inputType: "insertText",
-      data: payload,
-      bubbles: true,
-      cancelable: true,
-    }));
-  } catch(e) {}
-
-  try {
-    const dt = new DataTransfer();
-    dt.setData("text/plain", payload);
-    target.dispatchEvent(new ClipboardEvent("paste", {
-      clipboardData: dt,
-      bubbles: true,
-      cancelable: true,
-    }));
-  } catch(e) {}
-
-  try {
-    target.dispatchEvent(new InputEvent("input", {
-      inputType: "insertFromPaste",
-      data: payload,
-      bubbles: true,
-    }));
-  } catch(e) {
-    try { target.dispatchEvent(new Event("input", { bubbles: true })); } catch(_) {}
-  }
+  __sbGoogleDocsPlaceCaretAtStart(target);
+  await __sbAdapterWait(40);
 
   let inserted = false;
-  try {
-    inserted = document.execCommand("insertText", false, payload);
-  } catch(e) {}
+  const paragraphs = String(payload).split("\n");
 
-  if (!inserted) {
-    try {
-      const setter =
-        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set ||
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  for (let index = 0; index < paragraphs.length; index++) {
+    const paragraph = paragraphs[index];
 
-      if (setter && "value" in target) setter.call(target, payload);
-      else if ("value" in target) target.value = payload;
-      else if (target.isContentEditable) target.textContent = payload;
+    if (paragraph) {
+      try {
+        target.dispatchEvent(new InputEvent("beforeinput", {
+          inputType: "insertText",
+          data: paragraph,
+          bubbles: true,
+          cancelable: true,
+        }));
+      } catch(e) {}
 
-      target.dispatchEvent(new Event("input", { bubbles: true }));
-      target.dispatchEvent(new Event("change", { bubbles: true }));
-      inserted = true;
-    } catch(e) {}
+      let typed = false;
+      try {
+        typed = document.execCommand("insertText", false, paragraph);
+      } catch(e) {}
+
+      if (!typed) {
+        try {
+          target.textContent = `${target.textContent || ""}${paragraph}`;
+          typed = true;
+        } catch(e) {}
+      }
+
+      inserted = inserted || typed;
+
+      try {
+        target.dispatchEvent(new InputEvent("input", {
+          inputType: "insertText",
+          data: paragraph,
+          bubbles: true,
+        }));
+      } catch(e) {
+        try { target.dispatchEvent(new Event("input", { bubbles: true })); } catch(_) {}
+      }
+    }
+
+    if (index < paragraphs.length - 1) {
+      let brokeLine = false;
+      try { brokeLine = document.execCommand("insertParagraph", false, null); } catch(e) {}
+      if (!brokeLine) {
+        try { brokeLine = document.execCommand("insertLineBreak", false, null); } catch(e) {}
+      }
+      if (!brokeLine) {
+        try { brokeLine = document.execCommand("insertText", false, "\n"); } catch(e) {}
+      }
+      inserted = inserted || brokeLine;
+    }
+
+    await __sbAdapterWait(16);
   }
 
   await __sbAdapterWait(220);
@@ -613,7 +635,7 @@ async function __sbGoogleDocsWriteArticle(title, body) {
     return { error: "Google Docs stayed focused on the title field instead of the document body." };
   }
 
-  const target = __sbGoogleDocsGetInputTarget();
+  const target = __sbGoogleDocsGetBodyTarget();
   const bodyPayload = cleanTitle ? `${cleanTitle}\n\n${cleanBody}` : cleanBody;
   const bodySnippet = __sbAdapterNormalizeText(cleanBody.slice(0, 80));
   const titleSnippet = __sbAdapterNormalizeText(cleanTitle.slice(0, 40));
@@ -641,7 +663,7 @@ async function __sbGoogleDocsWriteArticle(title, body) {
     return { error: "The article text could not be inserted into the Google Doc body." };
   }
 
-  return { success: true, chars: payload.length };
+  return { success: true, chars: bodyPayload.length };
 }
 
 function __sbGetSiteAdapterContext() {
@@ -665,7 +687,7 @@ function __sbGetSiteAdapterContext() {
       url,
       title: document.title,
       hasEditorSurface: Boolean(__sbGoogleDocsGetEditorSurface()),
-      hasInputTarget: Boolean(__sbGoogleDocsGetInputTarget()),
+      hasInputTarget: Boolean(__sbGoogleDocsGetBodyTarget()),
     };
   }
 
