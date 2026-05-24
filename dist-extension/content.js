@@ -2250,17 +2250,23 @@ async function __sbXPostReply(article, replyText) {
   replyBtn.click();
   __sbShowBubble('X Auto: waiting for reply composer…', false, { tone: 'status', title: 'X Automation' });
 
-  // tweetTextarea_0 IS the contenteditable on Twitter (Draft.js) — poll up to 7s
+  // tweetTextarea_0 IS the contenteditable on Twitter (Draft.js)
+  // IMPORTANT: the home timeline also has a tweetTextarea_0 (main compose box).
+  // After clicking reply, the reply modal/inline composer appears — look inside
+  // [role="dialog"] first, then take the LAST one on page (reply comes after main).
   let editable = null;
   const t0 = Date.now();
   while (Date.now() - t0 < 7000) {
     try {
-      const el = document.querySelector('[data-testid="tweetTextarea_0"]');
-      if (el && el.isContentEditable) { editable = el; break; }
-      // Also try aria-label fallback
-      const el2 = document.querySelector('[aria-label="Post text"][contenteditable="true"]') ||
-                  document.querySelector('[role="textbox"][contenteditable="true"]');
-      if (el2) { editable = el2; break; }
+      // 1. Inside a dialog (reply modal)
+      const inDialog = document.querySelector('[role="dialog"] [data-testid="tweetTextarea_0"]');
+      if (inDialog && inDialog.isContentEditable) { editable = inDialog; break; }
+      // 2. Last tweetTextarea_0 on page (reply composer loads after main compose)
+      const all = [...document.querySelectorAll('[data-testid="tweetTextarea_0"]')];
+      if (all.length > 1) { // more than 1 means reply opened
+        const last = all[all.length - 1];
+        if (last.isContentEditable) { editable = last; break; }
+      }
     } catch(e) {}
     await __sbSleep(300);
   }
@@ -2374,7 +2380,7 @@ async function __sbRunXAutomation() {
     const reply = await __sbXGenerateReply(text, handle);
     if (!reply) { await __sbSleep(2000); continue; }
 
-    const ok = await __sbXPostReply(article, reply);
+    const ok = await __sbXPostReply(article, reply.slice(0, 240));
     if (ok) {
       count++;
       __sbShowBubble(`Replied to ${count} post${count !== 1 ? 's' : ''} — waiting 10s…`, false, { tone: 'status', title: 'X Automation' });
