@@ -1,4 +1,4 @@
-// SideBrain Content Script — extracts page text for AI context
+// Braino Content Script — extracts page text for AI context
 
 // Generate a stable, unique CSS selector for an element (used by browser agent)
 function getStableSelector(el) {
@@ -691,6 +691,8 @@ function __sbStorageGet(keys) {
 }
 const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 
+const __SB_BRAIN_SVG_SMALL = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="28" height="28"');
+
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
@@ -716,7 +718,7 @@ if (__sbContextOk()) {
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
-        __sbShowBubble(msg.text, false, { rich: true, kicker: "SideBrain" });
+        __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino" });
       } else {
         __sbShowBubble(msg.text, false, { tone: "status" });
       }
@@ -734,7 +736,7 @@ function __sbBuildBrainUI() {
   style.textContent = `
     #__sb_root__ {
       position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
-      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       pointer-events: none;
     }
@@ -1001,54 +1003,219 @@ function __sbBuildBrainUI() {
     }
     .sb-notion-btn:hover { background: rgba(65,48,40,0.06); }
     .sb-notion-btn:disabled { opacity: 0.55; cursor: default; }
+
+    /* ── NEW UI: Thin bar + centered glass card ── */
+    #__sb_bar__ {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,251,247,0.96); border-radius: 100px;
+      padding: 7px 7px 7px 18px;
+      border: 1px solid rgba(65,48,40,0.1);
+      box-shadow: 0 8px 28px rgba(27,23,19,0.13), 0 2px 8px rgba(27,23,19,0.07);
+      width: 360px; max-width: calc(100vw - 90px);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      pointer-events: none; opacity: 0;
+      transform: scaleX(0.55) translateY(4px); transform-origin: right center;
+      transition: opacity 0.22s cubic-bezier(0.34,1.2,0.64,1), transform 0.22s cubic-bezier(0.34,1.2,0.64,1);
+    }
+    #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
+    #__sb_input__ {
+      flex: 1; border: none; outline: none; background: transparent;
+      font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #__sb_input__::placeholder { color: #A79B92; }
+    .sb-bar-icon-btn {
+      width: 32px; height: 32px; border-radius: 50%; border: none;
+      background: transparent; color: #6B5248; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.15s; padding: 0;
+    }
+    .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
+    .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_send_btn__ { background: #E8786E !important; color: white !important; }
+    #__sb_send_btn__:hover { background: #C9544A !important; }
+    #__sb_card_wrap__ {
+      position: fixed; z-index: 2147483648; top: 50%; left: 50%;
+      transform: translate(-50%, -50%); width: min(580px, calc(100vw - 48px));
+      pointer-events: none; opacity: 0; transition: opacity 0.25s;
+    }
+    #__sb_card_wrap__.visible { opacity: 1; pointer-events: all; }
+    #__sb_card_wrap__.animating-in #__sb_bubble__ {
+      animation: __sb_card_in__ 0.38s cubic-bezier(0.34,1.15,0.64,1) both;
+    }
+    @keyframes __sb_card_in__ {
+      from { opacity: 0; transform: scale(0.88) translateY(22px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    #__sb_orbit_brain__ {
+      position: absolute; top: 0; left: 0; width: 28px; height: 28px;
+      z-index: 2; pointer-events: none; display: none; offset-anchor: 50% 50%;
+    }
+    #__sb_card_wrap__.visible #__sb_orbit_brain__ { display: block; }
+    @keyframes __sb_orbit__ { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+    #__sb_bubble__ {
+      position: relative; width: 100%;
+      height: auto; max-height: min(72vh, 700px); min-height: 120px;
+      display: flex; flex-direction: column; overflow: hidden;
+      background: rgba(255,255,255,0.14); border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.38);
+      box-shadow: 0 40px 100px rgba(27,23,19,0.28), 0 8px 24px rgba(27,23,19,0.12),
+                  inset 0 1px 0 rgba(255,255,255,0.65), inset 0 -1px 0 rgba(255,255,255,0.12);
+      backdrop-filter: blur(64px) saturate(200%) brightness(1.08);
+      -webkit-backdrop-filter: blur(64px) saturate(200%) brightness(1.08);
+      color: #1B1713; resize: none;
+    }
+    .sb-card-header {
+      display: flex; align-items: center; justify-content: flex-end; gap: 5px;
+      padding: 12px 14px 4px; flex-shrink: 0;
+    }
+    .sb-card-header-btn {
+      border: none; background: rgba(255,255,255,0.22); color: rgba(80,60,50,0.85);
+      height: 26px; padding: 0 10px; border-radius: 8px; cursor: pointer;
+      font-size: 11px; font-weight: 600; transition: background 0.12s;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .sb-card-header-btn:hover { background: rgba(255,255,255,0.4); }
+    .sb-card-scroll {
+      flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px;
+    }
+    .sb-card-scroll::-webkit-scrollbar { width: 4px; }
+    .sb-card-scroll::-webkit-scrollbar-track { background: transparent; }
+    .sb-card-scroll::-webkit-scrollbar-thumb { background: rgba(180,140,120,0.3); border-radius: 99px; }
+    .sb-card-scroll::-webkit-scrollbar-thumb:hover { background: rgba(180,140,120,0.55); }
+    .sb-card-q {
+      display: inline-block; background: rgba(201,84,74,0.09); border: 1px solid rgba(201,84,74,0.16);
+      border-radius: 14px; padding: 10px 14px; font-size: 13px; color: #5B3830; line-height: 1.5;
+      margin-bottom: 18px; max-width: 100%; word-break: break-word;
+    }
+    .sb-card-a { font-size: 14.5px; line-height: 1.75; color: #1E1713; word-break: break-word; }
+    .sb-card-a h1, .sb-card-a h2, .sb-card-a h3 {
+      font-family: Georgia, 'Times New Roman', serif; color: #1A1210; margin: 0 0 10px; line-height: 1.25;
+    }
+    .sb-card-a h1 { font-size: 22px; }
+    .sb-card-a h2 { font-size: 18px; }
+    .sb-card-a h3 { font-size: 15.5px; }
+    .sb-card-a p { margin: 0 0 12px; }
+    .sb-card-a p:last-child { margin-bottom: 0; }
+    .sb-card-a ul, .sb-card-a ol { margin: 0 0 12px 18px; padding: 0; }
+    .sb-card-a li { margin: 0 0 5px; }
+    .sb-card-a a { color: #B44B42; text-decoration: none; }
+    .sb-card-a a:hover { text-decoration: underline; }
+    .sb-card-a code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px; padding: 2px 5px; border-radius: 5px;
+      background: rgba(67,50,42,0.1); color: #7C352E;
+    }
+    .sb-card-a pre {
+      margin: 0 0 12px; padding: 12px 14px; border-radius: 14px;
+      background: rgba(20,14,10,0.78); color: #FBF7F1; overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px; line-height: 1.55;
+    }
+    .sb-card-a pre code { background: transparent; color: inherit; padding: 0; }
+    .sb-card-a blockquote {
+      margin: 0 0 12px; padding: 0 0 0 12px;
+      border-left: 3px solid rgba(201,84,74,0.35); color: #705C50;
+    }
+    .sb-card-a hr { border: none; border-top: 1px solid rgba(65,48,40,0.1); margin: 14px 0; }
+    .sb-card-status { font-size: 13.5px; color: #5B4A40; line-height: 1.65; }
+    .sb-card-footer {
+      display: flex; align-items: center; gap: 5px;
+      padding: 10px 12px 12px; flex-shrink: 0;
+      border-top: 1px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.07);
+    }
+    #__sb_card_input__ {
+      flex: 1; border: none; outline: none; background: transparent;
+      font-size: 13.5px; color: #1B1713; min-width: 0; padding: 0;
+      resize: none; line-height: 1.5; max-height: 80px; overflow-y: auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #__sb_card_input__::placeholder { color: rgba(107,82,72,0.65); }
+    .sb-card-foot-btn {
+      width: 30px; height: 30px; border-radius: 50%; border: none;
+      background: transparent; color: #6B5248; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.15s; padding: 0;
+    }
+    .sb-card-foot-btn:hover { background: rgba(65,48,40,0.1); }
+    .sb-card-foot-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_card_send__ { background: #E8786E; color: white; }
+    #__sb_card_send__:hover { background: #C9544A; }
+    #__sb_rec_bar__ {
+      display: none; align-items: center; gap: 8px; padding: 8px 14px; flex-shrink: 0;
+      border-top: 1px solid rgba(255,255,255,0.18);
+    }
+    #__sb_rec_bar__.active { display: flex; }
   `;
   document.head.appendChild(style);
 
   const root = document.createElement("div");
   root.id = "__sb_root__";
   root.innerHTML = `
-    <div id="__sb_bubble__"></div>
-    <div id="__sb_pill__">
-      <div id="__sb_pill_top__">
-        <textarea id="__sb_input__" placeholder="What do you want to do?" autocomplete="off" spellcheck="false" rows="1"></textarea>
-        <button id="__sb_send_btn__" title="Send">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-        </button>
-      </div>
-      <div id="__sb_pill_bottom__">
-        <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
-          <span id="__sb_mode_label__">⚡ Auto</span>
-          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
-        </button>
-        <button id="__sb_model_btn__" class="sb-pill-dropdown-btn" title="Model">
-          <span id="__sb_model_label__">🧠 SideBrain AI</span>
-          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
-        </button>
-        <div class="sb-pill-spacer"></div>
-        <button id="__sb_voice_mode_btn__" title="Voice mode — spoken replies only">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-        </button>
-        <button id="__sb_rec_btn__" title="Voice">🎙</button>
-      </div>
-      <div id="__sb_rec_bar__">
-        <span id="__sb_rec_timer__">00:00</span>
-        <button id="__sb_capture_btn__" title="Capture notes from recording so far">✂ Capture</button>
-        <button id="__sb_rec_stop_btn__" title="Stop recording">⏹ Stop</button>
-      </div>
+    <div id="__sb_bar__">
+      <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
+      <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
+        <span id="__sb_mode_label__">⚡ Auto</span>
+        <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+      </button>
+      <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Voice">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      </button>
+      <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
   document.body.appendChild(root);
 
-  // ── dropdowns appended directly to body so backdrop-filter on pill doesn't trap fixed positioning ──
+  // ── Card wrapper ──
+  const cardWrap = document.createElement("div");
+  cardWrap.id = "__sb_card_wrap__";
+  cardWrap.innerHTML = `
+    <div id="__sb_orbit_brain__">${__SB_BRAIN_SVG_SMALL}</div>
+    <div id="__sb_bubble__">
+      <div class="sb-card-header">
+        <button class="sb-card-header-btn" type="button" data-sb-speak>Speak</button>
+        <button class="sb-card-header-btn" type="button" data-sb-copy>Copy</button>
+        <button class="sb-card-header-btn" type="button" data-sb-close>×</button>
+      </div>
+      <div class="sb-card-scroll"></div>
+      <div class="sb-card-footer">
+        <textarea id="__sb_card_input__" placeholder="Follow up…" rows="1"></textarea>
+        <button id="__sb_card_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
+          <span id="__sb_card_mode_label__">⚡ Auto</span>
+          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+        </button>
+        <button id="__sb_card_rec_btn__" class="sb-card-foot-btn" title="Voice">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </button>
+        <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Voice-only mode">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        </button>
+        <button id="__sb_card_send__" class="sb-card-foot-btn" title="Send">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+        <button id="__sb_card_collapse__" class="sb-card-foot-btn" title="Collapse">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="19 12 12 19 5 12"/></svg>
+        </button>
+      </div>
+      <div id="__sb_rec_bar__">
+        <span id="__sb_rec_timer__">00:00</span>
+        <button id="__sb_capture_btn__">✂ Capture</button>
+        <button id="__sb_rec_stop_btn__">⏹ Stop</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(cardWrap);
+
+  // ── Dropdowns (body-level to avoid stacking context issues) ──
   const modeDd = document.createElement("div");
   modeDd.id = "__sb_mode_dropdown__";
   modeDd.className = "sb-dropdown";
   modeDd.innerHTML = `
     <div class="sb-dropdown-label">Mode</div>
-    <button class="sb-dropdown-item selected" data-mode="auto"><span class="sb-di-icon">⚡</span><span class="sb-di-label">Auto-detect</span><span class="sb-di-check">✓</span></button>
-    <button class="sb-dropdown-item" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Chat with Page</span><span class="sb-di-check">✓</span></button>
-    <button class="sb-dropdown-item" data-mode="chat"><span class="sb-di-icon">💬</span><span class="sb-di-label">General Chat</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item selected" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Chat with Page</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="web"><span class="sb-di-icon">🔍</span><span class="sb-di-label">Web Search</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
@@ -1061,16 +1228,16 @@ function __sbBuildBrainUI() {
   modelDd.className = "sb-dropdown";
   modelDd.innerHTML = `
     <div class="sb-dropdown-label">AI Model</div>
-    <button class="sb-dropdown-item selected" data-model="lovable"><span class="sb-di-icon">🧠</span><span class="sb-di-label">SideBrain AI</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item selected" data-model="lovable"><span class="sb-di-icon">🧠</span><span class="sb-di-label">Braino AI</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
   `;
   document.body.appendChild(modelDd);
 
-  // Brain hidden by default — summoned via Cmd+B or extension icon click
+  // Brain hidden by default
   document.getElementById("__sb_brain_btn__").style.display = "none";
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
 
-  // ⌘B / Ctrl+B — show/hide the whole brain UI
+  // ⌘B / Ctrl+B — toggle brain
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
       const tag = document.activeElement?.tagName?.toLowerCase();
@@ -1080,16 +1247,40 @@ function __sbBuildBrainUI() {
       __sbToggleBrain();
     }
   }, true);
+
+  // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
-  document.getElementById("__sb_voice_mode_btn__").addEventListener("click", () => {
+
+  // Card footer buttons
+  document.getElementById("__sb_card_send__").addEventListener("click", __sbSendMessage);
+  document.getElementById("__sb_card_rec_btn__").addEventListener("click", __sbToggleRecording);
+  document.getElementById("__sb_card_collapse__").addEventListener("click", __sbCollapseCard);
+  document.getElementById("__sb_card_voice_mode_btn__").addEventListener("click", () => {
     __sbVoiceOnlyMode = !__sbVoiceOnlyMode;
-    document.getElementById("__sb_voice_mode_btn__").classList.toggle("active", __sbVoiceOnlyMode);
+    document.getElementById("__sb_card_voice_mode_btn__").classList.toggle("active", __sbVoiceOnlyMode);
   });
   document.getElementById("__sb_capture_btn__").addEventListener("click", () => void __sbCaptureLectureSegment());
   document.getElementById("__sb_rec_stop_btn__").addEventListener("click", () => void __sbStopLectureRecording());
 
-  // ── dropdown helpers ──
+  // Card header buttons (wired once, not per-show)
+  const bubble = document.getElementById("__sb_bubble__");
+  bubble.querySelector("[data-sb-close]").addEventListener("click", () => __sbCollapseCard());
+  bubble.querySelector("[data-sb-copy]").addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
+    try {
+      await navigator.clipboard.writeText(__sbLastBubbleRaw);
+      const prev = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = prev || "Copy"; }, 1200);
+    } catch {}
+  });
+  bubble.querySelector("[data-sb-speak]").addEventListener("click", () => {
+    if (__sbIsSpeaking) { __sbStopSpeech(); return; }
+    void __sbSpeakText(__sbLastBubbleRaw);
+  });
+
+  // ── Dropdown helpers ──
   let __sbOpenDropdown = null;
   function __sbCloseAllDropdowns() {
     document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
@@ -1098,71 +1289,111 @@ function __sbBuildBrainUI() {
   }
   function __sbPositionDropdown(ddEl, triggerEl) {
     const tr = triggerEl.getBoundingClientRect();
-    const dd = ddEl;
-    dd.style.left = tr.left + "px";
-    dd.style.bottom = (window.innerHeight - tr.top + 6) + "px";
-    dd.style.top = "auto";
+    ddEl.style.left = tr.left + "px";
+    ddEl.style.bottom = (window.innerHeight - tr.top + 6) + "px";
+    ddEl.style.top = "auto";
   }
 
-  // ── mode dropdown ──
-  const modeBtn = document.getElementById("__sb_mode_btn__");
-  modeBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isOpen = modeDd.classList.contains("open");
-    __sbCloseAllDropdowns();
-    if (!isOpen) { __sbPositionDropdown(modeDd, modeBtn); modeDd.classList.add("open"); __sbOpenDropdown = "mode"; }
-  });
+  // ── Mode dropdown (bar + card share the same dropdown) ──
+  function __sbSetupModeBtn(btnEl) {
+    btnEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = modeDd.classList.contains("open");
+      __sbCloseAllDropdowns();
+      if (!isOpen) { __sbPositionDropdown(modeDd, btnEl); modeDd.classList.add("open"); __sbOpenDropdown = "mode"; }
+    });
+  }
+  __sbSetupModeBtn(document.getElementById("__sb_mode_btn__"));
+  __sbSetupModeBtn(document.getElementById("__sb_card_mode_btn__"));
+
   modeDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
     item.addEventListener("click", () => {
       const mode = item.dataset.mode;
       window.__sbForcedMode = mode;
       modeDd.querySelectorAll(".sb-dropdown-item").forEach(i => i.classList.remove("selected"));
       item.classList.add("selected");
-      const labels = { auto: "⚡ Auto", page: "📄 Chat with Page", chat: "💬 General Chat", web: "🔍 Web Search", lecture: "🎙 Lecture", meeting: "👥 Meeting", agent: "🤖 Delegate" };
-      document.getElementById("__sb_mode_label__").textContent = labels[mode] || "⚡ Auto";
-      modeBtn.classList.toggle("active-mode", mode !== "auto");
+      const labels = { page: "📄 Page", web: "🔍 Web", lecture: "🎙 Lecture", meeting: "👥 Meeting", agent: "🤖 Delegate" };
+      const label = labels[mode] || "📄 Page";
+      document.getElementById("__sb_mode_label__").textContent = label;
+      document.getElementById("__sb_card_mode_label__").textContent = label;
+      document.getElementById("__sb_mode_btn__").classList.toggle("active-mode", mode !== "page");
+      document.getElementById("__sb_card_mode_btn__").classList.toggle("active-mode", mode !== "page");
       __sbCloseAllDropdowns();
     });
   });
 
-  // ── model dropdown ──
-  const modelBtn = document.getElementById("__sb_model_btn__");
-  modelBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isOpen = modelDd.classList.contains("open");
-    __sbCloseAllDropdowns();
-    if (!isOpen) { __sbPositionDropdown(modelDd, modelBtn); modelDd.classList.add("open"); __sbOpenDropdown = "model"; }
-  });
   modelDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
     item.addEventListener("click", () => {
       const model = item.dataset.model;
       modelDd.querySelectorAll(".sb-dropdown-item").forEach(i => i.classList.remove("selected"));
       item.classList.add("selected");
-      const labels = { lovable: "🧠 SideBrain AI", claude: "✦ Claude" };
-      document.getElementById("__sb_model_label__").textContent = labels[model] || "🧠 SideBrain AI";
       if (__sbContextOk()) chrome.storage.local.set({ aiProvider: model });
       __sbCloseAllDropdowns();
     });
   });
 
-  // close dropdowns on outside click
   document.addEventListener("click", (e) => {
-    if (__sbOpenDropdown && !e.target.closest("#__sb_mode_dropdown__,#__sb_model_dropdown__,#__sb_mode_btn__,#__sb_model_btn__")) {
+    if (__sbOpenDropdown && !e.target.closest("#__sb_mode_dropdown__,#__sb_model_dropdown__,#__sb_mode_btn__,#__sb_card_mode_btn__")) {
       __sbCloseAllDropdowns();
     }
   });
 
+  // Bar input
   const inputEl = document.getElementById("__sb_input__");
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
     if (e.key === "Escape") __sbToggleInput(false);
   });
-  inputEl.addEventListener("input", () => {
-    inputEl.style.height = "auto";
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
-  });
 
-  // Brain is hidden by default — no auto-restore
+  // Card input
+  const cardInputEl = document.getElementById("__sb_card_input__");
+  cardInputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
+    if (e.key === "Escape") __sbCollapseCard();
+  });
+  cardInputEl.addEventListener("input", () => {
+    cardInputEl.style.height = "auto";
+    cardInputEl.style.height = Math.min(cardInputEl.scrollHeight, 80) + "px";
+  });
+}
+
+function __sbOpenCard(options = {}) {
+  const wrap = document.getElementById("__sb_card_wrap__");
+  if (!wrap) return;
+  wrap.classList.add("visible", "animating-in");
+  requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
+  document.getElementById("__sb_bar__")?.classList.remove("open");
+  if (options.rich) setTimeout(() => __sbStartOrbit(), 60);
+  else __sbStopOrbit();
+}
+
+function __sbCollapseCard() {
+  const wrap = document.getElementById("__sb_card_wrap__");
+  if (wrap) wrap.classList.remove("visible");
+  __sbStopOrbit();
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  if (__sbBrainVisible && __sbInputOpen) {
+    document.getElementById("__sb_bar__")?.classList.add("open");
+  }
+}
+
+function __sbStartOrbit() {
+  const card = document.getElementById("__sb_bubble__");
+  const brain = document.getElementById("__sb_orbit_brain__");
+  if (!card || !brain) return;
+  const w = card.offsetWidth;
+  const h = card.offsetHeight;
+  const r = 24;
+  const path = `M ${r},0 H ${w - r} Q ${w},0 ${w},${r} V ${h - r} Q ${w},${h} ${w - r},${h} H ${r} Q 0,${h} 0,${h - r} V ${r} Q 0,0 ${r},0 Z`;
+  brain.style.offsetPath = `path("${path}")`;
+  brain.style.animation = "__sb_orbit__ 12s linear infinite";
+}
+
+function __sbStopOrbit() {
+  const brain = document.getElementById("__sb_orbit_brain__");
+  if (!brain) return;
+  brain.style.offsetPath = "";
+  brain.style.animation = "none";
 }
 
 function __sbTimeGreeting() {
@@ -1193,7 +1424,9 @@ function __sbToggleBrain() {
     if (btn) btn.style.display = "none";
     __sbToggleInput(false, { skipPersist: true });
     if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-    document.getElementById("__sb_bubble__")?.classList.remove("visible");
+    const wrap = document.getElementById("__sb_card_wrap__");
+    if (wrap) wrap.classList.remove("visible");
+    __sbStopOrbit();
   } else {
     __sbBrainVisible = true;
     if (btn) btn.style.display = "";
@@ -1204,7 +1437,7 @@ function __sbToggleBrain() {
 function __sbToggleInput(open, options = {}) {
   if (open) {
     if (!__sbContextOk()) {
-      __sbShowBubble("Reload this page to reconnect SideBrain.", true, { tone: "status" });
+      __sbShowBubble("Reload this page to reconnect Braino.", true, { tone: "status" });
       return;
     }
     chrome.storage.local.get("authToken", ({ authToken }) => {
@@ -1218,24 +1451,20 @@ function __sbToggleInput(open, options = {}) {
       __sbSetGreetingPlaceholder(authToken);
       __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
         const model = aiProvider === "claude" ? "claude" : "lovable";
-        const labels = { lovable: "🧠 SideBrain AI", claude: "✦ Claude" };
-        const labelEl = document.getElementById("__sb_model_label__");
-        if (labelEl) labelEl.textContent = labels[model] || "🧠 SideBrain AI";
         document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
           b.classList.toggle("selected", b.dataset.model === model));
       });
-      const pill = document.getElementById("__sb_pill__");
-      if (pill) {
-        pill.classList.add("open");
-        if (!options.suppressFocus) {
-          setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
-        }
+      const bar = document.getElementById("__sb_bar__");
+      if (bar) {
+        const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+        if (!cardOpen) bar.classList.add("open");
+        if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
       }
     });
   } else {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
-    document.getElementById("__sb_pill__")?.classList.remove("open");
+    document.getElementById("__sb_bar__")?.classList.remove("open");
   }
 }
 
@@ -1349,14 +1578,14 @@ function __sbRenderMarkdown(md) {
 }
 
 function __sbSetVoiceButtonState(active) {
-  const recBtn = document.getElementById("__sb_rec_btn__");
-  recBtn?.classList.toggle("active", active);
+  const title = active ? "Stop listening" : (__sbIsSpeaking ? "Stop speaking" : "Speak to Braino");
+  ["__sb_rec_btn__", "__sb_card_rec_btn__"].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.classList.toggle("active", active);
+    btn.title = title;
+  });
   document.getElementById("__sb_brain_btn__")?.classList.toggle("recording", active);
-  if (recBtn) {
-    recBtn.title = active
-      ? "Stop listening"
-      : (__sbIsSpeaking ? "Stop speaking" : "Speak to SideBrain");
-  }
 }
 
 function __sbStripMarkdownForSpeech(text) {
@@ -1483,150 +1712,39 @@ async function __sbSpeakText(text) {
   return spoke;
 }
 
-function __sbBindBubbleActions() {
-  const bubble = document.getElementById("__sb_bubble__");
-  if (!bubble) return;
-
-  bubble.querySelector("[data-sb-close]")?.addEventListener("click", () => {
-    __sbStopSpeech();
-    bubble.classList.remove("visible");
-  });
-
-  bubble.querySelector("[data-sb-copy]")?.addEventListener("click", async (event) => {
-    const button = event.currentTarget;
-    if (!(button instanceof HTMLElement)) return;
-    try {
-      await navigator.clipboard.writeText(__sbLastBubbleRaw);
-      const previous = button.textContent;
-      button.textContent = "Copied";
-      setTimeout(() => { button.textContent = previous || "Copy"; }, 1200);
-    } catch {}
-  });
-
-  bubble.querySelector("[data-sb-speak]")?.addEventListener("click", () => {
-    if (__sbIsSpeaking) {
-      __sbStopSpeech();
-      return;
-    }
-    void __sbSpeakText(__sbLastBubbleRaw);
-  });
-
-  __sbSyncSpeakButtons();
-}
-
-function __sbCenterBubble(bubble) {
-  if (bubble.dataset.positioned) return;
-  const w = Math.min(420, window.innerWidth - 100);
-  // Anchor above the brain+pill stack (bottom-right)
-  bubble.style.right = "20px";
-  bubble.style.bottom = "148px"; // brain(52) + gap(8) + pill(52) + gap(8) + margin(28)
-  bubble.style.left = "auto";
-  bubble.style.top = "auto";
-  bubble.style.width = w + "px";
-  bubble.dataset.positioned = "1";
-  __sbInitDrag(bubble);
-}
-
-function __sbInitDrag(bubble) {
-  if (bubble.dataset.dragBound) return;
-  bubble.dataset.dragBound = "1";
-  let dragging = false, ox = 0, oy = 0, bl = 0, bt = 0;
-  bubble.addEventListener("mousedown", (e) => {
-    if (!e.target.closest(".sb-bubble-head")) return;
-    if (e.button !== 0) return;
-    dragging = true;
-    const r = bubble.getBoundingClientRect();
-    // Convert right/bottom anchoring to left/top so drag math works
-    bubble.style.left = r.left + "px";
-    bubble.style.top = r.top + "px";
-    bubble.style.right = "auto";
-    bubble.style.bottom = "auto";
-    bl = r.left; bt = r.top; ox = e.clientX; oy = e.clientY;
-    e.preventDefault();
-  });
-  document.addEventListener("mousemove", (e) => {
-    if (!dragging) return;
-    bubble.style.left = Math.max(0, bl + e.clientX - ox) + "px";
-    bubble.style.top = Math.max(0, bt + e.clientY - oy) + "px";
-  });
-  document.addEventListener("mouseup", () => { dragging = false; });
-}
 
 function __sbShowBubble(text, autoHide = true, options = {}) {
-  const bubble = document.getElementById("__sb_bubble__");
-  if (!bubble) return;
-  __sbCenterBubble(bubble);
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
   __sbLastBubbleRaw = String(text || "");
-  const tone = options.tone || "status";
-  const title = options.title || document.title || "Current page";
-  const prompt = options.prompt ? `<div class="sb-bubble-prompt">${__sbEscapeHtml(options.prompt)}</div>` : "";
   const rich = Boolean(options.rich);
-
-  bubble.innerHTML = rich
-    ? `
-      <div class="sb-bubble-card">
-        <div class="sb-bubble-head">
-          <div class="sb-bubble-head-main">
-            <div class="sb-bubble-kicker">${__sbEscapeHtml(options.kicker || "SideBrain")}</div>
-            <div class="sb-bubble-title">${__sbEscapeHtml(title)}</div>
-          </div>
-          <div class="sb-bubble-actions">
-            <button class="sb-bubble-iconbtn" type="button" data-sb-speak>Speak</button>
-            <button class="sb-bubble-iconbtn" type="button" data-sb-copy>Copy</button>
-            <button class="sb-bubble-iconbtn" type="button" data-sb-close>×</button>
-          </div>
-        </div>
-        ${prompt}
-        <div class="sb-bubble-body sb-bubble-markdown">${__sbRenderMarkdown(text)}</div>
-      </div>
-    `
-    : `
-      <div class="sb-bubble-card sb-bubble-card-status">
-        <div class="sb-bubble-head">
-          <div class="sb-bubble-head-main">
-            <div class="sb-bubble-kicker">${__sbEscapeHtml(options.kicker || "SideBrain")}</div>
-            <div class="sb-bubble-title">${__sbEscapeHtml(options.title || "Working")}</div>
-          </div>
-          <div class="sb-bubble-actions">
-            <button class="sb-bubble-iconbtn" type="button" data-sb-close>×</button>
-          </div>
-        </div>
-        <div class="sb-bubble-body">${__sbEscapeHtml(text)}</div>
-      </div>
-    `;
-  bubble.classList.add("visible");
-  bubble.dataset.tone = tone;
-  __sbBindBubbleActions();
+  const promptHtml = options.prompt ? `<div class="sb-card-q">${__sbEscapeHtml(options.prompt)}</div>` : "";
+  scroll.innerHTML = rich
+    ? promptHtml + `<div class="sb-card-a">${__sbRenderMarkdown(text)}</div>`
+    : promptHtml + `<div class="sb-card-status">${__sbEscapeHtml(text)}</div>`;
+  __sbOpenCard({ rich });
+  __sbSyncSpeakButtons();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-  if (autoHide) __sbBubbleTimer = setTimeout(() => bubble.classList.remove("visible"), 8000);
+  if (autoHide) __sbBubbleTimer = setTimeout(() => __sbCollapseCard(), 8000);
 }
 
 function __sbShowSignIn() {
-  const bubble = document.getElementById("__sb_bubble__");
-  if (!bubble) return;
-  __sbCenterBubble(bubble);
-  bubble.innerHTML = `
-    <div style="font-size:13px;line-height:1.5;color:#1B1713">
-      Sign in to get started with SideBrain.
-    </div>
-    <button id="__sb_signin_btn__" style="
-      margin-top:10px;width:100%;padding:8px 0;border:none;border-radius:20px;
-      background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;
-    ">Sign in</button>
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  scroll.innerHTML = `
+    <div style="font-size:13.5px;line-height:1.6;color:#2B221D;margin-bottom:14px">Sign in to start using Braino.</div>
+    <button id="__sb_signin_btn__" style="width:100%;padding:9px 0;border:none;border-radius:20px;background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;">Sign in</button>
   `;
-  bubble.classList.add("visible");
+  __sbOpenCard({ rich: false });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-
   document.getElementById("__sb_signin_btn__")?.addEventListener("click", () => {
     window.open(chrome.runtime.getURL("sidepanel.html"), "_blank", "width=420,height=680,menubar=no,toolbar=no,resizable=no");
   });
-
-  // Auto-unlock once auth token lands in storage
   if (__sbContextOk()) {
     const handleStorageChange = (changes, area) => {
       if (area === "local" && changes.authToken?.newValue) {
         chrome.storage.onChanged.removeListener(handleStorageChange);
-        bubble.classList.remove("visible");
+        __sbCollapseCard();
         __sbShowBubble("You're signed in! Click the brain to chat.", true, { tone: "status", title: "Signed in" });
       }
     };
@@ -1710,7 +1828,7 @@ function __sbAppendSearchSources(reply, results) {
 }
 
 async function __sbPerformWebSearch(query) {
-  if (!__sbContextOk()) throw new Error("Reload page to reconnect SideBrain.");
+  if (!__sbContextOk()) throw new Error("Reload page to reconnect Braino.");
 
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage({ action: "performWebSearch", query }, (res) => {
@@ -1755,8 +1873,8 @@ async function __sbProcessPrompt(text, options = {}) {
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
 
-  const forcedMode = window.__sbForcedMode || "auto";
-  const rawIntent = (forcedMode !== "auto") ? forcedMode : __sbDetectIntent(promptText);
+  const forcedMode = window.__sbForcedMode || "page";
+  const rawIntent = (forcedMode !== "page") ? forcedMode : __sbDetectIntent(promptText);
   // lecture and meeting both drive the recording flow
   const intent = (rawIntent === "lecture" || rawIntent === "meeting") ? "record" : rawIntent;
 
@@ -1862,7 +1980,7 @@ async function __sbProcessPrompt(text, options = {}) {
       if (fromVoice) await __sbSpeakText(reply);
     }
   } catch (err) {
-    __sbShowBubble("Error: " + (err.message || "couldn't reach SideBrain"), true);
+    __sbShowBubble("Error: " + (err.message || "couldn't reach Braino"), true);
     if (fromVoice) await __sbSpeakText("Something went wrong.");
   } finally {
     if (fromVoice) __sbVoicePendingReply = false;
@@ -1870,31 +1988,32 @@ async function __sbProcessPrompt(text, options = {}) {
 }
 
 async function __sbSendMessage() {
-  const input = document.getElementById("__sb_input__");
+  const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+  const input = document.getElementById(cardOpen ? "__sb_card_input__" : "__sb_input__");
   if (!input) return;
   const text = input.value.trim();
   if (!text) return;
   input.value = "";
-  input.style.height = "auto";
+  if (input.tagName === "TEXTAREA") input.style.height = "auto";
   await __sbProcessPrompt(text);
 }
 
 function __sbShowUpgrade(feature) {
-  const bubble = document.getElementById("__sb_bubble__");
-  if (!bubble) return;
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-  bubble.innerHTML = `
-    <div style="font-size:13px;line-height:1.5;color:#1B1713">⚡ <strong>${feature}</strong> is a Premium feature.</div>
-    <button id="__sb_upgrade_btn__" style="margin-top:10px;width:100%;padding:8px 0;border:none;border-radius:20px;background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;">Upgrade to Premium</button>
+  scroll.innerHTML = `
+    <div style="font-size:13.5px;line-height:1.6;color:#1B1713;margin-bottom:14px">⚡ <strong>${feature}</strong> is a Premium feature.</div>
+    <button id="__sb_upgrade_btn__" style="width:100%;padding:9px 0;border:none;border-radius:20px;background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;">Upgrade to Premium</button>
   `;
-  bubble.classList.add("visible");
+  __sbOpenCard({ rich: false });
   document.getElementById("__sb_upgrade_btn__")?.addEventListener("click", () => {
     window.open("https://notetakerai.lovable.app/#pricing", "_blank");
   });
 }
 
 function __sbRunAgent(task) {
-  if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect SideBrain.", true); return; }
+  if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect Braino.", true); return; }
   // Hand off to background — it runs the full agent loop and sends sbAgentUpdate messages back
   chrome.runtime.sendMessage({ action: "runBrainAgent", task }, () => { void chrome.runtime.lastError; });
 }
@@ -1907,14 +2026,14 @@ function __sbShowLectureRecordingBar(show) {
 
 async function __sbStartLectureRecording() {
   if (!__sbContextOk()) {
-    __sbShowBubble("Reload this page to reconnect SideBrain.", true);
+    __sbShowBubble("Reload this page to reconnect Braino.", true);
     return;
   }
   if (__sbIsLectureRecording) return;
   __sbIsLectureRecording = true;
   __sbLectureNotes = "";
 
-  const mode = window.__sbForcedMode || "auto";
+  const mode = window.__sbForcedMode || "page";
   const withMic = (mode === "meeting");
 
   try {
@@ -1998,39 +2117,17 @@ async function __sbStopLectureRecording() {
 }
 
 function __sbShowLectureNotes(notes, isFinal) {
-  const bubble = document.getElementById("__sb_bubble__");
-  if (!bubble) return;
-  __sbCenterBubble(bubble);
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
   __sbLastBubbleRaw = notes;
-
-  const notionRow = isFinal ? `
-    <div class="sb-lecture-notion-row">
+  const notionHtml = isFinal ? `
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(65,48,40,0.1)">
       <button id="__sb_notion_sync_btn__" class="sb-notion-btn">Sync to Notion</button>
     </div>
   ` : "";
-
-  bubble.innerHTML = `
-    <div class="sb-bubble-card">
-      <div class="sb-bubble-head">
-        <div class="sb-bubble-head-main">
-          <div class="sb-bubble-kicker">SideBrain</div>
-          <div class="sb-bubble-title">${isFinal ? "Lecture Notes" : "Notes so far…"}</div>
-        </div>
-        <div class="sb-bubble-actions">
-          <button class="sb-bubble-iconbtn" type="button" data-sb-speak>Speak</button>
-          <button class="sb-bubble-iconbtn" type="button" data-sb-copy>Copy</button>
-          <button class="sb-bubble-iconbtn" type="button" data-sb-close>×</button>
-        </div>
-      </div>
-      <div class="sb-bubble-body sb-bubble-markdown">${__sbRenderMarkdown(notes)}</div>
-      ${notionRow}
-    </div>
-  `;
-  bubble.classList.add("visible");
-  bubble.dataset.tone = "status";
-  __sbBindBubbleActions();
+  scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}</div>${notionHtml}`;
+  __sbOpenCard({ rich: true });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-
   if (isFinal) {
     document.getElementById("__sb_notion_sync_btn__")?.addEventListener("click", __sbSyncNotesToNotion);
   }
@@ -2068,7 +2165,7 @@ async function __sbSyncNotesToNotion() {
 }
 
 function __sbToggleRecording() {
-  const mode = window.__sbForcedMode || "auto";
+  const mode = window.__sbForcedMode || "page";
   const isLectureMode = (mode === "lecture" || mode === "meeting");
 
   if (__sbIsLectureRecording) {
@@ -2097,13 +2194,15 @@ function __sbToggleRecording() {
 
 function __sbStartRecording(options = {}) {
   if (!__sbContextOk()) {
-    __sbShowBubble("Reload this page to reconnect SideBrain.", true, { tone: "status", title: "Voice" });
+    __sbShowBubble("Reload this page to reconnect Braino.", true, { tone: "status", title: "Voice" });
     return Promise.resolve(false);
   }
 
   __sbStopSpeech();
   const input = document.getElementById("__sb_input__");
+  const cardInput = document.getElementById("__sb_card_input__");
   if (input) input.value = "";
+  if (cardInput) cardInput.value = "";
 
   __sbIsRecording = true;
   __sbSetVoiceButtonState(true);
@@ -2140,6 +2239,7 @@ function __sbHandleRecordingUpdate(msg) {
   } else if (msg.status === "done") {
     __sbIsRecording = false;
     document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+    document.getElementById("__sb_card_rec_btn__")?.classList.remove("active");
     document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
     __sbShowBubble(msg.text || "Recording saved to dashboard.", true, { tone: "status", title: "Recording saved" });
   } else if (msg.status === "error") {
