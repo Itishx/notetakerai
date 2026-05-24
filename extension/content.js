@@ -1362,7 +1362,6 @@ function __sbOpenCard(options = {}) {
   if (!wrap) return;
   wrap.classList.add("visible", "animating-in");
   requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
-  document.getElementById("__sb_bar__")?.classList.remove("open");
   if (options.rich) setTimeout(() => __sbStartOrbit(), 60);
   else __sbStopOrbit();
 }
