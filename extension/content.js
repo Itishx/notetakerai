@@ -2210,6 +2210,7 @@ const __sbXReplied = new WeakSet();
 const __sbXProcessedKeys = new Set();
 let __sbXRunning = false;
 const __sbXReplyDelayMs = 5000;
+const __sbXPostReplySettleMs = 1500;
 
 function __sbSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -2657,8 +2658,8 @@ async function __sbRunXAutomation() {
     const ok = await __sbXPostReply(article, reply.slice(0, 240));
     if (ok) {
       count++;
-      __sbShowBubble(`Replied to ${count} post${count !== 1 ? 's' : ''} — waiting 10s…`, false, { tone: 'status', title: 'X Automation' });
-      await __sbSleep(10000);
+      __sbShowBubble(`Replied to ${count} post${count !== 1 ? 's' : ''} — scanning…`, false, { tone: 'status', title: 'X Automation' });
+      await __sbSleep(__sbXPostReplySettleMs);
     } else {
       await __sbSleep(3000);
     }
