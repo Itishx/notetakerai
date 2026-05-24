@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "SideBrain — AI Browser Companion",
-  "version": "1.3.0",
+  "name": "Braino — AI Browser Companion",
+  "version": "1.3.2",
   "description": "Your AI companion that lives in the browser — record audio, chat about any page, and sync notes to Notion",
   "permissions": ["activeTab", "tabs", "tabCapture", "offscreen", "storage", "scripting", "alarms"],
   "optional_permissions": [],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
-    "matches": ["https://notetakerai.lovable.app/*", "https://*.lovable.app/*"]
+    "matches": ["https://trybraino.com/*", "https://notetakerai.lovable.app/*", "https://*.lovable.app/*"]
   },
   "action": {
     "default_icon": {
