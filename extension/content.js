@@ -2258,14 +2258,17 @@ async function __sbXInsertText(editable, text) {
   document.execCommand('selectAll', false, null);
   await __sbSleep(80);
 
-  // Block the browser's native contenteditable insertion so only Draft.js handles it.
-  // execCommand fires a trusted `beforeinput` event — Draft.js processes it and updates
-  // its EditorState, but (in Twitter's version) does not call e.preventDefault(), so the
-  // browser ALSO inserts natively → text appears twice. Our capturing listener prevents that.
+  // React 17+ (Twitter) registers its event listeners in CAPTURE phase at the root element.
+  // So the order for a beforeinput event is:
+  //   1. Capture at React root → Draft.js fires, updates EditorState (text inserted once)
+  //   2. Bubble up to document → our listener fires, calls e.preventDefault()
+  //   3. execCommand sees defaultPrevented → cancels browser's NATIVE DOM insertion
+  // Result: Draft.js has the text once, browser doesn't double-insert.
+  // Using capture:true would run BEFORE Draft.js, blocking both Draft.js and browser.
   const blockNative = (e) => { if (e.inputType === 'insertText') e.preventDefault(); };
-  document.addEventListener('beforeinput', blockNative, { capture: true });
+  document.addEventListener('beforeinput', blockNative); // bubble phase — runs after Draft.js
   try { document.execCommand('insertText', false, text); } catch(e) {}
-  document.removeEventListener('beforeinput', blockNative, { capture: true });
+  document.removeEventListener('beforeinput', blockNative);
 
   await __sbSleep(600);
 }

@@ -314,7 +314,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chatHistory: [
           {
             role: 'user',
-            content: 'You are a Twitter reply writer. I will give you tweets and you will reply. Rules: (1) MAX 200 characters total — count carefully and rewrite shorter if needed. (2) Sound human — warm, direct, conversational. (3) Directly engage with the tweet topic in 1 sentence. (4) End naturally with a mention of trybraino.com. (5) No more than 1 emoji. (6) Return ONLY the reply text — no quotes, no labels, nothing else.',
+            content: 'You are a Twitter reply writer. I will give you tweets and you will reply. Rules: (1) MAX 200 characters total — count carefully and rewrite shorter if needed. (2) Sound human — warm, direct, conversational. (3) Directly engage with the tweet topic — add a thought, ask a question, or agree with a specific point. (4) No more than 1 emoji. (5) Return ONLY the reply text — no quotes, no labels, nothing else.',
           },
           { role: 'assistant', content: 'Got it. Give me the tweet.' },
         ],
