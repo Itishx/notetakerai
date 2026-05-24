@@ -2236,50 +2236,24 @@ async function __sbXGenerateReply(tweetText, handle) {
   });
 }
 
-async function __sbXPostReply(article, replyText) {
-  if (!document.body.contains(article)) return false;
-
-  const replyBtn = article.querySelector('[data-testid="reply"]');
-  if (!replyBtn) {
-    __sbShowBubble('X Auto: reply button not found on tweet.', false, { tone: 'status', title: 'X Automation' });
-    return false;
-  }
-
-  article.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  await __sbSleep(800);
-  replyBtn.click();
-  __sbShowBubble('X Auto: waiting for reply composer…', false, { tone: 'status', title: 'X Automation' });
-
-  // tweetTextarea_0 IS the contenteditable on Twitter (Draft.js)
-  // IMPORTANT: the home timeline also has a tweetTextarea_0 (main compose box).
-  // After clicking reply, the reply modal/inline composer appears — look inside
-  // [role="dialog"] first, then take the LAST one on page (reply comes after main).
-  let editable = null;
+async function __sbXFindReplyEditor() {
+  // Poll up to 6s for the reply composer to appear.
+  // Priority: inside [role="dialog"] → last textarea on page (> 1 means reply opened)
   const t0 = Date.now();
-  while (Date.now() - t0 < 7000) {
-    try {
-      // 1. Inside a dialog (reply modal)
-      const inDialog = document.querySelector('[role="dialog"] [data-testid="tweetTextarea_0"]');
-      if (inDialog && inDialog.isContentEditable) { editable = inDialog; break; }
-      // 2. Last tweetTextarea_0 on page (reply composer loads after main compose)
-      const all = [...document.querySelectorAll('[data-testid="tweetTextarea_0"]')];
-      if (all.length > 1) { // more than 1 means reply opened
-        const last = all[all.length - 1];
-        if (last.isContentEditable) { editable = last; break; }
-      }
-    } catch(e) {}
+  while (Date.now() - t0 < 6000) {
+    const inDialog = document.querySelector('[role="dialog"] [data-testid="tweetTextarea_0"]');
+    if (inDialog?.isContentEditable) return inDialog;
+    const all = [...document.querySelectorAll('[data-testid="tweetTextarea_0"]')];
+    if (all.length > 1 && all[all.length - 1].isContentEditable) return all[all.length - 1];
     await __sbSleep(300);
   }
-  if (!editable) {
-    __sbShowBubble('X Auto: reply composer never appeared (timeout 7s).', false, { tone: 'status', title: 'X Automation' });
-    return false;
-  }
+  return null;
+}
 
-  // Focus the Draft.js editor
-  try { editable.focus(); } catch(e) {}
-  await __sbSleep(300);
-
-  // Set cursor at end via Selection API
+async function __sbXInsertText(editable, text) {
+  editable.focus();
+  await __sbSleep(200);
+  // Place cursor at end
   try {
     const range = document.createRange();
     range.selectNodeContents(editable);
@@ -2288,45 +2262,71 @@ async function __sbXPostReply(article, replyText) {
     sel.removeAllRanges();
     sel.addRange(range);
   } catch(e) {}
-  await __sbSleep(150);
+  await __sbSleep(100);
+  // Single execCommand call — avoids per-char doubling issues
+  try { document.execCommand('insertText', false, text); } catch(e) {}
+  await __sbSleep(500);
+}
 
-  __sbShowBubble(`X Auto: typing ${replyText.length} chars…`, false, { tone: 'status', title: 'X Automation' });
-
-  // Type char-by-char using execCommand only — no synthetic keyboard events
-  // (dispatching keydown + execCommand was doubling each character)
-  for (const char of replyText) {
-    if (!__sbXRunning) return false;
-    try { document.execCommand('insertText', false, char); } catch(e) {}
-    await __sbSleep(25);
-  }
-  await __sbSleep(700);
-
-  // Twitter's Reply button: data-testid="tweetButton" (disabled = gray bg rgb(239,243,244))
-  let submit = null;
+async function __sbXWaitForSubmit() {
   for (let i = 0; i < 12; i++) {
-    try {
-      const btn = document.querySelector('[data-testid="tweetButton"]') ||
-                  document.querySelector('[data-testid="tweetButtonInline"]');
-      if (btn) {
-        const bg = window.getComputedStyle(btn).backgroundColor;
-        // Enabled = dark bg; disabled = light gray rgb(239,243,244)
-        const rgb = bg.match(/\d+/g);
-        const isEnabled = rgb && +rgb[0] < 200;
-        if (isEnabled) { submit = btn; break; }
-        __sbShowBubble(`X Auto: Reply btn still gray (attempt ${i+1}/12), editor text: "${editable.textContent?.slice(0,30)}"`, false, { tone: 'status', title: 'X Automation' });
-      }
-    } catch(e) {}
-    await __sbSleep(500);
+    const btn = document.querySelector('[data-testid="tweetButton"]') ||
+                document.querySelector('[data-testid="tweetButtonInline"]');
+    if (btn) {
+      const rgb = window.getComputedStyle(btn).backgroundColor.match(/\d+/g);
+      if (rgb && +rgb[0] < 200) return btn; // dark bg = enabled
+    }
+    await __sbSleep(400);
+  }
+  return null;
+}
+
+async function __sbXPostReply(article, replyText) {
+  if (!document.body.contains(article)) return false;
+
+  const replyBtn = article.querySelector('[data-testid="reply"]');
+  if (!replyBtn) return false;
+
+  article.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await __sbSleep(600);
+
+  const urlBefore = location.href;
+  replyBtn.click();
+  __sbShowBubble('X Auto: waiting for reply composer…', false, { tone: 'status', title: 'X Automation' });
+  await __sbSleep(1200);
+
+  // Twitter sometimes navigates to /compose/post when reply is clicked.
+  // That page also keeps the in-reply-to context, so we can post from there.
+  const navigated = location.href !== urlBefore;
+  if (navigated) {
+    __sbShowBubble('X Auto: compose page opened, finding editor…', false, { tone: 'status', title: 'X Automation' });
   }
 
-  if (!submit) {
-    __sbShowBubble(`X Auto: Reply button never enabled. Editor has: "${editable.textContent?.slice(0,60)}"`, false, { tone: 'status', title: 'X Automation' });
+  const editable = await __sbXFindReplyEditor();
+  if (!editable) {
+    __sbShowBubble('X Auto: no reply editor found.', false, { tone: 'status', title: 'X Automation' });
     return false;
   }
 
-  try { submit.click(); } catch(e) {}
+  __sbShowBubble(`X Auto: inserting reply (${replyText.length} chars)…`, false, { tone: 'status', title: 'X Automation' });
+  await __sbXInsertText(editable, replyText);
+
+  const submit = await __sbXWaitForSubmit();
+  if (!submit) {
+    __sbShowBubble(`X Auto: submit never enabled. Editor: "${editable.textContent?.slice(0, 50)}"`, false, { tone: 'status', title: 'X Automation' });
+    return false;
+  }
+
+  submit.click();
   __sbShowBubble('X Auto: reply posted ✓', false, { tone: 'status', title: 'X Automation' });
   await __sbSleep(2000);
+
+  // If we navigated to /compose/post, go back to the timeline
+  if (navigated) {
+    history.back();
+    await __sbSleep(1500);
+  }
+
   return true;
 }
 
