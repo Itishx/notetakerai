@@ -111,6 +111,34 @@ const Auth = () => {
               {loading ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
             </Button>
 
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              disabled={loading}
+              onClick={async () => {
+                setError("");
+                const result = await lovable.auth.signInWithOAuth("google", {
+                  redirect_uri: window.location.origin,
+                });
+                if (result.error) {
+                  setError(result.error.message || "Google sign-in failed");
+                  return;
+                }
+                if (result.redirected) return;
+                navigate("/");
+              }}
+            >
+              <GoogleIcon />
+              Continue with Google
+            </Button>
+
             <p className="text-center text-sm text-muted-foreground">
               {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
               <button
