@@ -745,7 +745,7 @@ export default function Dashboard() {
           .select("google_email,updated_at")
           .eq("user_identifier", user.id)
           .maybeSingle(),
-        supabase
+        (supabase as any)
           .from("x_automation_stats")
           .select("total_replies,total_runs,total_runtime_ms,last_run_reply_count,last_run_duration_ms,last_run_started_at,last_run_finished_at")
           .eq("user_id", user.id)
