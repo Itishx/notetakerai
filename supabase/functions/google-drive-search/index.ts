@@ -48,7 +48,7 @@ serve(async (req) => {
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: connection, error: connectionError } = await admin
       .from("google_drive_connections")
-      .select("access_token, refresh_token, expires_at")
+      .select("access_token, refresh_token, token_expires_at")
       .eq("user_identifier", user.id)
       .maybeSingle();
 
@@ -115,9 +115,9 @@ async function getValidAccessToken({
   userId: string;
   clientId: string;
   clientSecret: string;
-  connection: { access_token: string; refresh_token?: string | null; expires_at?: string | null };
+  connection: { access_token: string; refresh_token?: string | null; token_expires_at?: string | null };
 }) {
-  const expiresAt = connection.expires_at ? new Date(connection.expires_at).getTime() : 0;
+  const expiresAt = connection.token_expires_at ? new Date(connection.token_expires_at).getTime() : 0;
   if (connection.access_token && (!expiresAt || expiresAt > Date.now() + 60_000)) {
     return connection.access_token;
   }
@@ -155,7 +155,7 @@ async function getValidAccessToken({
     .from("google_drive_connections")
     .update({
       access_token: accessToken,
-      expires_at: expiresAtIso,
+      token_expires_at: expiresAtIso,
       updated_at: new Date().toISOString(),
     })
     .eq("user_identifier", userId);
