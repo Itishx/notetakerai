@@ -188,48 +188,6 @@ export type Database = {
         }
         Relationships: []
       }
-      x_automation_stats: {
-        Row: {
-          created_at: string
-          id: string
-          last_run_duration_ms: number
-          last_run_finished_at: string | null
-          last_run_reply_count: number
-          last_run_started_at: string | null
-          total_replies: number
-          total_runs: number
-          total_runtime_ms: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          last_run_duration_ms?: number
-          last_run_finished_at?: string | null
-          last_run_reply_count?: number
-          last_run_started_at?: string | null
-          total_replies?: number
-          total_runs?: number
-          total_runtime_ms?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          last_run_duration_ms?: number
-          last_run_finished_at?: string | null
-          last_run_reply_count?: number
-          last_run_started_at?: string | null
-          total_replies?: number
-          total_runs?: number
-          total_runtime_ms?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never
