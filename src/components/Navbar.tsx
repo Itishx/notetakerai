@@ -6,6 +6,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 const NAV_LINKS = [
   { href: "/use-cases", label: "Use Cases" },
   { href: "/automations", label: "Automations" },
+  { href: "/integrations", label: "Integrations" },
   { href: "/delegate", label: "Delegate" },
   { href: "/compare", label: "vs Claude" },
   { href: "/premium", label: "Pricing" },
@@ -57,7 +58,7 @@ const GLOW_CSS = `
     transition: max-width 0.48s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.28s ease;
   }
   .braino-links-wrap.open {
-    max-width: 440px;
+    max-width: 760px;
     opacity: 1;
   }
   .braino-link-item {
@@ -68,6 +69,14 @@ const GLOW_CSS = `
   .braino-links-wrap.open .braino-link-item {
     opacity: 1;
     transform: translateX(0);
+  }
+  @media (max-width: 1120px) {
+    .braino-links-wrap.open {
+      max-width: 680px;
+    }
+    .braino-link-item {
+      font-size: 13px;
+    }
   }
 `;
 
@@ -126,7 +135,7 @@ const Navbar = () => {
     fontSize: 13.5,
     color: pathname === href ? "var(--sb-ink)" : "var(--sb-ink-2)",
     textDecoration: "none",
-    padding: "6px 10px",
+    padding: "6px 8px",
     borderRadius: 999,
     whiteSpace: "nowrap",
     fontWeight: pathname === href ? 500 : 400,

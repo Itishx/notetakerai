@@ -29,6 +29,7 @@ import Terms from "./pages/Terms.tsx";
 import Contact from "./pages/Contact.tsx";
 import ProductOverview from "./pages/ProductOverview.tsx";
 import Automations from "./pages/Automations.tsx";
+import Integrations from "./pages/Integrations.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -71,6 +72,7 @@ const App = () => {
               <Route path="/contact" element={<Contact />} />
               <Route path="/product-overview" element={<ProductOverview />} />
               <Route path="/automations" element={<Automations />} />
+              <Route path="/integrations" element={<Integrations />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

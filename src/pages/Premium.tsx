@@ -20,6 +20,30 @@ const CheckIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
 );
 
+const USD_TO_INR = 96.4;
+const INDIA_PRICE_FACTOR = 399 / (21 * USD_TO_INR);
+
+const X_AUTO_OFFERS = [
+  { name: "Free preview", usd: 0, replies: "93 replies", bestFor: "Trying it once", notes: "Lets people test quality before paying." },
+  { name: "Starter", usd: 9, replies: "500 replies / month", bestFor: "Casual builders", notes: "Good for light timeline presence without feeling expensive." },
+  { name: "Core", usd: 15, replies: "1,000 replies / month", bestFor: "Most users", notes: "Best default add-on. Strong value, very healthy margin." },
+  { name: "Growth", usd: 29, replies: "2,500 replies / month", bestFor: "Heavy creators", notes: "For people running X Auto regularly across the month." },
+  { name: "Pro", usd: 49, replies: "5,000 replies / month", bestFor: "Power users", notes: "Only makes sense once abuse controls and reporting are tighter." },
+] as const;
+
+function formatXAutoInrPrice(usd: number) {
+  if (usd === 0) return "₹0";
+  const discountedInr = usd * USD_TO_INR * INDIA_PRICE_FACTOR;
+  const rounded = Math.ceil(discountedInr / 100) * 100 - 1;
+  return `₹${rounded}`;
+}
+
+function formatDetectedPrice(usd: number, isIndia: boolean | null) {
+  if (isIndia === null) return "...";
+  if (isIndia) return formatXAutoInrPrice(usd);
+  return usd === 0 ? "$0" : `$${usd}`;
+}
+
 const FEATURES = [
   { tag: "Recording", title: "Record without limits.", body: "Free users hit a 5-minute cap per day. With Pro, record full lectures, long meetings, hour-long podcasts — however long it runs, SideBrain keeps up.", free: "5 min / day", pro: "Unlimited", big: true },
   { tag: "Storage", title: "Cloud sync & note history.", body: "Free notes live only on your device. Reinstall the extension and they're gone. Pro saves every note to the cloud — switch browsers, log in anywhere, your history is waiting.", free: "Local only", pro: "Unlimited cloud history" },
@@ -43,7 +67,7 @@ export default function Premium() {
       .catch(() => setIsIndia(false));
   }, []);
 
-  const priceDisplay = isIndia === null ? "..." : isIndia ? "₹299" : "$12";
+  const priceDisplay = isIndia === null ? "..." : isIndia ? "₹399" : "$21";
   const pricePer = isIndia === null ? "" : isIndia ? "/ month" : "/ month";
 
   const handleGetPro = async () => {
@@ -91,7 +115,7 @@ export default function Premium() {
             <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Pro when you want more.</em>
           </h1>
           <p style={{ fontSize: 18, color: "var(--sb-ink-2)", maxWidth: 600, margin: "0 auto", lineHeight: 1.55 }}>
-            SideBrain works in your browser. The model runs on us. Pro buys you faster models, unlimited recordings, and more Delegate runs.
+            SideBrain works in your browser. The model runs on us. Pro buys you faster models, unlimited recordings, and more Delegate runs. X Auto lives as a separate add-on.
           </p>
         </div>
       </section>
@@ -99,7 +123,37 @@ export default function Premium() {
       {/* Pricing cards */}
       <section style={{ padding: "60px 0 110px", background: "var(--sb-bg-2)" }}>
         <div style={{ ...wrap, maxWidth: 880 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 80 }}>
+          {/* Feature breakdown */}
+          <div style={{ textAlign: "center", marginBottom: 40 }}>
+            <h2 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: "clamp(28px,3.5vw,44px)", marginBottom: 12 }}>Everything Pro unlocks.</h2>
+            <p style={{ fontSize: 15, color: "var(--sb-ink-2)" }}>What changes when you go Pro, feature by feature.</p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20, marginBottom: 80 }}>
+            {FEATURES.map(({ tag, title, body, free, pro, big }) => (
+              <div key={title} style={{ gridColumn: big ? "span 2" : "span 1", background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 18, padding: 28, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-accent-deep)" }}>{tag}</span>
+                <h3 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: 22, lineHeight: 1.1 }}>{title}</h3>
+                <p style={{ fontSize: 14.5, color: "var(--sb-ink-2)", lineHeight: 1.55, flex: 1 }}>{body}</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+                  <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sb-bg-2)", border: "1px solid var(--sb-line-2)" }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 4 }}>Free</div>
+                    <div style={{ fontSize: 13, color: "var(--sb-ink-2)" }}>{free}</div>
+                  </div>
+                  <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sb-accent-soft)", border: "1px solid rgba(240,168,107,0.3)" }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-accent-deep)", marginBottom: 4 }}>Pro</div>
+                    <div style={{ fontSize: 13, color: "var(--sb-ink)", fontWeight: 500 }}>{pro}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <h2 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: "clamp(28px,3.5vw,44px)", marginBottom: 12 }}>Pricing</h2>
+            <p style={{ fontSize: 15, color: "var(--sb-ink-2)" }}>Core SideBrain access. X Auto is not bundled into Pro.</p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 24, marginBottom: 80 }}>
             {/* Free */}
             <div style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 24, padding: 36, display: "flex", flexDirection: "column", gap: 18 }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--sb-ink-3)" }}>Free</div>
@@ -137,7 +191,7 @@ export default function Premium() {
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 60, lineHeight: 1, letterSpacing: "-0.02em", color: "#FBF7F1", display: "flex", alignItems: "baseline", gap: 6 }}>
                 {priceDisplay}<span style={{ fontSize: 16, fontFamily: "'Inter',sans-serif", color: "rgba(251,247,241,0.5)", letterSpacing: 0 }}>&nbsp;{pricePer}</span>
               </div>
-              <p style={{ color: "rgba(251,247,241,0.65)", fontSize: 14.5, lineHeight: 1.5 }}>For people who actually live in their browser. Pay yearly, save 20%.</p>
+              <p style={{ color: "rgba(251,247,241,0.65)", fontSize: 14.5, lineHeight: 1.5 }}>For people who actually live in their browser. X Auto is sold separately as an add-on.</p>
               <ul style={{ display: "flex", flexDirection: "column", gap: 12, margin: "8px 0", padding: 0 }}>
                 {["Everything in Free", "Faster, smarter models", "Unlimited Delegate tasks", "Unlimited recording & transcription", "Cloud sync across devices", "Custom voices & 50+ languages", "Persistent memory across sessions", "Priority support"].map(f => (
                   <li key={f} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, listStyle: "none", color: "var(--sb-accent-2)" }}>
@@ -163,29 +217,86 @@ export default function Premium() {
             </div>
           </div>
 
-          {/* Feature breakdown */}
-          <div style={{ textAlign: "center", marginBottom: 40 }}>
-            <h2 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: "clamp(28px,3.5vw,44px)", marginBottom: 12 }}>Everything Pro unlocks.</h2>
-            <p style={{ fontSize: 15, color: "var(--sb-ink-2)" }}>What changes when you go Pro, feature by feature.</p>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
-            {FEATURES.map(({ tag, title, body, free, pro, big }) => (
-              <div key={title} style={{ gridColumn: big ? "span 2" : "span 1", background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 18, padding: 28, display: "flex", flexDirection: "column", gap: 10 }}>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-accent-deep)" }}>{tag}</span>
-                <h3 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: 22, lineHeight: 1.1 }}>{title}</h3>
-                <p style={{ fontSize: 14.5, color: "var(--sb-ink-2)", lineHeight: 1.55, flex: 1 }}>{body}</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
-                  <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sb-bg-2)", border: "1px solid var(--sb-line-2)" }}>
-                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 4 }}>Free</div>
-                    <div style={{ fontSize: 13, color: "var(--sb-ink-2)" }}>{free}</div>
+          <div style={{ marginBottom: 80 }}>
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <h2 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: "clamp(28px,3.4vw,42px)", marginBottom: 12 }}>
+                X Auto is a <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>separate add-on.</em>
+              </h2>
+              <p style={{ fontSize: 15, color: "var(--sb-ink-2)", maxWidth: 760, margin: "0 auto", lineHeight: 1.6 }}>
+                Built for people who want Braino engaging on X without manually writing every reply. Pick the level that matches how often you want it showing up in your timeline.
+              </p>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16, marginBottom: 16 }}>
+              {X_AUTO_OFFERS.map((offer) => (
+                <div key={offer.name} style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 22, padding: 24, display: "grid", gridTemplateColumns: "minmax(160px,1.1fr) minmax(110px,0.7fr) minmax(140px,0.9fr) minmax(130px,0.85fr) minmax(260px,1.25fr)", gap: 18, alignItems: "start" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 18, fontWeight: 600, color: "var(--sb-ink)" }}>{offer.name}</div>
+                    {offer.name === "Core" ? (
+                      <div style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 9px", borderRadius: 999, background: "var(--sb-accent-soft)", color: "var(--sb-accent-deep)", fontSize: 10.5, fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".08em", textTransform: "uppercase" }}>
+                        Recommended
+                      </div>
+                    ) : null}
                   </div>
-                  <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sb-accent-soft)", border: "1px solid rgba(240,168,107,0.3)" }}>
-                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-accent-deep)", marginBottom: 4 }}>Pro</div>
-                    <div style={{ fontSize: 13, color: "var(--sb-ink)", fontWeight: 500 }}>{pro}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 6 }}>
+                      Price
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 600, color: "var(--sb-ink)" }}>{formatDetectedPrice(offer.usd, isIndia)}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--sb-ink-3)", marginTop: 4 }}>per month</div>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 6 }}>
+                      Usage
+                    </div>
+                    <div style={{ fontSize: 14, color: "var(--sb-ink-2)", lineHeight: 1.55 }}>{offer.replies}</div>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 6 }}>
+                      Best for
+                    </div>
+                    <div style={{ fontSize: 14, color: "var(--sb-ink)" }}>{offer.bestFor}</div>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 6 }}>
+                      Notes
+                    </div>
+                    <div style={{ fontSize: 14, color: "var(--sb-ink-2)", lineHeight: 1.6 }}>{offer.notes}</div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+              <Link
+                to="/automations"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "12px 20px",
+                  borderRadius: 999,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: "var(--sb-ink)",
+                  textDecoration: "none",
+                  background: "var(--sb-panel)",
+                  border: "1px solid var(--sb-line)",
+                  transition: "transform .15s, background .15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = "var(--sb-accent-soft)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = "var(--sb-panel)"; }}
+              >
+                Learn more about X Auto →
+              </Link>
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 12, color: "var(--sb-ink-3)", fontSize: 13, justifyContent: "center" }}>
+              <span>Pro access sold separately.</span>
+              <span>30 replies max per run.</span>
+              <span>3 second pacing between replies.</span>
+              <span>Payment wiring comes later.</span>
+            </div>
           </div>
         </div>
       </section>
