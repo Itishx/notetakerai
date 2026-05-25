@@ -1828,7 +1828,7 @@ async function callGoogleDriveFunction(functionName, payload) {
 
   const data = await response.json().catch(() => ({}));
   console.log("[Braino][Drive][Popup] Function response:", functionName, response.status, data);
-  if (!response.ok) throw new Error(data?.error || `${functionName} failed (${response.status})`);
+  if (!response.ok) throw new Error([data?.error, data?.details].filter(Boolean).join(" — ") || `${functionName} failed (${response.status})`);
   return data;
 }
 

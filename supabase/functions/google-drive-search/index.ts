@@ -82,7 +82,7 @@ serve(async (req) => {
     if (!driveRes.ok) {
       const errorText = await driveRes.text();
       console.error("google-drive-search drive api error:", errorText);
-      return json({ error: "Google Drive search failed." }, 502);
+      return json({ error: "Google Drive search failed.", details: compactText(errorText) }, 502);
     }
 
     const driveData = await driveRes.json();
@@ -100,7 +100,7 @@ serve(async (req) => {
     });
   } catch (e) {
     console.error("google-drive-search error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
+    return json(serializeError(e), 500);
   }
 });
 
@@ -140,7 +140,7 @@ async function getValidAccessToken({
   if (!refreshRes.ok) {
     const errorText = await refreshRes.text();
     console.error("google-drive-search refresh error:", errorText);
-    throw new Error("Failed to refresh Google Drive access.");
+    throw new Error(`Failed to refresh Google Drive access. ${compactText(errorText)}`);
   }
 
   const refreshed = await refreshRes.json();
@@ -169,4 +169,28 @@ function json(payload: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function serializeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      error: error.message || "Unknown error",
+      details: error.stack ? compactText(error.stack) : null,
+    };
+  }
+  if (typeof error === "string") {
+    return { error, details: null };
+  }
+  try {
+    return {
+      error: "Unexpected backend error",
+      details: compactText(JSON.stringify(error)),
+    };
+  } catch {
+    return { error: "Unknown error", details: null };
+  }
+}
+
+function compactText(value: string) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, 500);
 }
