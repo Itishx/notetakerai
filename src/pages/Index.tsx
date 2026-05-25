@@ -288,9 +288,26 @@ const subText: React.CSSProperties = { maxWidth: 640, margin: "0 auto", fontSize
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Index() {
-  const heroOrbRef = useRef<HTMLDivElement>(null);
   const { displayText, sideWords } = useTypewriter();
   const [isIndia, setIsIndia] = useState<boolean | null>(null);
+  const [cardOffset, setCardOffset] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ active: boolean; startX: number; startY: number; origX: number; origY: number }>({ active: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+
+  const onCardMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, origX: cardOffset.x, origY: cardOffset.y };
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current.active) return;
+      setCardOffset({ x: dragRef.current.origX + ev.clientX - dragRef.current.startX, y: dragRef.current.origY + ev.clientY - dragRef.current.startY });
+    };
+    const onUp = () => {
+      dragRef.current.active = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   useEffect(() => {
     fetch("https://ipapi.co/json/")
@@ -299,20 +316,7 @@ export default function Index() {
       .catch(() => setIsIndia(false));
   }, []);
 
-  useEffect(() => {
-    const orb = heroOrbRef.current;
-    if (!orb) return;
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (y < 1200) {
-        orb.style.transform = `translateX(-50%) translateY(${y * 0.25}px) scale(${1 - Math.min(0.25, y / 4000)})`;
-      }
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
+const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
   const proPer = isIndia === null ? "" : "/ month";
 
   return (
@@ -322,31 +326,6 @@ export default function Index() {
 
       {/* ════════════════════════ HERO ════════════════════════ */}
       <section style={{ padding: "120px 0 100px", position: "relative" }}>
-        {/* Background orb */}
-        <div
-          ref={heroOrbRef}
-          style={{
-            position: "absolute", left: "50%", top: 480,
-            transform: "translateX(-50%)",
-            width: 460, height: 460,
-            pointerEvents: "none", zIndex: 0,
-            filter: "blur(0.4px)",
-            opacity: 0.75,
-          }}
-        >
-          <div style={{
-            position: "absolute", inset: "30%", borderRadius: "50%",
-            background: "radial-gradient(circle at 35% 35%, #FFE0BC 0%, #F8A95B 35%, #D9651A 75%)",
-            boxShadow: "0 0 80px rgba(243,154,66,0.45), 0 0 160px rgba(243,154,66,0.2), inset 0 -22px 40px rgba(160,60,10,.3)",
-            animation: "sbOrbBreathe 5s ease-in-out infinite",
-          }} />
-          <div style={{
-            position: "absolute", inset: 0, borderRadius: "50%",
-            background: "radial-gradient(circle at 50% 50%, rgba(243,154,66,0.32) 0%, rgba(243,154,66,0.12) 30%, transparent 60%)",
-            animation: "sbOrbHalo 5s ease-in-out infinite",
-          }} />
-        </div>
-
         <div style={{ ...wrap, position: "relative", zIndex: 1 }}>
           {/* Eyebrow */}
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
@@ -380,10 +359,6 @@ export default function Index() {
             <a href="/braino-extension.zip" download style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
               Install for Chrome
-            </a>
-            <a href="https://raw.githubusercontent.com/Itishx/notetakerai/main/public/braino-extension.zip" download="braino-extension.zip" style={{ ...btnGhost, color: "var(--sb-ink-3)" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13M7 12l5 5 5-5"/><path d="M5 21h14"/></svg>
-              Download latest
             </a>
             <a href="#delegate" style={{ ...btnGhost, color: "var(--sb-ink-3)" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
               Watch a 60s demo <ArrowRightIcon />
@@ -422,86 +397,137 @@ export default function Index() {
           <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
             <div style={{
               width: "100%", maxWidth: 1100,
-              background: "var(--sb-panel-2)",
-              borderRadius: 24, border: "1px solid var(--sb-line)",
-              boxShadow: "0 1px 2px rgba(40,28,18,.04), 0 40px 80px -30px rgba(40,28,18,.25)",
+              background: "#0F0D0B",
+              borderRadius: 24, border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 1px 2px rgba(0,0,0,.2), 0 40px 80px -30px rgba(0,0,0,.55)",
               overflow: "hidden",
             }}>
-              <BrowserBar url="mail.google.com/inbox" />
-              <div style={{ display: "flex", minHeight: 540 }}>
-                {/* Mock article */}
-                <div style={{ flex: 1, padding: "32px 36px", background: "#fff" }}>
+              <BrowserBar url="mail.google.com/inbox" dark />
+              {/* Content area — full width page + floating Pino widget */}
+              <div style={{ position: "relative", minHeight: 540, userSelect: "none" }}>
+                {/* Full-width webpage mock — dark */}
+                <div style={{ padding: "32px 48px 32px 56px", background: "#0F0D0B", minHeight: 540 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
                     <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #DB4437, #C44033)", flexShrink: 0, display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 16 }}>G</div>
-                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)", letterSpacing: ".04em" }}>GMAIL · INBOX · 3 UNREAD</div>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "rgba(255,250,242,0.4)", letterSpacing: ".04em" }}>GMAIL · INBOX · 3 UNREAD</div>
                   </div>
-                  <h1 style={{ fontFamily: "'Instrument Serif',serif", fontSize: 28, marginBottom: 8, lineHeight: 1.15, color: "var(--sb-ink)" }}>
+                  <h1 style={{ fontFamily: "'Instrument Serif',serif", fontSize: 28, marginBottom: 8, lineHeight: 1.15, color: "#FBF7F1" }}>
                     Re: Thursday's onboarding — are you joining?
                   </h1>
-                  <div style={{ height: 180, borderRadius: 12, margin: "18px 0", background: "linear-gradient(135deg, #f8f4ef, #EFE7DB)", position: "relative", overflow: "hidden", border: "1px solid var(--sb-line-2)" }}>
+                  <div style={{ height: 160, borderRadius: 12, margin: "18px 0", background: "#1A1612", overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
                       {[["From:", "Priya Singh <priya@example.com>"],["To:", "you"],["Date:", "Today 9:41 AM"]].map(([lbl,val])=>(
                         <div key={lbl} style={{ display:"flex",gap:8,fontFamily:"'JetBrains Mono',monospace",fontSize:11 }}>
-                          <span style={{ color:"var(--sb-ink-3)",width:36,flexShrink:0 }}>{lbl}</span>
-                          <span style={{ color:"var(--sb-ink-2)" }}>{val}</span>
+                          <span style={{ color:"rgba(255,250,242,0.35)",width:36,flexShrink:0 }}>{lbl}</span>
+                          <span style={{ color:"rgba(255,250,242,0.65)" }}>{val}</span>
                         </div>
                       ))}
-                      <div style={{ marginTop:8,fontSize:13,color:"var(--sb-ink-2)",lineHeight:1.5 }}>Hey — just checking if you're joining us Thursday. Let me know by EOD if possible.</div>
+                      <div style={{ marginTop:8,fontSize:13,color:"rgba(255,250,242,0.6)",lineHeight:1.5 }}>Hey — just checking if you're joining us Thursday. Let me know by EOD if possible.</div>
                     </div>
                   </div>
                   {[100,90,95,75,100,90,60].map((w, i) => (
                     <div key={i} style={{
-                      height: 11,
-                      background: i === 2 ? "linear-gradient(90deg, var(--sb-accent-soft), rgba(240,168,107,0.5))" : "var(--sb-bg-2)",
-                      borderRadius: 4, margin: "10px 0", width: `${w}%`,
+                      height: 10,
+                      background: i === 2 ? "linear-gradient(90deg, rgba(243,154,66,0.35), rgba(240,168,107,0.18))" : "rgba(255,255,255,0.06)",
+                      borderRadius: 4, margin: "9px 0", width: `${w}%`,
                     }} />
                   ))}
                 </div>
 
-                {/* SideBrain panel */}
-                <div style={{ width: 380, flexShrink: 0, background: "var(--sb-panel)", borderLeft: "1px solid var(--sb-line)", display: "flex", flexDirection: "column" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid var(--sb-line-2)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--sb-accent)", boxShadow: "0 0 10px var(--sb-accent)", display: "inline-block" }} />
-                      Braino
-                    </div>
-                    <span style={{ color: "var(--sb-ink-3)", fontSize: 18 }}>×</span>
+                {/* ── Glassmorphism response card — draggable ── */}
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 175,
+                    right: 20,
+                    width: 380,
+                    borderRadius: 22,
+                    overflow: "hidden",
+                    background: "rgba(255,255,255,0.1)",
+                    border: "1px solid rgba(255,255,255,0.22)",
+                    boxShadow: "0 40px 100px rgba(0,0,0,0.38), 0 8px 24px rgba(0,0,0,0.18)",
+                    backdropFilter: "blur(40px) saturate(180%)",
+                    WebkitBackdropFilter: "blur(40px) saturate(180%)",
+                    color: "#fff",
+                    zIndex: 8,
+                    transform: `translate(${cardOffset.x}px, ${cardOffset.y}px)`,
+                    cursor: "grab",
+                  }}
+                  onMouseDown={onCardMouseDown}
+                >
+                  {/* Card header */}
+                  <div style={{ display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5,padding:"10px 14px 4px",flexShrink:0 }}>
+                    <button style={{ border:"none",background:"rgba(255,255,255,0.18)",color:"rgba(255,255,255,0.75)",height:26,padding:"0 10px",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:"sans-serif" }}>Speak</button>
+                    <button style={{ border:"none",background:"rgba(255,255,255,0.18)",color:"rgba(255,255,255,0.75)",height:26,padding:"0 10px",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:"sans-serif" }}>Copy</button>
+                    <button style={{ border:"none",background:"rgba(255,255,255,0.18)",color:"rgba(255,255,255,0.75)",width:26,height:26,borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"sans-serif",display:"grid",placeItems:"center" }}>×</button>
                   </div>
-                  <div style={{ margin: "14px 16px 0", padding: "10px 12px", background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 12, display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 5, background: "linear-gradient(135deg, #DB4437, #C44033)", display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 10, flexShrink: 0 }}>G</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "var(--sb-ink)", fontWeight: 500, fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Re: Thursday's onboarding — Gmail</div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, color: "var(--sb-ink-3)" }}>mail.google.com</div>
-                    </div>
-                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: "var(--sb-accent-deep)", display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--sb-accent)", animation: "sbPulse 1.6s infinite", display: "inline-block" }} />
-                      reading
+                  {/* User query bubble */}
+                  <div style={{ padding:"4px 22px 0" }}>
+                    <div style={{ display:"inline-block",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"9px 14px",fontSize:13,color:"rgba(255,255,255,0.85)",lineHeight:1.5 }}>
+                      Draft a reply to Priya's email
                     </div>
                   </div>
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "center", padding: "14px 0 12px" }}>
-                      <img src="/favicon.svg" width={96} height={96} alt="Braino" style={{ animation: "sbOrbBreathe 3.5s ease-in-out infinite", filter: "drop-shadow(0 0 18px rgba(201,84,74,0.5))" }} />
+                  {/* AI response */}
+                  <div style={{ padding:"14px 22px 18px",fontSize:14.5,lineHeight:1.75,color:"rgba(255,255,255,0.92)",fontFamily:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
+                    Sure! Here's a draft reply to Priya's email:<br /><br />
+                    <span style={{ color:"rgba(255,255,255,0.75)",fontSize:14 }}>
+                      "Hi Priya, yes I'll be there Thursday — see you then!"
+                    </span>
+                  </div>
+                </div>
+
+                {/* ── Floating Pino widget — bottom right ── */}
+                <div style={{
+                  position: "absolute",
+                  bottom: 20,
+                  right: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  gap: 10,
+                  zIndex: 10,
+                }}>
+                  {/* Pill input bar */}
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "rgba(255,251,247,0.97)",
+                    borderRadius: 100,
+                    padding: "7px 7px 7px 18px",
+                    border: "1px solid rgba(65,48,40,0.1)",
+                    boxShadow: "0 8px 28px rgba(27,23,19,0.13), 0 2px 8px rgba(27,23,19,0.07)",
+                    width: 340,
+                    backdropFilter: "blur(20px)",
+                    WebkitBackdropFilter: "blur(20px)",
+                  }}>
+                    <span style={{ flex:1, fontSize:14, color:"#A79B92", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", letterSpacing:"-0.01em" }}>
+                      What's on your mind?
+                    </span>
+                    {/* Mode dropdown */}
+                    <div style={{ display:"inline-flex",alignItems:"center",gap:4,background:"rgba(65,48,40,0.07)",borderRadius:8,padding:"4px 8px 4px 9px",fontSize:11,fontWeight:600,color:"#6B5248",whiteSpace:"nowrap",flexShrink:0 }}>
+                      ⚡ Auto
+                      <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
                     </div>
-                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--sb-accent-deep)", display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
-                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--sb-accent)", animation: "sbPulse 1.6s infinite", display: "inline-block" }} />
-                      Agent speaking
+                    {/* Mic button */}
+                    <div style={{ width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"#6B5248" }}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
                     </div>
-                    <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 22, lineHeight: 1.25, color: "var(--sb-ink)", letterSpacing: "-0.005em", minHeight: 80 }}>
-                      {sideWords.map((w, i) => (
-                        <span key={i} style={{ opacity: w.state === "unsaid" ? 0.22 : 1, color: w.state === "current" ? "var(--sb-accent-deep)" : "var(--sb-ink)", transition: "opacity .25s" }}>
-                          {w.word}{" "}
-                        </span>
-                      ))}
+                    {/* Send button */}
+                    <div style={{ width:32,height:32,borderRadius:"50%",background:"#E8786E",color:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
                     </div>
-                    <div style={{ marginTop: "auto", paddingTop: 14, display: "flex", gap: 8, borderTop: "1px solid var(--sb-line-2)" }}>
-                      <CtrlBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--sb-ink-2)" strokeWidth="1.7" strokeLinecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>} />
-                      <div style={{ height: 34, padding: "0 12px", borderRadius: 10, background: "var(--sb-ink)", border: "1px solid var(--sb-ink)", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--sb-on-ink)", cursor: "pointer" }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-                        Interrupt
-                      </div>
-                      <div style={{ flex: 1 }} />
-                      <CtrlBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--sb-ink-2)" strokeWidth="1.7" strokeLinecap="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>} />
-                    </div>
+                  </div>
+
+                  {/* Brain button — 52×52, bottom-right corner */}
+                  <div style={{ alignSelf:"flex-end" }}>
+                    <img
+                      src="/favicon.svg"
+                      width={52}
+                      height={52}
+                      alt="Braino"
+                      style={{ display:"block", filter:"drop-shadow(0 2px 10px rgba(200,84,74,0.55)) drop-shadow(0 0 18px rgba(200,84,74,0.3))", animation:"sbOrbBreathe 3s ease-in-out infinite", cursor:"pointer" }}
+                    />
                   </div>
                 </div>
               </div>
@@ -784,78 +810,247 @@ export default function Index() {
           </div>
 
           <div style={{ background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",borderRadius:24,overflow:"hidden",boxShadow:"0 1px 2px rgba(40,28,18,.04), 0 40px 80px -30px rgba(40,28,18,.25)" }}>
-            <BrowserBar url="app.braino.info/library" />
-            <div style={{ display:"flex",minHeight:600 }}>
-              {/* Sidebar */}
-              <aside style={{ width:240,flexShrink:0,background:"#F0E9DF",borderRight:"1px solid #E2D8CC",padding:"18px 14px",display:"flex",flexDirection:"column",gap:4 }}>
-                <div style={{ display:"flex",alignItems:"center",gap:8,padding:"4px 8px 18px" }}>
-                  <img src="/favicon.svg" width={20} height={20} alt="Braino" style={{ display: "inline-block", flexShrink: 0 }} />
-                  <span style={{ fontWeight:600,fontSize:14 }}>Braino</span>
+            <BrowserBar url="app.trybraino.com/dashboard" />
+            <div style={{ display:"flex",minHeight:640 }}>
+
+              {/* ── Sidebar ── */}
+              <aside style={{ width:240,flexShrink:0,background:"var(--sb-panel)",borderRight:"1px solid var(--sb-line)",padding:"16px 14px",display:"flex",flexDirection:"column",gap:2 }}>
+                {/* Logo */}
+                <div style={{ display:"flex",alignItems:"center",gap:0,padding:"2px 8px 20px" }}>
+                  <span style={{ fontFamily:"'Times New Roman',serif",fontStyle:"italic",fontSize:17,color:"var(--sb-ink)" }}>side</span>
+                  <span style={{ fontFamily:"'BeVietnam',sans-serif",fontWeight:800,fontSize:17,color:"var(--sb-ink)",letterSpacing:"-0.03em" }}>brain</span>
                 </div>
+                {/* Talk to SideBrain CTA */}
+                <div style={{ display:"flex",alignItems:"center",gap:8,borderRadius:10,background:"var(--sb-ink)",padding:"10px 12px",marginBottom:16,fontSize:13.5,fontWeight:500,color:"var(--sb-on-ink)" }}>
+                  <span style={{ width:16,height:16,borderRadius:"50%",background:"radial-gradient(circle at 35% 35%, #FFD9A8, #F39A42, #D96E1A)",boxShadow:"0 0 8px rgba(243,154,66,0.6)",display:"inline-block",flexShrink:0 }} />
+                  <span>Talk to SideBrain</span>
+                  <span style={{ marginLeft:"auto",fontFamily:"'JetBrains Mono',monospace",borderRadius:4,background:"rgba(255,255,255,0.1)",padding:"1px 6px",fontSize:10,color:"rgba(255,255,255,0.6)" }}>CMD K</span>
+                </div>
+                {/* Workspace section */}
+                <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:9.5,letterSpacing:".14em",textTransform:"uppercase",color:"var(--sb-ink-3)",padding:"4px 8px 4px" }}>Workspace</div>
                 {[
-                  { icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 12h18M3 18h12"/></svg>,label:"Library",badge:"124",active:true },
-                  { icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,label:"Chats" },
-                  { icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg>,label:"Tasks",badge:"3" },
-                  { icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v22M5 8l7-7 7 7M5 16l7 7 7-7"/></svg>,label:"Recordings" },
-                ].map(({icon,label,badge,active})=>(
-                  <div key={label} style={{ display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,fontSize:13.5,cursor:"default",background:active?"#2A1F14":"transparent",color:active?"#FBF7F1":"#7A6A5A" }}>
-                    {icon}{label}
-                    {badge&&<span style={{ marginLeft:"auto",fontFamily:"'JetBrains Mono',monospace",fontSize:10,padding:"1px 6px",borderRadius:4,background:active?"rgba(255,255,255,0.15)":"rgba(243,154,66,0.15)",color:active?"rgba(255,255,255,0.85)":"#A0622A" }}>{badge}</span>}
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>, label:"Overview", active:true },
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Notes", badge:"31" },
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>, label:"Agent Tasks" },
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>, label:"X Automation", badge:"84" },
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>, label:"Recordings", muted:true, badge:"Soon" },
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>, label:"Memory", badge:"5" },
+                ].map(({icon,label,active,muted,badge})=>(
+                  <div key={label} style={{ display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:8,fontSize:13,cursor:"default",background:active?"var(--sb-ink)":"transparent",color:active?"var(--sb-on-ink)":muted?"var(--sb-ink-3)":"var(--sb-ink-2)" }}>
+                    <span style={{ display:"flex",width:16,height:16,alignItems:"center",justifyContent:"center" }}>{icon}</span>
+                    {label}
+                    {badge&&<span style={{ marginLeft:"auto",fontFamily:"'JetBrains Mono',monospace",fontSize:10,padding:"1px 7px",borderRadius:999,background:active?"rgba(255,255,255,0.12)":muted?"var(--sb-bg-2)":"var(--sb-accent-soft)",color:active?"rgba(255,255,255,0.8)":muted?"var(--sb-ink-4)":"var(--sb-accent-deep)" }}>{badge}</span>}
                   </div>
                 ))}
-                <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:"#C0A882",padding:"18px 8px 6px" }}>Workspace</div>
+                {/* Library section */}
+                <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:9.5,letterSpacing:".14em",textTransform:"uppercase",color:"var(--sb-ink-3)",padding:"12px 8px 4px" }}>Library</div>
                 {[
-                  { icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>,label:"Memory" },
-                  { icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1z"/></svg>,label:"Settings" },
-                ].map(({icon,label})=>(
-                  <div key={label} style={{ display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,fontSize:13.5,color:"#7A6A5A",cursor:"default" }}>{icon}{label}</div>
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>, label:"Collections" },
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>, label:"Search", badge:"CMD F" },
+                  { icon:<svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>, label:"Highlights" },
+                ].map(({icon,label,badge})=>(
+                  <div key={label} style={{ display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:8,fontSize:13,cursor:"default",color:"var(--sb-ink-3)" }}>
+                    <span style={{ display:"flex",width:16,height:16,alignItems:"center",justifyContent:"center" }}>{icon}</span>
+                    {label}
+                    {badge&&<span style={{ marginLeft:"auto",fontFamily:"'JetBrains Mono',monospace",fontSize:10,padding:"1px 5px",borderRadius:4,background:"var(--sb-bg-2)",color:"var(--sb-ink-3)" }}>{badge}</span>}
+                  </div>
                 ))}
+                {/* Account */}
+                <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:9.5,letterSpacing:".14em",textTransform:"uppercase",color:"var(--sb-ink-3)",padding:"12px 8px 4px" }}>Account</div>
+                <div style={{ display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:8,fontSize:13,cursor:"default",color:"var(--sb-ink-2)" }}>
+                  <span style={{ display:"flex",width:16,height:16,alignItems:"center",justifyContent:"center" }}><svg width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1z"/></svg></span>
+                  Settings
+                </div>
+                {/* Bottom: premium card + user */}
+                <div style={{ marginTop:"auto",borderTop:"1px solid var(--sb-line-2)",paddingTop:12 }}>
+                  <div style={{ borderRadius:14,background:"var(--sb-ink)",padding:"14px 14px 12px",marginBottom:10,color:"var(--sb-on-ink)" }}>
+                    <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".12em",textTransform:"uppercase",color:"var(--sb-accent-2)",marginBottom:6 }}>FREE PLAN</div>
+                    <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:16,lineHeight:1.2,marginBottom:10 }}>Go Pro for unlimited Delegate.</div>
+                    <div style={{ fontSize:11,color:"rgba(255,255,255,0.55)",marginBottom:6 }}>14 / 25 tasks used this month</div>
+                    <div style={{ height:4,borderRadius:999,background:"rgba(255,255,255,0.1)",marginBottom:10,overflow:"hidden" }}>
+                      <div style={{ height:"100%",width:"56%",borderRadius:999,background:"var(--sb-accent)" }} />
+                    </div>
+                    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:6,borderRadius:999,background:"var(--sb-panel-2)",padding:"6px 0",fontSize:12,fontWeight:500,color:"var(--sb-ink)",cursor:"default" }}>
+                      Upgrade · $12/mo
+                    </div>
+                  </div>
+                  <div style={{ display:"flex",alignItems:"center",gap:10,padding:"6px 8px",borderRadius:8,cursor:"default" }}>
+                    <div style={{ width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,#6B4E32,#8C5A3D)",display:"grid",placeItems:"center",fontSize:11,fontWeight:700,color:"#fff",flexShrink:0 }}>IT</div>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ fontSize:13,fontWeight:500,color:"var(--sb-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>Itish</div>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:"var(--sb-ink-3)",textTransform:"uppercase",letterSpacing:".04em" }}>BETA</div>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--sb-ink-3)" strokeWidth="1.8" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
+                  </div>
+                </div>
               </aside>
 
-              {/* Main */}
-              <main style={{ flex:1,padding:"28px 32px",background:"#FDFAF6",minWidth:0 }}>
-                <div style={{ display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:24 }}>
-                  <h3 style={{ fontFamily:"'Instrument Serif',serif",fontSize:32,fontWeight:400,color:"#2A1F14" }}>Library</h3>
-                  <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"#A0927F",letterSpacing:".04em" }}>SHOWING 6 OF 124</div>
-                </div>
-                <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:28 }}>
-                  {[{lbl:"Conversations",val:"124",delta:"+12 this week"},{lbl:"Tasks completed",val:"87",delta:"+9 today"},{lbl:"Lectures recorded",val:"23",delta:"14h of audio"},{lbl:"Pages read",val:"1.2k",delta:"Across 47 sites",accent:true}].map(({lbl,val,delta,accent})=>(
-                    <div key={lbl} style={{ background:"#F5EFE5",border:"1px solid #E8DFD2",borderRadius:12,padding:"16px 18px" }}>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:"#A0927F",marginBottom:8 }}>{lbl}</div>
-                      <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:30,letterSpacing:"-0.01em" }}><em style={{ color:"#B5601A",fontStyle:"italic" }}>{val}</em></div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:accent?"#A0622A":"#3D8A6A",marginTop:4 }}>{delta}</div>
+              {/* ── Main content ── */}
+              <div style={{ flex:1,minWidth:0,display:"flex",flexDirection:"column",background:"var(--sb-bg)" }}>
+                {/* Top bar */}
+                <div style={{ height:56,display:"flex",alignItems:"center",gap:12,padding:"0 24px",borderBottom:"1px solid var(--sb-line-2)",background:"rgba(246,241,234,0.88)",backdropFilter:"blur(12px)",flexShrink:0 }}>
+                  <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"var(--sb-ink-3)",display:"flex",alignItems:"center",gap:6 }}>
+                    SideBrain <span style={{ color:"var(--sb-ink-4)" }}>/</span> <span style={{ fontWeight:500,color:"var(--sb-ink)" }}>Overview</span>
+                  </div>
+                  <div style={{ flex:1,maxWidth:400,display:"flex",alignItems:"center",gap:8,borderRadius:10,border:"1px solid var(--sb-line-2)",background:"var(--sb-panel)",padding:"6px 10px",fontSize:13,color:"var(--sb-ink-3)" }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span>Search notes, tasks...</span>
+                    <span style={{ marginLeft:"auto",fontFamily:"'JetBrains Mono',monospace",fontSize:10,borderRadius:4,border:"1px solid var(--sb-line-2)",background:"var(--sb-bg-2)",padding:"1px 5px",color:"var(--sb-ink-3)" }}>CMD K</span>
+                  </div>
+                  <div style={{ marginLeft:"auto",display:"flex",alignItems:"center",gap:6 }}>
+                    {[<svg key="b" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>,<svg key="h" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>].map((ic,i)=>(
+                      <div key={i} style={{ width:32,height:32,borderRadius:9,display:"grid",placeItems:"center",color:"var(--sb-ink-2)" }}>{ic}</div>
+                    ))}
+                    <div style={{ display:"flex",alignItems:"center",gap:6,borderRadius:9,background:"var(--sb-ink)",padding:"6px 12px",fontSize:13,fontWeight:500,color:"var(--sb-on-ink)",cursor:"default" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      New task
                     </div>
-                  ))}
+                  </div>
                 </div>
-                <div style={{ display:"flex",alignItems:"baseline",justifyContent:"space-between",margin:"18px 0 12px" }}>
-                  <h4 style={{ fontFamily:"'Instrument Serif',serif",fontSize:22,fontWeight:400,color:"#2A1F14" }}>Recent</h4>
-                  <a href="#" style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"#A0927F",textDecoration:"none" }}>VIEW ALL →</a>
-                </div>
-                <div>
-                  {[
-                    { bg:"linear-gradient(135deg,#DB4437,#C44033)",ic:"G",title:'Reply to Priya — "I\'ll be ten minutes late"',meta:"mail.google.com · 4 steps · Delegate",date:"2 min ago",pill:"sent",pillStyle:"done" },
-                    { bg:"#FF6B35",ic:"S",title:"Stripe pricing page — 3 key changes detected",meta:"stripe.com · summarized · 2 min read",date:"23 min ago",pill:"saved",pillStyle:"saved" },
-                    { bg:"linear-gradient(135deg,#6B4E32,#8C5A3D)",ic:"CS",title:"Compiler Design — Lecture 14: Optimization passes",meta:"recorded · 1h 12m · transcribed",date:"Today, 11:04",pill:"ready",pillStyle:"done" },
-                    { bg:"linear-gradient(135deg,#0072B1,#005A8E)",ic:"in",title:"Draft reply to Marcus's recruiter message",meta:"linkedin.com · Delegate",date:"Yesterday",pill:"draft",pillStyle:"draft" },
-                    { bg:"linear-gradient(135deg,#1D9BF0,#0F76C0)",ic:"𝕏",title:'"Find me the original Karpathy thread about nanoGPT"',meta:"x.com · 3 steps · found 1 result",date:"Yesterday",pill:"done",pillStyle:"done" },
-                    { bg:"#2A1F14",ic:"A",title:"Summarize this Stripe pricing change PDF",meta:"arxiv-style.pdf · 12 pages",date:"Tue",pill:"saved",pillStyle:"saved" },
-                  ].map(({bg,ic,title,meta,date,pill,pillStyle},i)=>(
-                    <div key={i} style={{ display:"grid",gridTemplateColumns:"26px 1fr 100px 80px",alignItems:"center",gap:14,padding:"14px 6px",borderBottom:i<5?"1px solid #E8DFD2":"none" }}>
-                      <div style={{ width:22,height:22,borderRadius:6,display:"grid",placeItems:"center",color:"#fff",fontSize:11,background:bg,flexShrink:0 }}>{ic}</div>
-                      <div>
-                        <div style={{ fontSize:14,color:"#2A1F14",fontWeight:500 }}>{title}</div>
-                        <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"#A0927F",marginTop:2 }}>{meta}</div>
+
+                {/* Page body */}
+                <div style={{ flex:1,padding:"24px 28px",overflow:"hidden" }}>
+                  {/* Greeting + progress bar */}
+                  <div style={{ display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:16,marginBottom:24 }}>
+                    <div>
+                      <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:38,lineHeight:1.02,letterSpacing:"-0.03em",marginBottom:6 }}>
+                        Good morning, <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>Itish.</em>
                       </div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"#A0927F" }}>{date}</div>
-                      <div>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,padding:"3px 8px",borderRadius:999,letterSpacing:".04em",display:"inline-flex",alignItems:"center",gap:5,background:pillStyle==="done"?"#D9F0E6":pillStyle==="draft"?"#F4ECE2":"#FBECD6",color:pillStyle==="done"?"#2D7A52":pillStyle==="draft"?"#8A7060":"#A0622A" }}>
-                          <span style={{ width:5,height:5,borderRadius:"50%",background:"currentColor",display:"inline-block" }} />{pill}
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"var(--sb-ink-3)",display:"flex",alignItems:"center",gap:6 }}>
+                        <span><strong style={{ fontWeight:500,color:"var(--sb-ink-2)" }}>Day 45</strong></span>
+                        <span style={{ width:4,height:4,borderRadius:"50%",background:"var(--sb-ink-4)",display:"inline-block" }} />
+                        <span>last active 2m ago</span>
+                      </div>
+                    </div>
+                    <div style={{ borderRadius:14,border:"1px solid var(--sb-line-2)",background:"var(--sb-panel-2)",padding:"10px 14px",minWidth:200 }}>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,textTransform:"uppercase",letterSpacing:".06em",color:"var(--sb-ink-3)",display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+                        <span>Delegate this month</span>
+                        <span style={{ color:"var(--sb-ink)" }}><strong>14</strong> / 25</span>
+                      </div>
+                      <div style={{ height:5,borderRadius:999,background:"var(--sb-bg-2)",overflow:"hidden" }}>
+                        <div style={{ height:"100%",width:"56%",borderRadius:999,background:"linear-gradient(90deg,var(--sb-accent),var(--sb-accent-deep))" }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tab bar */}
+                  <div style={{ display:"flex",alignItems:"center",gap:0,borderBottom:"1px solid var(--sb-line-2)",marginBottom:18 }}>
+                    {[{lbl:"Overview",active:true},{lbl:"Notes",badge:"31"},{lbl:"Agent Tasks"},{lbl:"X Automation",badge:"84"},{lbl:"Settings"}].map(({lbl,active,badge})=>(
+                      <div key={lbl} style={{ position:"relative",display:"inline-flex",alignItems:"center",gap:6,padding:"10px 14px",fontSize:13.5,fontWeight:500,color:active?"var(--sb-ink)":"var(--sb-ink-3)",cursor:"default" }}>
+                        {lbl}
+                        {badge&&<span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,borderRadius:999,padding:"1px 7px",background:active?"var(--sb-accent-soft)":"var(--sb-bg-2)",color:active?"var(--sb-accent-deep)":"var(--sb-ink-3)" }}>{badge}</span>}
+                        {active&&<span style={{ position:"absolute",bottom:-1,left:8,right:8,height:2,borderRadius:999,background:"var(--sb-ink)" }} />}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Stats grid */}
+                  <div style={{ display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr 1fr",gap:12,marginBottom:16 }}>
+                    {/* Dark card */}
+                    <div style={{ borderRadius:18,border:"1px solid var(--sb-ink)",background:"linear-gradient(180deg,var(--sb-ink) 0%,#2A211A 100%)",padding:18,color:"var(--sb-on-ink)" }}>
+                      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:"var(--sb-accent-2)" }}>Tasks done</span>
+                        <span style={{ width:22,height:22,borderRadius:6,background:"rgba(255,255,255,0.1)",display:"grid",placeItems:"center" }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--sb-accent-2)" strokeWidth="1.7" strokeLinecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                         </span>
                       </div>
+                      <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:44,lineHeight:1,letterSpacing:"-0.03em",display:"flex",alignItems:"flex-end",gap:4,marginBottom:4 }}>
+                        <em style={{ color:"var(--sb-accent-2)",fontStyle:"italic" }}>87</em>
+                        <span style={{ fontSize:16,color:"rgba(255,255,255,0.45)",paddingBottom:4 }}>/ 124</span>
+                      </div>
+                      <div style={{ fontSize:13,color:"rgba(255,255,255,0.6)",marginBottom:14 }}>70% success rate</div>
+                      <svg height="28" width="100%" viewBox="0 0 200 28" preserveAspectRatio="none">
+                        <polyline points="0,22 25,18 50,24 75,10 100,16 125,8 150,14 175,4 200,10" fill="none" stroke="oklch(0.82 0.14 65)" strokeWidth="1.5"/>
+                      </svg>
                     </div>
-                  ))}
+                    {/* Light cards */}
+                    {[
+                      {label:"Total notes",val:"31",sub:"From lectures, meetings, page chat",spark:"0,22 25,20 50,16 75,20 100,12 125,18 150,10 175,14 200,8"},
+                      {label:"Tasks run",val:"124",sub:"+14 this month",spark:"0,24 25,20 50,22 75,14 100,18 125,10 150,16 175,8 200,12"},
+                      {label:"This month",val:"14",sub:"11 tasks left on free",spark:"0,26 25,24 50,20 75,22 100,16 125,18 150,12 175,10 200,8"},
+                    ].map(({label,val,sub,spark})=>(
+                      <div key={label} style={{ borderRadius:18,border:"1px solid var(--sb-line-2)",background:"var(--sb-panel-2)",padding:18 }}>
+                        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
+                          <span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:"var(--sb-ink-3)" }}>{label}</span>
+                          <span style={{ width:22,height:22,borderRadius:6,background:"var(--sb-bg-2)",display:"grid",placeItems:"center" }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--sb-ink-2)" strokeWidth="1.8" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          </span>
+                        </div>
+                        <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:44,lineHeight:1,letterSpacing:"-0.03em",fontStyle:"italic",color:"var(--sb-accent-deep)",marginBottom:4 }}>{val}</div>
+                        <div style={{ fontSize:13,color:"var(--sb-ink-2)",marginBottom:14 }}>{sub}</div>
+                        <svg height="28" width="100%" viewBox="0 0 200 28" preserveAspectRatio="none">
+                          <polyline points={spark} fill="none" stroke="var(--sb-ink-3)" strokeWidth="1.5"/>
+                        </svg>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Recent notes + In progress */}
+                  <div style={{ display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:12 }}>
+                    {/* Recent notes */}
+                    <div style={{ borderRadius:18,border:"1px solid var(--sb-line-2)",background:"var(--sb-panel-2)",overflow:"hidden" }}>
+                      <div style={{ display:"flex",alignItems:"flex-end",justifyContent:"space-between",padding:"16px 20px 12px" }}>
+                        <div>
+                          <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:22,lineHeight:1 }}>Recent notes</div>
+                          <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,color:"var(--sb-ink-3)",marginTop:4 }}>From your last week</div>
+                        </div>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,color:"var(--sb-ink-3)",letterSpacing:".06em" }}>View all →</span>
+                      </div>
+                      {[
+                        {grad:"linear-gradient(135deg,#6B4E32,#8C5A3D)",sh:"LE",title:"Compiler Design — Lecture 14",meta:"lecture · 1h 12m",date:"Today",pill:"Lecture",pillBg:"#FEF3C7",pillC:"#92400E"},
+                        {grad:"linear-gradient(135deg,#DB4437,#C44033)",sh:"G",title:'Reply to Priya — "ten minutes late"',meta:"mail.google.com · Delegate",date:"2h ago",pill:"Chat",pillBg:"#FEE2E2",pillC:"#991B1B"},
+                        {grad:"linear-gradient(135deg,#2B6CDF,#1E50B0)",sh:"MT",title:"Q2 product planning — 14 May",meta:"meeting · 48m",date:"Yesterday",pill:"Meeting",pillBg:"#DBEAFE",pillC:"#1E3A8A"},
+                        {grad:"linear-gradient(135deg,#E27D39,#C65E1E)",sh:"CH",title:"Stripe pricing page — 3 changes",meta:"stripe.com · summarized",date:"Tue",pill:"Chat",pillBg:"#FEE2E2",pillC:"#991B1B"},
+                      ].map(({grad,sh,title,meta,date,pill,pillBg,pillC},i)=>(
+                        <div key={i} style={{ display:"grid",gridTemplateColumns:"32px 1fr auto auto",alignItems:"center",gap:12,padding:"11px 20px",borderTop:"1px solid var(--sb-line-2)" }}>
+                          <div style={{ width:32,height:32,borderRadius:8,background:grad,display:"grid",placeItems:"center",color:"#fff",fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,fontWeight:600,flexShrink:0 }}>{sh}</div>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontSize:13.5,fontWeight:500,color:"var(--sb-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{title}</div>
+                            <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,color:"var(--sb-ink-3)",marginTop:2 }}>{meta}</div>
+                          </div>
+                          <span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,padding:"2px 8px",borderRadius:999,background:pillBg,color:pillC,border:`1px solid ${pillC}22`,whiteSpace:"nowrap" }}>{pill}</span>
+                          <span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,color:"var(--sb-ink-3)",whiteSpace:"nowrap" }}>{date}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* In progress */}
+                    <div style={{ borderRadius:18,border:"1px solid var(--sb-line-2)",background:"var(--sb-panel-2)",padding:"16px 18px" }}>
+                      <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:22,lineHeight:1,marginBottom:4 }}>
+                        In <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>progress.</em>
+                      </div>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,color:"var(--sb-ink-3)",marginBottom:14 }}>Live agent work</div>
+                      <div style={{ borderRadius:12,border:"1px solid var(--sb-line-2)",background:"var(--sb-panel)",padding:"14px 14px" }}>
+                        <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:10 }}>
+                          <span style={{ width:8,height:8,borderRadius:"50%",background:"var(--sb-accent)",boxShadow:"0 0 8px var(--sb-accent)",display:"inline-block",animation:"sbPulse 1.6s infinite" }} />
+                          <span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:"var(--sb-accent-deep)" }}>Delegate · acting</span>
+                          <span style={{ marginLeft:"auto",fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,color:"var(--sb-ink-3)" }}>just now</span>
+                        </div>
+                        <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:17,lineHeight:1.3,color:"var(--sb-ink)",marginBottom:14 }}>
+                          Reply to Marcus on LinkedIn
+                        </div>
+                        <div style={{ display:"flex",gap:4,marginBottom:10 }}>
+                          {[1,2,3,4,5].map(n=>(
+                            <span key={n} style={{ height:3,flex:1,borderRadius:999,background:n<3?"var(--sb-accent)":n===3?"linear-gradient(90deg,var(--sb-accent),var(--sb-bg-2))":"var(--sb-bg-2)" }} />
+                          ))}
+                        </div>
+                        <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,color:"var(--sb-ink-3)",display:"flex",alignItems:"center",gap:6 }}>
+                          <span style={{ width:9,height:9,borderRadius:3,background:"linear-gradient(135deg,#0072B1,#005A8E)",display:"inline-block" }} />
+                          linkedin.com · step 2 / 5
+                        </div>
+                      </div>
+                      <div style={{ borderRadius:12,border:"1px solid var(--sb-line-2)",background:"var(--sb-panel)",padding:"14px 14px",marginTop:10 }}>
+                        <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6 }}>
+                          <span style={{ width:8,height:8,borderRadius:"50%",background:"#10B981",opacity:0.7,display:"inline-block" }} />
+                          <span style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:"#047857" }}>Calm</span>
+                        </div>
+                        <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:16,color:"var(--sb-ink)",marginBottom:6 }}>No other live work.</div>
+                        <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10.5,color:"var(--sb-ink-3)" }}>Start a task from the extension or remote agent.</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </main>
+              </div>
             </div>
           </div>
         </div>
@@ -1001,15 +1196,27 @@ export default function Index() {
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
-function BrowserBar({ url }: { url: string }) {
+function BrowserBar({ url, dark }: { url: string; dark?: boolean }) {
   return (
-    <div style={{ height:44,display:"flex",alignItems:"center",gap:8,padding:"0 14px",background:"linear-gradient(180deg, #F5EFE5, #EFE7DB)",borderBottom:"1px solid var(--sb-line-2)" }}>
+    <div style={{
+      height: 44, display: "flex", alignItems: "center", gap: 8, padding: "0 14px",
+      background: dark ? "linear-gradient(180deg, #1C1814, #161210)" : "linear-gradient(180deg, #F5EFE5, #EFE7DB)",
+      borderBottom: dark ? "1px solid rgba(255,255,255,0.07)" : "1px solid var(--sb-line-2)",
+    }}>
       <div style={{ display:"flex",gap:6 }}>
         {["#E36F62","#E7B654","#74C28D"].map((c,i)=><span key={i} style={{ width:11,height:11,borderRadius:"50%",background:c,display:"inline-block" }} />)}
       </div>
-      <div style={{ flex:1,maxWidth:480,margin:"0 auto",background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",borderRadius:8,padding:"0 12px",fontFamily:"'JetBrains Mono',monospace",fontSize:11.5,color:"var(--sb-ink-3)",display:"flex",alignItems:"center",gap:6,height:28 }}>
+      <div style={{
+        flex:1, maxWidth:480, margin:"0 auto",
+        background: dark ? "rgba(255,255,255,0.07)" : "var(--sb-panel-2)",
+        border: dark ? "1px solid rgba(255,255,255,0.1)" : "1px solid var(--sb-line)",
+        borderRadius:8, padding:"0 12px",
+        fontFamily:"'JetBrains Mono',monospace", fontSize:11.5,
+        color: dark ? "rgba(255,250,242,0.45)" : "var(--sb-ink-3)",
+        display:"flex", alignItems:"center", gap:6, height:28,
+      }}>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity:.7 }}><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        <strong style={{ color:"var(--sb-ink-2)",fontWeight:500 }}>https://</strong>{url}
+        <strong style={{ color: dark ? "rgba(255,250,242,0.65)" : "var(--sb-ink-2)", fontWeight:500 }}>https://</strong>{url}
       </div>
       <img src="/favicon.svg" width={22} height={22} alt="Braino" style={{ display: "inline-block", flexShrink: 0 }} />
     </div>
