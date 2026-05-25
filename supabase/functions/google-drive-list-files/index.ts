@@ -4,6 +4,7 @@ import {
   createDriveAdmin,
   getDriveConnection,
   getValidAccessToken,
+  hasFullDriveScope,
   json,
   listDriveItems,
   requireAuthedDriveUser,
@@ -30,6 +31,12 @@ serve(async (req) => {
 
     const admin = createDriveAdmin(env);
     const connection = await getDriveConnection(admin, user.id);
+    if (!hasFullDriveScope(connection)) {
+      return json({
+        error: "Google Drive needs to be reconnected with the latest permissions before Braino can see all your files.",
+        reconnectRequired: true,
+      }, 400);
+    }
     const token = await getValidAccessToken({
       admin,
       userId: user.id,

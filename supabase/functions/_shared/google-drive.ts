@@ -9,6 +9,7 @@ export type DriveConnection = {
   access_token: string;
   refresh_token?: string | null;
   token_expires_at?: string | null;
+  scope?: string | null;
 };
 
 export type DriveEnv = {
@@ -109,13 +110,18 @@ export function createDriveAdmin(env: DriveEnv) {
 export async function getDriveConnection(admin: ReturnType<typeof createClient>, userId: string) {
   const { data, error } = await admin
     .from("google_drive_connections")
-    .select("access_token, refresh_token, token_expires_at")
+    .select("access_token, refresh_token, token_expires_at, scope")
     .eq("user_identifier", userId)
     .maybeSingle();
 
   if (error) throw error;
   if (!data) throw new Error("Google Drive is not connected yet.");
   return data as DriveConnection;
+}
+
+export function hasFullDriveScope(connection: DriveConnection) {
+  const scope = String(connection?.scope || "");
+  return scope.includes("https://www.googleapis.com/auth/drive");
 }
 
 export async function getValidAccessToken({
