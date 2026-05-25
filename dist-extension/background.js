@@ -936,7 +936,7 @@ async function bgCallGoogleDriveFunction(functionName, payload) {
 
   const data = await response.json().catch(() => ({}));
   console.log("[Braino][Drive][BG] Function response:", functionName, response.status, data);
-  if (!response.ok) throw new Error(data?.error || `${functionName} failed (${response.status})`);
+  if (!response.ok) throw new Error([data?.error, data?.details].filter(Boolean).join(" — ") || `${functionName} failed (${response.status})`);
   return data;
 }
 
@@ -986,7 +986,56 @@ function bgParseAdapterTask(task, siteContext) {
   const createFolderMatch = raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i)
     || raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?(?:google\s+)?drive folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?$/i);
   if (wantsGoogleDrive && createFolderMatch) {
-    return { adapter: "google-drive", intent: "createFolder", folderName: createFolderMatch[1].trim() };
+    const parentFolderMatch = raw.match(/\s+in\s+folder\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+    return {
+      adapter: "google-drive",
+      intent: "createFolder",
+      folderName: createFolderMatch[1].trim(),
+      parentFolderName: parentFolderMatch?.[1]?.trim() || null,
+    };
+  }
+
+  const createDocMatch = raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?google doc\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+in\s+folder\s+["“]?(.+?)["”]?)?\s+(?:in|on)\s+(?:google\s+)?drive\b/i)
+    || raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?doc\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+in\s+folder\s+["“]?(.+?)["”]?)?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+  if (wantsGoogleDrive && createDocMatch) {
+    return {
+      adapter: "google-drive",
+      intent: "createDoc",
+      docName: createDocMatch[1].trim(),
+      parentFolderName: createDocMatch[2]?.trim() || null,
+    };
+  }
+
+  const renameMatch = raw.match(/rename\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?\s+to\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+  if (wantsGoogleDrive && renameMatch) {
+    return {
+      adapter: "google-drive",
+      intent: "rename",
+      targetKind: renameMatch[1]?.trim()?.toLowerCase() || null,
+      currentName: renameMatch[2].trim(),
+      newName: renameMatch[3].trim(),
+    };
+  }
+
+  const moveMatch = raw.match(/move\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?\s+to\s+(?:folder\s+)?["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+  if (wantsGoogleDrive && moveMatch) {
+    return {
+      adapter: "google-drive",
+      intent: "move",
+      targetKind: moveMatch[1]?.trim()?.toLowerCase() || null,
+      itemName: moveMatch[2].trim(),
+      destinationFolderName: moveMatch[3].trim(),
+    };
+  }
+
+  const deleteMatch = raw.match(/(?:delete|remove|trash)\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?\s+(?:from\s+|in\s+|on\s+)?(?:google\s+)?drive\b/i);
+  if (wantsGoogleDrive && deleteMatch) {
+    return {
+      adapter: "google-drive",
+      intent: "delete",
+      targetKind: deleteMatch[1]?.trim()?.toLowerCase() || null,
+      itemName: deleteMatch[2].trim(),
+    };
   }
 
   const folderSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?folder\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
@@ -1258,10 +1307,77 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       onResult,
       run: () => bgCallGoogleDriveFunction("google-drive-create-folder", {
         folderName: parsed.folderName,
+        parentFolderName: parsed.parentFolderName || undefined,
       }),
     });
 
     return `Created the Google Drive folder **${result?.name || parsed.folderName}**.`;
+  }
+
+  if (parsed.adapter === "google-drive" && parsed.intent === "createDoc") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Create the Google Doc "${parsed.docName}" in Drive`,
+      type: "googleDriveCreateDoc",
+      onProgress,
+      onResult,
+      run: () => bgCallGoogleDriveFunction("google-drive-create-doc", {
+        docName: parsed.docName,
+        parentFolderName: parsed.parentFolderName || undefined,
+      }),
+    });
+
+    return `Created the Google Doc **${result?.name || parsed.docName}** in Drive.`;
+  }
+
+  if (parsed.adapter === "google-drive" && parsed.intent === "rename") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Rename "${parsed.currentName}" to "${parsed.newName}" in Drive`,
+      type: "googleDriveRename",
+      onProgress,
+      onResult,
+      run: () => bgCallGoogleDriveFunction("google-drive-rename", {
+        currentName: parsed.currentName,
+        newName: parsed.newName,
+        targetKind: parsed.targetKind || undefined,
+      }),
+    });
+
+    return `Renamed **${result?.oldName || parsed.currentName}** to **${result?.name || parsed.newName}** in Drive.`;
+  }
+
+  if (parsed.adapter === "google-drive" && parsed.intent === "move") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Move "${parsed.itemName}" to "${parsed.destinationFolderName}" in Drive`,
+      type: "googleDriveMove",
+      onProgress,
+      onResult,
+      run: () => bgCallGoogleDriveFunction("google-drive-move", {
+        itemName: parsed.itemName,
+        destinationFolderName: parsed.destinationFolderName,
+        targetKind: parsed.targetKind || undefined,
+      }),
+    });
+
+    return `Moved **${result?.name || parsed.itemName}** to **${result?.destinationFolderName || parsed.destinationFolderName}** in Drive.`;
+  }
+
+  if (parsed.adapter === "google-drive" && parsed.intent === "delete") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Delete "${parsed.itemName}" from Drive`,
+      type: "googleDriveDelete",
+      onProgress,
+      onResult,
+      run: () => bgCallGoogleDriveFunction("google-drive-delete", {
+        itemName: parsed.itemName,
+        targetKind: parsed.targetKind || undefined,
+      }),
+    });
+
+    return `Deleted **${result?.name || parsed.itemName}** from Drive.`;
   }
 
   return null;
