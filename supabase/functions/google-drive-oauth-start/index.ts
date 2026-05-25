@@ -2,7 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -20,36 +21,37 @@ serve(async (req) => {
     }
 
     const clientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const redirectUri =
-      Deno.env.get("GOOGLE_DRIVE_REDIRECT_URI") ||
-      (supabaseUrl ? `${supabaseUrl}/functions/v1/google-drive-oauth-callback` : null);
-
+    const redirectUri = Deno.env.get("GOOGLE_DRIVE_REDIRECT_URI");
     if (!clientId || !redirectUri) {
-      return new Response(JSON.stringify({ error: "Google Drive OAuth not configured" }), {
+      return new Response(JSON.stringify({ error: "OAuth not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const state = btoa(JSON.stringify({ userIdentifier }));
+
     const scope = [
-      "openid",
-      "email",
       "https://www.googleapis.com/auth/drive.file",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "openid",
     ].join(" ");
 
-    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", clientId);
-    authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("access_type", "offline");
-    authUrl.searchParams.set("prompt", "consent");
-    authUrl.searchParams.set("include_granted_scopes", "true");
-    authUrl.searchParams.set("scope", scope);
-    authUrl.searchParams.set("state", state);
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope,
+      access_type: "offline",
+      prompt: "consent",
+      include_granted_scopes: "true",
+      state,
+    });
 
-    return new Response(JSON.stringify({ authUrl: authUrl.toString() }), {
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+    return new Response(JSON.stringify({ authUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
