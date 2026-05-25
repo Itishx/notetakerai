@@ -914,12 +914,37 @@ function bgBuildSpotifyTrackSearchUrl(songName) {
   return `https://open.spotify.com/search/${encodeURIComponent(songName)}/tracks`;
 }
 
+async function bgCallGoogleDriveFunction(functionName, payload) {
+  const stored = await new Promise((resolve) => chrome.storage.local.get(["authToken", "authUserId"], resolve));
+  let token = stored.authToken;
+  if (!token) token = await bgRefreshAuthToken();
+  if (!token || !stored.authUserId) throw new Error("Please sign in to Braino first.");
+
+  const response = await fetch(`${BG_API_BASE}/${functionName}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: BG_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      userIdentifier: stored.authUserId,
+      ...payload,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || `${functionName} failed (${response.status})`);
+  return data;
+}
+
 function bgParseAdapterTask(task, siteContext) {
   const raw = String(task || "").trim();
   const text = raw.toLowerCase();
   const currentSite = siteContext?.site || "generic";
   const onSpotify = currentSite === "spotify" || /\bspotify\b/.test(text);
   const wantsGoogleDoc = /\bgoogle docs?\b|\bgdoc\b/.test(text);
+  const wantsGoogleDrive = /\bgoogle drive\b|\bdrive\b/.test(text);
 
   const quotedAdd = raw.match(/add\s+["“](.+?)["”]\s+to\s+(?:my\s+)?playlist\s+["“](.+?)["”](?:\s+on\s+spotify)?/i);
   if (onSpotify && quotedAdd) {
@@ -954,6 +979,23 @@ function bgParseAdapterTask(task, siteContext) {
         return { adapter: "google-docs", intent: "researchArticle", topic: match[1].trim() };
       }
     }
+  }
+
+  const createFolderMatch = raw.match(/(?:create|make)\s+(?:a\s+)?folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?\s+(?:in|on)\s+google drive\b/i)
+    || raw.match(/(?:create|make)\s+(?:a\s+)?google drive folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?$/i);
+  if (wantsGoogleDrive && createFolderMatch) {
+    return { adapter: "google-drive", intent: "createFolder", folderName: createFolderMatch[1].trim() };
+  }
+
+  const folderSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?folder\s+["“]?(.+?)["”]?\s+(?:in|on)\s+google drive\b/i);
+  if (wantsGoogleDrive && folderSearchMatch) {
+    return { adapter: "google-drive", intent: "search", query: folderSearchMatch[1].trim(), folderOnly: true };
+  }
+
+  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+["“]?(.+?)["”]?\s+(?:in|on)\s+google drive\b/i)
+    || raw.match(/(?:find|search for|look for)\s+["“]?(.+?)["”]?\s+(?:in|on)\s+google drive\b/i);
+  if (wantsGoogleDrive && fileSearchMatch) {
+    return { adapter: "google-drive", intent: "search", query: fileSearchMatch[1].trim(), folderOnly: false };
   }
 
   return null;
@@ -1180,6 +1222,43 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
     });
 
     return `Drafted an article about **${parsed.topic}** in a Google Doc.`;
+  }
+
+  if (parsed.adapter === "google-drive" && parsed.intent === "search") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Search Google Drive for "${parsed.query}"`,
+      type: "googleDriveSearch",
+      onProgress,
+      onResult,
+      run: () => bgCallGoogleDriveFunction("google-drive-search", {
+        query: parsed.query,
+        folderOnly: !!parsed.folderOnly,
+      }),
+    });
+
+    const results = Array.isArray(result?.results) ? result.results : [];
+    if (!results.length) {
+      return `I searched Google Drive for **${parsed.query}** but didn’t find any matching ${parsed.folderOnly ? "folders" : "files"}.`;
+    }
+
+    const summary = results.slice(0, 3).map((item) => `- ${item.name} (${item.kind})`).join("\n");
+    return `I found these matches in Google Drive for **${parsed.query}**:\n${summary}`;
+  }
+
+  if (parsed.adapter === "google-drive" && parsed.intent === "createFolder") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Create the Google Drive folder "${parsed.folderName}"`,
+      type: "googleDriveCreateFolder",
+      onProgress,
+      onResult,
+      run: () => bgCallGoogleDriveFunction("google-drive-create-folder", {
+        folderName: parsed.folderName,
+      }),
+    });
+
+    return `Created the Google Drive folder **${result?.name || parsed.folderName}**.`;
   }
 
   return null;
