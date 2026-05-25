@@ -44,6 +44,45 @@ export type Database = {
         }
         Relationships: []
       }
+      google_drive_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          google_email: string | null
+          google_user_id: string | null
+          id: string
+          refresh_token: string | null
+          scope: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_identifier: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          google_email?: string | null
+          google_user_id?: string | null
+          id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          google_email?: string | null
+          google_user_id?: string | null
+          id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier?: string
+        }
+        Relationships: []
+      }
       notes: {
         Row: {
           created_at: string
