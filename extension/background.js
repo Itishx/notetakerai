@@ -981,19 +981,19 @@ function bgParseAdapterTask(task, siteContext) {
     }
   }
 
-  const createFolderMatch = raw.match(/(?:create|make)\s+(?:a\s+)?folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?\s+(?:in|on)\s+google drive\b/i)
-    || raw.match(/(?:create|make)\s+(?:a\s+)?google drive folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?$/i);
+  const createFolderMatch = raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i)
+    || raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?(?:google\s+)?drive folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?$/i);
   if (wantsGoogleDrive && createFolderMatch) {
     return { adapter: "google-drive", intent: "createFolder", folderName: createFolderMatch[1].trim() };
   }
 
-  const folderSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?folder\s+["“]?(.+?)["”]?\s+(?:in|on)\s+google drive\b/i);
+  const folderSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?folder\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
   if (wantsGoogleDrive && folderSearchMatch) {
     return { adapter: "google-drive", intent: "search", query: folderSearchMatch[1].trim(), folderOnly: true };
   }
 
-  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+["“]?(.+?)["”]?\s+(?:in|on)\s+google drive\b/i)
-    || raw.match(/(?:find|search for|look for)\s+["“]?(.+?)["”]?\s+(?:in|on)\s+google drive\b/i);
+  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i)
+    || raw.match(/(?:find|search for|look for)\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
   if (wantsGoogleDrive && fileSearchMatch) {
     return { adapter: "google-drive", intent: "search", query: fileSearchMatch[1].trim(), folderOnly: false };
   }
