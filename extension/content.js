@@ -666,6 +666,156 @@ async function __sbGoogleDocsWriteArticle(title, body) {
   return { success: true, chars: bodyPayload.length };
 }
 
+function __sbGmailNormalizeText(value) {
+  return String(value || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function __sbGmailVisible(el) {
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  if (!rect.width || !rect.height) return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+}
+
+function __sbGmailFindSearchInput() {
+  const selectors = [
+    'input[placeholder*="Search mail"]',
+    'input[aria-label*="Search mail"]',
+    'input[name="q"]',
+  ];
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (el && __sbGmailVisible(el)) return el;
+  }
+  return null;
+}
+
+function __sbGmailSetInputValue(input, value) {
+  if (!input) return false;
+  try { input.focus(); } catch(_) {}
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
+    || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  if (setter) setter.call(input, value);
+  else input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+
+function __sbGmailFindOpenComposeDialog() {
+  const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+  return dialogs.find((dialog) => __sbGmailVisible(dialog) && dialog.querySelector('input[name="subjectbox"], input[placeholder*="Subject"], textarea[name="to"]'))
+    || null;
+}
+
+function __sbGmailFindComposeField(selectors, root = document) {
+  for (const selector of selectors) {
+    const el = root.querySelector(selector);
+    if (el && __sbGmailVisible(el)) return el;
+  }
+  return null;
+}
+
+function __sbGmailFindComposeBody(root = document) {
+  const selectors = [
+    'div[role="textbox"][aria-label*="Message Body"]',
+    'div[role="textbox"][g_editable="true"]',
+    'div[contenteditable="true"][aria-label*="Message Body"]',
+  ];
+  return __sbGmailFindComposeField(selectors, root);
+}
+
+function __sbGmailFindReplyButton() {
+  const candidates = Array.from(document.querySelectorAll('span[role="link"], div[role="button"], span[role="button"], button'));
+  return candidates.find((el) => {
+    if (!__sbGmailVisible(el)) return false;
+    const text = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("aria-label") || "");
+    return /^reply$/i.test(text) || /^reply to all$/i.test(text);
+  }) || null;
+}
+
+function __sbGmailFindSendButton(root = document) {
+  const selectors = [
+    'div[role="button"][aria-label^="Send"]',
+    'div[role="button"][data-tooltip^="Send"]',
+    'button[aria-label^="Send"]',
+  ];
+  return __sbGmailFindComposeField(selectors, root);
+}
+
+async function __sbGmailSearch(query) {
+  const input = __sbGmailFindSearchInput();
+  if (!input) return { error: "Gmail search box was not found." };
+  if (!__sbGmailSetInputValue(input, String(query || "").trim())) {
+    return { error: "Gmail search query could not be entered." };
+  }
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+  input.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+  input.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+  return { success: true, query: String(query || "").trim() };
+}
+
+async function __sbGmailFillComposeFields({ to, subject, body }, options = {}) {
+  const root = __sbGmailFindOpenComposeDialog() || document;
+  const toField = __sbGmailFindComposeField([
+    'textarea[name="to"]',
+    'input[aria-label*="Recipients"]',
+    'input[peoplekit-id]',
+  ], root);
+  const subjectField = __sbGmailFindComposeField([
+    'input[name="subjectbox"]',
+    'input[placeholder*="Subject"]',
+  ], root);
+  const bodyField = __sbGmailFindComposeBody(root);
+
+  if (to && toField) __sbGmailSetInputValue(toField, to);
+  if (subject && subjectField) __sbGmailSetInputValue(subjectField, subject);
+
+  if (body && bodyField) {
+    try { bodyField.focus(); } catch(_) {}
+    bodyField.click?.();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const text = String(body || "");
+    try {
+      document.execCommand("selectAll", false, null);
+      document.execCommand("delete", false, null);
+    } catch(_) {}
+    const inserted = document.execCommand("insertText", false, text);
+    if (!inserted || !__sbGmailNormalizeText(bodyField.innerText || bodyField.textContent)) {
+      bodyField.textContent = text;
+      bodyField.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: text, bubbles: true }));
+    }
+  }
+
+  if (!options.requireBody && (to || subject || body)) {
+    return { success: true };
+  }
+  if (body && !bodyField) return { error: "Gmail message body field was not found." };
+  return { success: true };
+}
+
+async function __sbGmailSendOpenCompose() {
+  const root = __sbGmailFindOpenComposeDialog() || document;
+  const sendButton = __sbGmailFindSendButton(root);
+  if (!sendButton) return { error: "Gmail Send button was not found." };
+  sendButton.click();
+  return { success: true };
+}
+
+async function __sbGmailReplyToCurrentThread(body, options = {}) {
+  const replyButton = __sbGmailFindReplyButton();
+  if (!replyButton) return { error: "Reply button was not found in the current Gmail thread." };
+  replyButton.click();
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  const filled = await __sbGmailFillComposeFields({ body }, { requireBody: true });
+  if (filled?.error) return filled;
+  if (options.send) {
+    return __sbGmailSendOpenCompose();
+  }
+  return { success: true };
+}
+
 function __sbGetSiteAdapterContext() {
   const url = window.location.href;
   const host = window.location.hostname;
@@ -879,6 +1029,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "googleDocsWriteArticle") {
           sendResponse(await __sbGoogleDocsWriteArticle(msg.title || "", msg.body || ""));
+          return;
+        }
+        if (msg.type === "gmailSearch") {
+          sendResponse(await __sbGmailSearch(msg.query || ""));
+          return;
+        }
+        if (msg.type === "gmailFillCompose") {
+          sendResponse(await __sbGmailFillComposeFields({
+            to: msg.to || "",
+            subject: msg.subject || "",
+            body: msg.body || "",
+          }));
+          return;
+        }
+        if (msg.type === "gmailSendOpenCompose") {
+          sendResponse(await __sbGmailSendOpenCompose());
+          return;
+        }
+        if (msg.type === "gmailReplyToCurrentThread") {
+          sendResponse(await __sbGmailReplyToCurrentThread(msg.body || "", { send: !!msg.send }));
           return;
         }
         sendResponse({ error: `Unknown site adapter action: ${msg.type}` });

@@ -916,6 +916,17 @@ function bgBuildSpotifyTrackSearchUrl(songName) {
   return `https://open.spotify.com/search/${encodeURIComponent(songName)}/tracks`;
 }
 
+function bgBuildGmailComposeUrl({ to, subject, body }) {
+  const url = new URL("https://mail.google.com/mail/u/0/");
+  url.searchParams.set("view", "cm");
+  url.searchParams.set("fs", "1");
+  url.searchParams.set("tf", "1");
+  if (to) url.searchParams.set("to", to);
+  if (subject) url.searchParams.set("su", subject);
+  if (body) url.searchParams.set("body", body);
+  return url.toString();
+}
+
 async function bgCallGoogleDriveFunction(functionName, payload) {
   const stored = await new Promise((resolve) => chrome.storage.local.get(["authToken", "authUserId"], resolve));
   let token = stored.authToken;
@@ -957,6 +968,10 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   const normalizedConnector = bgNormalizeConnectorHint(connectorHint) || "auto";
   const onSpotify = currentSite === "spotify" || /\bspotify\b/.test(text);
   const wantsGoogleDoc = /\bgoogle docs?\b|\bgdoc\b/.test(text);
+  const wantsGmail =
+    currentSite === "gmail" ||
+    normalizedConnector === "gmail" ||
+    /\bgmail\b|\bemail\b|\bmail\b/.test(text);
   const wantsGoogleDrive =
     currentSite === "google-drive" ||
     normalizedConnector === "google-drive" ||
@@ -995,6 +1010,57 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
         return { adapter: "google-docs", intent: "researchArticle", topic: match[1].trim() };
       }
     }
+  }
+
+  const sendEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:about|subject)\s+(.+?)\s+(?:saying|that says|body)\s+(.+)$/i);
+  if (wantsGmail && sendEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: /^(send)/i.test(raw.trim()) ? "sendEmail" : "draftEmail",
+      to: sendEmailMatch[1].trim(),
+      subject: sendEmailMatch[2].trim(),
+      body: sendEmailMatch[3].trim(),
+    };
+  }
+
+  const draftEmailMatch = raw.match(/(?:draft|compose|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message)\s+(.+)$/i);
+  if (wantsGmail && draftEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "draftEmail",
+      to: draftEmailMatch[1].trim(),
+      subject: "",
+      body: draftEmailMatch[2].trim(),
+    };
+  }
+
+  const replyEmailMatch = raw.match(/reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
+  if (wantsGmail && replyEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "replyCurrentThread",
+      body: replyEmailMatch[1].trim(),
+      send: true,
+    };
+  }
+
+  const draftReplyMatch = raw.match(/draft\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
+  if (wantsGmail && draftReplyMatch) {
+    return {
+      adapter: "gmail",
+      intent: "replyCurrentThread",
+      body: draftReplyMatch[1].trim(),
+      send: false,
+    };
+  }
+
+  const gmailSearchMatch = raw.match(/(?:find|search|look for|open)\s+(?:emails?|mail)\s+(?:about|for|from)?\s+(.+)$/i);
+  if (wantsGmail && gmailSearchMatch) {
+    return {
+      adapter: "gmail",
+      intent: "search",
+      query: gmailSearchMatch[1].trim(),
+    };
   }
 
   const createFolderMatch = raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i)
@@ -1288,6 +1354,126 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
     });
 
     return `Drafted an article about **${parsed.topic}** in a Google Doc.`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "search") {
+    if (siteContext?.site !== "gmail") {
+      await bgRunAdapterStep({
+        history,
+        description: "Open Gmail",
+        type: "navigate",
+        onProgress,
+        onResult,
+        run: async () => {
+          const result = await bgExecuteAgentAction(tabId, {
+            type: "navigate",
+            url: "https://mail.google.com/mail/u/0/#inbox",
+            description: "Open Gmail",
+          });
+          if (!result?.error) {
+            await bgWaitForTabReady(tabId, 8000);
+            await bgDelay(1800);
+          }
+          return result;
+        },
+      });
+    }
+
+    await bgRunAdapterStep({
+      history,
+      description: `Search Gmail for "${parsed.query}"`,
+      type: "gmailSearch",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailSearch",
+        query: parsed.query,
+      }),
+    });
+
+    return `Searched Gmail for **${parsed.query}**.`;
+  }
+
+  if (parsed.adapter === "gmail" && (parsed.intent === "draftEmail" || parsed.intent === "sendEmail")) {
+    const composeUrl = bgBuildGmailComposeUrl({
+      to: parsed.to,
+      subject: parsed.subject,
+      body: parsed.body,
+    });
+
+    await bgRunAdapterStep({
+      history,
+      description: `Open Gmail compose for ${parsed.to}`,
+      type: "navigate",
+      onProgress,
+      onResult,
+      run: async () => {
+        const result = await bgExecuteAgentAction(tabId, {
+          type: "navigate",
+          url: composeUrl,
+          description: `Open Gmail compose for ${parsed.to}`,
+        });
+        if (!result?.error) {
+          await bgWaitForTabReady(tabId, 8000);
+          await bgDelay(1800);
+        }
+        return result;
+      },
+    });
+
+    await bgRunAdapterStep({
+      history,
+      description: "Verify Gmail compose fields",
+      type: "gmailFillCompose",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailFillCompose",
+        to: parsed.to,
+        subject: parsed.subject || "",
+        body: parsed.body,
+      }),
+    });
+
+    if (parsed.intent === "sendEmail") {
+      if (shouldStop?.()) throw new Error("Stopped.");
+      await bgRunAdapterStep({
+        history,
+        description: "Send the Gmail message",
+        type: "gmailSendOpenCompose",
+        onProgress,
+        onResult,
+        run: () => bgExecuteSiteAdapterAction(tabId, {
+          type: "gmailSendOpenCompose",
+        }),
+      });
+      return `Sent the email to **${parsed.to}**.`;
+    }
+
+    return `Drafted an email to **${parsed.to}** in Gmail.`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "replyCurrentThread") {
+    if (siteContext?.site !== "gmail") {
+      return "Open the Gmail thread you want first, then ask me to reply and I’ll use the Gmail adapter.";
+    }
+
+    await bgRunAdapterStep({
+      history,
+      description: parsed.send ? "Reply in the current Gmail thread and send" : "Draft a reply in the current Gmail thread",
+      type: "gmailReplyToCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailReplyToCurrentThread",
+        body: parsed.body,
+        send: !!parsed.send,
+      }),
+    });
+
+    return parsed.send
+      ? "Replied to the current Gmail thread."
+      : "Drafted a reply in the current Gmail thread.";
   }
 
   if (parsed.adapter === "google-drive" && parsed.intent === "search") {
