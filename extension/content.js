@@ -881,6 +881,13 @@ function __sbGetEffectiveConnector(siteContext) {
   return __sbGetConnectorSiteSuggestion(siteContext || __sbGetSiteAdapterContext());
 }
 
+function __sbInferConnectorFromPrompt(promptText) {
+  const text = String(promptText || "").trim().toLowerCase();
+  if (/\bgoogle drive\b|\bdrive\b/.test(text)) return "google-drive";
+  if (/\bgmail\b|\bemail\b|\bmail\b/.test(text)) return "gmail";
+  return "auto";
+}
+
 function __sbGetConnectorLabel(connector, options = {}) {
   const key = __sbNormalizeConnectorName(connector) || "auto";
   const includeAutoHint = Boolean(options.includeAutoHint);
@@ -924,7 +931,7 @@ function __sbShouldConnectorForceAgent(connector, promptText, forcedMode, siteCo
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(text)) return false;
   if (__sbIsBrowserActionCommand(text)) return true;
   if (key === "google-drive") {
-    return /\b(create|make|find|search|look for|rename|move|delete|remove|trash|organize|sort|list|show|open|take)\b/.test(text);
+    return /\b(create|make|find|search|look for|rename|move|delete|remove|trash|organize|organise|organhise|sort|clean|tidy|arrange|list|show|open|take)\b/.test(text);
   }
   if (key === "gmail") {
     return /\b(reply|draft|compose|send|archive|label|star|read|open|find|search|show|summarize|triage|email)\b/.test(text);
@@ -2124,10 +2131,6 @@ function __sbBuildBrainUI() {
         <span id="__sb_mode_label__">⚡ Auto</span>
         <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
       </button>
-      <button id="__sb_connector_btn__" class="sb-pill-dropdown-btn" title="Connector">
-        <span id="__sb_connector_label__">↗ Auto</span>
-        <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
-      </button>
       <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Voice">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
       </button>
@@ -2160,10 +2163,6 @@ function __sbBuildBrainUI() {
         <textarea id="__sb_card_input__" placeholder="Follow up…" rows="1"></textarea>
         <button id="__sb_card_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
           <span id="__sb_card_mode_label__">⚡ Auto</span>
-          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
-        </button>
-        <button id="__sb_card_connector_btn__" class="sb-pill-dropdown-btn" title="Connector">
-          <span id="__sb_card_connector_label__">↗ Auto</span>
           <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
         </button>
         <button id="__sb_card_rec_btn__" class="sb-card-foot-btn" title="Voice">
@@ -2326,6 +2325,7 @@ function __sbBuildBrainUI() {
   }
 
   function __sbSetupConnectorBtn(btnEl) {
+    if (!btnEl) return;
     btnEl.addEventListener("click", (e) => {
       e.stopPropagation();
       const isOpen = connectorDd.classList.contains("open");
@@ -3641,7 +3641,8 @@ async function __sbProcessPrompt(text, options = {}) {
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
 
   const siteContext = __sbGetSiteAdapterContext();
-  const connectorHint = __sbGetEffectiveConnector(siteContext);
+  const detectedConnector = __sbGetEffectiveConnector(siteContext);
+  const connectorHint = detectedConnector === "auto" ? __sbInferConnectorFromPrompt(promptText) : detectedConnector;
   const forcedMode = window.__sbForcedMode || "page";
   const rawIntent = (forcedMode !== "page")
     ? forcedMode

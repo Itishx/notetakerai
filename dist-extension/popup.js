@@ -1876,15 +1876,12 @@ function parseAdapterTask(task, siteContext) {
   const wantsGmail = currentSite === "gmail" || /\bgmail\b|\bemail\b|\bmail\b/.test(text);
   const wantsGoogleDrive = currentSite === "google-drive" || /\bgoogle drive\b|\bdrive\b/.test(text);
 
-  if (wantsGoogleDrive && /\b(organize|sort|clean up|tidy up)\b.*\b(files|drive)\b/i.test(raw)) {
-    return { adapter: "google-drive", intent: "organizePreview" };
-  }
-
   if (
     wantsGoogleDrive &&
-    /^(?:apply|confirm|go ahead|do it|yes|run it|organize them|move them)\b/i.test(raw)
+    /\b(organize|organise|organhise|sort|clean(?:\s+up)?|tidy(?:\s+up)?|arrange)\b/i.test(raw) &&
+    /\b(files?|folders?|docs?|documents?|drive)\b/i.test(raw)
   ) {
-    return { adapter: "google-drive", intent: "organizeApply" };
+    return { adapter: "google-drive", intent: "organize" };
   }
 
   const quotedAdd = raw.match(/add\s+["“](.+?)["”]\s+to\s+(?:my\s+)?playlist\s+["“](.+?)["”](?:\s+on\s+spotify)?/i);
@@ -2092,6 +2089,85 @@ Rules:
     title: String(parsed.title).trim(),
     body: String(parsed.body).trim(),
   };
+}
+
+async function buildDriveOrganizationPlan(files) {
+  const safeFiles = Array.isArray(files) ? files.slice(0, 180) : [];
+  if (!safeFiles.length) {
+    return { folders: [], moves: [] };
+  }
+
+  const response = await fetch(`${API_BASE}/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      aiProvider: currentAiProvider,
+      pageContext: {
+        title: "Google Drive file inventory",
+        url: "https://drive.google.com",
+        text: safeFiles.map((file, index) => (
+          `[${index + 1}] id=${file.id}\nname=${file.name}\nmime=${file.mimeType}\nparents=${(file.parentNames || []).join(", ") || "root"}`
+        )).join("\n\n"),
+      },
+      message: `You are organizing a Google Drive using API actions.
+
+Return ONLY JSON. No markdown fences.
+Format:
+{"folders":["Folder A","Folder B"],"moves":[{"fileId":"abc","targetFolderName":"Folder A"}]}
+
+Rules:
+- Create practical folders based on the files provided.
+- Use at most 8 folders.
+- Every move must reference an exact fileId from the inventory.
+- targetFolderName must be one of the folders you propose.
+- Skip files that should stay where they are.
+- Favor simple, human folder names like Finance, Hiring, Meetings, Decks, Docs, Legal, Product, Misc.
+- Do not invent fileIds.
+- Do not include explanations outside JSON.`,
+    }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Drive organization planning failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const reply = String(data.reply || "").trim();
+  const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/(\{[\s\S]*\})/);
+  const json = (match?.[1] ?? match?.[0] ?? reply).trim();
+  const parsed = JSON.parse(json);
+  return {
+    folders: Array.isArray(parsed?.folders) ? parsed.folders.map((item) => String(item || "").trim()).filter(Boolean) : [],
+    moves: Array.isArray(parsed?.moves) ? parsed.moves : [],
+  };
+}
+
+function validateDriveOrganizationPlan(files, plan) {
+  const fileMap = new Map((Array.isArray(files) ? files : []).map((file) => [String(file.id), file]));
+  const normalizedFolders = Array.from(new Set((Array.isArray(plan?.folders) ? plan.folders : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)));
+  const allowedFolders = new Set(normalizedFolders);
+  const moves = [];
+
+  for (const move of Array.isArray(plan?.moves) ? plan.moves : []) {
+    const fileId = String(move?.fileId || "").trim();
+    const targetFolderName = String(move?.targetFolderName || "").trim();
+    if (!fileId || !targetFolderName) continue;
+    const file = fileMap.get(fileId);
+    if (!file) continue;
+    if (!allowedFolders.has(targetFolderName)) continue;
+    moves.push({
+      fileId,
+      fileName: file.name,
+      currentParentIds: Array.isArray(file.parentIds) ? file.parentIds : [],
+      targetFolderName,
+    });
+  }
+
+  const foldersToCreate = Array.from(new Set(moves.map((move) => move.targetFolderName)));
+  return { foldersToCreate, moves };
 }
 
 async function runPopupAdapterStep({ thinkingBlock, history, description, type, run, onStatus }) {
@@ -2409,55 +2485,48 @@ async function tryRunPopupSiteAdapter(task, thinkingBlock, history, options = {}
     return `I found these matches in Google Drive for **${parsed.query}**:\n${summary}`;
   }
 
-  if (parsed.adapter === "google-drive" && parsed.intent === "organizePreview") {
-    const result = await runPopupAdapterStep({
+  if (parsed.adapter === "google-drive" && parsed.intent === "organize") {
+    const filesResult = await runPopupAdapterStep({
       thinkingBlock,
       history,
-      description: "Analyze your Google Drive files and build an organization plan",
-      type: "googleDriveOrganizePreview",
+      description: "Read your Google Drive files",
+      type: "googleDriveListFiles",
       onStatus,
-      run: () => callGoogleDriveFunction("google-drive-organize-preview", {}),
+      run: () => callGoogleDriveFunction("google-drive-list-files", { pageSize: 250 }),
     });
 
-    const plan = result?.plan || null;
-    if (!plan || !Array.isArray(plan.moves)) {
-      throw new Error("Google Drive organize preview came back in an unexpected format.");
+    const files = Array.isArray(filesResult?.files) ? filesResult.files : [];
+    if (!files.length) {
+      return "I couldn't see any Google Drive files to organize. Reconnect Drive with the latest permissions and try again.";
     }
-    await setStorage({
-      driveOrganizePendingPlan: plan,
-      driveOrganizePendingSummary: {
-        scannedCount: result?.scannedCount || 0,
-        moveCount: result?.moveCount || 0,
-        foldersToCreate: result?.foldersToCreate || [],
+
+    const planDraft = await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: "Plan folders and file moves with AI",
+      type: "googleDriveOrganizePlan",
+      onStatus,
+      run: async () => {
+        const plan = await buildDriveOrganizationPlan(files);
+        return { success: true, ...plan };
       },
     });
 
-    const byFolder = Array.isArray(result?.byFolder) ? result.byFolder.slice(0, 5) : [];
-    const folderLine = byFolder.length
-      ? `\n${byFolder.map((entry) => `- ${entry.folderName}: ${entry.count}`).join("\n")}`
-      : "";
-
-    return `I scanned **${result?.scannedCount || 0}** Drive files and want to move **${result?.moveCount || 0}** of them.${folderLine}\n\nSay **apply the drive organization plan** when you want me to do it.`;
-  }
-
-  if (parsed.adapter === "google-drive" && parsed.intent === "organizeApply") {
-    const stored = await getStorage(["driveOrganizePendingPlan"]);
-    const plan = stored.driveOrganizePendingPlan;
-    if (!plan?.moves?.length) {
-      return "There isn't a pending Drive organization plan yet. Ask me to organize your Drive files first.";
+    const plan = validateDriveOrganizationPlan(files, planDraft);
+    if (!plan.moves.length) {
+      return `I scanned **${files.length}** Google Drive files, but there was nothing clear to reorganize.`;
     }
 
     const result = await runPopupAdapterStep({
       thinkingBlock,
       history,
-      description: "Apply the Google Drive organization plan",
+      description: "Create folders and move files in Google Drive",
       type: "googleDriveOrganizeApply",
       onStatus,
       run: () => callGoogleDriveFunction("google-drive-organize-apply", { plan }),
     });
 
-    await removeStorage(["driveOrganizePendingPlan", "driveOrganizePendingSummary"]);
-    return `Organized your Google Drive: created **${result?.createdFolderCount || 0}** folders and moved **${result?.movedCount || 0}** files.`;
+    return `Organized your Google Drive: scanned **${files.length}** files, created **${result?.createdFolderCount || 0}** folders, and moved **${result?.movedCount || 0}** files.`;
   }
 
   if (parsed.adapter === "google-drive" && parsed.intent === "createFolder") {
