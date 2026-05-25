@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import SideBrainLogo from "@/components/SideBrainLogo";
-import { lovable } from "@/integrations/lovable";
+import { supabase } from "@/integrations/supabase/client";
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -124,15 +124,16 @@ const Auth = () => {
               disabled={loading}
               onClick={async () => {
                 setError("");
-                const result = await lovable.auth.signInWithOAuth("google", {
-                  redirect_uri: window.location.origin,
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: "google",
+                  options: {
+                    redirectTo: window.location.origin,
+                  },
                 });
-                if (result.error) {
-                  setError(result.error.message || "Google sign-in failed");
+                if (error) {
+                  setError(error.message || "Google sign-in failed");
                   return;
                 }
-                if (result.redirected) return;
-                navigate("/");
               }}
             >
               <GoogleIcon />
