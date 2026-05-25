@@ -12,6 +12,7 @@ serve(async (req) => {
   }
 
   try {
+    console.log("[google-drive-search] request received");
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -36,6 +37,7 @@ serve(async (req) => {
     }
 
     const { userIdentifier, query, folderOnly } = await req.json();
+    console.log("[google-drive-search] payload", { userIdentifier, query, folderOnly });
     if (!userIdentifier || userIdentifier !== user.id) {
       return json({ error: "User mismatch." }, 403);
     }
@@ -85,6 +87,7 @@ serve(async (req) => {
 
     const driveData = await driveRes.json();
     const files = Array.isArray(driveData?.files) ? driveData.files : [];
+    console.log("[google-drive-search] success", { count: files.length });
 
     return json({
       results: files.map((file: any) => ({

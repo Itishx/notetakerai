@@ -1811,6 +1811,7 @@ async function callGoogleDriveFunction(functionName, payload) {
   const token = await getAuthToken();
   const authState = await getStorage(["authUserId"]);
   if (!token || !authState.authUserId) throw new Error("Please sign in to Braino first.");
+  console.log("[Braino][Drive][Popup] Calling function:", functionName, payload);
 
   const response = await fetch(`${API_BASE}/${functionName}`, {
     method: "POST",
@@ -1826,6 +1827,7 @@ async function callGoogleDriveFunction(functionName, payload) {
   });
 
   const data = await response.json().catch(() => ({}));
+  console.log("[Braino][Drive][Popup] Function response:", functionName, response.status, data);
   if (!response.ok) throw new Error(data?.error || `${functionName} failed (${response.status})`);
   return data;
 }
@@ -1982,6 +1984,7 @@ async function runPopupAdapterStep({ thinkingBlock, history, description, type, 
 async function tryRunPopupSiteAdapter(task, thinkingBlock, history, options = {}) {
   const siteContext = await getSiteAdapterContext();
   const parsed = parseAdapterTask(task, siteContext);
+  console.log("[Braino][Adapter][Popup] Parsed task:", { task, siteContext, parsed });
   if (!parsed) return null;
 
   const onStatus = options.onStatus;

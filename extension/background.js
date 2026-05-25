@@ -919,6 +919,7 @@ async function bgCallGoogleDriveFunction(functionName, payload) {
   let token = stored.authToken;
   if (!token) token = await bgRefreshAuthToken();
   if (!token || !stored.authUserId) throw new Error("Please sign in to Braino first.");
+  console.log("[Braino][Drive][BG] Calling function:", functionName, payload);
 
   const response = await fetch(`${BG_API_BASE}/${functionName}`, {
     method: "POST",
@@ -934,6 +935,7 @@ async function bgCallGoogleDriveFunction(functionName, payload) {
   });
 
   const data = await response.json().catch(() => ({}));
+  console.log("[Braino][Drive][BG] Function response:", functionName, response.status, data);
   if (!response.ok) throw new Error(data?.error || `${functionName} failed (${response.status})`);
   return data;
 }
@@ -1068,6 +1070,7 @@ async function bgRunAdapterStep({ history, description, type, run, onProgress, o
 async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, onResult, shouldStop }) {
   const siteContext = await bgGetSiteAdapterContext(tabId);
   const parsed = bgParseAdapterTask(task, siteContext);
+  console.log("[Braino][Adapter][BG] Parsed task:", { task, tabId, siteContext, parsed });
   if (!parsed) return null;
 
   if (parsed.adapter === "spotify" && parsed.intent === "addSongToPlaylist") {

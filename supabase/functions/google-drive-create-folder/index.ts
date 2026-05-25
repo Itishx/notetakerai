@@ -12,6 +12,7 @@ serve(async (req) => {
   }
 
   try {
+    console.log("[google-drive-create-folder] request received");
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -36,6 +37,7 @@ serve(async (req) => {
     }
 
     const { userIdentifier, folderName, parentId } = await req.json();
+    console.log("[google-drive-create-folder] payload", { userIdentifier, folderName, hasParentId: !!parentId });
     if (!userIdentifier || userIdentifier !== user.id) {
       return json({ error: "User mismatch." }, 403);
     }
@@ -81,6 +83,7 @@ serve(async (req) => {
     }
 
     const created = await createRes.json();
+    console.log("[google-drive-create-folder] success", { id: created.id, name: created.name || String(folderName).trim() });
     return json({
       id: created.id,
       name: created.name || String(folderName).trim(),
