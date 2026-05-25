@@ -48,33 +48,36 @@ export type Database = {
         Row: {
           access_token: string
           created_at: string
-          expires_at: string | null
           google_email: string | null
+          google_user_id: string | null
           id: string
           refresh_token: string | null
           scope: string | null
+          token_expires_at: string | null
           updated_at: string
           user_identifier: string
         }
         Insert: {
           access_token: string
           created_at?: string
-          expires_at?: string | null
           google_email?: string | null
+          google_user_id?: string | null
           id?: string
           refresh_token?: string | null
           scope?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_identifier: string
         }
         Update: {
           access_token?: string
           created_at?: string
-          expires_at?: string | null
           google_email?: string | null
+          google_user_id?: string | null
           id?: string
           refresh_token?: string | null
           scope?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_identifier?: string
         }

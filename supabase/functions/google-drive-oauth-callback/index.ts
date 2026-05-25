@@ -32,18 +32,17 @@ serve(async (req) => {
 
     const clientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
     const clientSecret = Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const redirectUri =
-      Deno.env.get("GOOGLE_DRIVE_REDIRECT_URI") ||
-      (supabaseUrl ? `${supabaseUrl}/functions/v1/google-drive-oauth-callback` : null);
+    const redirectUri = Deno.env.get("GOOGLE_DRIVE_REDIRECT_URI");
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!clientId || !clientSecret || !supabaseUrl || !serviceRoleKey || !redirectUri) {
+    if (!clientId || !clientSecret || !redirectUri || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return new Response(renderHTML(false, "Server configuration error"), {
         headers: { "Content-Type": "text/html" },
       });
     }
 
+    // Exchange code for tokens
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -53,7 +52,7 @@ serve(async (req) => {
         client_secret: clientSecret,
         redirect_uri: redirectUri,
         grant_type: "authorization_code",
-      }),
+      }).toString(),
     });
 
     if (!tokenRes.ok) {
@@ -65,57 +64,65 @@ serve(async (req) => {
     }
 
     const tokenData = await tokenRes.json();
-    const accessToken = tokenData.access_token as string | undefined;
-    const refreshToken = tokenData.refresh_token as string | undefined;
-    const scope = tokenData.scope as string | undefined;
-    const expiresIn = Number(tokenData.expires_in || 0);
+    const accessToken: string = tokenData.access_token;
+    const refreshToken: string | undefined = tokenData.refresh_token;
+    const expiresIn: number = tokenData.expires_in ?? 3600;
+    const scope: string = tokenData.scope ?? "";
+    const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    if (!accessToken) {
-      return new Response(renderHTML(false, "Google did not return an access token"), {
-        headers: { "Content-Type": "text/html" },
+    // Fetch userinfo
+    let googleEmail: string | null = null;
+    let googleUserId: string | null = null;
+    try {
+      const userRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
+      if (userRes.ok) {
+        const u = await userRes.json();
+        googleEmail = u.email ?? null;
+        googleUserId = u.sub ?? null;
+      }
+    } catch (e) {
+      console.error("Failed to fetch Google userinfo:", e);
     }
 
-    const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const userInfo = userInfoRes.ok ? await userInfoRes.json() : {};
-    const googleEmail = typeof userInfo?.email === "string" ? userInfo.email : null;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const { data: existing } = await supabase
-      .from("google_drive_connections")
-      .select("refresh_token")
-      .eq("user_identifier", userIdentifier)
-      .maybeSingle();
-
-    const expiresAt = expiresIn > 0
-      ? new Date(Date.now() + expiresIn * 1000).toISOString()
-      : null;
+    // If no refresh token returned (already granted), preserve existing one
+    let existingRefresh: string | null = null;
+    if (!refreshToken) {
+      const { data: existing } = await supabase
+        .from("google_drive_connections")
+        .select("refresh_token")
+        .eq("user_identifier", userIdentifier)
+        .maybeSingle();
+      existingRefresh = existing?.refresh_token ?? null;
+    }
 
     const { error: dbError } = await supabase
       .from("google_drive_connections")
       .upsert(
         {
           user_identifier: userIdentifier,
-          google_email: googleEmail,
           access_token: accessToken,
-          refresh_token: refreshToken || existing?.refresh_token || null,
-          scope: scope || null,
-          expires_at: expiresAt,
+          refresh_token: refreshToken ?? existingRefresh,
+          token_expires_at: tokenExpiresAt,
+          scope,
+          google_email: googleEmail,
+          google_user_id: googleUserId,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_identifier" },
       );
 
     if (dbError) {
-      console.error("google drive db error:", dbError);
-      return new Response(renderHTML(false, "Failed to save Google Drive connection"), {
+      console.error("DB error:", dbError);
+      return new Response(renderHTML(false, "Failed to save connection"), {
         headers: { "Content-Type": "text/html" },
       });
     }
 
-    return new Response(renderHTML(true, `Connected ${googleEmail || "your Google Drive"} successfully!`), {
+    return new Response(renderHTML(true, `Connected to Google Drive${googleEmail ? ` as ${googleEmail}` : ""}!`), {
       headers: { "Content-Type": "text/html" },
     });
   } catch (e) {
@@ -135,10 +142,10 @@ function renderHTML(success: boolean, message: string): string {
   <title>Google Drive Connection</title>
   <style>
     body { font-family: Georgia, serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f0e8; color: #2c3e2d; }
-    .card { text-align: center; padding: 40px; background: #ede8dd; border-radius: 12px; border: 1px solid #d4ccbc; max-width: 420px; }
+    .card { text-align: center; padding: 40px; background: #ede8dd; border-radius: 12px; border: 1px solid #d4ccbc; max-width: 400px; }
     .icon { font-size: 48px; margin-bottom: 16px; }
     h1 { font-size: 20px; font-weight: 400; margin-bottom: 8px; }
-    p { font-size: 14px; color: #6b7c6b; line-height: 1.5; }
+    p { font-size: 14px; color: #6b7c6b; }
     .hint { margin-top: 16px; font-size: 12px; color: #8a9a8a; font-style: italic; }
     .button { display: inline-block; margin-top: 18px; padding: 10px 14px; border-radius: 999px; background: #2c3e2d; color: #f5f0e8; text-decoration: none; font-size: 13px; }
   </style>
@@ -148,8 +155,8 @@ function renderHTML(success: boolean, message: string): string {
     <div class="icon">${success ? "✅" : "❌"}</div>
     <h1>${success ? "Connected!" : "Connection Failed"}</h1>
     <p>${message}</p>
-    <p class="hint">${success ? "You can return to Braino now. This tab will try to close automatically." : "Please return to Braino and try again."}</p>
-    <a href="#" class="button" onclick="window.close(); return false;">Return to Braino</a>
+    <p class="hint">${success ? "You can close this tab and return to the app." : "Please return to the app and try again."}</p>
+    <a href="#" class="button" onclick="window.close(); return false;">Close</a>
   </div>
   <script>
     if (${success ? "true" : "false"}) {
