@@ -16,6 +16,18 @@ function bgDelay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function bgGetStorage(keys) {
+  return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
+}
+
+function bgSetStorage(values) {
+  return new Promise((resolve) => chrome.storage.local.set(values, resolve));
+}
+
+function bgRemoveStorage(keys) {
+  return new Promise((resolve) => chrome.storage.local.remove(keys, resolve));
+}
+
 
 async function bgPerformRealWebSearch(query) {
   const trimmedQuery = String(query || "").trim();
@@ -977,6 +989,17 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     normalizedConnector === "google-drive" ||
     /\bgoogle drive\b|\bdrive\b/.test(text);
 
+  if (wantsGoogleDrive && /\b(organize|sort|clean up|tidy up)\b.*\b(files|drive)\b/i.test(raw)) {
+    return { adapter: "google-drive", intent: "organizePreview" };
+  }
+
+  if (
+    wantsGoogleDrive &&
+    /^(?:apply|confirm|go ahead|do it|yes|run it|organize them|move them)\b/i.test(raw)
+  ) {
+    return { adapter: "google-drive", intent: "organizeApply" };
+  }
+
   const quotedAdd = raw.match(/add\s+["“](.+?)["”]\s+to\s+(?:my\s+)?playlist\s+["“](.+?)["”](?:\s+on\s+spotify)?/i);
   if (onSpotify && quotedAdd) {
     return { adapter: "spotify", intent: "addSongToPlaylist", song: quotedAdd[1].trim(), playlist: quotedAdd[2].trim() };
@@ -1496,6 +1519,58 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
 
     const summary = results.slice(0, 3).map((item) => `- ${item.name} (${item.kind})`).join("\n");
     return `I found these matches in Google Drive for **${parsed.query}**:\n${summary}`;
+  }
+
+  if (parsed.adapter === "google-drive" && parsed.intent === "organizePreview") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: "Analyze your Google Drive files and build an organization plan",
+      type: "googleDriveOrganizePreview",
+      onProgress,
+      onResult,
+      run: () => bgCallGoogleDriveFunction("google-drive-organize-preview", {}),
+    });
+
+    const plan = result?.plan || null;
+    if (!plan || !Array.isArray(plan.moves)) {
+      throw new Error("Google Drive organize preview came back in an unexpected format.");
+    }
+    await bgSetStorage({
+      driveOrganizePendingPlan: plan,
+      driveOrganizePendingSummary: {
+        scannedCount: result?.scannedCount || 0,
+        moveCount: result?.moveCount || 0,
+        foldersToCreate: result?.foldersToCreate || [],
+      },
+    });
+
+    const byFolder = Array.isArray(result?.byFolder) ? result.byFolder.slice(0, 5) : [];
+    const folderLine = byFolder.length
+      ? `\n${byFolder.map((entry) => `- ${entry.folderName}: ${entry.count}`).join("\n")}`
+      : "";
+
+    return `I scanned **${result?.scannedCount || 0}** Drive files and want to move **${result?.moveCount || 0}** of them into **${(result?.foldersToCreate || []).length + byFolder.length || 0}** folders.${folderLine}\n\nSay **apply the drive organization plan** when you want me to do it.`;
+  }
+
+  if (parsed.adapter === "google-drive" && parsed.intent === "organizeApply") {
+    const stored = await bgGetStorage(["driveOrganizePendingPlan"]);
+    const plan = stored.driveOrganizePendingPlan;
+    if (!plan?.moves?.length) {
+      return "There isn't a pending Drive organization plan yet. Ask me to organize your Drive files first.";
+    }
+
+    const result = await bgRunAdapterStep({
+      history,
+      description: "Apply the Google Drive organization plan",
+      type: "googleDriveOrganizeApply",
+      onProgress,
+      onResult,
+      run: () => bgCallGoogleDriveFunction("google-drive-organize-apply", { plan }),
+    });
+
+    await bgRemoveStorage(["driveOrganizePendingPlan", "driveOrganizePendingSummary"]);
+
+    return `Organized your Google Drive: created **${result?.createdFolderCount || 0}** folders and moved **${result?.movedCount || 0}** files.`;
   }
 
   if (parsed.adapter === "google-drive" && parsed.intent === "createFolder") {

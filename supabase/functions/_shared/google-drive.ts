@@ -219,6 +219,40 @@ export async function listDriveItemsByName({
   return Array.isArray(data?.files) ? data.files : [];
 }
 
+export function escapeDriveQueryValue(value: string) {
+  return String(value || "").replace(/'/g, "\\'");
+}
+
+export async function listDriveItems({
+  token,
+  query,
+  fields = "files(id,name,mimeType,webViewLink,modifiedTime,parents)",
+  pageSize = 100,
+  orderBy = "modifiedTime desc",
+  logPrefix,
+}: {
+  token: string;
+  query: string;
+  fields?: string;
+  pageSize?: number;
+  orderBy?: string;
+  logPrefix: string;
+}): Promise<DriveItem[]> {
+  const driveUrl = new URL("https://www.googleapis.com/drive/v3/files");
+  driveUrl.searchParams.set("q", query);
+  driveUrl.searchParams.set("pageSize", String(pageSize));
+  driveUrl.searchParams.set("fields", fields);
+  driveUrl.searchParams.set("orderBy", orderBy);
+  driveUrl.searchParams.set("includeItemsFromAllDrives", "true");
+  driveUrl.searchParams.set("supportsAllDrives", "true");
+
+  const data = await driveRequestJson<{ files?: DriveItem[] }>(driveUrl.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  }, logPrefix);
+
+  return Array.isArray(data?.files) ? data.files : [];
+}
+
 export async function resolveDriveItemByName({
   token,
   name,
