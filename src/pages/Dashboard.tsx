@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,6 +64,11 @@ type Command = {
 type NotionConn = {
   workspace_name: string | null;
   workspace_id: string | null;
+} | null;
+
+type GoogleDriveConn = {
+  google_email: string | null;
+  updated_at: string | null;
 } | null;
 
 type XAutomationStats = {
@@ -676,6 +681,7 @@ export default function Dashboard() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [commands, setCommands] = useState<Command[]>([]);
   const [notionConn, setNotionConn] = useState<NotionConn>(null);
+  const [googleDriveConn, setGoogleDriveConn] = useState<GoogleDriveConn>(null);
   const [xAutomationStats, setXAutomationStats] = useState<XAutomationStats>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -686,6 +692,26 @@ export default function Dashboard() {
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
+  const [driveConnectLoading, setDriveConnectLoading] = useState(false);
+  const drivePollRef = useRef<number | null>(null);
+
+  function stopDrivePolling() {
+    if (drivePollRef.current !== null) {
+      window.clearInterval(drivePollRef.current);
+      drivePollRef.current = null;
+    }
+  }
+
+  async function refreshGoogleDriveConnection(userId: string) {
+    const { data } = await supabase
+      .from("google_drive_connections")
+      .select("google_email,updated_at")
+      .eq("user_identifier", userId)
+      .maybeSingle();
+
+    setGoogleDriveConn((data as GoogleDriveConn) || null);
+    return (data as GoogleDriveConn) || null;
+  }
 
   useEffect(() => {
     if (!loading && !user) navigate("/auth");
@@ -696,7 +722,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, xStatsRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, xStatsRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -715,6 +741,11 @@ export default function Dashboard() {
           .eq("user_identifier", user.id)
           .maybeSingle(),
         supabase
+          .from("google_drive_connections")
+          .select("google_email,updated_at")
+          .eq("user_identifier", user.id)
+          .maybeSingle(),
+        supabase
           .from("x_automation_stats")
           .select("total_replies,total_runs,total_runtime_ms,last_run_reply_count,last_run_duration_ms,last_run_started_at,last_run_finished_at")
           .eq("user_id", user.id)
@@ -724,12 +755,51 @@ export default function Dashboard() {
       if (notesRes.data) setNotes(notesRes.data as Note[]);
       if (commandsRes.data) setCommands(commandsRes.data as unknown as Command[]);
       setNotionConn(notionRes.data as NotionConn);
+      setGoogleDriveConn((driveRes.data as GoogleDriveConn) || null);
       setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
       setDataLoading(false);
     };
 
     load();
   }, [profile, user]);
+
+  useEffect(() => () => stopDrivePolling(), []);
+
+  async function handleConnectGoogleDrive() {
+    if (!user) return;
+    setDriveConnectLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-oauth-start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIdentifier: user.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.authUrl) {
+        throw new Error(payload.error || "Failed to start Google Drive OAuth");
+      }
+
+      window.open(payload.authUrl, "_blank", "noopener,noreferrer");
+      stopDrivePolling();
+      const startedAt = Date.now();
+      drivePollRef.current = window.setInterval(async () => {
+        const connection = await refreshGoogleDriveConnection(user.id);
+        if (connection) {
+          stopDrivePolling();
+          setDriveConnectLoading(false);
+          return;
+        }
+        if (Date.now() - startedAt > 2 * 60 * 1000) {
+          stopDrivePolling();
+          setDriveConnectLoading(false);
+        }
+      }, 2000);
+    } catch (error) {
+      console.error("google drive connect failed:", error);
+      setDriveConnectLoading(false);
+      window.alert(error instanceof Error ? error.message : "Failed to connect Google Drive");
+    }
+  }
 
   const isPremium = profile?.is_premium === true;
   const firstName = profile?.display_name?.split(" ")[0] || user?.email?.split("@")[0] || "there";
@@ -1980,29 +2050,74 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6 xl:col-span-2">
                   <h3 style={serifStyle} className="mb-1 text-[26px] leading-none tracking-[-0.02em]">
-                    Notion
+                    Connectors
                   </h3>
                   <p className="mb-5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    Send structured notes to your workspace with one click from the extension.
+                    Configure the services Braino can talk to. Connected apps will eventually power announcements, file actions, and richer automations.
                   </p>
 
-                  <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
-                    <div>
-                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
-                        <span className={cn("h-2 w-2 rounded-full", notionConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
-                        {notionConn ? notionConn.workspace_name || "Connected workspace" : "Not connected"}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
+                          <span className={cn("h-2 w-2 rounded-full", notionConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
+                          Notion
+                        </div>
+                        <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
+                          {notionConn ? notionConn.workspace_name || notionConn.workspace_id || "Workspace connected" : "Send structured notes into your workspace"}
+                        </div>
                       </div>
-                      <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
-                        {notionConn ? notionConn.workspace_id || "Workspace active" : "Connect from the Notion sync flow"}
-                      </div>
+                      <Link to="/notion-sync">
+                        <Button variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]">
+                          {notionConn ? "Manage" : "Connect"}
+                        </Button>
+                      </Link>
                     </div>
-                    <Link to="/notion-sync">
-                      <Button variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]">
-                        {notionConn ? "Manage" : "Connect"}
+
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
+                          <span className={cn("h-2 w-2 rounded-full", googleDriveConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
+                          Google Drive
+                        </div>
+                        <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
+                          {googleDriveConn ? googleDriveConn.google_email || `Updated ${formatDateTime(googleDriveConn.updated_at)}` : "Save artifacts, organize folders, and power Docs flows"}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={handleConnectGoogleDrive}
+                        disabled={driveConnectLoading}
+                        className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                      >
+                        {driveConnectLoading ? "Waiting…" : googleDriveConn ? "Reconnect" : "Connect"}
                       </Button>
-                    </Link>
+                    </div>
+
+                    {[
+                      { name: "Slack", blurb: "Mentions, DMs, and team activity announcements", status: "Soon" },
+                      { name: "Google Calendar", blurb: "Meeting reminders and day awareness", status: "Soon" },
+                      { name: "Gmail", blurb: "Inbox awareness once the heavier compliance path is ready", status: "Planned" },
+                      { name: "Outlook / Microsoft Graph", blurb: "Enterprise mail and calendar support", status: "Planned" },
+                      { name: "GitHub", blurb: "PR reviews, CI failures, and repo activity", status: "Planned" },
+                    ].map((connector) => (
+                      <div key={connector.name} className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
+                            <span className="h-2 w-2 rounded-full bg-[var(--sb-ink-4)]" />
+                            {connector.name}
+                          </div>
+                          <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
+                            {connector.blurb}
+                          </div>
+                        </div>
+                        <span className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-xs text-[var(--sb-ink-3)]">
+                          {connector.status}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 

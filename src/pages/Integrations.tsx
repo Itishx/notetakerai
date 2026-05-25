@@ -833,14 +833,24 @@ export default function Integrations() {
               If we do Slack or Calendar first, Braino can start speaking useful real-world activity without waiting on the hardest compliance path.
             </p>
           </div>
-          <Link
-            to="/automations"
-            className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
-            style={{ background: "var(--sb-ink)", color: "var(--sb-on-ink)" }}
-          >
-            Back to Automations
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              to="/connectors-vault"
+              className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold"
+              style={{ border: "1px solid var(--sb-line)", background: "var(--sb-panel)", color: "var(--sb-ink)" }}
+            >
+              Open Secrets Playbook
+              <ShieldCheck className="h-4 w-4" />
+            </Link>
+            <Link
+              to="/automations"
+              className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
+              style={{ background: "var(--sb-ink)", color: "var(--sb-on-ink)" }}
+            >
+              Back to Automations
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </section>
     </div>
