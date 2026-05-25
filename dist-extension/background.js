@@ -345,13 +345,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "runBrainAgent") {
     const task = message.task;
+    const connector = message.connector;
     const senderTabId = sender?.tab?.id || null;
     chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
       const tabId = senderTabId || activeTabId || message.senderTabId;
       if (!tabId) { sendResponse({ ok: true }); return; }
       chrome.storage.local.set({ activeTabId: tabId });
       bgAgentShouldStop = false;
-      bgRunBrainAgent(tabId, task);
+      bgRunBrainAgent(tabId, task, connector);
       sendResponse({ ok: true });
     });
     return true;
@@ -785,7 +786,7 @@ async function bgSaveAgentTask(tabId, task, result) {
   } catch (_) {}
 }
 
-async function bgRunBrainAgent(tabId, task) {
+async function bgRunBrainAgent(tabId, task, connectorHint) {
   let currentTabId = tabId;
   const MAX_STEPS = 10;
   const history = [];
@@ -813,6 +814,7 @@ async function bgRunBrainAgent(tabId, task) {
     const adapterMessage = await bgTryHandleSiteAdapterTask({
       tabId: currentTabId,
       task,
+      connectorHint,
       history,
       onProgress: async (description) => {
         bgBrainUpdate(currentTabId, `→ ${description}`);
@@ -940,13 +942,25 @@ async function bgCallGoogleDriveFunction(functionName, payload) {
   return data;
 }
 
-function bgParseAdapterTask(task, siteContext) {
+function bgNormalizeConnectorHint(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (!key || key === "auto" || key === "default") return "auto";
+  if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
+  if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
+  return null;
+}
+
+function bgParseAdapterTask(task, siteContext, connectorHint) {
   const raw = String(task || "").trim();
   const text = raw.toLowerCase();
   const currentSite = siteContext?.site || "generic";
+  const normalizedConnector = bgNormalizeConnectorHint(connectorHint) || "auto";
   const onSpotify = currentSite === "spotify" || /\bspotify\b/.test(text);
   const wantsGoogleDoc = /\bgoogle docs?\b|\bgdoc\b/.test(text);
-  const wantsGoogleDrive = /\bgoogle drive\b|\bdrive\b/.test(text);
+  const wantsGoogleDrive =
+    currentSite === "google-drive" ||
+    normalizedConnector === "google-drive" ||
+    /\bgoogle drive\b|\bdrive\b/.test(text);
 
   const quotedAdd = raw.match(/add\s+["“](.+?)["”]\s+to\s+(?:my\s+)?playlist\s+["“](.+?)["”](?:\s+on\s+spotify)?/i);
   if (onSpotify && quotedAdd) {
@@ -983,10 +997,10 @@ function bgParseAdapterTask(task, siteContext) {
     }
   }
 
-  const createFolderMatch = raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i)
+  const createFolderMatch = raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i)
     || raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?(?:google\s+)?drive folder\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?$/i);
   if (wantsGoogleDrive && createFolderMatch) {
-    const parentFolderMatch = raw.match(/\s+in\s+folder\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+    const parentFolderMatch = raw.match(/\s+in\s+folder\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
     return {
       adapter: "google-drive",
       intent: "createFolder",
@@ -995,8 +1009,8 @@ function bgParseAdapterTask(task, siteContext) {
     };
   }
 
-  const createDocMatch = raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?google doc\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+in\s+folder\s+["“]?(.+?)["”]?)?\s+(?:in|on)\s+(?:google\s+)?drive\b/i)
-    || raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?doc\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+in\s+folder\s+["“]?(.+?)["”]?)?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+  const createDocMatch = raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?google doc\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+in\s+folder\s+["“]?(.+?)["”]?)?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i)
+    || raw.match(/(?:create|make)\s+(?:a\s+)?(?:new\s+)?doc\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+in\s+folder\s+["“]?(.+?)["”]?)?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
   if (wantsGoogleDrive && createDocMatch) {
     return {
       adapter: "google-drive",
@@ -1006,7 +1020,7 @@ function bgParseAdapterTask(task, siteContext) {
     };
   }
 
-  const renameMatch = raw.match(/rename\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?\s+to\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+  const renameMatch = raw.match(/rename\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?\s+to\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
   if (wantsGoogleDrive && renameMatch) {
     return {
       adapter: "google-drive",
@@ -1017,7 +1031,7 @@ function bgParseAdapterTask(task, siteContext) {
     };
   }
 
-  const moveMatch = raw.match(/move\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?\s+to\s+(?:folder\s+)?["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+  const moveMatch = raw.match(/move\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?\s+to\s+(?:folder\s+)?["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
   if (wantsGoogleDrive && moveMatch) {
     return {
       adapter: "google-drive",
@@ -1028,7 +1042,7 @@ function bgParseAdapterTask(task, siteContext) {
     };
   }
 
-  const deleteMatch = raw.match(/(?:delete|remove|trash)\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?\s+(?:from\s+|in\s+|on\s+)?(?:google\s+)?drive\b/i);
+  const deleteMatch = raw.match(/(?:delete|remove|trash)\s+(?:the\s+)?(?:(file|folder)\s+)?["“]?(.+?)["”]?(?:\s+(?:from|in|on)\s+(?:google\s+)?drive\b)?$/i);
   if (wantsGoogleDrive && deleteMatch) {
     return {
       adapter: "google-drive",
@@ -1038,13 +1052,13 @@ function bgParseAdapterTask(task, siteContext) {
     };
   }
 
-  const folderSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?folder\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+  const folderSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?folder\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
   if (wantsGoogleDrive && folderSearchMatch) {
     return { adapter: "google-drive", intent: "search", query: folderSearchMatch[1].trim(), folderOnly: true };
   }
 
-  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i)
-    || raw.match(/(?:find|search for|look for)\s+["“]?(.+?)["”]?\s+(?:in|on)\s+(?:google\s+)?drive\b/i);
+  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i)
+    || raw.match(/(?:find|search for|look for)\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
   if (wantsGoogleDrive && fileSearchMatch) {
     return { adapter: "google-drive", intent: "search", query: fileSearchMatch[1].trim(), folderOnly: false };
   }
@@ -1116,10 +1130,10 @@ async function bgRunAdapterStep({ history, description, type, run, onProgress, o
   return result;
 }
 
-async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, onResult, shouldStop }) {
+async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, onResult, shouldStop, connectorHint }) {
   const siteContext = await bgGetSiteAdapterContext(tabId);
-  const parsed = bgParseAdapterTask(task, siteContext);
-  console.log("[Braino][Adapter][BG] Parsed task:", { task, tabId, siteContext, parsed });
+  const parsed = bgParseAdapterTask(task, siteContext, connectorHint);
+  console.log("[Braino][Adapter][BG] Parsed task:", { task, tabId, siteContext, connectorHint, parsed });
   if (!parsed) return null;
 
   if (parsed.adapter === "spotify" && parsed.intent === "addSongToPlaylist") {

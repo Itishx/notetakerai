@@ -691,7 +691,107 @@ function __sbGetSiteAdapterContext() {
     };
   }
 
+  if (/drive\.google\.com$/.test(host)) {
+    return {
+      site: "google-drive",
+      url,
+      title: document.title,
+    };
+  }
+
+  if (/mail\.google\.com$/.test(host)) {
+    return {
+      site: "gmail",
+      url,
+      title: document.title,
+    };
+  }
+
   return { site: "generic", url, title: document.title };
+}
+
+function __sbNormalizeConnectorName(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (!key || key === "auto" || key === "default") return "auto";
+  if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
+  if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
+  return null;
+}
+
+function __sbGetConnectorSiteSuggestion(siteContext) {
+  const site = siteContext?.site || "generic";
+  if (site === "google-drive") return "google-drive";
+  if (site === "gmail") return "gmail";
+  return "auto";
+}
+
+function __sbGetEffectiveConnector(siteContext) {
+  const forced = __sbNormalizeConnectorName(window.__sbForcedConnector);
+  if (forced && forced !== "auto") return forced;
+  return __sbGetConnectorSiteSuggestion(siteContext || __sbGetSiteAdapterContext());
+}
+
+function __sbGetConnectorLabel(connector, options = {}) {
+  const key = __sbNormalizeConnectorName(connector) || "auto";
+  const includeAutoHint = Boolean(options.includeAutoHint);
+  if (key === "google-drive") return "🗂 Drive";
+  if (key === "gmail") return "✉ Gmail";
+  if (includeAutoHint) {
+    const suggestion = __sbGetConnectorSiteSuggestion(options.siteContext || __sbGetSiteAdapterContext());
+    if (suggestion === "google-drive") return "↗ Auto · Drive";
+    if (suggestion === "gmail") return "↗ Auto · Gmail";
+  }
+  return "↗ Auto";
+}
+
+function __sbRefreshConnectorButtons() {
+  const primaryLabel = document.getElementById("__sb_connector_label__");
+  const cardLabel = document.getElementById("__sb_card_connector_label__");
+  if (!primaryLabel || !cardLabel) return;
+  const siteContext = __sbGetSiteAdapterContext();
+  const forced = __sbNormalizeConnectorName(window.__sbForcedConnector) || "auto";
+  const effective = __sbGetEffectiveConnector(siteContext);
+  const label = __sbGetConnectorLabel(forced === "auto" ? "auto" : forced, {
+    includeAutoHint: forced === "auto",
+    siteContext,
+  });
+  primaryLabel.textContent = label;
+  cardLabel.textContent = label;
+  document.getElementById("__sb_connector_btn__")?.classList.toggle("active-mode", effective !== "auto");
+  document.getElementById("__sb_card_connector_btn__")?.classList.toggle("active-mode", effective !== "auto");
+  document.querySelectorAll("#__sb_connector_dropdown__ .sb-dropdown-item").forEach((item) => {
+    item.classList.toggle("selected", item.getAttribute("data-connector") === forced);
+  });
+}
+
+function __sbShouldConnectorForceAgent(connector, promptText, forcedMode, siteContext) {
+  if (forcedMode !== "page") return false;
+  const key = __sbNormalizeConnectorName(connector) || "auto";
+  if (key === "auto") return false;
+  const text = String(promptText || "").trim().toLowerCase();
+  if (!text) return false;
+  if (__sbIsExplicitWebSearchRequest(text)) return false;
+  if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(text)) return false;
+  if (__sbIsBrowserActionCommand(text)) return true;
+  if (key === "google-drive") {
+    return /\b(create|make|find|search|look for|rename|move|delete|remove|trash|organize|sort|list|show|open|take)\b/.test(text);
+  }
+  if (key === "gmail") {
+    return /\b(reply|draft|compose|send|archive|label|star|read|open|find|search|show|summarize|triage|email)\b/.test(text);
+  }
+  return false;
+}
+
+function __sbParseConnectorDirective(rawText) {
+  const text = String(rawText || "").trim();
+  const match = text.match(/^\/([a-z-]+)\b([\s\S]*)$/i);
+  if (!match) return { connector: null, task: text };
+  const connector = __sbNormalizeConnectorName(match[1]);
+  if (!connector) return { connector: null, task: text };
+  return {
+    connector,
+    task: String(match[2] || "").trim(),
+  };
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -1854,6 +1954,10 @@ function __sbBuildBrainUI() {
         <span id="__sb_mode_label__">⚡ Auto</span>
         <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
       </button>
+      <button id="__sb_connector_btn__" class="sb-pill-dropdown-btn" title="Connector">
+        <span id="__sb_connector_label__">↗ Auto</span>
+        <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+      </button>
       <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Voice">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
       </button>
@@ -1886,6 +1990,10 @@ function __sbBuildBrainUI() {
         <textarea id="__sb_card_input__" placeholder="Follow up…" rows="1"></textarea>
         <button id="__sb_card_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
           <span id="__sb_card_mode_label__">⚡ Auto</span>
+          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+        </button>
+        <button id="__sb_card_connector_btn__" class="sb-pill-dropdown-btn" title="Connector">
+          <span id="__sb_card_connector_label__">↗ Auto</span>
           <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
         </button>
         <button id="__sb_card_rec_btn__" class="sb-card-foot-btn" title="Voice">
@@ -1923,6 +2031,22 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
   `;
   document.body.appendChild(modeDd);
+
+  const connectorDd = document.createElement("div");
+  connectorDd.id = "__sb_connector_dropdown__";
+  connectorDd.className = "sb-dropdown";
+  connectorDd.innerHTML = `
+    <div class="sb-dropdown-label">Connector</div>
+    <button class="sb-dropdown-item selected" data-connector="auto"><span class="sb-di-icon">↗</span><span class="sb-di-label">Auto detect</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-connector="google-drive"><span class="sb-di-icon">🗂</span><span class="sb-di-label">Google Drive</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-connector="gmail"><span class="sb-di-icon">✉</span><span class="sb-di-label">Gmail</span><span class="sb-di-check">✓</span></button>
+  `;
+  document.body.appendChild(connectorDd);
+
+  const connectorSlashDd = document.createElement("div");
+  connectorSlashDd.id = "__sb_connector_slash_dropdown__";
+  connectorSlashDd.className = "sb-dropdown";
+  document.body.appendChild(connectorSlashDd);
 
   const modelDd = document.createElement("div");
   modelDd.id = "__sb_model_dropdown__";
@@ -1997,7 +2121,9 @@ function __sbBuildBrainUI() {
   let __sbOpenDropdown = null;
   function __sbCloseAllDropdowns() {
     document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_connector_dropdown__")?.classList.remove("open");
     document.getElementById("__sb_model_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
     __sbOpenDropdown = null;
   }
   function __sbPositionDropdown(ddEl, triggerEl) {
@@ -2018,6 +2144,93 @@ function __sbBuildBrainUI() {
   }
   __sbSetupModeBtn(document.getElementById("__sb_mode_btn__"));
   __sbSetupModeBtn(document.getElementById("__sb_card_mode_btn__"));
+
+  function __sbRefreshConnectorUi() {
+    __sbRefreshConnectorButtons();
+  }
+
+  function __sbApplyConnectorChoice(connector, options = {}) {
+    window.__sbForcedConnector = __sbNormalizeConnectorName(connector) || "auto";
+    __sbRefreshConnectorUi();
+    if (!options.keepDropdownOpen) __sbCloseAllDropdowns();
+  }
+
+  function __sbSetupConnectorBtn(btnEl) {
+    btnEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = connectorDd.classList.contains("open");
+      __sbCloseAllDropdowns();
+      if (!isOpen) {
+        __sbPositionDropdown(connectorDd, btnEl);
+        connectorDd.classList.add("open");
+        __sbOpenDropdown = "connector";
+      }
+    });
+  }
+
+  function __sbPositionSlashDropdown(inputEl) {
+    const rect = inputEl.getBoundingClientRect();
+    connectorSlashDd.style.left = rect.left + "px";
+    connectorSlashDd.style.bottom = (window.innerHeight - rect.top + 6) + "px";
+    connectorSlashDd.style.top = "auto";
+    connectorSlashDd.style.minWidth = Math.max(rect.width, 220) + "px";
+  }
+
+  function __sbRenderSlashConnectorOptions(filterText, inputEl) {
+    const normalized = String(filterText || "").trim().toLowerCase();
+    const options = [
+      { connector: "google-drive", icon: "🗂", label: "Google Drive", aliases: ["drive", "gdrive"] },
+      { connector: "gmail", icon: "✉", label: "Gmail", aliases: ["gmail", "mail"] },
+      { connector: "auto", icon: "↗", label: "Auto detect", aliases: ["auto"] },
+    ].filter((option) => {
+      if (!normalized) return true;
+      return option.connector.includes(normalized)
+        || option.label.toLowerCase().includes(normalized)
+        || option.aliases.some((alias) => alias.includes(normalized));
+    });
+
+    if (!options.length) {
+      connectorSlashDd.classList.remove("open");
+      return;
+    }
+
+    connectorSlashDd.innerHTML = `
+      <div class="sb-dropdown-label">Choose connector</div>
+      ${options.map((option) => `
+        <button class="sb-dropdown-item" data-slash-connector="${option.connector}">
+          <span class="sb-di-icon">${option.icon}</span>
+          <span class="sb-di-label">${option.label}</span>
+        </button>
+      `).join("")}
+    `;
+    connectorSlashDd.querySelectorAll("[data-slash-connector]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const connector = item.getAttribute("data-slash-connector");
+        const shortName = connector === "google-drive" ? "drive" : connector;
+        inputEl.value = connector === "auto" ? "" : `/${shortName} `;
+        __sbApplyConnectorChoice(connector);
+        connectorSlashDd.classList.remove("open");
+        inputEl.focus();
+      });
+    });
+    __sbPositionSlashDropdown(inputEl);
+    connectorSlashDd.classList.add("open");
+    __sbOpenDropdown = "connector-slash";
+  }
+
+  function __sbSyncSlashConnectorDropdown(inputEl) {
+    const value = String(inputEl?.value || "");
+    const match = value.match(/^\/([a-z-]*)$/i);
+    if (!match) {
+      connectorSlashDd.classList.remove("open");
+      if (__sbOpenDropdown === "connector-slash") __sbOpenDropdown = null;
+      return;
+    }
+    __sbRenderSlashConnectorOptions(match[1], inputEl);
+  }
+
+  __sbSetupConnectorBtn(document.getElementById("__sb_connector_btn__"));
+  __sbSetupConnectorBtn(document.getElementById("__sb_card_connector_btn__"));
 
   modeDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
     item.addEventListener("click", () => {
@@ -2045,8 +2258,14 @@ function __sbBuildBrainUI() {
     });
   });
 
+  connectorDd.querySelectorAll(".sb-dropdown-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      __sbApplyConnectorChoice(item.dataset.connector);
+    });
+  });
+
   document.addEventListener("click", (e) => {
-    if (__sbOpenDropdown && !e.target.closest("#__sb_mode_dropdown__,#__sb_model_dropdown__,#__sb_mode_btn__,#__sb_card_mode_btn__")) {
+    if (__sbOpenDropdown && !e.target.closest("#__sb_mode_dropdown__,#__sb_model_dropdown__,#__sb_connector_dropdown__,#__sb_connector_slash_dropdown__,#__sb_mode_btn__,#__sb_card_mode_btn__,#__sb_connector_btn__,#__sb_card_connector_btn__")) {
       __sbCloseAllDropdowns();
     }
   });
@@ -2057,6 +2276,7 @@ function __sbBuildBrainUI() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
     if (e.key === "Escape") __sbToggleInput(false);
   });
+  inputEl.addEventListener("input", () => __sbSyncSlashConnectorDropdown(inputEl));
 
   // Card input
   const cardInputEl = document.getElementById("__sb_card_input__");
@@ -2067,7 +2287,11 @@ function __sbBuildBrainUI() {
   cardInputEl.addEventListener("input", () => {
     cardInputEl.style.height = "auto";
     cardInputEl.style.height = Math.min(cardInputEl.scrollHeight, 80) + "px";
+    __sbSyncSlashConnectorDropdown(cardInputEl);
   });
+
+  window.__sbForcedConnector = __sbNormalizeConnectorName(window.__sbForcedConnector) || "auto";
+  __sbRefreshConnectorUi();
 }
 
 function __sbDetectPageTheme() {
@@ -3235,14 +3459,23 @@ async function __sbFetchAssistantReply(body) {
 }
 
 async function __sbProcessPrompt(text, options = {}) {
-  const promptText = String(text || "").trim();
+  const connectorDirective = __sbParseConnectorDirective(text);
+  if (connectorDirective.connector) {
+    window.__sbForcedConnector = connectorDirective.connector;
+    __sbRefreshConnectorButtons();
+  }
+  const promptText = String(connectorDirective.task || "").trim();
   if (!promptText) return;
   const fromVoice = Boolean(options.fromVoice);
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
 
+  const siteContext = __sbGetSiteAdapterContext();
+  const connectorHint = __sbGetEffectiveConnector(siteContext);
   const forcedMode = window.__sbForcedMode || "page";
-  const rawIntent = (forcedMode !== "page") ? forcedMode : __sbDetectIntent(promptText);
+  const rawIntent = (forcedMode !== "page")
+    ? forcedMode
+    : (__sbShouldConnectorForceAgent(connectorHint, promptText, forcedMode, siteContext) ? "agent" : __sbDetectIntent(promptText));
   // lecture and meeting both drive the recording flow
   const intent = (rawIntent === "lecture" || rawIntent === "meeting") ? "record" : rawIntent;
 
@@ -3267,7 +3500,7 @@ async function __sbProcessPrompt(text, options = {}) {
       return;
     }
     if (!fromVoice || !__sbVoiceOnlyMode) __sbShowBubble("Delegating…", false);
-    __sbRunAgent(promptText);
+    __sbRunAgent(promptText, { connector: connectorHint });
     if (fromVoice) {
       __sbVoicePendingReply = false;
       await __sbSpeakText("On it.");
@@ -3381,10 +3614,14 @@ function __sbShowUpgrade(feature) {
   });
 }
 
-function __sbRunAgent(task) {
+function __sbRunAgent(task, options = {}) {
   if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect Braino.", true); return; }
   // Hand off to background — it runs the full agent loop and sends sbAgentUpdate messages back
-  chrome.runtime.sendMessage({ action: "runBrainAgent", task }, () => { void chrome.runtime.lastError; });
+  chrome.runtime.sendMessage({
+    action: "runBrainAgent",
+    task,
+    connector: __sbNormalizeConnectorName(options.connector) || "auto",
+  }, () => { void chrome.runtime.lastError; });
 }
 
 function __sbShowLectureRecordingBar(show) {
