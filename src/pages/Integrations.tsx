@@ -719,7 +719,7 @@ export default function Integrations() {
                         className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl"
                         style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", boxShadow: "var(--sb-shadow-sm)" }}
                       >
-                        <Icon className="h-5 w-5" style={{ color: "var(--sb-ink)" }} />
+                        <Icon className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
