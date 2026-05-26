@@ -91,6 +91,20 @@ const sections: VaultSection[] = [
     ],
   },
   {
+    slug: "x",
+    name: "X",
+    badge: "Scheduling live",
+    note: "Use OAuth 1.0a user auth first so Braino can link real X accounts and post from the backend on schedule.",
+    fields: [
+      { label: "API key / consumer key", valueHint: "X_API_KEY or TWITTER_CONSUMER_KEY" },
+      { label: "API secret / consumer secret", valueHint: "X_API_SECRET or TWITTER_CONSUMER_SECRET" },
+      { label: "Callback URL", valueHint: "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1/x-oauth-callback" },
+      { label: "App permissions", valueHint: "Read and write" },
+      { label: "Supabase secret names", valueHint: "X_API_KEY, X_API_SECRET, X_OAUTH_CALLBACK_URL" },
+      { label: "Posting note", valueHint: "Per-user access tokens are captured during the 3-legged OAuth flow" },
+    ],
+  },
+  {
     slug: "notion",
     name: "Notion",
     badge: "Already wired",

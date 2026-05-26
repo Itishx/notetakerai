@@ -1,114 +1,129 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-function renderHTML(success: boolean, message: string): string {
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>X Connection</title>
-<style>body{font-family:Georgia,serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f0e8;color:#2c3e2d}
-.card{text-align:center;padding:40px;background:#ede8dd;border-radius:12px;border:1px solid #d4ccbc;max-width:400px}
-.icon{font-size:48px;margin-bottom:16px}h1{font-size:20px;font-weight:400;margin-bottom:8px}
-p{font-size:14px;color:#6b7c6b}.hint{margin-top:16px;font-size:12px;color:#8a9a8a;font-style:italic}</style></head>
-<body><div class="card"><div class="icon">${success ? "✅" : "❌"}</div>
-<h1>${success ? "Connected!" : "Connection Failed"}</h1><p>${message}</p>
-<p class="hint">${success ? "You can close this tab." : "Please try again."}</p></div>
-<script>if(${success}){window.close();setTimeout(()=>window.close(),500);setTimeout(()=>window.close(),1500);}</script>
-</body></html>`;
-}
+import { parseFormEncodedResponse, xFetch } from "../_shared/x-oauth.ts";
 
 serve(async (req) => {
   try {
     const url = new URL(req.url);
-    const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
-    const error = url.searchParams.get("error");
+    const denied = url.searchParams.get("denied");
+    const requestToken = url.searchParams.get("oauth_token");
+    const verifier = url.searchParams.get("oauth_verifier");
+    const userIdentifier = url.searchParams.get("user_identifier");
 
-    if (error) return new Response(renderHTML(false, `X authorization denied: ${error}`), { headers: { "Content-Type": "text/html" } });
-    if (!code || !state) return new Response(renderHTML(false, "Missing code or state"), { headers: { "Content-Type": "text/html" } });
-
-    const clientId = Deno.env.get("X_CLIENT_ID");
-    const clientSecret = Deno.env.get("X_CLIENT_SECRET");
-    const redirectUri = Deno.env.get("X_REDIRECT_URI");
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!clientId || !clientSecret || !redirectUri || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return new Response(renderHTML(false, "Server configuration error"), { headers: { "Content-Type": "text/html" } });
+    if (denied) {
+      return html(false, "X authorization was denied.");
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data: stateRow, error: stateErr } = await supabase
-      .from("x_oauth_states").select("user_identifier, code_verifier").eq("state", state).maybeSingle();
-    if (stateErr || !stateRow) return new Response(renderHTML(false, "Invalid or expired state"), { headers: { "Content-Type": "text/html" } });
+    if (!requestToken || !verifier || !userIdentifier) {
+      return html(false, "Missing oauth token, verifier, or user identifier.");
+    }
 
-    const { user_identifier: userIdentifier, code_verifier: codeVerifier } = stateRow;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) {
+      return html(false, "Server configuration error.");
+    }
 
-    // Exchange code (X requires Basic auth for confidential clients)
-    const tokenRes = await fetch("https://api.twitter.com/2/oauth2/token", {
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const { data: pendingToken, error: pendingError } = await supabase
+      .from("x_oauth_request_tokens")
+      .select("oauth_token_secret")
+      .eq("oauth_token", requestToken)
+      .eq("user_identifier", userIdentifier)
+      .maybeSingle();
+
+    if (pendingError) throw pendingError;
+    if (!pendingToken?.oauth_token_secret) {
+      return html(false, "Could not find the pending X authorization request.");
+    }
+
+    const accessResponse = await xFetch({
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      url: "https://api.x.com/oauth/access_token",
+      token: requestToken,
+      tokenSecret: pendingToken.oauth_token_secret,
+      oauthExtras: {
+        oauth_verifier: verifier,
       },
-      body: new URLSearchParams({
-        code,
-        grant_type: "authorization_code",
-        client_id: clientId,
-        redirect_uri: redirectUri,
-        code_verifier: codeVerifier,
-      }).toString(),
     });
 
-    if (!tokenRes.ok) {
-      const errText = await tokenRes.text();
-      console.error("X token exchange failed:", errText);
-      return new Response(renderHTML(false, "Failed to exchange code"), { headers: { "Content-Type": "text/html" } });
+    const raw = await accessResponse.text();
+    if (!accessResponse.ok) {
+      throw new Error(`X access token exchange failed: ${raw}`);
     }
 
-    const tokenData = await tokenRes.json();
-    const accessToken: string = tokenData.access_token;
-    const refreshToken: string | undefined = tokenData.refresh_token;
-    const expiresIn: number = tokenData.expires_in ?? 7200;
-    const scope: string = tokenData.scope ?? "";
-    const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-    // Fetch X user info
-    let xUserId: string | null = null;
-    let xUsername: string | null = null;
-    try {
-      const uRes = await fetch("https://api.twitter.com/2/users/me", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (uRes.ok) {
-        const u = await uRes.json();
-        xUserId = u?.data?.id ?? null;
-        xUsername = u?.data?.username ?? null;
-      }
-    } catch (e) {
-      console.error("Failed to fetch X userinfo:", e);
+    const payload = parseFormEncodedResponse(raw);
+    if (!payload.oauth_token || !payload.oauth_token_secret) {
+      throw new Error("X did not return an access token.");
     }
 
-    const { error: dbError } = await supabase.from("x_connections").upsert({
-      user_identifier: userIdentifier,
-      access_token: accessToken,
-      refresh_token: refreshToken ?? null,
-      token_expires_at: tokenExpiresAt,
-      scope,
-      x_user_id: xUserId,
-      x_username: xUsername,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "user_identifier" });
+    const { error: upsertError } = await supabase
+      .from("x_connections")
+      .upsert(
+        {
+          user_identifier: userIdentifier,
+          x_user_id: payload.user_id || null,
+          username: payload.screen_name || null,
+          display_name: payload.screen_name || null,
+          access_token: payload.oauth_token,
+          access_token_secret: payload.oauth_token_secret,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_identifier" },
+      );
 
-    if (dbError) {
-      console.error("DB error:", dbError);
-      return new Response(renderHTML(false, "Failed to save connection"), { headers: { "Content-Type": "text/html" } });
-    }
+    if (upsertError) throw upsertError;
 
-    await supabase.from("x_oauth_states").delete().eq("state", state);
+    await supabase
+      .from("x_oauth_request_tokens")
+      .delete()
+      .eq("oauth_token", requestToken)
+      .eq("user_identifier", userIdentifier);
 
-    return new Response(renderHTML(true, `Connected to X${xUsername ? ` as @${xUsername}` : ""}!`), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return html(true, `Connected to X${payload.screen_name ? ` as @${payload.screen_name}` : ""}.`);
   } catch (e) {
     console.error("x-oauth-callback error:", e);
-    return new Response(renderHTML(false, e instanceof Error ? e.message : "Unknown error"), { headers: { "Content-Type": "text/html" } });
+    return html(false, e instanceof Error ? e.message : "Unknown error");
   }
 });
+
+function html(success: boolean, message: string) {
+  return new Response(
+    `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>X Connection</title>
+    <style>
+      body { font-family: Georgia, serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f0e8; color: #2c3e2d; }
+      .card { text-align: center; padding: 40px; background: #ede8dd; border-radius: 12px; border: 1px solid #d4ccbc; max-width: 420px; }
+      .icon { font-size: 48px; margin-bottom: 16px; }
+      h1 { font-size: 20px; font-weight: 400; margin-bottom: 8px; }
+      p { font-size: 14px; color: #6b7c6b; }
+      .hint { margin-top: 16px; font-size: 12px; color: #8a9a8a; font-style: italic; }
+      .button { display: inline-block; margin-top: 18px; padding: 10px 14px; border-radius: 999px; background: #2c3e2d; color: #f5f0e8; text-decoration: none; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="icon">${success ? "✅" : "❌"}</div>
+      <h1>${success ? "Connected!" : "Connection Failed"}</h1>
+      <p>${message}</p>
+      <p class="hint">${success ? "You can close this tab and return to Braino." : "Return to Braino and try again."}</p>
+      <a href="#" class="button" onclick="window.close(); return false;">Close</a>
+    </div>
+    <script>
+      if (${success ? "true" : "false"}) {
+        window.close();
+        setTimeout(() => window.close(), 500);
+        setTimeout(() => window.close(), 1500);
+      }
+    </script>
+  </body>
+</html>`,
+    {
+      headers: { "Content-Type": "text/html" },
+    },
+  );
+}

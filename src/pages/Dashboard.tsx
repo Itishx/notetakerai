@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import {
   Bell,
   Bot,
@@ -70,6 +72,25 @@ type GoogleDriveConn = {
   google_email: string | null;
   updated_at: string | null;
 } | null;
+
+type XConnection = {
+  username: string | null;
+  displayName: string | null;
+  xUserId: string | null;
+  updatedAt: string | null;
+} | null;
+
+type ScheduledXPost = {
+  id: string;
+  content: string;
+  scheduled_at: string;
+  status: "pending" | "processing" | "posted" | "failed" | "cancelled";
+  x_post_id: string | null;
+  error_message: string | null;
+  posted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 type XAutomationStats = {
   total_replies: number;
@@ -135,6 +156,17 @@ function formatDateTime(iso?: string | null) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function toDateTimeLocalValue(date: Date) {
+  const next = new Date(date);
+  next.setSeconds(0, 0);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:${pad(next.getMinutes())}`;
+}
+
+function defaultScheduledAtValue(minutesAhead = 15) {
+  return toDateTimeLocalValue(new Date(Date.now() + minutesAhead * 60000));
 }
 
 function renderMarkdown(md: string): string {
@@ -676,12 +708,15 @@ function MemoryAddForm({ userId, onAdded }: { userId: string; onAdded: (note: No
 export default function Dashboard() {
   const { user, profile, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [notes, setNotes] = useState<Note[]>([]);
   const [commands, setCommands] = useState<Command[]>([]);
   const [notionConn, setNotionConn] = useState<NotionConn>(null);
   const [googleDriveConn, setGoogleDriveConn] = useState<GoogleDriveConn>(null);
+  const [xConn, setXConn] = useState<XConnection>(null);
+  const [scheduledXPosts, setScheduledXPosts] = useState<ScheduledXPost[]>([]);
   const [xAutomationStats, setXAutomationStats] = useState<XAutomationStats>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -693,12 +728,26 @@ export default function Dashboard() {
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
   const [driveConnectLoading, setDriveConnectLoading] = useState(false);
+  const [xConnectLoading, setXConnectLoading] = useState(false);
+  const [xPostDraft, setXPostDraft] = useState("");
+  const [xScheduledAt, setXScheduledAt] = useState(() => defaultScheduledAtValue());
+  const [xScheduling, setXScheduling] = useState(false);
+  const [xCancellingId, setXCancellingId] = useState<string | null>(null);
+  const [xDispatching, setXDispatching] = useState(false);
   const drivePollRef = useRef<number | null>(null);
+  const xPollRef = useRef<number | null>(null);
 
   function stopDrivePolling() {
     if (drivePollRef.current !== null) {
       window.clearInterval(drivePollRef.current);
       drivePollRef.current = null;
+    }
+  }
+
+  function stopXPolling() {
+    if (xPollRef.current !== null) {
+      window.clearInterval(xPollRef.current);
+      xPollRef.current = null;
     }
   }
 
@@ -713,6 +762,45 @@ export default function Dashboard() {
     return (data as GoogleDriveConn) || null;
   }
 
+  async function fetchXConnection(userId: string): Promise<XConnection> {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-connection-status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIdentifier: userId }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "Failed to load X connection");
+    }
+    if (!payload.connected) return null;
+    return {
+      username: payload.username ?? null,
+      displayName: payload.displayName ?? null,
+      xUserId: payload.xUserId ?? null,
+      updatedAt: payload.updatedAt ?? null,
+    };
+  }
+
+  async function refreshXConnection(userId: string) {
+    const connection = await fetchXConnection(userId);
+    setXConn(connection);
+    return connection;
+  }
+
+  async function refreshScheduledXPosts(userId: string) {
+    const { data, error } = await supabase
+      .from("scheduled_x_posts")
+      .select("*")
+      .eq("user_id", userId)
+      .order("scheduled_at", { ascending: true })
+      .limit(20);
+
+    if (error) throw error;
+    const posts = (data as ScheduledXPost[] | null) || [];
+    setScheduledXPosts(posts);
+    return posts;
+  }
+
   useEffect(() => {
     if (!loading && !user) navigate("/auth");
   }, [loading, navigate, user]);
@@ -722,7 +810,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, driveRes, xStatsRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, xStatsRes, xConnRes, scheduledXRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -750,12 +838,21 @@ export default function Dashboard() {
           .select("total_replies,total_runs,total_runtime_ms,last_run_reply_count,last_run_duration_ms,last_run_started_at,last_run_finished_at")
           .eq("user_id", user.id)
           .maybeSingle(),
+        fetchXConnection(user.id).catch(() => null),
+        supabase
+          .from("scheduled_x_posts")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("scheduled_at", { ascending: true })
+          .limit(20),
       ]);
 
       if (notesRes.data) setNotes(notesRes.data as Note[]);
       if (commandsRes.data) setCommands(commandsRes.data as unknown as Command[]);
       setNotionConn(notionRes.data as NotionConn);
       setGoogleDriveConn((driveRes.data as GoogleDriveConn) || null);
+      setXConn((xConnRes as XConnection) || null);
+      setScheduledXPosts((scheduledXRes.data as ScheduledXPost[] | null) || []);
       setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
       setDataLoading(false);
     };
@@ -763,7 +860,10 @@ export default function Dashboard() {
     load();
   }, [profile, user]);
 
-  useEffect(() => () => stopDrivePolling(), []);
+  useEffect(() => () => {
+    stopDrivePolling();
+    stopXPolling();
+  }, []);
 
   async function handleConnectGoogleDrive() {
     if (!user) return;
@@ -798,6 +898,170 @@ export default function Dashboard() {
       console.error("google drive connect failed:", error);
       setDriveConnectLoading(false);
       window.alert(error instanceof Error ? error.message : "Failed to connect Google Drive");
+    }
+  }
+
+  async function handleConnectX() {
+    if (!user) return;
+    setXConnectLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-oauth-start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIdentifier: user.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.authUrl) {
+        throw new Error(payload.error || "Failed to start X OAuth");
+      }
+
+      window.open(payload.authUrl, "_blank", "noopener,noreferrer");
+      stopXPolling();
+      const startedAt = Date.now();
+      xPollRef.current = window.setInterval(async () => {
+        try {
+          const connection = await refreshXConnection(user.id);
+          if (connection) {
+            stopXPolling();
+            setXConnectLoading(false);
+            toast({
+              title: "X connected",
+              description: connection.username ? `Linked @${connection.username}.` : "Your X account is now linked.",
+            });
+            return;
+          }
+        } catch (error) {
+          console.error("x connection poll failed:", error);
+        }
+
+        if (Date.now() - startedAt > 2 * 60 * 1000) {
+          stopXPolling();
+          setXConnectLoading(false);
+        }
+      }, 2000);
+    } catch (error) {
+      console.error("x connect failed:", error);
+      setXConnectLoading(false);
+      toast({
+        title: "Could not connect X",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleScheduleXPost() {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Please sign in to schedule posts." });
+      return;
+    }
+    if (!xConn) {
+      toast({ title: "Connect X first", description: "Link an X account before scheduling posts." });
+      return;
+    }
+
+    const content = xPostDraft.trim();
+    if (!content) {
+      toast({ title: "Write the post first", description: "Add some text before scheduling it." });
+      return;
+    }
+    if (content.length > 280) {
+      toast({ title: "Too long for X", description: "Keep the draft at 280 characters or fewer." });
+      return;
+    }
+
+    const scheduledDate = new Date(xScheduledAt);
+    if (Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+      toast({ title: "Pick a future time", description: "The scheduled time must be in the future." });
+      return;
+    }
+
+    setXScheduling(true);
+    try {
+      const { data, error } = await supabase
+        .from("scheduled_x_posts")
+        .insert({
+          user_id: user.id,
+          content,
+          scheduled_at: scheduledDate.toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setScheduledXPosts((prev) =>
+        [...prev, data as ScheduledXPost].sort(
+          (left, right) => new Date(left.scheduled_at).getTime() - new Date(right.scheduled_at).getTime(),
+        ),
+      );
+      setXPostDraft("");
+      setXScheduledAt(defaultScheduledAtValue());
+      toast({
+        title: "Post scheduled",
+        description: `Braino will send it on ${formatDateTime(scheduledDate.toISOString())}.`,
+      });
+    } catch (error) {
+      console.error("schedule x post failed:", error);
+      toast({
+        title: "Could not schedule post",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setXScheduling(false);
+    }
+  }
+
+  async function handleCancelScheduledXPost(id: string) {
+    if (!user) return;
+    setXCancellingId(id);
+    try {
+      const { error } = await supabase
+        .from("scheduled_x_posts")
+        .update({ status: "cancelled" })
+        .eq("id", id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      setScheduledXPosts((prev) => prev.map((post) => (post.id === id ? { ...post, status: "cancelled" } : post)));
+    } catch (error) {
+      console.error("cancel x post failed:", error);
+      toast({
+        title: "Could not cancel post",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setXCancellingId(null);
+    }
+  }
+
+  async function handleDispatchScheduledXPosts() {
+    if (!user) return;
+    setXDispatching(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dispatch-scheduled-x-posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to dispatch scheduled posts");
+      }
+
+      await refreshScheduledXPosts(user.id);
+      toast({
+        title: "Dispatch finished",
+        description: `${payload.posted || 0} posted, ${payload.failed || 0} failed.`,
+      });
+    } catch (error) {
+      console.error("dispatch x posts failed:", error);
+      toast({
+        title: "Dispatch failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setXDispatching(false);
     }
   }
 
@@ -1847,6 +2111,139 @@ export default function Dashboard() {
 
             {activeTab === "xAutomation" && (
               <div className="space-y-5">
+                <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+                  <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div>
+                        <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                          Scheduled <em className="text-[var(--sb-accent-deep)]">posts.</em>
+                        </h3>
+                        <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                          Server-side queue for laptop-off posting
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-[10px]",
+                          xConn ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700" : "border-[var(--sb-line)] bg-[var(--sb-panel)] text-[var(--sb-ink-3)]",
+                        )}
+                        style={monoStyle}
+                      >
+                        {xConn ? `Linked${xConn.username ? ` · @${xConn.username}` : ""}` : "X account not linked"}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                        <div className="mb-2 text-sm font-medium text-[var(--sb-ink)]">Post text</div>
+                        <Textarea
+                          value={xPostDraft}
+                          onChange={(event) => setXPostDraft(event.target.value)}
+                          placeholder={xConn ? "Draft the post Braino should send for you…" : "Connect X first to unlock scheduling."}
+                          disabled={!xConn || xScheduling}
+                          className="min-h-[140px] rounded-[14px] border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-[14px] text-[var(--sb-ink)] placeholder:text-[var(--sb-ink-3)]"
+                        />
+                        <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--sb-ink-3)]" style={monoStyle}>
+                          <span>{xConn ? "Braino will send exactly this text." : "OAuth link required before the queue can post."}</span>
+                          <span className={cn(xPostDraft.length > 280 && "text-red-500")}>{xPostDraft.length}/280</span>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+                        <div>
+                          <div className="mb-2 text-sm font-medium text-[var(--sb-ink)]">Schedule for</div>
+                          <Input
+                            type="datetime-local"
+                            value={xScheduledAt}
+                            onChange={(event) => setXScheduledAt(event.target.value)}
+                            disabled={!xConn || xScheduling}
+                            className="h-11 rounded-[14px] border-[var(--sb-line)] bg-[var(--sb-panel)] text-[13.5px]"
+                          />
+                        </div>
+                        <Button
+                          onClick={handleScheduleXPost}
+                          disabled={!xConn || xScheduling}
+                          className="h-11 rounded-[14px] bg-[var(--sb-ink)] px-5 text-[13px] text-[var(--sb-on-ink)] hover:opacity-90"
+                        >
+                          {xScheduling ? "Scheduling…" : "Schedule post"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={xConn ? handleDispatchScheduledXPosts : handleConnectX}
+                          disabled={xConn ? xDispatching : xConnectLoading}
+                          className="h-11 rounded-[14px] border-[var(--sb-line)] bg-[var(--sb-panel)] px-5 text-[13px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                        >
+                          {xConn ? (xDispatching ? "Dispatching…" : "Run due now") : (xConnectLoading ? "Waiting…" : "Connect X")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                    <div className="mb-4">
+                      <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                        Queue
+                      </h3>
+                      <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                        Pending, sent, and failed scheduled posts
+                      </div>
+                    </div>
+
+                    {scheduledXPosts.length ? (
+                      <div className="space-y-3">
+                        {scheduledXPosts.map((post) => (
+                          <div key={post.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-[14px] leading-6 text-[var(--sb-ink)]">{post.content}</p>
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "shrink-0 rounded-full border px-2.5 py-1 text-[10px]",
+                                  post.status === "posted" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700",
+                                  post.status === "failed" && "border-red-500/30 bg-red-500/10 text-red-600",
+                                  post.status === "processing" && "border-amber-500/30 bg-amber-500/10 text-amber-700",
+                                  post.status === "pending" && "border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-[var(--sb-ink-2)]",
+                                  post.status === "cancelled" && "border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-[var(--sb-ink-3)]",
+                                )}
+                                style={monoStyle}
+                              >
+                                {post.status}
+                              </Badge>
+                            </div>
+                            <div style={monoStyle} className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--sb-ink-3)]">
+                              <span>Scheduled {formatDateTime(post.scheduled_at)}</span>
+                              {post.posted_at ? <span>Posted {formatDateTime(post.posted_at)}</span> : null}
+                              {post.x_post_id ? <span>Post ID {post.x_post_id}</span> : null}
+                            </div>
+                            {post.error_message ? (
+                              <div className="mt-3 rounded-[12px] border border-red-500/20 bg-red-500/5 px-3 py-2 text-[12px] text-red-700">
+                                {post.error_message}
+                              </div>
+                            ) : null}
+                            {post.status === "pending" ? (
+                              <div className="mt-3">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => handleCancelScheduledXPost(post.id)}
+                                  disabled={xCancellingId === post.id}
+                                  className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                                >
+                                  {xCancellingId === post.id ? "Cancelling…" : "Cancel"}
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-[18px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-6 py-14 text-center text-sm text-[var(--sb-ink-3)]">
+                        No scheduled X posts yet. Queue one here and the backend will handle delivery.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {[
                     {
@@ -1946,7 +2343,7 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <div className="rounded-[18px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-6 py-14 text-center text-sm text-[var(--sb-ink-3)]">
-                        No X automation history yet. Run X Auto once from the extension and the stats will appear here.
+                        No X automation history yet. Extension reply stats will appear here after your first synced run.
                       </div>
                     )}
                   </div>
@@ -2059,6 +2456,26 @@ export default function Dashboard() {
                   </p>
 
                   <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
+                          <span className={cn("h-2 w-2 rounded-full", xConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
+                          X
+                        </div>
+                        <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
+                          {xConn ? `Linked ${xConn.username ? `@${xConn.username}` : "account"} for server-side scheduling` : "Connect a real X account for dashboard scheduling and backend posting"}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={handleConnectX}
+                        disabled={xConnectLoading}
+                        className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                      >
+                        {xConnectLoading ? "Waiting…" : xConn ? "Reconnect" : "Connect"}
+                      </Button>
+                    </div>
+
                     <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
                       <div>
                         <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
