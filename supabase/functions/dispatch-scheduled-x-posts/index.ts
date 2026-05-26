@@ -2,6 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getEnvValue, getXOAuth2Credentials } from "../_shared/x-oauth.ts";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
 type ScheduledXPost = {
   id: string;
   user_id: string;
@@ -38,7 +44,11 @@ async function refreshAccessToken(refreshToken: string): Promise<{
   return await res.json();
 }
 
-serve(async () => {
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   const supabaseUrl = getEnvValue("SUPABASE_URL");
   const serviceRoleKey = getEnvValue("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) return json({ error: "Missing Supabase configuration" }, 500);
@@ -167,6 +177,6 @@ serve(async () => {
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }

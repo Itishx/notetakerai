@@ -732,6 +732,7 @@ export default function Dashboard() {
   const [xPostDraft, setXPostDraft] = useState("");
   const [xScheduledAt, setXScheduledAt] = useState(() => defaultScheduledAtValue());
   const [xScheduling, setXScheduling] = useState(false);
+  const [xPostingNow, setXPostingNow] = useState(false);
   const [xCancellingId, setXCancellingId] = useState<string | null>(null);
   const [xDispatching, setXDispatching] = useState(false);
   const drivePollRef = useRef<number | null>(null);
@@ -1020,6 +1021,69 @@ export default function Dashboard() {
       });
     } finally {
       setXScheduling(false);
+    }
+  }
+
+  async function handlePostXNow() {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Please sign in to post on X." });
+      return;
+    }
+    if (!xConn) {
+      toast({ title: "Connect X first", description: "Link an X account before posting." });
+      return;
+    }
+
+    const content = xPostDraft.trim();
+    if (!content) {
+      toast({ title: "Write the post first", description: "Add some text before posting it." });
+      return;
+    }
+    if (content.length > 280) {
+      toast({ title: "Too long for X", description: "Keep the draft at 280 characters or fewer." });
+      return;
+    }
+
+    setXPostingNow(true);
+    try {
+      const dueAt = new Date(Date.now() - 1_000).toISOString();
+      const { error } = await supabase
+        .from("scheduled_x_posts")
+        .insert({
+          user_id: user.id,
+          content,
+          scheduled_at: dueAt,
+        });
+
+      if (error) throw error;
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dispatch-scheduled-x-posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to post to X");
+      }
+
+      await refreshScheduledXPosts(user.id);
+      setXPostDraft("");
+      setXScheduledAt(defaultScheduledAtValue());
+      toast({
+        title: payload.posted ? "Posted to X" : "Post sent to queue",
+        description: payload.posted
+          ? "Braino sent your draft right away."
+          : `${payload.failed || 0} failed. Check the queue for the exact X error.`,
+      });
+    } catch (error) {
+      console.error("post x now failed:", error);
+      toast({
+        title: "Could not post to X",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setXPostingNow(false);
     }
   }
 
@@ -2153,7 +2217,7 @@ export default function Dashboard() {
                           value={xPostDraft}
                           onChange={(event) => setXPostDraft(event.target.value)}
                           placeholder={xConn ? "Draft the post Braino should send for you…" : "Connect X first to unlock scheduling."}
-                          disabled={!xConn || xScheduling}
+                          disabled={!xConn || xScheduling || xPostingNow}
                           className="min-h-[140px] rounded-[14px] border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-[14px] text-[var(--sb-ink)] placeholder:text-[var(--sb-ink-3)]"
                         />
                         <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--sb-ink-3)]" style={monoStyle}>
@@ -2162,28 +2226,36 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-end">
                         <div>
                           <div className="mb-2 text-sm font-medium text-[var(--sb-ink)]">Schedule for</div>
                           <Input
                             type="datetime-local"
                             value={xScheduledAt}
                             onChange={(event) => setXScheduledAt(event.target.value)}
-                            disabled={!xConn || xScheduling}
+                            disabled={!xConn || xScheduling || xPostingNow}
                             className="h-11 rounded-[14px] border-[var(--sb-line)] bg-[var(--sb-panel)] text-[13.5px]"
                           />
                         </div>
                         <Button
                           onClick={handleScheduleXPost}
-                          disabled={!xConn || xScheduling}
+                          disabled={!xConn || xScheduling || xPostingNow}
                           className="h-11 rounded-[14px] bg-[var(--sb-ink)] px-5 text-[13px] text-[var(--sb-on-ink)] hover:opacity-90"
                         >
                           {xScheduling ? "Scheduling…" : "Schedule post"}
                         </Button>
                         <Button
                           variant="outline"
+                          onClick={handlePostXNow}
+                          disabled={!xConn || xScheduling || xPostingNow || xDispatching}
+                          className="h-11 rounded-[14px] border-[var(--sb-line)] bg-[var(--sb-panel)] px-5 text-[13px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                        >
+                          {xPostingNow ? "Posting…" : "Post now"}
+                        </Button>
+                        <Button
+                          variant="outline"
                           onClick={xConn ? handleDispatchScheduledXPosts : handleConnectX}
-                          disabled={xConn ? xDispatching : xConnectLoading}
+                          disabled={xConn ? xDispatching || xPostingNow : xConnectLoading}
                           className="h-11 rounded-[14px] border-[var(--sb-line)] bg-[var(--sb-panel)] px-5 text-[13px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
                         >
                           {xConn ? (xDispatching ? "Dispatching…" : "Run due now") : (xConnectLoading ? "Waiting…" : "Connect X")}
