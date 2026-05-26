@@ -22,14 +22,13 @@ serve(async (req) => {
       });
     }
 
-    const callbackUrl = new URL(getXCallbackUrl());
-    callbackUrl.searchParams.set("user_identifier", userIdentifier);
+    const callbackUrl = getXCallbackUrl();
 
     const response = await xFetch({
       method: "POST",
       url: "https://api.x.com/oauth/request_token",
       oauthExtras: {
-        oauth_callback: callbackUrl.toString(),
+        oauth_callback: callbackUrl,
       },
     });
 
@@ -42,6 +41,9 @@ serve(async (req) => {
     if (!payload.oauth_token || !payload.oauth_token_secret) {
       throw new Error("X did not return a request token");
     }
+    if (payload.oauth_callback_confirmed !== "true") {
+      throw new Error("X did not confirm the callback URL for this app");
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -50,6 +52,11 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    await supabase
+      .from("x_oauth_request_tokens")
+      .delete()
+      .eq("user_identifier", userIdentifier);
+
     const { error } = await supabase
       .from("x_oauth_request_tokens")
       .insert({

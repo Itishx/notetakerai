@@ -8,14 +8,13 @@ serve(async (req) => {
     const denied = url.searchParams.get("denied");
     const requestToken = url.searchParams.get("oauth_token");
     const verifier = url.searchParams.get("oauth_verifier");
-    const userIdentifier = url.searchParams.get("user_identifier");
 
     if (denied) {
       return html(false, "X authorization was denied.");
     }
 
-    if (!requestToken || !verifier || !userIdentifier) {
-      return html(false, "Missing oauth token, verifier, or user identifier.");
+    if (!requestToken || !verifier) {
+      return html(false, "Missing oauth token or verifier.");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -27,15 +26,16 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const { data: pendingToken, error: pendingError } = await supabase
       .from("x_oauth_request_tokens")
-      .select("oauth_token_secret")
+      .select("oauth_token_secret,user_identifier")
       .eq("oauth_token", requestToken)
-      .eq("user_identifier", userIdentifier)
       .maybeSingle();
 
     if (pendingError) throw pendingError;
-    if (!pendingToken?.oauth_token_secret) {
+    if (!pendingToken?.oauth_token_secret || !pendingToken.user_identifier) {
       return html(false, "Could not find the pending X authorization request.");
     }
+
+    const userIdentifier = pendingToken.user_identifier;
 
     const accessResponse = await xFetch({
       method: "POST",
