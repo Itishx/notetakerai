@@ -1,115 +1,112 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { parseFormEncodedResponse, xFetch } from "../_shared/x-oauth.ts";
-
-function mask(value: string | null | undefined, visible = 6) {
-  if (!value) return null;
-  if (value.length <= visible) return value;
-  return `${value.slice(0, visible)}…`;
-}
+import {
+  getXOAuthClient,
+  getXCallbackUrl,
+  basicAuthHeader,
+} from "../_shared/x-oauth.ts";
 
 serve(async (req) => {
   try {
     const url = new URL(req.url);
-    const denied = url.searchParams.get("denied");
-    const requestToken = url.searchParams.get("oauth_token");
-    const verifier = url.searchParams.get("oauth_verifier");
-    console.log("[x-oauth-callback] begin", {
-      denied: denied || null,
-      oauthToken: mask(requestToken, 10),
-      verifier: mask(verifier, 10),
-    });
+    const error = url.searchParams.get("error");
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
 
-    if (denied) {
-      return html(false, "X authorization was denied.");
-    }
+    if (error) return html(false, `X authorization error: ${error}`);
+    if (!code || !state) return html(false, "Missing code or state from X.");
 
-    if (!requestToken || !verifier) {
-      return html(false, "Missing oauth token or verifier.");
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceRoleKey) {
-      return html(false, "Server configuration error.");
-    }
-
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const { data: pendingToken, error: pendingError } = await supabase
-      .from("x_oauth_request_tokens")
-      .select("oauth_token_secret,user_identifier")
-      .eq("oauth_token", requestToken)
+
+    const { data: stateRow, error: stateError } = await supabase
+      .from("x_oauth_states")
+      .select("code_verifier,user_identifier")
+      .eq("state", state)
       .maybeSingle();
-
-    if (pendingError) throw pendingError;
-    if (!pendingToken?.oauth_token_secret || !pendingToken.user_identifier) {
-      return html(false, "Could not find the pending X authorization request.");
+    if (stateError) throw stateError;
+    if (!stateRow?.code_verifier || !stateRow?.user_identifier) {
+      return html(false, "Could not find pending X authorization (state mismatch).");
     }
 
-    const userIdentifier = pendingToken.user_identifier;
-    console.log("[x-oauth-callback] pending token found", {
-      userIdentifier: mask(userIdentifier, 8),
-      oauthToken: mask(requestToken, 10),
+    const { clientId, clientSecret } = getXOAuthClient();
+    const redirectUri = getXCallbackUrl();
+
+    const tokenBody = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      code_verifier: stateRow.code_verifier,
     });
 
-    const accessResponse = await xFetch({
+    const tokenRes = await fetch("https://api.x.com/2/oauth2/token", {
       method: "POST",
-      url: "https://api.x.com/oauth/access_token",
-      token: requestToken,
-      tokenSecret: pendingToken.oauth_token_secret,
-      oauthExtras: {
-        oauth_verifier: verifier,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: basicAuthHeader(clientId, clientSecret),
       },
+      body: tokenBody.toString(),
     });
+    const tokenRaw = await tokenRes.text();
+    if (!tokenRes.ok) {
+      console.error("[x-oauth-callback] token exchange failed", tokenRes.status, tokenRaw);
+      return html(false, `Token exchange failed: ${tokenRaw}`);
+    }
+    const tokens = JSON.parse(tokenRaw) as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+      scope?: string;
+      token_type?: string;
+    };
 
-    const raw = await accessResponse.text();
-    console.log("[x-oauth-callback] access_token response", {
-      status: accessResponse.status,
-      ok: accessResponse.ok,
-      raw: accessResponse.ok ? mask(raw, 24) : raw,
-    });
-    if (!accessResponse.ok) {
-      throw new Error(`X access token exchange failed: ${raw}`);
+    // Fetch user info
+    let xUserId: string | null = null;
+    let username: string | null = null;
+    let displayName: string | null = null;
+    try {
+      const meRes = await fetch("https://api.x.com/2/users/me", {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      if (meRes.ok) {
+        const meJson = await meRes.json();
+        xUserId = meJson?.data?.id ?? null;
+        username = meJson?.data?.username ?? null;
+        displayName = meJson?.data?.name ?? null;
+      } else {
+        console.warn("[x-oauth-callback] users/me failed", meRes.status, await meRes.text());
+      }
+    } catch (e) {
+      console.warn("[x-oauth-callback] users/me threw", e);
     }
 
-    const payload = parseFormEncodedResponse(raw);
-    if (!payload.oauth_token || !payload.oauth_token_secret) {
-      throw new Error("X did not return an access token.");
-    }
+    const tokenExpiresAt = tokens.expires_in
+      ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+      : null;
 
     const { error: upsertError } = await supabase
       .from("x_connections")
       .upsert(
         {
-          user_identifier: userIdentifier,
-          x_user_id: payload.user_id || null,
-          username: payload.screen_name || null,
-          display_name: payload.screen_name || null,
-          access_token: payload.oauth_token,
-          access_token_secret: payload.oauth_token_secret,
+          user_identifier: stateRow.user_identifier,
+          x_user_id: xUserId,
+          username,
+          display_name: displayName,
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token ?? null,
+          token_expires_at: tokenExpiresAt,
+          scope: tokens.scope ?? null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_identifier" },
       );
-
     if (upsertError) throw upsertError;
-    console.log("[x-oauth-callback] connection saved", {
-      userIdentifier: mask(userIdentifier, 8),
-      username: payload.screen_name || null,
-      xUserId: mask(payload.user_id, 8),
-    });
 
-    await supabase
-      .from("x_oauth_request_tokens")
-      .delete()
-      .eq("oauth_token", requestToken)
-      .eq("user_identifier", userIdentifier);
-    console.log("[x-oauth-callback] pending token cleared", {
-      userIdentifier: mask(userIdentifier, 8),
-      oauthToken: mask(requestToken, 10),
-    });
+    await supabase.from("x_oauth_states").delete().eq("state", state);
 
-    return html(true, `Connected to X${payload.screen_name ? ` as @${payload.screen_name}` : ""}.`);
+    return html(true, `Connected to X${username ? ` as @${username}` : ""}.`);
   } catch (e) {
     console.error("x-oauth-callback error:", e);
     return html(false, e instanceof Error ? e.message : "Unknown error");
@@ -118,41 +115,14 @@ serve(async (req) => {
 
 function html(success: boolean, message: string) {
   return new Response(
-    `<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>X Connection</title>
-    <style>
-      body { font-family: Georgia, serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f0e8; color: #2c3e2d; }
-      .card { text-align: center; padding: 40px; background: #ede8dd; border-radius: 12px; border: 1px solid #d4ccbc; max-width: 420px; }
-      .icon { font-size: 48px; margin-bottom: 16px; }
-      h1 { font-size: 20px; font-weight: 400; margin-bottom: 8px; }
-      p { font-size: 14px; color: #6b7c6b; }
-      .hint { margin-top: 16px; font-size: 12px; color: #8a9a8a; font-style: italic; }
-      .button { display: inline-block; margin-top: 18px; padding: 10px 14px; border-radius: 999px; background: #2c3e2d; color: #f5f0e8; text-decoration: none; font-size: 13px; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <div class="icon">${success ? "✅" : "❌"}</div>
-      <h1>${success ? "Connected!" : "Connection Failed"}</h1>
-      <p>${message}</p>
-      <p class="hint">${success ? "You can close this tab and return to Braino." : "Return to Braino and try again."}</p>
-      <a href="#" class="button" onclick="window.close(); return false;">Close</a>
-    </div>
-    <script>
-      if (${success ? "true" : "false"}) {
-        window.close();
-        setTimeout(() => window.close(), 500);
-        setTimeout(() => window.close(), 1500);
-      }
-    </script>
-  </body>
-</html>`,
-    {
-      headers: { "Content-Type": "text/html" },
-    },
+    `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>X Connection</title>
+<style>body{font-family:Georgia,serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f0e8;color:#2c3e2d}.card{text-align:center;padding:40px;background:#ede8dd;border-radius:12px;border:1px solid #d4ccbc;max-width:420px}.icon{font-size:48px;margin-bottom:16px}h1{font-size:20px;font-weight:400;margin-bottom:8px}p{font-size:14px;color:#6b7c6b}.hint{margin-top:16px;font-size:12px;color:#8a9a8a;font-style:italic}.button{display:inline-block;margin-top:18px;padding:10px 14px;border-radius:999px;background:#2c3e2d;color:#f5f0e8;text-decoration:none;font-size:13px}</style>
+</head><body><div class="card"><div class="icon">${success ? "✅" : "❌"}</div>
+<h1>${success ? "Connected!" : "Connection Failed"}</h1><p>${message}</p>
+<p class="hint">${success ? "You can close this tab and return to Braino." : "Return to Braino and try again."}</p>
+<a href="#" class="button" onclick="window.close();return false;">Close</a></div>
+<script>if(${success}){window.close();setTimeout(()=>window.close(),500);setTimeout(()=>window.close(),1500);}</script>
+</body></html>`,
+    { headers: { "Content-Type": "text/html" } },
   );
 }
