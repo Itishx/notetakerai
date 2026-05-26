@@ -904,6 +904,11 @@ export default function Dashboard() {
   async function handleConnectX() {
     if (!user) return;
     setXConnectLoading(true);
+
+    // Open the popup synchronously (before any await) so browsers don't block it.
+    // With noopener, window.open returns null, so we omit it here and set the URL after.
+    const popup = window.open("about:blank", "_blank", "width=620,height=720");
+
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-oauth-start`, {
         method: "POST",
@@ -912,10 +917,16 @@ export default function Dashboard() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.authUrl) {
+        popup?.close();
         throw new Error(payload.error || "Failed to start X OAuth");
       }
 
-      window.open(payload.authUrl, "_blank", "noopener,noreferrer");
+      if (popup && !popup.closed) {
+        popup.location.href = payload.authUrl;
+      } else {
+        window.open(payload.authUrl, "_blank");
+      }
+
       stopXPolling();
       const startedAt = Date.now();
       xPollRef.current = window.setInterval(async () => {
@@ -940,6 +951,7 @@ export default function Dashboard() {
         }
       }, 2000);
     } catch (error) {
+      popup?.close();
       console.error("x connect failed:", error);
       setXConnectLoading(false);
       toast({

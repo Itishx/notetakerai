@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { getXOAuthClient, basicAuthHeader } from "../_shared/x-oauth.ts";
+import { getEnvValue, getXOAuth2Credentials } from "../_shared/x-oauth.ts";
 
 type ScheduledXPost = {
   id: string;
@@ -15,23 +15,19 @@ async function refreshAccessToken(refreshToken: string): Promise<{
   expires_in?: number;
   scope?: string;
 } | null> {
-  let clientId: string, clientSecret: string;
-  try {
-    ({ clientId, clientSecret } = getXOAuthClient());
-  } catch {
-    return null;
-  }
+  const { clientId, clientSecret } = getXOAuth2Credentials();
 
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
     client_id: clientId,
   });
+  const basic = btoa(`${clientId}:${clientSecret}`);
   const res = await fetch("https://api.x.com/2/oauth2/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: basicAuthHeader(clientId, clientSecret),
+      Authorization: `Basic ${basic}`,
     },
     body: body.toString(),
   });
@@ -43,8 +39,8 @@ async function refreshAccessToken(refreshToken: string): Promise<{
 }
 
 serve(async () => {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseUrl = getEnvValue("SUPABASE_URL");
+  const serviceRoleKey = getEnvValue("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) return json({ error: "Missing Supabase configuration" }, 500);
 
   try {

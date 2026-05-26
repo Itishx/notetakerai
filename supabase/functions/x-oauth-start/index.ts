@@ -1,12 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import {
-  getXOAuthClient,
-  getXCallbackUrl,
-  randomUrlSafe,
-  pkceChallenge,
-  X_SCOPES,
-} from "../_shared/x-oauth.ts";
+import { getEnvValue, getXCallbackUrl, getXOAuth2Credentials } from "../_shared/x-oauth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,57 +8,85 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+function base64UrlEncode(bytes: Uint8Array): string {
+  let str = "";
+  bytes.forEach((byte) => (str += String.fromCharCode(byte)));
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function randomString(length = 64): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return base64UrlEncode(bytes).slice(0, length);
+}
+
+async function sha256(input: string): Promise<Uint8Array> {
+  const data = new TextEncoder().encode(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return new Uint8Array(hashBuffer);
+}
+
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const userIdentifier: string | undefined = body?.userIdentifier;
+    const { userIdentifier } = await req.json();
     if (!userIdentifier) {
-      return json({ error: "userIdentifier required" }, 400);
+      return new Response(JSON.stringify({ error: "userIdentifier required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const { clientId } = getXOAuthClient();
+    const { clientId } = getXOAuth2Credentials();
     const redirectUri = getXCallbackUrl();
+    const supabaseUrl = getEnvValue("SUPABASE_URL");
+    const serviceRoleKey = getEnvValue("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error("Missing Supabase service role configuration");
+    }
 
-    const state = randomUrlSafe(24);
-    const codeVerifier = randomUrlSafe(48);
-    const codeChallenge = await pkceChallenge(codeVerifier);
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const state = randomString(32);
+    const codeVerifier = randomString(64);
+    const codeChallenge = base64UrlEncode(await sha256(codeVerifier));
 
-    // cleanup old states for this user
     await supabase.from("x_oauth_states").delete().eq("user_identifier", userIdentifier);
 
-    const { error: insertError } = await supabase
-      .from("x_oauth_states")
-      .insert({ state, code_verifier: codeVerifier, user_identifier: userIdentifier });
-    if (insertError) throw insertError;
+    const { error } = await supabase.from("x_oauth_states").insert({
+      user_identifier: userIdentifier,
+      state,
+      code_verifier: codeVerifier,
+    });
+    if (error) throw error;
 
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
       redirect_uri: redirectUri,
-      scope: X_SCOPES,
+      scope: "tweet.read tweet.write users.read offline.access",
       state,
       code_challenge: codeChallenge,
       code_challenge_method: "S256",
     });
 
-    const authUrl = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
-    console.log("[x-oauth-start] generated auth url", { redirectUri });
-    return json({ authUrl });
-  } catch (e) {
-    console.error("x-oauth-start error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
+    return new Response(
+      JSON.stringify({
+        authUrl: `https://twitter.com/i/oauth2/authorize?${params.toString()}`,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  } catch (error) {
+    console.error("x-oauth-start error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
-
-function json(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
