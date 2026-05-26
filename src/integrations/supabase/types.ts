@@ -229,99 +229,96 @@ export type Database = {
       }
       scheduled_x_posts: {
         Row: {
-          content: string
           created_at: string
-          error_message: string | null
+          error: string | null
           id: string
-          posted_at: string | null
+          posted_tweet_id: string | null
           scheduled_at: string
           status: string
+          text: string
           updated_at: string
           user_id: string
-          x_post_id: string | null
         }
         Insert: {
-          content: string
           created_at?: string
-          error_message?: string | null
+          error?: string | null
           id?: string
-          posted_at?: string | null
+          posted_tweet_id?: string | null
           scheduled_at: string
           status?: string
+          text: string
           updated_at?: string
           user_id: string
-          x_post_id?: string | null
         }
         Update: {
-          content?: string
           created_at?: string
-          error_message?: string | null
+          error?: string | null
           id?: string
-          posted_at?: string | null
+          posted_tweet_id?: string | null
           scheduled_at?: string
           status?: string
+          text?: string
           updated_at?: string
           user_id?: string
-          x_post_id?: string | null
         }
         Relationships: []
       }
       x_connections: {
         Row: {
           access_token: string
-          access_token_secret: string
           created_at: string
-          display_name: string | null
           id: string
+          refresh_token: string | null
+          scope: string | null
+          token_expires_at: string | null
           updated_at: string
           user_identifier: string
-          username: string | null
           x_user_id: string | null
+          x_username: string | null
         }
         Insert: {
           access_token: string
-          access_token_secret: string
           created_at?: string
-          display_name?: string | null
           id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_identifier: string
-          username?: string | null
           x_user_id?: string | null
+          x_username?: string | null
         }
         Update: {
           access_token?: string
-          access_token_secret?: string
           created_at?: string
-          display_name?: string | null
           id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_identifier?: string
-          username?: string | null
           x_user_id?: string | null
+          x_username?: string | null
         }
         Relationships: []
       }
-      x_oauth_request_tokens: {
+      x_oauth_states: {
         Row: {
+          code_verifier: string
           created_at: string
-          id: string
-          oauth_token: string
-          oauth_token_secret: string
+          state: string
           user_identifier: string
         }
         Insert: {
+          code_verifier: string
           created_at?: string
-          id?: string
-          oauth_token: string
-          oauth_token_secret: string
+          state: string
           user_identifier: string
         }
         Update: {
+          code_verifier?: string
           created_at?: string
-          id?: string
-          oauth_token?: string
-          oauth_token_secret?: string
+          state?: string
           user_identifier?: string
         }
         Relationships: []
