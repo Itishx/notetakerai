@@ -1,15 +1,28 @@
 const textEncoder = new TextEncoder();
+const denoEnv = (
+  globalThis as typeof globalThis & {
+    Deno?: {
+      env?: {
+        get(name: string): string | undefined;
+      };
+    };
+  }
+).Deno?.env;
+
+function readEnv(name: string): string | undefined {
+  return denoEnv?.get(name)?.trim();
+}
 
 function readFirstEnv(names: string[]): string | null {
   for (const name of names) {
-    const value = Deno.env.get(name)?.trim();
+    const value = readEnv(name);
     if (value) return value;
   }
   return null;
 }
 
 function requiredEnv(name: string): string {
-  const value = Deno.env.get(name)?.trim();
+  const value = readEnv(name);
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
@@ -111,7 +124,7 @@ export function getXConsumerCredentials() {
 
 export function getXCallbackUrl(): string {
   return (
-    readFirstEnv(["X_OAUTH_CALLBACK_URL", "X_REDIRECT_URI", "TWITTER_CALLBACK_URL"]) ||
+    readFirstEnv(["X_OAUTH_CALLBACK_URL", "TWITTER_CALLBACK_URL"]) ||
     `${requiredEnv("SUPABASE_URL")}/functions/v1/x-oauth-callback`
   );
 }
