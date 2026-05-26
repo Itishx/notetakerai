@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getXOAuthClient, basicAuthHeader } from "../_shared/x-oauth.ts";
 
 type ScheduledXPost = {
   id: string;
@@ -14,21 +15,23 @@ async function refreshAccessToken(refreshToken: string): Promise<{
   expires_in?: number;
   scope?: string;
 } | null> {
-  const clientId = Deno.env.get("X_CLIENT_ID");
-  const clientSecret = Deno.env.get("X_CLIENT_SECRET");
-  if (!clientId || !clientSecret) return null;
+  let clientId: string, clientSecret: string;
+  try {
+    ({ clientId, clientSecret } = getXOAuthClient());
+  } catch {
+    return null;
+  }
 
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
     client_id: clientId,
   });
-  const basic = btoa(`${clientId}:${clientSecret}`);
   const res = await fetch("https://api.x.com/2/oauth2/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${basic}`,
+      Authorization: basicAuthHeader(clientId, clientSecret),
     },
     body: body.toString(),
   });
