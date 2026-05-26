@@ -227,6 +227,102 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_x_posts: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          posted_tweet_id: string | null
+          scheduled_at: string
+          status: string
+          text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          posted_tweet_id?: string | null
+          scheduled_at: string
+          status?: string
+          text: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          posted_tweet_id?: string | null
+          scheduled_at?: string
+          status?: string
+          text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      x_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          id: string
+          refresh_token: string | null
+          scope: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_identifier: string
+          x_user_id: string | null
+          x_username: string | null
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier: string
+          x_user_id?: string | null
+          x_username?: string | null
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier?: string
+          x_user_id?: string | null
+          x_username?: string | null
+        }
+        Relationships: []
+      }
+      x_oauth_states: {
+        Row: {
+          code_verifier: string
+          created_at: string
+          state: string
+          user_identifier: string
+        }
+        Insert: {
+          code_verifier: string
+          created_at?: string
+          state: string
+          user_identifier: string
+        }
+        Update: {
+          code_verifier?: string
+          created_at?: string
+          state?: string
+          user_identifier?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
