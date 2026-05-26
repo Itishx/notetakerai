@@ -13,7 +13,17 @@ serve(async (req) => {
   }
 
   try {
-    const { userIdentifier } = await req.json();
+    let userIdentifier: string | undefined;
+    try {
+      if (req.method !== "GET") {
+        const body = await req.json().catch(() => ({}));
+        userIdentifier = body?.userIdentifier;
+      }
+    } catch { /* ignore */ }
+    if (!userIdentifier) {
+      const url = new URL(req.url);
+      userIdentifier = url.searchParams.get("userIdentifier") ?? undefined;
+    }
     if (!userIdentifier) {
       return new Response(JSON.stringify({ error: "userIdentifier required" }), {
         status: 400,
