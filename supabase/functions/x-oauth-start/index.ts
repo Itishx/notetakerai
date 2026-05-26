@@ -73,7 +73,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        authUrl: `https://twitter.com/i/oauth2/authorize?${params.toString()}`,
+        authUrl: `https://x.com/i/oauth2/authorize?${params.toString()}`,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
