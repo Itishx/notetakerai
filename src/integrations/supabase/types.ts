@@ -269,10 +269,12 @@ export type Database = {
       x_connections: {
         Row: {
           access_token: string
-          access_token_secret: string
           created_at: string
           display_name: string | null
           id: string
+          refresh_token: string | null
+          scope: string | null
+          token_expires_at: string | null
           updated_at: string
           user_identifier: string
           username: string | null
@@ -280,10 +282,12 @@ export type Database = {
         }
         Insert: {
           access_token: string
-          access_token_secret: string
           created_at?: string
           display_name?: string | null
           id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_identifier: string
           username?: string | null
@@ -291,10 +295,12 @@ export type Database = {
         }
         Update: {
           access_token?: string
-          access_token_secret?: string
           created_at?: string
           display_name?: string | null
           id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_identifier?: string
           username?: string | null
@@ -302,26 +308,23 @@ export type Database = {
         }
         Relationships: []
       }
-      x_oauth_request_tokens: {
+      x_oauth_states: {
         Row: {
+          code_verifier: string
           created_at: string
-          id: string
-          oauth_token: string
-          oauth_token_secret: string
+          state: string
           user_identifier: string
         }
         Insert: {
+          code_verifier: string
           created_at?: string
-          id?: string
-          oauth_token: string
-          oauth_token_secret: string
+          state: string
           user_identifier: string
         }
         Update: {
+          code_verifier?: string
           created_at?: string
-          id?: string
-          oauth_token?: string
-          oauth_token_secret?: string
+          state?: string
           user_identifier?: string
         }
         Relationships: []
