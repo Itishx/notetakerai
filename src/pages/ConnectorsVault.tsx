@@ -20,7 +20,8 @@ const sharedGoogleFields: VaultField[] = [
   { label: "Google Cloud project name", valueHint: "Braino Workspace" },
   { label: "OAuth client type", valueHint: "Web application" },
   { label: "Authorized JavaScript origins", valueHint: "https://trybraino.com, https://www.trybraino.com, localhost dev origins" },
-  { label: "Primary redirect URI", valueHint: "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1/<provider-callback>" },
+  { label: "Supabase Auth callback URI", valueHint: "https://ovapacfrzddnhrwvkbkr.supabase.co/auth/v1/callback" },
+  { label: "Integration callback URIs", valueHint: "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1/<provider-callback>" },
 ];
 
 const sections: VaultSection[] = [

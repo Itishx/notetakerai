@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import {
   AssistantPageContext,
@@ -134,6 +135,16 @@ function getHostname(url: string) {
   } catch {
     return "";
   }
+}
+
+function isLikelyXCommand(text: string) {
+  return (
+    /\b(twitter|tweet|tweets)\b/i.test(text) ||
+    /\b(post|schedule|queue|dispatch|run|reply|publish)\b[\s\S]{0,40}\b(on|to)\s+x\b/i.test(text) ||
+    /\bmy x queue\b/i.test(text) ||
+    /\bx account\b/i.test(text) ||
+    /\b(on|to)\s+x\b/i.test(text)
+  );
 }
 
 function buildRequestId() {
@@ -353,6 +364,20 @@ export default function AssistantPanel() {
 
     const data = await response.json();
     return String(data.reply || "I couldn't put a reply together.");
+  }
+
+  async function runXAssistantReply(text: string) {
+    const { data, error } = await supabase.functions.invoke("x-assistant", {
+      body: {
+        message: text,
+        browserTime: new Date().toString(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+    });
+
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return String(data?.reply || "I couldn't execute that X request.");
   }
 
   async function runAgentReply(task: string) {
@@ -576,7 +601,11 @@ export default function AssistantPanel() {
     startBusyReply();
 
     try {
-      const reply = mode === "agent" ? await runAgentReply(taskText) : await sendPageReply(taskText);
+      const reply = isLikelyXCommand(taskText)
+        ? await runXAssistantReply(taskText)
+        : mode === "agent"
+        ? await runAgentReply(taskText)
+        : await sendPageReply(taskText);
       replaceBusyMessage(reply);
       if (shouldSpeakNextReplyRef.current) {
         postToHost("sidebrain:speak", { text: stripMarkdown(reply) });

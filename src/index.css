@@ -722,6 +722,24 @@
   .sb-cta-banner { padding: 48px 28px; }
 }
 
+/* Braino mascot chat animations */
+@keyframes brainoPillIn {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes brainoCardIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes brainoDot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+@keyframes brainoConfettiFall {
+  0%   { transform: translateY(0) rotateZ(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotateZ(720deg); opacity: 0; }
+}
+
 /* Legacy animations for other pages */
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(16px); }
