@@ -1409,9 +1409,56 @@ function saveChatMessages() {
   chrome.storage.local.set({ [key]: chatMessages });
 }
 
+function buildAgentTraceEl(msg, index) {
+  const stepCount = msg.steps?.length || 0;
+  const isComplete = msg.status === "complete";
+
+  const stepsHtml = (msg.steps || []).map((step, si) => {
+    const isActive = step.status === "running";
+    const isError = step.status === "error";
+    const iconCls = isActive ? "run" : isError ? "error" : "done";
+    const iconContent = isActive ? "" : isError ? "!" : "✓";
+    const subText = isActive ? (step.type === "error" ? "Blocked" : "Working…")
+      : isError ? (step.error || "This step failed.") : "Done";
+    return `<div class="trace-step${isActive ? " active" : ""} trace-step-${step.type || "step"}${isError ? " trace-step-error" : ""}" data-step-index="${si}">
+      <div class="ix">${String(si + 1).padStart(2, "0")}</div>
+      <div><div class="desc">${escapeHtml(step.text)}</div><div class="sub">${escapeHtml(subText)}</div></div>
+      <div class="ic ${iconCls}">${iconContent}</div>
+    </div>`;
+  }).join("");
+
+  const totalText = isComplete
+    ? `Completed · ${stepCount} step${stepCount !== 1 ? "s" : ""}`
+    : stepCount > 0 ? `${stepCount} step${stepCount !== 1 ? "s" : ""} in progress`
+    : "Starting…";
+
+  const el = document.createElement("div");
+  el.className = `agent-thinking-block${isComplete ? " agent-thinking-complete" : ""}`;
+  el.dataset.msgIndex = String(index);
+  el.dataset.stepCount = String(stepCount);
+  el.innerHTML = `
+    <div class="delegate-banner">
+      <div class="lbl"><span class="d"></span> Delegate${!isComplete ? " · running" : ""}</div>
+      <div class="what">${escapeHtml(msg.task || "")}</div>
+    </div>
+    <div class="agent-plan-head">Plan · live trace</div>
+    <div class="agent-thinking-steps trace">${stepsHtml}</div>
+    <div class="trace-total">
+      <span class="trace-total-text">${totalText}</span>
+      <span class="pill">DELEGATE</span>
+    </div>
+  `;
+  return el;
+}
+
 function renderChatMessages() {
   chatMessagesEl.innerHTML = "";
   chatMessages.forEach((msg, index) => {
+    if (msg.role === "agent-trace") {
+      chatMessagesEl.appendChild(buildAgentTraceEl(msg, index));
+      return;
+    }
+
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble chat-${msg.role}`;
 
@@ -1693,34 +1740,41 @@ function setAgentRunningUI(running) {
   refreshPanelChrome();
 }
 
-// ---- Agent thinking block (Claude-style collapsible) ----
+// ---- Agent thinking block — stored in chatMessages for persistence ----
 function createAgentThinkingBlock(task) {
-  const block = document.createElement("div");
-  block.className = "agent-thinking-block";
-  block.dataset.stepCount = "0";
-  block.innerHTML = `
-    <div class="delegate-banner">
-      <div class="lbl"><span class="d"></span> Delegate · running</div>
-      <div class="what">${escapeHtml(task)}</div>
-    </div>
-    <div class="agent-plan-head">Plan · live trace</div>
-    <div class="agent-thinking-steps trace"></div>
-    <div class="trace-total">
-      <span class="trace-total-text">Starting…</span>
-      <span class="pill">DELEGATE</span>
-    </div>
-  `;
-  chatMessagesEl.appendChild(block);
+  chatMessages.push({ role: "agent-trace", task, steps: [], status: "running" });
+  const msgIndex = chatMessages.length - 1;
+  saveChatMessages();
+  renderChatMessages();
   chatArea.scrollTop = chatArea.scrollHeight;
-  return block;
+  return chatMessagesEl.querySelector(`[data-msg-index="${msgIndex}"]`);
 }
 
 function agentAddStep(block, text, type = "step") {
-  const steps = block.querySelector(".agent-thinking-steps");
-  const stepCount = Number(block.dataset.stepCount || "0") + 1;
-  block.dataset.stepCount = String(stepCount);
+  const msgIndex = block ? Number(block.dataset.msgIndex) : -1;
+
+  let stepIndex;
+  if (msgIndex >= 0 && chatMessages[msgIndex]?.role === "agent-trace") {
+    const msg = chatMessages[msgIndex];
+    stepIndex = msg.steps.length;
+    msg.steps.push({ text, type, status: "running" });
+    saveChatMessages();
+  }
+
+  // Always use the live DOM element in case the block was re-rendered
+  const liveBlock = msgIndex >= 0
+    ? (chatMessagesEl.querySelector(`[data-msg-index="${msgIndex}"]`) || block)
+    : block;
+
+  if (!liveBlock) return null;
+
+  const stepCount = Number(liveBlock.dataset.stepCount || "0") + 1;
+  liveBlock.dataset.stepCount = String(stepCount);
+
   const line = document.createElement("div");
   line.className = `trace-step active trace-step-${type}`;
+  if (stepIndex !== undefined) line.dataset.stepIndex = String(stepIndex);
+  line._traceRef = { msgIndex, stepIndex };
   line.innerHTML = `
     <div class="ix">${String(stepCount).padStart(2, "0")}</div>
     <div>
@@ -1729,8 +1783,11 @@ function agentAddStep(block, text, type = "step") {
     </div>
     <div class="ic run"></div>
   `;
-  steps.appendChild(line);
-  const totalText = block.querySelector(".trace-total-text");
+
+  const steps = liveBlock.querySelector(".agent-thinking-steps");
+  if (steps) steps.appendChild(line);
+
+  const totalText = liveBlock.querySelector(".trace-total-text");
   if (totalText) totalText.textContent = `${stepCount} step${stepCount !== 1 ? "s" : ""} in progress`;
   chatArea.scrollTop = chatArea.scrollHeight;
   return line;
@@ -1738,25 +1795,57 @@ function agentAddStep(block, text, type = "step") {
 
 function agentMarkStepResult(stepEl, success, errorMsg) {
   if (!stepEl) return;
-  stepEl.classList.remove("active");
-  const icon = stepEl.querySelector(".ic");
-  const sub = stepEl.querySelector(".sub");
+
+  const ref = stepEl._traceRef;
+  if (ref?.msgIndex >= 0 && chatMessages[ref.msgIndex]?.steps?.[ref.stepIndex]) {
+    chatMessages[ref.msgIndex].steps[ref.stepIndex].status = success ? "done" : "error";
+    if (!success) chatMessages[ref.msgIndex].steps[ref.stepIndex].error = errorMsg || null;
+    saveChatMessages();
+  }
+
+  // Find the live step in case block was re-rendered
+  let target = stepEl;
+  if (ref?.msgIndex >= 0) {
+    const liveBlock = chatMessagesEl.querySelector(`[data-msg-index="${ref.msgIndex}"]`);
+    const liveStep = ref.stepIndex !== undefined
+      ? liveBlock?.querySelector(`[data-step-index="${ref.stepIndex}"]`)
+      : null;
+    if (liveStep) target = liveStep;
+  }
+
+  target.classList.remove("active");
+  const icon = target.querySelector(".ic");
+  const sub = target.querySelector(".sub");
   if (!success) {
-    stepEl.classList.add("trace-step-error");
-    if (icon) icon.className = "ic error";
-    if (icon) icon.innerHTML = "!";
+    target.classList.add("trace-step-error");
+    if (icon) { icon.className = "ic error"; icon.innerHTML = "!"; }
     if (sub) sub.textContent = errorMsg || "This step failed.";
   } else {
-    if (icon) icon.className = "ic done";
-    if (icon) icon.innerHTML = "✓";
+    if (icon) { icon.className = "ic done"; icon.innerHTML = "✓"; }
     if (sub) sub.textContent = "Done";
   }
 }
 
 function agentFinalizeBlock(block, stepCount) {
-  const totalText = block.querySelector(".trace-total-text");
+  const msgIndex = block ? Number(block.dataset.msgIndex) : -1;
+
+  if (msgIndex >= 0 && chatMessages[msgIndex]?.role === "agent-trace") {
+    chatMessages[msgIndex].status = "complete";
+    saveChatMessages();
+  }
+
+  const liveBlock = msgIndex >= 0
+    ? (chatMessagesEl.querySelector(`[data-msg-index="${msgIndex}"]`) || block)
+    : block;
+
+  if (!liveBlock) return;
+
+  const totalText = liveBlock.querySelector(".trace-total-text");
   if (totalText) totalText.textContent = `Completed · ${stepCount} step${stepCount !== 1 ? "s" : ""}`;
-  block.classList.add("agent-thinking-complete");
+  liveBlock.classList.add("agent-thinking-complete");
+
+  const lbl = liveBlock.querySelector(".delegate-banner .lbl");
+  if (lbl) lbl.innerHTML = `<span class="d"></span> Delegate`;
 }
 
 function getAgentPageContext() {
@@ -3370,7 +3459,11 @@ function runAgentLoopForVoice(task) {
             continue;
           }
         }
-        if (history.length === 0) thinkingBlock.remove();
+        if (history.length === 0) {
+          const _mi = Number(thinkingBlock?.dataset.msgIndex);
+          if (_mi >= 0 && chatMessages[_mi]?.role === "agent-trace") { chatMessages.splice(_mi, 1); saveChatMessages(); }
+          thinkingBlock?.remove();
+        }
         finish(first.message || "Done.");
         return;
       }
@@ -3533,7 +3626,11 @@ async function runAgentLoop(task) {
         }
       }
 
-      if (history.length === 0) thinkingBlock.remove();
+      if (history.length === 0) {
+        const _mi = Number(thinkingBlock?.dataset.msgIndex);
+        if (_mi >= 0 && chatMessages[_mi]?.role === "agent-trace") { chatMessages.splice(_mi, 1); saveChatMessages(); }
+        thinkingBlock?.remove();
+      }
       finish(firstAction.message || "Done.");
       return;
     }
@@ -4365,11 +4462,9 @@ async function runRemoteCommand(cmd, token) {
   await updateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
 
   // Show task in side panel chat (same as regular agent)
+  chatMessages.push({ role: "user", content: `📱 ${cmd.task}` });
+  saveChatMessages();
   updateEmptyState();
-  const remoteUserBubble = document.createElement("div");
-  remoteUserBubble.className = "chat-bubble chat-user";
-  remoteUserBubble.innerHTML = `<div class="chat-bubble-text">📱 ${cmd.task}</div>`;
-  chatMessagesEl.appendChild(remoteUserBubble);
   const remoteBlock = createAgentThinkingBlock(cmd.task);
   chatArea.scrollTop = chatArea.scrollHeight;
 
