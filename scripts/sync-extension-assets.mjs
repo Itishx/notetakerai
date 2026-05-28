@@ -11,6 +11,8 @@ const ELECTRON_FONTS_DIR = path.join(ELECTRON_RENDERER_DIR, "fonts");
 
 const EXTENSION_FILES = [
   "background.js",
+  "braino-popup.html",
+  "braino-popup.js",
   "content.js",
   "icon128.png",
   "icon48.png",

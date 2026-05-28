@@ -16,11 +16,12 @@ const BRAINO_ZIPS = [
 ];
 
 // JS files to minify (simple whitespace removal, no obfuscation — Chrome flags obfuscated code as malware)
-const JS_FILES = ["popup.js", "background.js", "offscreen.js", "content.js"];
+const JS_FILES = ["popup.js", "background.js", "offscreen.js", "content.js", "braino-popup.js"];
 
 // Files/folders to copy as-is
 const COPY_FILES = [
   "manifest.json",
+  "braino-popup.html",
   "sidepanel.html",
   "offscreen.html",
   "popup.html",

@@ -97,7 +97,7 @@ async function bgPerformRealWebSearch(query) {
 chrome.action.onClicked.addListener((tab) => {
   const url = tab.url || "";
   if (!bgIsScriptableUrl(url)) {
-    chrome.action.setPopup({ tabId: tab.id, popup: "sidepanel.html?ctx=popup" });
+    chrome.action.setPopup({ tabId: tab.id, popup: "braino-popup.html" });
     if (chrome.action.openPopup) chrome.action.openPopup().catch?.(() => {});
     return;
   }
@@ -634,7 +634,7 @@ function bgIsScriptableUrl(url) {
 // Pre-register the correct action popup for a tab so clicking the icon
 // always does the right thing without waiting for onClicked to fire.
 function bgSyncActionPopup(tabId, url) {
-  const popup = bgIsScriptableUrl(url) ? "" : "sidepanel.html?ctx=popup";
+  const popup = bgIsScriptableUrl(url) ? "" : "braino-popup.html";
   chrome.action.setPopup({ tabId, popup });
 }
 
