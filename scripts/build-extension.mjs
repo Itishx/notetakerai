@@ -9,8 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "extension");
 const DIST = path.join(ROOT, "dist-extension");
-const OUT_ZIP = path.join(ROOT, "public", "sidebrain-extension.zip");
-const BRAINO_ZIPS = [
+const ZIP_PATHS = [
   path.join(ROOT, "public", "braino-extension.zip"),
   path.join(ROOT, "dist", "braino-extension.zip"),
 ];
@@ -64,20 +63,20 @@ for (const dir of COPY_DIRS) {
 }
 
 // ── Zip ────────────────────────────────────────────────────────────────────
-fs.mkdirSync(path.dirname(OUT_ZIP), { recursive: true });
-const output = fs.createWriteStream(OUT_ZIP);
+const primaryZip = ZIP_PATHS[0];
+fs.mkdirSync(path.dirname(primaryZip), { recursive: true });
+const output = fs.createWriteStream(primaryZip);
 const archive = archiver("zip", { zlib: { level: 9 } });
 
 output.on("close", () => {
   const kb = (archive.pointer() / 1024).toFixed(1);
-  // Also copy to braino-extension.zip locations
-  for (const dest of BRAINO_ZIPS) {
+  for (const dest of ZIP_PATHS.slice(1)) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(OUT_ZIP, dest);
+    fs.copyFileSync(primaryZip, dest);
   }
   console.log(`\n  📦  braino-extension.zip → ${kb} KB`);
-  console.log(`      ${BRAINO_ZIPS[0]}`);
-  console.log(`      ${BRAINO_ZIPS[1]}\n`);
+  ZIP_PATHS.forEach(p => console.log(`      ${p}`));
+  console.log();
 });
 
 archive.on("error", (err) => { throw err; });

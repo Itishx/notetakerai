@@ -233,9 +233,9 @@ const NotionSync = () => {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button
             onClick={() => {
-              fetch("/sidebrain-extension.zip")
+              fetch("/braino-extension.zip")
                 .then((res) => { if (!res.ok) throw new Error(); return res.blob(); })
-                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "sidebrain-extension.zip"; a.click(); URL.revokeObjectURL(a.href); })
+                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "braino-extension.zip"; a.click(); URL.revokeObjectURL(a.href); })
                 .catch(() => alert("Extension not yet packaged. Please check back soon."));
             }}
             className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base"

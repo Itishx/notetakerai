@@ -169,7 +169,7 @@ export default function Premium() {
                 ))}
               </ul>
               <a
-                href="/sidebrain-extension.zip"
+                href="/braino-extension.zip"
                 download
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",
