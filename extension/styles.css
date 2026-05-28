@@ -208,6 +208,7 @@ button {
 
 /* Utility */
 .hidden { display: none !important; }
+.version-badge { font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--ink-3); letter-spacing: 0.04em; align-self: flex-end; margin-bottom: 1px; }
 
 /* =====================================================================
    APP SHELL
@@ -2097,6 +2098,14 @@ button {
 .voice-ctrl.voice-primary:hover { background: #2A2018; }
 .voice-ctrl.voice-danger { color: var(--bad); }
 .voice-spacer { flex: 1; }
+
+/* Headphone mode — only the glowing orb, everything else hidden */
+body.headphone-mode .shell-header { display: none !important; }
+body.headphone-mode .voice-caption-wrap { display: none !important; }
+body.headphone-mode .voice-controls { display: none !important; }
+body.headphone-mode .voice-stage { justify-content: center; }
+body.headphone-mode .voice-orb-wrap { padding: 0; cursor: pointer; }
+body.headphone-mode .voice-orb { width: 220px; height: 220px; }
 
 /* =====================================================================
    RECORDING CARD
