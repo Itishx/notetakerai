@@ -2547,6 +2547,7 @@ async function bgRefreshAuthToken() {
 // --- polling ---
 
 async function bgPollRemoteCommands() {
+  if (!navigator.onLine) return; // skip silently when offline
   const data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId", "remoteProcessingId"], r));
   if (!data.authUserId) {
     console.log("[BgRemoteAgent] Not logged in, skipping poll");
@@ -2600,7 +2601,8 @@ async function bgPollRemoteCommands() {
       bgRunRemoteCommand(cmd, token);
     }
   } catch (e) {
-    console.error("[BgRemoteAgent] Error:", e);
+    // Expected on network loss — warn only so Chrome error panel stays clean
+    console.warn("[BgRemoteAgent] Error:", e.message || e);
   }
 }
 
@@ -2619,9 +2621,12 @@ chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "remoteAgentPoll") bgPollRemoteCommands();
 });
-// Also poll + start realtime immediately on service worker startup
-bgPollRemoteCommands();
-bgStartRealtime();
+// Delay startup connections — gives the service worker time to settle
+// and avoids flooding the Chrome error panel on a cold start with a flaky network
+setTimeout(() => {
+  bgPollRemoteCommands();
+  bgStartRealtime();
+}, 2000);
 
 // ===== AUTH — onMessageExternal (backup, from website directly) =====
 chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
