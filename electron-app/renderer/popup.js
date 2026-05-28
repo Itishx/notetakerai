@@ -815,7 +815,7 @@ function finishOnboarding() {
 
 if (onboardingOverlay && onboardingNextBtn) {
   chrome.storage.local.get(["onboardingDone"], (data) => {
-    if (!data.onboardingDone) {
+    if (!data.onboardingDone && !SB_IS_POPUP) {
       onboardingOverlay.classList.remove("hidden");
     }
 

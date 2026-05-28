@@ -2717,35 +2717,62 @@ body.headphone-mode .voice-orb-wrap[data-state="processing"] .braino-icon { anim
 
 /* =====================================================================
    POPUP MODE — compact floating card, shown on restricted pages
-   Same UI as the sidepanel, compact dimensions, floating card feel.
+   Matches injected floating brain card: glassmorphic warm pill,
+   brain icon with glow, same palette as #__sb_bar__ / #__sb_pill__.
    Applied via body.sb-popup-mode when ?ctx=popup param is present.
    ===================================================================== */
 html.sb-popup-mode { background: transparent; }
 
 body.sb-popup-mode {
-  width: 384px;
-  height: 576px;
-  min-height: 576px;
-  max-height: 576px;
+  width: 380px;
+  height: 560px;
+  min-height: 560px;
+  max-height: 560px;
   overflow: hidden;
   background: transparent;
-  padding: 6px;
+  padding: 8px;
 }
 
 body.sb-popup-mode .app-shell {
-  height: calc(576px - 12px);
-  border-radius: 20px;
+  height: calc(560px - 16px);
+  border-radius: 22px;
   overflow: hidden;
-  background: var(--panel);
+  background: rgba(255, 251, 247, 0.97);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   box-shadow:
-    0 0 0 1px rgba(65, 48, 40, 0.10),
-    0 8px 32px rgba(27, 23, 19, 0.18),
-    0 24px 64px rgba(27, 23, 19, 0.14);
+    0 0 0 1px rgba(65, 48, 40, 0.09),
+    0 8px 28px rgba(27, 23, 19, 0.16),
+    0 24px 56px rgba(27, 23, 19, 0.13);
 }
 
 body.sb-popup-mode .shell-header {
-  border-radius: 20px 20px 0 0;
+  border-radius: 22px 22px 0 0;
+  padding: 10px 12px;
+  background: rgba(255, 251, 247, 0.99);
+  border-bottom: 1px solid rgba(65, 48, 40, 0.07);
+  backdrop-filter: none;
 }
+
+/* Orange dot hidden — brain icon takes its place */
+body.sb-popup-mode .shell-brand-mark { display: none !important; }
+
+/* Brain icon — hidden by default, shown only in popup mode */
+.sb-popup-brain-icon {
+  display: none;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 8px rgba(200, 84, 74, 0.38));
+  animation: sbPopupBrainIdle 3.8s ease-in-out infinite;
+}
+
+@keyframes sbPopupBrainIdle {
+  0%, 100% { filter: drop-shadow(0 2px 8px rgba(200, 84, 74, 0.28)); }
+  50%       { filter: drop-shadow(0 0 16px rgba(232, 120, 110, 0.9)) drop-shadow(0 0 32px rgba(200, 84, 74, 0.5)); }
+}
+
+body.sb-popup-mode .sb-popup-brain-icon { display: block; }
 
 /* Hide elements that don't apply in popup context */
 body.sb-popup-mode #closePanelBtn    { display: none !important; }
@@ -2766,8 +2793,8 @@ body.sb-popup-mode .mode-option[data-mode="agent"] {
   font-weight: 500;
   letter-spacing: 0.06em;
   color: var(--ink-4);
-  background: var(--bg-2);
-  border: 1px solid var(--line);
+  background: rgba(65, 48, 40, 0.06);
+  border: 1px solid rgba(65, 48, 40, 0.10);
   border-radius: 5px;
   padding: 2px 6px;
   white-space: nowrap;
