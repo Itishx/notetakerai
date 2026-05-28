@@ -3177,12 +3177,24 @@ const voiceCtxUrl       = document.getElementById("voiceCtxUrl");
 const voiceCtxFavicon   = document.getElementById("voiceCtxFavicon");
 const voiceCtxLiveTxt   = document.getElementById("voiceCtxLiveTxt");
 
-const CAP_LABELS = { listening: "Braino · Listening", processing: "Braino · Thinking", speaking: "Braino · Speaking", idle: "Braino · Ready", acting: "Braino · Acting" };
+const CAP_LABELS = { listening: "Braino · Listening", captured: "Braino · Got it", processing: "Braino · Thinking", speaking: "Braino · Speaking", idle: "Braino · Ready", acting: "Braino · Acting" };
 
 function setOrbState(state) {
   if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
   if (voiceOrb?.parentElement) voiceOrb.parentElement.dataset.state = state;
   if (voiceCapLabelTxt) voiceCapLabelTxt.textContent = CAP_LABELS[state] || state;
+  // Braino icon glow in headphone mode
+  const brainoEl = document.getElementById("brainoIcon");
+  if (brainoEl && headphoneMode) {
+    const animMap = {
+      listening:  "brainoGlowListen 1.4s ease-in-out infinite",
+      captured:   "brainoGlowCaptured 0.5s ease-in-out infinite",
+      speaking:   "brainoGlowSpeak 0.85s ease-in-out infinite",
+      processing: "brainoGlowProcess 1.2s ease-in-out infinite",
+      idle:       "brainoGlowIdle 3.8s ease-in-out infinite",
+    };
+    brainoEl.style.animation = animMap[state] || "brainoGlowIdle 3.8s ease-in-out infinite";
+  }
 }
 
 function updateVoicePageCtx() {
@@ -3342,8 +3354,14 @@ async function handleVoiceInput(text) {
   if (voiceHandlingToken !== myToken || !voiceActive) return;
   agentShouldStop = false;
 
-  setOrbState("processing");
+  // Flash "captured" (yellow) briefly before switching to processing
+  setOrbState("captured");
   if (voiceUserText) voiceUserText.textContent = text;
+  setCaption("");
+  await new Promise(r => setTimeout(r, 800));
+  if (voiceHandlingToken !== myToken || !voiceActive) return;
+
+  setOrbState("processing");
   setCaption("Thinking…");
 
   // Auto-route to agent if request sounds like a browser action
