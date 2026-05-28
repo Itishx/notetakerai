@@ -3408,39 +3408,50 @@ function __sbToggleInput(open, options = {}) {
         brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
       }
 
-      // Phase 2 (1200ms): yellow glow starts + REAL auth check fires simultaneously
+      // Phase 2 (1200ms): yellow glow + open silent auth tab in background
       setTimeout(() => {
         if (brainBtn) brainBtn.classList.add("sb-brain-auth");
         const tYellow = Date.now();
-        const minYellow = 600;
+        const minYellow = 800;
 
-        chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
+        chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
+
+        let resolved = false;
+
+        const goGreen = () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(fallbackTimer);
+          chrome.storage.onChanged.removeListener(authWatcher);
           const wait = Math.max(0, minYellow - (Date.now() - tYellow));
           setTimeout(() => {
-            if (!result?.authenticated) {
-              // Red glow
-              if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
-              setTimeout(() => {
-                if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
-                bar.classList.add("open", "sb-signin");
-                if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-                __sbSetupBarSignIn();
-              }, 700);
-              return;
-            }
-            // Green glow + eyes open
-            if (brainBtn) {
-              brainBtn.classList.remove("sb-brain-auth");
-              brainBtn.innerHTML = __SB_BRAIN_SVG;
-              brainBtn.classList.add("sb-brain-authed");
-            }
-            // 1100ms of green, then bar opens
+            if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.innerHTML = __SB_BRAIN_SVG; brainBtn.classList.add("sb-brain-authed"); }
             setTimeout(() => {
               if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
               __sbOpenBarReady();
             }, 1100);
           }, wait);
-        });
+        };
+
+        const goRed = () => {
+          if (resolved) return;
+          resolved = true;
+          chrome.storage.onChanged.removeListener(authWatcher);
+          if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
+          setTimeout(() => {
+            if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
+            bar.classList.add("open", "sb-signin");
+            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+            __sbSetupBarSignIn();
+          }, 700);
+        };
+
+        const authWatcher = (changes, area) => {
+          if (area === "local" && changes.authToken?.newValue) goGreen();
+        };
+        chrome.storage.onChanged.addListener(authWatcher);
+
+        const fallbackTimer = setTimeout(goRed, 6000);
       }, 1200);
     });
   } else {
