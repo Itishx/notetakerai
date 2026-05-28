@@ -374,6 +374,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (message.action === "openAuthTab") {
+    const extId = chrome.runtime.id;
+    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}` }, (tab) => {
+      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+    });
+    sendResponse({ ok: true });
+    return true;
+  }
   if (
     message.action === "agentAction" ||
     message.action === "getAgentPageContext" ||

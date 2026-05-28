@@ -1638,6 +1638,14 @@ const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
 
+const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
+  .replace('<circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
+    '<circle cx="38" cy="48" r="6.5" fill="white"/><path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/><circle cx="62" cy="48" r="6.5" fill="white"/><path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/>')
+  .replace('<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="28" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/><ellipse cx="72" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/>')
+  .replace('<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 46 62 Q 50 62 54 62" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>');
+
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
@@ -1703,6 +1711,14 @@ function __sbBuildBrainUI() {
     @keyframes __sb_pulse__ {
       0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5)); }
       50% { filter: drop-shadow(0 0 22px rgba(220,50,50,0.95)) drop-shadow(0 0 8px rgba(220,50,50,0.7)); }
+    }
+    @keyframes __sb_brain_glow__ {
+      0% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.4)); transform: scale(1); }
+      45% { filter: drop-shadow(0 0 28px rgba(246,168,162,1)) drop-shadow(0 0 50px rgba(200,84,74,0.6)); transform: scale(1.07); }
+      100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5)); transform: scale(1); }
+    }
+    #__sb_brain_btn__.sb-brain-waking {
+      animation: __sb_brain_glow__ 0.85s ease-out forwards;
     }
     #__sb_pill__ {
       display: flex; flex-direction: column;
@@ -3275,46 +3291,58 @@ function __sbToggleInput(open, options = {}) {
       return;
     }
 
-    // Open bar immediately in waking state
-    bar.classList.remove("sb-signin");
-    bar.classList.add("open", "sb-waking");
+    // Sleeping brain: closed eyes + glow, then eyes open after 280ms
+    const brainBtn = document.getElementById("__sb_brain_btn__");
+    if (brainBtn) {
+      brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
+      brainBtn.classList.add("sb-brain-waking");
+    }
 
-    // Reset and animate the loading bar to ~60%
-    const fill = document.getElementById("__sb_wakeup_fill__");
-    if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (fill) { fill.style.transition = "width 0.7s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "62%"; }
-    }));
-
-    // Auth check
-    chrome.storage.local.get("authToken", ({ authToken }) => {
-      if (!authToken) {
-        // Stop bar at ~35%, pause, then show sign-in CTA
-        if (fill) fill.style.width = "35%";
-        setTimeout(() => {
-          bar.classList.remove("sb-waking");
-          bar.classList.add("sb-signin");
-          if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-          __sbSetupBarSignIn();
-        }, 420);
-        return;
+    setTimeout(() => {
+      if (brainBtn) {
+        brainBtn.innerHTML = __SB_BRAIN_SVG;
+        brainBtn.classList.remove("sb-brain-waking");
       }
 
-      // Complete the bar then reveal the normal input
-      if (fill) { fill.style.transition = "width 0.35s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
-      setTimeout(() => {
-        bar.classList.remove("sb-waking");
-        __sbInputOpen = true;
-        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
-        __sbSetGreetingPlaceholder();
-        __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
-          const model = aiProvider === "claude" ? "claude" : "lovable";
-          document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
-            b.classList.toggle("selected", b.dataset.model === model));
-        });
-        if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
-      }, 520);
-    });
+      // Open bar in waking state
+      bar.classList.remove("sb-signin");
+      bar.classList.add("open", "sb-waking");
+
+      // Reset and animate the loading bar to ~60%
+      const fill = document.getElementById("__sb_wakeup_fill__");
+      if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (fill) { fill.style.transition = "width 0.7s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "62%"; }
+      }));
+
+      // Auth check
+      chrome.storage.local.get("authToken", ({ authToken }) => {
+        if (!authToken) {
+          if (fill) fill.style.width = "35%";
+          setTimeout(() => {
+            bar.classList.remove("sb-waking");
+            bar.classList.add("sb-signin");
+            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+            __sbSetupBarSignIn();
+          }, 420);
+          return;
+        }
+
+        if (fill) { fill.style.transition = "width 0.35s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
+        setTimeout(() => {
+          bar.classList.remove("sb-waking");
+          __sbInputOpen = true;
+          if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
+          __sbSetGreetingPlaceholder();
+          __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
+            const model = aiProvider === "claude" ? "claude" : "lovable";
+            document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
+              b.classList.toggle("selected", b.dataset.model === model));
+          });
+          if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+        }, 520);
+      });
+    }, 280);
   } else {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
@@ -3589,10 +3617,7 @@ function __sbSetupBarSignIn() {
   const btn = document.getElementById("__sb_signin_btn_cta__");
   if (!btn) return;
   btn.onclick = () => {
-    const extId = chrome.runtime.id;
-    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}` }, (tab) => {
-      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
-    });
+    chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
   };
 
   if (!__sbContextOk()) return;
@@ -3601,27 +3626,22 @@ function __sbSetupBarSignIn() {
     chrome.storage.onChanged.removeListener(handleAuthArrival);
     const bar = document.getElementById("__sb_bar__");
     if (!bar || !bar.classList.contains("open")) return;
-    const fill = document.getElementById("__sb_wakeup_fill__");
 
-    // Re-enter waking state and complete the bar
+    // Flash "Signed in!" then close bar — user clicks brain again to invoke
+    const label = document.getElementById("__sb_wakeup_label__");
+    const fill = document.getElementById("__sb_wakeup_fill__");
     bar.classList.remove("sb-signin");
     bar.classList.add("sb-waking");
-    if (fill) { fill.style.transition = "none"; fill.style.width = "30%"; }
+    if (label) label.textContent = "Signed in! ✓";
+    if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (fill) { fill.style.transition = "width 0.55s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
+      if (fill) { fill.style.transition = "width 0.5s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
     }));
     setTimeout(() => {
-      bar.classList.remove("sb-waking");
-      __sbInputOpen = true;
-      chrome.storage.local.set({ sbBrainExpanded: true });
-      __sbSetGreetingPlaceholder();
-      __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
-        const model = aiProvider === "claude" ? "claude" : "lovable";
-        document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
-          b.classList.toggle("selected", b.dataset.model === model));
-      });
-      setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
-    }, 680);
+      bar.classList.remove("sb-waking", "open");
+      if (label) label.textContent = "Waking up…";
+      chrome.storage.local.set({ sbBrainExpanded: false });
+    }, 900);
   };
   chrome.storage.onChanged.addListener(handleAuthArrival);
 }
@@ -3637,10 +3657,7 @@ function __sbShowSignIn() {
   __sbOpenCard({ rich: false });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   document.getElementById("__sb_signin_btn__")?.addEventListener("click", () => {
-    const extId = chrome.runtime.id;
-    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}` }, (tab) => {
-      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
-    });
+    chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
   });
   if (__sbContextOk()) {
     const handleStorageChange = (changes, area) => {
