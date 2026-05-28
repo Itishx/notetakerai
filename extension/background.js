@@ -2654,6 +2654,13 @@ function storeAuthData(data) {
     authEmail: data.email,
     authUserId: data.userId,
   });
+  // Auto-close the auth tab opened by the extension
+  chrome.storage.local.get("__sbAuthTabId", ({ __sbAuthTabId }) => {
+    if (typeof __sbAuthTabId === "number") {
+      chrome.tabs.remove(__sbAuthTabId, () => { void chrome.runtime.lastError; });
+      chrome.storage.local.remove("__sbAuthTabId");
+    }
+  });
   // Restart realtime with fresh credentials
   bgStartRealtime();
 }

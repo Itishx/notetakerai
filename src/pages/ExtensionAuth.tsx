@@ -96,9 +96,9 @@ const ExtensionAuth = () => {
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="text-center max-w-sm">
           <SideBrainLogo sizeClass="text-2xl" />
-          <h2 className="text-xl font-semibold mt-4 text-foreground">You're logged in!</h2>
-          <p className="text-muted-foreground mt-2">
-            You can close this tab and return to the SideBrain extension.
+          <h2 className="text-xl font-semibold mt-4 text-foreground">Signed in!</h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Returning to Braino…
           </p>
         </div>
       </div>

@@ -1968,6 +1968,60 @@ function __sbBuildBrainUI() {
       transition: opacity 0.22s cubic-bezier(0.34,1.2,0.64,1), transform 0.22s cubic-bezier(0.34,1.2,0.64,1);
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
+    /* ── Wake-up state ── */
+    #__sb_wakeup__ {
+      display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    }
+    #__sb_bar__.sb-waking #__sb_wakeup__ { display: flex; }
+    #__sb_bar__.sb-waking #__sb_input__,
+    #__sb_bar__.sb-waking #__sb_mode_btn__,
+    #__sb_bar__.sb-waking #__sb_rec_btn__,
+    #__sb_bar__.sb-waking #__sb_send_btn__,
+    #__sb_bar__.sb-waking #__sb_x_auto_btn__ { display: none !important; }
+    #__sb_wakeup_track__ {
+      flex: 1; height: 2px; background: rgba(65,48,40,0.12); border-radius: 99px; overflow: hidden;
+    }
+    #__sb_wakeup_fill__ {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #F6A8A2, #E8786E 60%, #C9544A);
+      border-radius: 99px; transition: width 0.55s cubic-bezier(0.4,0,0.2,1);
+    }
+    #__sb_wakeup_label__ {
+      font-size: 11.5px; color: #A79B92; white-space: nowrap; flex-shrink: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    @keyframes __sb_wu_pulse__ {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    #__sb_bar__.sb-waking #__sb_wakeup_label__ {
+      animation: __sb_wu_pulse__ 1.4s ease-in-out infinite;
+    }
+    /* ── Sign-in CTA state ── */
+    #__sb_signin_cta__ {
+      display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    }
+    #__sb_bar__.sb-signin #__sb_signin_cta__ { display: flex; }
+    #__sb_bar__.sb-signin #__sb_input__,
+    #__sb_bar__.sb-signin #__sb_mode_btn__,
+    #__sb_bar__.sb-signin #__sb_rec_btn__,
+    #__sb_bar__.sb-signin #__sb_send_btn__,
+    #__sb_bar__.sb-signin #__sb_x_auto_btn__,
+    #__sb_bar__.sb-signin #__sb_wakeup__ { display: none !important; }
+    #__sb_signin_cta_hint__ {
+      font-size: 12px; color: #A79B92; flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #__sb_signin_btn_cta__ {
+      white-space: nowrap; border: none; border-radius: 20px; flex-shrink: 0;
+      background: #E8786E; color: white; font-size: 12px; font-weight: 600;
+      padding: 6px 14px; cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      transition: background 0.15s;
+    }
+    #__sb_signin_btn_cta__:hover { background: #C9544A; }
+    #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
       font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
@@ -2141,6 +2195,14 @@ function __sbBuildBrainUI() {
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span id="__sb_x_auto_label__">X Auto</span>
       </button>
+      <div id="__sb_wakeup__">
+        <span id="__sb_wakeup_label__">Waking up…</span>
+        <div id="__sb_wakeup_track__"><div id="__sb_wakeup_fill__"></div></div>
+      </div>
+      <div id="__sb_signin_cta__">
+        <span id="__sb_signin_cta_hint__">Sign in to start chatting</span>
+        <button id="__sb_signin_btn_cta__">Sign in →</button>
+      </div>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
@@ -3197,31 +3259,67 @@ function __sbToggleInput(open, options = {}) {
       __sbShowBubble("Reload this page to reconnect Braino.", true, { tone: "status" });
       return;
     }
+
+    const bar = document.getElementById("__sb_bar__");
+    if (!bar) return;
+
+    // Skip the wakeup animation if already in a normal open state (e.g. card was visible)
+    const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+    if (cardOpen) {
+      chrome.storage.local.get("authToken", ({ authToken }) => {
+        if (!authToken) { __sbSetupBarSignIn(); return; }
+        __sbInputOpen = true;
+        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
+        __sbSetGreetingPlaceholder();
+      });
+      return;
+    }
+
+    // Open bar immediately in waking state
+    bar.classList.remove("sb-signin");
+    bar.classList.add("open", "sb-waking");
+
+    // Reset and animate the loading bar to ~60%
+    const fill = document.getElementById("__sb_wakeup_fill__");
+    if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (fill) { fill.style.transition = "width 0.7s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "62%"; }
+    }));
+
+    // Auth check
     chrome.storage.local.get("authToken", ({ authToken }) => {
       if (!authToken) {
-        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-        __sbShowSignIn();
+        // Stop bar at ~35%, pause, then show sign-in CTA
+        if (fill) fill.style.width = "35%";
+        setTimeout(() => {
+          bar.classList.remove("sb-waking");
+          bar.classList.add("sb-signin");
+          if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+          __sbSetupBarSignIn();
+        }, 420);
         return;
       }
-      __sbInputOpen = true;
-      if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
-      __sbSetGreetingPlaceholder(authToken);
-      __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
-        const model = aiProvider === "claude" ? "claude" : "lovable";
-        document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
-          b.classList.toggle("selected", b.dataset.model === model));
-      });
-      const bar = document.getElementById("__sb_bar__");
-      if (bar) {
-        const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
-        if (!cardOpen) bar.classList.add("open");
+
+      // Complete the bar then reveal the normal input
+      if (fill) { fill.style.transition = "width 0.35s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
+      setTimeout(() => {
+        bar.classList.remove("sb-waking");
+        __sbInputOpen = true;
+        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
+        __sbSetGreetingPlaceholder();
+        __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
+          const model = aiProvider === "claude" ? "claude" : "lovable";
+          document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
+            b.classList.toggle("selected", b.dataset.model === model));
+        });
         if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
-      }
+      }, 520);
     });
   } else {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
-    document.getElementById("__sb_bar__")?.classList.remove("open");
+    const bar = document.getElementById("__sb_bar__");
+    bar?.classList.remove("open", "sb-waking", "sb-signin");
   }
 }
 
@@ -3487,6 +3585,47 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
   if (autoHide) __sbBubbleTimer = setTimeout(() => __sbCollapseCard(), 8000);
 }
 
+function __sbSetupBarSignIn() {
+  const btn = document.getElementById("__sb_signin_btn_cta__");
+  if (!btn) return;
+  btn.onclick = () => {
+    const extId = chrome.runtime.id;
+    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}` }, (tab) => {
+      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+    });
+  };
+
+  if (!__sbContextOk()) return;
+  const handleAuthArrival = (changes, area) => {
+    if (area !== "local" || !changes.authToken?.newValue) return;
+    chrome.storage.onChanged.removeListener(handleAuthArrival);
+    const bar = document.getElementById("__sb_bar__");
+    if (!bar || !bar.classList.contains("open")) return;
+    const fill = document.getElementById("__sb_wakeup_fill__");
+
+    // Re-enter waking state and complete the bar
+    bar.classList.remove("sb-signin");
+    bar.classList.add("sb-waking");
+    if (fill) { fill.style.transition = "none"; fill.style.width = "30%"; }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (fill) { fill.style.transition = "width 0.55s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
+    }));
+    setTimeout(() => {
+      bar.classList.remove("sb-waking");
+      __sbInputOpen = true;
+      chrome.storage.local.set({ sbBrainExpanded: true });
+      __sbSetGreetingPlaceholder();
+      __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
+        const model = aiProvider === "claude" ? "claude" : "lovable";
+        document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
+          b.classList.toggle("selected", b.dataset.model === model));
+      });
+      setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+    }, 680);
+  };
+  chrome.storage.onChanged.addListener(handleAuthArrival);
+}
+
 function __sbShowSignIn() {
   if (!__sbOwnsInlineUi()) return;
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -3497,14 +3636,15 @@ function __sbShowSignIn() {
   `;
   __sbOpenCard({ rich: false });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-  let __sbSignInClicked = false;
   document.getElementById("__sb_signin_btn__")?.addEventListener("click", () => {
-    __sbSignInClicked = true;
-    window.open(chrome.runtime.getURL("sidepanel.html"), "_blank", "width=420,height=680,menubar=no,toolbar=no,resizable=no");
+    const extId = chrome.runtime.id;
+    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}` }, (tab) => {
+      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+    });
   });
   if (__sbContextOk()) {
     const handleStorageChange = (changes, area) => {
-      if (area === "local" && changes.authToken?.newValue && __sbSignInClicked) {
+      if (area === "local" && changes.authToken?.newValue) {
         chrome.storage.onChanged.removeListener(handleStorageChange);
         __sbCollapseCard();
         __sbShowBubble("You're signed in! Click the brain to chat.", true, { tone: "status", title: "Signed in" });

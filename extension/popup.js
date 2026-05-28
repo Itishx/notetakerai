@@ -4140,7 +4140,9 @@ updateAuthUI();
 
 loginBtn?.addEventListener("click", () => {
   const extId = chrome.runtime.id;
-  chrome.tabs.create({ url: `${WEBSITE_URL}/auth/extension?ext=${extId}` });
+  chrome.tabs.create({ url: `${WEBSITE_URL}/auth/extension?ext=${extId}` }, (tab) => {
+    if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+  });
 });
 
 logoutBtn?.addEventListener("click", () => {

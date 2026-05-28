@@ -3353,7 +3353,7 @@ async function handleVoiceInput(text) {
       chatMessages.push({ role: "user", content: text });
       chatMessages.push({ role: "assistant", content: reply });
       saveChatMessages();
-      renderChatMessages();
+      if (!headphoneMode) renderChatMessages();
     } else {
       // Use same rich context as sendChatMessage — notes + page context + chat history + mode
       const hasNotes = hasExistingNotes();
@@ -3382,7 +3382,7 @@ async function handleVoiceInput(text) {
       chatMessages.push({ role: "user", content: text });
       chatMessages.push({ role: "assistant", content: reply });
       saveChatMessages();
-      renderChatMessages();
+      if (!headphoneMode) renderChatMessages();
     }
 
     setOrbState("speaking");
@@ -4140,7 +4140,9 @@ updateAuthUI();
 
 loginBtn?.addEventListener("click", () => {
   const extId = chrome.runtime.id;
-  chrome.tabs.create({ url: `${WEBSITE_URL}/auth/extension?ext=${extId}` });
+  chrome.tabs.create({ url: `${WEBSITE_URL}/auth/extension?ext=${extId}` }, (tab) => {
+    if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+  });
 });
 
 logoutBtn?.addEventListener("click", () => {
