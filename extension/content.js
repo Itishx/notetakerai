@@ -1714,11 +1714,11 @@ function __sbBuildBrainUI() {
     }
     @keyframes __sb_brain_glow__ {
       0% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.4)); transform: scale(1); }
-      45% { filter: drop-shadow(0 0 28px rgba(246,168,162,1)) drop-shadow(0 0 50px rgba(200,84,74,0.6)); transform: scale(1.07); }
+      45% { filter: drop-shadow(0 0 32px rgba(246,168,162,1)) drop-shadow(0 0 60px rgba(200,84,74,0.65)); transform: scale(1.09); }
       100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5)); transform: scale(1); }
     }
     #__sb_brain_btn__.sb-brain-waking {
-      animation: __sb_brain_glow__ 0.85s ease-out forwards;
+      animation: __sb_brain_glow__ 1.4s ease-out forwards;
     }
     #__sb_pill__ {
       display: flex; flex-direction: column;
@@ -1981,7 +1981,7 @@ function __sbBuildBrainUI() {
       backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
       pointer-events: none; opacity: 0;
       transform: scaleX(0.55) translateY(4px); transform-origin: right center;
-      transition: opacity 0.22s cubic-bezier(0.34,1.2,0.64,1), transform 0.22s cubic-bezier(0.34,1.2,0.64,1);
+      transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1);
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
     /* ── Wake-up state ── */
@@ -3312,7 +3312,7 @@ function __sbToggleInput(open, options = {}) {
       const fill = document.getElementById("__sb_wakeup_fill__");
       if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (fill) { fill.style.transition = "width 0.7s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "62%"; }
+        if (fill) { fill.style.transition = "width 1.1s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "62%"; }
       }));
 
       // Auth check
@@ -3324,11 +3324,11 @@ function __sbToggleInput(open, options = {}) {
             bar.classList.add("sb-signin");
             if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
             __sbSetupBarSignIn();
-          }, 420);
+          }, 600);
           return;
         }
 
-        if (fill) { fill.style.transition = "width 0.35s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
+        if (fill) { fill.style.transition = "width 0.5s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
         setTimeout(() => {
           bar.classList.remove("sb-waking");
           __sbInputOpen = true;
@@ -3340,9 +3340,9 @@ function __sbToggleInput(open, options = {}) {
               b.classList.toggle("selected", b.dataset.model === model));
           });
           if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
-        }, 520);
+        }, 700);
       });
-    }, 280);
+    }, 600);
   } else {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
