@@ -2099,13 +2099,41 @@ button {
 .voice-ctrl.voice-danger { color: var(--bad); }
 .voice-spacer { flex: 1; }
 
-/* Headphone mode — only the glowing orb, everything else hidden */
+/* Headphone mode — only the glowing Braino icon, everything else hidden */
 body.headphone-mode .shell-header { display: none !important; }
 body.headphone-mode .voice-caption-wrap { display: none !important; }
 body.headphone-mode .voice-controls { display: none !important; }
 body.headphone-mode .voice-stage { justify-content: center; }
-body.headphone-mode .voice-orb-wrap { padding: 0; cursor: pointer; }
-body.headphone-mode .voice-orb { width: 220px; height: 220px; }
+body.headphone-mode .voice-orb-wrap { padding: 0; cursor: pointer; flex-direction: column; gap: 0; }
+body.headphone-mode .voice-orb { display: none !important; }
+body.headphone-mode .braino-icon { display: block !important; }
+
+.braino-icon {
+  width: 120px;
+  height: 120px;
+  border-radius: 28px;
+  animation: brainoGlowIdle 3.8s ease-in-out infinite;
+}
+body.headphone-mode .voice-orb-wrap[data-state="listening"] .braino-icon { animation: brainoGlowListen 1.4s ease-in-out infinite; }
+body.headphone-mode .voice-orb-wrap[data-state="speaking"] .braino-icon { animation: brainoGlowSpeak 0.9s ease-in-out infinite; }
+body.headphone-mode .voice-orb-wrap[data-state="processing"] .braino-icon { animation: brainoGlowProcess 1.2s ease-in-out infinite; }
+
+@keyframes brainoGlowIdle {
+  0%, 100% { filter: drop-shadow(0 0 18px rgba(243,154,66,0.45)) drop-shadow(0 0 6px rgba(243,154,66,0.2)); transform: scale(1); }
+  50%       { filter: drop-shadow(0 0 32px rgba(243,154,66,0.7)) drop-shadow(0 0 12px rgba(243,154,66,0.35)); transform: scale(1.03); }
+}
+@keyframes brainoGlowListen {
+  0%, 100% { filter: drop-shadow(0 0 24px rgba(243,154,66,0.8)) drop-shadow(0 0 8px rgba(243,154,66,0.4)); transform: scale(1); }
+  50%       { filter: drop-shadow(0 0 48px rgba(243,154,66,1))   drop-shadow(0 0 18px rgba(243,154,66,0.6)); transform: scale(1.06); }
+}
+@keyframes brainoGlowSpeak {
+  0%, 100% { filter: drop-shadow(0 0 20px rgba(100,180,255,0.7)) drop-shadow(0 0 8px rgba(100,180,255,0.3)); transform: scale(1.02); }
+  50%       { filter: drop-shadow(0 0 40px rgba(100,180,255,1))  drop-shadow(0 0 16px rgba(100,180,255,0.5)); transform: scale(1.07); }
+}
+@keyframes brainoGlowProcess {
+  0%, 100% { filter: drop-shadow(0 0 16px rgba(243,154,66,0.5)); transform: scale(1) rotate(0deg); opacity: 0.85; }
+  50%       { filter: drop-shadow(0 0 36px rgba(243,154,66,0.9)); transform: scale(1.04) rotate(2deg); opacity: 1; }
+}
 
 /* =====================================================================
    RECORDING CARD

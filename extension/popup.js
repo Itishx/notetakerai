@@ -3167,6 +3167,7 @@ const CAP_LABELS = { listening: "Braino · Listening", processing: "Braino · Th
 
 function setOrbState(state) {
   if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
+  if (voiceOrb?.parentElement) voiceOrb.parentElement.dataset.state = state;
   if (voiceCapLabelTxt) voiceCapLabelTxt.textContent = CAP_LABELS[state] || state;
 }
 
