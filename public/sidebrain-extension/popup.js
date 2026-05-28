@@ -57,6 +57,9 @@ const PANEL_ICON_SVGS = {
 };
 
 // ===== DOM REFS =====
+const versionBadge = document.getElementById("versionBadge");
+if (versionBadge) versionBadge.textContent = "v" + chrome.runtime.getManifest().version;
+
 const chatArea = document.getElementById("chatArea");
 const chatMessagesEl = document.getElementById("chatMessages");
 const chatInput = document.getElementById("chatInput");
@@ -3143,6 +3146,7 @@ async function speakText(text, onWordUpdate) {
 let voiceActive = false;
 let voiceTabId = null;
 let voiceMuted = false;
+let headphoneMode = false;
 
 const voiceOverlay      = document.getElementById("voiceOverlay");
 const voiceOrb          = document.getElementById("voiceOrb");
@@ -3163,6 +3167,7 @@ const CAP_LABELS = { listening: "Braino · Listening", processing: "Braino · Th
 
 function setOrbState(state) {
   if (voiceOrb) voiceOrb.className = `voice-orb ${state}`;
+  if (voiceOrb?.parentElement) voiceOrb.parentElement.dataset.state = state;
   if (voiceCapLabelTxt) voiceCapLabelTxt.textContent = CAP_LABELS[state] || state;
 }
 
@@ -3235,6 +3240,8 @@ async function openVoiceMode() {
 }
 
 async function closeVoiceMode() {
+  headphoneMode = false;
+  document.body.classList.remove("headphone-mode");
   voiceActive = false;
   stopCurrentTTS();
   voiceOverlay?.classList.add("hidden");
@@ -3242,6 +3249,16 @@ async function closeVoiceMode() {
   const tabId = voiceTabId || await getActiveTabId();
   voiceTabId = null;
   if (tabId) sendToContentScript(tabId, "stopVoiceListening");
+}
+
+function toggleHeadphoneMode() {
+  if (voiceActive) {
+    closeVoiceMode();
+  } else {
+    headphoneMode = true;
+    document.body.classList.add("headphone-mode");
+    openVoiceMode();
+  }
 }
 
 // Handle remote commands forwarded by background.js
@@ -3502,8 +3519,9 @@ function runAgentLoopForVoice(task) {
   });
 }
 
-voiceModeBtn?.addEventListener("click", openVoiceMode);
+voiceModeBtn?.addEventListener("click", toggleHeadphoneMode);
 voiceCloseBtn?.addEventListener("click", closeVoiceMode);
+voiceOrb?.addEventListener("click", () => { if (headphoneMode) closeVoiceMode(); });
 
 voiceInterruptBtn?.addEventListener("click", () => {
   stopCurrentTTS();
