@@ -2709,3 +2709,64 @@ body.headphone-mode .voice-orb-wrap[data-state="processing"] .braino-icon { anim
   letter-spacing: 3px;
   padding: 4px 0;
 }
+
+/* =====================================================================
+   POPUP MODE — compact floating card, shown on restricted pages
+   Same UI as the sidepanel, compact dimensions, floating card feel.
+   Applied via body.sb-popup-mode when ?ctx=popup param is present.
+   ===================================================================== */
+html.sb-popup-mode { background: transparent; }
+
+body.sb-popup-mode {
+  width: 384px;
+  height: 576px;
+  min-height: 576px;
+  max-height: 576px;
+  overflow: hidden;
+  background: transparent;
+  padding: 6px;
+}
+
+body.sb-popup-mode .app-shell {
+  height: calc(576px - 12px);
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow:
+    0 0 0 1px rgba(65, 48, 40, 0.10),
+    0 8px 32px rgba(27, 23, 19, 0.18),
+    0 24px 64px rgba(27, 23, 19, 0.14);
+}
+
+body.sb-popup-mode .shell-header {
+  border-radius: 20px 20px 0 0;
+}
+
+/* Hide elements that don't apply in popup context */
+body.sb-popup-mode #closePanelBtn    { display: none !important; }
+body.sb-popup-mode #pageContextChip  { display: none !important; }
+
+/* Page + agent modes require content script — visually disabled in popup */
+body.sb-popup-mode .mode-option[data-mode="page"],
+body.sb-popup-mode .mode-option[data-mode="agent"] {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Small "toolbar" label beside the brand — only shows in popup mode */
+.sb-popup-label {
+  display: none;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+body.sb-popup-mode .sb-popup-label { display: inline-flex; align-items: center; }

@@ -56,6 +56,17 @@ const PANEL_ICON_SVGS = {
   arrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>`,
 };
 
+// ===== POPUP-MODE DETECTION =====
+// When BRAINO is opened as an extension popup on a restricted page (chrome://,
+// chrome-extension://, Chrome Web Store, etc.) background.js registers
+// sidepanel.html?ctx=popup. We detect that here and apply the compact card
+// styling + disable modes that require a content script.
+const SB_IS_POPUP = new URLSearchParams(window.location.search).get("ctx") === "popup";
+if (SB_IS_POPUP) {
+  document.documentElement.classList.add("sb-popup-mode");
+  document.body.classList.add("sb-popup-mode");
+}
+
 // ===== DOM REFS =====
 const versionBadge = document.getElementById("versionBadge");
 if (versionBadge) versionBadge.textContent = "v" + chrome.runtime.getManifest().version;
@@ -858,9 +869,12 @@ modeOptions.forEach((opt) => {
   opt.addEventListener("click", () => setMode(opt.dataset.mode));
 });
 
-// Restore saved mode
+// Restore saved mode — in popup mode, page & agent need a content script so
+// fall back to general chat if the saved mode is one of those.
 chrome.storage.local.get("currentMode", (data) => {
-  setMode(data.currentMode || "page");
+  const saved = data.currentMode || "page";
+  const mode = SB_IS_POPUP && (saved === "page" || saved === "agent") ? "general" : saved;
+  setMode(mode);
 });
 
 
@@ -4140,7 +4154,9 @@ updateAuthUI();
 
 loginBtn?.addEventListener("click", () => {
   const extId = chrome.runtime.id;
-  chrome.tabs.create({ url: `${WEBSITE_URL}/auth/extension?ext=${extId}` });
+  chrome.tabs.create({ url: `${WEBSITE_URL}/auth/extension?ext=${extId}` }, (tab) => {
+    if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+  });
 });
 
 logoutBtn?.addEventListener("click", () => {

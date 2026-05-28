@@ -1638,10 +1638,21 @@ const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
 
+const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
+  .replace('<circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
+    '<circle cx="38" cy="48" r="6.5" fill="white"/><path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/><circle cx="62" cy="48" r="6.5" fill="white"/><path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/>')
+  .replace('<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="28" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/><ellipse cx="72" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/>')
+  .replace('<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 46 62 Q 50 62 54 62" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>');
+
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
 let __sbVoiceOnlyMode = false;
+let __sbHeadphoneMode = false;
+let __sbVoiceSilenceTimer = null;
+let __sbLastFinalTranscript = null;
 let __sbChatHistory = [];
 let __sbVoicePendingReply = false;
 let __sbIsSpeaking = false;
@@ -1703,6 +1714,20 @@ function __sbBuildBrainUI() {
     @keyframes __sb_pulse__ {
       0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5)); }
       50% { filter: drop-shadow(0 0 22px rgba(220,50,50,0.95)) drop-shadow(0 0 8px rgba(220,50,50,0.7)); }
+    }
+    @keyframes __sb_brain_glow_auth__ {
+      0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.3)); }
+      50% { filter: drop-shadow(0 0 30px rgba(255,210,50,1)) drop-shadow(0 0 55px rgba(255,175,0,0.65)); }
+    }
+    @keyframes __sb_brain_glow_authed__ {
+      0%, 100% { filter: drop-shadow(0 2px 12px rgba(40,180,70,0.4)); }
+      50% { filter: drop-shadow(0 0 32px rgba(80,230,110,1)) drop-shadow(0 0 60px rgba(40,180,70,0.7)); }
+    }
+    #__sb_brain_btn__.sb-brain-auth {
+      animation: __sb_brain_glow_auth__ 0.85s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-authed {
+      animation: __sb_brain_glow_authed__ 0.85s ease-in-out infinite;
     }
     #__sb_pill__ {
       display: flex; flex-direction: column;
@@ -1965,9 +1990,63 @@ function __sbBuildBrainUI() {
       backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
       pointer-events: none; opacity: 0;
       transform: scaleX(0.55) translateY(4px); transform-origin: right center;
-      transition: opacity 0.22s cubic-bezier(0.34,1.2,0.64,1), transform 0.22s cubic-bezier(0.34,1.2,0.64,1);
+      transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1);
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
+    /* ── Wake-up state ── */
+    #__sb_wakeup__ {
+      display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    }
+    #__sb_bar__.sb-waking #__sb_wakeup__ { display: flex; }
+    #__sb_bar__.sb-waking #__sb_input__,
+    #__sb_bar__.sb-waking #__sb_mode_btn__,
+    #__sb_bar__.sb-waking #__sb_rec_btn__,
+    #__sb_bar__.sb-waking #__sb_send_btn__,
+    #__sb_bar__.sb-waking #__sb_x_auto_btn__ { display: none !important; }
+    #__sb_wakeup_track__ {
+      flex: 1; height: 2px; background: rgba(65,48,40,0.12); border-radius: 99px; overflow: hidden;
+    }
+    #__sb_wakeup_fill__ {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #F6A8A2, #E8786E 60%, #C9544A);
+      border-radius: 99px; transition: width 0.55s cubic-bezier(0.4,0,0.2,1);
+    }
+    #__sb_wakeup_label__ {
+      font-size: 11.5px; color: #A79B92; white-space: nowrap; flex-shrink: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    @keyframes __sb_wu_pulse__ {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    #__sb_bar__.sb-waking #__sb_wakeup_label__ {
+      animation: __sb_wu_pulse__ 1.4s ease-in-out infinite;
+    }
+    /* ── Sign-in CTA state ── */
+    #__sb_signin_cta__ {
+      display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    }
+    #__sb_bar__.sb-signin #__sb_signin_cta__ { display: flex; }
+    #__sb_bar__.sb-signin #__sb_input__,
+    #__sb_bar__.sb-signin #__sb_mode_btn__,
+    #__sb_bar__.sb-signin #__sb_rec_btn__,
+    #__sb_bar__.sb-signin #__sb_send_btn__,
+    #__sb_bar__.sb-signin #__sb_x_auto_btn__,
+    #__sb_bar__.sb-signin #__sb_wakeup__ { display: none !important; }
+    #__sb_signin_cta_hint__ {
+      font-size: 12px; color: #A79B92; flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #__sb_signin_btn_cta__ {
+      white-space: nowrap; border: none; border-radius: 20px; flex-shrink: 0;
+      background: #E8786E; color: white; font-size: 12px; font-weight: 600;
+      padding: 6px 14px; cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      transition: background 0.15s;
+    }
+    #__sb_signin_btn_cta__:hover { background: #C9544A; }
+    #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
       font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
@@ -2119,6 +2198,38 @@ function __sbBuildBrainUI() {
       border-top: 1px solid var(--sb-rec-border);
     }
     #__sb_rec_bar__.active { display: flex; }
+
+    /* ── Headphone Mode Brain Glows ── */
+    @keyframes __sb_hp_listen__ {
+      0%,100% { filter: drop-shadow(0 0 20px rgba(210,40,40,0.75)) drop-shadow(0 0 7px rgba(210,40,40,0.5)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 44px rgba(220,40,40,1))    drop-shadow(0 0 16px rgba(220,40,40,0.7)); transform: scale(1.08); }
+    }
+    @keyframes __sb_hp_captured__ {
+      0%,100% { filter: drop-shadow(0 0 24px rgba(255,195,0,0.9)) drop-shadow(0 0 10px rgba(255,170,0,0.6)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 52px rgba(255,215,0,1))   drop-shadow(0 0 22px rgba(255,185,0,0.8)); transform: scale(1.1); }
+    }
+    @keyframes __sb_hp_speak__ {
+      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
+      50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
+    }
+    #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+
+    /* ── Voice Error Pill ── */
+    #__sb_voice_error_pill__ {
+      position: fixed; bottom: 84px; right: 20px; z-index: 2147483649;
+      background: #DC2626; color: #fff;
+      padding: 10px 16px; border-radius: 999px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px; font-weight: 500;
+      box-shadow: 0 4px 18px rgba(220,38,38,0.45);
+      max-width: calc(100vw - 48px);
+      opacity: 0; transform: translateY(8px) scale(0.97);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+    }
+    #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
   `;
   document.head.appendChild(style);
 
@@ -2131,8 +2242,8 @@ function __sbBuildBrainUI() {
         <span id="__sb_mode_label__">⚡ Auto</span>
         <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
       </button>
-      <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Voice">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Headphone mode">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
       </button>
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
@@ -2141,6 +2252,14 @@ function __sbBuildBrainUI() {
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span id="__sb_x_auto_label__">X Auto</span>
       </button>
+      <div id="__sb_wakeup__">
+        <span id="__sb_wakeup_label__">Waking up…</span>
+        <div id="__sb_wakeup_track__"><div id="__sb_wakeup_fill__"></div></div>
+      </div>
+      <div id="__sb_signin_cta__">
+        <span id="__sb_signin_cta_hint__">Sign in to start chatting</span>
+        <button id="__sb_signin_btn_cta__">Sign in →</button>
+      </div>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
@@ -2165,10 +2284,7 @@ function __sbBuildBrainUI() {
           <span id="__sb_card_mode_label__">⚡ Auto</span>
           <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
         </button>
-        <button id="__sb_card_rec_btn__" class="sb-card-foot-btn" title="Voice">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-        </button>
-        <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Voice-only mode">
+        <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Headphone mode">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
         </button>
         <button id="__sb_card_send__" class="sb-card-foot-btn" title="Send">
@@ -2186,6 +2302,11 @@ function __sbBuildBrainUI() {
     </div>
   `;
   document.body.appendChild(cardWrap);
+
+  // ── Voice Error Pill ──
+  const errPill = document.createElement("div");
+  errPill.id = "__sb_voice_error_pill__";
+  document.body.appendChild(errPill);
 
   // ── Dropdowns (body-level to avoid stacking context issues) ──
   const modeDd = document.createElement("div");
@@ -2229,7 +2350,14 @@ function __sbBuildBrainUI() {
 
   // Brain hidden by default
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
+  document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
+    if (__sbHeadphoneMode && !__sbInputOpen) {
+      // Open bar so user can stop headphone mode via the headphone button
+      __sbToggleInput(true);
+    } else {
+      __sbToggleInput(!__sbInputOpen);
+    }
+  });
 
   // ⌘I / Ctrl+I — toggle brain
   document.addEventListener("keydown", (e) => {
@@ -2243,7 +2371,7 @@ function __sbBuildBrainUI() {
 
   // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
-  document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
+  document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleHeadphoneMode);
 
   // X Auto button — show only on X/Twitter
   const xAutoBtn = document.getElementById("__sb_x_auto_btn__");
@@ -2252,12 +2380,9 @@ function __sbBuildBrainUI() {
 
   // Card footer buttons
   document.getElementById("__sb_card_send__").addEventListener("click", __sbSendMessage);
-  document.getElementById("__sb_card_rec_btn__").addEventListener("click", __sbToggleRecording);
   document.getElementById("__sb_card_collapse__").addEventListener("click", __sbCollapseCard);
-  document.getElementById("__sb_card_voice_mode_btn__").addEventListener("click", () => {
-    __sbVoiceOnlyMode = !__sbVoiceOnlyMode;
-    document.getElementById("__sb_card_voice_mode_btn__").classList.toggle("active", __sbVoiceOnlyMode);
-  });
+  document.getElementById("__sb_card_voice_mode_btn__").addEventListener("click", __sbToggleHeadphoneMode);
+
   document.getElementById("__sb_capture_btn__").addEventListener("click", () => void __sbCaptureLectureSegment());
   document.getElementById("__sb_rec_stop_btn__").addEventListener("click", () => void __sbStopLectureRecording());
 
@@ -3197,31 +3322,93 @@ function __sbToggleInput(open, options = {}) {
       __sbShowBubble("Reload this page to reconnect Braino.", true, { tone: "status" });
       return;
     }
-    chrome.storage.local.get("authToken", ({ authToken }) => {
-      if (!authToken) {
-        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-        __sbShowSignIn();
-        return;
-      }
+
+    const bar = document.getElementById("__sb_bar__");
+    if (!bar) return;
+
+    // Skip the wakeup animation if already in a normal open state (e.g. card was visible)
+    const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+    if (cardOpen) {
+      chrome.storage.local.get("authToken", ({ authToken }) => {
+        if (!authToken) { __sbSetupBarSignIn(); return; }
+        __sbInputOpen = true;
+        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
+        __sbSetGreetingPlaceholder();
+      });
+      return;
+    }
+
+    const brainBtn = document.getElementById("__sb_brain_btn__");
+
+    const __sbOpenBarReady = () => {
+      bar.classList.remove("sb-signin", "sb-waking");
+      bar.classList.add("open");
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
-      __sbSetGreetingPlaceholder(authToken);
+      __sbSetGreetingPlaceholder();
       __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
         const model = aiProvider === "claude" ? "claude" : "lovable";
         document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
           b.classList.toggle("selected", b.dataset.model === model));
       });
-      const bar = document.getElementById("__sb_bar__");
-      if (bar) {
-        const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
-        if (!cardOpen) bar.classList.add("open");
-        if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+      if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+    };
+
+    chrome.storage.local.get(["sbHasAwoken", "authToken"], ({ sbHasAwoken, authToken }) => {
+      if (sbHasAwoken) {
+        // Fast path — cinematic played before, open bar directly
+        if (!authToken) {
+          bar.classList.add("open", "sb-signin");
+          __sbSetupBarSignIn();
+          return;
+        }
+        __sbOpenBarReady();
+        return;
       }
+
+      // First-ever open: cinematic wakeup
+      chrome.storage.local.set({ sbHasAwoken: true });
+
+      // Phase 1 (0–1200ms): sleeping, silent
+      if (brainBtn) {
+        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed");
+        brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
+      }
+
+      // Phase 2 (1200ms): yellow glow = authenticating
+      setTimeout(() => {
+        if (brainBtn) brainBtn.classList.add("sb-brain-auth");
+      }, 1200);
+
+      // Phase 3 (2100ms): evaluate auth result
+      setTimeout(() => {
+        if (!authToken) {
+          if (brainBtn) brainBtn.classList.remove("sb-brain-auth");
+          bar.classList.add("open", "sb-signin");
+          if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+          __sbSetupBarSignIn();
+          return;
+        }
+
+        // Green glow + eyes open
+        if (brainBtn) {
+          brainBtn.classList.remove("sb-brain-auth");
+          brainBtn.innerHTML = __SB_BRAIN_SVG;
+          brainBtn.classList.add("sb-brain-authed");
+        }
+
+        // Phase 4 (2100+1100ms): open bar
+        setTimeout(() => {
+          if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
+          __sbOpenBarReady();
+        }, 1100);
+      }, 2100);
     });
   } else {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
-    document.getElementById("__sb_bar__")?.classList.remove("open");
+    const bar = document.getElementById("__sb_bar__");
+    bar?.classList.remove("open", "sb-waking", "sb-signin");
   }
 }
 
@@ -3400,6 +3587,7 @@ function __sbSpeakWithBrowser(text) {
     __sbIsSpeaking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
+    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
 
     const finish = () => {
       if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
@@ -3444,6 +3632,7 @@ async function __sbSpeakText(text) {
     __sbIsSpeaking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
+    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
 
     await new Promise((resolve, reject) => {
       audio.onended = resolve;
@@ -3465,6 +3654,11 @@ async function __sbSpeakText(text) {
     __sbIsSpeaking = false;
     __sbSetVoiceButtonState(__sbIsRecording);
     __sbSyncSpeakButtons();
+    // After speaking ends in headphone mode, go back to listening
+    if (__sbHeadphoneMode && !__sbVoicePendingReply) {
+      __sbSetHpBrainState("listening");
+      __sbSetHpStatus("Listening…");
+    }
   }
   return spoke;
 }
@@ -3487,6 +3681,39 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
   if (autoHide) __sbBubbleTimer = setTimeout(() => __sbCollapseCard(), 8000);
 }
 
+function __sbSetupBarSignIn() {
+  const btn = document.getElementById("__sb_signin_btn_cta__");
+  if (!btn) return;
+  btn.onclick = () => {
+    chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
+  };
+
+  if (!__sbContextOk()) return;
+  const handleAuthArrival = (changes, area) => {
+    if (area !== "local" || !changes.authToken?.newValue) return;
+    chrome.storage.onChanged.removeListener(handleAuthArrival);
+    const bar = document.getElementById("__sb_bar__");
+    if (!bar || !bar.classList.contains("open")) return;
+
+    // Flash "Signed in!" then close bar — user clicks brain again to invoke
+    const label = document.getElementById("__sb_wakeup_label__");
+    const fill = document.getElementById("__sb_wakeup_fill__");
+    bar.classList.remove("sb-signin");
+    bar.classList.add("sb-waking");
+    if (label) label.textContent = "Signed in! ✓";
+    if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (fill) { fill.style.transition = "width 0.5s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
+    }));
+    setTimeout(() => {
+      bar.classList.remove("sb-waking", "open");
+      if (label) label.textContent = "Waking up…";
+      chrome.storage.local.set({ sbBrainExpanded: false });
+    }, 900);
+  };
+  chrome.storage.onChanged.addListener(handleAuthArrival);
+}
+
 function __sbShowSignIn() {
   if (!__sbOwnsInlineUi()) return;
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -3497,14 +3724,12 @@ function __sbShowSignIn() {
   `;
   __sbOpenCard({ rich: false });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-  let __sbSignInClicked = false;
   document.getElementById("__sb_signin_btn__")?.addEventListener("click", () => {
-    __sbSignInClicked = true;
-    window.open(chrome.runtime.getURL("sidepanel.html"), "_blank", "width=420,height=680,menubar=no,toolbar=no,resizable=no");
+    chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
   });
   if (__sbContextOk()) {
     const handleStorageChange = (changes, area) => {
-      if (area === "local" && changes.authToken?.newValue && __sbSignInClicked) {
+      if (area === "local" && changes.authToken?.newValue) {
         chrome.storage.onChanged.removeListener(handleStorageChange);
         __sbCollapseCard();
         __sbShowBubble("You're signed in! Click the brain to chat.", true, { tone: "status", title: "Signed in" });
@@ -3752,10 +3977,22 @@ async function __sbProcessPrompt(text, options = {}) {
       if (fromVoice) await __sbSpeakText(reply);
     }
   } catch (err) {
-    __sbShowBubble("Error: " + (err.message || "couldn't reach Braino"), true);
+    if (__sbHeadphoneMode) {
+      __sbShowVoiceError("Something went wrong — try again.");
+    } else {
+      __sbShowBubble("Error: " + (err.message || "couldn't reach Braino"), true);
+    }
     if (fromVoice) await __sbSpeakText("Something went wrong.");
   } finally {
-    if (fromVoice) __sbVoicePendingReply = false;
+    if (fromVoice) {
+      __sbVoicePendingReply = false;
+      // Restart listening in headphone mode after reply is done
+      if (__sbHeadphoneMode) {
+        __sbSetHpBrainState("listening");
+        __sbSetHpStatus("Listening…");
+        void __sbStartRecording();
+      }
+    }
   }
 }
 
@@ -3941,6 +4178,67 @@ async function __sbSyncNotesToNotion() {
   }
 }
 
+// ── Headphone Mode ──────────────────────────────────────────────────────────
+
+function __sbToggleHeadphoneMode() {
+  if (__sbHeadphoneMode) {
+    __sbExitHeadphoneMode();
+  } else {
+    __sbEnterHeadphoneMode();
+  }
+}
+
+function __sbEnterHeadphoneMode() {
+  __sbHeadphoneMode = true;
+  __sbVoiceOnlyMode = true;
+
+  // Close bar, keep the brain button visible as the only UI
+  __sbToggleInput(false);
+  __sbCollapseCard();
+
+  // Mark headphone btn active in case bar reopens
+  document.getElementById("__sb_rec_btn__")?.classList.add("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+
+  // Start with listening glow on the brain
+  __sbSetHpBrainState("listening");
+  void __sbStartRecording();
+}
+
+function __sbExitHeadphoneMode() {
+  __sbHeadphoneMode = false;
+  __sbVoiceOnlyMode = false;
+
+  if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+  __sbLastFinalTranscript = null;
+
+  if (__sbIsRecording) __sbStopRecording({ silent: true });
+  __sbStopSpeech();
+
+  __sbSetHpBrainState("");
+
+  document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
+}
+
+// state: "listening" | "captured" | "speaking" | ""
+function __sbSetHpBrainState(state) {
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (!brain) return;
+  brain.classList.remove("hp-listening", "hp-captured", "hp-speaking", "recording");
+  if (state) brain.classList.add(`hp-${state}`);
+}
+
+function __sbShowVoiceError(msg) {
+  const pill = document.getElementById("__sb_voice_error_pill__");
+  if (!pill) return;
+  pill.textContent = msg;
+  pill.classList.add("visible");
+  setTimeout(() => pill.classList.remove("visible"), 4500);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 function __sbToggleRecording() {
   const mode = window.__sbForcedMode || "page";
   const isLectureMode = (mode === "lecture" || mode === "meeting");
@@ -4037,6 +4335,9 @@ function __sbHandleVoiceEvent(msg) {
   if (msg.event === "listening") {
     __sbIsRecording = true;
     __sbSetVoiceButtonState(true);
+    if (__sbHeadphoneMode) {
+      __sbSetHpBrainState("listening");
+    }
     return;
   }
 
@@ -4045,24 +4346,62 @@ function __sbHandleVoiceEvent(msg) {
     if (!transcript) return;
 
     if (!msg.isFinal) {
+      // Interim — user still speaking, cancel any pending final processing
+      if (__sbVoiceSilenceTimer) {
+        clearTimeout(__sbVoiceSilenceTimer);
+        __sbVoiceSilenceTimer = null;
+        __sbLastFinalTranscript = null;
+      }
       return;
     }
 
-    __sbVoicePendingReply = true;
-    __sbStopRecording({ silent: true });
-    if (input) input.value = "";
-    if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
-    void __sbProcessPrompt(transcript, { fromVoice: true });
+    // Final transcript — wait for silence before processing to avoid
+    // cutting off sentences that the engine split too early
+    __sbLastFinalTranscript = transcript;
+    if (__sbVoiceSilenceTimer) clearTimeout(__sbVoiceSilenceTimer);
+
+    __sbVoiceSilenceTimer = setTimeout(() => {
+      __sbVoiceSilenceTimer = null;
+      const toProcess = __sbLastFinalTranscript;
+      __sbLastFinalTranscript = null;
+      if (!toProcess || __sbVoicePendingReply) return;
+
+      // Flash yellow: capture acknowledged
+      if (__sbHeadphoneMode) {
+        __sbSetHpBrainState("captured");
+      }
+
+      __sbVoicePendingReply = true;
+      __sbStopRecording({ silent: true });
+      if (input) input.value = "";
+      if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
+      void __sbProcessPrompt(toProcess, { fromVoice: true });
+    }, 950);
     return;
   }
 
   if (msg.event === "error") {
     __sbVoicePendingReply = false;
+    if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+    __sbLastFinalTranscript = null;
     __sbStopRecording({ silent: true });
     const errorText = msg.error === "not-allowed"
       ? "Microphone access is blocked. Allow mic access and try again."
       : `Voice error: ${msg.error || "unknown error"}`;
-    __sbShowBubble(errorText, true, { tone: "status", title: "Voice" });
+    if (__sbHeadphoneMode) {
+      __sbSetHpBrainState("");
+      __sbSetHpStatus("Listening…");
+      __sbShowVoiceError(errorText);
+      // Retry listening after a short delay
+      setTimeout(() => {
+        if (__sbHeadphoneMode) {
+          __sbSetHpBrainState("listening");
+          void __sbStartRecording();
+        }
+      }, 2000);
+    } else {
+      __sbShowBubble(errorText, true, { tone: "status", title: "Voice" });
+    }
   }
 }
 

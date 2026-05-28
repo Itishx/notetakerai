@@ -1650,6 +1650,9 @@ let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
 let __sbVoiceOnlyMode = false;
+let __sbHeadphoneMode = false;
+let __sbVoiceSilenceTimer = null;
+let __sbLastFinalTranscript = null;
 let __sbChatHistory = [];
 let __sbVoicePendingReply = false;
 let __sbIsSpeaking = false;
@@ -2195,6 +2198,38 @@ function __sbBuildBrainUI() {
       border-top: 1px solid var(--sb-rec-border);
     }
     #__sb_rec_bar__.active { display: flex; }
+
+    /* ── Headphone Mode Brain Glows ── */
+    @keyframes __sb_hp_listen__ {
+      0%,100% { filter: drop-shadow(0 0 20px rgba(210,40,40,0.75)) drop-shadow(0 0 7px rgba(210,40,40,0.5)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 44px rgba(220,40,40,1))    drop-shadow(0 0 16px rgba(220,40,40,0.7)); transform: scale(1.08); }
+    }
+    @keyframes __sb_hp_captured__ {
+      0%,100% { filter: drop-shadow(0 0 24px rgba(255,195,0,0.9)) drop-shadow(0 0 10px rgba(255,170,0,0.6)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 52px rgba(255,215,0,1))   drop-shadow(0 0 22px rgba(255,185,0,0.8)); transform: scale(1.1); }
+    }
+    @keyframes __sb_hp_speak__ {
+      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
+      50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
+    }
+    #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+
+    /* ── Voice Error Pill ── */
+    #__sb_voice_error_pill__ {
+      position: fixed; bottom: 84px; right: 20px; z-index: 2147483649;
+      background: #DC2626; color: #fff;
+      padding: 10px 16px; border-radius: 999px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px; font-weight: 500;
+      box-shadow: 0 4px 18px rgba(220,38,38,0.45);
+      max-width: calc(100vw - 48px);
+      opacity: 0; transform: translateY(8px) scale(0.97);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+    }
+    #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
   `;
   document.head.appendChild(style);
 
@@ -2207,8 +2242,8 @@ function __sbBuildBrainUI() {
         <span id="__sb_mode_label__">⚡ Auto</span>
         <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
       </button>
-      <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Voice">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Headphone mode">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
       </button>
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
@@ -2249,10 +2284,7 @@ function __sbBuildBrainUI() {
           <span id="__sb_card_mode_label__">⚡ Auto</span>
           <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
         </button>
-        <button id="__sb_card_rec_btn__" class="sb-card-foot-btn" title="Voice">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-        </button>
-        <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Voice-only mode">
+        <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Headphone mode">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
         </button>
         <button id="__sb_card_send__" class="sb-card-foot-btn" title="Send">
@@ -2270,6 +2302,11 @@ function __sbBuildBrainUI() {
     </div>
   `;
   document.body.appendChild(cardWrap);
+
+  // ── Voice Error Pill ──
+  const errPill = document.createElement("div");
+  errPill.id = "__sb_voice_error_pill__";
+  document.body.appendChild(errPill);
 
   // ── Dropdowns (body-level to avoid stacking context issues) ──
   const modeDd = document.createElement("div");
@@ -2313,7 +2350,14 @@ function __sbBuildBrainUI() {
 
   // Brain hidden by default
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
+  document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
+    if (__sbHeadphoneMode && !__sbInputOpen) {
+      // Open bar so user can stop headphone mode via the headphone button
+      __sbToggleInput(true);
+    } else {
+      __sbToggleInput(!__sbInputOpen);
+    }
+  });
 
   // ⌘I / Ctrl+I — toggle brain
   document.addEventListener("keydown", (e) => {
@@ -2327,7 +2371,7 @@ function __sbBuildBrainUI() {
 
   // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
-  document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
+  document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleHeadphoneMode);
 
   // X Auto button — show only on X/Twitter
   const xAutoBtn = document.getElementById("__sb_x_auto_btn__");
@@ -2336,12 +2380,9 @@ function __sbBuildBrainUI() {
 
   // Card footer buttons
   document.getElementById("__sb_card_send__").addEventListener("click", __sbSendMessage);
-  document.getElementById("__sb_card_rec_btn__").addEventListener("click", __sbToggleRecording);
   document.getElementById("__sb_card_collapse__").addEventListener("click", __sbCollapseCard);
-  document.getElementById("__sb_card_voice_mode_btn__").addEventListener("click", () => {
-    __sbVoiceOnlyMode = !__sbVoiceOnlyMode;
-    document.getElementById("__sb_card_voice_mode_btn__").classList.toggle("active", __sbVoiceOnlyMode);
-  });
+  document.getElementById("__sb_card_voice_mode_btn__").addEventListener("click", __sbToggleHeadphoneMode);
+
   document.getElementById("__sb_capture_btn__").addEventListener("click", () => void __sbCaptureLectureSegment());
   document.getElementById("__sb_rec_stop_btn__").addEventListener("click", () => void __sbStopLectureRecording());
 
@@ -3546,6 +3587,7 @@ function __sbSpeakWithBrowser(text) {
     __sbIsSpeaking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
+    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
 
     const finish = () => {
       if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
@@ -3590,6 +3632,7 @@ async function __sbSpeakText(text) {
     __sbIsSpeaking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
+    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
 
     await new Promise((resolve, reject) => {
       audio.onended = resolve;
@@ -3611,6 +3654,11 @@ async function __sbSpeakText(text) {
     __sbIsSpeaking = false;
     __sbSetVoiceButtonState(__sbIsRecording);
     __sbSyncSpeakButtons();
+    // After speaking ends in headphone mode, go back to listening
+    if (__sbHeadphoneMode && !__sbVoicePendingReply) {
+      __sbSetHpBrainState("listening");
+      __sbSetHpStatus("Listening…");
+    }
   }
   return spoke;
 }
@@ -3929,10 +3977,22 @@ async function __sbProcessPrompt(text, options = {}) {
       if (fromVoice) await __sbSpeakText(reply);
     }
   } catch (err) {
-    __sbShowBubble("Error: " + (err.message || "couldn't reach Braino"), true);
+    if (__sbHeadphoneMode) {
+      __sbShowVoiceError("Something went wrong — try again.");
+    } else {
+      __sbShowBubble("Error: " + (err.message || "couldn't reach Braino"), true);
+    }
     if (fromVoice) await __sbSpeakText("Something went wrong.");
   } finally {
-    if (fromVoice) __sbVoicePendingReply = false;
+    if (fromVoice) {
+      __sbVoicePendingReply = false;
+      // Restart listening in headphone mode after reply is done
+      if (__sbHeadphoneMode) {
+        __sbSetHpBrainState("listening");
+        __sbSetHpStatus("Listening…");
+        void __sbStartRecording();
+      }
+    }
   }
 }
 
@@ -4118,6 +4178,67 @@ async function __sbSyncNotesToNotion() {
   }
 }
 
+// ── Headphone Mode ──────────────────────────────────────────────────────────
+
+function __sbToggleHeadphoneMode() {
+  if (__sbHeadphoneMode) {
+    __sbExitHeadphoneMode();
+  } else {
+    __sbEnterHeadphoneMode();
+  }
+}
+
+function __sbEnterHeadphoneMode() {
+  __sbHeadphoneMode = true;
+  __sbVoiceOnlyMode = true;
+
+  // Close bar, keep the brain button visible as the only UI
+  __sbToggleInput(false);
+  __sbCollapseCard();
+
+  // Mark headphone btn active in case bar reopens
+  document.getElementById("__sb_rec_btn__")?.classList.add("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+
+  // Start with listening glow on the brain
+  __sbSetHpBrainState("listening");
+  void __sbStartRecording();
+}
+
+function __sbExitHeadphoneMode() {
+  __sbHeadphoneMode = false;
+  __sbVoiceOnlyMode = false;
+
+  if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+  __sbLastFinalTranscript = null;
+
+  if (__sbIsRecording) __sbStopRecording({ silent: true });
+  __sbStopSpeech();
+
+  __sbSetHpBrainState("");
+
+  document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
+}
+
+// state: "listening" | "captured" | "speaking" | ""
+function __sbSetHpBrainState(state) {
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (!brain) return;
+  brain.classList.remove("hp-listening", "hp-captured", "hp-speaking", "recording");
+  if (state) brain.classList.add(`hp-${state}`);
+}
+
+function __sbShowVoiceError(msg) {
+  const pill = document.getElementById("__sb_voice_error_pill__");
+  if (!pill) return;
+  pill.textContent = msg;
+  pill.classList.add("visible");
+  setTimeout(() => pill.classList.remove("visible"), 4500);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 function __sbToggleRecording() {
   const mode = window.__sbForcedMode || "page";
   const isLectureMode = (mode === "lecture" || mode === "meeting");
@@ -4214,6 +4335,9 @@ function __sbHandleVoiceEvent(msg) {
   if (msg.event === "listening") {
     __sbIsRecording = true;
     __sbSetVoiceButtonState(true);
+    if (__sbHeadphoneMode) {
+      __sbSetHpBrainState("listening");
+    }
     return;
   }
 
@@ -4222,24 +4346,62 @@ function __sbHandleVoiceEvent(msg) {
     if (!transcript) return;
 
     if (!msg.isFinal) {
+      // Interim — user still speaking, cancel any pending final processing
+      if (__sbVoiceSilenceTimer) {
+        clearTimeout(__sbVoiceSilenceTimer);
+        __sbVoiceSilenceTimer = null;
+        __sbLastFinalTranscript = null;
+      }
       return;
     }
 
-    __sbVoicePendingReply = true;
-    __sbStopRecording({ silent: true });
-    if (input) input.value = "";
-    if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
-    void __sbProcessPrompt(transcript, { fromVoice: true });
+    // Final transcript — wait for silence before processing to avoid
+    // cutting off sentences that the engine split too early
+    __sbLastFinalTranscript = transcript;
+    if (__sbVoiceSilenceTimer) clearTimeout(__sbVoiceSilenceTimer);
+
+    __sbVoiceSilenceTimer = setTimeout(() => {
+      __sbVoiceSilenceTimer = null;
+      const toProcess = __sbLastFinalTranscript;
+      __sbLastFinalTranscript = null;
+      if (!toProcess || __sbVoicePendingReply) return;
+
+      // Flash yellow: capture acknowledged
+      if (__sbHeadphoneMode) {
+        __sbSetHpBrainState("captured");
+      }
+
+      __sbVoicePendingReply = true;
+      __sbStopRecording({ silent: true });
+      if (input) input.value = "";
+      if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
+      void __sbProcessPrompt(toProcess, { fromVoice: true });
+    }, 950);
     return;
   }
 
   if (msg.event === "error") {
     __sbVoicePendingReply = false;
+    if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+    __sbLastFinalTranscript = null;
     __sbStopRecording({ silent: true });
     const errorText = msg.error === "not-allowed"
       ? "Microphone access is blocked. Allow mic access and try again."
       : `Voice error: ${msg.error || "unknown error"}`;
-    __sbShowBubble(errorText, true, { tone: "status", title: "Voice" });
+    if (__sbHeadphoneMode) {
+      __sbSetHpBrainState("");
+      __sbSetHpStatus("Listening…");
+      __sbShowVoiceError(errorText);
+      // Retry listening after a short delay
+      setTimeout(() => {
+        if (__sbHeadphoneMode) {
+          __sbSetHpBrainState("listening");
+          void __sbStartRecording();
+        }
+      }, 2000);
+    } else {
+      __sbShowBubble(errorText, true, { tone: "status", title: "Voice" });
+    }
   }
 }
 

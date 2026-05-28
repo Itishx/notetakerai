@@ -90,11 +90,17 @@ async function bgPerformRealWebSearch(query) {
   }
 }
 
-// Toggle injected panel when extension icon is clicked
+// Toggle injected panel when extension icon is clicked.
+// For scriptable tabs this fires normally (no popup registered).
+// For restricted tabs the popup is pre-registered via bgSyncActionPopup so
+// onClicked never fires — but handle it here as a first-click safety net.
 chrome.action.onClicked.addListener((tab) => {
-  // Can't inject into chrome://, file://, or extension pages
   const url = tab.url || "";
-  if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) return;
+  if (!bgIsScriptableUrl(url)) {
+    chrome.action.setPopup({ tabId: tab.id, popup: "sidepanel.html?ctx=popup" });
+    if (chrome.action.openPopup) chrome.action.openPopup().catch?.(() => {});
+    return;
+  }
 
   chrome.storage.local.set({ activeTabId: tab.id });
 
@@ -126,9 +132,20 @@ chrome.action.onClicked.addListener((tab) => {
   sendToggle(true, true);
 });
 
-// Auto-update activeTabId when user switches tabs
+// Auto-update activeTabId and sync popup state when user switches tabs
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   chrome.storage.local.set({ activeTabId: tabId });
+  chrome.tabs.get(tabId, (tab) => {
+    if (chrome.runtime.lastError) return;
+    bgSyncActionPopup(tabId, tab?.url || "");
+  });
+});
+
+// Keep popup state in sync as tab URLs change (navigation, SPA, etc.)
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url !== undefined || changeInfo.status === "complete") {
+    bgSyncActionPopup(tabId, tab?.url || "");
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -609,7 +626,16 @@ function bgIsScriptableUrl(url) {
          !url.startsWith("chrome-extension://") &&
          !url.startsWith("about:") &&
          !url.startsWith("devtools://") &&
-         !url.startsWith("edge://");
+         !url.startsWith("edge://") &&
+         !url.startsWith("https://chrome.google.com/webstore") &&
+         !url.startsWith("https://chromewebstore.google.com");
+}
+
+// Pre-register the correct action popup for a tab so clicking the icon
+// always does the right thing without waiting for onClicked to fire.
+function bgSyncActionPopup(tabId, url) {
+  const popup = bgIsScriptableUrl(url) ? "" : "sidepanel.html?ctx=popup";
+  chrome.action.setPopup({ tabId, popup });
 }
 
 async function bgGetActiveTabId() {
