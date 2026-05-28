@@ -2101,6 +2101,7 @@ button {
 
 /* Headphone mode — only the glowing Braino icon, everything else hidden */
 body.headphone-mode .shell-header { display: none !important; }
+body.headphone-mode #pageContextChip { display: none !important; }
 body.headphone-mode .voice-caption-wrap { display: none !important; }
 body.headphone-mode .voice-controls { display: none !important; }
 body.headphone-mode .voice-stage { justify-content: center; }

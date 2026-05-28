@@ -3353,7 +3353,7 @@ async function handleVoiceInput(text) {
       chatMessages.push({ role: "user", content: text });
       chatMessages.push({ role: "assistant", content: reply });
       saveChatMessages();
-      renderChatMessages();
+      if (!headphoneMode) renderChatMessages();
     } else {
       // Use same rich context as sendChatMessage — notes + page context + chat history + mode
       const hasNotes = hasExistingNotes();
@@ -3382,7 +3382,7 @@ async function handleVoiceInput(text) {
       chatMessages.push({ role: "user", content: text });
       chatMessages.push({ role: "assistant", content: reply });
       saveChatMessages();
-      renderChatMessages();
+      if (!headphoneMode) renderChatMessages();
     }
 
     setOrbState("speaking");
