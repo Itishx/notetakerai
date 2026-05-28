@@ -3667,7 +3667,7 @@ async function __sbSpeakText(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: clean,
-        voiceId: "2ajXGJNYBR0iNHpS4VZb",
+        voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
     });
 

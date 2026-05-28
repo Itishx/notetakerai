@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     }
 
     // Use provided voiceId or default to "Sarah" voice
-    const voice = voiceId || "EXAVITQu4vr4xnSDxMaL";
+    const voice = voiceId || "vBKc2FfBKJfcZNyEt1n6";
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=mp3_44100_128`,
