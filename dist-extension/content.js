@@ -1712,13 +1712,19 @@ function __sbBuildBrainUI() {
       0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5)); }
       50% { filter: drop-shadow(0 0 22px rgba(220,50,50,0.95)) drop-shadow(0 0 8px rgba(220,50,50,0.7)); }
     }
-    @keyframes __sb_brain_glow__ {
-      0% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.4)); transform: scale(1); }
-      45% { filter: drop-shadow(0 0 32px rgba(246,168,162,1)) drop-shadow(0 0 60px rgba(200,84,74,0.65)); transform: scale(1.09); }
-      100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5)); transform: scale(1); }
+    @keyframes __sb_brain_glow_auth__ {
+      0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.3)); }
+      50% { filter: drop-shadow(0 0 30px rgba(255,210,50,1)) drop-shadow(0 0 55px rgba(255,175,0,0.65)); }
     }
-    #__sb_brain_btn__.sb-brain-waking {
-      animation: __sb_brain_glow__ 1.4s ease-out forwards;
+    @keyframes __sb_brain_glow_authed__ {
+      0%, 100% { filter: drop-shadow(0 2px 12px rgba(40,180,70,0.4)); }
+      50% { filter: drop-shadow(0 0 32px rgba(80,230,110,1)) drop-shadow(0 0 60px rgba(40,180,70,0.7)); }
+    }
+    #__sb_brain_btn__.sb-brain-auth {
+      animation: __sb_brain_glow_auth__ 0.85s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-authed {
+      animation: __sb_brain_glow_authed__ 0.85s ease-in-out infinite;
     }
     #__sb_pill__ {
       display: flex; flex-direction: column;
@@ -3291,58 +3297,72 @@ function __sbToggleInput(open, options = {}) {
       return;
     }
 
-    // Sleeping brain: closed eyes + glow, then eyes open after 280ms
     const brainBtn = document.getElementById("__sb_brain_btn__");
-    if (brainBtn) {
-      brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
-      brainBtn.classList.add("sb-brain-waking");
-    }
 
-    setTimeout(() => {
-      if (brainBtn) {
-        brainBtn.innerHTML = __SB_BRAIN_SVG;
-        brainBtn.classList.remove("sb-brain-waking");
+    const __sbOpenBarReady = () => {
+      bar.classList.remove("sb-signin", "sb-waking");
+      bar.classList.add("open");
+      __sbInputOpen = true;
+      if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
+      __sbSetGreetingPlaceholder();
+      __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
+        const model = aiProvider === "claude" ? "claude" : "lovable";
+        document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
+          b.classList.toggle("selected", b.dataset.model === model));
+      });
+      if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+    };
+
+    chrome.storage.local.get(["sbHasAwoken", "authToken"], ({ sbHasAwoken, authToken }) => {
+      if (sbHasAwoken) {
+        // Fast path — cinematic played before, open bar directly
+        if (!authToken) {
+          bar.classList.add("open", "sb-signin");
+          __sbSetupBarSignIn();
+          return;
+        }
+        __sbOpenBarReady();
+        return;
       }
 
-      // Open bar in waking state
-      bar.classList.remove("sb-signin");
-      bar.classList.add("open", "sb-waking");
+      // First-ever open: cinematic wakeup
+      chrome.storage.local.set({ sbHasAwoken: true });
 
-      // Reset and animate the loading bar to ~60%
-      const fill = document.getElementById("__sb_wakeup_fill__");
-      if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (fill) { fill.style.transition = "width 1.1s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "62%"; }
-      }));
+      // Phase 1 (0–1200ms): sleeping, silent
+      if (brainBtn) {
+        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed");
+        brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
+      }
 
-      // Auth check
-      chrome.storage.local.get("authToken", ({ authToken }) => {
+      // Phase 2 (1200ms): yellow glow = authenticating
+      setTimeout(() => {
+        if (brainBtn) brainBtn.classList.add("sb-brain-auth");
+      }, 1200);
+
+      // Phase 3 (2100ms): evaluate auth result
+      setTimeout(() => {
         if (!authToken) {
-          if (fill) fill.style.width = "35%";
-          setTimeout(() => {
-            bar.classList.remove("sb-waking");
-            bar.classList.add("sb-signin");
-            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-            __sbSetupBarSignIn();
-          }, 600);
+          if (brainBtn) brainBtn.classList.remove("sb-brain-auth");
+          bar.classList.add("open", "sb-signin");
+          if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+          __sbSetupBarSignIn();
           return;
         }
 
-        if (fill) { fill.style.transition = "width 0.5s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
+        // Green glow + eyes open
+        if (brainBtn) {
+          brainBtn.classList.remove("sb-brain-auth");
+          brainBtn.innerHTML = __SB_BRAIN_SVG;
+          brainBtn.classList.add("sb-brain-authed");
+        }
+
+        // Phase 4 (2100+1100ms): open bar
         setTimeout(() => {
-          bar.classList.remove("sb-waking");
-          __sbInputOpen = true;
-          if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
-          __sbSetGreetingPlaceholder();
-          __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
-            const model = aiProvider === "claude" ? "claude" : "lovable";
-            document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
-              b.classList.toggle("selected", b.dataset.model === model));
-          });
-          if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
-        }, 700);
-      });
-    }, 600);
+          if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
+          __sbOpenBarReady();
+        }, 1100);
+      }, 2100);
+    });
   } else {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
