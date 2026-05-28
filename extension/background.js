@@ -400,7 +400,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "checkAuth") {
-    chrome.storage.local.get(["authToken", "authRefreshToken"], async ({ authToken, authRefreshToken }) => {
+    (async () => {
+      // Pull token from extension storage
+      let { authToken, authRefreshToken } = await chrome.storage.local.get(["authToken", "authRefreshToken"]);
+
+      // If no token in extension storage, try to grab it from any open trybraino.com tab
+      if (!authToken && !authRefreshToken) {
+        try {
+          const tabs = await chrome.tabs.query({ url: "*://trybraino.com/*" });
+          if (tabs.length > 0) {
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: tabs[0].id },
+              func: () => {
+                try {
+                  const raw = localStorage.getItem('sb-ovapacfrzddnhrwvkbkr-auth-token');
+                  if (!raw) return null;
+                  const s = JSON.parse(raw);
+                  return s?.access_token ? s : null;
+                } catch { return null; }
+              }
+            });
+            const s = results?.[0]?.result;
+            if (s?.access_token) {
+              authToken = s.access_token;
+              authRefreshToken = s.refresh_token || null;
+              chrome.storage.local.set({
+                authToken,
+                authRefreshToken,
+                authEmail: s.user?.email || null,
+                authUserId: s.user?.id || null,
+                authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+              });
+            }
+          }
+        } catch {}
+      }
+
       if (!authToken && !authRefreshToken) { sendResponse({ authenticated: false }); return; }
       try {
         const res = await fetch(`${BG_SUPABASE_URL}/auth/v1/user`, {
@@ -416,7 +451,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch {
         sendResponse({ authenticated: !!authToken });
       }
-    });
+    })();
     return true;
   }
   if (
