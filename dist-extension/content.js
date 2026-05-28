@@ -3657,7 +3657,6 @@ async function __sbSpeakText(text) {
     // After speaking ends in headphone mode, go back to listening
     if (__sbHeadphoneMode && !__sbVoicePendingReply) {
       __sbSetHpBrainState("listening");
-      __sbSetHpStatus("Listening…");
     }
   }
   return spoke;
@@ -3989,7 +3988,6 @@ async function __sbProcessPrompt(text, options = {}) {
       // Restart listening in headphone mode after reply is done
       if (__sbHeadphoneMode) {
         __sbSetHpBrainState("listening");
-        __sbSetHpStatus("Listening…");
         void __sbStartRecording();
       }
     }
@@ -4390,7 +4388,6 @@ function __sbHandleVoiceEvent(msg) {
       : `Voice error: ${msg.error || "unknown error"}`;
     if (__sbHeadphoneMode) {
       __sbSetHpBrainState("");
-      __sbSetHpStatus("Listening…");
       __sbShowVoiceError(errorText);
       // Retry listening after a short delay
       setTimeout(() => {
