@@ -1729,6 +1729,13 @@ function __sbBuildBrainUI() {
     #__sb_brain_btn__.sb-brain-authed {
       animation: __sb_brain_glow_authed__ 0.85s ease-in-out infinite;
     }
+    @keyframes __sb_brain_glow_rejected__ {
+      0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,40,40,0.4)); }
+      50% { filter: drop-shadow(0 0 30px rgba(255,80,80,1)) drop-shadow(0 0 55px rgba(200,40,40,0.65)); }
+    }
+    #__sb_brain_btn__.sb-brain-rejected {
+      animation: __sb_brain_glow_rejected__ 0.85s ease-in-out infinite;
+    }
     #__sb_pill__ {
       display: flex; flex-direction: column;
       background: rgba(255, 251, 247, 0.96); border-radius: 20px;
@@ -3354,15 +3361,17 @@ function __sbToggleInput(open, options = {}) {
       if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
     };
 
-    chrome.storage.local.get(["sbHasAwoken", "authToken"], ({ sbHasAwoken, authToken }) => {
+    chrome.storage.local.get("sbHasAwoken", ({ sbHasAwoken }) => {
       if (sbHasAwoken) {
         // Fast path — cinematic played before, open bar directly
-        if (!authToken) {
-          bar.classList.add("open", "sb-signin");
-          __sbSetupBarSignIn();
-          return;
-        }
-        __sbOpenBarReady();
+        chrome.storage.local.get("authToken", ({ authToken }) => {
+          if (!authToken) {
+            bar.classList.add("open", "sb-signin");
+            __sbSetupBarSignIn();
+            return;
+          }
+          __sbOpenBarReady();
+        });
         return;
       }
 
@@ -3371,38 +3380,44 @@ function __sbToggleInput(open, options = {}) {
 
       // Phase 1 (0–1200ms): sleeping, silent
       if (brainBtn) {
-        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed");
+        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
         brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
       }
 
-      // Phase 2 (1200ms): yellow glow = authenticating
+      // Phase 2 (1200ms): yellow glow starts + REAL auth check fires simultaneously
       setTimeout(() => {
         if (brainBtn) brainBtn.classList.add("sb-brain-auth");
+        const tYellow = Date.now();
+        const minYellow = 600;
+
+        chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
+          const wait = Math.max(0, minYellow - (Date.now() - tYellow));
+          setTimeout(() => {
+            if (!result?.authenticated) {
+              // Red glow
+              if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
+              setTimeout(() => {
+                if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
+                bar.classList.add("open", "sb-signin");
+                if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+                __sbSetupBarSignIn();
+              }, 700);
+              return;
+            }
+            // Green glow + eyes open
+            if (brainBtn) {
+              brainBtn.classList.remove("sb-brain-auth");
+              brainBtn.innerHTML = __SB_BRAIN_SVG;
+              brainBtn.classList.add("sb-brain-authed");
+            }
+            // 1100ms of green, then bar opens
+            setTimeout(() => {
+              if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
+              __sbOpenBarReady();
+            }, 1100);
+          }, wait);
+        });
       }, 1200);
-
-      // Phase 3 (2100ms): evaluate auth result
-      setTimeout(() => {
-        if (!authToken) {
-          if (brainBtn) brainBtn.classList.remove("sb-brain-auth");
-          bar.classList.add("open", "sb-signin");
-          if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-          __sbSetupBarSignIn();
-          return;
-        }
-
-        // Green glow + eyes open
-        if (brainBtn) {
-          brainBtn.classList.remove("sb-brain-auth");
-          brainBtn.innerHTML = __SB_BRAIN_SVG;
-          brainBtn.classList.add("sb-brain-authed");
-        }
-
-        // Phase 4 (2100+1100ms): open bar
-        setTimeout(() => {
-          if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
-          __sbOpenBarReady();
-        }, 1100);
-      }, 2100);
     });
   } else {
     __sbInputOpen = false;

@@ -399,6 +399,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (message.action === "checkAuth") {
+    chrome.storage.local.get(["authToken", "authRefreshToken"], async ({ authToken, authRefreshToken }) => {
+      if (!authToken && !authRefreshToken) { sendResponse({ authenticated: false }); return; }
+      try {
+        const res = await fetch(`${BG_SUPABASE_URL}/auth/v1/user`, {
+          headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` }
+        });
+        if (res.ok) { sendResponse({ authenticated: true }); return; }
+        if (authRefreshToken) {
+          const refreshed = await bgRefreshAuthToken();
+          sendResponse({ authenticated: !!refreshed });
+          return;
+        }
+        sendResponse({ authenticated: false });
+      } catch {
+        sendResponse({ authenticated: !!authToken });
+      }
+    });
+    return true;
+  }
   if (
     message.action === "agentAction" ||
     message.action === "getAgentPageContext" ||
