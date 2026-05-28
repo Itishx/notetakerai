@@ -4,6 +4,30 @@ if (globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ !== `${chrome.runtime?.id || "no-
   (() => {
 // Braino Content Script — extracts page text for AI context
 
+// Sync Supabase session from website localStorage into extension storage so
+// checkAuth finds a token even when the user logged in on the website (not via the extension auth tab).
+if (location.hostname === 'trybraino.com') {
+  const __sbSyncWebAuth = () => {
+    try {
+      const raw = localStorage.getItem('sb-ovapacfrzddnhrwvkbkr-auth-token');
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s?.access_token) return;
+      chrome.storage.local.set({
+        authToken: s.access_token,
+        authRefreshToken: s.refresh_token || null,
+        authEmail: s.user?.email || null,
+        authUserId: s.user?.id || null,
+        authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+      });
+    } catch {}
+  };
+  __sbSyncWebAuth();
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'sb-ovapacfrzddnhrwvkbkr-auth-token') __sbSyncWebAuth();
+  });
+}
+
 // Generate a stable, unique CSS selector for an element (used by browser agent)
 function getStableSelector(el) {
   // Priority 1: id attribute (must be valid CSS ident)
