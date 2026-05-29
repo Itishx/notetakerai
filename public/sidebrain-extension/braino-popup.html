@@ -6,7 +6,7 @@
   <title>Braino</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -14,217 +14,319 @@
       width: 380px;
       height: 560px;
       overflow: hidden;
-      background: transparent;
+      background: #120E0A;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       -webkit-font-smoothing: antialiased;
     }
 
     body {
-      padding: 8px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
+      gap: 8px;
     }
 
-    /* ── Floating card ── */
-    .bp-card {
+    .hidden { display: none !important; }
+
+    /* ── CARD ──────────────────────────────────────────────────── */
+    #bp-card {
       flex: 1;
       display: flex;
       flex-direction: column;
-      background: rgba(255, 251, 247, 0.97);
-      border-radius: 22px;
-      border: 1px solid rgba(65, 48, 40, 0.09);
-      box-shadow:
-        0 8px 28px rgba(27, 23, 19, 0.16),
-        0 24px 56px rgba(27, 23, 19, 0.13);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 20px;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.2);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
       overflow: hidden;
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
+      min-height: 0;
     }
 
-    /* ── Header ── */
+    /* ── HEADER ────────────────────────────────────────────────── */
     .bp-header {
       display: flex;
       align-items: center;
-      gap: 9px;
-      padding: 11px 13px;
-      border-bottom: 1px solid rgba(65, 48, 40, 0.07);
-      background: rgba(255, 251, 247, 0.99);
+      gap: 7px;
+      padding: 10px 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
       flex-shrink: 0;
     }
 
-    .bp-brain {
-      width: 28px;
-      height: 28px;
+    .bp-brain-sm {
+      width: 22px;
+      height: 22px;
       flex-shrink: 0;
-      filter: drop-shadow(0 2px 8px rgba(200, 84, 74, 0.35));
-      animation: bpBrainGlow 3.8s ease-in-out infinite;
-    }
-
-    @keyframes bpBrainGlow {
-      0%, 100% { filter: drop-shadow(0 2px 8px rgba(200, 84, 74, 0.25)); }
-      50%       { filter: drop-shadow(0 0 16px rgba(232, 120, 110, 0.9)) drop-shadow(0 0 32px rgba(200, 84, 74, 0.5)); }
-    }
-
-    .bp-brand {
-      font-size: 13.5px;
-      font-weight: 600;
-      letter-spacing: -0.015em;
-      color: #1B1713;
-      line-height: 1;
-    }
-    .bp-brand span { color: oklch(0.58 0.19 45); }
-
-    .bp-restricted-badge {
-      font-size: 9.5px;
-      font-weight: 500;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #B8AFA4;
-      background: rgba(65, 48, 40, 0.06);
-      border: 1px solid rgba(65, 48, 40, 0.09);
-      border-radius: 5px;
-      padding: 2px 6px;
-      white-space: nowrap;
-    }
-
-    .bp-header-right {
-      margin-left: auto;
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
+      animation: bpGlow 3.8s ease-in-out infinite;
+    }
+
+    @keyframes bpGlow {
+      0%, 100% { filter: drop-shadow(0 1px 6px rgba(232,120,110,0.3)); }
+      50%       { filter: drop-shadow(0 0 14px rgba(232,120,110,0.85)) drop-shadow(0 0 28px rgba(200,84,74,0.45)); }
+    }
+
+    .bp-wordmark {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: rgba(255,255,255,0.92);
+      flex: 1;
+    }
+
+    #bpBadge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: rgba(255,180,155,0.7);
+      background: rgba(232,120,110,0.12);
+      border: 1px solid rgba(232,120,110,0.22);
+      border-radius: 6px;
+      padding: 2px 6px;
+      white-space: nowrap;
       flex-shrink: 0;
     }
 
-    .bp-username {
-      font-size: 11.5px;
-      color: #8A7F75;
+    .bp-auth {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+
+    #bpUserName {
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+      font-weight: 500;
       display: none;
       white-space: nowrap;
-      max-width: 80px;
+      max-width: 72px;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     #bpSignInBtn {
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 600;
-      color: white;
-      background: #E8786E;
-      border: none;
+      color: rgba(255,255,255,0.8);
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.16);
       border-radius: 20px;
-      padding: 5px 13px;
+      padding: 4px 11px;
       cursor: pointer;
       transition: background 0.15s;
+      font-family: inherit;
       white-space: nowrap;
     }
-    #bpSignInBtn:hover { background: #C9544A; }
+    #bpSignInBtn:hover { background: rgba(255,255,255,0.18); }
 
-    /* ── Messages area ── */
-    .bp-messages {
+    /* ── CONTEXT CHIP ──────────────────────────────────────────── */
+    #bpCtx {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
+    }
+
+    #bpFav {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.75);
+      flex-shrink: 0;
+    }
+
+    .bp-ctx-meta {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    #bpCtxTitle {
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.85);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #bpCtxSub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      color: rgba(255,255,255,0.32);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #bpCtxStatus {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    #bpCtxStatus::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: #5DB87A;
+    }
+    #bpCtxStatus.loading::before { background: #F5A623; }
+    #bpCtxStatus.error::before   { background: #E8786E; }
+
+    #bpCtxStatusLabel {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.38);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── MESSAGES ──────────────────────────────────────────────── */
+    #bpMessages {
       flex: 1;
       overflow-y: auto;
       padding: 12px 13px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      scroll-behavior: smooth;
+      gap: 10px;
+      min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
     }
 
-    .bp-messages::-webkit-scrollbar { width: 3px; }
-    .bp-messages::-webkit-scrollbar-track { background: transparent; }
-    .bp-messages::-webkit-scrollbar-thumb { background: rgba(65,48,40,0.15); border-radius: 99px; }
+    #bpMessages::-webkit-scrollbar { width: 3px; }
+    #bpMessages::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.1);
+      border-radius: 99px;
+    }
 
-    /* ── Empty state ── */
-    .bp-empty {
+    /* ── EMPTY STATE ───────────────────────────────────────────── */
+    #bpEmpty {
+      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100%;
-      gap: 11px;
-      padding: 20px 20px;
-      text-align: center;
+      gap: 8px;
+      padding: 20px;
     }
 
-    .bp-empty-icon {
-      width: 62px;
-      height: 62px;
-      filter: drop-shadow(0 2px 12px rgba(200, 84, 74, 0.4));
-      animation: bpBrainGlow 3.8s ease-in-out infinite;
+    .bp-empty-brain {
+      opacity: 0.25;
+      animation: bpGlow 3.8s ease-in-out infinite;
     }
 
     .bp-empty-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
-      color: #1B1713;
+      color: rgba(255,255,255,0.5);
       letter-spacing: -0.01em;
     }
 
     .bp-empty-sub {
-      font-size: 12.5px;
-      color: #A79B92;
+      font-size: 12px;
+      color: rgba(255,255,255,0.25);
       line-height: 1.5;
+      text-align: center;
       max-width: 220px;
     }
 
-    /* ── Chat bubbles ── */
-    .bp-msg {
-      max-width: 90%;
-      padding: 9px 12px;
-      font-size: 13.5px;
-      line-height: 1.58;
+    /* ── CHAT BUBBLES ──────────────────────────────────────────── */
+    .bp-user {
+      align-self: flex-end;
+      max-width: 88%;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 14px 14px 4px 14px;
+      padding: 8px 12px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: rgba(255,255,255,0.88);
       word-break: break-word;
     }
 
-    .bp-msg-user {
-      align-self: flex-end;
-      background: rgba(232, 120, 110, 0.13);
-      color: #1B1713;
-      border-radius: 14px 14px 4px 14px;
-    }
-
-    .bp-msg-assistant {
+    .bp-assistant {
       align-self: flex-start;
-      background: rgba(65, 48, 40, 0.055);
-      color: #1B1713;
-      border-radius: 4px 14px 14px 14px;
+      max-width: 96%;
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: rgba(255,255,255,0.88);
+      word-break: break-word;
     }
 
-    .bp-msg-assistant code {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 12px;
-      background: rgba(65, 48, 40, 0.08);
+    .bp-assistant p { margin: 0 0 6px; }
+    .bp-assistant p:last-child { margin-bottom: 0; }
+    .bp-assistant strong { color: #fff; font-weight: 600; }
+    .bp-assistant em { color: rgba(255,255,255,0.72); font-style: italic; }
+    .bp-assistant code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      background: rgba(255,255,255,0.1);
+      color: #FFD0CB;
       padding: 1px 5px;
       border-radius: 4px;
     }
 
-    .bp-msg-assistant strong { font-weight: 600; }
-    .bp-msg-assistant em { font-style: italic; }
-
-    .bp-msg-assistant p + p { margin-top: 6px; }
-
     .bp-thinking {
-      opacity: 0.5;
-      font-style: italic;
+      color: rgba(255,255,255,0.3);
       font-size: 13px;
-    }
-
-    .bp-msg-error {
+      font-style: italic;
       align-self: flex-start;
-      background: oklch(0.94 0.05 25);
-      color: oklch(0.45 0.18 25);
-      border-radius: 4px 14px 14px 14px;
     }
 
-    /* ── Input bar ── */
-    .bp-bar {
+    .bp-error {
+      align-self: flex-start;
+      max-width: 96%;
+      font-size: 12.5px;
+      color: rgba(255,160,140,0.85);
+      background: rgba(232,120,110,0.1);
+      border: 1px solid rgba(232,120,110,0.2);
+      border-radius: 10px;
+      padding: 7px 11px;
+    }
+
+    /* ── BOTTOM ROW ────────────────────────────────────────────── */
+    .bp-bottom-row {
       display: flex;
       align-items: center;
-      gap: 7px;
-      padding: 10px 13px;
-      border-top: 1px solid rgba(65, 48, 40, 0.07);
-      background: rgba(255, 251, 247, 0.99);
+      gap: 8px;
       flex-shrink: 0;
+    }
+
+    /* ── PILL INPUT BAR ────────────────────────────────────────── */
+    #bp-pill {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(18,14,10,0.82);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 100px;
+      padding: 7px 7px 7px 14px;
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.18);
     }
 
     #bpInput {
@@ -233,69 +335,198 @@
       outline: none;
       background: transparent;
       font-size: 13.5px;
-      color: #1B1713;
-      font-family: inherit;
-      padding: 0;
-      line-height: 1.4;
+      color: rgba(255,255,255,0.88);
+      font-family: 'Inter', sans-serif;
       min-width: 0;
+      line-height: 1.4;
     }
-    #bpInput::placeholder { color: #A79B92; }
-    #bpInput:disabled { opacity: 0.5; }
+    #bpInput::placeholder { color: rgba(255,255,255,0.26); }
+    #bpInput:disabled { opacity: 0.4; }
+
+    .bp-mode-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: rgba(255,255,255,0.38);
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      padding: 3px 7px;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .bp-mode-pill.active {
+      color: rgba(255,255,255,0.82);
+      background: rgba(255,255,255,0.1);
+    }
+
+    .bp-mode-pill:hover:not(.active) { color: rgba(255,255,255,0.6); }
 
     #bpSendBtn {
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       border: none;
-      background: #E8786E;
-      color: white;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      background: #E8786E;
+      color: white;
+      transition: background 0.15s;
       flex-shrink: 0;
-      transition: background 0.15s, opacity 0.15s;
       padding: 0;
     }
     #bpSendBtn:hover { background: #C9544A; }
-    #bpSendBtn:disabled { opacity: 0.45; cursor: default; background: #E8786E; }
+    #bpSendBtn:disabled {
+      background: rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.28);
+      cursor: not-allowed;
+    }
+
+    /* ── BRAIN BUTTON ──────────────────────────────────────────── */
+    .bp-brain-wrap {
+      width: 52px;
+      height: 52px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    @keyframes bpFloat {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      30%       { transform: translateY(-5px) rotate(-2deg); }
+      70%       { transform: translateY(-5px) rotate(2deg); }
+    }
+    .bp-brain-wrap {
+      width: 52px;
+      height: 52px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: bpGlow 3.8s ease-in-out infinite, bpFloat 3s ease-in-out infinite;
+    }
   </style>
 </head>
 <body>
-  <div class="bp-card">
+
+  <!-- Dark glassmorphic card -->
+  <div id="bp-card">
 
     <!-- Header -->
     <div class="bp-header">
-      <img src="icon128.png" class="bp-brain" alt="Braino" />
-      <span class="bp-brand"><b>side</b><span>brain</span></span>
-      <span class="bp-restricted-badge">general</span>
-      <div class="bp-header-right">
-        <span id="bpUserName" class="bp-username"></span>
+      <span class="bp-brain-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22"><defs><linearGradient id="bph-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="bph-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="bph-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#bph-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#bph-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#bph-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#bph-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#bph-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#bph-fill)"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#bph-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#bph-fill)"/><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </span>
+      <span class="bp-wordmark">Braino</span>
+      <span id="bpBadge">restricted</span>
+      <div class="bp-auth">
+        <span id="bpUserName"></span>
         <button id="bpSignInBtn">Sign in</button>
       </div>
     </div>
 
-    <!-- Messages -->
-    <div id="bpMessages" class="bp-messages">
-      <div id="bpEmpty" class="bp-empty">
-        <img src="icon128.png" class="bp-empty-icon" alt="Braino" />
-        <span class="bp-empty-title">Ask me anything</span>
-        <span class="bp-empty-sub">General AI chat · works on every page including restricted ones</span>
+    <!-- Page context chip -->
+    <div id="bpCtx" class="hidden">
+      <div id="bpFav">?</div>
+      <div class="bp-ctx-meta">
+        <span id="bpCtxTitle">Reading page…</span>
+        <span id="bpCtxSub"></span>
+      </div>
+      <div id="bpCtxStatus" class="loading">
+        <span id="bpCtxStatusLabel">reading</span>
       </div>
     </div>
 
-    <!-- Input bar -->
-    <div class="bp-bar">
-      <input id="bpInput" type="text" placeholder="Ask anything…" autocomplete="off" spellcheck="false" />
+    <!-- Messages -->
+    <div id="bpMessages">
+      <div id="bpEmpty">
+        <span class="bp-empty-brain">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="44" height="44"><defs><linearGradient id="bpe-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="bpe-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="bpe-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#bpe-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#bpe-dark)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#bpe-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#bpe-glow)"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#bpe-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#bpe-fill)"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#bpe-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#bpe-fill)"/><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <span class="bp-empty-title">Hey, I'm Braino</span>
+        <span class="bp-empty-sub">Chat with this page, or ask me anything.</span>
+      </div>
+    </div>
+
+  </div><!-- /#bp-card -->
+
+  <!-- Bottom row: pill input + brain -->
+  <div class="bp-bottom-row">
+
+    <div id="bp-pill">
+      <input id="bpInput" type="text" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
+      <button class="bp-mode-pill active" data-mode="page">Page</button>
+      <button class="bp-mode-pill" data-mode="general">General</button>
       <button id="bpSendBtn" title="Send">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="19" x2="12" y2="5"/>
           <polyline points="5 12 12 5 19 12"/>
         </svg>
       </button>
     </div>
 
+    <div class="bp-brain-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="bpb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="bpb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="bpb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#bpb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#bpb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#bpb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#bpb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#bpb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#bpb-fill)"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#bpb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#bpb-fill)"/><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+
   </div>
+
   <script src="braino-popup.js"></script>
+  <script>
+  (function() {
+    var ns = 'http://www.w3.org/2000/svg';
+    var blinkMap = { '6.5': '6.5;6.5;0.5;6.5', '3.2': '3.2;3.2;0.3;3.2', '1.1': '1.1;1.1;0;1.1' };
+    function addAnimate(el, attr, values, dur, begin) {
+      var a = document.createElementNS(ns, 'animate');
+      a.setAttribute('attributeName', attr);
+      a.setAttribute('values', values);
+      a.setAttribute('keyTimes', '0;0.88;0.93;1');
+      a.setAttribute('dur', dur);
+      if (begin) a.setAttribute('begin', begin);
+      a.setAttribute('repeatCount', 'indefinite');
+      el.appendChild(a);
+    }
+    function addRotate(el, pivot, angle) {
+      var at = document.createElementNS(ns, 'animateTransform');
+      at.setAttribute('attributeName', 'transform');
+      at.setAttribute('type', 'rotate');
+      at.setAttribute('values', '0 ' + pivot + ';' + angle + ' ' + pivot + ';0 ' + pivot);
+      at.setAttribute('dur', '1.8s');
+      at.setAttribute('calcMode', 'spline');
+      at.setAttribute('keyTimes', '0;0.5;1');
+      at.setAttribute('keySplines', '0.45 0 0.55 1;0.45 0 0.55 1');
+      at.setAttribute('repeatCount', 'indefinite');
+      el.appendChild(at);
+    }
+    function animateBraino(svg) {
+      if (!svg) return;
+      var circles = Array.prototype.slice.call(svg.querySelectorAll('circle'));
+      var eyeIdx = 0;
+      circles.forEach(function(c) {
+        var r = c.getAttribute('r');
+        if (!blinkMap[r]) return;
+        addAnimate(c, 'r', blinkMap[r], '5s', eyeIdx >= 3 ? '0.25s' : null);
+        eyeIdx++;
+      });
+      Array.prototype.slice.call(svg.querySelectorAll('path')).forEach(function(p) {
+        var d = p.getAttribute('d') || '';
+        if (d.indexOf('M 22 52') === 0) addRotate(p, '22 52', 18);
+        if (d.indexOf('M 78 52') === 0) addRotate(p, '78 52', -20);
+      });
+      circles.forEach(function(c) {
+        if (c.getAttribute('r') === '5.5' && c.getAttribute('cx') === '6')  addRotate(c, '22 52', 18);
+        if (c.getAttribute('r') === '5.5' && c.getAttribute('cx') === '94') addRotate(c, '78 52', -20);
+      });
+    }
+    animateBraino(document.querySelector('.bp-brain-wrap svg'));
+    animateBraino(document.querySelector('.bp-empty-brain svg'));
+  })();
+  </script>
 </body>
 </html>

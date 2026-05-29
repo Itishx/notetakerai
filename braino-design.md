@@ -1,3 +1,10 @@
+Yes. Here's my understanding:
+
+Reference (DO NOT TOUCH): The floating brain SVG — the dark glassmorphic chat widget that pops up when you click the brain on a normal web page. Dark rgba(18,14,10,0.78) card, white text, coral send button, pill input bar, blur/saturate backdrop. This is the finished product.
+
+
+
+
 # Braino — Brain Character Design Reference
 
 > Exact reproduction guide for the brain mascot. Give this file to any Claude instance and it should build the identical character.
