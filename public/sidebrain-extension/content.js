@@ -2284,15 +2284,37 @@ function __sbBuildBrainUI() {
     #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
 
     /* ── Movie watching mode ── */
+    /* Faint blue pulse on the brain itself — just enough to signal "watching" */
     @keyframes __sb_movie_watch__ {
-      0%, 100% { filter: drop-shadow(0 0 14px rgba(80,160,255,0.7)) drop-shadow(0 2px 8px rgba(0,0,0,0.18)); }
-      50%       { filter: drop-shadow(0 0 28px rgba(100,180,255,1))  drop-shadow(0 0 48px rgba(60,130,255,0.65)); }
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(120,180,255,0.55)) drop-shadow(0 2px 8px rgba(0,0,0,0.2)); }
+      50%       { filter: drop-shadow(0 0 22px rgba(150,200,255,0.9)) drop-shadow(0 0 40px rgba(80,150,255,0.5)); }
     }
     #__sb_brain_btn__.sb-movie-watching {
-      animation: __sb_movie_watch__ 2.2s ease-in-out infinite;
+      animation: __sb_movie_watch__ 2.4s ease-in-out infinite;
+    }
+    @keyframes __sb_movie_think__ {
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(120,180,255,0.6)); }
+      50%       { filter: drop-shadow(0 0 28px rgba(150,200,255,1)) drop-shadow(0 0 50px rgba(80,150,255,0.7)); }
     }
     #__sb_brain_btn__.sb-movie-thinking {
-      animation: __sb_movie_watch__ 0.6s ease-in-out infinite;
+      animation: __sb_movie_think__ 0.55s ease-in-out infinite;
+    }
+
+    /* Ambient halo: backdrop-filter picks up the movie's actual colors */
+    #__sb_movie_halo__ {
+      position: fixed;
+      bottom: -10px; right: -10px;
+      width: 130px; height: 130px;
+      border-radius: 50%;
+      backdrop-filter: blur(28px) saturate(9) brightness(2.8);
+      -webkit-backdrop-filter: blur(28px) saturate(9) brightness(2.8);
+      pointer-events: none;
+      z-index: 2147483646; /* just below the brain */
+      opacity: 0;
+      transition: opacity 0.8s ease;
+    }
+    #__sb_movie_halo__.active {
+      opacity: 1;
     }
 
     /* ── Movie recommendation card ── */
@@ -2458,6 +2480,7 @@ function __sbBuildBrainUI() {
     document.getElementById("__sb_connector_dropdown__"),
     document.getElementById("__sb_connector_slash_dropdown__"),
     document.getElementById("__sb_model_dropdown__"),
+    document.getElementById("__sb_movie_halo__"),
   ].filter(Boolean);
 
   document.addEventListener("fullscreenchange", () => {
@@ -4092,6 +4115,16 @@ function __sbStartMovieMode() {
   const brain = document.getElementById('__sb_brain_btn__');
   if (brain) brain.classList.add('sb-movie-watching');
 
+  // Ambient halo — glows in whatever color the movie scene has behind it
+  let halo = document.getElementById('__sb_movie_halo__');
+  if (!halo) {
+    halo = document.createElement('div');
+    halo.id = '__sb_movie_halo__';
+    const fsEl = document.fullscreenElement;
+    (fsEl || document.body).appendChild(halo);
+  }
+  requestAnimationFrame(() => halo.classList.add('active'));
+
   __sbSetBrainMovieEyes();
 
   const inp = document.getElementById('__sb_input__');
@@ -4121,6 +4154,12 @@ function __sbStopMovieMode() {
 
   const brain = document.getElementById('__sb_brain_btn__');
   if (brain) brain.classList.remove('sb-movie-watching', 'sb-movie-thinking');
+
+  const halo = document.getElementById('__sb_movie_halo__');
+  if (halo) {
+    halo.classList.remove('active');
+    setTimeout(() => halo.remove(), 900);
+  }
 
   __sbResetBrainEyes();
 
