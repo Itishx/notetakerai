@@ -249,17 +249,33 @@ const USE_CASES = [
 function UseCasesResponse({ onDone }: { onDone: () => void }) {
   const [visible, setVisible] = useState(0);
   const doneFired = useRef(false);
+  const lastCardRef = useRef<HTMLDivElement>(null);
 
+  // Progressive card loading — no auto-fire
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     USE_CASES.forEach((_, i) => {
       timers.push(setTimeout(() => setVisible(i + 1), i * 2800 + 600));
     });
-    timers.push(setTimeout(() => {
-      if (!doneFired.current) { doneFired.current = true; onDone(); }
-    }, USE_CASES.length * 2800 + 1200));
     return () => timers.forEach(clearTimeout);
-  }, [onDone]);
+  }, []);
+
+  // Fire onDone only when user scrolls the last card into view
+  useEffect(() => {
+    if (visible < USE_CASES.length || !lastCardRef.current) return;
+    const el = lastCardRef.current;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !doneFired.current) {
+          doneFired.current = true;
+          setTimeout(onDone, 700);
+        }
+      },
+      { threshold: 0.35 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible, onDone]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -267,8 +283,8 @@ function UseCasesResponse({ onDone }: { onDone: () => void }) {
         Four features — each unlocking a different set of workflows:
       </p>
 
-      {USE_CASES.slice(0, visible).map((uc) => (
-        <div key={uc.num} style={{
+      {USE_CASES.slice(0, visible).map((uc, i) => (
+        <div key={uc.num} ref={i === USE_CASES.length - 1 ? lastCardRef : undefined} style={{
           border: '1.5px solid rgba(255,255,255,0.1)',
           borderRadius: 22,
           overflow: 'hidden',
@@ -503,11 +519,11 @@ export default function PreLaunch() {
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
-  // Line 1 fades in on awake (0.9s), visible ~1s, then line 2, then chip
+  // Line 1 fades in on awake, sits for ~2s, line 2 fades in, chip at 5s total
   useEffect(() => {
     if (phase !== 'awake') return;
-    const t1 = setTimeout(() => setShowLine2(true), 2400);
-    const t2 = setTimeout(() => setShowChip(true), 3500);
+    const t1 = setTimeout(() => setShowLine2(true), 3000);
+    const t2 = setTimeout(() => setShowChip(true), 5000);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [phase]);
 
@@ -524,10 +540,7 @@ export default function PreLaunch() {
   }, [phase]);
 
   const handleUseCasesDone = useCallback(() => {
-    setTimeout(() => {
-      setMsgs(prev => [...prev, { role: 'assistant', content: "That's everything I can do — and I'm still growing. Want to be the first to know when I launch?" }]);
-      setPhase('email_capture');
-    }, 700);
+    setPhase('email_capture');
   }, []);
 
   const sendMessage = useCallback(async (text?: string) => {
@@ -630,11 +643,11 @@ export default function PreLaunch() {
             {phase === 'awake' && (
               <div style={{ marginTop: 32, textAlign: 'center', maxWidth: 420 }}>
                 {!showLine2 ? (
-                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.9s ease both' }}>
+                  <p key="line1" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 1.2s ease both' }}>
                     {line1}
                   </p>
                 ) : (
-                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.9s ease both' }}>
+                  <p key="line2" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 1.2s ease both' }}>
                     {line2}
                   </p>
                 )}
@@ -702,7 +715,11 @@ export default function PreLaunch() {
                         {emailConfirm}
                       </p>
                     ) : (
-                      // Email form
+                      // Text + email form together
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <p style={{ margin: 0, fontSize: 16, lineHeight: 1.7, color: '#FBF7F1', animation: 'plFadeUp 0.5s ease both' }}>
+                          That's everything I can do — and I'm still growing. Want to be the first to know when I launch?
+                        </p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <div style={{ display: 'flex', gap: 10, maxWidth: 440, animation: 'plFadeUp 0.3s ease', alignItems: 'center' }}>
                           <input ref={emailRef} type="email" value={emailInput}
@@ -731,6 +748,7 @@ export default function PreLaunch() {
                           </button>
                         </div>
                         {emailError && <p style={{ fontSize: 13, color: 'rgba(226,80,80,0.9)', margin: 0, paddingLeft: 4 }}>{emailError}</p>}
+                      </div>
                       </div>
                     )}
                   </div>
