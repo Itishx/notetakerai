@@ -40,8 +40,12 @@ serve(async (req) => {
       throw error;
     }
 
+    const { count } = await supabase
+      .from("waitlist")
+      .select("*", { count: "exact", head: true });
+
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({ success: true, position: count ?? 1 }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

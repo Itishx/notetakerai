@@ -23,7 +23,7 @@ async function callWaitlistSignup(email: string, context?: string) {
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
     body: JSON.stringify({ email, context }),
   });
-  return res.json() as Promise<{ success?: boolean; error?: string }>;
+  return res.json() as Promise<{ success?: boolean; error?: string; position?: number }>;
 }
 
 // ─── Feature graphics (mirrored from UseCases.tsx) ────────────────────────────
@@ -590,7 +590,7 @@ export default function PreLaunch() {
       const result = await callWaitlistSignup(email, lastContext);
       const confirm = result.error === 'already_on_waitlist'
         ? "You're already on the list. I'll remember you."
-        : "Done. I'll find you when I'm ready.";
+        : `Done. You're #${result.position} on the waitlist. I'll see you soon.`;
       setEmailConfirm(confirm);
       setEmailDone(true);
       setPhase('waitlisted');
