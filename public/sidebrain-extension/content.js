@@ -2444,6 +2444,28 @@ function __sbBuildBrainUI() {
   `;
   document.body.appendChild(modelDd);
 
+  // ── Fullscreen fix ──
+  // When a page (e.g. Netflix) enters fullscreen the browser creates a new
+  // stacking layer for the fullscreen element. position:fixed elements that
+  // are children of <body> but NOT inside the fullscreen element disappear.
+  // Fix: reparent all extension UI into the fullscreen element on enter,
+  // move back to <body> on exit.
+  const __sbOwnedEls = () => [
+    document.getElementById("__sb_root__"),
+    document.getElementById("__sb_card_wrap__"),
+    document.getElementById("__sb_voice_error_pill__"),
+    document.getElementById("__sb_mode_dropdown__"),
+    document.getElementById("__sb_connector_dropdown__"),
+    document.getElementById("__sb_connector_slash_dropdown__"),
+    document.getElementById("__sb_model_dropdown__"),
+  ].filter(Boolean);
+
+  document.addEventListener("fullscreenchange", () => {
+    const fsEl = document.fullscreenElement;
+    const target = fsEl || document.body;
+    __sbOwnedEls().forEach(el => target.appendChild(el));
+  });
+
   // Brain hidden by default
   document.getElementById("__sb_brain_btn__").style.display = "none";
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
