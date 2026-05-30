@@ -266,6 +266,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_watched_movies: {
+        Row: {
+          completed: boolean | null
+          created_at: string
+          genres: string[] | null
+          id: string
+          movie_title: string
+          poster_url: string | null
+          rating: number | null
+          tmdb_id: number | null
+          user_id: string
+          watched_at: string | null
+        }
+        Insert: {
+          completed?: boolean | null
+          created_at?: string
+          genres?: string[] | null
+          id?: string
+          movie_title: string
+          poster_url?: string | null
+          rating?: number | null
+          tmdb_id?: number | null
+          user_id: string
+          watched_at?: string | null
+        }
+        Update: {
+          completed?: boolean | null
+          created_at?: string
+          genres?: string[] | null
+          id?: string
+          movie_title?: string
+          poster_url?: string | null
+          rating?: number | null
+          tmdb_id?: number | null
+          user_id?: string
+          watched_at?: string | null
+        }
+        Relationships: []
+      }
       waitlist: {
         Row: {
           context: string | null
