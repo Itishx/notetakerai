@@ -187,10 +187,13 @@ async function callBrainoAI(message: string, history: Message[]): Promise<string
   return (data.reply as string) || "My neurons hiccuped. Try again?";
 }
 
+type WakePhase = 'sleeping' | 'yellow' | 'green' | 'awake';
+
 // ─── BrainSVG ─────────────────────────────────────────────────────────────────
-function BrainSVG({ pl, pr, al, ar, squish }: {
-  pl: V2; pr: V2; al: number; ar: number; squish: number;
+function BrainSVG({ pl, pr, al, ar, squish, wakePhase = 'awake' }: {
+  pl: V2; pr: V2; al: number; ar: number; squish: number; wakePhase?: WakePhase;
 }) {
+  const eyesClosed = wakePhase === 'sleeping' || wakePhase === 'yellow';
   return (
     <svg
       viewBox="0 0 100 100"
@@ -255,11 +258,15 @@ function BrainSVG({ pl, pr, al, ar, squish }: {
         <circle cx="94" cy="63" r="5.5" fill="url(#bm-fill)" />
       </g>
       <circle cx="38" cy="48" r="6.5" fill="white" />
-      <circle cx={38 + pl.x} cy={48 + pl.y} r="3.2" fill="#1B1713" />
-      <circle cx={38 + pl.x + 1} cy={47.6 + pl.y} r="1.1" fill="white" />
+      {eyesClosed
+        ? <path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" strokeWidth="2.2" strokeLinecap="round" />
+        : <><circle cx={38 + pl.x} cy={48 + pl.y} r="3.2" fill="#1B1713" /><circle cx={38 + pl.x + 1} cy={47.6 + pl.y} r="1.1" fill="white" /></>
+      }
       <circle cx="62" cy="48" r="6.5" fill="white" />
-      <circle cx={62 + pr.x} cy={48 + pr.y} r="3.2" fill="#1B1713" />
-      <circle cx={62 + pr.x + 1} cy={47.6 + pr.y} r="1.1" fill="white" />
+      {eyesClosed
+        ? <path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" strokeWidth="2.2" strokeLinecap="round" />
+        : <><circle cx={62 + pr.x} cy={48 + pr.y} r="3.2" fill="#1B1713" /><circle cx={62 + pr.x + 1} cy={47.6 + pr.y} r="1.1" fill="white" /></>
+      }
       <ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" />
       <ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" />
       <path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" strokeWidth="1.8" strokeLinecap="round" />
@@ -271,6 +278,15 @@ function BrainSVG({ pl, pr, al, ar, squish }: {
 export default function BrainMascot() {
   const initX = window.innerWidth - S - 24;
   const initY = window.innerHeight - S - FLOOR_PAD;
+
+  const [wakePhase, setWakePhase] = useState<WakePhase>('sleeping');
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setWakePhase('yellow'), 800);
+    const t2 = setTimeout(() => setWakePhase('green'), 2000);
+    const t3 = setTimeout(() => setWakePhase('awake'), 3000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []);
 
   const [view, setView] = useState<ViewState>({
     x: initX, y: initY,
@@ -759,7 +775,14 @@ export default function BrainMascot() {
             ? 'drop-shadow(0 18px 36px rgba(0,0,0,0.42))'
             : chatOpen
               ? 'drop-shadow(0 0 18px rgba(232,120,110,0.65)) drop-shadow(0 5px 14px rgba(0,0,0,0.24))'
-              : 'drop-shadow(0 5px 14px rgba(0,0,0,0.24))',
+              : wakePhase === 'sleeping'
+                ? 'drop-shadow(0 5px 14px rgba(0,0,0,0.18)) brightness(0.7)'
+                : wakePhase === 'yellow'
+                  ? 'drop-shadow(0 0 16px rgba(255,210,50,1)) drop-shadow(0 0 32px rgba(255,175,0,0.7))'
+                  : wakePhase === 'green'
+                    ? 'drop-shadow(0 0 16px rgba(80,230,110,1)) drop-shadow(0 0 32px rgba(40,180,70,0.7))'
+                    : 'drop-shadow(0 5px 14px rgba(0,0,0,0.24))',
+          transition: 'filter 0.5s ease',
           willChange: 'left, top, transform, filter',
         }}
       >
@@ -769,6 +792,7 @@ export default function BrainMascot() {
           al={view.al}
           ar={view.ar}
           squish={view.squish}
+          wakePhase={wakePhase}
         />
       </div>
     </>
