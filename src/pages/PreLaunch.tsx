@@ -503,8 +503,8 @@ export default function PreLaunch() {
   const [showLine2, setShowLine2] = useState(false);
   const openingLine = `${line1} ${line2}`;
 
-  const tw1 = useTypewriter(line1, 38, phase === 'awake');
-  const tw2 = useTypewriter(line2, 38, showLine2);
+  const tw1 = useTypewriter(line1, 127, phase === 'awake');
+  const tw2 = useTypewriter(line2, 127, showLine2);
 
   useEffect(() => {
     document.body.classList.add('sb-prelaunch');
