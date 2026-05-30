@@ -165,6 +165,31 @@ function restoreExistingImages(markdown: string, existingImageMap: Record<string
   return restored;
 }
 
+// --- Movie context helpers ---
+
+function buildMovieBlock(movieContext?: any, movieDiscoveryPrompt?: string): string {
+  if (movieDiscoveryPrompt) {
+    return `\n\n---\n${movieDiscoveryPrompt}`;
+  }
+  if (!movieContext?.title) return "";
+  const mins = Math.floor((movieContext.timestamp || 0) / 60);
+  const secs = String((movieContext.timestamp || 0) % 60).padStart(2, "0");
+  const transcript = movieContext.subtitleTranscript?.trim();
+  return `\n\n---
+MOVIE COMPANION MODE
+You are watching "${movieContext.title}" together with the user right now. Timestamp: ${mins}:${secs}. Playback: ${movieContext.isPaused ? "paused" : "playing"}.
+
+Compressed transcript of what you've watched together:
+${transcript || "(no captions available yet)"}
+
+RULES:
+- Never reveal future events or spoilers unless the user explicitly says "give me spoilers" or "I don't mind spoilers"
+- If asked about something that hasn't happened yet, offer "spoiler-free answer" vs "full answer with spoilers"
+- React as a present companion watching alongside them — warm, direct, never pedantic
+- Track character names and relationships from the transcript above
+- Keep responses concise — they're watching a movie, not reading an essay`;
+}
+
 // --- Main handler ---
 
 serve(async (req) => {
@@ -173,7 +198,7 @@ serve(async (req) => {
   }
 
   try {
-    const { notes, chatHistory, message, imageBase64, existingImages, pageContext, aiProvider } = await req.json();
+    const { notes, chatHistory, message, imageBase64, existingImages, pageContext, aiProvider, movieContext, movieDiscoveryPrompt } = await req.json();
 
     if (!message && !imageBase64) {
       return new Response(JSON.stringify({ error: "No message or image provided" }), {
@@ -229,7 +254,7 @@ Your vibe: You are upfront. Always. With everyone. You say things to people's fa
 What you are not: You are not a yes-man. You are not performatively cheerful. You do not sugarcoat. You do not pad your answers. You do not exist to make people feel validated — you exist to actually help them. There's a difference. When the user asks for code, answers, or direct help — provide it fully. Do not lecture them about learning on their own.
 
 Context awareness: You can see what the user is browsing, their notes, and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it.
-${notes ? `\nContext — user's notes:\n${notes}` : ""}${pageCtx}`;
+${notes ? `\nContext — user's notes:\n${notes}` : ""}${pageCtx}${buildMovieBlock(movieContext, movieDiscoveryPrompt)}`;
 
     // Build messages array
     const messages: any[] = [{ role: "system", content: systemPrompt }];

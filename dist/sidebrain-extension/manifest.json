@@ -1,13 +1,27 @@
 {
   "manifest_version": 3,
-  "name": "Braino — AI Browser Companion",
-  "version": "1.4.24",
-  "description": "Your AI companion that lives in the browser — record audio, chat about any page, and sync notes to Notion",
-  "permissions": ["activeTab", "tabs", "tabCapture", "offscreen", "storage", "scripting", "alarms"],
+  "name": "Braino \u2014 AI Browser Companion",
+  "version": "1.8.0",
+  "description": "Your AI companion that lives in the browser \u2014 record audio, chat about any page, and sync notes to Notion",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "tabCapture",
+    "offscreen",
+    "storage",
+    "scripting",
+    "alarms"
+  ],
   "optional_permissions": [],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "externally_connectable": {
-    "matches": ["https://trybraino.com/*", "https://notetakerai.lovable.app/*", "https://*.lovable.app/*"]
+    "matches": [
+      "https://trybraino.com/*",
+      "https://notetakerai.lovable.app/*",
+      "https://*.lovable.app/*"
+    ]
   },
   "action": {
     "default_icon": {
@@ -15,13 +29,26 @@
       "128": "icon128.png"
     }
   },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+I",
+        "mac": "Command+I"
+      },
+      "description": "Open Braino"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -31,8 +58,19 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["sidepanel.html", "popup.js", "styles.css", "offscreen.html", "offscreen.js", "fonts/*", "icon48.png", "icon128.png"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "sidepanel.html",
+        "popup.js",
+        "styles.css",
+        "offscreen.html",
+        "offscreen.js",
+        "fonts/*",
+        "icon48.png",
+        "icon128.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {

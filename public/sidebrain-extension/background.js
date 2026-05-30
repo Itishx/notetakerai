@@ -2,6 +2,9 @@
 let isRecording = false;
 let bgAgentShouldStop = false;
 
+// Track previous URLs per tab for movie mode detection
+const bgPreviousUrlMap = {};
+
 function doCapture(windowId, sendResponse) {
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
     if (chrome.runtime.lastError) {
@@ -145,6 +148,29 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url !== undefined || changeInfo.status === "complete") {
     bgSyncActionPopup(tabId, tab?.url || "");
+  }
+
+  // Movie mode: detect Netflix /watch/ navigation
+  if (changeInfo.url !== undefined || changeInfo.status === "complete") {
+    const url = tab?.url || "";
+    const prev = bgPreviousUrlMap[tabId] || "";
+    const wasMovie = /netflix\.com\/watch\//.test(prev);
+    const isMovie  = /netflix\.com\/watch\//.test(url);
+
+    if (isMovie && !wasMovie) {
+      // Give the page a moment to inject the content script before messaging
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tabId, { type: "activateMovieMode" }, () => {
+          void chrome.runtime.lastError;
+        });
+      }, 1500);
+    } else if (!isMovie && wasMovie) {
+      chrome.tabs.sendMessage(tabId, { type: "deactivateMovieMode" }, () => {
+        void chrome.runtime.lastError;
+      });
+    }
+
+    bgPreviousUrlMap[tabId] = url;
   }
 });
 
@@ -391,12 +417,75 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (message.action === "openSilentAuthTab") {
+    const extId = chrome.runtime.id;
+    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}`, active: false }, (tab) => {
+      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+    });
+    sendResponse({ ok: true });
+    return true;
+  }
   if (message.action === "openAuthTab") {
     const extId = chrome.runtime.id;
     chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}` }, (tab) => {
       if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
     });
     sendResponse({ ok: true });
+    return true;
+  }
+  if (message.action === "checkAuth") {
+    (async () => {
+      // Pull token from extension storage
+      let { authToken, authRefreshToken } = await chrome.storage.local.get(["authToken", "authRefreshToken"]);
+
+      // If no token in extension storage, try to grab it from any open trybraino.com tab
+      if (!authToken && !authRefreshToken) {
+        try {
+          const tabs = await chrome.tabs.query({ url: "*://trybraino.com/*" });
+          if (tabs.length > 0) {
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: tabs[0].id },
+              func: () => {
+                try {
+                  const raw = localStorage.getItem('sb-ovapacfrzddnhrwvkbkr-auth-token');
+                  if (!raw) return null;
+                  const s = JSON.parse(raw);
+                  return s?.access_token ? s : null;
+                } catch { return null; }
+              }
+            });
+            const s = results?.[0]?.result;
+            if (s?.access_token) {
+              authToken = s.access_token;
+              authRefreshToken = s.refresh_token || null;
+              chrome.storage.local.set({
+                authToken,
+                authRefreshToken,
+                authEmail: s.user?.email || null,
+                authUserId: s.user?.id || null,
+                authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+              });
+            }
+          }
+        } catch {}
+      }
+
+      if (!authToken && !authRefreshToken) { sendResponse({ authenticated: false }); return; }
+      try {
+        const res = await fetch(`${BG_SUPABASE_URL}/auth/v1/user`, {
+          headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` }
+        });
+        if (res.ok) { sendResponse({ authenticated: true }); return; }
+        if (authRefreshToken) {
+          const refreshed = await bgRefreshAuthToken();
+          sendResponse({ authenticated: !!refreshed });
+          return;
+        }
+        sendResponse({ authenticated: false });
+      } catch {
+        sendResponse({ authenticated: !!authToken });
+      }
+    })();
     return true;
   }
   if (

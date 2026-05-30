@@ -4,6 +4,30 @@ if (globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ !== `${chrome.runtime?.id || "no-
   (() => {
 // Braino Content Script — extracts page text for AI context
 
+// Sync Supabase session from website localStorage into extension storage so
+// checkAuth finds a token even when the user logged in on the website (not via the extension auth tab).
+if (location.hostname === 'trybraino.com') {
+  const __sbSyncWebAuth = () => {
+    try {
+      const raw = localStorage.getItem('sb-ovapacfrzddnhrwvkbkr-auth-token');
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s?.access_token) return;
+      chrome.storage.local.set({
+        authToken: s.access_token,
+        authRefreshToken: s.refresh_token || null,
+        authEmail: s.user?.email || null,
+        authUserId: s.user?.id || null,
+        authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+      });
+    } catch {}
+  };
+  __sbSyncWebAuth();
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'sb-ovapacfrzddnhrwvkbkr-auth-token') __sbSyncWebAuth();
+  });
+}
+
 // Generate a stable, unique CSS selector for an element (used by browser agent)
 function getStableSelector(el) {
   // Priority 1: id attribute (must be valid CSS ident)
@@ -1475,6 +1499,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "activateMovieMode") {
+    __sbStartMovieMode();
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg.type === "deactivateMovieMode") {
+    __sbStopMovieMode();
+    sendResponse({ ok: true });
+    return true;
+  }
+
   return true;
 });
 
@@ -1663,6 +1699,15 @@ let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
 
+// Movie mode state
+let __sbMovieMode = false;
+let __sbMovieTitle = '';
+let __sbSubtitleBuffer = [];
+let __sbLastSubtitle = '';
+let __sbSubtitleTimer = null;
+let __sbMovieChatHistory = [];
+let __sbMovieDiscovery = false;
+
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -1728,6 +1773,13 @@ function __sbBuildBrainUI() {
     }
     #__sb_brain_btn__.sb-brain-authed {
       animation: __sb_brain_glow_authed__ 0.85s ease-in-out infinite;
+    }
+    @keyframes __sb_brain_glow_rejected__ {
+      0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,40,40,0.4)); }
+      50% { filter: drop-shadow(0 0 30px rgba(255,80,80,1)) drop-shadow(0 0 55px rgba(200,40,40,0.65)); }
+    }
+    #__sb_brain_btn__.sb-brain-rejected {
+      animation: __sb_brain_glow_rejected__ 0.85s ease-in-out infinite;
     }
     #__sb_pill__ {
       display: flex; flex-direction: column;
@@ -2230,6 +2282,50 @@ function __sbBuildBrainUI() {
       pointer-events: none;
     }
     #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
+
+    /* ── Movie watching mode ── */
+    @keyframes __sb_movie_watch__ {
+      0%, 100% { filter: drop-shadow(0 0 14px rgba(80,160,255,0.7)) drop-shadow(0 2px 8px rgba(0,0,0,0.18)); }
+      50%       { filter: drop-shadow(0 0 28px rgba(100,180,255,1))  drop-shadow(0 0 48px rgba(60,130,255,0.65)); }
+    }
+    #__sb_brain_btn__.sb-movie-watching {
+      animation: __sb_movie_watch__ 2.2s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-movie-thinking {
+      animation: __sb_movie_watch__ 0.6s ease-in-out infinite;
+    }
+
+    /* ── Movie recommendation card ── */
+    .sb-movie-card {
+      margin: 12px 16px 4px; border-radius: 16px; overflow: hidden;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    }
+    .sb-mc-poster-wrap { width: 100%; overflow: hidden; max-height: 300px; }
+    .sb-mc-poster { width: 100%; display: block; object-fit: cover; }
+    .sb-mc-poster-placeholder {
+      width: 100%; height: 200px; display: flex; align-items: center; justify-content: center;
+      font-size: 48px; background: rgba(255,255,255,0.04);
+    }
+    .sb-mc-title {
+      font-size: 18px; font-weight: 700; color: #fff; padding: 14px 16px 2px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .sb-mc-year { font-size: 13px; font-weight: 400; color: rgba(255,255,255,0.45); margin-left: 6px; }
+    .sb-mc-rating { font-size: 12px; color: #FFD060; padding: 0 16px 4px; }
+    .sb-mc-overview {
+      font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.7);
+      padding: 4px 16px 12px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .sb-mc-watch-btn {
+      display: block; text-decoration: none; text-align: center;
+      margin: 0 16px 16px; padding: 10px;
+      background: #E8483E; color: white; border-radius: 10px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      transition: background 0.15s;
+    }
+    .sb-mc-watch-btn:hover { background: #C9544A; }
   `;
   document.head.appendChild(style);
 
@@ -3354,15 +3450,17 @@ function __sbToggleInput(open, options = {}) {
       if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
     };
 
-    chrome.storage.local.get(["sbHasAwoken", "authToken"], ({ sbHasAwoken, authToken }) => {
+    chrome.storage.local.get("sbHasAwoken", ({ sbHasAwoken }) => {
       if (sbHasAwoken) {
         // Fast path — cinematic played before, open bar directly
-        if (!authToken) {
-          bar.classList.add("open", "sb-signin");
-          __sbSetupBarSignIn();
-          return;
-        }
-        __sbOpenBarReady();
+        chrome.storage.local.get("authToken", ({ authToken }) => {
+          if (!authToken) {
+            bar.classList.add("open", "sb-signin");
+            __sbSetupBarSignIn();
+            return;
+          }
+          __sbOpenBarReady();
+        });
         return;
       }
 
@@ -3371,38 +3469,55 @@ function __sbToggleInput(open, options = {}) {
 
       // Phase 1 (0–1200ms): sleeping, silent
       if (brainBtn) {
-        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed");
+        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
         brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
       }
 
-      // Phase 2 (1200ms): yellow glow = authenticating
+      // Phase 2 (1200ms): yellow glow + open silent auth tab in background
       setTimeout(() => {
         if (brainBtn) brainBtn.classList.add("sb-brain-auth");
+        const tYellow = Date.now();
+        const minYellow = 800;
+
+        chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
+
+        let resolved = false;
+
+        const goGreen = () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(fallbackTimer);
+          chrome.storage.onChanged.removeListener(authWatcher);
+          const wait = Math.max(0, minYellow - (Date.now() - tYellow));
+          setTimeout(() => {
+            if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.innerHTML = __SB_BRAIN_SVG; brainBtn.classList.add("sb-brain-authed"); }
+            setTimeout(() => {
+              if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
+              __sbOpenBarReady();
+            }, 1100);
+          }, wait);
+        };
+
+        const goRed = () => {
+          if (resolved) return;
+          resolved = true;
+          chrome.storage.onChanged.removeListener(authWatcher);
+          if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
+          setTimeout(() => {
+            if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
+            bar.classList.add("open", "sb-signin");
+            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+            __sbSetupBarSignIn();
+          }, 700);
+        };
+
+        const authWatcher = (changes, area) => {
+          if (area === "local" && changes.authToken?.newValue) goGreen();
+        };
+        chrome.storage.onChanged.addListener(authWatcher);
+
+        const fallbackTimer = setTimeout(goRed, 6000);
       }, 1200);
-
-      // Phase 3 (2100ms): evaluate auth result
-      setTimeout(() => {
-        if (!authToken) {
-          if (brainBtn) brainBtn.classList.remove("sb-brain-auth");
-          bar.classList.add("open", "sb-signin");
-          if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-          __sbSetupBarSignIn();
-          return;
-        }
-
-        // Green glow + eyes open
-        if (brainBtn) {
-          brainBtn.classList.remove("sb-brain-auth");
-          brainBtn.innerHTML = __SB_BRAIN_SVG;
-          brainBtn.classList.add("sb-brain-authed");
-        }
-
-        // Phase 4 (2100+1100ms): open bar
-        setTimeout(() => {
-          if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
-          __sbOpenBarReady();
-        }, 1100);
-      }, 2100);
     });
   } else {
     __sbInputOpen = false;
@@ -3617,7 +3732,7 @@ async function __sbSpeakText(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: clean,
-        voiceId: "2ajXGJNYBR0iNHpS4VZb",
+        voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
     });
 
@@ -3852,6 +3967,190 @@ async function __sbFetchAssistantReply(body) {
   return { reply: json.reply || json.response || json.message || json.answer || "" };
 }
 
+// ─────────────────────────────────────────────
+// Movie Mode
+// ─────────────────────────────────────────────
+
+const MOVIE_DISCOVERY_SYSTEM_PROMPT = `The user wants to watch a movie. Help them pick something on Netflix tonight.
+
+Ask about their mood naturally — one question at a time. Examples: "Lighthearted or something with weight?", "Do you want to laugh, think, or feel something tonight?". After 2-3 exchanges, recommend exactly ONE movie with a short personal pitch (2-3 sentences).
+
+IMPORTANT: When you have a recommendation, output this on its own line (nothing else on that line):
+MOVIE_REC:{"title":"Interstellar","year":2014,"pitch":"...your 2-3 sentence pitch...","tmdb_query":"Interstellar 2014"}
+
+Then on the next line, ask if they want to look it up on Netflix.
+Keep the Braino voice: direct, warm, slightly dry.`;
+
+const MOVIE_INTENT_PATTERNS = [
+  /let'?s?\s+watch\s+a?\s*movie/i,
+  /watch\s+a?\s*movie\s+with\s+(me|us)/i,
+  /movie\s+night/i,
+  /suggest\s+(a|some)\s+movie/i,
+  /what\s+(should|can)\s+(i|we)\s+watch/i,
+  /i\s+want\s+to\s+watch\s+something/i,
+  /something\s+to\s+watch/i,
+  /pick\s+(a|me\s+a)\s+movie/i,
+  /recommend\s+(a|me\s+a)\s+movie/i,
+];
+
+function __sbIsMovieIntent(text) {
+  return MOVIE_INTENT_PATTERNS.some(p => p.test(text));
+}
+
+function __sbNetflixGetSubtitle() {
+  const spans = document.querySelectorAll(
+    '.player-timedtext-text-container span, [class*="player-timedtext"] span, [data-uia="player-timedtext"] span'
+  );
+  return Array.from(spans).map(el => el.textContent).join(' ').trim();
+}
+
+function __sbNetflixGetVideoState() {
+  const v = document.querySelector('video');
+  const titleEl = document.querySelector(
+    '[data-uia="video-title"], [class*="ellipsize-text"], .watch-title'
+  );
+  return {
+    title: titleEl?.textContent?.trim() || document.title.replace(' | Netflix', '').trim(),
+    timestamp: v ? Math.floor(v.currentTime) : 0,
+    duration:  v ? Math.floor(v.duration) : 0,
+    isPaused:  v ? v.paused : true,
+  };
+}
+
+function __sbSetBrainMovieEyes() {
+  const brain = document.getElementById('__sb_brain_btn__');
+  if (!brain) return;
+  const rect = brain.getBoundingClientRect();
+  const dx = window.innerWidth / 2  - (rect.left + rect.width / 2);
+  const dy = window.innerHeight / 2 - (rect.top  + rect.height / 2);
+  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+  const MAX = 1.6;
+  const ox = (dx / dist) * MAX;
+  const oy = (dy / dist) * MAX;
+  const svg = brain.querySelector('svg');
+  if (!svg) return;
+  const pupils    = svg.querySelectorAll('circle[r="3.2"]');
+  const highlights = svg.querySelectorAll('circle[r="1.1"]');
+  if (pupils[0])    { pupils[0].setAttribute('cx', String(38 + ox)); pupils[0].setAttribute('cy', String(48 + oy)); }
+  if (pupils[1])    { pupils[1].setAttribute('cx', String(62 + ox)); pupils[1].setAttribute('cy', String(48 + oy)); }
+  if (highlights[0]){ highlights[0].setAttribute('cx', String(39 + ox)); highlights[0].setAttribute('cy', String(46.6 + oy)); }
+  if (highlights[1]){ highlights[1].setAttribute('cx', String(63 + ox)); highlights[1].setAttribute('cy', String(46.6 + oy)); }
+}
+
+function __sbResetBrainEyes() {
+  const brain = document.getElementById('__sb_brain_btn__');
+  const svg = brain?.querySelector('svg');
+  if (!svg) return;
+  const pupils    = svg.querySelectorAll('circle[r="3.2"]');
+  const highlights = svg.querySelectorAll('circle[r="1.1"]');
+  if (pupils[0])    { pupils[0].setAttribute('cx', '38');   pupils[0].setAttribute('cy', '48'); }
+  if (pupils[1])    { pupils[1].setAttribute('cx', '62');   pupils[1].setAttribute('cy', '48'); }
+  if (highlights[0]){ highlights[0].setAttribute('cx', '39');  highlights[0].setAttribute('cy', '46.6'); }
+  if (highlights[1]){ highlights[1].setAttribute('cx', '63');  highlights[1].setAttribute('cy', '46.6'); }
+}
+
+function __sbCompressSubtitles(currentTs) {
+  if (!__sbSubtitleBuffer.length) return '';
+  const recent = __sbSubtitleBuffer.filter(e => currentTs - e.ts <= 120);
+  const older  = __sbSubtitleBuffer.filter(e => currentTs - e.ts >  120);
+  const windows = {};
+  older.forEach(e => { const w = Math.floor(e.ts / 30); if (!windows[w]) windows[w] = e.text; });
+  const olderText  = Object.values(windows).join(' … ');
+  const recentText = recent.map(e => e.text).join(' ');
+  return (olderText + ' … ' + recentText).trim().slice(0, 1500);
+}
+
+function __sbStartMovieMode() {
+  if (__sbMovieMode) return;
+  __sbMovieMode = true;
+  __sbSubtitleBuffer = [];
+  __sbMovieChatHistory = [];
+  __sbLastSubtitle = '';
+
+  const brain = document.getElementById('__sb_brain_btn__');
+  if (brain) brain.classList.add('sb-movie-watching');
+
+  __sbSetBrainMovieEyes();
+
+  const inp = document.getElementById('__sb_input__');
+  if (inp) inp.placeholder = 'Ask about the movie…';
+
+  __sbSubtitleTimer = setInterval(() => {
+    const state = __sbNetflixGetVideoState();
+    if (state.isPaused) return;
+    if (state.title) __sbMovieTitle = state.title;
+    const sub = __sbNetflixGetSubtitle();
+    if (sub && sub !== __sbLastSubtitle) {
+      __sbLastSubtitle = sub;
+      __sbSubtitleBuffer.push({ ts: state.timestamp, text: sub });
+      if (__sbSubtitleBuffer.length > 7200) __sbSubtitleBuffer.shift();
+    }
+  }, 2000);
+}
+
+function __sbStopMovieMode() {
+  __sbMovieMode = false;
+  clearInterval(__sbSubtitleTimer);
+  __sbSubtitleTimer = null;
+  __sbSubtitleBuffer = [];
+  __sbMovieChatHistory = [];
+  __sbMovieTitle = '';
+  __sbLastSubtitle = '';
+
+  const brain = document.getElementById('__sb_brain_btn__');
+  if (brain) brain.classList.remove('sb-movie-watching', 'sb-movie-thinking');
+
+  __sbResetBrainEyes();
+
+  const inp = document.getElementById('__sb_input__');
+  if (inp) inp.placeholder = "What's on your mind?";
+}
+
+function __sbParseMovieRec(text) {
+  const match = text.match(/MOVIE_REC:(\{[^\n]+\})/);
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch { return null; }
+}
+
+async function __sbRenderMovieCard(rec) {
+  let posterUrl = null;
+  let voteAverage = null;
+  let overview = rec.pitch || '';
+
+  try {
+    const r = await fetch(
+      `${__SB_API}/tmdb-search?query=${encodeURIComponent(rec.tmdb_query || rec.title)}`,
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    const d = await r.json();
+    if (d.results && d.results[0]) {
+      posterUrl   = d.results[0].poster_url || null;
+      voteAverage = d.results[0].vote_average || null;
+      overview    = d.results[0].overview || rec.pitch || '';
+    }
+  } catch { /* use fallback values */ }
+
+  const card = document.createElement('div');
+  card.className = 'sb-movie-card';
+  card.innerHTML = `
+    <div class="sb-mc-poster-wrap">
+      ${posterUrl
+        ? `<img class="sb-mc-poster" src="${posterUrl}" alt="${rec.title.replace(/"/g,'&quot;')}" />`
+        : `<div class="sb-mc-poster-placeholder">🎬</div>`
+      }
+    </div>
+    <div class="sb-mc-title">${rec.title}<span class="sb-mc-year">${rec.year || ''}</span></div>
+    ${voteAverage ? `<div class="sb-mc-rating">★ ${Number(voteAverage).toFixed(1)}</div>` : ''}
+    <div class="sb-mc-overview">${overview}</div>
+    <a class="sb-mc-watch-btn" href="https://www.netflix.com/search?q=${encodeURIComponent(rec.title)}" target="_blank" rel="noopener">Watch on Netflix →</a>
+  `;
+
+  const scrollArea = document.querySelector('#__sb_bubble__ .sb-card-scroll');
+  if (scrollArea) scrollArea.appendChild(card);
+}
+
+// ─────────────────────────────────────────────
+
 async function __sbProcessPrompt(text, options = {}) {
   const connectorDirective = __sbParseConnectorDirective(text);
   if (connectorDirective.connector) {
@@ -3860,6 +4159,11 @@ async function __sbProcessPrompt(text, options = {}) {
   }
   const promptText = String(connectorDirective.task || "").trim();
   if (!promptText) return;
+
+  // Movie intent detection — triggers discovery mode
+  if (!__sbMovieMode && __sbIsMovieIntent(promptText)) {
+    __sbMovieDiscovery = true;
+  }
   const fromVoice = Boolean(options.fromVoice);
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
@@ -3958,11 +4262,51 @@ async function __sbProcessPrompt(text, options = {}) {
     if (hasPageText) body.pageContext = { url: pageContext.url, title: pageContext.title, text: pageContext.text };
     if (selectedText) body.selectedText = selectedText;
 
+    // Movie companion: inject subtitle context
+    if (__sbMovieMode) {
+      const state = __sbNetflixGetVideoState();
+      body.movieContext = {
+        title:              __sbMovieTitle || state.title,
+        timestamp:          state.timestamp,
+        subtitleTranscript: __sbCompressSubtitles(state.timestamp),
+        isPaused:           state.isPaused,
+      };
+      body.chatHistory = __sbMovieChatHistory.slice(-6);
+      document.getElementById('__sb_brain_btn__')?.classList.add('sb-movie-thinking');
+    } else if (__sbMovieDiscovery) {
+      body.movieDiscoveryPrompt = MOVIE_DISCOVERY_SYSTEM_PROMPT;
+    }
+
     const { reply } = await __sbFetchAssistantReply(body);
     if (!reply) {
       if (fromVoice) await __sbSpeakText("Please sign in to continue.");
       return;
     }
+
+    // Movie companion: update per-movie history + remove thinking glow
+    if (__sbMovieMode) {
+      __sbMovieChatHistory.push({ role: 'user', content: promptText });
+      __sbMovieChatHistory.push({ role: 'assistant', content: reply });
+      document.getElementById('__sb_brain_btn__')?.classList.remove('sb-movie-thinking');
+    }
+
+    // Parse movie recommendation card
+    const movieRec = __sbParseMovieRec(reply);
+    if (movieRec) {
+      __sbMovieDiscovery = false;
+      const cleanReply = reply.replace(/MOVIE_REC:\{[^\n]+\}\n?/, '').trim();
+      __sbChatHistory.push({ role: "assistant", content: cleanReply || reply });
+      const displayReply = cleanReply || reply;
+      if (voiceOnly) {
+        await __sbSpeakText(displayReply);
+      } else {
+        __sbShowBubble(displayReply, false, { rich: true, prompt: promptText, title: '🎬 Movie Night' });
+        if (fromVoice) await __sbSpeakText(displayReply);
+      }
+      void __sbRenderMovieCard(movieRec);
+      return;
+    }
+
     __sbChatHistory.push({ role: "assistant", content: reply });
     if (voiceOnly) {
       const spoke = await __sbSpeakText(reply);
@@ -3971,7 +4315,9 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbShowBubble(reply, false, {
         rich: true,
         prompt: promptText,
-        title: pageContext.title || location.hostname.replace(/^www\./, "") || "Current page",
+        title: __sbMovieMode
+          ? `🎬 ${__sbMovieTitle || 'Movie'}`
+          : (pageContext.title || location.hostname.replace(/^www\./, "") || "Current page"),
       });
       if (fromVoice) await __sbSpeakText(reply);
     }

@@ -4,6 +4,30 @@ if (globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ !== `${chrome.runtime?.id || "no-
   (() => {
 // Braino Content Script — extracts page text for AI context
 
+// Sync Supabase session from website localStorage into extension storage so
+// checkAuth finds a token even when the user logged in on the website (not via the extension auth tab).
+if (location.hostname === 'trybraino.com') {
+  const __sbSyncWebAuth = () => {
+    try {
+      const raw = localStorage.getItem('sb-ovapacfrzddnhrwvkbkr-auth-token');
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s?.access_token) return;
+      chrome.storage.local.set({
+        authToken: s.access_token,
+        authRefreshToken: s.refresh_token || null,
+        authEmail: s.user?.email || null,
+        authUserId: s.user?.id || null,
+        authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+      });
+    } catch {}
+  };
+  __sbSyncWebAuth();
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'sb-ovapacfrzddnhrwvkbkr-auth-token') __sbSyncWebAuth();
+  });
+}
+
 // Generate a stable, unique CSS selector for an element (used by browser agent)
 function getStableSelector(el) {
   // Priority 1: id attribute (must be valid CSS ident)
@@ -1475,6 +1499,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "activateMovieMode") {
+    __sbStartMovieMode();
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg.type === "deactivateMovieMode") {
+    __sbStopMovieMode();
+    sendResponse({ ok: true });
+    return true;
+  }
+
   return true;
 });
 
@@ -1638,10 +1674,21 @@ const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
 
+const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
+  .replace('<circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
+    '<circle cx="38" cy="48" r="6.5" fill="white"/><path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/><circle cx="62" cy="48" r="6.5" fill="white"/><path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/>')
+  .replace('<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="28" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/><ellipse cx="72" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/>')
+  .replace('<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 46 62 Q 50 62 54 62" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>');
+
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
 let __sbVoiceOnlyMode = false;
+let __sbHeadphoneMode = false;
+let __sbVoiceSilenceTimer = null;
+let __sbLastFinalTranscript = null;
 let __sbChatHistory = [];
 let __sbVoicePendingReply = false;
 let __sbIsSpeaking = false;
@@ -1651,6 +1698,15 @@ let __sbCurrentUtterance = null;
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
+
+// Movie mode state
+let __sbMovieMode = false;
+let __sbMovieTitle = '';
+let __sbSubtitleBuffer = [];
+let __sbLastSubtitle = '';
+let __sbSubtitleTimer = null;
+let __sbMovieChatHistory = [];
+let __sbMovieDiscovery = false;
 
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
@@ -1703,6 +1759,27 @@ function __sbBuildBrainUI() {
     @keyframes __sb_pulse__ {
       0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5)); }
       50% { filter: drop-shadow(0 0 22px rgba(220,50,50,0.95)) drop-shadow(0 0 8px rgba(220,50,50,0.7)); }
+    }
+    @keyframes __sb_brain_glow_auth__ {
+      0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.3)); }
+      50% { filter: drop-shadow(0 0 30px rgba(255,210,50,1)) drop-shadow(0 0 55px rgba(255,175,0,0.65)); }
+    }
+    @keyframes __sb_brain_glow_authed__ {
+      0%, 100% { filter: drop-shadow(0 2px 12px rgba(40,180,70,0.4)); }
+      50% { filter: drop-shadow(0 0 32px rgba(80,230,110,1)) drop-shadow(0 0 60px rgba(40,180,70,0.7)); }
+    }
+    #__sb_brain_btn__.sb-brain-auth {
+      animation: __sb_brain_glow_auth__ 0.85s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-authed {
+      animation: __sb_brain_glow_authed__ 0.85s ease-in-out infinite;
+    }
+    @keyframes __sb_brain_glow_rejected__ {
+      0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,40,40,0.4)); }
+      50% { filter: drop-shadow(0 0 30px rgba(255,80,80,1)) drop-shadow(0 0 55px rgba(200,40,40,0.65)); }
+    }
+    #__sb_brain_btn__.sb-brain-rejected {
+      animation: __sb_brain_glow_rejected__ 0.85s ease-in-out infinite;
     }
     #__sb_pill__ {
       display: flex; flex-direction: column;
@@ -1965,9 +2042,63 @@ function __sbBuildBrainUI() {
       backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
       pointer-events: none; opacity: 0;
       transform: scaleX(0.55) translateY(4px); transform-origin: right center;
-      transition: opacity 0.22s cubic-bezier(0.34,1.2,0.64,1), transform 0.22s cubic-bezier(0.34,1.2,0.64,1);
+      transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1);
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
+    /* ── Wake-up state ── */
+    #__sb_wakeup__ {
+      display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    }
+    #__sb_bar__.sb-waking #__sb_wakeup__ { display: flex; }
+    #__sb_bar__.sb-waking #__sb_input__,
+    #__sb_bar__.sb-waking #__sb_mode_btn__,
+    #__sb_bar__.sb-waking #__sb_rec_btn__,
+    #__sb_bar__.sb-waking #__sb_send_btn__,
+    #__sb_bar__.sb-waking #__sb_x_auto_btn__ { display: none !important; }
+    #__sb_wakeup_track__ {
+      flex: 1; height: 2px; background: rgba(65,48,40,0.12); border-radius: 99px; overflow: hidden;
+    }
+    #__sb_wakeup_fill__ {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #F6A8A2, #E8786E 60%, #C9544A);
+      border-radius: 99px; transition: width 0.55s cubic-bezier(0.4,0,0.2,1);
+    }
+    #__sb_wakeup_label__ {
+      font-size: 11.5px; color: #A79B92; white-space: nowrap; flex-shrink: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    @keyframes __sb_wu_pulse__ {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    #__sb_bar__.sb-waking #__sb_wakeup_label__ {
+      animation: __sb_wu_pulse__ 1.4s ease-in-out infinite;
+    }
+    /* ── Sign-in CTA state ── */
+    #__sb_signin_cta__ {
+      display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    }
+    #__sb_bar__.sb-signin #__sb_signin_cta__ { display: flex; }
+    #__sb_bar__.sb-signin #__sb_input__,
+    #__sb_bar__.sb-signin #__sb_mode_btn__,
+    #__sb_bar__.sb-signin #__sb_rec_btn__,
+    #__sb_bar__.sb-signin #__sb_send_btn__,
+    #__sb_bar__.sb-signin #__sb_x_auto_btn__,
+    #__sb_bar__.sb-signin #__sb_wakeup__ { display: none !important; }
+    #__sb_signin_cta_hint__ {
+      font-size: 12px; color: #A79B92; flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #__sb_signin_btn_cta__ {
+      white-space: nowrap; border: none; border-radius: 20px; flex-shrink: 0;
+      background: #E8786E; color: white; font-size: 12px; font-weight: 600;
+      padding: 6px 14px; cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      transition: background 0.15s;
+    }
+    #__sb_signin_btn_cta__:hover { background: #C9544A; }
+    #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
       font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
@@ -2119,6 +2250,82 @@ function __sbBuildBrainUI() {
       border-top: 1px solid var(--sb-rec-border);
     }
     #__sb_rec_bar__.active { display: flex; }
+
+    /* ── Headphone Mode Brain Glows ── */
+    @keyframes __sb_hp_listen__ {
+      0%,100% { filter: drop-shadow(0 0 20px rgba(210,40,40,0.75)) drop-shadow(0 0 7px rgba(210,40,40,0.5)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 44px rgba(220,40,40,1))    drop-shadow(0 0 16px rgba(220,40,40,0.7)); transform: scale(1.08); }
+    }
+    @keyframes __sb_hp_captured__ {
+      0%,100% { filter: drop-shadow(0 0 24px rgba(255,195,0,0.9)) drop-shadow(0 0 10px rgba(255,170,0,0.6)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 52px rgba(255,215,0,1))   drop-shadow(0 0 22px rgba(255,185,0,0.8)); transform: scale(1.1); }
+    }
+    @keyframes __sb_hp_speak__ {
+      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
+      50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
+    }
+    #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+
+    /* ── Voice Error Pill ── */
+    #__sb_voice_error_pill__ {
+      position: fixed; bottom: 84px; right: 20px; z-index: 2147483649;
+      background: #DC2626; color: #fff;
+      padding: 10px 16px; border-radius: 999px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px; font-weight: 500;
+      box-shadow: 0 4px 18px rgba(220,38,38,0.45);
+      max-width: calc(100vw - 48px);
+      opacity: 0; transform: translateY(8px) scale(0.97);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+    }
+    #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
+
+    /* ── Movie watching mode ── */
+    @keyframes __sb_movie_watch__ {
+      0%, 100% { filter: drop-shadow(0 0 14px rgba(80,160,255,0.7)) drop-shadow(0 2px 8px rgba(0,0,0,0.18)); }
+      50%       { filter: drop-shadow(0 0 28px rgba(100,180,255,1))  drop-shadow(0 0 48px rgba(60,130,255,0.65)); }
+    }
+    #__sb_brain_btn__.sb-movie-watching {
+      animation: __sb_movie_watch__ 2.2s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-movie-thinking {
+      animation: __sb_movie_watch__ 0.6s ease-in-out infinite;
+    }
+
+    /* ── Movie recommendation card ── */
+    .sb-movie-card {
+      margin: 12px 16px 4px; border-radius: 16px; overflow: hidden;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    }
+    .sb-mc-poster-wrap { width: 100%; overflow: hidden; max-height: 300px; }
+    .sb-mc-poster { width: 100%; display: block; object-fit: cover; }
+    .sb-mc-poster-placeholder {
+      width: 100%; height: 200px; display: flex; align-items: center; justify-content: center;
+      font-size: 48px; background: rgba(255,255,255,0.04);
+    }
+    .sb-mc-title {
+      font-size: 18px; font-weight: 700; color: #fff; padding: 14px 16px 2px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .sb-mc-year { font-size: 13px; font-weight: 400; color: rgba(255,255,255,0.45); margin-left: 6px; }
+    .sb-mc-rating { font-size: 12px; color: #FFD060; padding: 0 16px 4px; }
+    .sb-mc-overview {
+      font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.7);
+      padding: 4px 16px 12px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .sb-mc-watch-btn {
+      display: block; text-decoration: none; text-align: center;
+      margin: 0 16px 16px; padding: 10px;
+      background: #E8483E; color: white; border-radius: 10px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      transition: background 0.15s;
+    }
+    .sb-mc-watch-btn:hover { background: #C9544A; }
   `;
   document.head.appendChild(style);
 
@@ -2131,8 +2338,8 @@ function __sbBuildBrainUI() {
         <span id="__sb_mode_label__">⚡ Auto</span>
         <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
       </button>
-      <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Voice">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Headphone mode">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
       </button>
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
@@ -2141,6 +2348,14 @@ function __sbBuildBrainUI() {
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span id="__sb_x_auto_label__">X Auto</span>
       </button>
+      <div id="__sb_wakeup__">
+        <span id="__sb_wakeup_label__">Waking up…</span>
+        <div id="__sb_wakeup_track__"><div id="__sb_wakeup_fill__"></div></div>
+      </div>
+      <div id="__sb_signin_cta__">
+        <span id="__sb_signin_cta_hint__">Sign in to start chatting</span>
+        <button id="__sb_signin_btn_cta__">Sign in →</button>
+      </div>
     </div>
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
@@ -2165,10 +2380,7 @@ function __sbBuildBrainUI() {
           <span id="__sb_card_mode_label__">⚡ Auto</span>
           <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
         </button>
-        <button id="__sb_card_rec_btn__" class="sb-card-foot-btn" title="Voice">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-        </button>
-        <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Voice-only mode">
+        <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Headphone mode">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
         </button>
         <button id="__sb_card_send__" class="sb-card-foot-btn" title="Send">
@@ -2186,6 +2398,11 @@ function __sbBuildBrainUI() {
     </div>
   `;
   document.body.appendChild(cardWrap);
+
+  // ── Voice Error Pill ──
+  const errPill = document.createElement("div");
+  errPill.id = "__sb_voice_error_pill__";
+  document.body.appendChild(errPill);
 
   // ── Dropdowns (body-level to avoid stacking context issues) ──
   const modeDd = document.createElement("div");
@@ -2229,7 +2446,14 @@ function __sbBuildBrainUI() {
 
   // Brain hidden by default
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  document.getElementById("__sb_brain_btn__").addEventListener("click", () => __sbToggleInput(!__sbInputOpen));
+  document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
+    if (__sbHeadphoneMode && !__sbInputOpen) {
+      // Open bar so user can stop headphone mode via the headphone button
+      __sbToggleInput(true);
+    } else {
+      __sbToggleInput(!__sbInputOpen);
+    }
+  });
 
   // ⌘I / Ctrl+I — toggle brain
   document.addEventListener("keydown", (e) => {
@@ -2243,7 +2467,7 @@ function __sbBuildBrainUI() {
 
   // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
-  document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleRecording);
+  document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleHeadphoneMode);
 
   // X Auto button — show only on X/Twitter
   const xAutoBtn = document.getElementById("__sb_x_auto_btn__");
@@ -2252,12 +2476,9 @@ function __sbBuildBrainUI() {
 
   // Card footer buttons
   document.getElementById("__sb_card_send__").addEventListener("click", __sbSendMessage);
-  document.getElementById("__sb_card_rec_btn__").addEventListener("click", __sbToggleRecording);
   document.getElementById("__sb_card_collapse__").addEventListener("click", __sbCollapseCard);
-  document.getElementById("__sb_card_voice_mode_btn__").addEventListener("click", () => {
-    __sbVoiceOnlyMode = !__sbVoiceOnlyMode;
-    document.getElementById("__sb_card_voice_mode_btn__").classList.toggle("active", __sbVoiceOnlyMode);
-  });
+  document.getElementById("__sb_card_voice_mode_btn__").addEventListener("click", __sbToggleHeadphoneMode);
+
   document.getElementById("__sb_capture_btn__").addEventListener("click", () => void __sbCaptureLectureSegment());
   document.getElementById("__sb_rec_stop_btn__").addEventListener("click", () => void __sbStopLectureRecording());
 
@@ -3197,31 +3418,112 @@ function __sbToggleInput(open, options = {}) {
       __sbShowBubble("Reload this page to reconnect Braino.", true, { tone: "status" });
       return;
     }
-    chrome.storage.local.get("authToken", ({ authToken }) => {
-      if (!authToken) {
-        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-        __sbShowSignIn();
-        return;
-      }
+
+    const bar = document.getElementById("__sb_bar__");
+    if (!bar) return;
+
+    // Skip the wakeup animation if already in a normal open state (e.g. card was visible)
+    const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+    if (cardOpen) {
+      chrome.storage.local.get("authToken", ({ authToken }) => {
+        if (!authToken) { __sbSetupBarSignIn(); return; }
+        __sbInputOpen = true;
+        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
+        __sbSetGreetingPlaceholder();
+      });
+      return;
+    }
+
+    const brainBtn = document.getElementById("__sb_brain_btn__");
+
+    const __sbOpenBarReady = () => {
+      bar.classList.remove("sb-signin", "sb-waking");
+      bar.classList.add("open");
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
-      __sbSetGreetingPlaceholder(authToken);
+      __sbSetGreetingPlaceholder();
       __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
         const model = aiProvider === "claude" ? "claude" : "lovable";
         document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
           b.classList.toggle("selected", b.dataset.model === model));
       });
-      const bar = document.getElementById("__sb_bar__");
-      if (bar) {
-        const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
-        if (!cardOpen) bar.classList.add("open");
-        if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+      if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+    };
+
+    chrome.storage.local.get("sbHasAwoken", ({ sbHasAwoken }) => {
+      if (sbHasAwoken) {
+        // Fast path — cinematic played before, open bar directly
+        chrome.storage.local.get("authToken", ({ authToken }) => {
+          if (!authToken) {
+            bar.classList.add("open", "sb-signin");
+            __sbSetupBarSignIn();
+            return;
+          }
+          __sbOpenBarReady();
+        });
+        return;
       }
+
+      // First-ever open: cinematic wakeup
+      chrome.storage.local.set({ sbHasAwoken: true });
+
+      // Phase 1 (0–1200ms): sleeping, silent
+      if (brainBtn) {
+        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
+        brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
+      }
+
+      // Phase 2 (1200ms): yellow glow + open silent auth tab in background
+      setTimeout(() => {
+        if (brainBtn) brainBtn.classList.add("sb-brain-auth");
+        const tYellow = Date.now();
+        const minYellow = 800;
+
+        chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
+
+        let resolved = false;
+
+        const goGreen = () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(fallbackTimer);
+          chrome.storage.onChanged.removeListener(authWatcher);
+          const wait = Math.max(0, minYellow - (Date.now() - tYellow));
+          setTimeout(() => {
+            if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.innerHTML = __SB_BRAIN_SVG; brainBtn.classList.add("sb-brain-authed"); }
+            setTimeout(() => {
+              if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
+              __sbOpenBarReady();
+            }, 1100);
+          }, wait);
+        };
+
+        const goRed = () => {
+          if (resolved) return;
+          resolved = true;
+          chrome.storage.onChanged.removeListener(authWatcher);
+          if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
+          setTimeout(() => {
+            if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
+            bar.classList.add("open", "sb-signin");
+            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+            __sbSetupBarSignIn();
+          }, 700);
+        };
+
+        const authWatcher = (changes, area) => {
+          if (area === "local" && changes.authToken?.newValue) goGreen();
+        };
+        chrome.storage.onChanged.addListener(authWatcher);
+
+        const fallbackTimer = setTimeout(goRed, 6000);
+      }, 1200);
     });
   } else {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
-    document.getElementById("__sb_bar__")?.classList.remove("open");
+    const bar = document.getElementById("__sb_bar__");
+    bar?.classList.remove("open", "sb-waking", "sb-signin");
   }
 }
 
@@ -3400,6 +3702,7 @@ function __sbSpeakWithBrowser(text) {
     __sbIsSpeaking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
+    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
 
     const finish = () => {
       if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
@@ -3429,7 +3732,7 @@ async function __sbSpeakText(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: clean,
-        voiceId: "2ajXGJNYBR0iNHpS4VZb",
+        voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
     });
 
@@ -3444,6 +3747,7 @@ async function __sbSpeakText(text) {
     __sbIsSpeaking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
+    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
 
     await new Promise((resolve, reject) => {
       audio.onended = resolve;
@@ -3465,6 +3769,10 @@ async function __sbSpeakText(text) {
     __sbIsSpeaking = false;
     __sbSetVoiceButtonState(__sbIsRecording);
     __sbSyncSpeakButtons();
+    // After speaking ends in headphone mode, go back to listening
+    if (__sbHeadphoneMode && !__sbVoicePendingReply) {
+      __sbSetHpBrainState("listening");
+    }
   }
   return spoke;
 }
@@ -3487,6 +3795,39 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
   if (autoHide) __sbBubbleTimer = setTimeout(() => __sbCollapseCard(), 8000);
 }
 
+function __sbSetupBarSignIn() {
+  const btn = document.getElementById("__sb_signin_btn_cta__");
+  if (!btn) return;
+  btn.onclick = () => {
+    chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
+  };
+
+  if (!__sbContextOk()) return;
+  const handleAuthArrival = (changes, area) => {
+    if (area !== "local" || !changes.authToken?.newValue) return;
+    chrome.storage.onChanged.removeListener(handleAuthArrival);
+    const bar = document.getElementById("__sb_bar__");
+    if (!bar || !bar.classList.contains("open")) return;
+
+    // Flash "Signed in!" then close bar — user clicks brain again to invoke
+    const label = document.getElementById("__sb_wakeup_label__");
+    const fill = document.getElementById("__sb_wakeup_fill__");
+    bar.classList.remove("sb-signin");
+    bar.classList.add("sb-waking");
+    if (label) label.textContent = "Signed in! ✓";
+    if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (fill) { fill.style.transition = "width 0.5s cubic-bezier(0.4,0,0.2,1)"; fill.style.width = "100%"; }
+    }));
+    setTimeout(() => {
+      bar.classList.remove("sb-waking", "open");
+      if (label) label.textContent = "Waking up…";
+      chrome.storage.local.set({ sbBrainExpanded: false });
+    }, 900);
+  };
+  chrome.storage.onChanged.addListener(handleAuthArrival);
+}
+
 function __sbShowSignIn() {
   if (!__sbOwnsInlineUi()) return;
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -3497,14 +3838,12 @@ function __sbShowSignIn() {
   `;
   __sbOpenCard({ rich: false });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-  let __sbSignInClicked = false;
   document.getElementById("__sb_signin_btn__")?.addEventListener("click", () => {
-    __sbSignInClicked = true;
-    window.open(chrome.runtime.getURL("sidepanel.html"), "_blank", "width=420,height=680,menubar=no,toolbar=no,resizable=no");
+    chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
   });
   if (__sbContextOk()) {
     const handleStorageChange = (changes, area) => {
-      if (area === "local" && changes.authToken?.newValue && __sbSignInClicked) {
+      if (area === "local" && changes.authToken?.newValue) {
         chrome.storage.onChanged.removeListener(handleStorageChange);
         __sbCollapseCard();
         __sbShowBubble("You're signed in! Click the brain to chat.", true, { tone: "status", title: "Signed in" });
@@ -3628,6 +3967,190 @@ async function __sbFetchAssistantReply(body) {
   return { reply: json.reply || json.response || json.message || json.answer || "" };
 }
 
+// ─────────────────────────────────────────────
+// Movie Mode
+// ─────────────────────────────────────────────
+
+const MOVIE_DISCOVERY_SYSTEM_PROMPT = `The user wants to watch a movie. Help them pick something on Netflix tonight.
+
+Ask about their mood naturally — one question at a time. Examples: "Lighthearted or something with weight?", "Do you want to laugh, think, or feel something tonight?". After 2-3 exchanges, recommend exactly ONE movie with a short personal pitch (2-3 sentences).
+
+IMPORTANT: When you have a recommendation, output this on its own line (nothing else on that line):
+MOVIE_REC:{"title":"Interstellar","year":2014,"pitch":"...your 2-3 sentence pitch...","tmdb_query":"Interstellar 2014"}
+
+Then on the next line, ask if they want to look it up on Netflix.
+Keep the Braino voice: direct, warm, slightly dry.`;
+
+const MOVIE_INTENT_PATTERNS = [
+  /let'?s?\s+watch\s+a?\s*movie/i,
+  /watch\s+a?\s*movie\s+with\s+(me|us)/i,
+  /movie\s+night/i,
+  /suggest\s+(a|some)\s+movie/i,
+  /what\s+(should|can)\s+(i|we)\s+watch/i,
+  /i\s+want\s+to\s+watch\s+something/i,
+  /something\s+to\s+watch/i,
+  /pick\s+(a|me\s+a)\s+movie/i,
+  /recommend\s+(a|me\s+a)\s+movie/i,
+];
+
+function __sbIsMovieIntent(text) {
+  return MOVIE_INTENT_PATTERNS.some(p => p.test(text));
+}
+
+function __sbNetflixGetSubtitle() {
+  const spans = document.querySelectorAll(
+    '.player-timedtext-text-container span, [class*="player-timedtext"] span, [data-uia="player-timedtext"] span'
+  );
+  return Array.from(spans).map(el => el.textContent).join(' ').trim();
+}
+
+function __sbNetflixGetVideoState() {
+  const v = document.querySelector('video');
+  const titleEl = document.querySelector(
+    '[data-uia="video-title"], [class*="ellipsize-text"], .watch-title'
+  );
+  return {
+    title: titleEl?.textContent?.trim() || document.title.replace(' | Netflix', '').trim(),
+    timestamp: v ? Math.floor(v.currentTime) : 0,
+    duration:  v ? Math.floor(v.duration) : 0,
+    isPaused:  v ? v.paused : true,
+  };
+}
+
+function __sbSetBrainMovieEyes() {
+  const brain = document.getElementById('__sb_brain_btn__');
+  if (!brain) return;
+  const rect = brain.getBoundingClientRect();
+  const dx = window.innerWidth / 2  - (rect.left + rect.width / 2);
+  const dy = window.innerHeight / 2 - (rect.top  + rect.height / 2);
+  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+  const MAX = 1.6;
+  const ox = (dx / dist) * MAX;
+  const oy = (dy / dist) * MAX;
+  const svg = brain.querySelector('svg');
+  if (!svg) return;
+  const pupils    = svg.querySelectorAll('circle[r="3.2"]');
+  const highlights = svg.querySelectorAll('circle[r="1.1"]');
+  if (pupils[0])    { pupils[0].setAttribute('cx', String(38 + ox)); pupils[0].setAttribute('cy', String(48 + oy)); }
+  if (pupils[1])    { pupils[1].setAttribute('cx', String(62 + ox)); pupils[1].setAttribute('cy', String(48 + oy)); }
+  if (highlights[0]){ highlights[0].setAttribute('cx', String(39 + ox)); highlights[0].setAttribute('cy', String(46.6 + oy)); }
+  if (highlights[1]){ highlights[1].setAttribute('cx', String(63 + ox)); highlights[1].setAttribute('cy', String(46.6 + oy)); }
+}
+
+function __sbResetBrainEyes() {
+  const brain = document.getElementById('__sb_brain_btn__');
+  const svg = brain?.querySelector('svg');
+  if (!svg) return;
+  const pupils    = svg.querySelectorAll('circle[r="3.2"]');
+  const highlights = svg.querySelectorAll('circle[r="1.1"]');
+  if (pupils[0])    { pupils[0].setAttribute('cx', '38');   pupils[0].setAttribute('cy', '48'); }
+  if (pupils[1])    { pupils[1].setAttribute('cx', '62');   pupils[1].setAttribute('cy', '48'); }
+  if (highlights[0]){ highlights[0].setAttribute('cx', '39');  highlights[0].setAttribute('cy', '46.6'); }
+  if (highlights[1]){ highlights[1].setAttribute('cx', '63');  highlights[1].setAttribute('cy', '46.6'); }
+}
+
+function __sbCompressSubtitles(currentTs) {
+  if (!__sbSubtitleBuffer.length) return '';
+  const recent = __sbSubtitleBuffer.filter(e => currentTs - e.ts <= 120);
+  const older  = __sbSubtitleBuffer.filter(e => currentTs - e.ts >  120);
+  const windows = {};
+  older.forEach(e => { const w = Math.floor(e.ts / 30); if (!windows[w]) windows[w] = e.text; });
+  const olderText  = Object.values(windows).join(' … ');
+  const recentText = recent.map(e => e.text).join(' ');
+  return (olderText + ' … ' + recentText).trim().slice(0, 1500);
+}
+
+function __sbStartMovieMode() {
+  if (__sbMovieMode) return;
+  __sbMovieMode = true;
+  __sbSubtitleBuffer = [];
+  __sbMovieChatHistory = [];
+  __sbLastSubtitle = '';
+
+  const brain = document.getElementById('__sb_brain_btn__');
+  if (brain) brain.classList.add('sb-movie-watching');
+
+  __sbSetBrainMovieEyes();
+
+  const inp = document.getElementById('__sb_input__');
+  if (inp) inp.placeholder = 'Ask about the movie…';
+
+  __sbSubtitleTimer = setInterval(() => {
+    const state = __sbNetflixGetVideoState();
+    if (state.isPaused) return;
+    if (state.title) __sbMovieTitle = state.title;
+    const sub = __sbNetflixGetSubtitle();
+    if (sub && sub !== __sbLastSubtitle) {
+      __sbLastSubtitle = sub;
+      __sbSubtitleBuffer.push({ ts: state.timestamp, text: sub });
+      if (__sbSubtitleBuffer.length > 7200) __sbSubtitleBuffer.shift();
+    }
+  }, 2000);
+}
+
+function __sbStopMovieMode() {
+  __sbMovieMode = false;
+  clearInterval(__sbSubtitleTimer);
+  __sbSubtitleTimer = null;
+  __sbSubtitleBuffer = [];
+  __sbMovieChatHistory = [];
+  __sbMovieTitle = '';
+  __sbLastSubtitle = '';
+
+  const brain = document.getElementById('__sb_brain_btn__');
+  if (brain) brain.classList.remove('sb-movie-watching', 'sb-movie-thinking');
+
+  __sbResetBrainEyes();
+
+  const inp = document.getElementById('__sb_input__');
+  if (inp) inp.placeholder = "What's on your mind?";
+}
+
+function __sbParseMovieRec(text) {
+  const match = text.match(/MOVIE_REC:(\{[^\n]+\})/);
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch { return null; }
+}
+
+async function __sbRenderMovieCard(rec) {
+  let posterUrl = null;
+  let voteAverage = null;
+  let overview = rec.pitch || '';
+
+  try {
+    const r = await fetch(
+      `${__SB_API}/tmdb-search?query=${encodeURIComponent(rec.tmdb_query || rec.title)}`,
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    const d = await r.json();
+    if (d.results && d.results[0]) {
+      posterUrl   = d.results[0].poster_url || null;
+      voteAverage = d.results[0].vote_average || null;
+      overview    = d.results[0].overview || rec.pitch || '';
+    }
+  } catch { /* use fallback values */ }
+
+  const card = document.createElement('div');
+  card.className = 'sb-movie-card';
+  card.innerHTML = `
+    <div class="sb-mc-poster-wrap">
+      ${posterUrl
+        ? `<img class="sb-mc-poster" src="${posterUrl}" alt="${rec.title.replace(/"/g,'&quot;')}" />`
+        : `<div class="sb-mc-poster-placeholder">🎬</div>`
+      }
+    </div>
+    <div class="sb-mc-title">${rec.title}<span class="sb-mc-year">${rec.year || ''}</span></div>
+    ${voteAverage ? `<div class="sb-mc-rating">★ ${Number(voteAverage).toFixed(1)}</div>` : ''}
+    <div class="sb-mc-overview">${overview}</div>
+    <a class="sb-mc-watch-btn" href="https://www.netflix.com/search?q=${encodeURIComponent(rec.title)}" target="_blank" rel="noopener">Watch on Netflix →</a>
+  `;
+
+  const scrollArea = document.querySelector('#__sb_bubble__ .sb-card-scroll');
+  if (scrollArea) scrollArea.appendChild(card);
+}
+
+// ─────────────────────────────────────────────
+
 async function __sbProcessPrompt(text, options = {}) {
   const connectorDirective = __sbParseConnectorDirective(text);
   if (connectorDirective.connector) {
@@ -3636,6 +4159,11 @@ async function __sbProcessPrompt(text, options = {}) {
   }
   const promptText = String(connectorDirective.task || "").trim();
   if (!promptText) return;
+
+  // Movie intent detection — triggers discovery mode
+  if (!__sbMovieMode && __sbIsMovieIntent(promptText)) {
+    __sbMovieDiscovery = true;
+  }
   const fromVoice = Boolean(options.fromVoice);
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
@@ -3734,11 +4262,51 @@ async function __sbProcessPrompt(text, options = {}) {
     if (hasPageText) body.pageContext = { url: pageContext.url, title: pageContext.title, text: pageContext.text };
     if (selectedText) body.selectedText = selectedText;
 
+    // Movie companion: inject subtitle context
+    if (__sbMovieMode) {
+      const state = __sbNetflixGetVideoState();
+      body.movieContext = {
+        title:              __sbMovieTitle || state.title,
+        timestamp:          state.timestamp,
+        subtitleTranscript: __sbCompressSubtitles(state.timestamp),
+        isPaused:           state.isPaused,
+      };
+      body.chatHistory = __sbMovieChatHistory.slice(-6);
+      document.getElementById('__sb_brain_btn__')?.classList.add('sb-movie-thinking');
+    } else if (__sbMovieDiscovery) {
+      body.movieDiscoveryPrompt = MOVIE_DISCOVERY_SYSTEM_PROMPT;
+    }
+
     const { reply } = await __sbFetchAssistantReply(body);
     if (!reply) {
       if (fromVoice) await __sbSpeakText("Please sign in to continue.");
       return;
     }
+
+    // Movie companion: update per-movie history + remove thinking glow
+    if (__sbMovieMode) {
+      __sbMovieChatHistory.push({ role: 'user', content: promptText });
+      __sbMovieChatHistory.push({ role: 'assistant', content: reply });
+      document.getElementById('__sb_brain_btn__')?.classList.remove('sb-movie-thinking');
+    }
+
+    // Parse movie recommendation card
+    const movieRec = __sbParseMovieRec(reply);
+    if (movieRec) {
+      __sbMovieDiscovery = false;
+      const cleanReply = reply.replace(/MOVIE_REC:\{[^\n]+\}\n?/, '').trim();
+      __sbChatHistory.push({ role: "assistant", content: cleanReply || reply });
+      const displayReply = cleanReply || reply;
+      if (voiceOnly) {
+        await __sbSpeakText(displayReply);
+      } else {
+        __sbShowBubble(displayReply, false, { rich: true, prompt: promptText, title: '🎬 Movie Night' });
+        if (fromVoice) await __sbSpeakText(displayReply);
+      }
+      void __sbRenderMovieCard(movieRec);
+      return;
+    }
+
     __sbChatHistory.push({ role: "assistant", content: reply });
     if (voiceOnly) {
       const spoke = await __sbSpeakText(reply);
@@ -3747,15 +4315,28 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbShowBubble(reply, false, {
         rich: true,
         prompt: promptText,
-        title: pageContext.title || location.hostname.replace(/^www\./, "") || "Current page",
+        title: __sbMovieMode
+          ? `🎬 ${__sbMovieTitle || 'Movie'}`
+          : (pageContext.title || location.hostname.replace(/^www\./, "") || "Current page"),
       });
       if (fromVoice) await __sbSpeakText(reply);
     }
   } catch (err) {
-    __sbShowBubble("Error: " + (err.message || "couldn't reach Braino"), true);
+    if (__sbHeadphoneMode) {
+      __sbShowVoiceError("Something went wrong — try again.");
+    } else {
+      __sbShowBubble("Error: " + (err.message || "couldn't reach Braino"), true);
+    }
     if (fromVoice) await __sbSpeakText("Something went wrong.");
   } finally {
-    if (fromVoice) __sbVoicePendingReply = false;
+    if (fromVoice) {
+      __sbVoicePendingReply = false;
+      // Restart listening in headphone mode after reply is done
+      if (__sbHeadphoneMode) {
+        __sbSetHpBrainState("listening");
+        void __sbStartRecording();
+      }
+    }
   }
 }
 
@@ -3941,6 +4522,67 @@ async function __sbSyncNotesToNotion() {
   }
 }
 
+// ── Headphone Mode ──────────────────────────────────────────────────────────
+
+function __sbToggleHeadphoneMode() {
+  if (__sbHeadphoneMode) {
+    __sbExitHeadphoneMode();
+  } else {
+    __sbEnterHeadphoneMode();
+  }
+}
+
+function __sbEnterHeadphoneMode() {
+  __sbHeadphoneMode = true;
+  __sbVoiceOnlyMode = true;
+
+  // Close bar, keep the brain button visible as the only UI
+  __sbToggleInput(false);
+  __sbCollapseCard();
+
+  // Mark headphone btn active in case bar reopens
+  document.getElementById("__sb_rec_btn__")?.classList.add("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+
+  // Start with listening glow on the brain
+  __sbSetHpBrainState("listening");
+  void __sbStartRecording();
+}
+
+function __sbExitHeadphoneMode() {
+  __sbHeadphoneMode = false;
+  __sbVoiceOnlyMode = false;
+
+  if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+  __sbLastFinalTranscript = null;
+
+  if (__sbIsRecording) __sbStopRecording({ silent: true });
+  __sbStopSpeech();
+
+  __sbSetHpBrainState("");
+
+  document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
+}
+
+// state: "listening" | "captured" | "speaking" | ""
+function __sbSetHpBrainState(state) {
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (!brain) return;
+  brain.classList.remove("hp-listening", "hp-captured", "hp-speaking", "recording");
+  if (state) brain.classList.add(`hp-${state}`);
+}
+
+function __sbShowVoiceError(msg) {
+  const pill = document.getElementById("__sb_voice_error_pill__");
+  if (!pill) return;
+  pill.textContent = msg;
+  pill.classList.add("visible");
+  setTimeout(() => pill.classList.remove("visible"), 4500);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 function __sbToggleRecording() {
   const mode = window.__sbForcedMode || "page";
   const isLectureMode = (mode === "lecture" || mode === "meeting");
@@ -4037,6 +4679,9 @@ function __sbHandleVoiceEvent(msg) {
   if (msg.event === "listening") {
     __sbIsRecording = true;
     __sbSetVoiceButtonState(true);
+    if (__sbHeadphoneMode) {
+      __sbSetHpBrainState("listening");
+    }
     return;
   }
 
@@ -4045,24 +4690,61 @@ function __sbHandleVoiceEvent(msg) {
     if (!transcript) return;
 
     if (!msg.isFinal) {
+      // Interim — user still speaking, cancel any pending final processing
+      if (__sbVoiceSilenceTimer) {
+        clearTimeout(__sbVoiceSilenceTimer);
+        __sbVoiceSilenceTimer = null;
+        __sbLastFinalTranscript = null;
+      }
       return;
     }
 
-    __sbVoicePendingReply = true;
-    __sbStopRecording({ silent: true });
-    if (input) input.value = "";
-    if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
-    void __sbProcessPrompt(transcript, { fromVoice: true });
+    // Final transcript — wait for silence before processing to avoid
+    // cutting off sentences that the engine split too early
+    __sbLastFinalTranscript = transcript;
+    if (__sbVoiceSilenceTimer) clearTimeout(__sbVoiceSilenceTimer);
+
+    __sbVoiceSilenceTimer = setTimeout(() => {
+      __sbVoiceSilenceTimer = null;
+      const toProcess = __sbLastFinalTranscript;
+      __sbLastFinalTranscript = null;
+      if (!toProcess || __sbVoicePendingReply) return;
+
+      // Flash yellow: capture acknowledged
+      if (__sbHeadphoneMode) {
+        __sbSetHpBrainState("captured");
+      }
+
+      __sbVoicePendingReply = true;
+      __sbStopRecording({ silent: true });
+      if (input) input.value = "";
+      if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
+      void __sbProcessPrompt(toProcess, { fromVoice: true });
+    }, 950);
     return;
   }
 
   if (msg.event === "error") {
     __sbVoicePendingReply = false;
+    if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+    __sbLastFinalTranscript = null;
     __sbStopRecording({ silent: true });
     const errorText = msg.error === "not-allowed"
       ? "Microphone access is blocked. Allow mic access and try again."
       : `Voice error: ${msg.error || "unknown error"}`;
-    __sbShowBubble(errorText, true, { tone: "status", title: "Voice" });
+    if (__sbHeadphoneMode) {
+      __sbSetHpBrainState("");
+      __sbShowVoiceError(errorText);
+      // Retry listening after a short delay
+      setTimeout(() => {
+        if (__sbHeadphoneMode) {
+          __sbSetHpBrainState("listening");
+          void __sbStartRecording();
+        }
+      }, 2000);
+    } else {
+      __sbShowBubble(errorText, true, { tone: "status", title: "Voice" });
+    }
   }
 }
 

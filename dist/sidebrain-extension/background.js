@@ -2,6 +2,9 @@
 let isRecording = false;
 let bgAgentShouldStop = false;
 
+// Track previous URLs per tab for movie mode detection
+const bgPreviousUrlMap = {};
+
 function doCapture(windowId, sendResponse) {
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
     if (chrome.runtime.lastError) {
@@ -90,11 +93,17 @@ async function bgPerformRealWebSearch(query) {
   }
 }
 
-// Toggle injected panel when extension icon is clicked
+// Toggle injected panel when extension icon is clicked.
+// For scriptable tabs this fires normally (no popup registered).
+// For restricted tabs the popup is pre-registered via bgSyncActionPopup so
+// onClicked never fires — but handle it here as a first-click safety net.
 chrome.action.onClicked.addListener((tab) => {
-  // Can't inject into chrome://, file://, or extension pages
   const url = tab.url || "";
-  if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) return;
+  if (!bgIsScriptableUrl(url)) {
+    chrome.action.setPopup({ tabId: tab.id, popup: "braino-popup.html" });
+    if (chrome.action.openPopup) chrome.action.openPopup().catch?.(() => {});
+    return;
+  }
 
   chrome.storage.local.set({ activeTabId: tab.id });
 
@@ -126,9 +135,43 @@ chrome.action.onClicked.addListener((tab) => {
   sendToggle(true, true);
 });
 
-// Auto-update activeTabId when user switches tabs
+// Auto-update activeTabId and sync popup state when user switches tabs
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   chrome.storage.local.set({ activeTabId: tabId });
+  chrome.tabs.get(tabId, (tab) => {
+    if (chrome.runtime.lastError) return;
+    bgSyncActionPopup(tabId, tab?.url || "");
+  });
+});
+
+// Keep popup state in sync as tab URLs change (navigation, SPA, etc.)
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url !== undefined || changeInfo.status === "complete") {
+    bgSyncActionPopup(tabId, tab?.url || "");
+  }
+
+  // Movie mode: detect Netflix /watch/ navigation
+  if (changeInfo.url !== undefined || changeInfo.status === "complete") {
+    const url = tab?.url || "";
+    const prev = bgPreviousUrlMap[tabId] || "";
+    const wasMovie = /netflix\.com\/watch\//.test(prev);
+    const isMovie  = /netflix\.com\/watch\//.test(url);
+
+    if (isMovie && !wasMovie) {
+      // Give the page a moment to inject the content script before messaging
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tabId, { type: "activateMovieMode" }, () => {
+          void chrome.runtime.lastError;
+        });
+      }, 1500);
+    } else if (!isMovie && wasMovie) {
+      chrome.tabs.sendMessage(tabId, { type: "deactivateMovieMode" }, () => {
+        void chrome.runtime.lastError;
+      });
+    }
+
+    bgPreviousUrlMap[tabId] = url;
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -374,6 +417,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (message.action === "openSilentAuthTab") {
+    const extId = chrome.runtime.id;
+    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}`, active: false }, (tab) => {
+      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+    });
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (message.action === "openAuthTab") {
+    const extId = chrome.runtime.id;
+    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}` }, (tab) => {
+      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
+    });
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (message.action === "checkAuth") {
+    (async () => {
+      // Pull token from extension storage
+      let { authToken, authRefreshToken } = await chrome.storage.local.get(["authToken", "authRefreshToken"]);
+
+      // If no token in extension storage, try to grab it from any open trybraino.com tab
+      if (!authToken && !authRefreshToken) {
+        try {
+          const tabs = await chrome.tabs.query({ url: "*://trybraino.com/*" });
+          if (tabs.length > 0) {
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: tabs[0].id },
+              func: () => {
+                try {
+                  const raw = localStorage.getItem('sb-ovapacfrzddnhrwvkbkr-auth-token');
+                  if (!raw) return null;
+                  const s = JSON.parse(raw);
+                  return s?.access_token ? s : null;
+                } catch { return null; }
+              }
+            });
+            const s = results?.[0]?.result;
+            if (s?.access_token) {
+              authToken = s.access_token;
+              authRefreshToken = s.refresh_token || null;
+              chrome.storage.local.set({
+                authToken,
+                authRefreshToken,
+                authEmail: s.user?.email || null,
+                authUserId: s.user?.id || null,
+                authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+              });
+            }
+          }
+        } catch {}
+      }
+
+      if (!authToken && !authRefreshToken) { sendResponse({ authenticated: false }); return; }
+      try {
+        const res = await fetch(`${BG_SUPABASE_URL}/auth/v1/user`, {
+          headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` }
+        });
+        if (res.ok) { sendResponse({ authenticated: true }); return; }
+        if (authRefreshToken) {
+          const refreshed = await bgRefreshAuthToken();
+          sendResponse({ authenticated: !!refreshed });
+          return;
+        }
+        sendResponse({ authenticated: false });
+      } catch {
+        sendResponse({ authenticated: !!authToken });
+      }
+    })();
+    return true;
+  }
   if (
     message.action === "agentAction" ||
     message.action === "getAgentPageContext" ||
@@ -601,7 +715,16 @@ function bgIsScriptableUrl(url) {
          !url.startsWith("chrome-extension://") &&
          !url.startsWith("about:") &&
          !url.startsWith("devtools://") &&
-         !url.startsWith("edge://");
+         !url.startsWith("edge://") &&
+         !url.startsWith("https://chrome.google.com/webstore") &&
+         !url.startsWith("https://chromewebstore.google.com");
+}
+
+// Pre-register the correct action popup for a tab so clicking the icon
+// always does the right thing without waiting for onClicked to fire.
+function bgSyncActionPopup(tabId, url) {
+  const popup = bgIsScriptableUrl(url) ? "" : "braino-popup.html";
+  chrome.action.setPopup({ tabId, popup });
 }
 
 async function bgGetActiveTabId() {
@@ -2547,6 +2670,7 @@ async function bgRefreshAuthToken() {
 // --- polling ---
 
 async function bgPollRemoteCommands() {
+  if (!navigator.onLine) return; // skip silently when offline
   const data = await new Promise(r => chrome.storage.local.get(["authToken", "authUserId", "remoteProcessingId"], r));
   if (!data.authUserId) {
     console.log("[BgRemoteAgent] Not logged in, skipping poll");
@@ -2600,7 +2724,8 @@ async function bgPollRemoteCommands() {
       bgRunRemoteCommand(cmd, token);
     }
   } catch (e) {
-    console.error("[BgRemoteAgent] Error:", e);
+    // Expected on network loss — warn only so Chrome error panel stays clean
+    console.warn("[BgRemoteAgent] Error:", e.message || e);
   }
 }
 
@@ -2619,9 +2744,12 @@ chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "remoteAgentPoll") bgPollRemoteCommands();
 });
-// Also poll + start realtime immediately on service worker startup
-bgPollRemoteCommands();
-bgStartRealtime();
+// Delay startup connections — gives the service worker time to settle
+// and avoids flooding the Chrome error panel on a cold start with a flaky network
+setTimeout(() => {
+  bgPollRemoteCommands();
+  bgStartRealtime();
+}, 2000);
 
 // ===== AUTH — onMessageExternal (backup, from website directly) =====
 chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
@@ -2648,6 +2776,13 @@ function storeAuthData(data) {
     authDisplayName: data.displayName,
     authEmail: data.email,
     authUserId: data.userId,
+  });
+  // Auto-close the auth tab opened by the extension
+  chrome.storage.local.get("__sbAuthTabId", ({ __sbAuthTabId }) => {
+    if (typeof __sbAuthTabId === "number") {
+      chrome.tabs.remove(__sbAuthTabId, () => { void chrome.runtime.lastError; });
+      chrome.storage.local.remove("__sbAuthTabId");
+    }
   });
   // Restart realtime with fresh credentials
   bgStartRealtime();
