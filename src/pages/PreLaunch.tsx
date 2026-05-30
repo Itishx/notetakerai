@@ -467,18 +467,6 @@ function BrainoIcon({ glowing }: { glowing: boolean }) {
   );
 }
 
-function useTypewriter(text: string, speed = 38, active = true) {
-  const [displayed, setDisplayed] = useState('');
-  const [done, setDone] = useState(false);
-  useEffect(() => {
-    if (!active || !text) { setDisplayed(''); setDone(false); return; }
-    setDisplayed(''); setDone(false);
-    let i = 0;
-    const id = setInterval(() => { i++; setDisplayed(text.slice(0, i)); if (i >= text.length) { clearInterval(id); setDone(true); } }, speed);
-    return () => clearInterval(id);
-  }, [text, speed, active]);
-  return { displayed, done };
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function PreLaunch() {
@@ -503,9 +491,6 @@ export default function PreLaunch() {
   const [showLine2, setShowLine2] = useState(false);
   const openingLine = `${line1} ${line2}`;
 
-  const tw1 = useTypewriter(line1, 127, phase === 'awake');
-  const tw2 = useTypewriter(line2, 127, showLine2);
-
   useEffect(() => {
     document.body.classList.add('sb-prelaunch');
     return () => document.body.classList.remove('sb-prelaunch');
@@ -518,18 +503,13 @@ export default function PreLaunch() {
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
-  // Line 1 done → pause → start line 2
+  // Line 1 fades in on awake, line 2 replaces it after 1.6s, chip after 2.3s
   useEffect(() => {
-    if (tw1.done) {
-      const t = setTimeout(() => setShowLine2(true), 600);
-      return () => clearTimeout(t);
-    }
-  }, [tw1.done]);
-
-  // Line 2 done → show chip
-  useEffect(() => {
-    if (tw2.done) { const t = setTimeout(() => setShowChip(true), 400); return () => clearTimeout(t); }
-  }, [tw2.done]);
+    if (phase !== 'awake') return;
+    const t1 = setTimeout(() => setShowLine2(true), 1600);
+    const t2 = setTimeout(() => setShowChip(true), 2300);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [phase]);
 
   // Only auto-scroll for regular text messages — not during progressive use-cases loading
   useEffect(() => {
@@ -648,14 +628,14 @@ export default function PreLaunch() {
               <BrainoHero phase={phase}/>
             </div>
             {phase === 'awake' && (
-              <div style={{ marginTop: 32, textAlign: 'center', animation: 'plFadeUp 0.5s ease', maxWidth: 420 }}>
+              <div style={{ marginTop: 32, textAlign: 'center', maxWidth: 420 }}>
                 {!showLine2 ? (
-                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.4s ease' }}>
-                    {tw1.displayed}{!tw1.done && <span style={{ opacity: 0.3 }}>|</span>}
+                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.65s ease' }}>
+                    {line1}
                   </p>
                 ) : (
-                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.5s ease' }}>
-                    {tw2.displayed}{!tw2.done && <span style={{ opacity: 0.3 }}>|</span>}
+                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.65s ease' }}>
+                    {line2}
                   </p>
                 )}
               </div>
