@@ -489,6 +489,8 @@ export default function PreLaunch() {
   const [loading, setLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
+  const [emailDone, setEmailDone] = useState(false);
+  const [emailConfirm, setEmailConfirm] = useState('');
   const [userMsgCount, setUserMsgCount] = useState(0);
   const [lastContext, setLastContext] = useState('');
   const [showChip, setShowChip] = useState(false);
@@ -586,8 +588,11 @@ export default function PreLaunch() {
     setEmailLoading(true);
     try {
       const result = await callWaitlistSignup(email, lastContext);
-      const reply = result.error === 'already_on_waitlist' ? "You're already on the list. I'll remember you." : "Done. I'll find you when I'm ready.";
-      setMsgs(prev => [...prev, { role: 'assistant', content: reply }]);
+      const confirm = result.error === 'already_on_waitlist'
+        ? "You're already on the list. I'll remember you."
+        : "Done. I'll find you when I'm ready.";
+      setEmailConfirm(confirm);
+      setEmailDone(true);
       setPhase('waitlisted');
     } catch {
       setEmailError('Something went wrong. Try again.');
@@ -624,6 +629,11 @@ export default function PreLaunch() {
         .pl-show-btn:active {
           filter: drop-shadow(0 0 20px rgba(226,125,57,1));
           transform: scale(0.97);
+        }
+        .pl-iamin-btn:hover {
+          background: rgba(226,125,57,0.28) !important;
+          border-color: rgba(226,125,57,0.8) !important;
+          filter: drop-shadow(0 0 10px rgba(226,125,57,0.5));
         }
         .pl-scroll::-webkit-scrollbar { display: none; }
         .pl-scroll { scrollbar-width: none; }
@@ -702,25 +712,47 @@ export default function PreLaunch() {
                 </div>
               )}
 
-              {phase === 'email_capture' && !loading && (
+              {(phase === 'email_capture' || phase === 'waitlisted') && !loading && (
                 <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', animation: 'plMsgIn 0.3s ease' }}>
                   <BrainoIcon glowing={false}/>
-                  <div style={{ flex: 1, paddingTop: 2, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {/* Email input */}
-                    <div style={{ display: 'flex', gap: 8, maxWidth: 420, animation: 'plFadeUp 0.3s ease' }}>
-                      <input ref={emailRef} type="email" value={emailInput}
-                        onChange={e => { setEmailInput(e.target.value); setEmailError(''); }}
-                        onKeyDown={e => { if (e.key === 'Enter') submitEmail(); }}
-                        placeholder="your@email.com"
-                        style={{ flex: 1, padding: '10px 16px', borderRadius: 40, border: emailError ? '1px solid rgba(226,80,80,0.7)' : '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#FBF7F1', fontSize: 15, outline: 'none', fontFamily: 'inherit', animation: emailError ? 'plShake 0.3s ease' : 'none' }}
-                      />
-                      <button onClick={submitEmail} disabled={emailLoading}
-                        style={{ padding: '10px 20px', borderRadius: 40, border: 'none', background: '#E27D39', color: '#FBF7F1', fontSize: 15, fontWeight: 600, cursor: emailLoading ? 'not-allowed' : 'pointer', opacity: emailLoading ? 0.6 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'opacity 0.15s' }}>
-                        {emailLoading ? '…' : "I'm in"}
-                      </button>
-                    </div>
-                    {emailError && <p style={{ fontSize: 13, color: 'rgba(226,80,80,0.9)', margin: 0 }}>{emailError}</p>}
-
+                  <div style={{ flex: 1, paddingTop: 4 }}>
+                    {emailDone ? (
+                      // Confirmation — replaces the form in-place
+                      <p style={{ margin: 0, fontSize: 16, lineHeight: 1.7, color: '#FBF7F1', animation: 'plFadeUp 0.4s ease' }}>
+                        {emailConfirm}
+                      </p>
+                    ) : (
+                      // Email form
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'flex', gap: 10, maxWidth: 440, animation: 'plFadeUp 0.3s ease', alignItems: 'center' }}>
+                          <input ref={emailRef} type="email" value={emailInput}
+                            onChange={e => { setEmailInput(e.target.value); setEmailError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter') submitEmail(); }}
+                            placeholder="your@email.com"
+                            style={{ flex: 1, padding: '12px 18px', borderRadius: 40, border: emailError ? '1px solid rgba(226,80,80,0.7)' : '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#FBF7F1', fontSize: 15, outline: 'none', fontFamily: 'inherit', animation: emailError ? 'plShake 0.3s ease' : 'none' }}
+                          />
+                          <button
+                            onClick={submitEmail}
+                            disabled={emailLoading}
+                            className="pl-iamin-btn"
+                            style={{
+                              padding: '12px 24px', borderRadius: 40,
+                              border: '1px solid rgba(226,125,57,0.5)',
+                              background: 'rgba(226,125,57,0.15)',
+                              color: '#FBF7F1', fontSize: 15, fontWeight: 600,
+                              cursor: emailLoading ? 'not-allowed' : 'pointer',
+                              opacity: emailLoading ? 0.5 : 1,
+                              fontFamily: 'inherit', whiteSpace: 'nowrap',
+                              transition: 'all 0.2s ease', flexShrink: 0,
+                              display: 'flex', alignItems: 'center', gap: 7,
+                            }}
+                          >
+                            {emailLoading ? '…' : <>I'm in <span style={{ fontSize: 14 }}>→</span></>}
+                          </button>
+                        </div>
+                        {emailError && <p style={{ fontSize: 13, color: 'rgba(226,80,80,0.9)', margin: 0, paddingLeft: 4 }}>{emailError}</p>}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
