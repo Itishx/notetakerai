@@ -503,11 +503,11 @@ export default function PreLaunch() {
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
-  // Line 1 fades in on awake, line 2 replaces it after 1.6s, chip after 2.3s
+  // Line 1 fades in on awake (0.9s), visible ~1s, then line 2, then chip
   useEffect(() => {
     if (phase !== 'awake') return;
-    const t1 = setTimeout(() => setShowLine2(true), 1600);
-    const t2 = setTimeout(() => setShowChip(true), 2300);
+    const t1 = setTimeout(() => setShowLine2(true), 2400);
+    const t2 = setTimeout(() => setShowChip(true), 3500);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [phase]);
 
@@ -630,11 +630,11 @@ export default function PreLaunch() {
             {phase === 'awake' && (
               <div style={{ marginTop: 32, textAlign: 'center', maxWidth: 420 }}>
                 {!showLine2 ? (
-                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.65s ease' }}>
+                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.9s ease both' }}>
                     {line1}
                   </p>
                 ) : (
-                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.65s ease' }}>
+                  <p style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, color: '#FBF7F1', letterSpacing: '-0.01em', margin: 0, animation: 'plFadeUp 0.9s ease both' }}>
                     {line2}
                   </p>
                 )}
