@@ -9,6 +9,7 @@ import { useState } from "react";
 import SplashScreen from "@/components/SplashScreen";
 import BrainMascot from "@/components/BrainMascot";
 import PreLaunch from "./pages/PreLaunch.tsx";
+import LaunchTeaser from "./pages/LaunchTeaser.tsx";
 import Index from "./pages/Index.tsx";
 import UseCases from "./pages/UseCases.tsx";
 import NotionSync from "./pages/NotionSync.tsx";
@@ -55,6 +56,7 @@ const App = () => {
             <Routes>
               <Route path="/" element={<PreLaunch />} />
               <Route path="/home" element={<Index />} />
+              <Route path="/teaser" element={<LaunchTeaser />} />
               <Route path="/use-cases" element={<UseCases />} />
               <Route path="/notion-sync" element={<NotionSync />} />
               <Route path="/glass-preview" element={<GlassPreview />} />
