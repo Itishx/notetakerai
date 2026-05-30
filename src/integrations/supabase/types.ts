@@ -266,6 +266,27 @@ export type Database = {
         }
         Relationships: []
       }
+      waitlist: {
+        Row: {
+          context: string | null
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          context?: string | null
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          context?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
       x_connections: {
         Row: {
           access_token: string
