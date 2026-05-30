@@ -2349,12 +2349,6 @@ function __sbBuildBrainUI() {
     }
     .sb-mc-watch-btn:hover { background: #C9544A; }
 
-    /* ── Screen share privacy ── */
-    .sb-screenshare-hidden {
-      opacity: 0 !important;
-      pointer-events: none !important;
-      transition: opacity 0.15s !important;
-    }
   `;
   document.head.appendChild(style);
 
@@ -2472,37 +2466,6 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
   `;
   document.body.appendChild(modelDd);
-
-  // ── Screen share privacy ──
-  // When the page calls getDisplayMedia (Google Meet, Zoom web, Teams, etc.)
-  // we hide all extension UI so it doesn't appear in the shared screen.
-  // Works for browser-based sharing only — OS-level capture (Zoom desktop,
-  // OBS) cannot be detected from a browser extension.
-  function __sbSetScreenShareHidden(hidden) {
-    const ids = [
-      '__sb_root__', '__sb_card_wrap__', '__sb_voice_error_pill__',
-      '__sb_movie_halo__', '__sb_mode_dropdown__', '__sb_connector_dropdown__',
-      '__sb_connector_slash_dropdown__', '__sb_model_dropdown__',
-    ];
-    ids.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.classList.toggle('sb-screenshare-hidden', hidden);
-    });
-  }
-
-  (function __sbScreenShareGuard() {
-    if (!navigator.mediaDevices?.getDisplayMedia) return;
-    const orig = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getDisplayMedia = async function(constraints) {
-      const stream = await orig(constraints);
-      const track = stream.getVideoTracks?.()?.[0];
-      if (track) {
-        __sbSetScreenShareHidden(true);
-        track.addEventListener('ended', () => __sbSetScreenShareHidden(false), { once: true });
-      }
-      return stream;
-    };
-  })();
 
   // ── Fullscreen fix ──
   // When a page (e.g. Netflix) enters fullscreen the browser creates a new
