@@ -40,40 +40,42 @@ serve(async (req) => {
   try {
     const { messages, messageCount } = await req.json();
 
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+    const apiKey = Deno.env.get("LOVABLE_API_KEY");
+    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 300,
-        system: SYSTEM_PROMPT,
-        messages,
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...messages,
+        ],
       }),
     });
 
     if (!res.ok) {
       const err = await res.text();
-      throw new Error(`Claude API ${res.status}: ${err}`);
+      throw new Error(`Lovable AI ${res.status}: ${err}`);
     }
 
     const data = await res.json();
-    const raw = data.content?.[0]?.text ?? "";
+    const raw = data.choices?.[0]?.message?.content ?? "";
 
     let parsed: { reply: string; suggestEmail: boolean };
     try {
-      parsed = JSON.parse(raw);
+      // Strip markdown code fences if the model wraps the JSON
+      const cleaned = raw.replace(/^```json?\s*/i, "").replace(/```\s*$/, "").trim();
+      parsed = JSON.parse(cleaned);
     } catch {
       parsed = { reply: raw, suggestEmail: false };
     }
 
-    // Force suggestEmail after 4+ user messages if Claude hasn't done it yet
+    // Force suggestEmail after 4+ user messages if the model hasn't done it yet
     if (messageCount >= 4 && !parsed.suggestEmail) {
       parsed.suggestEmail = true;
     }
