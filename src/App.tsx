@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { useState } from "react";
 import SplashScreen from "@/components/SplashScreen";
 import BrainMascot from "@/components/BrainMascot";
+import PreLaunch from "./pages/PreLaunch.tsx";
 import Index from "./pages/Index.tsx";
 import UseCases from "./pages/UseCases.tsx";
 import NotionSync from "./pages/NotionSync.tsx";
@@ -38,7 +39,7 @@ const queryClient = new QueryClient();
 const App = () => {
   const [splashDone, setSplashDone] = useState(() => {
     if (typeof window === "undefined") return false;
-    return window.location.pathname === "/assistant-panel";
+    return window.location.pathname === "/assistant-panel" || window.location.pathname === "/";
   });
 
   return (
@@ -49,10 +50,11 @@ const App = () => {
           <Toaster />
           <Sonner />
           {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
-          {splashDone && <BrainMascot />}
+          <div id="sb-brain-mascot-wrapper">{splashDone && <BrainMascot />}</div>
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Index />} />
+              <Route path="/" element={<PreLaunch />} />
+              <Route path="/home" element={<Index />} />
               <Route path="/use-cases" element={<UseCases />} />
               <Route path="/notion-sync" element={<NotionSync />} />
               <Route path="/glass-preview" element={<GlassPreview />} />
