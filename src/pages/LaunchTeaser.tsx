@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 
 type Phase = 'hidden' | 'sleeping' | 'yellow' | 'green' | 'awake';
 
+const FULL_TEXT = "The waitlist opens tomorrow.";
+const TYPE_SPEED = 120;
+
 function BrainSVG({ phase }: { phase: Phase }) {
   const eyesOpen = phase === 'green' || phase === 'awake';
   const pulsing = phase === 'yellow' || phase === 'green';
@@ -76,121 +79,98 @@ function BrainSVG({ phase }: { phase: Phase }) {
   );
 }
 
-const FULL_TEXT = "Tomorrow, get ready.";
-const TYPE_SPEED = 80;
-
-type Step = 'typing' | 'label' | 'braino';
-
 export default function LaunchTeaser() {
-  const [step, setStep] = useState<Step>('typing');
   const [phase, setPhase] = useState<Phase>('hidden');
   const [typed, setTyped] = useState('');
-  const [typingDone, setTypingDone] = useState(false);
-  // fade-out the current item before switching step
-  const [fading, setFading] = useState(false);
+  const [showBraino, setShowBraino] = useState(false);
+  const [textFading, setTextFading] = useState(false);
+  const [showFarewell, setShowFarewell] = useState(false);
+  const brainStarted = useRef(false);
 
   useEffect(() => {
     document.body.classList.add('sb-prelaunch');
     return () => document.body.classList.remove('sb-prelaunch');
   }, []);
 
-  // 1. Type the heading
+  // 1. Type the text
   useEffect(() => {
     const delay = setTimeout(() => {
       let i = 0;
       const id = setInterval(() => {
         i++;
         setTyped(FULL_TEXT.slice(0, i));
-        if (i >= FULL_TEXT.length) { clearInterval(id); setTypingDone(true); }
+        if (i >= FULL_TEXT.length) {
+          clearInterval(id);
+          // Pause, fade text out, then show Braino
+          setTimeout(() => setTextFading(true), 1200);
+          setTimeout(() => setShowBraino(true), 1900);
+        }
       }, TYPE_SPEED);
       return () => clearInterval(id);
     }, 700);
     return () => clearTimeout(delay);
   }, []);
 
-  // 2. Heading done → fade out → show label
+  // 2. Once Braino is visible, run the wakeup sequence
   useEffect(() => {
-    if (!typingDone) return;
-    const t1 = setTimeout(() => setFading(true), 1000);
-    const t2 = setTimeout(() => { setFading(false); setStep('label'); }, 1600);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [typingDone]);
-
-  // 3. Label shown → fade out → hand off to braino step
-  useEffect(() => {
-    if (step !== 'label') return;
-    const t1 = setTimeout(() => setFading(true), 1400);
-    const t2 = setTimeout(() => { setFading(false); setStep('braino'); setPhase('sleeping'); }, 2000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [step]);
-
-  // 4. Braino step → run the full wakeup sequence
-  useEffect(() => {
-    if (step !== 'braino') return;
-    const t1 = setTimeout(() => setPhase('yellow'),  900);
-    const t2 = setTimeout(() => setPhase('green'),   2500);
-    const t3 = setTimeout(() => setPhase('awake'),   3600);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [step]);
+    if (!showBraino || brainStarted.current) return;
+    brainStarted.current = true;
+    setPhase('sleeping');
+    const t1 = setTimeout(() => setPhase('yellow'),       900);
+    const t2 = setTimeout(() => setPhase('green'),        2500);
+    const t3 = setTimeout(() => setPhase('awake'),        3600);
+    const t4 = setTimeout(() => setShowFarewell(true),    4800);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  }, [showBraino]);
 
   return (
     <>
       <style>{`
         body.sb-prelaunch #sb-brain-mascot-wrapper { display: none !important; }
-
         @keyframes ltGlowPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
         @keyframes ltFloat     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
         @keyframes ltBlink     { 0%,88%,100%{transform:scaleY(1)} 93%{transform:scaleY(0.07)} }
-        @keyframes ltFadeUp    { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes ltFadeIn    { from{opacity:0} to{opacity:1} }
+        @keyframes ltFadeIn    { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
       `}</style>
 
       <div style={{
-        minHeight: '100dvh',
-        background: '#000',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
+        minHeight: '100dvh', background: '#000',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: "'NeueHaas', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         color: '#FBF7F1',
-        gap: 48,
       }}>
 
-        {/* Step 1: heading */}
-        {step === 'typing' && (
+        {/* Typewriter text */}
+        {!showBraino && (
           <h1 style={{
-            margin: 0,
-            fontSize: 'clamp(36px, 5.5vw, 64px)',
+            margin: 0, textAlign: 'center',
+            fontSize: 'clamp(28px, 4.5vw, 56px)',
             fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.1,
             color: '#FBF7F1',
-            opacity: fading ? 0 : 1,
-            transition: 'opacity 0.5s ease',
+            opacity: textFading ? 0 : 1,
+            transform: textFading ? 'translateY(-6px)' : 'translateY(0)',
+            transition: 'opacity 0.6s ease, transform 0.6s ease',
           }}>
-            {typed}{!typingDone && <span style={{ opacity: 0.3 }}>|</span>}
+            {typed}<span style={{ opacity: 0.3 }}>|</span>
           </h1>
         )}
 
-        {/* Step 2: Pre Launch label */}
-        {step === 'label' && (
-          <p style={{
-            margin: 0,
-            fontSize: 13, fontWeight: 600,
-            letterSpacing: '0.22em', textTransform: 'uppercase',
-            color: 'rgba(226,125,57,0.8)',
-            opacity: fading ? 0 : 1,
-            transform: fading ? 'translateY(-4px)' : 'translateY(0)',
-            transition: 'opacity 0.5s ease, transform 0.5s ease',
-            animation: !fading ? 'ltFadeUp 0.5s ease' : 'none',
-          }}>
-            Pre Launch
-          </p>
-        )}
-
-        {/* Step 3: Braino wakeup */}
-        {step === 'braino' && (
-          <div style={{ width: 160, height: 160, animation: 'ltFadeIn 0.5s ease' }}>
-            <BrainSVG phase={phase}/>
+        {/* Braino wakeup + farewell */}
+        {showBraino && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 36, animation: 'ltFadeIn 0.6s ease' }}>
+            <div style={{ width: 180, height: 180 }}>
+              <BrainSVG phase={phase}/>
+            </div>
+            <p style={{
+              margin: 0,
+              fontSize: 22, fontWeight: 600, letterSpacing: '-0.01em',
+              color: '#FBF7F1',
+              opacity: showFarewell ? 1 : 0,
+              transform: showFarewell ? 'translateY(0)' : 'translateY(8px)',
+              transition: 'opacity 0.8s ease, transform 0.8s ease',
+            }}>
+              I'll see you soon.
+            </p>
           </div>
         )}
       </div>
