@@ -2656,8 +2656,12 @@ function __sbOpenCard(options = {}) {
   __sbRefreshInlineOwner();
   // Hide the bar — card has its own follow-up input
   document.getElementById("__sb_bar__")?.classList.remove("open");
-  wrap.classList.add("visible", "animating-in");
-  requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
+  const alreadyOpen = wrap.classList.contains("visible");
+  wrap.classList.add("visible");
+  if (!alreadyOpen) {
+    wrap.classList.add("animating-in");
+    requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
+  }
   if (options.rich) setTimeout(() => __sbStartOrbit(), 60);
   else __sbStopOrbit();
   const bubble = wrap.querySelector("#__sb_bubble__");
