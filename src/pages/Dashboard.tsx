@@ -17,6 +17,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clock3,
   ExternalLink,
@@ -653,6 +654,7 @@ function SidebarItem({
   badge,
   onClick,
   muted = false,
+  collapsed = false,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -660,13 +662,16 @@ function SidebarItem({
   badge?: React.ReactNode;
   onClick?: () => void;
   muted?: boolean;
+  collapsed?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={collapsed ? label : undefined}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors",
+        "flex items-center gap-2.5 rounded-lg py-2 text-left text-[13px] transition-colors",
+        collapsed ? "w-full justify-center px-0" : "w-full px-3",
         active
           ? "bg-[var(--sb-ink)] text-[var(--sb-on-ink)]"
           : muted
@@ -674,9 +679,9 @@ function SidebarItem({
             : "text-[var(--sb-ink-2)] hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink)]",
       )}
     >
-      <span className="flex h-4 w-4 items-center justify-center">{icon}</span>
-      <span>{label}</span>
-      {badge ? <span className="ml-auto">{badge}</span> : null}
+      <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">{icon}</span>
+      {!collapsed && <span>{label}</span>}
+      {!collapsed && badge ? <span className="ml-auto">{badge}</span> : null}
     </button>
   );
 }
@@ -732,6 +737,7 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [commands, setCommands] = useState<Command[]>([]);
   const [notionConn, setNotionConn] = useState<NotionConn>(null);
@@ -1440,58 +1446,100 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[var(--sb-bg)] text-[var(--sb-ink)]">
-      <div className="grid min-h-screen lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="sticky top-0 hidden h-screen flex-col border-r border-[var(--sb-line)] bg-[var(--sb-panel)] px-3.5 py-4 lg:flex">
-          <Link to="/" className="flex items-center gap-0 px-2 pb-5 no-underline">
-            <span
-              style={{
-                fontFamily: "'TNR', 'Times New Roman', serif",
-                fontStyle: "italic",
-                fontWeight: 400,
-                fontSize: 17,
-                color: "var(--sb-ink)",
-              }}
-            >side</span>
-            <span
-              style={{
-                fontFamily: "'BeVietnam', sans-serif",
-                fontWeight: 800,
-                fontSize: 17,
-                color: "var(--sb-ink)",
-                letterSpacing: "-0.03em",
-              }}
-            >brain</span>
+      <div
+        className="grid min-h-screen transition-[grid-template-columns] duration-300"
+        style={{ gridTemplateColumns: sidebarCollapsed ? "64px minmax(0,1fr)" : "240px minmax(0,1fr)" }}
+      >
+        <aside className={cn(
+          "sticky top-0 hidden h-screen flex-col border-r border-[var(--sb-line)] bg-[var(--sb-panel)] py-4 lg:flex overflow-hidden transition-all duration-300",
+          sidebarCollapsed ? "px-2 items-center" : "px-3.5",
+        )}>
+          <Link
+            to="/"
+            className={cn("flex items-center pb-5 no-underline", sidebarCollapsed ? "justify-center px-0" : "gap-2 px-2")}
+          >
+            {/* Brain SVG logo */}
+            <svg viewBox="0 0 100 100" style={{ width: 26, height: 26, flexShrink: 0 }}>
+              <defs>
+                <linearGradient id="sb-logo-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#F6A8A2" />
+                  <stop offset="0.55" stopColor="#E8786E" />
+                  <stop offset="1" stopColor="#C9544A" />
+                </linearGradient>
+                <radialGradient id="sb-logo-glow" cx="35%" cy="30%" r="50%">
+                  <stop offset="0" stopColor="#FFD0CB" stopOpacity="0.7" />
+                  <stop offset="1" stopColor="#FFD0CB" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              <path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sb-logo-fill)" />
+              <path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sb-logo-glow)" />
+              <path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" strokeWidth="1.1" strokeLinecap="round" opacity="0.55" />
+              <path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" strokeWidth="1.1" strokeLinecap="round" opacity="0.6" />
+              <path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" strokeWidth="1.1" strokeLinecap="round" opacity="0.6" />
+              <circle cx="38" cy="48" r="6.5" fill="white" />
+              <circle cx="38" cy="48" r="3.2" fill="#1B1713" />
+              <circle cx="39" cy="47.6" r="1.1" fill="white" />
+              <circle cx="62" cy="48" r="6.5" fill="white" />
+              <circle cx="62" cy="48" r="3.2" fill="#1B1713" />
+              <circle cx="63" cy="47.6" r="1.1" fill="white" />
+              <ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" />
+              <ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" />
+              <path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            {!sidebarCollapsed && (
+              <span
+                style={{
+                  fontFamily: "'BeVietnam', sans-serif",
+                  fontWeight: 800,
+                  fontSize: 17,
+                  color: "var(--sb-ink)",
+                  letterSpacing: "-0.03em",
+                }}
+              >Braino</span>
+            )}
           </Link>
 
           <button
             type="button"
             onClick={() => navigate("/#install")}
-            className="mb-5 flex w-full items-center gap-2 rounded-[10px] bg-[var(--sb-ink)] px-3 py-3 text-left text-[13.5px] font-medium text-[var(--sb-on-ink)] transition hover:opacity-90"
+            title={sidebarCollapsed ? "Talk to Braino" : undefined}
+            className={cn(
+              "mb-5 flex w-full items-center gap-2 rounded-[10px] bg-[var(--sb-ink)] py-3 text-left text-[13.5px] font-medium text-[var(--sb-on-ink)] transition hover:opacity-90",
+              sidebarCollapsed ? "justify-center px-0" : "px-3",
+            )}
           >
             <span
-              className="h-4 w-4 rounded-full"
+              className="h-4 w-4 flex-shrink-0 rounded-full"
               style={{
                 background: "radial-gradient(circle at 35% 35%, #FFD9A8, #F39A42, #D96E1A)",
                 boxShadow: "0 0 8px rgba(243,154,66,0.6)",
               }}
             />
-            <span>Talk to SideBrain</span>
-            <span style={monoStyle} className="ml-auto rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/60">
-              CMD K
-            </span>
+            {!sidebarCollapsed && (
+              <>
+                <span>Talk to Braino</span>
+                <span style={monoStyle} className="ml-auto rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/60">
+                  CMD K
+                </span>
+              </>
+            )}
           </button>
 
-          <div style={monoStyle} className="px-2 pb-1 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
-            Workspace
-          </div>
-          <div className="space-y-0.5">
+          {!sidebarCollapsed && (
+            <div style={monoStyle} className="px-2 pb-1 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+              Workspace
+            </div>
+          )}
+          <div className="space-y-0.5 w-full">
             <SidebarItem
+              collapsed={sidebarCollapsed}
               label="Overview"
               active={activeTab === "overview"}
               onClick={() => setActiveTab("overview")}
               icon={<LayoutGrid className="h-3.5 w-3.5" />}
             />
             <SidebarItem
+              collapsed={sidebarCollapsed}
               label="Notes"
               active={activeTab === "notes"}
               onClick={() => setActiveTab("notes")}
@@ -1503,6 +1551,7 @@ export default function Dashboard() {
               }
             />
             <SidebarItem
+              collapsed={sidebarCollapsed}
               label="Agent Tasks"
               active={activeTab === "tasks"}
               onClick={() => setActiveTab("tasks")}
@@ -1514,6 +1563,7 @@ export default function Dashboard() {
               }
             />
             <SidebarItem
+              collapsed={sidebarCollapsed}
               label="X Automation"
               active={activeTab === "xAutomation"}
               onClick={() => setActiveTab("xAutomation")}
@@ -1526,8 +1576,9 @@ export default function Dashboard() {
                 ) : undefined
               }
             />
-            <SidebarItem label="Recordings" muted icon={<Mic className="h-3.5 w-3.5" />} badge={<span style={monoStyle} className="text-[10px] text-[var(--sb-ink-4)]">Soon</span>} />
+            <SidebarItem collapsed={sidebarCollapsed} label="Recordings" muted icon={<Mic className="h-3.5 w-3.5" />} badge={<span style={monoStyle} className="text-[10px] text-[var(--sb-ink-4)]">Soon</span>} />
             <SidebarItem
+              collapsed={sidebarCollapsed}
               label="Memory"
               active={activeTab === "memory"}
               onClick={() => setActiveTab("memory")}
@@ -1542,12 +1593,15 @@ export default function Dashboard() {
             />
           </div>
 
-          <div style={monoStyle} className="px-2 pb-1 pt-4 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
-            Library
-          </div>
-          <div className="space-y-0.5">
-            <SidebarItem label="Collections" muted icon={<FolderOpen className="h-3.5 w-3.5" />} />
+          {!sidebarCollapsed && (
+            <div style={monoStyle} className="px-2 pb-1 pt-4 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+              Library
+            </div>
+          )}
+          <div className={cn("space-y-0.5 w-full", sidebarCollapsed && "pt-3")}>
+            <SidebarItem collapsed={sidebarCollapsed} label="Collections" muted icon={<FolderOpen className="h-3.5 w-3.5" />} />
             <SidebarItem
+              collapsed={sidebarCollapsed}
               label="Search"
               muted={false}
               onClick={() => {
@@ -1562,6 +1616,7 @@ export default function Dashboard() {
               }
             />
             <SidebarItem
+              collapsed={sidebarCollapsed}
               label="Highlights"
               active={activeTab === "highlights"}
               onClick={() => setActiveTab("highlights")}
@@ -1576,68 +1631,102 @@ export default function Dashboard() {
             />
           </div>
 
-          <div style={monoStyle} className="px-2 pb-1 pt-4 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
-            Account
-          </div>
-          <SidebarItem
-            label="Settings"
-            active={activeTab === "settings"}
-            onClick={() => setActiveTab("settings")}
-            icon={<Settings className="h-3.5 w-3.5" />}
-          />
-
-          <div className="mt-auto border-t border-[var(--sb-line-2)] pt-3">
-            <div className="mb-3 overflow-hidden rounded-xl bg-[var(--sb-ink)] p-4 text-[var(--sb-on-ink)]">
-              <div style={monoStyle} className="mb-2 text-[10px] uppercase tracking-[0.12em] text-[var(--sb-accent-2)]">
-                {isPremium ? "PREMIUM ACTIVE" : "FREE PLAN"}
-              </div>
-              <h4 style={serifStyle} className="mb-3 max-w-[170px] text-[20px] leading-[1.15] tracking-[-0.02em]">
-                {isPremium ? "Unlimited Delegate is live." : "Go Pro for unlimited Delegate."}
-              </h4>
-              <div className="mb-2 text-[11.5px] text-white/60">
-                {isPremium ? "Premium enabled for this account." : `${tasksThisMonth} / ${monthlyTaskLimit} tasks used this month`}
-              </div>
-              <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-[var(--sb-accent)]"
-                  style={{
-                    width: isPremium
-                      ? "100%"
-                      : `${Math.min(100, Math.round((tasksThisMonth / Math.max(monthlyTaskLimit || 1, 1)) * 100))}%`,
-                  }}
-                />
-              </div>
-              {!isPremium ? (
-                <Link to="/premium">
-                  <button className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sb-panel-2)] px-3 py-2 text-xs font-medium text-[var(--sb-ink)] transition hover:brightness-110">
-                    <Zap className="h-3 w-3" />
-                    Upgrade - $12/mo
-                  </button>
-                </Link>
-              ) : (
-                <Link to="/premium">
-                  <button className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sb-panel-2)] px-3 py-2 text-xs font-medium text-[var(--sb-ink)] transition hover:brightness-110">
-                    Manage plan
-                  </button>
-                </Link>
-              )}
+          {!sidebarCollapsed && (
+            <div style={monoStyle} className="px-2 pb-1 pt-4 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+              Account
             </div>
+          )}
+          <div className={cn("w-full", sidebarCollapsed && "pt-3")}>
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              label="Settings"
+              active={activeTab === "settings"}
+              onClick={() => setActiveTab("settings")}
+              icon={<Settings className="h-3.5 w-3.5" />}
+            />
+          </div>
+
+          <div className="mt-auto w-full border-t border-[var(--sb-line-2)] pt-3">
+            {!sidebarCollapsed && (
+              <div className="mb-3 overflow-hidden rounded-xl bg-[var(--sb-ink)] p-4 text-[var(--sb-on-ink)]">
+                <div style={monoStyle} className="mb-2 text-[10px] uppercase tracking-[0.12em] text-[var(--sb-accent-2)]">
+                  {isPremium ? "PREMIUM ACTIVE" : "FREE PLAN"}
+                </div>
+                <h4 style={serifStyle} className="mb-3 max-w-[170px] text-[20px] leading-[1.15] tracking-[-0.02em]">
+                  {isPremium ? "Unlimited Delegate is live." : "Go Pro for unlimited Delegate."}
+                </h4>
+                <div className="mb-2 text-[11.5px] text-white/60">
+                  {isPremium ? "Premium enabled for this account." : `${tasksThisMonth} / ${monthlyTaskLimit} tasks used this month`}
+                </div>
+                <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-[var(--sb-accent)]"
+                    style={{
+                      width: isPremium
+                        ? "100%"
+                        : `${Math.min(100, Math.round((tasksThisMonth / Math.max(monthlyTaskLimit || 1, 1)) * 100))}%`,
+                    }}
+                  />
+                </div>
+                {!isPremium ? (
+                  <Link to="/premium">
+                    <button className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sb-panel-2)] px-3 py-2 text-xs font-medium text-[var(--sb-ink)] transition hover:brightness-110">
+                      <Zap className="h-3 w-3" />
+                      Upgrade - $12/mo
+                    </button>
+                  </Link>
+                ) : (
+                  <Link to="/premium">
+                    <button className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sb-panel-2)] px-3 py-2 text-xs font-medium text-[var(--sb-ink)] transition hover:brightness-110">
+                      Manage plan
+                    </button>
+                  </Link>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
               onClick={() => setActiveTab("settings")}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-[var(--sb-bg-2)]"
+              title={sidebarCollapsed ? (profile?.display_name || firstName) : undefined}
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded-lg py-2 text-left transition hover:bg-[var(--sb-bg-2)]",
+                sidebarCollapsed ? "justify-center px-0" : "px-2.5",
+              )}
             >
-              <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#6B4E32,#8C5A3D)] text-xs font-semibold text-white">
+              <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,#6B4E32,#8C5A3D)] text-xs font-semibold text-white">
                 {getInitials(profile?.display_name || user.email || "SB")}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-medium text-[var(--sb-ink)]">{profile?.display_name || firstName}</div>
-                <div style={monoStyle} className="text-[10px] uppercase tracking-[0.04em] text-[var(--sb-ink-3)]">
-                  BETA
-                </div>
-              </div>
-              <ChevronRight className="h-4 w-4 text-[var(--sb-ink-3)]" />
+              {!sidebarCollapsed && (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-medium text-[var(--sb-ink)]">{profile?.display_name || firstName}</div>
+                    <div style={monoStyle} className="text-[10px] uppercase tracking-[0.04em] text-[var(--sb-ink-3)]">
+                      BETA
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-[var(--sb-ink-3)]" />
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={cn(
+                "mt-2 flex w-full items-center rounded-lg py-2 text-[var(--sb-ink-3)] transition-colors hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink)]",
+                sidebarCollapsed ? "justify-center px-0" : "gap-2 px-2.5",
+              )}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <>
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="text-[12px]">Collapse</span>
+                </>
+              )}
             </button>
           </div>
         </aside>
@@ -1645,7 +1734,7 @@ export default function Dashboard() {
         <main className="min-w-0">
           <div className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-[var(--sb-line-2)] bg-[color-mix(in_srgb,var(--sb-bg)_86%,transparent)] px-4 backdrop-blur md:px-8">
             <div style={monoStyle} className="hidden items-center gap-2 text-[11px] text-[var(--sb-ink-3)] md:flex">
-              <span>SideBrain</span>
+              <span>Braino</span>
               <span className="text-[var(--sb-ink-4)]">/</span>
               <b className="font-medium text-[var(--sb-ink)]">{dashboardTabLabel(activeTab)}</b>
             </div>
