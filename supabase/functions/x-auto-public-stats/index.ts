@@ -22,7 +22,7 @@ serve(async (req) => {
 
   // Resolve which user's data to show — defaults to first result for "BrainoAI" username
   const url = new URL(req.url);
-  const requestedUsername = url.searchParams.get("username") || "BrainoAI";
+  const requestedUsername = url.searchParams.get("username") || "brainosays";
 
   const { data: connection } = await supabase
     .from("x_connections")
