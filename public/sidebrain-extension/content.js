@@ -2163,6 +2163,7 @@ function __sbBuildBrainUI() {
     .sb-card-header-btn:hover { background: var(--sb-btn-hover); }
     .sb-card-scroll {
       flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px;
+      background: rgba(0,0,0,0.45);
     }
     .sb-card-scroll::-webkit-scrollbar { width: 4px; }
     .sb-card-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -3773,6 +3774,15 @@ async function __sbSpeakText(text) {
 }
 
 
+function __sbScrollToLast(scroll) {
+  const turns = scroll.querySelectorAll(".sb-turn");
+  const last = turns[turns.length - 1];
+  if (last) {
+    void last.getBoundingClientRect(); // force reflow
+    scroll.scrollTop = last.offsetTop;
+  }
+}
+
 function __sbRenderCardHistory(scroll) {
   if (!scroll) return;
   const containerH = scroll.clientHeight || 0;
@@ -3788,12 +3798,9 @@ function __sbRenderCardHistory(scroll) {
     html += `</div>`;
   });
   scroll.innerHTML = html;
-  requestAnimationFrame(() => {
-    const turns = scroll.querySelectorAll(".sb-turn");
-    const last = turns[turns.length - 1];
-    if (last) scroll.scrollTop = last.offsetTop;
-    else scroll.scrollTop = 0;
-  });
+  __sbScrollToLast(scroll);
+  setTimeout(() => __sbScrollToLast(scroll), 0);
+  setTimeout(() => __sbScrollToLast(scroll), 60);
 }
 
 function __sbShowThinking(scroll) {
@@ -3818,7 +3825,10 @@ function __sbShowThinking(scroll) {
   __sbThinkingEl.textContent = "Thinking…";
   wrap.appendChild(__sbThinkingEl);
   scroll.appendChild(wrap);
-  requestAnimationFrame(() => { scroll.scrollTop = wrap.offsetTop; });
+  void wrap.getBoundingClientRect();
+  scroll.scrollTop = wrap.offsetTop;
+  setTimeout(() => { scroll.scrollTop = wrap.offsetTop; }, 0);
+  setTimeout(() => { scroll.scrollTop = wrap.offsetTop; }, 60);
 }
 
 function __sbShowBubble(text, autoHide = true, options = {}) {
