@@ -584,7 +584,7 @@ export default function BrainMascot() {
 
   // ── 10-second auto-open ───────────────────────────────────────────────────
   useEffect(() => {
-    const skipPaths = ['/auth', '/dashboard', '/assistant-panel'];
+    const skipPaths = ['/auth', '/dashboard'];
     if (skipPaths.some(p => window.location.pathname.startsWith(p))) return;
     const t = setTimeout(() => {
       setChatOpen(true);

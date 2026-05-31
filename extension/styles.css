@@ -502,6 +502,14 @@ button {
   gap: 14px;
 }
 
+/* ── Chat turns (history vs active) ── */
+.chat-turn { display: flex; flex-direction: column; gap: 8px; }
+.chat-turn-divider { height: 1px; background: var(--line); opacity: 0.5; margin: 4px 0 6px; }
+.chat-turn-history { opacity: 0.45; pointer-events: none; }
+.chat-turn-history .chat-bubble { font-size: 12px; }
+.chat-turn-history .chat-user { padding: 7px 11px; }
+.chat-turn-active { opacity: 1; pointer-events: auto; }
+
 /* ── Chat bubbles ── */
 .chat-bubble {
   font-size: 14px;

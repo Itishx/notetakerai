@@ -1469,60 +1469,85 @@ function buildAgentTraceEl(msg, index) {
   return el;
 }
 
+function groupChatIntoTurns(messages) {
+  const turns = [];
+  let i = 0;
+  while (i < messages.length) {
+    const msg = messages[i];
+    if (msg.role === "agent-trace") {
+      turns.push({ type: "agent-trace", msg, flatIdx: i });
+      i++;
+    } else if (msg.role === "user") {
+      const next = messages[i + 1];
+      const hasAssistant = next && next.role === "assistant";
+      turns.push({
+        type: "chat",
+        user: msg,
+        assistant: hasAssistant ? next : null,
+        userFlatIdx: i,
+        assistantFlatIdx: hasAssistant ? i + 1 : null,
+      });
+      i += hasAssistant ? 2 : 1;
+    } else {
+      i++;
+    }
+  }
+  return turns;
+}
+
 function renderChatMessages() {
   chatMessagesEl.innerHTML = "";
-  chatMessages.forEach((msg, index) => {
-    if (msg.role === "agent-trace") {
-      chatMessagesEl.appendChild(buildAgentTraceEl(msg, index));
+  const turns = groupChatIntoTurns(chatMessages);
+
+  turns.forEach((turn, turnIdx) => {
+    const isActive = turnIdx === turns.length - 1;
+
+    if (turn.type === "agent-trace") {
+      chatMessagesEl.appendChild(buildAgentTraceEl(turn.msg, turn.flatIdx));
       return;
     }
 
-    const bubble = document.createElement("div");
-    bubble.className = `chat-bubble chat-${msg.role}`;
-
-    if (msg.role === "assistant") {
-      const sources = extractSourceLinks(msg.content);
-      const bodyMarkdown = stripSourceSection(msg.content);
-      const followups = index === chatMessages.length - 1 ? getFollowupSuggestions() : [];
-      bubble.classList.add("chat-assistant-rich");
-      bubble.innerHTML = `
-        <div class="assistant-bubble-shell">
-          <div class="assistant-bubble-head"><span class="assistant-bubble-dot"></span>${escapeHtml(getAssistantLabel())}</div>
-          ${msg.image ? `<img src="${msg.image}" alt="Attached image" class="chat-msg-image" />` : ""}
-          <div class="chat-bubble-text rendered-md">${renderMarkdown(bodyMarkdown)}</div>
-          ${sources.length ? `
-            <div class="chat-source-row">
-              ${sources.map((source, sourceIndex) => `
-                <a class="chat-source-pill" href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">
-                  <span class="chat-source-pill-num">${sourceIndex + 1}</span>
-                  <span>${escapeHtml(source.title)}</span>
-                </a>
-              `).join("")}
-            </div>
-          ` : ""}
-          ${followups.length ? `
-            <div class="chat-followups">
-              ${followups.map((followup) => `
-                <button class="chat-followup" type="button" data-followup="${escapeHtml(followup)}">
-                  <span>${escapeHtml(followup)}</span>
-                  <span class="chat-followup-arrow">→</span>
-                </button>
-              `).join("")}
-            </div>
-          ` : ""}
-          <div class="chat-assistant-tools">
-            <button class="chat-tool-btn" type="button" data-tool="copy" data-index="${index}">Copy</button>
-            <button class="chat-tool-btn" type="button" data-tool="reuse" data-index="${index}">Use again</button>
-          </div>
-        </div>
-      `;
-    } else {
-      if (msg.image) bubble.innerHTML += `<img src="${msg.image}" alt="Attached image" class="chat-msg-image" />`;
-      bubble.innerHTML += `<div class="chat-bubble-text rendered-md">${renderMarkdown(msg.content)}</div>`;
+    if (turnIdx > 0) {
+      const divider = document.createElement("div");
+      divider.className = "chat-turn-divider";
+      chatMessagesEl.appendChild(divider);
     }
 
-    chatMessagesEl.appendChild(bubble);
+    const turnEl = document.createElement("div");
+    turnEl.className = `chat-turn ${isActive ? "chat-turn-active" : "chat-turn-history"}`;
+
+    // User bubble
+    const userBubble = document.createElement("div");
+    userBubble.className = "chat-bubble chat-user";
+    if (turn.user.image) userBubble.innerHTML += `<img src="${turn.user.image}" alt="Attached image" class="chat-msg-image" />`;
+    userBubble.innerHTML += `<div class="chat-bubble-text rendered-md">${renderMarkdown(turn.user.content)}</div>`;
+    turnEl.appendChild(userBubble);
+
+    // Assistant bubble
+    if (turn.assistant) {
+      const aIdx = turn.assistantFlatIdx;
+      const sources = extractSourceLinks(turn.assistant.content);
+      const bodyMarkdown = stripSourceSection(turn.assistant.content);
+      const followups = isActive ? getFollowupSuggestions() : [];
+
+      const assistantBubble = document.createElement("div");
+      assistantBubble.className = "chat-bubble chat-assistant chat-assistant-rich";
+      assistantBubble.innerHTML = `
+        <div class="assistant-bubble-shell">
+          <div class="assistant-bubble-head"><span class="assistant-bubble-dot"></span>${escapeHtml(getAssistantLabel())}</div>
+          ${turn.assistant.image ? `<img src="${turn.assistant.image}" alt="Attached image" class="chat-msg-image" />` : ""}
+          <div class="chat-bubble-text rendered-md">${renderMarkdown(bodyMarkdown)}</div>
+          ${sources.length ? `<div class="chat-source-row">${sources.map((s, si) => `<a class="chat-source-pill" href="${escapeHtml(s.url)}" target="_blank" rel="noreferrer"><span class="chat-source-pill-num">${si + 1}</span><span>${escapeHtml(s.title)}</span></a>`).join("")}</div>` : ""}
+          ${followups.length ? `<div class="chat-followups">${followups.map(f => `<button class="chat-followup" type="button" data-followup="${escapeHtml(f)}"><span>${escapeHtml(f)}</span><span class="chat-followup-arrow">→</span></button>`).join("")}</div>` : ""}
+          ${isActive ? `<div class="chat-assistant-tools"><button class="chat-tool-btn" type="button" data-tool="copy" data-index="${aIdx}">Copy</button><button class="chat-tool-btn" type="button" data-tool="reuse" data-index="${aIdx}">Use again</button></div>` : ""}
+        </div>
+      `;
+      turnEl.appendChild(assistantBubble);
+    }
+
+    chatMessagesEl.appendChild(turnEl);
   });
+
   chatArea.scrollTop = chatArea.scrollHeight;
   refreshPanelChrome();
 }
@@ -1615,6 +1640,10 @@ async function sendChatMessage(text, imageBase64) {
   const userMsg = { role: "user", content: text || "📎 Image attached — please insert into notes" };
   if (imageBase64) userMsg.image = `data:image/png;base64,${imageBase64}`;
   chatMessages.push(userMsg);
+  if (!currentSessionId) {
+    currentSessionId = Date.now();
+    chrome.storage.local.set({ currentSessionId });
+  }
   renderChatMessages();
   saveChatMessages();
   updateEmptyState();

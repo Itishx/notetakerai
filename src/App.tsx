@@ -23,10 +23,8 @@ import Delegate from "./pages/Delegate.tsx";
 import Compare from "./pages/Compare.tsx";
 import RemoteAgent from "./pages/RemoteAgent.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
-import SidepanelTest from "./pages/SidepanelTest.tsx";
 import BuildPlan from "./pages/BuildPlan.tsx";
 import Reddit from "./pages/Reddit.tsx";
-import AssistantPanel from "./pages/AssistantPanel.tsx";
 import Privacy from "./pages/Privacy.tsx";
 import Terms from "./pages/Terms.tsx";
 import Contact from "./pages/Contact.tsx";
@@ -43,7 +41,7 @@ const queryClient = new QueryClient();
 const App = () => {
   const [splashDone, setSplashDone] = useState(() => {
     if (typeof window === "undefined") return false;
-    return window.location.pathname === "/assistant-panel" || window.location.pathname === "/";
+    return window.location.pathname === "/";
   });
 
   return (
@@ -72,10 +70,8 @@ const App = () => {
               <Route path="/compare" element={<Compare />} />
               <Route path="/remote-agent" element={<RemoteAgent />} />
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/sidepanel-test" element={<SidepanelTest />} />
               <Route path="/build-plan" element={<BuildPlan />} />
               <Route path="/reddit" element={<Reddit />} />
-              <Route path="/assistant-panel" element={<AssistantPanel />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/contact" element={<Contact />} />
