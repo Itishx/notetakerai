@@ -3770,15 +3770,21 @@ async function __sbSpeakText(text) {
 
 function __sbRenderCardHistory(scroll, loadingText = null) {
   if (!scroll) return;
+  const screenH = scroll.clientHeight || 260;
+  const total = __sbCardTurns.length;
   let html = "";
   __sbCardTurns.forEach((turn, i) => {
-    if (i > 0) html += `<div style="height:1px;background:rgba(255,255,255,0.1);margin:18px 0;"></div>`;
+    const isActive = i === total - 1 && !loadingText;
+    // History turns: natural height + bottom divider. Active turn: fills full screen.
+    html += `<div style="min-height:${isActive ? screenH : 0}px;${i < total - 1 ? "padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:24px;" : ""}">`;
     if (turn.prompt) html += `<div class="sb-card-q">${__sbEscapeHtml(turn.prompt)}</div>`;
     html += `<div class="sb-card-a">${__sbRenderMarkdown(turn.answer)}</div>`;
+    html += `</div>`;
   });
   if (loadingText) {
-    if (__sbCardTurns.length > 0) html += `<div style="height:1px;background:rgba(255,255,255,0.1);margin:18px 0;"></div>`;
+    html += `<div style="min-height:${screenH}px;">`;
     html += `<div style="font-size:13px;color:rgba(255,255,255,0.38);font-style:italic;">${__sbEscapeHtml(loadingText)}</div>`;
+    html += `</div>`;
   }
   scroll.innerHTML = html;
   requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
