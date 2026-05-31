@@ -109,6 +109,7 @@ type XPersona = {
   bio: string;
   what_building: string;
   tone_notes: string;
+  content_source?: string;
   auto_posting_enabled?: boolean;
   auto_reply_enabled?: boolean;
   posts_per_day?: number;
@@ -763,11 +764,11 @@ export default function Dashboard() {
   const [xCancellingId, setXCancellingId] = useState<string | null>(null);
   const [xDispatching, setXDispatching] = useState(false);
   const [xPersona, setXPersona] = useState<XPersona>(null);
-  const [xPersonaDraft, setXPersonaDraft] = useState({ display_name: "", bio: "", what_building: "", tone_notes: "" });
+  const [xPersonaDraft, setXPersonaDraft] = useState({ display_name: "", bio: "", what_building: "", tone_notes: "", content_source: "" });
   const [xPersonaSaving, setXPersonaSaving] = useState(false);
   const [xPersonaSaved, setXPersonaSaved] = useState(false);
   const [xPersonaSaveError, setXPersonaSaveError] = useState<string | null>(null);
-  const [xPersonaVerified, setXPersonaVerified] = useState<{ display_name: string; bio: string; what_building: string; tone_notes: string } | null>(null);
+  const [xPersonaVerified, setXPersonaVerified] = useState<{ display_name: string; bio: string; what_building: string; tone_notes: string; content_source?: string } | null>(null);
   const [xAutoPostingEnabled, setXAutoPostingEnabled] = useState(false);
   const [xAutoReplyEnabled, setXAutoReplyEnabled] = useState(false);
   const [xPostsPerDay, setXPostsPerDay] = useState(4);
@@ -887,7 +888,7 @@ export default function Dashboard() {
           .limit(20),
         (supabase as any)
           .from("x_auto_persona")
-          .select("display_name,bio,what_building,tone_notes,auto_posting_enabled,auto_reply_enabled,posts_per_day")
+          .select("display_name,bio,what_building,tone_notes,content_source,auto_posting_enabled,auto_reply_enabled,posts_per_day")
           .eq("user_id", user.id)
           .maybeSingle(),
         (supabase as any)
@@ -908,7 +909,7 @@ export default function Dashboard() {
       const persona = (xPersonaRes.data as XPersona) || null;
       setXPersona(persona);
       if (persona) {
-        setXPersonaDraft({ display_name: persona.display_name || "", bio: persona.bio || "", what_building: persona.what_building || "", tone_notes: persona.tone_notes || "" });
+        setXPersonaDraft({ display_name: persona.display_name || "", bio: persona.bio || "", what_building: persona.what_building || "", tone_notes: persona.tone_notes || "", content_source: persona.content_source || "" });
         setXAutoPostingEnabled(persona.auto_posting_enabled ?? false);
         setXAutoReplyEnabled(persona.auto_reply_enabled ?? false);
         setXPostsPerDay(persona.posts_per_day ?? 4);
@@ -1346,12 +1347,17 @@ export default function Dashboard() {
     if (!user) return;
     setXAutoToggling(field === "auto_posting_enabled" ? "posting" : "reply");
     const { error } = await (supabase as any).from("x_auto_persona").upsert(
-      { user_id: user.id, [field]: value, updated_at: new Date().toISOString() },
+      { user_id: user.id, [field]: value },
       { onConflict: "user_id" }
     );
     if (!error) {
       if (field === "auto_posting_enabled") setXAutoPostingEnabled(value);
       else setXAutoReplyEnabled(value);
+      if (value && !xConn) {
+        toast({ title: "X account not linked", description: "Connect your X account below — the pipeline will start once linked." });
+      }
+    } else {
+      toast({ title: "Could not save", description: error.message || "Check that the DB migration has been applied.", variant: "destructive" });
     }
     setXAutoToggling(null);
   };
@@ -1385,7 +1391,7 @@ export default function Dashboard() {
     // Read back what was actually written to confirm it's in the DB
     const { data: verified, error: readError } = await (supabase as any)
       .from("x_auto_persona")
-      .select("display_name,bio,what_building,tone_notes")
+      .select("display_name,bio,what_building,tone_notes,content_source")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -2424,7 +2430,7 @@ export default function Dashboard() {
                       <Switch
                         checked={xAutoPostingEnabled}
                         onCheckedChange={(v) => handleToggleAutoMode("auto_posting_enabled", v)}
-                        disabled={xAutoToggling === "posting" || !xConn}
+                        disabled={xAutoToggling === "posting"}
                       />
                     </div>
 
@@ -2441,7 +2447,7 @@ export default function Dashboard() {
                       <Switch
                         checked={xAutoReplyEnabled}
                         onCheckedChange={(v) => handleToggleAutoMode("auto_reply_enabled", v)}
-                        disabled={xAutoToggling === "reply" || !xConn}
+                        disabled={xAutoToggling === "reply"}
                       />
                     </div>
 
@@ -2472,21 +2478,19 @@ export default function Dashboard() {
                     )}
 
                     {/* Status row */}
-                    {(xAutoPostingEnabled || xAutoReplyEnabled) && (
-                      <div style={monoStyle} className="flex flex-wrap gap-4 px-1 text-[11px] text-[var(--sb-ink-3)]">
-                        {xNextPostAt && (
-                          <span>
-                            Next post:{" "}
-                            <span className="text-[var(--sb-ink)]">
-                              {new Date(xNextPostAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}
-                            </span>
+                    <div style={monoStyle} className="flex flex-wrap gap-4 px-1 text-[11px] text-[var(--sb-ink-3)]">
+                      {!xConn && (
+                        <span className="text-amber-600">Link your X account below — required for the pipeline to run</span>
+                      )}
+                      {xNextPostAt && xConn && (
+                        <span>
+                          Next post:{" "}
+                          <span className="text-[var(--sb-ink)]">
+                            {new Date(xNextPostAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}
                           </span>
-                        )}
-                        {!xConn && (
-                          <span className="text-amber-600">Link your X account below to enable auto mode</span>
-                        )}
-                      </div>
-                    )}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -2538,6 +2542,25 @@ export default function Dashboard() {
                         placeholder="e.g. Building Braino, an AI browser companion at trybraino.com"
                         className="min-h-[80px] resize-none rounded-xl border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13px]"
                       />
+                    </div>
+                  </div>
+
+                  {/* Content source — full-width, large */}
+                  <div className="mt-4">
+                    <label className="mb-1.5 block text-[13px] font-medium text-[var(--sb-ink)]">
+                      What to post about
+                    </label>
+                    <div style={monoStyle} className="mb-2 text-[11px] text-[var(--sb-ink-3)]">
+                      Paste articles, notes, ideas, or a brief — Braino will generate every post from this material. No content source = generic posts.
+                    </div>
+                    <Textarea
+                      value={xPersonaDraft.content_source}
+                      onChange={e => setXPersonaDraft(p => ({ ...p, content_source: e.target.value }))}
+                      placeholder={"Paste anything: an article, a list of talking points, a product update, your thoughts on a topic, raw notes...\n\nBraino will mine this for tweet ideas and write them in your voice."}
+                      className="min-h-[200px] rounded-xl border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13px] leading-relaxed"
+                    />
+                    <div style={monoStyle} className="mt-1.5 text-right text-[11px] text-[var(--sb-ink-4)]">
+                      {xPersonaDraft.content_source.length > 0 ? `${xPersonaDraft.content_source.length.toLocaleString()} chars` : "no limit — paste as much as you want"}
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">

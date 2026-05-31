@@ -30,7 +30,7 @@ serve(async (req) => {
   // Load all users with auto posting enabled who have a linked X account
   const { data: personas, error: personaError } = await supabase
     .from("x_auto_persona")
-    .select("user_id, display_name, bio, what_building, tone_notes, posts_per_day")
+    .select("user_id, display_name, bio, what_building, tone_notes, content_source, posts_per_day")
     .eq("auto_posting_enabled", true);
 
   if (personaError) {
@@ -87,6 +87,7 @@ serve(async (req) => {
         bio: persona.bio,
         whatBuilding: persona.what_building,
         toneNotes: persona.tone_notes,
+        contentSource: persona.content_source ?? null,
         count: remaining,
       });
 
@@ -130,10 +131,10 @@ async function generateTweets(opts: {
   bio: string;
   whatBuilding: string;
   toneNotes: string;
+  contentSource: string | null;
   count: number;
 }): Promise<string[]> {
   if (!opts.apiKey) {
-    // Fallback: return placeholder if no API key
     return [];
   }
 
@@ -146,7 +147,7 @@ async function generateTweets(opts: {
     .filter(Boolean)
     .join("\n");
 
-  const systemPrompt = `You are a social media ghostwriter. Generate original, authentic X (Twitter) posts for a person based on their persona.
+  const systemPrompt = `You are a social media ghostwriter. Generate original, authentic X (Twitter) posts for a person based on their persona and content source.
 
 Rules:
 - Each post MUST be under 280 characters.
@@ -155,10 +156,15 @@ Rules:
 - No hashtags unless they are genuinely useful.
 - No emojis unless the tone calls for it.
 - No promotional language or obvious marketing.
+- If content source material is provided, mine it for ideas and angles — don't just summarize it, find the interesting takes.
 - Return ONLY a valid JSON array of strings. No markdown fences. No extra text.
 - Example output: ["Post one here.", "Post two here."]`;
 
-  const userPrompt = `Persona:\n${personaContext}\n\nGenerate ${opts.count} original tweet${opts.count > 1 ? "s" : ""} for today. Return a JSON array of strings.`;
+  const contentSection = opts.contentSource?.trim()
+    ? `\n\nContent source material (mine this for tweet ideas and angles):\n---\n${opts.contentSource.trim()}\n---`
+    : "";
+
+  const userPrompt = `Persona:\n${personaContext}${contentSection}\n\nGenerate ${opts.count} original tweet${opts.count > 1 ? "s" : ""} for today. Return a JSON array of strings.`;
 
   const response = await fetch(LOVABLE_API_URL, {
     method: "POST",
