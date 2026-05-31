@@ -70,8 +70,7 @@ function updateModeUI() {
 function fetchPageContext() {
   currentPageContext = null;
   bpCtxChip.className = "bp-ctx-chip loading";
-  bpCtxTitle.textContent = "Reading page…";
-  bpCtxUrl.textContent = "";
+  if (!bpCtxTitle.textContent) bpCtxTitle.textContent = "Reading page…";
 
   chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
     if (chrome.runtime.lastError || res?.error || !res?.text) {
