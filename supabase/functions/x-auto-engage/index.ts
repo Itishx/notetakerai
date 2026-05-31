@@ -27,10 +27,29 @@ serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  const { data: personas, error: personaError } = await supabase
+  // Detect manual user-triggered call via JWT
+  let targetUserId: string | null = null;
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (anonKey) {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (user) targetUserId = user.id;
+    }
+  }
+
+  // Cron mode: all enabled users. Manual mode: only the calling user (bypass toggle gate)
+  let personaQuery = supabase
     .from("x_auto_persona")
-    .select("user_id, display_name, bio, what_building, tone_notes, x_user_id, last_mention_id")
-    .eq("auto_reply_enabled", true);
+    .select("user_id, display_name, bio, what_building, tone_notes, x_user_id, last_mention_id");
+  personaQuery = targetUserId
+    ? personaQuery.eq("user_id", targetUserId)
+    : personaQuery.eq("auto_reply_enabled", true);
+
+  const { data: personas, error: personaError } = await personaQuery;
 
   if (personaError) {
     console.error("Failed to load personas:", personaError);

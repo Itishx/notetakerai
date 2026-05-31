@@ -831,6 +831,10 @@ export default function Dashboard() {
   const [xAutoToggling, setXAutoToggling] = useState<"posting" | "reply" | null>(null);
   const [xNextPostAt, setXNextPostAt] = useState<string | null>(null);
   const [xReplyLogs, setXReplyLogs] = useState<XReplyLog[]>([]);
+  const [xGenerating, setXGenerating] = useState(false);
+  const [xGenerateResult, setXGenerateResult] = useState<string | null>(null);
+  const [xEngaging, setXEngaging] = useState(false);
+  const [xEngageResult, setXEngageResult] = useState<string | null>(null);
   const drivePollRef = useRef<number | null>(null);
   const xPollRef = useRef<number | null>(null);
 
@@ -1252,6 +1256,60 @@ export default function Dashboard() {
       setScheduledXPosts((prev) => prev.filter((p) => !ids.includes(p.id)));
     } catch (error) {
       toast({ title: "Could not clear posts", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
+
+  async function handleRunGenerate() {
+    if (!session) return;
+    setXGenerating(true);
+    setXGenerateResult(null);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-auto-generate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Generation failed");
+      const count = data?.generated ?? 0;
+      setXGenerateResult(count > 0 ? `Generated ${count} post${count > 1 ? "s" : ""} — queued for dispatch` : "No new posts generated (quota full or no persona set)");
+      // Refresh the queue
+      const { data: fresh } = await supabase.from("scheduled_x_posts").select("*").eq("user_id", user!.id).order("scheduled_at", { ascending: false }).limit(50);
+      if (fresh) setScheduledXPosts(fresh as ScheduledXPost[]);
+    } catch (err) {
+      setXGenerateResult(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    } finally {
+      setXGenerating(false);
+    }
+  }
+
+  async function handleRunEngage() {
+    if (!session) return;
+    setXEngaging(true);
+    setXEngageResult(null);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-auto-engage`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Engage failed");
+      const count = data?.replied ?? 0;
+      setXEngageResult(count > 0 ? `Replied to ${count} mention${count > 1 ? "s" : ""}` : "No new mentions found");
+      // Refresh reply logs
+      const { data: fresh } = await supabase.from("x_auto_reply_logs").select("*").eq("user_id", user!.id).order("replied_at", { ascending: false }).limit(50);
+      if (fresh) setXReplyLogs(fresh as XReplyLog[]);
+    } catch (err) {
+      setXEngageResult(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    } finally {
+      setXEngaging(false);
     }
   }
 
@@ -3075,45 +3133,62 @@ export default function Dashboard() {
                           </a>
                         )}
                       </div>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
-                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xAutoPostingEnabled ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-medium text-[var(--sb-ink)]">Auto Posting</div>
-                            <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
-                              {xAutoPostingEnabled
-                                ? xNextPostAt
-                                  ? `Next post: ${new Date(xNextPostAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
-                                  : "Waiting for next generation cycle (daily at 14:00 UTC)"
-                                : "Off — enable in Settings to start the pipeline"}
-                            </div>
-                          </div>
-                          <span style={monoStyle} className={cn("text-[11px] font-medium", xAutoPostingEnabled ? "text-emerald-600" : "text-[var(--sb-ink-4)]")}>
-                            {xAutoPostingEnabled ? "ON" : "OFF"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
-                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xAutoReplyEnabled ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-medium text-[var(--sb-ink)]">Auto Reply</div>
-                            <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
-                              {xAutoReplyEnabled
-                                ? xAutomationStats?.last_run_finished_at
-                                  ? `Last run: ${timeAgo(xAutomationStats.last_run_finished_at)}`
-                                  : "Checking @mentions every 30 min"
-                                : "Off — enable in Settings to monitor @mentions"}
-                            </div>
-                          </div>
-                          <span style={monoStyle} className={cn("text-[11px] font-medium", xAutoReplyEnabled ? "text-emerald-600" : "text-[var(--sb-ink-4)]")}>
-                            {xAutoReplyEnabled ? "ON" : "OFF"}
-                          </span>
-                        </div>
-                      </div>
                       {!xConn && (
-                        <div style={monoStyle} className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[11px] text-amber-700">
-                          Link your X account in Settings for the pipeline to activate.
+                        <div style={monoStyle} className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[11px] text-amber-700">
+                          Link your X account in Settings before running.
                         </div>
                       )}
+                      <div className="space-y-3">
+                        {/* Generate posts row */}
+                        <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xGenerating ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-medium text-[var(--sb-ink)]">Generate posts</div>
+                            <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
+                              {xGenerating
+                                ? "Generating tweets in your voice…"
+                                : xGenerateResult
+                                  ? xGenerateResult
+                                  : xNextPostAt
+                                    ? `Next queued post: ${new Date(xNextPostAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+                                    : "Generates today's posts and queues them for dispatch"}
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleRunGenerate}
+                            disabled={xGenerating || !xConn}
+                            style={monoStyle}
+                            className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
+                          >
+                            {xGenerating ? "Running…" : "Run now"}
+                          </button>
+                        </div>
+
+                        {/* Check mentions row */}
+                        <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xEngaging ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-medium text-[var(--sb-ink)]">Check mentions &amp; reply</div>
+                            <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
+                              {xEngaging
+                                ? "Scanning @mentions and generating replies…"
+                                : xEngageResult
+                                  ? xEngageResult
+                                  : xAutomationStats?.last_run_finished_at
+                                    ? `Last run: ${timeAgo(xAutomationStats.last_run_finished_at)}`
+                                    : "Scans your @mentions and replies in your voice"}
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleRunEngage}
+                            disabled={xEngaging || !xConn}
+                            style={monoStyle}
+                            className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
+                          >
+                            {xEngaging ? "Running…" : "Run now"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="grid gap-5 xl:grid-cols-2">
