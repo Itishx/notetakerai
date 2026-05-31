@@ -165,6 +165,7 @@ export type Database = {
           display_name: string | null
           id: string
           is_premium: boolean
+          overall_memory: string
           polar_customer_id: string | null
           updated_at: string
           user_id: string
@@ -175,6 +176,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           is_premium?: boolean
+          overall_memory?: string
           polar_customer_id?: string | null
           updated_at?: string
           user_id: string
@@ -185,6 +187,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           is_premium?: boolean
+          overall_memory?: string
           polar_customer_id?: string | null
           updated_at?: string
           user_id?: string
@@ -377,38 +380,148 @@ export type Database = {
         }
         Relationships: []
       }
+      x_auto_sessions: {
+        Row: {
+          created_at: string
+          cooldown_ends_at: string
+          current_followers_count: number
+          current_replies_received: number
+          current_total_views: number
+          ends_at: string
+          followers_gained: number
+          id: string
+          last_polled_at: string | null
+          last_reply_at: string | null
+          mention_watermark_id: string | null
+          replies_failed: number
+          replies_posted: number
+          replies_queued: number
+          replies_received: number
+          session_number: number
+          start_followers_count: number
+          start_replies_received: number
+          start_total_views: number
+          started_at: string
+          status: string
+          stopped_at: string | null
+          total_views: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          cooldown_ends_at: string
+          current_followers_count?: number
+          current_replies_received?: number
+          current_total_views?: number
+          ends_at: string
+          followers_gained?: number
+          id?: string
+          last_polled_at?: string | null
+          last_reply_at?: string | null
+          mention_watermark_id?: string | null
+          replies_failed?: number
+          replies_posted?: number
+          replies_queued?: number
+          replies_received?: number
+          session_number: number
+          start_followers_count?: number
+          start_replies_received?: number
+          start_total_views?: number
+          started_at?: string
+          status?: string
+          stopped_at?: string | null
+          total_views?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          cooldown_ends_at?: string
+          current_followers_count?: number
+          current_replies_received?: number
+          current_total_views?: number
+          ends_at?: string
+          followers_gained?: number
+          id?: string
+          last_polled_at?: string | null
+          last_reply_at?: string | null
+          mention_watermark_id?: string | null
+          replies_failed?: number
+          replies_posted?: number
+          replies_queued?: number
+          replies_received?: number
+          session_number?: number
+          start_followers_count?: number
+          start_replies_received?: number
+          start_total_views?: number
+          started_at?: string
+          status?: string
+          stopped_at?: string | null
+          total_views?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       x_auto_reply_logs: {
         Row: {
           id: string
+          discovered_at: string
+          error_message: string | null
+          mention_tweet_id: string | null
           our_reply: string
+          our_reply_tweet_id: string | null
           post_author_display_name: string
           post_author_handle: string
           post_text: string
           post_url: string
-          replied_at: string
+          replied_at: string | null
+          session_id: string | null
+          status: string
           user_id: string
         }
         Insert: {
+          discovered_at?: string
+          error_message?: string | null
           id?: string
+          mention_tweet_id?: string | null
           our_reply?: string
+          our_reply_tweet_id?: string | null
           post_author_display_name?: string
           post_author_handle?: string
           post_text?: string
           post_url?: string
-          replied_at?: string
+          replied_at?: string | null
+          session_id?: string | null
+          status?: string
           user_id: string
         }
         Update: {
+          discovered_at?: string
+          error_message?: string | null
           id?: string
+          mention_tweet_id?: string | null
           our_reply?: string
+          our_reply_tweet_id?: string | null
           post_author_display_name?: string
           post_author_handle?: string
           post_text?: string
           post_url?: string
-          replied_at?: string
+          replied_at?: string | null
+          session_id?: string | null
+          status?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "x_auto_reply_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "x_auto_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       x_connections: {
         Row: {

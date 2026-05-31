@@ -98,6 +98,7 @@ serve(async (req) => {
     .from("x_auto_reply_logs")
     .select("post_author_handle, post_text, our_reply, replied_at, post_url")
     .eq("user_id", userId)
+    .eq("status", "posted")
     .order("replied_at", { ascending: false })
     .limit(10);
 
@@ -116,7 +117,8 @@ serve(async (req) => {
   const { count: totalRepliesSent } = await supabase
     .from("x_auto_reply_logs")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("status", "posted");
 
   // Auto mode status
   const { data: persona } = await supabase

@@ -155,7 +155,7 @@ function buildRequestId() {
 }
 
 export default function AssistantPanel() {
-  const { user, isPremium, signIn, signOut, signUp } = useAuth();
+  const { user, session, isPremium, signIn, signOut, signUp } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>(() => readStorage(CHAT_STORAGE_KEY, []));
   const [mode, setMode] = useState<"page" | "agent">(() => readStorage(MODE_STORAGE_KEY, "page"));
   const [pageContext, setPageContext] = useState<AssistantPageContext>(EMPTY_PAGE_CONTEXT);
@@ -341,14 +341,20 @@ export default function AssistantPanel() {
 
   async function sendPageReply(text: string) {
     const freshContext = await refreshPageContext();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
 
     const response = await fetch(`${FUNCTIONS_BASE}/chat-about-notes`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({
         message: text,
+        userId: user?.id,
         pageContext: freshContext.url ? freshContext : undefined,
         chatHistory: messages
           .filter((message) => message.role !== "system")
@@ -404,7 +410,14 @@ export default function AssistantPanel() {
       replaceBusyMessage("__sidebrain_busy__:Planning workflow…");
       try {
         const freshCtx = await refreshPageContext();
-        const plan = await planWorkflow({ apiBase: FUNCTIONS_BASE, task, pageContext: freshCtx, chatContext: chatCtx });
+        const plan = await planWorkflow({
+          apiBase: FUNCTIONS_BASE,
+          task,
+          pageContext: freshCtx,
+          chatContext: chatCtx,
+          authToken: session?.access_token,
+          userId: user?.id,
+        });
         if (plan.complexity === "multi-step" && plan.steps.length > 1) {
           planSteps = plan.steps;
         }
@@ -443,6 +456,8 @@ export default function AssistantPanel() {
             history,
             chatContext: chatCtx,
             currentStep: step,
+            authToken: session?.access_token,
+            userId: user?.id,
           }));
 
           if (!actions.length) break;
@@ -517,6 +532,8 @@ export default function AssistantPanel() {
               remainingSteps: planSteps.slice(stepIdx),
               pageContext: verifyCtx,
               lastError: lastErr?.result?.error ?? "Unknown failure",
+              authToken: session?.access_token,
+              userId: user?.id,
             });
             planSteps = [...planSteps.slice(0, stepIdx + 1), ...revised];
             consecutiveFailures = 0;
@@ -538,6 +555,8 @@ export default function AssistantPanel() {
         pageContext: freshContext,
         history,
         chatContext: chatCtx,
+        authToken: session?.access_token,
+        userId: user?.id,
       }));
 
       if (!actions.length) return "I couldn't find a safe next step on this page.";

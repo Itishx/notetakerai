@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { dispatchDueXPosts, requireSupabaseServiceConfig } from "../_shared/x-dispatch.ts";
+import { loadUserKnowledge } from "../_shared/user-knowledge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -135,7 +136,13 @@ serve(async (req) => {
       });
     }
 
-    const content = await resolvePostContent(action);
+    const userKnowledge = await loadUserKnowledge(supabase, user.id, {
+      includeMemoryNotes: true,
+      includeXPersona: true,
+      includeXContentSource: false,
+    });
+
+    const content = await resolvePostContent(action, userKnowledge.combinedContext);
     if (!content.trim()) {
       return json({
         handled: true,
@@ -299,7 +306,10 @@ function tryFastPath(task: string): XAction | null {
   return null;
 }
 
-async function resolvePostContent(action: Extract<XAction, { action: "post_now" | "schedule_post" }>) {
+async function resolvePostContent(
+  action: Extract<XAction, { action: "post_now" | "schedule_post" }>,
+  userContext: string,
+) {
   const direct = String(action.content || "").trim();
   if (direct) return direct.slice(0, 280);
 
@@ -321,11 +331,11 @@ async function resolvePostContent(action: Extract<XAction, { action: "post_now" 
         {
           role: "system",
           content:
-            "Write a polished X post. Return only the post text, no quotes, no labels, no markdown. Keep it under 280 characters.",
+            "Write a polished X post in the user's authentic voice. Return only the post text, no quotes, no labels, no markdown. Keep it under 280 characters.",
         },
         {
           role: "user",
-          content: brief,
+          content: `${userContext ? `User identity and voice context:\n${userContext}\n\n` : ""}${brief}`,
         },
       ],
     }),

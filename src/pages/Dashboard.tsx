@@ -117,13 +117,46 @@ type XPersona = {
 
 type XReplyLog = {
   id: string;
+  session_id: string | null;
+  mention_tweet_id: string | null;
+  our_reply_tweet_id: string | null;
   post_author_handle: string;
   post_author_display_name: string;
   post_url: string;
   post_text: string;
   our_reply: string;
-  replied_at: string;
+  status: "pending" | "posted" | "failed";
+  error_message: string | null;
+  discovered_at: string;
+  replied_at: string | null;
 };
+
+type XAutoSession = {
+  id: string;
+  session_number: number;
+  status: "active" | "completed" | "stopped";
+  started_at: string;
+  ends_at: string;
+  stopped_at: string | null;
+  cooldown_ends_at: string;
+  last_polled_at: string | null;
+  last_reply_at: string | null;
+  replies_posted: number;
+  replies_failed: number;
+  replies_queued: number;
+  followers_gained: number;
+  replies_received: number;
+  total_views: number;
+};
+
+type XSessionSortKey =
+  | "session_number"
+  | "status"
+  | "started_at"
+  | "replies_posted"
+  | "followers_gained"
+  | "replies_received"
+  | "total_views";
 
 type DashboardTab = "overview" | "notes" | "tasks" | "xAutomation" | "settings" | "memory" | "highlights";
 type NoteView = "list" | "grid";
@@ -179,6 +212,38 @@ function formatDateTime(iso?: string | null) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatCountdown(ms: number) {
+  if (ms <= 0) return "0m";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function sessionStatusLabel(status: XAutoSession["status"]) {
+  if (status === "active") return "Active";
+  if (status === "completed") return "Completed";
+  return "Stopped";
+}
+
+function sessionStatusClass(status: XAutoSession["status"]) {
+  if (status === "active") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
+  if (status === "completed") return "border-[var(--sb-line)] bg-[var(--sb-panel)] text-[var(--sb-ink-2)]";
+  return "border-amber-500/30 bg-amber-500/10 text-amber-700";
+}
+
+function replyLogStatusClass(status: XReplyLog["status"]) {
+  if (status === "posted") return "bg-emerald-500/10 text-emerald-700";
+  if (status === "failed") return "bg-red-500/10 text-red-600";
+  return "bg-amber-500/10 text-amber-700";
 }
 
 function toDateTimeLocalValue(date: Date) {
@@ -245,6 +310,53 @@ function shortDate(iso: string) {
     day: "numeric",
     month: "short",
   });
+}
+
+function buildCombinedKnowledgePreview({
+  displayName,
+  overallMemory,
+  memoryNotes,
+  xPersona,
+}: {
+  displayName: string;
+  overallMemory: string;
+  memoryNotes: Note[];
+  xPersona: XPersona;
+}) {
+  const sections: string[] = [];
+
+  if (displayName.trim()) {
+    sections.push(`Name: ${displayName.trim()}`);
+  }
+
+  if (overallMemory.trim()) {
+    sections.push(`Overall user profile:\n${overallMemory.trim()}`);
+  }
+
+  const rememberedFacts = Array.from(
+    new Set(
+      memoryNotes
+        .map((note) => String(note.structured_notes || note.title || "").trim())
+        .filter(Boolean),
+    ),
+  );
+
+  if (rememberedFacts.length > 0) {
+    sections.push(`Additional remembered facts:\n${rememberedFacts.map((fact) => `- ${fact}`).join("\n")}`);
+  }
+
+  const xLines = [
+    xPersona?.display_name ? `Name: ${xPersona.display_name}` : null,
+    xPersona?.bio ? `Who they are: ${xPersona.bio}` : null,
+    xPersona?.what_building ? `What they are building: ${xPersona.what_building}` : null,
+    xPersona?.tone_notes ? `Voice and tone: ${xPersona.tone_notes}` : null,
+  ].filter(Boolean);
+
+  if (xLines.length > 0) {
+    sections.push(`X automation profile:\n${xLines.join("\n")}`);
+  }
+
+  return sections.join("\n\n").trim();
 }
 
 function startOfDay(date: Date) {
@@ -793,7 +905,7 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
-  const [xSubTab, setXSubTab] = useState<"settings" | "activity">("settings");
+  const [xSubTab, setXSubTab] = useState<"settings" | "activity">("activity");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [commands, setCommands] = useState<Command[]>([]);
@@ -811,6 +923,11 @@ export default function Dashboard() {
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
+  const [overallMemory, setOverallMemory] = useState("");
+  const [overallMemoryDraft, setOverallMemoryDraft] = useState("");
+  const [overallMemorySaving, setOverallMemorySaving] = useState(false);
+  const [overallMemorySaved, setOverallMemorySaved] = useState(false);
+  const [overallMemoryError, setOverallMemoryError] = useState<string | null>(null);
   const [driveConnectLoading, setDriveConnectLoading] = useState(false);
   const [xConnectLoading, setXConnectLoading] = useState(false);
   const [xPostDraft, setXPostDraft] = useState("");
@@ -830,11 +947,18 @@ export default function Dashboard() {
   const [xPostsPerDay, setXPostsPerDay] = useState(4);
   const [xAutoToggling, setXAutoToggling] = useState<"posting" | "reply" | null>(null);
   const [xNextPostAt, setXNextPostAt] = useState<string | null>(null);
+  const [xAutoSessions, setXAutoSessions] = useState<XAutoSession[]>([]);
+  const [selectedXSessionId, setSelectedXSessionId] = useState<string | null>(null);
+  const [xSessionStarting, setXSessionStarting] = useState(false);
+  const [xSessionStopping, setXSessionStopping] = useState(false);
+  const [xSessionSortKey, setXSessionSortKey] = useState<XSessionSortKey>("started_at");
+  const [xSessionSortDirection, setXSessionSortDirection] = useState<"asc" | "desc">("desc");
   const [xReplyLogs, setXReplyLogs] = useState<XReplyLog[]>([]);
   const [xGenerating, setXGenerating] = useState(false);
   const [xGenerateResult, setXGenerateResult] = useState<string | null>(null);
   const [xEngaging, setXEngaging] = useState(false);
   const [xEngageResult, setXEngageResult] = useState<string | null>(null);
+  const [xSessionClock, setXSessionClock] = useState(() => Date.now());
   const xGenerateAbortRef = useRef<AbortController | null>(null);
   const xEngageAbortRef = useRef<AbortController | null>(null);
   const drivePollRef = useRef<number | null>(null);
@@ -904,6 +1028,52 @@ export default function Dashboard() {
     return posts;
   }
 
+  async function refreshXAutomationStats(userId: string) {
+    const { data, error } = await (supabase as any)
+      .from("x_automation_stats")
+      .select("total_replies,total_runs,total_runtime_ms,last_run_reply_count,last_run_duration_ms,last_run_started_at,last_run_finished_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    const stats = (data as XAutomationStats) || null;
+    setXAutomationStats(stats);
+    return stats;
+  }
+
+  async function refreshXAutoActivity(userId: string) {
+    const [sessionsRes, logsRes] = await Promise.all([
+      (supabase as any)
+        .from("x_auto_sessions")
+        .select("id,session_number,status,started_at,ends_at,stopped_at,cooldown_ends_at,last_polled_at,last_reply_at,replies_posted,replies_failed,replies_queued,followers_gained,replies_received,total_views")
+        .eq("user_id", userId)
+        .order("started_at", { ascending: false })
+        .limit(30),
+      (supabase as any)
+        .from("x_auto_reply_logs")
+        .select("id,session_id,mention_tweet_id,our_reply_tweet_id,post_author_handle,post_author_display_name,post_url,post_text,our_reply,status,error_message,discovered_at,replied_at")
+        .eq("user_id", userId)
+        .order("discovered_at", { ascending: false })
+        .limit(200),
+    ]);
+
+    if (sessionsRes.error) throw sessionsRes.error;
+    if (logsRes.error) throw logsRes.error;
+
+    const sessions = (sessionsRes.data as XAutoSession[] | null) || [];
+    const logs = (logsRes.data as XReplyLog[] | null) || [];
+
+    setXAutoSessions(sessions);
+    setSelectedXSessionId((current) =>
+      current && sessions.some((item) => item.id === current)
+        ? current
+        : sessions[0]?.id ?? null,
+    );
+    setXReplyLogs(logs);
+
+    return { sessions, logs };
+  }
+
   useEffect(() => {
     if (!loading && !user) navigate("/auth");
   }, [loading, navigate, user]);
@@ -913,7 +1083,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, driveRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xReplyLogsRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -936,6 +1106,11 @@ export default function Dashboard() {
           .select("google_email,updated_at")
           .eq("user_identifier", user.id)
           .maybeSingle(),
+        supabase
+          .from("profiles")
+          .select("overall_memory")
+          .eq("user_id", user.id)
+          .maybeSingle(),
         (supabase as any)
           .from("x_automation_stats")
           .select("total_replies,total_runs,total_runtime_ms,last_run_reply_count,last_run_duration_ms,last_run_started_at,last_run_finished_at")
@@ -954,17 +1129,26 @@ export default function Dashboard() {
           .eq("user_id", user.id)
           .maybeSingle(),
         (supabase as any)
-          .from("x_auto_reply_logs")
-          .select("id,post_author_handle,post_author_display_name,post_url,post_text,our_reply,replied_at")
+          .from("x_auto_sessions")
+          .select("id,session_number,status,started_at,ends_at,stopped_at,cooldown_ends_at,last_polled_at,last_reply_at,replies_posted,replies_failed,replies_queued,followers_gained,replies_received,total_views")
           .eq("user_id", user.id)
-          .order("replied_at", { ascending: false })
-          .limit(50),
+          .order("started_at", { ascending: false })
+          .limit(30),
+        (supabase as any)
+          .from("x_auto_reply_logs")
+          .select("id,session_id,mention_tweet_id,our_reply_tweet_id,post_author_handle,post_author_display_name,post_url,post_text,our_reply,status,error_message,discovered_at,replied_at")
+          .eq("user_id", user.id)
+          .order("discovered_at", { ascending: false })
+          .limit(200),
       ]);
 
       if (notesRes.data) setNotes(notesRes.data as Note[]);
       if (commandsRes.data) setCommands(commandsRes.data as unknown as Command[]);
       setNotionConn(notionRes.data as NotionConn);
       setGoogleDriveConn((driveRes.data as GoogleDriveConn) || null);
+      const loadedOverallMemory = String((profileMemoryRes.data as { overall_memory?: string } | null)?.overall_memory || "");
+      setOverallMemory(loadedOverallMemory);
+      setOverallMemoryDraft(loadedOverallMemory);
       setXConn((xConnRes as XConnection) || null);
       setScheduledXPosts((scheduledXRes.data as ScheduledXPost[] | null) || []);
       setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
@@ -987,6 +1171,9 @@ export default function Dashboard() {
         .limit(1)
         .maybeSingle();
       setXNextPostAt(nextPost?.scheduled_at ?? null);
+      const sessions = (xSessionsRes.data as XAutoSession[] | null) || [];
+      setXAutoSessions(sessions);
+      setSelectedXSessionId(sessions[0]?.id ?? null);
       setXReplyLogs((xReplyLogsRes.data as XReplyLog[]) || []);
       setDataLoading(false);
     };
@@ -998,6 +1185,29 @@ export default function Dashboard() {
     stopDrivePolling();
     stopXPolling();
   }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setXSessionClock(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (selectedXSessionId && xAutoSessions.some((sessionItem) => sessionItem.id === selectedXSessionId)) {
+      return;
+    }
+    setSelectedXSessionId(xAutoSessions[0]?.id ?? null);
+  }, [selectedXSessionId, xAutoSessions]);
+
+  useEffect(() => {
+    if (!user || activeTab !== "xAutomation") return;
+
+    const interval = window.setInterval(() => {
+      refreshXAutoActivity(user.id).catch(() => null);
+      refreshXAutomationStats(user.id).catch(() => null);
+    }, 30000);
+
+    return () => window.clearInterval(interval);
+  }, [activeTab, user]);
 
   async function handleConnectGoogleDrive() {
     if (!user) return;
@@ -1318,9 +1528,22 @@ export default function Dashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Engage failed");
       const count = data?.replied ?? 0;
-      setXEngageResult(count > 0 ? `Replied to ${count} mention${count > 1 ? "s" : ""}` : "No new mentions found");
-      const { data: fresh } = await supabase.from("x_auto_reply_logs").select("*").eq("user_id", user!.id).order("replied_at", { ascending: false }).limit(50);
-      if (fresh) setXReplyLogs(fresh as XReplyLog[]);
+      const sessionSummaries = Array.isArray(data?.sessions) ? data.sessions : [];
+      const queued = sessionSummaries.reduce(
+        (sum: number, item: { queued?: number }) => sum + Number(item?.queued || 0),
+        0,
+      );
+      setXEngageResult(
+        count > 0
+          ? `Posted ${count} repl${count > 1 ? "ies" : "y"} this minute${queued > 0 ? ` · ${queued} still queued` : ""}`
+          : queued > 0
+            ? `${queued} repl${queued > 1 ? "ies are" : "y is"} queued for the active session`
+            : data?.message || "No active session work right now",
+      );
+      await Promise.all([
+        refreshXAutoActivity(user!.id),
+        refreshXAutomationStats(user!.id),
+      ]);
     } catch (err) {
       if ((err as Error).name === "AbortError") {
         setXEngageResult("Stopped.");
@@ -1335,6 +1558,85 @@ export default function Dashboard() {
 
   function handleStopEngage() {
     xEngageAbortRef.current?.abort();
+  }
+
+  async function handleStartXSession() {
+    if (!session || !user) return;
+    setXSessionStarting(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-auto-session-start`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Could not start X Auto session");
+
+      await Promise.all([
+        refreshXAutoActivity(user.id),
+        refreshXAutomationStats(user.id),
+      ]);
+
+      toast({
+        title: `Session ${data?.session?.session_number ?? "?"} started`,
+        description: "X Auto will reply at most once per minute for the next 3 hours.",
+      });
+      setXEngageResult(null);
+    } catch (error) {
+      toast({
+        title: "Could not start session",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setXSessionStarting(false);
+    }
+  }
+
+  async function handleStopXSession() {
+    if (!session || !user) return;
+    setXSessionStopping(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-auto-session-stop`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Could not stop X Auto session");
+
+      await Promise.all([
+        refreshXAutoActivity(user.id),
+        refreshXAutomationStats(user.id),
+      ]);
+
+      toast({
+        title: `Session ${data?.session?.session_number ?? "?"} stopped`,
+        description: "That session is now locked in and the 3-hour cooldown still applies.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not stop session",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setXSessionStopping(false);
+    }
+  }
+
+  function handleXSessionSort(key: XSessionSortKey) {
+    if (xSessionSortKey === key) {
+      setXSessionSortDirection((current) => (current === "desc" ? "asc" : "desc"));
+      return;
+    }
+
+    setXSessionSortKey(key);
+    setXSessionSortDirection(key === "status" ? "asc" : "desc");
   }
 
   async function handleClearXQueue() {
@@ -1416,6 +1718,48 @@ export default function Dashboard() {
   const xTotalRuns = xAutomationStats?.total_runs || 0;
   const xTotalRuntime = formatDuration(xAutomationStats?.total_runtime_ms) || "0s";
   const xLastRunDuration = formatDuration(xAutomationStats?.last_run_duration_ms) || "0s";
+  const activeXSession = useMemo(
+    () => xAutoSessions.find((sessionItem) => sessionItem.status === "active") || null,
+    [xAutoSessions],
+  );
+  const latestXSession = xAutoSessions[0] || null;
+  const selectedXSession = useMemo(
+    () => xAutoSessions.find((sessionItem) => sessionItem.id === selectedXSessionId) || latestXSession,
+    [latestXSession, selectedXSessionId, xAutoSessions],
+  );
+  const selectedXSessionLogs = useMemo(
+    () =>
+      selectedXSession
+        ? [...xReplyLogs.filter((log) => log.session_id === selectedXSession.id)].sort(
+            (left, right) =>
+              new Date(left.discovered_at).getTime() - new Date(right.discovered_at).getTime(),
+          )
+        : [],
+    [selectedXSession, xReplyLogs],
+  );
+  const sortedXAutoSessions = useMemo(() => {
+    const sessions = [...xAutoSessions];
+    sessions.sort((left, right) => {
+      const direction = xSessionSortDirection === "asc" ? 1 : -1;
+      const getComparable = (sessionItem: XAutoSession) => {
+        if (xSessionSortKey === "status") return sessionItem.status;
+        if (xSessionSortKey === "started_at") return new Date(sessionItem.started_at).getTime();
+        return sessionItem[xSessionSortKey];
+      };
+      const leftValue = getComparable(left);
+      const rightValue = getComparable(right);
+      if (leftValue === rightValue) return 0;
+      return leftValue > rightValue ? direction : -direction;
+    });
+    return sessions;
+  }, [xAutoSessions, xSessionSortDirection, xSessionSortKey]);
+  const activeSessionTimeRemainingMs = activeXSession
+    ? Math.max(0, new Date(activeXSession.ends_at).getTime() - xSessionClock)
+    : 0;
+  const cooldownTimeRemainingMs = !activeXSession && latestXSession
+    ? Math.max(0, new Date(latestXSession.cooldown_ends_at).getTime() - xSessionClock)
+    : 0;
+  const xSessionFocus = activeXSession || latestXSession;
 
   const lastActivity = useMemo(() => {
     const latest = [notes[0]?.created_at, commands[0]?.created_at]
@@ -1449,6 +1793,27 @@ export default function Dashboard() {
 
   const memoryNotes = useMemo(() => notes.filter((n) => n.use_case === "memory"), [notes]);
   const highlights = useMemo(() => notes.filter((n) => n.use_case === "highlight"), [notes]);
+  const combinedKnowledgePreview = useMemo(
+    () =>
+      buildCombinedKnowledgePreview({
+        displayName,
+        overallMemory,
+        memoryNotes,
+        xPersona,
+      }),
+    [displayName, memoryNotes, overallMemory, xPersona],
+  );
+  const xPersonaConfigured = useMemo(
+    () =>
+      Boolean(
+        xPersona?.display_name?.trim() ||
+          xPersona?.bio?.trim() ||
+          xPersona?.what_building?.trim() ||
+          xPersona?.tone_notes?.trim(),
+      ),
+    [xPersona],
+  );
+  const memoryEntryCount = memoryNotes.length + (overallMemory.trim() ? 1 : 0);
 
   const taskStatuses = useMemo(() => {
     const base = ["all", "running", "done", "error", "pending"];
@@ -1518,6 +1883,29 @@ export default function Dashboard() {
     setSavingName(false);
     setNameSaved(true);
     window.setTimeout(() => setNameSaved(false), 2000);
+  };
+
+  const handleSaveOverallMemory = async () => {
+    if (!user) return;
+    setOverallMemorySaving(true);
+    setOverallMemoryError(null);
+
+    const nextValue = overallMemoryDraft.trim();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ overall_memory: nextValue })
+      .eq("user_id", user.id);
+
+    if (error) {
+      setOverallMemoryError(error.message || "Could not save overall memory.");
+      setOverallMemorySaving(false);
+      return;
+    }
+
+    setOverallMemory(nextValue);
+    setOverallMemorySaving(false);
+    setOverallMemorySaved(true);
+    window.setTimeout(() => setOverallMemorySaved(false), 2500);
   };
 
   const handleToggleAutoMode = async (field: "auto_posting_enabled" | "auto_reply_enabled", value: boolean) => {
@@ -1789,9 +2177,9 @@ export default function Dashboard() {
               onClick={() => setActiveTab("memory")}
               icon={<Sparkles className="h-3.5 w-3.5" />}
               badge={
-                memoryNotes.length > 0 ? (
+                memoryEntryCount > 0 ? (
                   <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "memory" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
-                    {memoryNotes.length}
+                    {memoryEntryCount}
                   </span>
                 ) : undefined
               }
@@ -2642,8 +3030,8 @@ export default function Dashboard() {
                         <div className="text-[13px] font-medium text-[var(--sb-ink)]">Auto Reply</div>
                         <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
                           {xAutoReplyEnabled
-                            ? "Monitoring @mentions every 30 min"
-                            : "Braino will respond to your @mentions automatically"}
+                            ? "Legacy compatibility is on. Sessions still start manually and reply once per minute."
+                            : "Optional compatibility toggle for the extension. Sessions are still the main control."}
                         </div>
                       </div>
                       <Switch
@@ -2944,7 +3332,7 @@ export default function Dashboard() {
                     {
                       label: "Total replies",
                       value: xTotalReplies.toLocaleString("en-US"),
-                      hint: "Lifetime across synced X Auto runs",
+                      hint: "Lifetime across finished X Auto sessions",
                       icon: <Zap className="h-3.5 w-3.5" />,
                     },
                     {
@@ -2960,7 +3348,7 @@ export default function Dashboard() {
                       icon: <Clock3 className="h-3.5 w-3.5" />,
                     },
                     {
-                      label: "Last run",
+                      label: "Latest session",
                       value: `${xAutomationStats?.last_run_reply_count || 0} replies`,
                       hint: `Duration ${xLastRunDuration}`,
                       icon: <CheckCircle2 className="h-3.5 w-3.5" />,
@@ -2987,17 +3375,17 @@ export default function Dashboard() {
                   <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                     <div className="mb-4">
                       <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
-                        X Auto <em className="text-[var(--sb-accent-deep)]">summary.</em>
+                        Lifetime <em className="text-[var(--sb-accent-deep)]">summary.</em>
                       </h3>
                       <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
-                        Synced from the extension
+                        Rolled up from your session history
                       </div>
                     </div>
 
                     {xAutomationStats ? (
                       <div className="space-y-4">
                         <div className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
-                          <div className="mb-2 text-sm font-medium text-[var(--sb-ink)]">Last automation run</div>
+                          <div className="mb-2 text-sm font-medium text-[var(--sb-ink)]">Latest finished session</div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
                               <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.1em] text-[var(--sb-ink-3)]">
@@ -3031,7 +3419,7 @@ export default function Dashboard() {
                           <div className="space-y-2 text-[13px] text-[var(--sb-ink-2)]">
                             <p>Skips promoted posts and ad-labeled tweets.</p>
                             <p>Skips Narendra Modi and broader political posts.</p>
-                            <p>Waits 3 seconds before posting each generated reply.</p>
+                            <p>Posts at most one reply per minute during an active session.</p>
                             <p>Special-cases builder prompts so Braino can mention what it is building more naturally.</p>
                           </div>
                         </div>
@@ -3077,7 +3465,7 @@ export default function Dashboard() {
                         Reply <em className="text-[var(--sb-accent-deep)]">History.</em>
                       </h3>
                       <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
-                        Last 50 replies sent by X Auto
+                        Recent reply rows across your X Auto sessions
                       </div>
                     </div>
                     <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
@@ -3086,7 +3474,7 @@ export default function Dashboard() {
                   </div>
                   {xReplyLogs.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-[var(--sb-line)] p-8 text-center text-[13px] text-[var(--sb-ink-3)]">
-                      No replies logged yet. They&apos;ll appear here after your next X Auto run.
+                      No reply rows yet. They&apos;ll appear here as soon as your first session starts surfacing mentions.
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -3097,11 +3485,19 @@ export default function Dashboard() {
                               <span style={monoStyle} className="rounded-full bg-[var(--sb-accent-soft)] px-2 py-0.5 text-[11px] text-[var(--sb-accent-deep)] shrink-0">
                                 @{log.post_author_handle || "unknown"}
                               </span>
+                              <span
+                                style={monoStyle}
+                                className={cn("rounded-full px-2 py-0.5 text-[10px]", replyLogStatusClass(log.status))}
+                              >
+                                {log.status}
+                              </span>
                               {log.post_author_display_name && (
                                 <span className="truncate text-[12px] text-[var(--sb-ink-3)]">{log.post_author_display_name}</span>
                               )}
                             </div>
-                            <span style={monoStyle} className="shrink-0 text-[11px] text-[var(--sb-ink-4)]">{timeAgo(log.replied_at)}</span>
+                            <span style={monoStyle} className="shrink-0 text-[11px] text-[var(--sb-ink-4)]">
+                              {timeAgo(log.replied_at || log.discovered_at)}
+                            </span>
                           </div>
                           <div className="mb-2">
                             <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--sb-ink-4)]">Tweet</span>
@@ -3111,6 +3507,11 @@ export default function Dashboard() {
                             <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--sb-ink-4)]">Reply</span>
                             <p className="mt-0.5 text-[13px] text-[var(--sb-ink)]">{log.our_reply}</p>
                           </div>
+                          {log.error_message ? (
+                            <div className="mb-3 rounded-[12px] border border-red-500/20 bg-red-500/5 px-3 py-2 text-[12px] text-red-600">
+                              {log.error_message}
+                            </div>
+                          ) : null}
                           {log.post_url && (
                             <a
                               href={log.post_url}
@@ -3133,15 +3534,14 @@ export default function Dashboard() {
 
                 {xSubTab === "activity" && (
                   <div className="space-y-5">
-                    {/* Pipeline Status */}
                     <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                       <div className="mb-5 flex items-start justify-between gap-4">
                         <div>
                           <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
-                            Pipeline <em className="text-[var(--sb-accent-deep)]">Status.</em>
+                            Session <em className="text-[var(--sb-accent-deep)]">Control.</em>
                           </h3>
                           <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
-                            Live state of your autonomous X pipeline
+                            Start one 3-hour X Auto reply session at a time. During an active session, Braino replies at most once per minute.
                           </div>
                         </div>
                         {xConn?.username === "brainosays" && (
@@ -3159,206 +3559,430 @@ export default function Dashboard() {
                       </div>
                       {!xConn && (
                         <div style={monoStyle} className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[11px] text-amber-700">
-                          Link your X account in Settings before running.
+                          Link your X account in Settings before starting a session.
                         </div>
                       )}
-                      <div className="space-y-3">
-                        {/* Generate posts row */}
-                        <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
-                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xGenerating ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-medium text-[var(--sb-ink)]">Generate posts</div>
-                            <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
-                              {xGenerating
-                                ? "Generating tweets in your voice…"
-                                : xGenerateResult
-                                  ? xGenerateResult
-                                  : xNextPostAt
-                                    ? `Next queued post: ${new Date(xNextPostAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
-                                    : "Generates today's posts and queues them for dispatch"}
-                            </div>
+                      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                        <div className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-5">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "rounded-full border px-3 py-1 text-[10px]",
+                                xSessionFocus ? sessionStatusClass(xSessionFocus.status) : "border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-[var(--sb-ink-3)]",
+                              )}
+                              style={monoStyle}
+                            >
+                              {xSessionFocus ? `Session ${xSessionFocus.session_number} · ${sessionStatusLabel(xSessionFocus.status)}` : "No session yet"}
+                            </Badge>
+                            {activeXSession ? (
+                              <span style={monoStyle} className="text-[11px] text-[var(--sb-ink-3)]">
+                                Ends in {formatCountdown(activeSessionTimeRemainingMs)}
+                              </span>
+                            ) : cooldownTimeRemainingMs > 0 ? (
+                              <span style={monoStyle} className="text-[11px] text-[var(--sb-ink-3)]">
+                                Next session available in {formatCountdown(cooldownTimeRemainingMs)}
+                              </span>
+                            ) : (
+                              <span style={monoStyle} className="text-[11px] text-[var(--sb-ink-3)]">
+                                Ready to start a fresh 3-hour session
+                              </span>
+                            )}
                           </div>
-                          {xGenerating ? (
-                            <button
-                              onClick={handleStopGenerate}
-                              style={monoStyle}
-                              className="shrink-0 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-500 transition-colors hover:bg-red-500/20"
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            {[
+                              {
+                                label: "Replies posted",
+                                value: xSessionFocus?.replies_posted ?? 0,
+                              },
+                              {
+                                label: "Followers gained",
+                                value: xSessionFocus?.followers_gained ?? 0,
+                              },
+                              {
+                                label: "Replies received",
+                                value: xSessionFocus?.replies_received ?? 0,
+                              },
+                              {
+                                label: "Total views",
+                                value: xSessionFocus?.total_views ?? 0,
+                              },
+                            ].map((item) => (
+                              <div key={item.label} className="rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-4">
+                                <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                  {item.label}
+                                </div>
+                                <div style={serifStyle} className="mt-2 text-[30px] leading-none tracking-[-0.03em] italic text-[var(--sb-accent-deep)]">
+                                  {item.value.toLocaleString("en-US")}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-4 flex flex-wrap gap-3">
+                            <Button
+                              onClick={handleStartXSession}
+                              disabled={!xConn || xSessionStarting || !!activeXSession || cooldownTimeRemainingMs > 0}
+                              className="rounded-xl bg-[var(--sb-ink)] px-4 text-[13px] text-[var(--sb-on-ink)] hover:opacity-90"
                             >
-                              Stop
-                            </button>
-                          ) : (
-                            <button
-                              onClick={handleRunGenerate}
-                              disabled={!xConn}
-                              style={monoStyle}
-                              className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
+                              {xSessionStarting ? "Starting…" : "Start Session"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={handleStopXSession}
+                              disabled={!activeXSession || xSessionStopping}
+                              className="rounded-xl border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 text-[13px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
                             >
-                              Run now
-                            </button>
-                          )}
+                              {xSessionStopping ? "Stopping…" : "Stop Session"}
+                            </Button>
+                          </div>
+                          <div style={monoStyle} className="mt-4 text-[11px] text-[var(--sb-ink-3)]">
+                            {activeXSession
+                              ? `Session ${activeXSession.session_number} started ${timeAgo(activeXSession.started_at)} and will stop automatically at ${formatDateTime(activeXSession.ends_at)}.`
+                              : latestXSession
+                                ? `Latest session: Session ${latestXSession.session_number} · ${sessionStatusLabel(latestXSession.status)} · started ${formatDateTime(latestXSession.started_at)}`
+                                : "No sessions have been started yet."}
+                          </div>
                         </div>
 
-                        {/* Check mentions row */}
-                        <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
-                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xEngaging ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-medium text-[var(--sb-ink)]">Check mentions &amp; reply</div>
-                            <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
-                              {xEngaging
-                                ? "Scanning @mentions and generating replies…"
-                                : xEngageResult
-                                  ? xEngageResult
-                                  : xAutomationStats?.last_run_finished_at
-                                    ? `Last run: ${timeAgo(xAutomationStats.last_run_finished_at)}`
-                                    : "Scans your @mentions and replies in your voice"}
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                            <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xGenerating ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[13px] font-medium text-[var(--sb-ink)]">Generate posts</div>
+                              <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
+                                {xGenerating
+                                  ? "Generating tweets in your voice…"
+                                  : xGenerateResult
+                                    ? xGenerateResult
+                                    : xNextPostAt
+                                      ? `Next queued post: ${new Date(xNextPostAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+                                      : "Generates today's posts and queues them for dispatch"}
+                              </div>
                             </div>
+                            {xGenerating ? (
+                              <button
+                                onClick={handleStopGenerate}
+                                style={monoStyle}
+                                className="shrink-0 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-500 transition-colors hover:bg-red-500/20"
+                              >
+                                Stop
+                              </button>
+                            ) : (
+                              <button
+                                onClick={handleRunGenerate}
+                                disabled={!xConn}
+                                style={monoStyle}
+                                className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
+                              >
+                                Run now
+                              </button>
+                            )}
                           </div>
-                          {xEngaging ? (
-                            <button
-                              onClick={handleStopEngage}
-                              style={monoStyle}
-                              className="shrink-0 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-500 transition-colors hover:bg-red-500/20"
-                            >
-                              Stop
-                            </button>
-                          ) : (
-                            <button
-                              onClick={handleRunEngage}
-                              disabled={!xConn}
-                              style={monoStyle}
-                              className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
-                            >
-                              Run now
-                            </button>
-                          )}
+
+                          <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                            <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xEngaging ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[13px] font-medium text-[var(--sb-ink)]">Run this minute's reply tick</div>
+                              <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
+                                {xEngaging
+                                  ? "Scanning active sessions and posting at most one reply each…"
+                                  : xEngageResult
+                                    ? xEngageResult
+                                    : activeXSession
+                                      ? `Session ${activeXSession.session_number} is live. One reply max per minute.`
+                                      : "Useful for testing. It only does work if a session is active."}
+                              </div>
+                            </div>
+                            {xEngaging ? (
+                              <button
+                                onClick={handleStopEngage}
+                                style={monoStyle}
+                                className="shrink-0 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-500 transition-colors hover:bg-red-500/20"
+                              >
+                                Stop
+                              </button>
+                            ) : (
+                              <button
+                                onClick={handleRunEngage}
+                                disabled={!xConn || !activeXSession}
+                                style={monoStyle}
+                                className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
+                              >
+                                Run now
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid gap-5 xl:grid-cols-2">
-                      {/* Recent Posts */}
+                    <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
                       <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                         <div className="mb-4 flex items-start justify-between gap-4">
                           <div>
                             <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
-                              Recent <em className="text-[var(--sb-accent-deep)]">Posts.</em>
+                              Session <em className="text-[var(--sb-accent-deep)]">History.</em>
                             </h3>
                             <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
-                              Posted and scheduled by the pipeline
+                              Sortable history of every X Auto session
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {scheduledXPosts.some((p) => ["posted", "failed", "cancelled"].includes(p.status)) && (
-                              <button
-                                onClick={handleClearPostedXPosts}
-                                className="rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)] transition-colors hover:bg-[var(--sb-bg-2)]"
-                                style={monoStyle}
-                              >
-                                Clear posted
-                              </button>
-                            )}
-                            {scheduledXPosts.some((p) => p.status === "pending") && (
-                              <button
-                                onClick={handleClearXQueue}
-                                className="rounded-lg border border-red-400/30 bg-red-500/8 px-3 py-1 text-[11px] text-red-500 transition-colors hover:bg-red-500/15"
-                                style={monoStyle}
-                              >
-                                Clear pending
-                              </button>
-                            )}
-                            <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
-                              {scheduledXPosts.length} in queue
-                            </span>
-                          </div>
+                          <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
+                            {xAutoSessions.length} session{xAutoSessions.length === 1 ? "" : "s"}
+                          </span>
                         </div>
-                        {scheduledXPosts.length === 0 ? (
+
+                        {sortedXAutoSessions.length === 0 ? (
                           <div className="rounded-xl border border-dashed border-[var(--sb-line)] px-6 py-12 text-center text-[13px] text-[var(--sb-ink-3)]">
-                            No posts yet. The pipeline generates your first batch daily at 14:00 UTC.
+                            No sessions yet. Start one above and Braino will begin tracking replies, followers, views, and reply rows session by session.
                           </div>
                         ) : (
-                          <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
-                            {scheduledXPosts.slice(0, 10).map((post) => (
-                              <div key={post.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
-                                <p className="mb-2 text-[13px] leading-6 text-[var(--sb-ink)]">{post.content}</p>
-                                <div style={monoStyle} className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--sb-ink-3)]">
-                                  <span className={cn(
-                                    "rounded-full px-2 py-0.5",
-                                    post.status === "posted" && "bg-emerald-500/10 text-emerald-700",
-                                    post.status === "failed" && "bg-red-500/10 text-red-600",
-                                    post.status === "pending" && "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]",
-                                    post.status === "cancelled" && "bg-[var(--sb-line)] text-[var(--sb-ink-4)]",
-                                  )}>
-                                    {post.status}
-                                  </span>
-                                  <span>{post.posted_at ? timeAgo(post.posted_at) : `scheduled ${formatDateTime(post.scheduled_at)}`}</span>
-                                  {post.x_post_id && xConn?.username && (
-                                    <a
-                                      href={`https://x.com/${xConn.username}/status/${post.x_post_id}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-0.5 transition-colors hover:text-[var(--sb-accent)]"
-                                    >
-                                      <ExternalLink className="h-2.5 w-2.5" />
-                                      View
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-left">
+                              <thead>
+                                <tr style={monoStyle} className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                  {[
+                                    ["session_number", "Session"],
+                                    ["status", "Status"],
+                                    ["started_at", "Started"],
+                                    ["replies_posted", "Replies"],
+                                    ["followers_gained", "Followers"],
+                                    ["replies_received", "Replies got"],
+                                    ["total_views", "Views"],
+                                  ].map(([key, label]) => (
+                                    <th key={key} className="border-b border-[var(--sb-line-2)] px-3 py-3 font-medium">
+                                      <button
+                                        onClick={() => handleXSessionSort(key as XSessionSortKey)}
+                                        className="inline-flex items-center gap-1 transition-colors hover:text-[var(--sb-ink)]"
+                                      >
+                                        <span>{label}</span>
+                                        <span>
+                                          {xSessionSortKey === key ? (xSessionSortDirection === "desc" ? "↓" : "↑") : "↕"}
+                                        </span>
+                                      </button>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {sortedXAutoSessions.map((sessionItem) => (
+                                  <tr
+                                    key={sessionItem.id}
+                                    onClick={() => setSelectedXSessionId(sessionItem.id)}
+                                    className={cn(
+                                      "cursor-pointer border-b border-[var(--sb-line-2)] transition-colors hover:bg-[var(--sb-panel)]/70",
+                                      selectedXSession?.id === sessionItem.id && "bg-[var(--sb-panel)]",
+                                    )}
+                                  >
+                                    <td className="px-3 py-3">
+                                      <div className="text-[13px] font-medium text-[var(--sb-ink)]">Session {sessionItem.session_number}</div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <span
+                                        style={monoStyle}
+                                        className={cn(
+                                          "rounded-full border px-2.5 py-1 text-[10px]",
+                                          sessionStatusClass(sessionItem.status),
+                                        )}
+                                      >
+                                        {sessionStatusLabel(sessionItem.status)}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-3 text-[12px] text-[var(--sb-ink-2)]">{formatDateTime(sessionItem.started_at)}</td>
+                                    <td className="px-3 py-3 text-[12px] text-[var(--sb-ink-2)]">{sessionItem.replies_posted}</td>
+                                    <td className="px-3 py-3 text-[12px] text-[var(--sb-ink-2)]">{sessionItem.followers_gained}</td>
+                                    <td className="px-3 py-3 text-[12px] text-[var(--sb-ink-2)]">{sessionItem.replies_received}</td>
+                                    <td className="px-3 py-3 text-[12px] text-[var(--sb-ink-2)]">{sessionItem.total_views.toLocaleString("en-US")}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         )}
                       </div>
 
-                      {/* Recent Auto-Replies */}
                       <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                         <div className="mb-4 flex items-start justify-between gap-4">
                           <div>
                             <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
-                              Auto <em className="text-[var(--sb-accent-deep)]">Replies.</em>
+                              Session <em className="text-[var(--sb-accent-deep)]">Detail.</em>
                             </h3>
                             <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
-                              @mentions replied to by the pipeline
+                              Per-reply rows for the selected session
                             </div>
                           </div>
-                          <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
-                            {xReplyLogs.length} logged
-                          </span>
+                          {selectedXSession ? (
+                            <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
+                              Session {selectedXSession.session_number}
+                            </span>
+                          ) : null}
                         </div>
-                        {xReplyLogs.length === 0 ? (
+
+                        {!selectedXSession ? (
                           <div className="rounded-xl border border-dashed border-[var(--sb-line)] px-6 py-12 text-center text-[13px] text-[var(--sb-ink-3)]">
-                            No replies yet. The pipeline checks @mentions every 30 min when Auto Reply is on.
+                            Select a session to inspect its reply rows.
                           </div>
                         ) : (
-                          <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
-                            {xReplyLogs.slice(0, 10).map((log) => (
-                              <div key={log.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
-                                <div className="mb-2 flex items-center justify-between gap-2">
-                                  <span style={monoStyle} className="shrink-0 rounded-full bg-[var(--sb-accent-soft)] px-2 py-0.5 text-[11px] text-[var(--sb-accent-deep)]">
-                                    @{log.post_author_handle || "unknown"}
-                                  </span>
-                                  <span style={monoStyle} className="text-[11px] text-[var(--sb-ink-4)]">{timeAgo(log.replied_at)}</span>
+                          <div className="space-y-4">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {[
+                                ["Started", formatDateTime(selectedXSession.started_at)],
+                                ["Stopped", selectedXSession.stopped_at ? formatDateTime(selectedXSession.stopped_at) : selectedXSession.status === "active" ? "Still active" : "—"],
+                                ["Queued left", String(selectedXSession.replies_queued)],
+                                ["Failed", String(selectedXSession.replies_failed)],
+                              ].map(([label, value]) => (
+                                <div key={label} className="rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-3">
+                                  <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                    {label}
+                                  </div>
+                                  <div className="mt-1 text-[13px] text-[var(--sb-ink)]">{value}</div>
                                 </div>
-                                <p className="mb-2 line-clamp-2 text-[12px] text-[var(--sb-ink-3)]">{log.post_text}</p>
-                                <div className="border-l-2 border-[var(--sb-accent)] pl-3">
-                                  <p className="text-[13px] text-[var(--sb-ink)]">{log.our_reply}</p>
-                                </div>
-                                {log.post_url && (
-                                  <a
-                                    href={log.post_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--sb-ink-3)] transition-colors hover:text-[var(--sb-accent)]"
-                                    style={monoStyle}
-                                  >
-                                    <ExternalLink className="h-2.5 w-2.5" />
-                                    View on X
-                                  </a>
-                                )}
+                              ))}
+                            </div>
+
+                            {selectedXSessionLogs.length === 0 ? (
+                              <div className="rounded-xl border border-dashed border-[var(--sb-line)] px-5 py-10 text-center text-[13px] text-[var(--sb-ink-3)]">
+                                No reply rows are logged for this session yet.
                               </div>
-                            ))}
+                            ) : (
+                              <div className="max-h-[520px] overflow-x-auto overflow-y-auto rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)]">
+                                <table className="min-w-[820px] text-left">
+                                  <thead className="sticky top-0 bg-[var(--sb-panel)]">
+                                    <tr style={monoStyle} className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                      <th className="border-b border-[var(--sb-line-2)] px-3 py-3 font-medium">User</th>
+                                      <th className="border-b border-[var(--sb-line-2)] px-3 py-3 font-medium">Mention</th>
+                                      <th className="border-b border-[var(--sb-line-2)] px-3 py-3 font-medium">Reply</th>
+                                      <th className="border-b border-[var(--sb-line-2)] px-3 py-3 font-medium">Status</th>
+                                      <th className="border-b border-[var(--sb-line-2)] px-3 py-3 font-medium">Time</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {selectedXSessionLogs.map((log) => (
+                                      <tr key={log.id} className="border-b border-[var(--sb-line-2)] align-top last:border-b-0">
+                                        <td className="px-3 py-3">
+                                          <div className="flex min-w-0 flex-col gap-1">
+                                            <span style={monoStyle} className="text-[11px] text-[var(--sb-accent-deep)]">
+                                              @{log.post_author_handle || "unknown"}
+                                            </span>
+                                            {log.post_url ? (
+                                              <a
+                                                href={log.post_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 text-[11px] text-[var(--sb-ink-3)] transition-colors hover:text-[var(--sb-accent)]"
+                                              >
+                                                <ExternalLink className="h-3 w-3" />
+                                                Open
+                                              </a>
+                                            ) : null}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-3">
+                                          <p className="max-w-[220px] text-[12px] leading-5 text-[var(--sb-ink-2)]">{log.post_text}</p>
+                                        </td>
+                                        <td className="px-3 py-3">
+                                          <div className="max-w-[240px] space-y-2">
+                                            <p className="text-[12px] leading-5 text-[var(--sb-ink)]">{log.our_reply || "—"}</p>
+                                            {log.error_message ? (
+                                              <div className="rounded-[10px] border border-red-500/20 bg-red-500/5 px-2.5 py-2 text-[11px] text-red-600">
+                                                {log.error_message}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-3">
+                                          <span
+                                            style={monoStyle}
+                                            className={cn("rounded-full px-2 py-0.5 text-[10px]", replyLogStatusClass(log.status))}
+                                          >
+                                            {log.status}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-3 text-[12px] text-[var(--sb-ink-3)]">
+                                          {formatDateTime(log.replied_at || log.discovered_at)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                      <div className="mb-4 flex items-start justify-between gap-4">
+                        <div>
+                          <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                            Recent <em className="text-[var(--sb-accent-deep)]">Posts.</em>
+                          </h3>
+                          <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                            Scheduled and posted alongside your sessions
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {scheduledXPosts.some((p) => ["posted", "failed", "cancelled"].includes(p.status)) && (
+                            <button
+                              onClick={handleClearPostedXPosts}
+                              className="rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)] transition-colors hover:bg-[var(--sb-bg-2)]"
+                              style={monoStyle}
+                            >
+                              Clear posted
+                            </button>
+                          )}
+                          {scheduledXPosts.some((p) => p.status === "pending") && (
+                            <button
+                              onClick={handleClearXQueue}
+                              className="rounded-lg border border-red-400/30 bg-red-500/8 px-3 py-1 text-[11px] text-red-500 transition-colors hover:bg-red-500/15"
+                              style={monoStyle}
+                            >
+                              Clear pending
+                            </button>
+                          )}
+                          <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
+                            {scheduledXPosts.length} in queue
+                          </span>
+                        </div>
+                      </div>
+
+                      {scheduledXPosts.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-[var(--sb-line)] px-6 py-12 text-center text-[13px] text-[var(--sb-ink-3)]">
+                          No posts yet. The pipeline will start filling this once your X schedule runs.
+                        </div>
+                      ) : (
+                        <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+                          {scheduledXPosts.slice(0, 10).map((post) => (
+                            <div key={post.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                              <p className="mb-2 text-[13px] leading-6 text-[var(--sb-ink)]">{post.content}</p>
+                              <div style={monoStyle} className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--sb-ink-3)]">
+                                <span className={cn(
+                                  "rounded-full px-2 py-0.5",
+                                  post.status === "posted" && "bg-emerald-500/10 text-emerald-700",
+                                  post.status === "failed" && "bg-red-500/10 text-red-600",
+                                  post.status === "pending" && "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]",
+                                  post.status === "cancelled" && "bg-[var(--sb-line)] text-[var(--sb-ink-4)]",
+                                )}>
+                                  {post.status}
+                                </span>
+                                <span>{post.posted_at ? timeAgo(post.posted_at) : `scheduled ${formatDateTime(post.scheduled_at)}`}</span>
+                                {post.x_post_id && xConn?.username && (
+                                  <a
+                                    href={`https://x.com/${xConn.username}/status/${post.x_post_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-0.5 transition-colors hover:text-[var(--sb-accent)]"
+                                  >
+                                    <ExternalLink className="h-2.5 w-2.5" />
+                                    View
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3621,77 +4245,203 @@ export default function Dashboard() {
                     Memory
                   </h2>
                   <p className="mt-1.5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    Things SideBrain has learned about you — preferences, context, and facts you've asked it to remember.
+                    Braino should always know who you are. Your overall memory lives here, and X automation persona data gets merged in automatically when it exists.
                   </p>
                 </div>
 
-                {dataLoading ? (
-                  <div className="space-y-3">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <Skeleton key={i} className="h-16 rounded-[14px] bg-[var(--sb-bg-2)]" />
-                    ))}
-                  </div>
-                ) : memoryNotes.length === 0 ? (
-                  <div className="flex flex-col items-center gap-4 rounded-[18px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-8 py-16 text-center">
-                    <div className="grid h-12 w-12 place-items-center rounded-full bg-[var(--sb-accent-soft)]">
-                      <Sparkles className="h-5 w-5 text-[var(--sb-accent-deep)]" />
+                <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-5">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div>
+                        <h3 style={serifStyle} className="text-[24px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
+                          Overall <em className="text-[var(--sb-accent-deep)]">memory.</em>
+                        </h3>
+                        <p className="mt-2 max-w-[520px] text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
+                          This is Braino&apos;s always-on understanding of who you are outside of any single integration.
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]"
+                      >
+                        Always on
+                      </Badge>
                     </div>
+
+                    <Textarea
+                      value={overallMemoryDraft}
+                      onChange={(event) => {
+                        setOverallMemoryDraft(event.target.value);
+                        if (overallMemorySaved) setOverallMemorySaved(false);
+                        if (overallMemoryError) setOverallMemoryError(null);
+                      }}
+                      placeholder={"Who are you? What should Braino consistently know about you?\n\nExample:\nI’m a CS student building AI products. I prefer concise answers, direct feedback, and practical examples. I care about startups, product design, and growth. If X automation is enabled, treat that persona as an extension of this broader identity."}
+                      className="min-h-[240px] rounded-[16px] border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13.5px] leading-relaxed"
+                    />
+
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                      <div style={monoStyle} className="text-[11px] text-[var(--sb-ink-4)]">
+                        {overallMemoryDraft.trim().length > 0 ? `${overallMemoryDraft.trim().length.toLocaleString()} chars` : "Add a durable user profile prompt here"}
+                      </div>
+                      <Button
+                        onClick={handleSaveOverallMemory}
+                        disabled={overallMemorySaving || overallMemoryDraft.trim() === overallMemory}
+                        size="sm"
+                        className={cn("rounded-xl", overallMemoryError && "border-red-500/50 bg-red-500/10 text-red-600 hover:bg-red-500/20")}
+                      >
+                        {overallMemorySaved ? <><Check className="mr-1.5 h-3.5 w-3.5" /> Saved</> : overallMemorySaving ? "Saving…" : overallMemoryError ? "Retry" : "Save"}
+                      </Button>
+                    </div>
+
+                    {overallMemoryError ? (
+                      <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-[13px] text-red-600">
+                        {overallMemoryError}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-5">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div>
+                        <h3 style={serifStyle} className="text-[24px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
+                          Combined <em className="text-[var(--sb-accent-deep)]">knowledge.</em>
+                        </h3>
+                        <p className="mt-2 text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
+                          This is the merged identity context Braino can use across the product.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mb-4 flex flex-wrap gap-2">
+                      <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-[10px] text-[var(--sb-ink-3)]">
+                        {overallMemory.trim() ? "Overall memory included" : "Overall memory empty"}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-[10px] text-[var(--sb-ink-3)]">
+                        {memoryNotes.length} memory fact{memoryNotes.length === 1 ? "" : "s"}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-[10px] text-[var(--sb-ink-3)]">
+                        {xPersonaConfigured ? "X persona merged" : "No X persona yet"}
+                      </Badge>
+                    </div>
+
+                    {dataLoading ? (
+                      <div className="space-y-3">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <Skeleton key={index} className="h-5 rounded-full bg-[var(--sb-bg-2)]" />
+                        ))}
+                      </div>
+                    ) : combinedKnowledgePreview ? (
+                      <div className="rounded-[16px] border border-[var(--sb-line)] bg-[var(--sb-panel)] p-4">
+                        <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
+                          {combinedKnowledgePreview}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-4 rounded-[16px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-6 py-10 text-center">
+                        <div className="grid h-12 w-12 place-items-center rounded-full bg-[var(--sb-accent-soft)]">
+                          <Sparkles className="h-5 w-5 text-[var(--sb-accent-deep)]" />
+                        </div>
+                        <div>
+                          <div className="mb-1 text-sm font-medium text-[var(--sb-ink)]">No identity context yet</div>
+                          <div className="max-w-[320px] text-[13px] text-[var(--sb-ink-3)]">
+                            Add your overall profile on the left. Manual memory facts and X persona data will stack into this view automatically.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+                  <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-5">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div>
+                        <h3 style={serifStyle} className="text-[24px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
+                          Supporting <em className="text-[var(--sb-accent-deep)]">memory.</em>
+                        </h3>
+                        <p className="mt-2 text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
+                          Small remembered facts still matter. These sit under the overall profile and help Braino keep sharp details around.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[10px] text-[var(--sb-ink-3)]">
+                        {memoryNotes.length} saved
+                      </Badge>
+                    </div>
+
+                    {dataLoading ? (
+                      <div className="space-y-3">
+                        {Array.from({ length: 4 }).map((_, index) => (
+                          <Skeleton key={index} className="h-16 rounded-[14px] bg-[var(--sb-bg-2)]" />
+                        ))}
+                      </div>
+                    ) : memoryNotes.length === 0 ? (
+                      <div className="flex flex-col items-center gap-4 rounded-[18px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-8 py-14 text-center">
+                        <div className="grid h-12 w-12 place-items-center rounded-full bg-[var(--sb-accent-soft)]">
+                          <Sparkles className="h-5 w-5 text-[var(--sb-accent-deep)]" />
+                        </div>
                     <div>
-                      <div className="mb-1 text-sm font-medium text-[var(--sb-ink)]">No memories yet</div>
+                          <div className="mb-1 text-sm font-medium text-[var(--sb-ink)]">No supporting memory facts yet</div>
                       <div className="max-w-[340px] text-[13px] text-[var(--sb-ink-3)]">
-                        Tell SideBrain something to remember — like "I'm a CS student" or "always summarize in bullet points" — and it will appear here.
+                            Save short facts like preferences, ongoing projects, or constraints that Braino should keep around.
                       </div>
                     </div>
                     <div style={monoStyle} className="rounded-full border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-2 text-[11px] text-[var(--sb-ink-3)]">
                       Try: "Remember that I prefer concise answers"
                     </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {memoryNotes.map((mem) => (
-                      <div
-                        key={mem.id}
-                        className="group flex items-start gap-4 rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] px-5 py-4"
-                      >
-                        <div className="mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-[var(--sb-accent-soft)]">
-                          <Sparkles className="h-3.5 w-3.5 text-[var(--sb-accent-deep)]" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          {mem.title && (
-                            <div className="mb-0.5 text-[12.5px] font-semibold text-[var(--sb-ink)]">{mem.title}</div>
-                          )}
-                          <div className="text-[13.5px] leading-relaxed text-[var(--sb-ink-2)]">
-                            {mem.structured_notes || mem.title || "—"}
-                          </div>
-                        </div>
-                        <div className="flex flex-shrink-0 items-center gap-3">
-                          <span style={monoStyle} className="text-[11px] text-[var(--sb-ink-4)]">
-                            {shortDate(mem.created_at)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await supabase.from("notes").delete().eq("id", mem.id);
-                              setNotes((prev) => prev.filter((n) => n.id !== mem.id));
-                            }}
-                            className="hidden rounded-md p-1 text-[var(--sb-ink-4)] transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)] group-hover:block"
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </button>
-                        </div>
                       </div>
-                    ))}
+                    ) : (
+                      <div className="space-y-3">
+                        {memoryNotes.map((mem) => (
+                          <div
+                            key={mem.id}
+                            className="group flex items-start gap-4 rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-5 py-4"
+                          >
+                            <div className="mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-[var(--sb-accent-soft)]">
+                              <Sparkles className="h-3.5 w-3.5 text-[var(--sb-accent-deep)]" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              {mem.title && (
+                                <div className="mb-0.5 text-[12.5px] font-semibold text-[var(--sb-ink)]">{mem.title}</div>
+                              )}
+                              <div className="text-[13.5px] leading-relaxed text-[var(--sb-ink-2)]">
+                                {mem.structured_notes || mem.title || "—"}
+                              </div>
+                            </div>
+                            <div className="flex flex-shrink-0 items-center gap-3">
+                              <span style={monoStyle} className="text-[11px] text-[var(--sb-ink-4)]">
+                                {shortDate(mem.created_at)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await supabase.from("notes").delete().eq("id", mem.id);
+                                  setNotes((prev) => prev.filter((n) => n.id !== mem.id));
+                                }}
+                                className="hidden rounded-md p-1 text-[var(--sb-ink-4)] transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)] group-hover:block"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
 
-                <div className="mt-6 rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-4">
-                  <div style={monoStyle} className="mb-3 text-[10px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
-                    Add a memory manually
+                  <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-5">
+                    <div className="mb-4">
+                      <h3 style={serifStyle} className="text-[24px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
+                        Add a <em className="text-[var(--sb-accent-deep)]">memory.</em>
+                      </h3>
+                      <p className="mt-2 text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
+                        Use this for one-off facts. The big identity prompt belongs in overall memory.
+                      </p>
+                    </div>
+                    <MemoryAddForm
+                      userId={user!.id}
+                      onAdded={(newNote) => setNotes((prev) => [newNote, ...prev])}
+                    />
                   </div>
-                  <MemoryAddForm
-                    userId={user!.id}
-                    onAdded={(newNote) => setNotes((prev) => [newNote, ...prev])}
-                  />
                 </div>
               </div>
             )}

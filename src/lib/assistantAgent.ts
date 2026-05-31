@@ -215,11 +215,15 @@ export async function planWorkflow({
   task,
   pageContext,
   chatContext,
+  authToken,
+  userId,
 }: {
   apiBase: string;
   task: string;
   pageContext: AssistantPageContext;
   chatContext: Array<{ role: "user" | "assistant"; content: string }>;
+  authToken?: string;
+  userId?: string;
 }): Promise<WorkflowPlan> {
   const systemPrompt = `You plan multi-step browser automation workflows.
 Return ONLY JSON. No prose. No markdown.
@@ -249,10 +253,15 @@ ${recentChat || "None."}
 
 Plan the workflow.`;
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
   const response = await fetch(`${apiBase}/chat-about-notes`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
+    headers,
+    body: JSON.stringify({ notes: systemPrompt, message: userPrompt, userId }),
   });
 
   if (!response.ok) throw new Error(`Workflow planning failed: ${response.status}`);
@@ -293,6 +302,8 @@ export async function replanWorkflow({
   remainingSteps,
   pageContext,
   lastError,
+  authToken,
+  userId,
 }: {
   apiBase: string;
   task: string;
@@ -300,6 +311,8 @@ export async function replanWorkflow({
   remainingSteps: WorkflowStep[];
   pageContext: AssistantPageContext;
   lastError: string;
+  authToken?: string;
+  userId?: string;
 }): Promise<WorkflowStep[]> {
   const systemPrompt = `You revise a browser automation plan after a step failed.
 Return ONLY a JSON array. No prose.
@@ -323,10 +336,15 @@ Text: ${(pageContext.text ?? "").slice(0, 600)}
 Produce a revised plan for the remaining work. Start numbering from ${(completedSteps.length || 0) + 1}.`;
 
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+
     const response = await fetch(`${apiBase}/chat-about-notes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
+      headers,
+      body: JSON.stringify({ notes: systemPrompt, message: userPrompt, userId }),
     });
     if (!response.ok) return remainingSteps;
 
@@ -350,6 +368,8 @@ export async function planAgentActions({
   history,
   chatContext,
   currentStep,
+  authToken,
+  userId,
 }: {
   apiBase: string;
   task: string;
@@ -357,13 +377,20 @@ export async function planAgentActions({
   history: AgentHistoryItem[];
   chatContext: Array<{ role: "user" | "assistant"; content: string }>;
   currentStep?: WorkflowStep;
+  authToken?: string;
+  userId?: string;
 }) {
   const { systemPrompt, userPrompt } = buildAgentPrompt(task, pageContext, history, chatContext, currentStep);
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
   const response = await fetch(`${apiBase}/chat-about-notes`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
+    headers,
+    body: JSON.stringify({ notes: systemPrompt, message: userPrompt, userId }),
   });
 
   if (!response.ok) {

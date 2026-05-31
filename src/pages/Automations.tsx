@@ -12,7 +12,7 @@ const steps = [
   "Install Braino and sign in at trybraino.com.",
   "Go to X (twitter.com) — your timeline, any tab.",
   'Open the Braino bar (click the brain or press ⌘I), hit "X Auto".',
-  "Braino reads each eligible tweet, skips ads and political posts, writes a human reply, and waits 3 seconds before posting.",
+  "Braino reads each eligible tweet, skips ads and political posts, writes a human reply, and posts at most one reply per minute during an active session.",
   'Hit "⏹ Stop" in the brain card at any time to pause.',
 ];
 
@@ -62,7 +62,7 @@ export default function Automations() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-foreground text-lg">X Timeline Auto-Reply</div>
-              <div className="text-sm text-muted-foreground mt-0.5">Replies to posts in your timeline with a 3-second pacing rule and synced run stats.</div>
+              <div className="text-sm text-muted-foreground mt-0.5">Replies to posts in your timeline with one-minute pacing, 3-hour sessions, and synced session stats.</div>
             </div>
             <span className="text-xs font-semibold px-3 py-1 rounded-full border border-green-500/20 text-green-600/80 bg-green-500/5 flex-shrink-0">Live</span>
           </div>
@@ -83,7 +83,7 @@ export default function Automations() {
           <div className="mx-8 mb-8 flex items-start gap-3 rounded-xl border border-border/50 bg-muted/30 px-5 py-4">
             <Zap className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" strokeWidth={2} />
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Capped at <strong className="text-foreground">30 replies per session</strong>. Builder-invite posts can mention{" "}
+              Sessions run for <strong className="text-foreground">3 hours</strong> and pace themselves at <strong className="text-foreground">one reply per minute</strong>. Builder-invite posts can mention{" "}
               <strong className="text-foreground">trybraino.com</strong>, while promoted posts, political posts, and duplicate-looking drafts are filtered out before posting.
             </p>
           </div>

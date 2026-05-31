@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { loadUserKnowledge } from "../_shared/user-knowledge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,6 +99,12 @@ serve(async (req) => {
         continue;
       }
 
+      const userKnowledge = await loadUserKnowledge(supabase, persona.user_id, {
+        includeMemoryNotes: true,
+        includeXPersona: false,
+        includeXContentSource: false,
+      });
+
       // Generate tweets via AI
       const tweets = await generateTweets({
         apiKey: apiKey ?? null,
@@ -106,6 +113,7 @@ serve(async (req) => {
         whatBuilding: persona.what_building,
         toneNotes: persona.tone_notes,
         contentSource: persona.content_source ?? null,
+        overallContext: userKnowledge.combinedContext,
         count: remaining,
       });
 
@@ -150,6 +158,7 @@ async function generateTweets(opts: {
   whatBuilding: string;
   toneNotes: string;
   contentSource: string | null;
+  overallContext: string;
   count: number;
 }): Promise<string[]> {
   if (!opts.apiKey) {
@@ -182,7 +191,7 @@ Rules:
     ? `\n\nContent source material (mine this for tweet ideas and angles):\n---\n${opts.contentSource.trim()}\n---`
     : "";
 
-  const userPrompt = `Persona:\n${personaContext}${contentSection}\n\nGenerate ${opts.count} original tweet${opts.count > 1 ? "s" : ""} for today. Return a JSON array of strings.`;
+  const userPrompt = `Persona:\n${personaContext}${opts.overallContext ? `\n\nAdditional user context:\n${opts.overallContext}` : ""}${contentSection}\n\nGenerate ${opts.count} original tweet${opts.count > 1 ? "s" : ""} for today. Return a JSON array of strings.`;
 
   const response = await fetch(LOVABLE_API_URL, {
     method: "POST",

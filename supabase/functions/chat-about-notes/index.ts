@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { loadUserKnowledge } from "../_shared/user-knowledge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -260,6 +262,7 @@ serve(async (req) => {
 
   try {
     const { notes, chatHistory, message, imageBase64, existingImages, pageContext, aiProvider, movieContext, movieDiscoveryPrompt, userId, driveConnected } = await req.json();
+    const requestAuthHeader = req.headers.get("Authorization");
 
     if (!message && !imageBase64) {
       return new Response(JSON.stringify({ error: "No message or image provided" }), {
@@ -272,10 +275,9 @@ serve(async (req) => {
     if (!imageBase64 && message && driveConnected && userId) {
       const intent = detectDocIntent(message);
       if (intent.matched && intent.topic) {
-        const authHeader = req.headers.get("Authorization") || "";
         const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
         const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-        const result = await createDocFromPrompt(supabaseUrl, serviceRoleKey, authHeader, userId, intent.topic);
+        const result = await createDocFromPrompt(supabaseUrl, serviceRoleKey, requestAuthHeader || "", userId, intent.topic);
 
         if (result?.docUrl) {
           const reply = `Done. I've researched **${intent.topic}** and written it up — ${result.wordCount} words across key sections.\n\n[Open Google Doc →](${result.docUrl})`;
@@ -294,6 +296,20 @@ serve(async (req) => {
 
     const pageCtx = pageContext && pageContext.text
       ? `\n\nThe user is currently viewing: "${pageContext.title || "Untitled"}" (${pageContext.url || "unknown URL"})\nPage content:\n${pageContext.text}`
+      : "";
+
+    const resolvedUserId = typeof userId === "string" ? userId : null;
+    const userKnowledge = await loadRequestUserKnowledge(requestAuthHeader, resolvedUserId);
+    const xAutoSessionContext = await loadRelevantXAutoSessionContext(
+      requestAuthHeader,
+      resolvedUserId,
+      typeof message === "string" ? message : "",
+    );
+    const persistentUserContext = userKnowledge?.combinedContext
+      ? `\n\nPersistent user context — who this user is across sessions:\n${userKnowledge.combinedContext}`
+      : "";
+    const sessionContextBlock = xAutoSessionContext
+      ? `\n\nRelevant X Auto session context:\n${xAutoSessionContext}`
       : "";
 
     const systemPrompt = hasImage
@@ -334,7 +350,7 @@ Your vibe: You are upfront. Always. With everyone. You say things to people's fa
 What you are not: You are not a yes-man. You are not performatively cheerful. You do not sugarcoat. You do not pad your answers. You do not exist to make people feel validated — you exist to actually help them. There's a difference. When the user asks for code, answers, or direct help — provide it fully. Do not lecture them about learning on their own.
 
 Context awareness: You can see what the user is browsing, their notes, and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it.
-${notes ? `\nContext — user's notes:\n${notes}` : ""}${pageCtx}${buildMovieBlock(movieContext, movieDiscoveryPrompt)}`;
+${persistentUserContext}${sessionContextBlock}${notes ? `\nContext — user's notes:\n${notes}` : ""}${pageCtx}${buildMovieBlock(movieContext, movieDiscoveryPrompt)}`;
 
     // Build messages array
     const messages: any[] = [{ role: "system", content: systemPrompt }];
@@ -413,3 +429,190 @@ ${notes ? `\nContext — user's notes:\n${notes}` : ""}${pageCtx}${buildMovieBlo
     });
   }
 });
+
+async function loadRequestUserKnowledge(authHeader: string | null, requestedUserId: string | null) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+
+  if (!supabaseUrl || !anonKey || !authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, anonKey, {
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
+    });
+
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      return null;
+    }
+
+    if (requestedUserId && requestedUserId !== user.id) {
+      return null;
+    }
+
+    return await loadUserKnowledge(supabase, user.id, {
+      includeMemoryNotes: true,
+      includeXPersona: true,
+      includeXContentSource: false,
+    });
+  } catch (error) {
+    console.warn("Could not load persistent user context:", error);
+    return null;
+  }
+}
+
+async function loadRelevantXAutoSessionContext(
+  authHeader: string | null,
+  requestedUserId: string | null,
+  message: string,
+) {
+  const sessionRequest = parseXAutoSessionRequest(message);
+  if (!sessionRequest) {
+    return "";
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+
+  if (!supabaseUrl || !anonKey || !authHeader?.startsWith("Bearer ")) {
+    return "";
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, anonKey, {
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
+    });
+
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      return "";
+    }
+
+    if (requestedUserId && requestedUserId !== user.id) {
+      return "";
+    }
+
+    let sessionQuery = supabase
+      .from("x_auto_sessions")
+      .select("*")
+      .eq("user_id", user.id);
+
+    if (sessionRequest.type === "session_number") {
+      sessionQuery = sessionQuery.eq("session_number", sessionRequest.sessionNumber);
+    } else {
+      sessionQuery = sessionQuery.order("started_at", { ascending: false }).limit(1);
+    }
+
+    const { data: session, error: sessionError } = await sessionQuery.maybeSingle();
+    if (sessionError) {
+      console.warn("Could not load X Auto session context:", sessionError);
+      return "";
+    }
+
+    if (!session) {
+      return sessionRequest.type === "session_number"
+        ? `The user asked about X Auto session ${sessionRequest.sessionNumber}, but no matching session exists yet.`
+        : "The user asked about their latest X Auto session, but they have not run one yet.";
+    }
+
+    const { data: replyLogs, error: logsError } = await supabase
+      .from("x_auto_reply_logs")
+      .select("post_author_handle,post_author_display_name,post_url,post_text,our_reply,status,error_message,discovered_at,replied_at")
+      .eq("session_id", session.id)
+      .order("discovered_at", { ascending: true })
+      .limit(60);
+
+    if (logsError) {
+      console.warn("Could not load X Auto reply rows for chat context:", logsError);
+    }
+
+    return buildXAutoSessionContext(session, replyLogs ?? []);
+  } catch (error) {
+    console.warn("Could not load X Auto session context:", error);
+    return "";
+  }
+}
+
+function parseXAutoSessionRequest(message: string):
+  | { type: "latest" }
+  | { type: "session_number"; sessionNumber: number }
+  | null {
+  const lower = String(message || "").toLowerCase();
+  const mentionsXAuto = /(x auto|x automation|twitter auto|twitter automation)/.test(lower);
+  if (!mentionsXAuto && !/\bsession\b/.test(lower)) {
+    return null;
+  }
+
+  const specificMatch =
+    lower.match(/\bx auto(?:mation)? session\s+(\d+)\b/) ||
+    lower.match(/\bsession\s+(\d+)\b/);
+
+  if (specificMatch?.[1]) {
+    return {
+      type: "session_number",
+      sessionNumber: Number(specificMatch[1]),
+    };
+  }
+
+  const latestPattern =
+    /\b(latest|last|recent)\b.*\bx auto\b.*\bsession\b/.test(lower) ||
+    /\bx auto\b.*\b(latest|last|recent)\b.*\bsession\b/.test(lower) ||
+    /\b(latest|last|recent)\s+session\b/.test(lower);
+
+  return latestPattern ? { type: "latest" } : null;
+}
+
+function buildXAutoSessionContext(session: any, replyLogs: any[]) {
+  const lines = [
+    `Session ${session.session_number}`,
+    `Status: ${session.status}`,
+    `Started: ${session.started_at || "unknown"}`,
+    `Ends: ${session.ends_at || "unknown"}`,
+    `Stopped: ${session.stopped_at || "still active"}`,
+    `Cooldown ends: ${session.cooldown_ends_at || "unknown"}`,
+    `Replies posted: ${session.replies_posted ?? 0}`,
+    `Replies failed: ${session.replies_failed ?? 0}`,
+    `Replies queued: ${session.replies_queued ?? 0}`,
+    `Followers gained: ${session.followers_gained ?? 0}`,
+    `Replies received: ${session.replies_received ?? 0}`,
+    `Total views: ${session.total_views ?? 0}`,
+  ];
+
+  if (!replyLogs.length) {
+    lines.push("Reply rows: none logged for this session.");
+    return lines.join("\n");
+  }
+
+  lines.push("Reply rows:");
+  for (const [index, log] of replyLogs.entries()) {
+    lines.push(
+      `${index + 1}. @${log.post_author_handle || "unknown"} | ${log.status || "unknown"} | discovered ${log.discovered_at || "unknown"} | replied ${log.replied_at || "not yet"} | mention: ${truncateSessionText(log.post_text)} | reply: ${truncateSessionText(log.our_reply)}${log.post_url ? ` | link: ${log.post_url}` : ""}${log.error_message ? ` | error: ${truncateSessionText(log.error_message)}` : ""}`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function truncateSessionText(value: unknown, maxLength = 180) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (text.length <= maxLength) return text || "—";
+  return `${text.slice(0, maxLength - 1)}…`;
+}
