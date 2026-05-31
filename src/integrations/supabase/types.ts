@@ -165,6 +165,7 @@ export type Database = {
           display_name: string | null
           id: string
           is_premium: boolean
+          overall_memory: string
           polar_customer_id: string | null
           updated_at: string
           user_id: string
@@ -175,6 +176,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           is_premium?: boolean
+          overall_memory?: string
           polar_customer_id?: string | null
           updated_at?: string
           user_id: string
@@ -185,6 +187,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           is_premium?: boolean
+          overall_memory?: string
           polar_customer_id?: string | null
           updated_at?: string
           user_id?: string
