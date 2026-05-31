@@ -1499,18 +1499,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  if (msg.type === "activateMovieMode") {
-    __sbStartMovieMode();
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (msg.type === "deactivateMovieMode") {
-    __sbStopMovieMode();
-    sendResponse({ ok: true });
-    return true;
-  }
-
   return true;
 });
 
@@ -1698,15 +1686,6 @@ let __sbCurrentUtterance = null;
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
-
-// Movie mode state
-let __sbMovieMode = false;
-let __sbMovieTitle = '';
-let __sbSubtitleBuffer = [];
-let __sbLastSubtitle = '';
-let __sbSubtitleTimer = null;
-let __sbMovieChatHistory = [];
-let __sbMovieDiscovery = false;
 
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
@@ -2282,73 +2261,6 @@ function __sbBuildBrainUI() {
       pointer-events: none;
     }
     #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
-
-    /* ── Movie watching mode ── */
-    /* Faint blue pulse on the brain itself — just enough to signal "watching" */
-    @keyframes __sb_movie_watch__ {
-      0%, 100% { filter: drop-shadow(0 0 10px rgba(120,180,255,0.55)) drop-shadow(0 2px 8px rgba(0,0,0,0.2)); }
-      50%       { filter: drop-shadow(0 0 22px rgba(150,200,255,0.9)) drop-shadow(0 0 40px rgba(80,150,255,0.5)); }
-    }
-    #__sb_brain_btn__.sb-movie-watching {
-      animation: __sb_movie_watch__ 2.4s ease-in-out infinite;
-    }
-    @keyframes __sb_movie_think__ {
-      0%, 100% { filter: drop-shadow(0 0 10px rgba(120,180,255,0.6)); }
-      50%       { filter: drop-shadow(0 0 28px rgba(150,200,255,1)) drop-shadow(0 0 50px rgba(80,150,255,0.7)); }
-    }
-    #__sb_brain_btn__.sb-movie-thinking {
-      animation: __sb_movie_think__ 0.55s ease-in-out infinite;
-    }
-
-    /* Ambient halo: backdrop-filter picks up the movie's actual colors */
-    #__sb_movie_halo__ {
-      position: fixed;
-      bottom: -10px; right: -10px;
-      width: 130px; height: 130px;
-      border-radius: 50%;
-      backdrop-filter: blur(28px) saturate(9) brightness(2.8);
-      -webkit-backdrop-filter: blur(28px) saturate(9) brightness(2.8);
-      pointer-events: none;
-      z-index: 2147483646; /* just below the brain */
-      opacity: 0;
-      transition: opacity 0.8s ease;
-    }
-    #__sb_movie_halo__.active {
-      opacity: 1;
-    }
-
-    /* ── Movie recommendation card ── */
-    .sb-movie-card {
-      margin: 12px 16px 4px; border-radius: 16px; overflow: hidden;
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
-    }
-    .sb-mc-poster-wrap { width: 100%; overflow: hidden; max-height: 300px; }
-    .sb-mc-poster { width: 100%; display: block; object-fit: cover; }
-    .sb-mc-poster-placeholder {
-      width: 100%; height: 200px; display: flex; align-items: center; justify-content: center;
-      font-size: 48px; background: rgba(255,255,255,0.04);
-    }
-    .sb-mc-title {
-      font-size: 18px; font-weight: 700; color: #fff; padding: 14px 16px 2px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-    .sb-mc-year { font-size: 13px; font-weight: 400; color: rgba(255,255,255,0.45); margin-left: 6px; }
-    .sb-mc-rating { font-size: 12px; color: #FFD060; padding: 0 16px 4px; }
-    .sb-mc-overview {
-      font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.7);
-      padding: 4px 16px 12px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-    .sb-mc-watch-btn {
-      display: block; text-decoration: none; text-align: center;
-      margin: 0 16px 16px; padding: 10px;
-      background: #E8483E; color: white; border-radius: 10px;
-      font-size: 13px; font-weight: 600; cursor: pointer;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      transition: background 0.15s;
-    }
-    .sb-mc-watch-btn:hover { background: #C9544A; }
-
   `;
   document.head.appendChild(style);
 
@@ -2466,29 +2378,6 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
   `;
   document.body.appendChild(modelDd);
-
-  // ── Fullscreen fix ──
-  // When a page (e.g. Netflix) enters fullscreen the browser creates a new
-  // stacking layer for the fullscreen element. position:fixed elements that
-  // are children of <body> but NOT inside the fullscreen element disappear.
-  // Fix: reparent all extension UI into the fullscreen element on enter,
-  // move back to <body> on exit.
-  const __sbOwnedEls = () => [
-    document.getElementById("__sb_root__"),
-    document.getElementById("__sb_card_wrap__"),
-    document.getElementById("__sb_voice_error_pill__"),
-    document.getElementById("__sb_mode_dropdown__"),
-    document.getElementById("__sb_connector_dropdown__"),
-    document.getElementById("__sb_connector_slash_dropdown__"),
-    document.getElementById("__sb_model_dropdown__"),
-    document.getElementById("__sb_movie_halo__"),
-  ].filter(Boolean);
-
-  document.addEventListener("fullscreenchange", () => {
-    const fsEl = document.fullscreenElement;
-    const target = fsEl || document.body;
-    __sbOwnedEls().forEach(el => target.appendChild(el));
-  });
 
   // Brain hidden by default
   document.getElementById("__sb_brain_btn__").style.display = "none";
@@ -2933,6 +2822,15 @@ function __sbXGetCurrentUserHandles() {
   return handles;
 }
 
+function __sbXGetTweetPermalink(article) {
+  const link =
+    article.querySelector('a[href*="/status/"] time')?.closest('a[href*="/status/"]') ||
+    [...article.querySelectorAll('a[href*="/status/"]')].find(el => /\/status\/\d+/.test(el.getAttribute('href') || ''));
+  const href = link?.getAttribute('href') || '';
+  if (!href) return '';
+  try { return new URL(href, location.origin).href; } catch { return ''; }
+}
+
 function __sbXGetTweetKey(article, handle, text) {
   const permalink =
     article.querySelector('a[href*="/status/"] time')?.closest('a[href*="/status/"]') ||
@@ -3031,6 +2929,12 @@ async function __sbXRecordRunStats(payload) {
   });
 }
 
+function __sbXLogReply(payload) {
+  chrome.runtime.sendMessage({ action: 'logXReply', ...payload }, () => {
+    void chrome.runtime.lastError;
+  });
+}
+
 function __sbXFindTweets(selfHandles) {
   return [...document.querySelectorAll('article[data-testid="tweet"]')]
     .map((article) => ({ article, data: __sbXGetTweetData(article) }))
@@ -3059,6 +2963,16 @@ function __sbXGetTweetData(article) {
   const key = __sbXGetTweetKey(article, handle, text);
   const displayName = __sbXGetDisplayName(article);
   return { text, handle, key, displayName, isBuilderPrompt: __sbXIsBuilderPrompt(text) };
+}
+
+async function __sbXExpandShowMore(article) {
+  const showMore =
+    article.querySelector('[data-testid="tweet-text-show-more-link"]') ||
+    [...article.querySelectorAll('[data-testid="tweetText"] a, [data-testid="tweetText"] span[role="link"]')]
+      .find(el => /^show\s+more$/i.test((el.innerText || el.textContent || '').trim()));
+  if (!showMore) return;
+  showMore.click();
+  await __sbSleep(600);
 }
 
 async function __sbXGenerateReply(tweetText, handle, options = {}) {
@@ -3377,7 +3291,13 @@ async function __sbRunXAutomation() {
     __sbXReplied.add(article);
     if (data.key) __sbXProcessedKeys.add(data.key);
 
-    const { text, handle, isBuilderPrompt } = data;
+    // Expand truncated post so AI sees the full text, not just the 280-char preview
+    await __sbXExpandShowMore(article);
+    const expanded = __sbXGetTweetData(article);
+    const tweetUrl = __sbXGetTweetPermalink(article);
+
+    const { handle, isBuilderPrompt } = expanded;
+    const text = expanded.text || data.text;
     if (!text || text.length < 8) continue;
 
     __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
@@ -3394,6 +3314,14 @@ async function __sbRunXAutomation() {
     const ok = await __sbXPostReply(article, reply.slice(0, 240));
     if (ok) {
       count++;
+      __sbXLogReply({
+        postAuthorHandle: handle,
+        postAuthorDisplayName: expanded.displayName,
+        postUrl: tweetUrl,
+        postText: text,
+        ourReply: reply.slice(0, 240),
+        repliedAt: new Date().toISOString(),
+      });
       __sbShowBubble(`Replied to ${count} post${count !== 1 ? 's' : ''} — scanning…`, false, { tone: 'status', title: 'X Automation' });
       await __sbSleep(__sbXPostReplySettleMs);
     } else {
@@ -4013,206 +3941,6 @@ async function __sbFetchAssistantReply(body) {
   return { reply: json.reply || json.response || json.message || json.answer || "" };
 }
 
-// ─────────────────────────────────────────────
-// Movie Mode
-// ─────────────────────────────────────────────
-
-const MOVIE_DISCOVERY_SYSTEM_PROMPT = `The user wants to watch a movie. Help them pick something on Netflix tonight.
-
-Ask about their mood naturally — one question at a time. Examples: "Lighthearted or something with weight?", "Do you want to laugh, think, or feel something tonight?". After 2-3 exchanges, recommend exactly ONE movie with a short personal pitch (2-3 sentences).
-
-IMPORTANT: When you have a recommendation, output this on its own line (nothing else on that line):
-MOVIE_REC:{"title":"Interstellar","year":2014,"pitch":"...your 2-3 sentence pitch...","tmdb_query":"Interstellar 2014"}
-
-Then on the next line, ask if they want to look it up on Netflix.
-Keep the Braino voice: direct, warm, slightly dry.`;
-
-const MOVIE_INTENT_PATTERNS = [
-  /let'?s?\s+watch\s+a?\s*movie/i,
-  /watch\s+a?\s*movie\s+with\s+(me|us)/i,
-  /movie\s+night/i,
-  /suggest\s+(a|some)\s+movie/i,
-  /what\s+(should|can)\s+(i|we)\s+watch/i,
-  /i\s+want\s+to\s+watch\s+something/i,
-  /something\s+to\s+watch/i,
-  /pick\s+(a|me\s+a)\s+movie/i,
-  /recommend\s+(a|me\s+a)\s+movie/i,
-];
-
-function __sbIsMovieIntent(text) {
-  return MOVIE_INTENT_PATTERNS.some(p => p.test(text));
-}
-
-function __sbNetflixGetSubtitle() {
-  const spans = document.querySelectorAll(
-    '.player-timedtext-text-container span, [class*="player-timedtext"] span, [data-uia="player-timedtext"] span'
-  );
-  return Array.from(spans).map(el => el.textContent).join(' ').trim();
-}
-
-function __sbNetflixGetVideoState() {
-  const v = document.querySelector('video');
-  const titleEl = document.querySelector(
-    '[data-uia="video-title"], [class*="ellipsize-text"], .watch-title'
-  );
-  return {
-    title: titleEl?.textContent?.trim() || document.title.replace(' | Netflix', '').trim(),
-    timestamp: v ? Math.floor(v.currentTime) : 0,
-    duration:  v ? Math.floor(v.duration) : 0,
-    isPaused:  v ? v.paused : true,
-  };
-}
-
-function __sbSetBrainMovieEyes() {
-  const brain = document.getElementById('__sb_brain_btn__');
-  if (!brain) return;
-  const rect = brain.getBoundingClientRect();
-  const dx = window.innerWidth / 2  - (rect.left + rect.width / 2);
-  const dy = window.innerHeight / 2 - (rect.top  + rect.height / 2);
-  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-  const MAX = 1.6;
-  const ox = (dx / dist) * MAX;
-  const oy = (dy / dist) * MAX;
-  const svg = brain.querySelector('svg');
-  if (!svg) return;
-  const pupils    = svg.querySelectorAll('circle[r="3.2"]');
-  const highlights = svg.querySelectorAll('circle[r="1.1"]');
-  if (pupils[0])    { pupils[0].setAttribute('cx', String(38 + ox)); pupils[0].setAttribute('cy', String(48 + oy)); }
-  if (pupils[1])    { pupils[1].setAttribute('cx', String(62 + ox)); pupils[1].setAttribute('cy', String(48 + oy)); }
-  if (highlights[0]){ highlights[0].setAttribute('cx', String(39 + ox)); highlights[0].setAttribute('cy', String(46.6 + oy)); }
-  if (highlights[1]){ highlights[1].setAttribute('cx', String(63 + ox)); highlights[1].setAttribute('cy', String(46.6 + oy)); }
-}
-
-function __sbResetBrainEyes() {
-  const brain = document.getElementById('__sb_brain_btn__');
-  const svg = brain?.querySelector('svg');
-  if (!svg) return;
-  const pupils    = svg.querySelectorAll('circle[r="3.2"]');
-  const highlights = svg.querySelectorAll('circle[r="1.1"]');
-  if (pupils[0])    { pupils[0].setAttribute('cx', '38');   pupils[0].setAttribute('cy', '48'); }
-  if (pupils[1])    { pupils[1].setAttribute('cx', '62');   pupils[1].setAttribute('cy', '48'); }
-  if (highlights[0]){ highlights[0].setAttribute('cx', '39');  highlights[0].setAttribute('cy', '46.6'); }
-  if (highlights[1]){ highlights[1].setAttribute('cx', '63');  highlights[1].setAttribute('cy', '46.6'); }
-}
-
-function __sbCompressSubtitles(currentTs) {
-  if (!__sbSubtitleBuffer.length) return '';
-  const recent = __sbSubtitleBuffer.filter(e => currentTs - e.ts <= 120);
-  const older  = __sbSubtitleBuffer.filter(e => currentTs - e.ts >  120);
-  const windows = {};
-  older.forEach(e => { const w = Math.floor(e.ts / 30); if (!windows[w]) windows[w] = e.text; });
-  const olderText  = Object.values(windows).join(' … ');
-  const recentText = recent.map(e => e.text).join(' ');
-  return (olderText + ' … ' + recentText).trim().slice(0, 1500);
-}
-
-function __sbStartMovieMode() {
-  if (__sbMovieMode) return;
-  __sbMovieMode = true;
-  __sbSubtitleBuffer = [];
-  __sbMovieChatHistory = [];
-  __sbLastSubtitle = '';
-
-  const brain = document.getElementById('__sb_brain_btn__');
-  if (brain) brain.classList.add('sb-movie-watching');
-
-  // Ambient halo — glows in whatever color the movie scene has behind it
-  let halo = document.getElementById('__sb_movie_halo__');
-  if (!halo) {
-    halo = document.createElement('div');
-    halo.id = '__sb_movie_halo__';
-    const fsEl = document.fullscreenElement;
-    (fsEl || document.body).appendChild(halo);
-  }
-  requestAnimationFrame(() => halo.classList.add('active'));
-
-  __sbSetBrainMovieEyes();
-
-  const inp = document.getElementById('__sb_input__');
-  if (inp) inp.placeholder = 'Ask about the movie…';
-
-  __sbSubtitleTimer = setInterval(() => {
-    const state = __sbNetflixGetVideoState();
-    if (state.isPaused) return;
-    if (state.title) __sbMovieTitle = state.title;
-    const sub = __sbNetflixGetSubtitle();
-    if (sub && sub !== __sbLastSubtitle) {
-      __sbLastSubtitle = sub;
-      __sbSubtitleBuffer.push({ ts: state.timestamp, text: sub });
-      if (__sbSubtitleBuffer.length > 7200) __sbSubtitleBuffer.shift();
-    }
-  }, 2000);
-}
-
-function __sbStopMovieMode() {
-  __sbMovieMode = false;
-  clearInterval(__sbSubtitleTimer);
-  __sbSubtitleTimer = null;
-  __sbSubtitleBuffer = [];
-  __sbMovieChatHistory = [];
-  __sbMovieTitle = '';
-  __sbLastSubtitle = '';
-
-  const brain = document.getElementById('__sb_brain_btn__');
-  if (brain) brain.classList.remove('sb-movie-watching', 'sb-movie-thinking');
-
-  const halo = document.getElementById('__sb_movie_halo__');
-  if (halo) {
-    halo.classList.remove('active');
-    setTimeout(() => halo.remove(), 900);
-  }
-
-  __sbResetBrainEyes();
-
-  const inp = document.getElementById('__sb_input__');
-  if (inp) inp.placeholder = "What's on your mind?";
-}
-
-function __sbParseMovieRec(text) {
-  const match = text.match(/MOVIE_REC:(\{[^\n]+\})/);
-  if (!match) return null;
-  try { return JSON.parse(match[1]); } catch { return null; }
-}
-
-async function __sbRenderMovieCard(rec) {
-  let posterUrl = null;
-  let voteAverage = null;
-  let overview = rec.pitch || '';
-
-  try {
-    const r = await fetch(
-      `${__SB_API}/tmdb-search?query=${encodeURIComponent(rec.tmdb_query || rec.title)}`,
-      { headers: { 'Content-Type': 'application/json' } }
-    );
-    const d = await r.json();
-    if (d.results && d.results[0]) {
-      posterUrl   = d.results[0].poster_url || null;
-      voteAverage = d.results[0].vote_average || null;
-      overview    = d.results[0].overview || rec.pitch || '';
-    }
-  } catch { /* use fallback values */ }
-
-  const card = document.createElement('div');
-  card.className = 'sb-movie-card';
-  card.innerHTML = `
-    <div class="sb-mc-poster-wrap">
-      ${posterUrl
-        ? `<img class="sb-mc-poster" src="${posterUrl}" alt="${rec.title.replace(/"/g,'&quot;')}" />`
-        : `<div class="sb-mc-poster-placeholder">🎬</div>`
-      }
-    </div>
-    <div class="sb-mc-title">${rec.title}<span class="sb-mc-year">${rec.year || ''}</span></div>
-    ${voteAverage ? `<div class="sb-mc-rating">★ ${Number(voteAverage).toFixed(1)}</div>` : ''}
-    <div class="sb-mc-overview">${overview}</div>
-    <a class="sb-mc-watch-btn" href="https://www.netflix.com/search?q=${encodeURIComponent(rec.title)}" target="_blank" rel="noopener">Watch on Netflix →</a>
-  `;
-
-  const scrollArea = document.querySelector('#__sb_bubble__ .sb-card-scroll');
-  if (scrollArea) scrollArea.appendChild(card);
-}
-
-// ─────────────────────────────────────────────
-
 async function __sbProcessPrompt(text, options = {}) {
   const connectorDirective = __sbParseConnectorDirective(text);
   if (connectorDirective.connector) {
@@ -4221,11 +3949,6 @@ async function __sbProcessPrompt(text, options = {}) {
   }
   const promptText = String(connectorDirective.task || "").trim();
   if (!promptText) return;
-
-  // Movie intent detection — triggers discovery mode
-  if (!__sbMovieMode && __sbIsMovieIntent(promptText)) {
-    __sbMovieDiscovery = true;
-  }
   const fromVoice = Boolean(options.fromVoice);
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
@@ -4324,51 +4047,11 @@ async function __sbProcessPrompt(text, options = {}) {
     if (hasPageText) body.pageContext = { url: pageContext.url, title: pageContext.title, text: pageContext.text };
     if (selectedText) body.selectedText = selectedText;
 
-    // Movie companion: inject subtitle context
-    if (__sbMovieMode) {
-      const state = __sbNetflixGetVideoState();
-      body.movieContext = {
-        title:              __sbMovieTitle || state.title,
-        timestamp:          state.timestamp,
-        subtitleTranscript: __sbCompressSubtitles(state.timestamp),
-        isPaused:           state.isPaused,
-      };
-      body.chatHistory = __sbMovieChatHistory.slice(-6);
-      document.getElementById('__sb_brain_btn__')?.classList.add('sb-movie-thinking');
-    } else if (__sbMovieDiscovery) {
-      body.movieDiscoveryPrompt = MOVIE_DISCOVERY_SYSTEM_PROMPT;
-    }
-
     const { reply } = await __sbFetchAssistantReply(body);
     if (!reply) {
       if (fromVoice) await __sbSpeakText("Please sign in to continue.");
       return;
     }
-
-    // Movie companion: update per-movie history + remove thinking glow
-    if (__sbMovieMode) {
-      __sbMovieChatHistory.push({ role: 'user', content: promptText });
-      __sbMovieChatHistory.push({ role: 'assistant', content: reply });
-      document.getElementById('__sb_brain_btn__')?.classList.remove('sb-movie-thinking');
-    }
-
-    // Parse movie recommendation card
-    const movieRec = __sbParseMovieRec(reply);
-    if (movieRec) {
-      __sbMovieDiscovery = false;
-      const cleanReply = reply.replace(/MOVIE_REC:\{[^\n]+\}\n?/, '').trim();
-      __sbChatHistory.push({ role: "assistant", content: cleanReply || reply });
-      const displayReply = cleanReply || reply;
-      if (voiceOnly) {
-        await __sbSpeakText(displayReply);
-      } else {
-        __sbShowBubble(displayReply, false, { rich: true, prompt: promptText, title: '🎬 Movie Night' });
-        if (fromVoice) await __sbSpeakText(displayReply);
-      }
-      void __sbRenderMovieCard(movieRec);
-      return;
-    }
-
     __sbChatHistory.push({ role: "assistant", content: reply });
     if (voiceOnly) {
       const spoke = await __sbSpeakText(reply);
@@ -4377,9 +4060,7 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbShowBubble(reply, false, {
         rich: true,
         prompt: promptText,
-        title: __sbMovieMode
-          ? `🎬 ${__sbMovieTitle || 'Movie'}`
-          : (pageContext.title || location.hostname.replace(/^www\./, "") || "Current page"),
+        title: pageContext.title || location.hostname.replace(/^www\./, "") || "Current page",
       });
       if (fromVoice) await __sbSpeakText(reply);
     }

@@ -102,6 +102,23 @@ type XAutomationStats = {
   last_run_finished_at: string | null;
 } | null;
 
+type XPersona = {
+  display_name: string;
+  bio: string;
+  what_building: string;
+  tone_notes: string;
+} | null;
+
+type XReplyLog = {
+  id: string;
+  post_author_handle: string;
+  post_author_display_name: string;
+  post_url: string;
+  post_text: string;
+  our_reply: string;
+  replied_at: string;
+};
+
 type DashboardTab = "overview" | "notes" | "tasks" | "xAutomation" | "settings" | "memory" | "highlights";
 type NoteView = "list" | "grid";
 
@@ -735,6 +752,11 @@ export default function Dashboard() {
   const [xPostingNow, setXPostingNow] = useState(false);
   const [xCancellingId, setXCancellingId] = useState<string | null>(null);
   const [xDispatching, setXDispatching] = useState(false);
+  const [xPersona, setXPersona] = useState<XPersona>(null);
+  const [xPersonaDraft, setXPersonaDraft] = useState({ display_name: "", bio: "", what_building: "", tone_notes: "" });
+  const [xPersonaSaving, setXPersonaSaving] = useState(false);
+  const [xPersonaSaved, setXPersonaSaved] = useState(false);
+  const [xReplyLogs, setXReplyLogs] = useState<XReplyLog[]>([]);
   const drivePollRef = useRef<number | null>(null);
   const xPollRef = useRef<number | null>(null);
 
@@ -811,7 +833,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, driveRes, xStatsRes, xConnRes, scheduledXRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xReplyLogsRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -846,6 +868,17 @@ export default function Dashboard() {
           .eq("user_id", user.id)
           .order("scheduled_at", { ascending: true })
           .limit(20),
+        (supabase as any)
+          .from("x_auto_persona")
+          .select("display_name,bio,what_building,tone_notes")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        (supabase as any)
+          .from("x_auto_reply_logs")
+          .select("id,post_author_handle,post_author_display_name,post_url,post_text,our_reply,replied_at")
+          .eq("user_id", user.id)
+          .order("replied_at", { ascending: false })
+          .limit(50),
       ]);
 
       if (notesRes.data) setNotes(notesRes.data as Note[]);
@@ -855,6 +888,10 @@ export default function Dashboard() {
       setXConn((xConnRes as XConnection) || null);
       setScheduledXPosts((scheduledXRes.data as ScheduledXPost[] | null) || []);
       setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
+      const persona = (xPersonaRes.data as XPersona) || null;
+      setXPersona(persona);
+      if (persona) setXPersonaDraft({ display_name: persona.display_name || "", bio: persona.bio || "", what_building: persona.what_building || "", tone_notes: persona.tone_notes || "" });
+      setXReplyLogs((xReplyLogsRes.data as XReplyLog[]) || []);
       setDataLoading(false);
     };
 
@@ -1270,6 +1307,19 @@ export default function Dashboard() {
     setSavingName(false);
     setNameSaved(true);
     window.setTimeout(() => setNameSaved(false), 2000);
+  };
+
+  const handleSavePersona = async () => {
+    if (!user) return;
+    setXPersonaSaving(true);
+    await (supabase as any).from("x_auto_persona").upsert(
+      { user_id: user.id, ...xPersonaDraft, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    setXPersona({ ...xPersonaDraft });
+    setXPersonaSaving(false);
+    setXPersonaSaved(true);
+    window.setTimeout(() => setXPersonaSaved(false), 2000);
   };
 
   const topSearchPlaceholder =
@@ -2187,6 +2237,68 @@ export default function Dashboard() {
 
             {activeTab === "xAutomation" && (
               <div className="space-y-5">
+                {/* Voice & Style persona card */}
+                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                  <div className="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                      <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                        Your Voice &amp; <em className="text-[var(--sb-accent-deep)]">Style.</em>
+                      </h3>
+                      <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                        Shape how Braino sounds when it replies on X
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block text-[13px] font-medium text-[var(--sb-ink)]">Your name</label>
+                      <Input
+                        value={xPersonaDraft.display_name}
+                        onChange={e => setXPersonaDraft(p => ({ ...p, display_name: e.target.value }))}
+                        placeholder="e.g. Alex — how should Braino refer to you?"
+                        className="rounded-xl border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[13px] font-medium text-[var(--sb-ink)]">Tone &amp; style notes</label>
+                      <Textarea
+                        value={xPersonaDraft.tone_notes}
+                        onChange={e => setXPersonaDraft(p => ({ ...p, tone_notes: e.target.value }))}
+                        placeholder="e.g. casual, direct, founder energy, no corporate speak"
+                        className="min-h-[80px] resize-none rounded-xl border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[13px] font-medium text-[var(--sb-ink)]">Who you are</label>
+                      <Textarea
+                        value={xPersonaDraft.bio}
+                        onChange={e => setXPersonaDraft(p => ({ ...p, bio: e.target.value }))}
+                        placeholder="Your background, role, what you care about…"
+                        className="min-h-[80px] resize-none rounded-xl border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[13px] font-medium text-[var(--sb-ink)]">What you&apos;re building</label>
+                      <Textarea
+                        value={xPersonaDraft.what_building}
+                        onChange={e => setXPersonaDraft(p => ({ ...p, what_building: e.target.value }))}
+                        placeholder="e.g. Building Braino, an AI browser companion at trybraino.com"
+                        className="min-h-[80px] resize-none rounded-xl border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13px]"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      onClick={handleSavePersona}
+                      disabled={xPersonaSaving}
+                      size="sm"
+                      className="gap-1.5 rounded-xl"
+                    >
+                      {xPersonaSaved ? <><Check className="h-3.5 w-3.5" /> Saved</> : xPersonaSaving ? "Saving…" : "Save"}
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
                   <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                     <div className="mb-4 flex items-start justify-between gap-4">
@@ -2456,6 +2568,66 @@ export default function Dashboard() {
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* Reply History log */}
+                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                  <div className="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                      <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                        Reply <em className="text-[var(--sb-accent-deep)]">History.</em>
+                      </h3>
+                      <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                        Last 50 replies sent by X Auto
+                      </div>
+                    </div>
+                    <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
+                      {xReplyLogs.length} logged
+                    </span>
+                  </div>
+                  {xReplyLogs.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[var(--sb-line)] p-8 text-center text-[13px] text-[var(--sb-ink-3)]">
+                      No replies logged yet. They&apos;ll appear here after your next X Auto run.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {xReplyLogs.map(log => (
+                        <div key={log.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span style={monoStyle} className="rounded-full bg-[var(--sb-accent-soft)] px-2 py-0.5 text-[11px] text-[var(--sb-accent-deep)] shrink-0">
+                                @{log.post_author_handle || "unknown"}
+                              </span>
+                              {log.post_author_display_name && (
+                                <span className="truncate text-[12px] text-[var(--sb-ink-3)]">{log.post_author_display_name}</span>
+                              )}
+                            </div>
+                            <span style={monoStyle} className="shrink-0 text-[11px] text-[var(--sb-ink-4)]">{timeAgo(log.replied_at)}</span>
+                          </div>
+                          <div className="mb-2">
+                            <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--sb-ink-4)]">Tweet</span>
+                            <p className="mt-0.5 line-clamp-2 text-[13px] text-[var(--sb-ink-2)]">{log.post_text}</p>
+                          </div>
+                          <div className="mb-3 border-l-2 border-[var(--sb-accent)] pl-3">
+                            <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--sb-ink-4)]">Reply</span>
+                            <p className="mt-0.5 text-[13px] text-[var(--sb-ink)]">{log.our_reply}</p>
+                          </div>
+                          {log.post_url && (
+                            <a
+                              href={log.post_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] text-[var(--sb-ink-3)] hover:text-[var(--sb-accent)] transition-colors"
+                              style={monoStyle}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View on X
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

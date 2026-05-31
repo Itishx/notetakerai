@@ -2822,6 +2822,15 @@ function __sbXGetCurrentUserHandles() {
   return handles;
 }
 
+function __sbXGetTweetPermalink(article) {
+  const link =
+    article.querySelector('a[href*="/status/"] time')?.closest('a[href*="/status/"]') ||
+    [...article.querySelectorAll('a[href*="/status/"]')].find(el => /\/status\/\d+/.test(el.getAttribute('href') || ''));
+  const href = link?.getAttribute('href') || '';
+  if (!href) return '';
+  try { return new URL(href, location.origin).href; } catch { return ''; }
+}
+
 function __sbXGetTweetKey(article, handle, text) {
   const permalink =
     article.querySelector('a[href*="/status/"] time')?.closest('a[href*="/status/"]') ||
@@ -2920,6 +2929,12 @@ async function __sbXRecordRunStats(payload) {
   });
 }
 
+function __sbXLogReply(payload) {
+  chrome.runtime.sendMessage({ action: 'logXReply', ...payload }, () => {
+    void chrome.runtime.lastError;
+  });
+}
+
 function __sbXFindTweets(selfHandles) {
   return [...document.querySelectorAll('article[data-testid="tweet"]')]
     .map((article) => ({ article, data: __sbXGetTweetData(article) }))
@@ -2948,6 +2963,16 @@ function __sbXGetTweetData(article) {
   const key = __sbXGetTweetKey(article, handle, text);
   const displayName = __sbXGetDisplayName(article);
   return { text, handle, key, displayName, isBuilderPrompt: __sbXIsBuilderPrompt(text) };
+}
+
+async function __sbXExpandShowMore(article) {
+  const showMore =
+    article.querySelector('[data-testid="tweet-text-show-more-link"]') ||
+    [...article.querySelectorAll('[data-testid="tweetText"] a, [data-testid="tweetText"] span[role="link"]')]
+      .find(el => /^show\s+more$/i.test((el.innerText || el.textContent || '').trim()));
+  if (!showMore) return;
+  showMore.click();
+  await __sbSleep(600);
 }
 
 async function __sbXGenerateReply(tweetText, handle, options = {}) {
@@ -3266,7 +3291,13 @@ async function __sbRunXAutomation() {
     __sbXReplied.add(article);
     if (data.key) __sbXProcessedKeys.add(data.key);
 
-    const { text, handle, isBuilderPrompt } = data;
+    // Expand truncated post so AI sees the full text, not just the 280-char preview
+    await __sbXExpandShowMore(article);
+    const expanded = __sbXGetTweetData(article);
+    const tweetUrl = __sbXGetTweetPermalink(article);
+
+    const { handle, isBuilderPrompt } = expanded;
+    const text = expanded.text || data.text;
     if (!text || text.length < 8) continue;
 
     __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
@@ -3283,6 +3314,14 @@ async function __sbRunXAutomation() {
     const ok = await __sbXPostReply(article, reply.slice(0, 240));
     if (ok) {
       count++;
+      __sbXLogReply({
+        postAuthorHandle: handle,
+        postAuthorDisplayName: expanded.displayName,
+        postUrl: tweetUrl,
+        postText: text,
+        ourReply: reply.slice(0, 240),
+        repliedAt: new Date().toISOString(),
+      });
       __sbShowBubble(`Replied to ${count} post${count !== 1 ? 's' : ''} — scanning…`, false, { tone: 'status', title: 'X Automation' });
       await __sbSleep(__sbXPostReplySettleMs);
     } else {

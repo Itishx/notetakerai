@@ -22,6 +22,7 @@ let agentRunning = false;
 let agentShouldStop = false;
 let isPremium = false;
 let currentSelection = null; // { text, url, title } — last text the user highlighted on the page
+let sbXPersonaCache = null; // cached x_auto_persona for injecting context on X
 
 // Daily usage counters (free tier limits)
 const FREE_RECORDING_SECONDS = 30 * 60; // 30 min/day
@@ -1559,6 +1560,52 @@ chatMessagesEl?.addEventListener("click", (event) => {
   }
 });
 
+function sbIsOnX() {
+  const url = currentPageContext?.url || "";
+  return /^https?:\/\/(www\.)?(twitter|x)\.com/i.test(url);
+}
+
+async function sbLoadXPersona() {
+  if (sbXPersonaCache !== null) return sbXPersonaCache;
+  return new Promise(resolve => {
+    chrome.runtime.sendMessage({ action: "loadXPersona" }, res => {
+      void chrome.runtime.lastError;
+      sbXPersonaCache = res?.persona || null;
+      resolve(sbXPersonaCache);
+    });
+  });
+}
+
+function sbBuildXAutoContext(persona) {
+  const lines = ["=== BRAINO X AUTO CONFIGURATION ==="];
+  lines.push("You are Braino, the AI browser companion. You are currently operating for this user on X/Twitter.");
+  lines.push("When the user asks what you know about them, how you reply to posts, or what rules you follow on X — answer fully and specifically based on this configuration.");
+  lines.push("");
+  lines.push("USER IDENTITY:");
+  if (persona?.display_name) lines.push(`Name: ${persona.display_name}`);
+  if (persona?.bio) lines.push(`Background: ${persona.bio}`);
+  if (persona?.what_building) lines.push(`Currently building: ${persona.what_building}`);
+  if (persona?.tone_notes) lines.push(`Writing style: ${persona.tone_notes}`);
+  if (!persona?.display_name && !persona?.bio && !persona?.what_building && !persona?.tone_notes) {
+    lines.push("(User has not configured their persona yet — go to Dashboard → X Automation → Your Voice & Style to set it up)");
+  }
+  lines.push("");
+  lines.push("X AUTO REPLY RULES (what Braino follows when replying to posts):");
+  lines.push("• Max 180 characters per reply");
+  lines.push("• Reply to ONE specific detail or phrase — no generic praise or paraphrasing");
+  lines.push("• Sound human: conversational, concrete, fragments OK, a little imperfect is fine");
+  lines.push("• Match the tweet's energy — sharp, thoughtful, or playful as needed");
+  lines.push("• No canned openers: 'great point', 'love this', 'totally agree', 'thanks for sharing'");
+  lines.push("• No AI phrases: 'this highlights', 'this underscores', 'important conversation', 'valuable insight'");
+  lines.push("• At most one emoji, only if it feels natural to the tweet");
+  lines.push("• For builder prompts (e.g. 'what are you building'): can mention Braino and trybraino.com once, naturally");
+  lines.push("• For regular tweets: no self-promotion unless directly relevant");
+  lines.push("• Skips: ads, promoted posts, political tweets (elections, Modi, party politics)");
+  lines.push("• Internally drafts 3 candidates and picks the most specific, least generic one");
+  lines.push("=====================================");
+  return lines.join("\n");
+}
+
 async function sendChatMessage(text, imageBase64) {
   if (!text && !imageBase64) return;
   const allowed = await checkChatLimit();
@@ -1601,8 +1648,17 @@ async function sendChatMessage(text, imageBase64) {
   try {
     const hasNotes = hasExistingNotes();
     const notesCtx = hasNotes ? buildNotesContextForAI(notesMarkdown) : { sanitizedNotes: "", existingImages: {} };
+
+    // When on X/Twitter, prepend X Auto configuration so Braino is fully context-aware
+    let systemNotes = notesCtx.sanitizedNotes;
+    if (sbIsOnX()) {
+      const xPersona = await sbLoadXPersona();
+      const xCtx = sbBuildXAutoContext(xPersona);
+      systemNotes = notesCtx.sanitizedNotes ? xCtx + "\n\n" + notesCtx.sanitizedNotes : xCtx;
+    }
+
     const body = {
-      notes: notesCtx.sanitizedNotes,
+      notes: systemNotes,
       message: text || "Please insert this diagram/image into my notes at the most appropriate location.",
       aiProvider: currentAiProvider,
     };

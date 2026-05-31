@@ -2,9 +2,6 @@
 let isRecording = false;
 let bgAgentShouldStop = false;
 
-// Track previous URLs per tab for movie mode detection
-const bgPreviousUrlMap = {};
-
 function doCapture(windowId, sendResponse) {
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
     if (chrome.runtime.lastError) {
@@ -148,29 +145,6 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url !== undefined || changeInfo.status === "complete") {
     bgSyncActionPopup(tabId, tab?.url || "");
-  }
-
-  // Movie mode: detect Netflix /watch/ navigation
-  if (changeInfo.url !== undefined || changeInfo.status === "complete") {
-    const url = tab?.url || "";
-    const prev = bgPreviousUrlMap[tabId] || "";
-    const wasMovie = /netflix\.com\/watch\//.test(prev);
-    const isMovie  = /netflix\.com\/watch\//.test(url);
-
-    if (isMovie && !wasMovie) {
-      // Give the page a moment to inject the content script before messaging
-      setTimeout(() => {
-        chrome.tabs.sendMessage(tabId, { type: "activateMovieMode" }, () => {
-          void chrome.runtime.lastError;
-        });
-      }, 1500);
-    } else if (!isMovie && wasMovie) {
-      chrome.tabs.sendMessage(tabId, { type: "deactivateMovieMode" }, () => {
-        void chrome.runtime.lastError;
-      });
-    }
-
-    bgPreviousUrlMap[tabId] = url;
   }
 });
 
@@ -358,38 +332,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "generateXReply") {
-    const { tweetText, handle } = message;
-    const builderPrompt = Boolean(message.builderPrompt) || bgIsBuilderPromptTweet(tweetText);
-    const xReplyPrompt = bgBuildXReplyPrompt({ handle, builderPrompt });
+    (async () => {
+      const { tweetText, handle } = message;
+      const builderPrompt = Boolean(message.builderPrompt) || bgIsBuilderPromptTweet(tweetText);
+      const persona = await bgLoadXPersona();
+      const xReplyPrompt = bgBuildXReplyPrompt({ handle, builderPrompt, persona });
 
-    fetch(`${BG_API_BASE}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        notes: '',
-        chatHistory: [
-          {
-            role: 'user',
-            content: xReplyPrompt,
-          },
-          { role: 'assistant', content: 'Got it. Give me the tweet.' },
-          { role: 'user', content: '@founder: "Most startup advice is survivorship bias with better branding."' },
-          { role: 'assistant', content: 'yeah a lot of it is just luck wearing a framework costume' },
-          { role: 'user', content: '@manager: "Remote work isn\'t dying. Bad management is."' },
-          { role: 'assistant', content: 'a lot of return-to-office panic really is management debt with better PR' },
-          { role: 'user', content: '@builder: "If onboarding needs a meeting, the product probably isn\'t ready."' },
-          { role: 'assistant', content: 'mostly true. enterprise is the annoying exception, but even there the payoff has to be obvious fast' },
-          { role: 'user', content: '@pm: "The best PMs write better bug reports than specs."' },
-          { role: 'assistant', content: 'because they notice where reality breaks, not just where the roadmap sounds neat' },
-          { role: 'user', content: '@maker: "what are you building right now? drop it below"' },
-          { role: 'assistant', content: 'building Braino right now. ai browser companion that can actually act on the tab for you. trybraino.com' },
-        ],
-        message: `@${handle || 'user'}: "${tweetText}"`,
-      }),
-    })
-      .then(r => r.json())
-      .then(data => sendResponse({ reply: bgCleanXReply(data?.reply || data?.response || null) || null }))
-      .catch(() => sendResponse({ reply: null }));
+      fetch(`${BG_API_BASE}/chat-about-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: '',
+          chatHistory: [
+            {
+              role: 'user',
+              content: xReplyPrompt,
+            },
+            { role: 'assistant', content: 'Got it. Give me the tweet.' },
+            { role: 'user', content: '@founder: "Most startup advice is survivorship bias with better branding."' },
+            { role: 'assistant', content: 'yeah a lot of it is just luck wearing a framework costume' },
+            { role: 'user', content: '@manager: "Remote work isn\'t dying. Bad management is."' },
+            { role: 'assistant', content: 'a lot of return-to-office panic really is management debt with better PR' },
+            { role: 'user', content: '@builder: "If onboarding needs a meeting, the product probably isn\'t ready."' },
+            { role: 'assistant', content: 'mostly true. enterprise is the annoying exception, but even there the payoff has to be obvious fast' },
+            { role: 'user', content: '@pm: "The best PMs write better bug reports than specs."' },
+            { role: 'assistant', content: 'because they notice where reality breaks, not just where the roadmap sounds neat' },
+            { role: 'user', content: '@maker: "what are you building right now? drop it below"' },
+            { role: 'assistant', content: 'building Braino right now. ai browser companion that can actually act on the tab for you. trybraino.com' },
+          ],
+          message: `@${handle || 'user'}: "${tweetText}"`,
+        }),
+      })
+        .then(r => r.json())
+        .then(data => sendResponse({ reply: bgCleanXReply(data?.reply || data?.response || null) || null }))
+        .catch(() => sendResponse({ reply: null }));
+    })().catch(() => sendResponse({ reply: null }));
     return true;
   }
   if (message.action === "recordXAutomationRunStats") {
@@ -397,6 +374,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then(() => sendResponse({ ok: true }))
       .catch((e) => sendResponse({ ok: false, error: e.message || "Could not save X automation stats." }));
     return true;
+  }
+  if (message.action === "logXReply") {
+    bgLogXReply(message).catch(() => {});
+    sendResponse({ ok: true });
+    return false;
   }
   if (message.action === "runBrainAgent") {
     const task = message.task;
@@ -551,18 +533,46 @@ const BG_SUPABASE_URL = "https://ovapacfrzddnhrwvkbkr.supabase.co";
 const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2ZyemRkbmhyd3ZrYmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDc4NTUsImV4cCI6MjA5MDUyMzg1NX0.WZV4fy1XqMS3TTyR09TneueaLl-729tp-Pi4HkfzURo";
 const BG_API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
 
+let bgXPersonaCache = null;
+let bgXPersonaCacheExpiry = 0;
+
 // --- helpers ---
 
 function bgIsBuilderPromptTweet(tweetText) {
   return /\b(what(?:'s| is)?\s+(?:everyone|everybody|yall|you all|you)\s+building|what are you building|what(?:'re| are)\s+you building|drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links|website)|share\s+what\s+you(?:'re| are)\s+building|show\s+me\s+what\s+you(?:'re| are)\s+building|plug\s+your\s+(?:startup|product|app|tool|project)|builders?\s+drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links))\b/i.test(String(tweetText || ""));
 }
 
-function bgBuildXReplyPrompt({ handle, builderPrompt }) {
+async function bgLoadXPersona() {
+  if (bgXPersonaCache !== null && Date.now() < bgXPersonaCacheExpiry) return bgXPersonaCache;
+  try {
+    const storage = await new Promise(r => chrome.storage.local.get(['authUserId'], r));
+    const userId = storage.authUserId;
+    if (!userId) return null;
+    const url = `${BG_SUPABASE_URL}/rest/v1/x_auto_persona?user_id=eq.${encodeURIComponent(userId)}&select=display_name,bio,what_building,tone_notes&limit=1`;
+    const { res } = await bgAuthedSupabaseFetch(url, { headers: { 'Content-Type': 'application/json' } });
+    if (!res.ok) return null;
+    const rows = await res.json();
+    bgXPersonaCache = rows[0] || null;
+    bgXPersonaCacheExpiry = Date.now() + 5 * 60 * 1000;
+    return bgXPersonaCache;
+  } catch { return null; }
+}
+
+function bgBuildXReplyPrompt({ handle, builderPrompt, persona }) {
+  const personaLines = [];
+  if (persona) {
+    if (persona.display_name) personaLines.push(`You are ${persona.display_name}.`);
+    if (persona.bio) personaLines.push(`Background: ${persona.bio}`);
+    if (persona.what_building) personaLines.push(`Currently building: ${persona.what_building}`);
+    if (persona.tone_notes) personaLines.push(`Writing style: ${persona.tone_notes}`);
+  }
+  const personaBlock = personaLines.length ? personaLines.join('\n') + '\n\n' : '';
+
   const promoRule = builderPrompt
     ? "11. This tweet is explicitly inviting builders to share what they are making. It is okay to mention Braino and include trybraino.com once, naturally and briefly, like a real builder reply."
     : "11. Do not sound promotional. Do not mention Braino or trybraino.com unless the tweet is directly about AI browser agents or workflow automation and the mention feels natural.";
 
-  return `You write replies on X that sound like a real person in the feed, not a bot, brand intern, customer support rep, or LinkedIn commenter.
+  return `${personaBlock}You write replies on X that sound like a real person in the feed, not a bot, brand intern, customer support rep, or LinkedIn commenter.
 
 Write ONE reply to the tweet.
 
@@ -707,6 +717,28 @@ async function bgRecordXAutomationRunStats({ repliedCount, durationMs, startedAt
     body: JSON.stringify(payload),
   });
   if (!insertRes.ok) throw new Error(`Could not create X automation stats (${insertRes.status})`);
+}
+
+async function bgLogXReply({ postAuthorHandle, postAuthorDisplayName, postUrl, postText, ourReply, repliedAt }) {
+  try {
+    const storage = await new Promise(r => chrome.storage.local.get(['authUserId'], r));
+    const userId = storage.authUserId;
+    if (!userId) return;
+    const url = `${BG_SUPABASE_URL}/rest/v1/x_auto_reply_logs`;
+    await bgAuthedSupabaseFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        user_id: userId,
+        post_author_handle: postAuthorHandle || '',
+        post_author_display_name: postAuthorDisplayName || '',
+        post_url: postUrl || '',
+        post_text: postText || '',
+        our_reply: ourReply || '',
+        replied_at: repliedAt || new Date().toISOString(),
+      }),
+    });
+  } catch { /* fire-and-forget — never surface to caller */ }
 }
 
 function bgIsScriptableUrl(url) {
