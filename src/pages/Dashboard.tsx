@@ -793,6 +793,7 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [xSubTab, setXSubTab] = useState<"settings" | "activity">("settings");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [commands, setCommands] = useState<Command[]>([]);
@@ -2461,6 +2462,26 @@ export default function Dashboard() {
 
             {activeTab === "xAutomation" && (
               <div className="space-y-5">
+                {/* X sub-tab nav */}
+                <div className="flex gap-1 rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-1">
+                  {(["settings", "activity"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setXSubTab(tab)}
+                      className={cn(
+                        "flex-1 rounded-[10px] px-4 py-2 text-[13px] font-medium capitalize transition-colors",
+                        xSubTab === tab
+                          ? "bg-[var(--sb-ink)] text-[var(--sb-on-ink)]"
+                          : "text-[var(--sb-ink-3)] hover:text-[var(--sb-ink)]"
+                      )}
+                    >
+                      {tab === "activity" ? "Activity" : "Settings"}
+                    </button>
+                  ))}
+                </div>
+
+                {xSubTab === "settings" && (
+                <>
                 {/* Auto Mode control card */}
                 <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                   <div className="mb-5">
@@ -2981,6 +3002,183 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+                </>
+                )}
+
+                {xSubTab === "activity" && (
+                  <div className="space-y-5">
+                    {/* Pipeline Status */}
+                    <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                      <div className="mb-5 flex items-start justify-between gap-4">
+                        <div>
+                          <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                            Pipeline <em className="text-[var(--sb-accent-deep)]">Status.</em>
+                          </h3>
+                          <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                            Live state of your autonomous X pipeline
+                          </div>
+                        </div>
+                        {xConn?.username === "brainosays" && (
+                          <a
+                            href="/live"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-2 text-[12px] text-[var(--sb-ink-2)] hover:border-[var(--sb-accent)] hover:text-[var(--sb-accent)] transition-colors"
+                            style={monoStyle}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            View public live page
+                          </a>
+                        )}
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xAutoPostingEnabled ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-medium text-[var(--sb-ink)]">Auto Posting</div>
+                            <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
+                              {xAutoPostingEnabled
+                                ? xNextPostAt
+                                  ? `Next post: ${new Date(xNextPostAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+                                  : "Waiting for next generation cycle (daily at 14:00 UTC)"
+                                : "Off — enable in Settings to start the pipeline"}
+                            </div>
+                          </div>
+                          <span style={monoStyle} className={cn("text-[11px] font-medium", xAutoPostingEnabled ? "text-emerald-600" : "text-[var(--sb-ink-4)]")}>
+                            {xAutoPostingEnabled ? "ON" : "OFF"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", xAutoReplyEnabled ? "animate-pulse bg-emerald-500" : "bg-[var(--sb-line)]")} />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-medium text-[var(--sb-ink)]">Auto Reply</div>
+                            <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
+                              {xAutoReplyEnabled
+                                ? xAutomationStats?.last_run_finished_at
+                                  ? `Last run: ${timeAgo(xAutomationStats.last_run_finished_at)}`
+                                  : "Checking @mentions every 30 min"
+                                : "Off — enable in Settings to monitor @mentions"}
+                            </div>
+                          </div>
+                          <span style={monoStyle} className={cn("text-[11px] font-medium", xAutoReplyEnabled ? "text-emerald-600" : "text-[var(--sb-ink-4)]")}>
+                            {xAutoReplyEnabled ? "ON" : "OFF"}
+                          </span>
+                        </div>
+                      </div>
+                      {!xConn && (
+                        <div style={monoStyle} className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[11px] text-amber-700">
+                          Link your X account in Settings for the pipeline to activate.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid gap-5 xl:grid-cols-2">
+                      {/* Recent Posts */}
+                      <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                        <div className="mb-4 flex items-start justify-between gap-4">
+                          <div>
+                            <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                              Recent <em className="text-[var(--sb-accent-deep)]">Posts.</em>
+                            </h3>
+                            <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                              Posted and scheduled by the pipeline
+                            </div>
+                          </div>
+                          <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
+                            {scheduledXPosts.length} in queue
+                          </span>
+                        </div>
+                        {scheduledXPosts.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-[var(--sb-line)] px-6 py-12 text-center text-[13px] text-[var(--sb-ink-3)]">
+                            No posts yet. The pipeline generates your first batch daily at 14:00 UTC.
+                          </div>
+                        ) : (
+                          <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                            {scheduledXPosts.slice(0, 10).map((post) => (
+                              <div key={post.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                                <p className="mb-2 text-[13px] leading-6 text-[var(--sb-ink)]">{post.content}</p>
+                                <div style={monoStyle} className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--sb-ink-3)]">
+                                  <span className={cn(
+                                    "rounded-full px-2 py-0.5",
+                                    post.status === "posted" && "bg-emerald-500/10 text-emerald-700",
+                                    post.status === "failed" && "bg-red-500/10 text-red-600",
+                                    post.status === "pending" && "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]",
+                                    post.status === "cancelled" && "bg-[var(--sb-line)] text-[var(--sb-ink-4)]",
+                                  )}>
+                                    {post.status}
+                                  </span>
+                                  <span>{post.posted_at ? timeAgo(post.posted_at) : `scheduled ${formatDateTime(post.scheduled_at)}`}</span>
+                                  {post.x_post_id && xConn?.username && (
+                                    <a
+                                      href={`https://x.com/${xConn.username}/status/${post.x_post_id}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-0.5 transition-colors hover:text-[var(--sb-accent)]"
+                                    >
+                                      <ExternalLink className="h-2.5 w-2.5" />
+                                      View
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Recent Auto-Replies */}
+                      <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                        <div className="mb-4 flex items-start justify-between gap-4">
+                          <div>
+                            <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                              Auto <em className="text-[var(--sb-accent-deep)]">Replies.</em>
+                            </h3>
+                            <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                              @mentions replied to by the pipeline
+                            </div>
+                          </div>
+                          <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
+                            {xReplyLogs.length} logged
+                          </span>
+                        </div>
+                        {xReplyLogs.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-[var(--sb-line)] px-6 py-12 text-center text-[13px] text-[var(--sb-ink-3)]">
+                            No replies yet. The pipeline checks @mentions every 30 min when Auto Reply is on.
+                          </div>
+                        ) : (
+                          <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                            {xReplyLogs.slice(0, 10).map((log) => (
+                              <div key={log.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <span style={monoStyle} className="shrink-0 rounded-full bg-[var(--sb-accent-soft)] px-2 py-0.5 text-[11px] text-[var(--sb-accent-deep)]">
+                                    @{log.post_author_handle || "unknown"}
+                                  </span>
+                                  <span style={monoStyle} className="text-[11px] text-[var(--sb-ink-4)]">{timeAgo(log.replied_at)}</span>
+                                </div>
+                                <p className="mb-2 line-clamp-2 text-[12px] text-[var(--sb-ink-3)]">{log.post_text}</p>
+                                <div className="border-l-2 border-[var(--sb-accent)] pl-3">
+                                  <p className="text-[13px] text-[var(--sb-ink)]">{log.our_reply}</p>
+                                </div>
+                                {log.post_url && (
+                                  <a
+                                    href={log.post_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--sb-ink-3)] transition-colors hover:text-[var(--sb-accent)]"
+                                    style={monoStyle}
+                                  >
+                                    <ExternalLink className="h-2.5 w-2.5" />
+                                    View on X
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
