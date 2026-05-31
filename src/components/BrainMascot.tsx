@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 // ─── Physics constants ────────────────────────────────────────────────────────
 const S = 56;
@@ -291,9 +293,60 @@ function BrainSVG({ pl, pr, al, ar, squish, wakePhase = 'awake' }: {
 }
 
 // ─── BrainMascot ─────────────────────────────────────────────────────────────
+// ─── Drive organise helpers ───────────────────────────────────────────────────
+const DRIVE_ORGANISE_RE =
+  /(?:organis[e]?|organiz[e]?|clean\s*up|sort|tidy|arrange)\s+(?:my\s+)?(?:google\s+)?drive|drive\s+(?:organis|organiz|clean|sort)/i;
+
+type DrivePlan = {
+  moves: Array<{ fileId: string; fileName: string; currentParentIds: string[]; targetFolderName: string }>;
+  foldersToCreate: string[];
+  moveCount: number;
+  scannedCount: number;
+  byFolder: Array<{ folderName: string; count: number }>;
+};
+
+async function drivePreview(authToken: string, userId: string): Promise<DrivePlan | null> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-organize-preview`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authToken },
+    body: JSON.stringify({ userIdentifier: userId }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (data.error) return null;
+  return data as DrivePlan;
+}
+
+async function driveApply(authToken: string, userId: string, plan: DrivePlan) {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-organize-apply`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authToken },
+    body: JSON.stringify({ userIdentifier: userId, plan }),
+  });
+  if (!res.ok) throw new Error('Apply failed');
+  return await res.json();
+}
+
 export default function BrainMascot() {
   const initX = window.innerWidth - S - 24;
   const initY = window.innerHeight - S - FLOOR_PAD;
+
+  const { user, session } = useAuth();
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [pendingDrivePlan, setPendingDrivePlan] = useState<DrivePlan | null>(null);
+
+  // Check if Drive is connected
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('google_drive_connections')
+      .select('user_identifier')
+      .eq('user_identifier', user.id)
+      .maybeSingle()
+      .then(({ data }) => setDriveConnected(!!data));
+  }, [user]);
 
   const [wakePhase, setWakePhase] = useState<WakePhase>('sleeping');
   const [speaking, setSpeaking] = useState(false);
@@ -585,6 +638,71 @@ export default function BrainMascot() {
     const newMessages: Message[] = [...messages, { role: 'user', text }];
     setMessages(newMessages);
 
+    // ── Drive organise: confirm step ──────────────────────────────────────────
+    if (pendingDrivePlan && /\byes\b|\bconfirm\b|\bdo it\b|\bgo ahead\b|\bproceed\b/i.test(text)) {
+      if (!session || !user) return;
+      const authToken = `Bearer ${session.access_token}`;
+      setAiLoading(true);
+      try {
+        const result = await driveApply(authToken, user.id, pendingDrivePlan);
+        setPendingDrivePlan(null);
+        const folderLine = result.createdFolderCount > 0
+          ? ` Created ${result.createdFolderCount} new folder${result.createdFolderCount > 1 ? 's' : ''}.`
+          : '';
+        setMessages(prev => [...prev, {
+          role: 'braino',
+          text: `Done. Moved ${result.movedCount} files into their folders.${folderLine} Your Drive is clean. 🗂️`,
+        }]);
+      } catch {
+        setMessages(prev => [...prev, { role: 'braino', text: "Something went wrong while moving files. Try again?" }]);
+      } finally {
+        setAiLoading(false);
+      }
+      return;
+    }
+
+    // Cancel pending plan
+    if (pendingDrivePlan && /\bno\b|\bcancel\b|\bstop\b|\bnever mind\b/i.test(text)) {
+      setPendingDrivePlan(null);
+      setTimeout(() => setMessages(prev => [...prev, { role: 'braino', text: "Cancelled. Drive untouched." }]), 200);
+      return;
+    }
+
+    // ── Drive organise: detect intent ─────────────────────────────────────────
+    if (DRIVE_ORGANISE_RE.test(text)) {
+      if (!driveConnected || !session || !user) {
+        setTimeout(() => setMessages(prev => [...prev, {
+          role: 'braino',
+          text: "Connect Google Drive first from your dashboard, then I can organise everything for you.",
+        }]), 200);
+        return;
+      }
+      setAiLoading(true);
+      setMessages(prev => [...prev, { role: 'braino', text: "Scanning your Drive… give me a sec." }]);
+      try {
+        const plan = await drivePreview(`Bearer ${session.access_token}`, user.id);
+        if (!plan || plan.moveCount === 0) {
+          setMessages(prev => [...prev, { role: 'braino', text: "Your Drive looks pretty tidy already. Nothing needs moving." }]);
+          setAiLoading(false);
+          return;
+        }
+        setPendingDrivePlan(plan);
+        const folderList = plan.byFolder.slice(0, 6).map(f => `• ${f.folderName} (${f.count})`).join('\n');
+        const newFolders = plan.foldersToCreate.length > 0
+          ? `\n\nNew folders I'll create: ${plan.foldersToCreate.join(', ')}.` : '';
+        setMessages(prev => [...prev, {
+          role: 'braino',
+          text: `Scanned ${plan.scannedCount} files. I'll move ${plan.moveCount} into organised folders:\n\n${folderList}${newFolders}\n\nType **yes** to proceed or **no** to cancel.`,
+        }]);
+      } catch {
+        setMessages(prev => [...prev, { role: 'braino', text: "Couldn't reach Drive. Check your connection and try again." }]);
+      } finally {
+        setAiLoading(false);
+      }
+      return;
+    }
+
+    // ── Standard party tricks ─────────────────────────────────────────────────
     const trick = handlePartyTrick(text);
     if (trick) {
       trick.action?.();
@@ -596,14 +714,18 @@ export default function BrainMascot() {
 
     setAiLoading(true);
     try {
-      const result = await callBrainoAI(text, newMessages);
+      const result = await callBrainoAI(text, newMessages, {
+        userId: user?.id,
+        authToken: session?.access_token,
+        driveConnected,
+      });
       setMessages(prev => [...prev, { role: 'braino', text: result.text, docUrl: result.docUrl, docName: result.docName }]);
     } catch {
       setMessages(prev => [...prev, { role: 'braino', text: "My neurons misfired. Try again? 🧠" }]);
     } finally {
       setAiLoading(false);
     }
-  }, [inputVal, messages, aiLoading]);
+  }, [inputVal, messages, aiLoading, pendingDrivePlan, session, user, driveConnected]);
 
   // ── Widget drag ───────────────────────────────────────────────────────────
   const onWidgetDragStart = (e: React.MouseEvent) => {
