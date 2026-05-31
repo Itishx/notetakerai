@@ -3777,30 +3777,39 @@ function __sbRenderCardHistory(scroll) {
   if (!scroll) return;
   let html = "";
   __sbCardTurns.forEach((turn, i) => {
-    if (i > 0) html += `<div style="height:1px;background:rgba(255,255,255,0.08);margin:18px 0;"></div>`;
+    const divider = i > 0 ? `<div style="height:1px;background:rgba(255,255,255,0.08);margin:18px 0;"></div>` : "";
+    html += `${divider}<div class="sb-turn">`;
     if (turn.prompt) html += `<div class="sb-card-q">${__sbEscapeHtml(turn.prompt)}</div>`;
     html += `<div class="sb-card-a">${__sbRenderMarkdown(turn.answer)}</div>`;
+    html += `</div>`;
   });
   scroll.innerHTML = html;
-  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+  requestAnimationFrame(() => {
+    const turns = scroll.querySelectorAll(".sb-turn");
+    const last = turns[turns.length - 1];
+    if (last) scroll.scrollTop = last.offsetTop - 16;
+    else scroll.scrollTop = 0;
+  });
 }
 
 function __sbShowThinking(scroll) {
   if (!scroll) return;
-  if (__sbThinkingEl) { __sbThinkingEl.remove(); __sbThinkingEl = null; }
+  document.getElementById("__sb_thinking_wrap__")?.remove();
+  __sbThinkingEl = null;
   const wrap = document.createElement("div");
   wrap.id = "__sb_thinking_wrap__";
+  wrap.className = "sb-turn";
   if (__sbCardTurns.length > 0) {
-    const div = document.createElement("div");
-    div.style.cssText = "height:1px;background:rgba(255,255,255,0.08);margin:18px 0;";
-    wrap.appendChild(div);
+    const divider = document.createElement("div");
+    divider.style.cssText = "height:1px;background:rgba(255,255,255,0.08);margin:18px 0;";
+    wrap.appendChild(divider);
   }
   __sbThinkingEl = document.createElement("div");
   __sbThinkingEl.style.cssText = "font-size:13px;color:rgba(255,255,255,0.38);font-style:italic;";
   __sbThinkingEl.textContent = "Thinking…";
   wrap.appendChild(__sbThinkingEl);
   scroll.appendChild(wrap);
-  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+  requestAnimationFrame(() => { scroll.scrollTop = wrap.offsetTop - 16; });
 }
 
 function __sbShowBubble(text, autoHide = true, options = {}) {
