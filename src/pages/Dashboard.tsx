@@ -835,6 +835,8 @@ export default function Dashboard() {
   const [xGenerateResult, setXGenerateResult] = useState<string | null>(null);
   const [xEngaging, setXEngaging] = useState(false);
   const [xEngageResult, setXEngageResult] = useState<string | null>(null);
+  const xGenerateAbortRef = useRef<AbortController | null>(null);
+  const xEngageAbortRef = useRef<AbortController | null>(null);
   const drivePollRef = useRef<number | null>(null);
   const xPollRef = useRef<number | null>(null);
 
@@ -1261,11 +1263,14 @@ export default function Dashboard() {
 
   async function handleRunGenerate() {
     if (!session) return;
+    const ctrl = new AbortController();
+    xGenerateAbortRef.current = ctrl;
     setXGenerating(true);
     setXGenerateResult(null);
     try {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-auto-generate`, {
         method: "POST",
+        signal: ctrl.signal,
         headers: {
           Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
@@ -1276,23 +1281,34 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(data?.error || "Generation failed");
       const count = data?.generated ?? 0;
       setXGenerateResult(count > 0 ? `Generated ${count} post${count > 1 ? "s" : ""} — queued for dispatch` : "No new posts generated (quota full or no persona set)");
-      // Refresh the queue
       const { data: fresh } = await supabase.from("scheduled_x_posts").select("*").eq("user_id", user!.id).order("scheduled_at", { ascending: false }).limit(50);
       if (fresh) setScheduledXPosts(fresh as ScheduledXPost[]);
     } catch (err) {
-      setXGenerateResult(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      if ((err as Error).name === "AbortError") {
+        setXGenerateResult("Stopped.");
+      } else {
+        setXGenerateResult(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      }
     } finally {
+      xGenerateAbortRef.current = null;
       setXGenerating(false);
     }
   }
 
+  function handleStopGenerate() {
+    xGenerateAbortRef.current?.abort();
+  }
+
   async function handleRunEngage() {
     if (!session) return;
+    const ctrl = new AbortController();
+    xEngageAbortRef.current = ctrl;
     setXEngaging(true);
     setXEngageResult(null);
     try {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-auto-engage`, {
         method: "POST",
+        signal: ctrl.signal,
         headers: {
           Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
@@ -1303,14 +1319,22 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(data?.error || "Engage failed");
       const count = data?.replied ?? 0;
       setXEngageResult(count > 0 ? `Replied to ${count} mention${count > 1 ? "s" : ""}` : "No new mentions found");
-      // Refresh reply logs
       const { data: fresh } = await supabase.from("x_auto_reply_logs").select("*").eq("user_id", user!.id).order("replied_at", { ascending: false }).limit(50);
       if (fresh) setXReplyLogs(fresh as XReplyLog[]);
     } catch (err) {
-      setXEngageResult(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      if ((err as Error).name === "AbortError") {
+        setXEngageResult("Stopped.");
+      } else {
+        setXEngageResult(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      }
     } finally {
+      xEngageAbortRef.current = null;
       setXEngaging(false);
     }
+  }
+
+  function handleStopEngage() {
+    xEngageAbortRef.current?.abort();
   }
 
   async function handleClearXQueue() {
@@ -3154,14 +3178,24 @@ export default function Dashboard() {
                                     : "Generates today's posts and queues them for dispatch"}
                             </div>
                           </div>
-                          <button
-                            onClick={handleRunGenerate}
-                            disabled={xGenerating || !xConn}
-                            style={monoStyle}
-                            className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
-                          >
-                            {xGenerating ? "Running…" : "Run now"}
-                          </button>
+                          {xGenerating ? (
+                            <button
+                              onClick={handleStopGenerate}
+                              style={monoStyle}
+                              className="shrink-0 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-500 transition-colors hover:bg-red-500/20"
+                            >
+                              Stop
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handleRunGenerate}
+                              disabled={!xConn}
+                              style={monoStyle}
+                              className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
+                            >
+                              Run now
+                            </button>
+                          )}
                         </div>
 
                         {/* Check mentions row */}
@@ -3179,14 +3213,24 @@ export default function Dashboard() {
                                     : "Scans your @mentions and replies in your voice"}
                             </div>
                           </div>
-                          <button
-                            onClick={handleRunEngage}
-                            disabled={xEngaging || !xConn}
-                            style={monoStyle}
-                            className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
-                          >
-                            {xEngaging ? "Running…" : "Run now"}
-                          </button>
+                          {xEngaging ? (
+                            <button
+                              onClick={handleStopEngage}
+                              style={monoStyle}
+                              className="shrink-0 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-500 transition-colors hover:bg-red-500/20"
+                            >
+                              Stop
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handleRunEngage}
+                              disabled={!xConn}
+                              style={monoStyle}
+                              className="shrink-0 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] transition-colors hover:bg-[var(--sb-bg-2)] disabled:opacity-40"
+                            >
+                              Run now
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
