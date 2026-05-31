@@ -1238,6 +1238,23 @@ export default function Dashboard() {
     }
   }
 
+  async function handleClearPostedXPosts() {
+    if (!user) return;
+    const ids = scheduledXPosts.filter((p) => ["posted", "failed", "cancelled"].includes(p.status)).map((p) => p.id);
+    if (ids.length === 0) return;
+    try {
+      const { error } = await supabase
+        .from("scheduled_x_posts")
+        .delete()
+        .in("id", ids)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      setScheduledXPosts((prev) => prev.filter((p) => !ids.includes(p.id)));
+    } catch (error) {
+      toast({ title: "Could not clear posts", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
+
   async function handleClearXQueue() {
     if (!user) return;
     const pendingIds = scheduledXPosts.filter((p) => p.status === "pending").map((p) => p.id);
@@ -3107,6 +3124,15 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {scheduledXPosts.some((p) => ["posted", "failed", "cancelled"].includes(p.status)) && (
+                              <button
+                                onClick={handleClearPostedXPosts}
+                                className="rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)] transition-colors hover:bg-[var(--sb-bg-2)]"
+                                style={monoStyle}
+                              >
+                                Clear posted
+                              </button>
+                            )}
                             {scheduledXPosts.some((p) => p.status === "pending") && (
                               <button
                                 onClick={handleClearXQueue}
