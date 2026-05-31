@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const LOVABLE_API_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-2.5-flash";
+const MODEL = "google/gemini-2.5-pro";
 
 // Posting windows in UTC hours — spread evenly if fewer slots needed
 const POSTING_HOURS_UTC = [8, 12, 16, 20, 23];
@@ -246,8 +246,16 @@ Rules:
 OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explanation. Just the array.
 ["Post one here.", "Post two here."]`;
 
-  const contentSection = opts.contentSource?.trim()
-    ? `\n\nContent source material (mine this for tweet ideas and angles):\n---\n${opts.contentSource.trim()}\n---`
+  // Scrub old product names from source before sending to AI so they never appear in output
+  const cleanedSource = (opts.contentSource || "")
+    .replace(/\bBenu\b/g, "Braino")
+    .replace(/\bSidebrain\b/gi, "Braino")
+    .replace(/\bBreno\b/g, "Braino")
+    .replace(/\bBrenu\b/g, "Braino")
+    .trim();
+
+  const contentSection = cleanedSource
+    ? `\n\nContent source material (mine this for tweet ideas and angles):\n---\n${cleanedSource}\n---`
     : "";
 
   const userPrompt = `Persona:\n${personaContext}${opts.overallContext ? `\n\nAdditional user context:\n${opts.overallContext}` : ""}${contentSection}\n\nGenerate ${opts.count} original tweet${opts.count > 1 ? "s" : ""} for today. Return a JSON array of strings.`;
@@ -274,6 +282,7 @@ OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explan
 
   const payload = await response.json();
   const rawContent = String(payload?.choices?.[0]?.message?.content || "").trim();
+  console.log("[x-auto-generate] raw AI response:", rawContent.slice(0, 500));
 
   // Strip markdown fences if present
   const fenced = rawContent.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -282,12 +291,14 @@ OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explan
   try {
     const parsed = JSON.parse(candidate);
     if (Array.isArray(parsed)) {
-      return parsed
-        .filter((t) => typeof t === "string" && t.trim().length > 0)
+      const posts = parsed
+        .filter((t) => typeof t === "string" && t.trim().length > 150) // reject one-liners
         .map(cleanPost);
+      console.log(`[x-auto-generate] parsed ${posts.length} valid posts from ${parsed.length} candidates`);
+      return posts;
     }
   } catch {
-    if (candidate.length > 0) {
+    if (candidate.length > 150) {
       return [cleanPost(candidate)];
     }
   }
