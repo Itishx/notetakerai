@@ -3775,10 +3775,14 @@ async function __sbSpeakText(text) {
 
 function __sbRenderCardHistory(scroll) {
   if (!scroll) return;
+  const containerH = scroll.clientHeight || 0;
+  const total = __sbCardTurns.length;
   let html = "";
   __sbCardTurns.forEach((turn, i) => {
+    const isPrev = i < total - 1;
+    const minH = isPrev && containerH ? ` style="min-height:${containerH}px;"` : "";
     const divider = i > 0 ? `<div style="height:1px;background:rgba(255,255,255,0.08);margin:18px 0;"></div>` : "";
-    html += `${divider}<div class="sb-turn">`;
+    html += `${divider}<div class="sb-turn"${minH}>`;
     if (turn.prompt) html += `<div class="sb-card-q">${__sbEscapeHtml(turn.prompt)}</div>`;
     html += `<div class="sb-card-a">${__sbRenderMarkdown(turn.answer)}</div>`;
     html += `</div>`;
@@ -3787,7 +3791,7 @@ function __sbRenderCardHistory(scroll) {
   requestAnimationFrame(() => {
     const turns = scroll.querySelectorAll(".sb-turn");
     const last = turns[turns.length - 1];
-    if (last) scroll.scrollTop = last.offsetTop - 16;
+    if (last) scroll.scrollTop = last.offsetTop;
     else scroll.scrollTop = 0;
   });
 }
@@ -3796,6 +3800,11 @@ function __sbShowThinking(scroll) {
   if (!scroll) return;
   document.getElementById("__sb_thinking_wrap__")?.remove();
   __sbThinkingEl = null;
+  const containerH = scroll.clientHeight || 0;
+  // Existing turns are now history — give them min-height so they're above the fold
+  if (containerH > 0) {
+    scroll.querySelectorAll(".sb-turn").forEach(t => { t.style.minHeight = containerH + "px"; });
+  }
   const wrap = document.createElement("div");
   wrap.id = "__sb_thinking_wrap__";
   wrap.className = "sb-turn";
@@ -3809,7 +3818,7 @@ function __sbShowThinking(scroll) {
   __sbThinkingEl.textContent = "Thinking…";
   wrap.appendChild(__sbThinkingEl);
   scroll.appendChild(wrap);
-  requestAnimationFrame(() => { scroll.scrollTop = wrap.offsetTop - 16; });
+  requestAnimationFrame(() => { scroll.scrollTop = wrap.offsetTop; });
 }
 
 function __sbShowBubble(text, autoHide = true, options = {}) {
