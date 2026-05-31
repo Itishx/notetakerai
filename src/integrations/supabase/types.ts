@@ -326,6 +326,72 @@ export type Database = {
         }
         Relationships: []
       }
+      x_auto_persona: {
+        Row: {
+          bio: string
+          created_at: string
+          display_name: string
+          id: string
+          tone_notes: string
+          updated_at: string
+          user_id: string
+          what_building: string
+        }
+        Insert: {
+          bio?: string
+          created_at?: string
+          display_name?: string
+          id?: string
+          tone_notes?: string
+          updated_at?: string
+          user_id: string
+          what_building?: string
+        }
+        Update: {
+          bio?: string
+          created_at?: string
+          display_name?: string
+          id?: string
+          tone_notes?: string
+          updated_at?: string
+          user_id?: string
+          what_building?: string
+        }
+        Relationships: []
+      }
+      x_auto_reply_logs: {
+        Row: {
+          id: string
+          our_reply: string
+          post_author_display_name: string
+          post_author_handle: string
+          post_text: string
+          post_url: string
+          replied_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          our_reply?: string
+          post_author_display_name?: string
+          post_author_handle?: string
+          post_text?: string
+          post_url?: string
+          replied_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          our_reply?: string
+          post_author_display_name?: string
+          post_author_handle?: string
+          post_text?: string
+          post_url?: string
+          replied_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       x_connections: {
         Row: {
           access_token: string
