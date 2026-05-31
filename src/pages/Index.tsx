@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Navbar from "@/components/Navbar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // ─── tiny helpers ────────────────────────────────────────────────────────────
 
@@ -290,6 +291,7 @@ const subText: React.CSSProperties = { maxWidth: 640, margin: "0 auto", fontSize
 type HeroPhase = 'sleeping' | 'yellow' | 'green' | 'awake';
 
 export default function Index() {
+  const isMobile = useIsMobile();
   const { displayText, sideWords } = useTypewriter();
   const [isIndia, setIsIndia] = useState<boolean | null>(null);
   const [cardOffset, setCardOffset] = useState({ x: 0, y: 0 });
@@ -335,8 +337,8 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       <Navbar />
 
       {/* ════════════════════════ HERO ════════════════════════ */}
-      <section style={{ padding: "120px 0 100px", position: "relative" }}>
-        <div style={{ ...wrap, position: "relative", zIndex: 1 }}>
+      <section style={{ padding: isMobile ? "80px 0 56px" : "120px 0 100px", position: "relative" }}>
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px", position: "relative", zIndex: 1 }}>
           {/* Eyebrow */}
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
             <span style={eyebrowStyle}><span style={pip} /> Your AI agent — on every page</span>
@@ -365,7 +367,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
           </p>
 
           {/* CTAs */}
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 56, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: isMobile ? 36 : 56, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", alignItems: "center" }}>
             <a href="/braino-extension.zip" download style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
               Install for Chrome
@@ -403,8 +405,69 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
             </div>
           </div>
 
-          {/* Browser frame */}
-          <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
+          {/* Phone mockup — mobile only */}
+          {isMobile && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 32, marginBottom: 8 }}>
+              <div style={{
+                width: 268, height: 460, borderRadius: 36,
+                background: "#0F0D0B", border: "6px solid #2A2520",
+                boxShadow: "0 32px 72px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)",
+                position: "relative", overflow: "hidden", flexShrink: 0,
+              }}>
+                {/* notch */}
+                <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 72, height: 22, background: "#0F0D0B", borderRadius: "0 0 14px 14px", zIndex: 20 }} />
+                <div style={{ padding: "32px 14px 14px", height: "100%", position: "relative" }}>
+                  {/* page content lines */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg,#DB4437,#C44033)", display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 11, flexShrink: 0 }}>G</div>
+                    <div style={{ height: 6, background: "rgba(255,255,255,0.15)", borderRadius: 3, flex: 1 }} />
+                  </div>
+                  {[100, 90, 100, 75, 95, 80, 60, 90].map((w, i) => (
+                    <div key={i} style={{ height: 6, background: i === 2 ? "linear-gradient(90deg,rgba(243,154,66,0.35),rgba(240,168,107,0.18))" : "rgba(255,255,255,0.07)", borderRadius: 3, marginBottom: 7, width: `${w}%` }} />
+                  ))}
+                  {/* pill input */}
+                  <div style={{
+                    position: "absolute", bottom: 62, left: 10, right: 10,
+                    display: "flex", alignItems: "center", gap: 4,
+                    background: "rgba(255,251,247,0.95)", borderRadius: 100,
+                    padding: "6px 6px 6px 12px",
+                    opacity: heroPhase === 'awake' ? 1 : 0,
+                    transform: heroPhase === 'awake' ? 'translateY(0)' : 'translateY(6px)',
+                    transition: 'opacity 0.5s, transform 0.5s',
+                  }}>
+                    <span style={{ flex: 1, fontSize: 11, color: "#A79B92" }}>What's on your mind?</span>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#E8786E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                    </div>
+                  </div>
+                  {/* brain button */}
+                  <div style={{ position: "absolute", bottom: 14, right: 14 }}>
+                    <img src="/favicon.svg" width={44} height={44} alt="Braino" style={{
+                      display: "block",
+                      animation: heroPhase === 'awake' ? "sbOrbBreathe 3s ease-in-out infinite" : heroPhase === 'yellow' || heroPhase === 'green' ? "sbOrbBreathe 0.85s ease-in-out infinite" : undefined,
+                      filter: heroPhase === 'sleeping' ? "brightness(0.7)" : heroPhase === 'yellow' ? "drop-shadow(0 0 10px rgba(255,210,50,1))" : heroPhase === 'green' ? "drop-shadow(0 0 10px rgba(80,230,110,1))" : "drop-shadow(0 0 8px rgba(200,84,74,0.5))",
+                    }} />
+                  </div>
+                  {/* response card */}
+                  {heroPhase === 'awake' && (
+                    <div style={{
+                      position: "absolute", top: 70, left: 10, right: 10,
+                      background: "rgba(255,255,255,0.11)", backdropFilter: "blur(20px)",
+                      WebkitBackdropFilter: "blur(20px)",
+                      borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
+                      padding: "10px 12px", color: "#fff",
+                    }}>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>Draft a reply to Priya's email</div>
+                      <div style={{ fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.9)" }}>"Hi Priya, yes I'll be there Thursday!"</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Browser frame — desktop only */}
+          <div style={{ marginTop: 16, display: isMobile ? "none" : "flex", justifyContent: "center" }}>
             <div style={{
               width: "100%", maxWidth: 1100,
               background: "#0F0D0B",
@@ -565,15 +628,15 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       </section>
 
       {/* ════════════════════════ GETTING STARTED ════════════════════════ */}
-      <section style={{ padding: "110px 0" }} id="how">
-        <div style={wrap}>
+      <section style={{ padding: isMobile ? "72px 0" : "110px 0" }} id="how">
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Getting started</span>
             <h2 style={H2}>Three steps. <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Then it's yours.</em></h2>
             <p style={subText}>Install once, sign in, and your agent is live on every tab. Everything it learns is saved to your account across devices.</p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 24 }}>
             <StepCard num="01" title="Install the extension." body="Add it to Chrome, Arc, Brave, or Edge in about six seconds. Sign in or create a free account — takes 30 seconds, no card required.">
               <div style={{ height: 130, borderRadius: 12, background: "var(--sb-bg-2)", border: "1px solid var(--sb-line-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ width: "92%", height: 36, borderRadius: 8, background: "linear-gradient(180deg, #F8F4ED, #EFE7DB)", border: "1px solid var(--sb-line)", display: "flex", alignItems: "center", gap: 8, padding: "0 10px" }}>
@@ -611,17 +674,17 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       </section>
 
       {/* ════════════════════════ FEATURES ════════════════════════ */}
-      <section style={{ padding: "110px 0", background: "var(--sb-bg-2)" }} id="features">
-        <div style={wrap}>
+      <section style={{ padding: isMobile ? "72px 0" : "110px 0", background: "var(--sb-bg-2)" }} id="features">
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Features</span>
             <h2 style={H2}>One agent. <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Every mode.</em> Already on your page.</h2>
             <p style={subText}>No new app, no tab-switching, no copy-pasting. Braino floats on whatever you're already looking at — reading it, acting on it, remembering it.</p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(12, 1fr)", gap: 18 }}>
             {/* Reads pages — large */}
-            <FeatureCard tag="01 — Reads" title="Reads any page." body="Selection or full document. Long article, dense doc, tabular dashboard, gnarly PDF — Braino parses the live DOM, not a screenshot, so it understands structure as well as content." span={7}>
+            <FeatureCard tag="01 — Reads" title="Reads any page." body="Selection or full document. Long article, dense doc, tabular dashboard, gnarly PDF — Braino parses the live DOM, not a screenshot, so it understands structure as well as content." span={isMobile ? 12 : 7}>
               <div style={{ width:"100%",padding:14,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:12,display:"flex",flexDirection:"column",gap:7 }}>
                 {[["95%",false],["85%",true],["95%",false],["70%",false]].map(([w,highlight],i)=>(
                   <div key={i}>
@@ -633,7 +696,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
             </FeatureCard>
 
             {/* Voice — small */}
-            <FeatureCard tag="02 — Speaks" title="Talk to it like a person." body="Voice in, voice out, with live word-by-word captions while it talks. Interrupt anytime." span={5}>
+            <FeatureCard tag="02 — Speaks" title="Talk to it like a person." body="Voice in, voice out, with live word-by-word captions while it talks. Interrupt anytime." span={isMobile ? 12 : 5}>
               <div style={{ width:"100%",display:"flex",alignItems:"center",gap:14,padding:14,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:12 }}>
                 <img src="/favicon.svg" width={48} height={48} alt="Braino" style={{ flexShrink: 0, animation: "sbOrbBreathe 3s ease-in-out infinite", filter: "drop-shadow(0 0 10px rgba(201,84,74,0.45))" }} />
                 <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:17,lineHeight:1.25,color:"var(--sb-ink)" }}>
@@ -643,7 +706,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
             </FeatureCard>
 
             {/* Records — small */}
-            <FeatureCard tag="03 — Listens" title="Records lectures." body="Hit record before class or a meeting. Get a clean transcript and a structured note — searchable, shareable, yours." span={5}>
+            <FeatureCard tag="03 — Listens" title="Records lectures." body="Hit record before class or a meeting. Get a clean transcript and a structured note — searchable, shareable, yours." span={isMobile ? 12 : 5}>
               <div style={{ width:"100%",padding:14,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:12,display:"flex",flexDirection:"column",gap:10 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"var(--sb-ink-2)" }}>
                   <span style={{ width:8,height:8,borderRadius:"50%",display:"inline-block",background:"oklch(0.62 0.18 25)",animation:"sbPulse 1.5s infinite" }} />
@@ -655,7 +718,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
             </FeatureCard>
 
             {/* Tasks — large */}
-            <FeatureCard tag="04 — Acts" title="Handles browser tasks." body={`"Send an email to Priya saying I'll be ten minutes late." It opens Gmail, finds the thread, drafts the reply, and asks before sending. You stay in the loop, not in the click stream.`} span={7}>
+            <FeatureCard tag="04 — Acts" title="Handles browser tasks." body={`"Send an email to Priya saying I'll be ten minutes late." It opens Gmail, finds the thread, drafts the reply, and asks before sending. You stay in the loop, not in the click stream.`} span={isMobile ? 12 : 7}>
               <div style={{ width:"100%",padding:14,background:"#fff",border:"1px solid var(--sb-line-2)",borderRadius:12,display:"flex",flexDirection:"column",gap:8,fontFamily:"'JetBrains Mono',monospace",fontSize:11 }}>
                 {[
                   { label:"Open mail.google.com",done:true },
@@ -678,13 +741,13 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       </section>
 
       {/* ════════════════════════ DELEGATE ════════════════════════ */}
-      <section style={{ padding: "110px 0" }} id="delegate">
-        <div style={wrap}>
+      <section style={{ padding: isMobile ? "72px 0" : "110px 0" }} id="delegate">
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
           <div style={{ ...secHead, textAlign: "left" }}>
             <span style={eyebrowStyle}><span style={pip} /> Braino Delegate</span>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "0.95fr 1.05fr", gap: 80, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "0.95fr 1.05fr", gap: isMobile ? 40 : 80, alignItems: "center" }}>
             <div>
               <h2 style={{ ...H2, textAlign: "left", margin: "0 0 24px" }}>Hand Braino the keys to your browser.</h2>
               <p style={{ fontSize: 19, color: "var(--sb-ink-2)", lineHeight: 1.55, marginBottom: 28 }}>
@@ -721,15 +784,15 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       </section>
 
       {/* ════════════════════════ SPEED COMPARISON ════════════════════════ */}
-      <section style={{ padding: "110px 0", background: "var(--sb-bg-2)" }} id="speed">
-        <div style={wrap}>
+      <section style={{ padding: isMobile ? "72px 0" : "110px 0", background: "var(--sb-bg-2)" }} id="speed">
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Why it's fast</span>
             <h2 style={H2}>Most browser agents see your page <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>through a camera.</em><br />Braino reads it like a developer.</h2>
             <p style={subText}>Computer Use takes a screenshot, sends it to a vision model, and asks "what should I click?" — every step. Braino reads the live DOM directly. That difference compounds with every single action.</p>
           </div>
 
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24 }}>
+          <div style={{ display:"grid",gridTemplateColumns:isMobile ? "1fr" : "1fr 1fr",gap:24 }}>
             {/* SideBrain col */}
             <div style={{ borderRadius:24,padding:32,display:"flex",flexDirection:"column",border:"1px solid var(--sb-line)",background:"var(--sb-panel-2)" }}>
               <h3 style={{ fontFamily:"'Instrument Serif',serif",fontWeight:400,fontSize:28,display:"flex",alignItems:"center",gap:10,marginBottom:4 }}>
@@ -782,7 +845,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
           </div>
 
           {/* Explain cards */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,marginTop:60 }}>
+          <div style={{ display:"grid",gridTemplateColumns:isMobile ? "1fr" : "1fr 1fr",gap:24,marginTop:isMobile ? 40 : 60 }}>
             {[
               { title:"Why screenshots are slow.", body:'Computer Use treats the browser like a human would — it can only see what\'s on the screen. That\'s elegant, but every step costs a full screenshot round-trip to a vision model: two or three seconds. Every time. No exceptions. Click an obvious "Send" button? Same cost as parsing a complex chart.' },
               { title:"Why reading the DOM is faster.", body:"Braino's content script reads the live DOM directly. Every button, input, and link comes back as structured text with selectors — not pixels. The model gets a clean element list and acts immediately. No screenshot. No vision model. No waiting for frames to render." },
@@ -795,7 +858,8 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
           </div>
 
           {/* Comparison table */}
-          <div style={{ marginTop:60,background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",borderRadius:18,overflow:"hidden" }}>
+          <div style={{ marginTop:isMobile ? 40 : 60, overflowX: isMobile ? "auto" : "visible", WebkitOverflowScrolling: "touch" as React.CSSProperties["WebkitOverflowScrolling"] }}>
+          <div style={{ background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",borderRadius:18,overflow:"hidden", minWidth: isMobile ? 480 : "auto" }}>
             {[
               { feature:"How they compare",us:"Braino",them:"Claude Computer Use",isHeader:true },
               { feature:"Step decision time",us:"~1s",them:"~6s" },
@@ -818,13 +882,14 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
               </div>
             ))}
           </div>
+          </div>
 
         </div>
       </section>
 
       {/* ════════════════════════ DASHBOARD ════════════════════════ */}
-      <section style={{ padding:"110px 0" }} id="dashboard">
-        <div style={wrap}>
+      <section style={{ padding: isMobile ? "72px 0" : "110px 0" }} id="dashboard">
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
           {/* Section header — centered */}
           <div style={{ ...secHead, marginBottom:56 }}>
             <span style={eyebrowStyle}><span style={pip} /> Dashboard</span>
@@ -839,10 +904,10 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
 
           <div style={{ background:"var(--sb-panel-2)",border:"1px solid var(--sb-line)",borderRadius:24,overflow:"hidden",boxShadow:"0 1px 2px rgba(40,28,18,.04), 0 40px 80px -30px rgba(40,28,18,.25)" }}>
             <BrowserBar url="app.trybraino.com/dashboard" />
-            <div style={{ display:"flex",minHeight:640 }}>
+            <div style={{ display:"flex",minHeight: isMobile ? 520 : 640 }}>
 
-              {/* ── Sidebar ── */}
-              <aside style={{ width:240,flexShrink:0,background:"var(--sb-panel)",borderRight:"1px solid var(--sb-line)",padding:"16px 14px",display:"flex",flexDirection:"column",gap:2 }}>
+              {/* ── Sidebar — hidden on mobile ── */}
+              <aside style={{ width:240,flexShrink:0,background:"var(--sb-panel)",borderRight:"1px solid var(--sb-line)",padding:"16px 14px",display: isMobile ? "none" : "flex",flexDirection:"column",gap:2 }}>
                 {/* Logo */}
                 <div style={{ display:"flex",alignItems:"center",gap:0,padding:"2px 8px 20px" }}>
                   <span style={{ fontFamily:"'Times New Roman',serif",fontStyle:"italic",fontSize:17,color:"var(--sb-ink)" }}>side</span>
@@ -939,7 +1004,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
                 {/* Page body */}
                 <div style={{ flex:1,padding:"24px 28px",overflow:"hidden" }}>
                   {/* Greeting + progress bar */}
-                  <div style={{ display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:16,marginBottom:24 }}>
+                  <div style={{ display:"flex",alignItems:"flex-end",flexDirection: isMobile ? "column" : "row",alignItems: isMobile ? "flex-start" : "flex-end",justifyContent:"space-between",gap:16,marginBottom:24 }}>
                     <div>
                       <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:38,lineHeight:1.02,letterSpacing:"-0.03em",marginBottom:6 }}>
                         Good morning, <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>Itish.</em>
@@ -973,7 +1038,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
                   </div>
 
                   {/* Stats grid */}
-                  <div style={{ display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr 1fr",gap:12,marginBottom:16 }}>
+                  <div style={{ display:"grid",gridTemplateColumns:isMobile ? "1fr 1fr" : "1.3fr 1fr 1fr 1fr",gap:12,marginBottom:16 }}>
                     {/* Dark card */}
                     <div style={{ borderRadius:18,border:"1px solid var(--sb-ink)",background:"linear-gradient(180deg,var(--sb-ink) 0%,#2A211A 100%)",padding:18,color:"var(--sb-on-ink)" }}>
                       <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
@@ -1014,7 +1079,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
                   </div>
 
                   {/* Recent notes + In progress */}
-                  <div style={{ display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:12 }}>
+                  <div style={{ display:"grid",gridTemplateColumns:isMobile ? "1fr" : "1.5fr 1fr",gap:12 }}>
                     {/* Recent notes */}
                     <div style={{ borderRadius:18,border:"1px solid var(--sb-line-2)",background:"var(--sb-panel-2)",overflow:"hidden" }}>
                       <div style={{ display:"flex",alignItems:"flex-end",justifyContent:"space-between",padding:"16px 20px 12px" }}>
@@ -1085,15 +1150,15 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       </section>
 
       {/* ════════════════════════ PRICING ════════════════════════ */}
-      <section style={{ padding:"110px 0",background:"var(--sb-bg-2)" }} id="pricing">
-        <div style={wrap}>
+      <section style={{ padding: isMobile ? "72px 0" : "110px 0", background:"var(--sb-bg-2)" }} id="pricing">
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
           <div style={secHead}>
             <span style={eyebrowStyle}><span style={pip} /> Pricing</span>
             <h2 style={H2}>Free forever. <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>Pro when you want more.</em></h2>
             <p style={subText}>Braino works in your browser. The model runs on us. Pro buys you faster models, more Delegate tasks, and unlimited recording.</p>
           </div>
 
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,maxWidth:880,margin:"0 auto" }}>
+          <div style={{ display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:24,maxWidth:880,margin:"0 auto" }}>
             {/* Free */}
             <div style={{ background:"var(--sb-panel-2)",border:"1px solid var(--sb-line-2)",borderRadius:24,padding:36,display:"flex",flexDirection:"column",gap:18 }}>
               <div style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:11,letterSpacing:".16em",textTransform:"uppercase",color:"var(--sb-ink-3)" }}>Free</div>
@@ -1137,9 +1202,9 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       </section>
 
       {/* ════════════════════════ COINCIDENCE ════════════════════════ */}
-      <section style={{ padding:"110px 0", background:"var(--sb-bg-2)" }}>
-        <div style={wrap}>
-          <div style={{ background:"var(--sb-bg)",borderRadius:24,padding:"72px 64px",textAlign:"center",border:"1px solid var(--sb-line-2)" }}>
+      <section style={{ padding: isMobile ? "72px 0" : "110px 0", background:"var(--sb-bg-2)" }}>
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
+          <div style={{ background:"var(--sb-bg)",borderRadius:24,padding: isMobile ? "40px 24px" : "72px 64px",textAlign:"center",border:"1px solid var(--sb-line-2)" }}>
             <span style={eyebrowStyle}><span style={pip} /> A note on parallel discovery</span>
             <h3 style={{ fontFamily:"'Instrument Serif',serif",fontStyle:"italic",fontSize:44,lineHeight:1.05,margin:"14px auto 24px",textWrap:"balance" as React.CSSProperties["textWrap"],maxWidth:700 }}>A coincidence of ideas.</h3>
             <p style={{ maxWidth:660,margin:"0 auto 14px",fontSize:16,color:"var(--sb-ink-2)" }}>Yes — Braino and Claude Computer Use are solving the same problem. We know how that looks.</p>
@@ -1154,9 +1219,9 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       </section>
 
       {/* ════════════════════════ CTA BANNER ════════════════════════ */}
-      <section style={{ padding:"110px 0" }} id="install">
-        <div style={wrap}>
-          <div style={{ background:"#14110E",color:"#FBF7F1",borderRadius:24,padding:"72px 56px",textAlign:"center",position:"relative",overflow:"hidden" }}>
+      <section style={{ padding: isMobile ? "56px 0" : "110px 0" }} id="install">
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
+          <div style={{ background:"#14110E",color:"#FBF7F1",borderRadius:24,padding: isMobile ? "48px 28px" : "72px 56px",textAlign:"center",position:"relative",overflow:"hidden" }}>
             <div style={{ position:"absolute",right:-120,top:-120,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle, rgba(243,154,66,0.45), transparent 60%)",filter:"blur(20px)",pointerEvents:"none" }} />
             <div style={{ position:"absolute",left:-100,bottom:-120,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle, rgba(243,154,66,0.2), transparent 60%)",filter:"blur(20px)",pointerEvents:"none" }} />
             <span style={{ ...eyebrowStyle,color:"rgba(255,250,242,0.55)" }}>
@@ -1167,12 +1232,12 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
               Install Braino. <em style={{ fontStyle:"italic",color:"var(--sb-accent-2)" }}>Talk to the web.</em>
             </h2>
             <p style={{ color:"rgba(251,247,241,0.7)",maxWidth:540,margin:"0 auto 32px",fontSize:18,position:"relative",zIndex:1 }}>Free during beta. Sign up in 30 seconds. Everything you save is tied to your account, forever.</p>
-            <div style={{ display:"flex",gap:12,justifyContent:"center",position:"relative",zIndex:1,flexWrap:"wrap" }}>
-              <a href="/braino-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"#FBF7F1",color:"#1B1713",border:"1px solid transparent",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+            <div style={{ display:"flex",gap:12,justifyContent:"center",position:"relative",zIndex:1,flexWrap:"wrap",flexDirection: isMobile ? "column" : "row",alignItems:"center" }}>
+              <a href="/braino-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"14px 24px",borderRadius:999,fontSize:14,fontWeight:500,background:"#FBF7F1",color:"#1B1713",border:"1px solid transparent",textDecoration:"none",transition:"transform .15s", width: isMobile ? "100%" : "auto", justifyContent: "center" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
                 Add to Chrome
               </a>
-              <a href="/braino-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"13px 22px",borderRadius:999,fontSize:14,fontWeight:500,background:"transparent",color:"#FBF7F1",border:"1px solid rgba(251,247,241,0.2)",textDecoration:"none",transition:"transform .15s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+              <a href="/braino-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"14px 24px",borderRadius:999,fontSize:14,fontWeight:500,background:"transparent",color:"#FBF7F1",border:"1px solid rgba(251,247,241,0.2)",textDecoration:"none",transition:"transform .15s", width: isMobile ? "100%" : "auto", justifyContent: "center" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 Other browsers <ArrowRightIcon />
               </a>
             </div>
@@ -1181,15 +1246,15 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
       </section>
 
       {/* ════════════════════════ FOOTER ════════════════════════ */}
-      <footer style={{ padding:"80px 0 60px",background:"var(--sb-bg)",borderTop:"1px solid var(--sb-line-2)" }}>
-        <div style={wrap}>
-          <div style={{ display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:40,marginBottom:60 }}>
-            <div>
+      <footer style={{ padding: isMobile ? "56px 0 40px" : "80px 0 60px", background:"var(--sb-bg)",borderTop:"1px solid var(--sb-line-2)" }}>
+        <div style={{ ...wrap, padding: isMobile ? "0 20px" : "0 32px" }}>
+          <div style={{ display:"grid",gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr",gap: isMobile ? 32 : 40,marginBottom: isMobile ? 40 : 60 }}>
+            <div style={{ gridColumn: isMobile ? "1 / -1" : "auto" }}>
               <div style={{ display:"flex",alignItems:"baseline",gap:0 }}>
                 <span style={{ fontFamily:"'BeVietnam',sans-serif",fontWeight:800,fontSize:18,color:"var(--sb-ink)",letterSpacing:"-0.03em" }}>Braino</span>
               </div>
               <p style={{ fontSize:14,maxWidth:280,marginTop:14,color:"var(--sb-ink-2)" }}>An AI side panel that lives in your browser. Reads pages. Speaks back. Handles tasks. Free during beta.</p>
-              <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:60,color:"var(--sb-ink-3)",marginTop:32,letterSpacing:"-0.02em",lineHeight:1 }}>↳ talk to&nbsp;the&nbsp;web.</div>
+              {!isMobile && <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:60,color:"var(--sb-ink-3)",marginTop:32,letterSpacing:"-0.02em",lineHeight:1 }}>↳ talk to&nbsp;the&nbsp;web.</div>}
             </div>
             {[
               { heading:"Product",links:[["#features","Features"],["#delegate","Delegate"],["#speed","Speed"],["#dashboard","Dashboard"],["#pricing","Pricing"]] },
@@ -1212,7 +1277,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
               </div>
             ))}
           </div>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:24,borderTop:"1px solid var(--sb-line-2)",fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"var(--sb-ink-3)",letterSpacing:".04em" }}>
+          <div style={{ display:"flex",alignItems: isMobile ? "flex-start" : "center",flexDirection: isMobile ? "column" : "row",justifyContent:"space-between",gap: isMobile ? 6 : 0,paddingTop:24,borderTop:"1px solid var(--sb-line-2)",fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"var(--sb-ink-3)",letterSpacing:".04em" }}>
             <div>© 2026 Braino · Built by a solo founder, somewhere with good coffee.</div>
             <div>v0.9.2 · Beta</div>
           </div>

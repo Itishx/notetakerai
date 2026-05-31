@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 type Phase = 'sleeping' | 'yellow' | 'green' | 'awake' | 'chatting' | 'email_capture' | 'waitlisted';
 type MsgType = 'text' | 'use-cases';
@@ -247,6 +248,7 @@ const USE_CASES = [
 
 // ─── Rich use-cases response — mirrors use-cases page layout, dark version ────
 function UseCasesResponse({ onDone }: { onDone: () => void }) {
+  const isMobile = useIsMobile();
   const [visible, setVisible] = useState(0);
   const doneFired = useRef(false);
   const lastCardRef = useRef<HTMLDivElement>(null);
@@ -291,7 +293,7 @@ function UseCasesResponse({ onDone }: { onDone: () => void }) {
           animation: 'plFadeUp 0.5s ease both',
         }}>
           {/* Header */}
-          <div style={{ padding: '28px 32px 24px' }}>
+          <div style={{ padding: isMobile ? '18px 18px 14px' : '28px 32px 24px' }}>
             {/* Number badge */}
             <div style={{ marginBottom: 10 }}>
               <span style={{
@@ -333,24 +335,24 @@ function UseCasesResponse({ onDone }: { onDone: () => void }) {
           </div>
 
           {/* Body */}
-          <div style={{ borderTop: '1.5px solid rgba(255,255,255,0.07)', margin: '0 32px' }} />
-          <div style={{ padding: '36px 32px 44px' }}>
+          <div style={{ borderTop: '1.5px solid rgba(255,255,255,0.07)', margin: isMobile ? '0 18px' : '0 32px' }} />
+          <div style={{ padding: isMobile ? '20px 18px 24px' : '36px 32px 44px' }}>
 
             {/* Big heading + graphic */}
-            <div style={{ display: 'flex', gap: 48, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 40 }}>
-              <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ display: 'flex', gap: isMobile ? 20 : 48, alignItems: 'flex-start', flexDirection: isMobile ? 'column' : 'row', marginBottom: isMobile ? 24 : 40 }}>
+              <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
                 <h2 style={{
                   fontFamily: "'Instrument Serif', 'TNR', Georgia, serif",
                   fontWeight: 400,
-                  fontSize: 'clamp(36px, 4.5vw, 58px)',
-                  lineHeight: 1.02, color: '#FBF7F1',
-                  margin: '0 0 20px', whiteSpace: 'pre-line', letterSpacing: '-0.02em',
+                  fontSize: isMobile ? 'clamp(28px, 8vw, 40px)' : 'clamp(36px, 4.5vw, 58px)',
+                  lineHeight: 1.05, color: '#FBF7F1',
+                  margin: '0 0 14px', whiteSpace: 'pre-line', letterSpacing: '-0.02em',
                 }}>{uc.heading}</h2>
-                <p style={{ fontSize: 15.5, lineHeight: 1.65, color: 'rgba(251,247,241,0.65)', margin: 0 }}>
+                <p style={{ fontSize: isMobile ? 14 : 15.5, lineHeight: 1.65, color: 'rgba(251,247,241,0.65)', margin: 0 }}>
                   {uc.description}
                 </p>
               </div>
-              <div style={{ flexShrink: 0, width: 'min(340px, 100%)' }}>
+              <div style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}>
                 <uc.Graphic />
               </div>
             </div>
@@ -372,18 +374,18 @@ function UseCasesResponse({ onDone }: { onDone: () => void }) {
             <div style={{ border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
               {uc.useCases.map((row, i) => (
                 <div key={i} style={{
-                  display: 'grid', gridTemplateColumns: '20px 1fr auto',
-                  alignItems: 'center', gap: 14, padding: '14px 20px',
+                  display: 'grid', gridTemplateColumns: isMobile ? '16px 1fr' : '20px 1fr auto',
+                  alignItems: 'center', gap: isMobile ? 10 : 14, padding: isMobile ? '12px 14px' : '14px 20px',
                   borderBottom: i < uc.useCases.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
                   background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
                 }}>
-                  <span style={{ color: 'var(--sb-accent)', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>→</span>
-                  <span style={{ fontSize: 14, color: 'rgba(251,247,241,0.8)', lineHeight: 1.45 }}>{row.label}</span>
-                  <span style={{
+                  <span style={{ color: 'var(--sb-accent)', fontSize: isMobile ? 12 : 14, fontWeight: 700, lineHeight: 1 }}>→</span>
+                  <span style={{ fontSize: isMobile ? 13 : 14, color: 'rgba(251,247,241,0.8)', lineHeight: 1.45 }}>{row.label}</span>
+                  {!isMobile && <span style={{
                     fontFamily: "'JetBrains Mono', monospace",
                     fontSize: 10, color: 'rgba(251,247,241,0.3)',
                     letterSpacing: '0.03em', whiteSpace: 'nowrap',
-                  }}>{row.who}</span>
+                  }}>{row.who}</span>}
                 </div>
               ))}
             </div>
@@ -486,6 +488,7 @@ function BrainoIcon({ glowing }: { glowing: boolean }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function PreLaunch() {
+  const isMobile = useIsMobile();
   const [phase, setPhase] = useState<Phase>('sleeping');
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -632,7 +635,7 @@ export default function PreLaunch() {
         .pl-scroll { scrollbar-width: none; }
       `}</style>
 
-      <div style={{ minHeight: '100dvh', background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: "'NeueHaas', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: '#FBF7F1', overflow: 'hidden' }}>
+      <div style={{ minHeight: '100dvh', background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: "'NeueHaas', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: '#FBF7F1', overflowX: 'hidden' }}>
 
         {/* Pre-chat */}
         {!chatActive && (
@@ -677,13 +680,13 @@ export default function PreLaunch() {
 
         {/* Chat */}
         {chatActive && (
-          <div style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: 900, flex: 1, padding: '0 32px', paddingBottom: phase === 'chatting' ? 100 : 60 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: 900, flex: 1, padding: isMobile ? '0 16px' : '0 32px', paddingBottom: phase === 'chatting' ? 100 : 60 }}>
             <div ref={scrollRef} className="pl-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 32, paddingTop: 52 }}>
 
               {msgs.map((m, i) => m.role === 'assistant' ? (
-                <div key={i} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', animation: 'plMsgIn 0.3s ease' }}>
+                <div key={i} style={{ display: 'flex', gap: isMobile ? 12 : 16, alignItems: 'flex-start', animation: 'plMsgIn 0.3s ease' }}>
                   <BrainoIcon glowing={loading && i === msgs.length - 1}/>
-                  <div style={{ flex: 1, paddingTop: 2 }}>
+                  <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                     {m.rich === 'use-cases'
                       ? <UseCasesResponse onDone={handleUseCasesDone}/>
                       : <p style={{ margin: 0, fontSize: 16, lineHeight: 1.7, color: '#FBF7F1' }}>{m.content}</p>
@@ -759,7 +762,7 @@ export default function PreLaunch() {
         )}
 
         {phase === 'chatting' && msgs[msgs.length - 1]?.rich !== 'use-cases' && (
-          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '16px 24px 28px', background: 'linear-gradient(to top, #000 65%, transparent)', display: 'flex', justifyContent: 'center', zIndex: 10 }}>
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: isMobile ? '12px 16px 24px' : '16px 24px 28px', background: 'linear-gradient(to top, #000 65%, transparent)', display: 'flex', justifyContent: 'center', zIndex: 10 }}>
             <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 900, alignItems: 'center' }}>
               <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}

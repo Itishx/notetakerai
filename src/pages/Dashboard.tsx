@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   Bell,
@@ -107,6 +108,9 @@ type XPersona = {
   bio: string;
   what_building: string;
   tone_notes: string;
+  auto_posting_enabled?: boolean;
+  auto_reply_enabled?: boolean;
+  posts_per_day?: number;
 } | null;
 
 type XReplyLog = {
@@ -758,6 +762,11 @@ export default function Dashboard() {
   const [xPersonaSaved, setXPersonaSaved] = useState(false);
   const [xPersonaSaveError, setXPersonaSaveError] = useState<string | null>(null);
   const [xPersonaVerified, setXPersonaVerified] = useState<{ display_name: string; bio: string; what_building: string; tone_notes: string } | null>(null);
+  const [xAutoPostingEnabled, setXAutoPostingEnabled] = useState(false);
+  const [xAutoReplyEnabled, setXAutoReplyEnabled] = useState(false);
+  const [xPostsPerDay, setXPostsPerDay] = useState(4);
+  const [xAutoToggling, setXAutoToggling] = useState<"posting" | "reply" | null>(null);
+  const [xNextPostAt, setXNextPostAt] = useState<string | null>(null);
   const [xReplyLogs, setXReplyLogs] = useState<XReplyLog[]>([]);
   const drivePollRef = useRef<number | null>(null);
   const xPollRef = useRef<number | null>(null);
@@ -872,7 +881,7 @@ export default function Dashboard() {
           .limit(20),
         (supabase as any)
           .from("x_auto_persona")
-          .select("display_name,bio,what_building,tone_notes")
+          .select("display_name,bio,what_building,tone_notes,auto_posting_enabled,auto_reply_enabled,posts_per_day")
           .eq("user_id", user.id)
           .maybeSingle(),
         (supabase as any)
@@ -892,7 +901,23 @@ export default function Dashboard() {
       setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
       const persona = (xPersonaRes.data as XPersona) || null;
       setXPersona(persona);
-      if (persona) setXPersonaDraft({ display_name: persona.display_name || "", bio: persona.bio || "", what_building: persona.what_building || "", tone_notes: persona.tone_notes || "" });
+      if (persona) {
+        setXPersonaDraft({ display_name: persona.display_name || "", bio: persona.bio || "", what_building: persona.what_building || "", tone_notes: persona.tone_notes || "" });
+        setXAutoPostingEnabled(persona.auto_posting_enabled ?? false);
+        setXAutoReplyEnabled(persona.auto_reply_enabled ?? false);
+        setXPostsPerDay(persona.posts_per_day ?? 4);
+      }
+      // Fetch next scheduled post time
+      const { data: nextPost } = await (supabase as any)
+        .from("scheduled_x_posts")
+        .select("scheduled_at")
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .gte("scheduled_at", new Date().toISOString())
+        .order("scheduled_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      setXNextPostAt(nextPost?.scheduled_at ?? null);
       setXReplyLogs((xReplyLogsRes.data as XReplyLog[]) || []);
       setDataLoading(false);
     };
@@ -1309,6 +1334,29 @@ export default function Dashboard() {
     setSavingName(false);
     setNameSaved(true);
     window.setTimeout(() => setNameSaved(false), 2000);
+  };
+
+  const handleToggleAutoMode = async (field: "auto_posting_enabled" | "auto_reply_enabled", value: boolean) => {
+    if (!user) return;
+    setXAutoToggling(field === "auto_posting_enabled" ? "posting" : "reply");
+    const { error } = await (supabase as any).from("x_auto_persona").upsert(
+      { user_id: user.id, [field]: value, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    if (!error) {
+      if (field === "auto_posting_enabled") setXAutoPostingEnabled(value);
+      else setXAutoReplyEnabled(value);
+    }
+    setXAutoToggling(null);
+  };
+
+  const handlePostsPerDayChange = async (value: number) => {
+    if (!user) return;
+    setXPostsPerDay(value);
+    await (supabase as any).from("x_auto_persona").upsert(
+      { user_id: user.id, posts_per_day: value, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
   };
 
   const handleSavePersona = async () => {
@@ -2263,6 +2311,96 @@ export default function Dashboard() {
 
             {activeTab === "xAutomation" && (
               <div className="space-y-5">
+                {/* Auto Mode control card */}
+                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                  <div className="mb-5">
+                    <h3 style={serifStyle} className="text-[26px] leading-none tracking-[-0.02em]">
+                      Auto <em className="text-[var(--sb-accent-deep)]">Mode.</em>
+                    </h3>
+                    <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                      24/7 autonomous pipeline — posts &amp; replies while you sleep
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {/* Auto Posting toggle */}
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                      <div>
+                        <div className="text-[13px] font-medium text-[var(--sb-ink)]">Auto Posting</div>
+                        <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
+                          {xAutoPostingEnabled
+                            ? `Posts ${xPostsPerDay}× per day in your voice`
+                            : "Braino will generate & schedule tweets daily"}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={xAutoPostingEnabled}
+                        onCheckedChange={(v) => handleToggleAutoMode("auto_posting_enabled", v)}
+                        disabled={xAutoToggling === "posting" || !xConn}
+                      />
+                    </div>
+
+                    {/* Auto Reply toggle */}
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                      <div>
+                        <div className="text-[13px] font-medium text-[var(--sb-ink)]">Auto Reply</div>
+                        <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">
+                          {xAutoReplyEnabled
+                            ? "Monitoring @mentions every 30 min"
+                            : "Braino will respond to your @mentions automatically"}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={xAutoReplyEnabled}
+                        onCheckedChange={(v) => handleToggleAutoMode("auto_reply_enabled", v)}
+                        disabled={xAutoToggling === "reply" || !xConn}
+                      />
+                    </div>
+
+                    {/* Posts per day selector — only shown when posting is on */}
+                    {xAutoPostingEnabled && (
+                      <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                        <div className="flex-1">
+                          <div className="text-[13px] font-medium text-[var(--sb-ink)]">Posts per day</div>
+                          <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">Spread evenly across the day</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {[2, 3, 4, 5, 6].map((n) => (
+                            <button
+                              key={n}
+                              onClick={() => handlePostsPerDayChange(n)}
+                              className={cn(
+                                "h-7 w-7 rounded-lg text-[12px] font-medium transition-colors",
+                                xPostsPerDay === n
+                                  ? "bg-[var(--sb-accent)] text-white"
+                                  : "bg-[var(--sb-panel-2)] text-[var(--sb-ink-3)] hover:bg-[var(--sb-line)]"
+                              )}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Status row */}
+                    {(xAutoPostingEnabled || xAutoReplyEnabled) && (
+                      <div style={monoStyle} className="flex flex-wrap gap-4 px-1 text-[11px] text-[var(--sb-ink-3)]">
+                        {xNextPostAt && (
+                          <span>
+                            Next post:{" "}
+                            <span className="text-[var(--sb-ink)]">
+                              {new Date(xNextPostAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                            </span>
+                          </span>
+                        )}
+                        {!xConn && (
+                          <span className="text-amber-600">Link your X account below to enable auto mode</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Voice & Style persona card */}
                 <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                   <div className="mb-5 flex items-start justify-between gap-4">
