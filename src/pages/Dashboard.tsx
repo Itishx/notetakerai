@@ -1555,10 +1555,22 @@ export default function Dashboard() {
           "sticky top-0 hidden h-screen flex-col border-r border-[var(--sb-line)] bg-[var(--sb-panel)] py-4 lg:flex overflow-hidden transition-all duration-300",
           sidebarCollapsed ? "px-2 items-center" : "px-3.5",
         )}>
-          <Link
-            to="/"
-            className={cn("flex items-center pb-5 no-underline", sidebarCollapsed ? "justify-center px-0" : "gap-2 px-2")}
-          >
+          <div className={cn("flex items-center pb-5", sidebarCollapsed ? "justify-center" : "justify-between")}>
+            {sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(false)}
+                title="Expand sidebar"
+                className="grid h-8 w-8 place-items-center rounded-lg text-[var(--sb-ink-3)] transition-colors hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink)]"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+            <>
+            <Link
+              to="/"
+              className="flex items-center gap-2 px-2 no-underline"
+            >
             {/* Brain SVG logo */}
             <svg viewBox="0 0 100 100" style={{ width: 26, height: 26, flexShrink: 0 }}>
               <defs>
@@ -1587,18 +1599,27 @@ export default function Dashboard() {
               <ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" />
               <path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
-            {!sidebarCollapsed && (
-              <span
-                style={{
-                  fontFamily: "'BeVietnam', sans-serif",
-                  fontWeight: 800,
-                  fontSize: 17,
-                  color: "var(--sb-ink)",
-                  letterSpacing: "-0.03em",
-                }}
-              >Braino</span>
+            <span
+              style={{
+                fontFamily: "'BeVietnam', sans-serif",
+                fontWeight: 800,
+                fontSize: 17,
+                color: "var(--sb-ink)",
+                letterSpacing: "-0.03em",
+              }}
+            >Braino</span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(true)}
+              title="Collapse sidebar"
+              className="grid h-6 w-6 place-items-center rounded-md text-[var(--sb-ink-3)] transition-colors hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink)]"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            </>
             )}
-          </Link>
+          </div>
 
           <button
             type="button"
@@ -1626,6 +1647,7 @@ export default function Dashboard() {
             )}
           </button>
 
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {!sidebarCollapsed && (
             <div style={monoStyle} className="px-2 pb-1 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
               Workspace
@@ -1746,6 +1768,7 @@ export default function Dashboard() {
               icon={<Settings className="h-3.5 w-3.5" />}
             />
           </div>
+          </div>
 
           <div className="mt-auto w-full border-t border-[var(--sb-line-2)] pt-3">
             {!sidebarCollapsed && (
@@ -1811,24 +1834,6 @@ export default function Dashboard() {
               )}
             </button>
 
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((c) => !c)}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className={cn(
-                "mt-2 flex w-full items-center rounded-lg py-2 text-[var(--sb-ink-3)] transition-colors hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink)]",
-                sidebarCollapsed ? "justify-center px-0" : "gap-2 px-2.5",
-              )}
-            >
-              {sidebarCollapsed ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
-                <>
-                  <ChevronLeft className="h-4 w-4" />
-                  <span className="text-[12px]">Collapse</span>
-                </>
-              )}
-            </button>
           </div>
         </aside>
 
