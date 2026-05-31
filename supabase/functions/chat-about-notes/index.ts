@@ -190,6 +190,67 @@ RULES:
 - Keep responses concise — they're watching a movie, not reading an essay`;
 }
 
+// --- Google Docs intent detection ---
+
+const DOC_CREATE_REGEX =
+  /(?:create|make|write|generate|build|draft|put together|compile)\s+(?:a\s+)?(?:google\s+)?doc(?:ument)?(?:\s+(?:about|on|for|covering|regarding|titled?))?\s*(.+)/i;
+
+function detectDocIntent(message: string): { matched: boolean; topic: string } {
+  const lower = String(message || "").toLowerCase();
+  const hasDocKeyword =
+    lower.includes("google doc") ||
+    lower.includes("create a doc") ||
+    lower.includes("make a doc") ||
+    lower.includes("write a doc") ||
+    lower.includes("generate a doc") ||
+    lower.includes("save to doc") ||
+    lower.includes("research and doc") ||
+    lower.includes("doc about") ||
+    lower.includes("document about") ||
+    lower.includes("create document") ||
+    lower.includes("make document");
+
+  if (!hasDocKeyword) return { matched: false, topic: "" };
+
+  const match = message.match(DOC_CREATE_REGEX);
+  if (match?.[1]) {
+    return { matched: true, topic: match[1].replace(/[.!?]+$/, "").trim() };
+  }
+
+  // Fallback: strip the command words and use the rest as topic
+  const topic = message
+    .replace(/(?:create|make|write|generate|draft)\s+(?:a\s+)?(?:google\s+)?doc(?:ument)?(?:\s+(?:about|on|for))?/i, "")
+    .replace(/(?:and|then|,)\s+(?:put it in|save it to|add to)\s+(?:google\s+)?docs?/i, "")
+    .trim();
+
+  return { matched: true, topic: topic || message };
+}
+
+async function createDocFromPrompt(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  authHeader: string,
+  userId: string,
+  topic: string,
+): Promise<{ docUrl: string; docName: string; wordCount: number } | null> {
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/google-docs-from-prompt`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": authHeader,
+        "GOOGLE_DRIVE_CLIENT_ID": Deno.env.get("GOOGLE_DRIVE_CLIENT_ID") || "",
+        "GOOGLE_DRIVE_CLIENT_SECRET": Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET") || "",
+      },
+      body: JSON.stringify({ userIdentifier: userId, topic }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 // --- Main handler ---
 
 serve(async (req) => {
@@ -198,13 +259,32 @@ serve(async (req) => {
   }
 
   try {
-    const { notes, chatHistory, message, imageBase64, existingImages, pageContext, aiProvider, movieContext, movieDiscoveryPrompt } = await req.json();
+    const { notes, chatHistory, message, imageBase64, existingImages, pageContext, aiProvider, movieContext, movieDiscoveryPrompt, userId, driveConnected } = await req.json();
 
     if (!message && !imageBase64) {
       return new Response(JSON.stringify({ error: "No message or image provided" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // ── Google Docs intent: "create a doc about X" ────────────────────────────
+    if (!imageBase64 && message && driveConnected && userId) {
+      const intent = detectDocIntent(message);
+      if (intent.matched && intent.topic) {
+        const authHeader = req.headers.get("Authorization") || "";
+        const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        const result = await createDocFromPrompt(supabaseUrl, serviceRoleKey, authHeader, userId, intent.topic);
+
+        if (result?.docUrl) {
+          const reply = `Done. I've researched **${intent.topic}** and written it up — ${result.wordCount} words across key sections.\n\n[Open Google Doc →](${result.docUrl})`;
+          return new Response(JSON.stringify({ reply, docUrl: result.docUrl, docName: result.docName }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // If doc creation failed, fall through to normal AI response
+      }
     }
 
     const config = resolveAiConfig(aiProvider);

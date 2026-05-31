@@ -49,7 +49,7 @@ interface ViewState {
   grabbing: boolean;
 }
 
-interface Message { role: 'braino' | 'user'; text: string; }
+interface Message { role: 'braino' | 'user'; text: string; docUrl?: string; docName?: string; }
 
 // ─── Confetti ─────────────────────────────────────────────────────────────────
 function triggerConfetti() {
@@ -163,7 +163,11 @@ function handlePartyTrick(input: string): { text: string; action?: () => void } 
 }
 
 // ─── AI call ──────────────────────────────────────────────────────────────────
-async function callBrainoAI(message: string, history: Message[]): Promise<string> {
+async function callBrainoAI(
+  message: string,
+  history: Message[],
+  opts?: { userId?: string; authToken?: string; driveConnected?: boolean },
+): Promise<{ text: string; docUrl?: string; docName?: string }> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
@@ -172,19 +176,31 @@ async function callBrainoAI(message: string, history: Message[]): Promise<string
     content: m.text,
   }));
 
+  const authHeader = opts?.authToken ? `Bearer ${opts.authToken}` : `Bearer ${supabaseKey}`;
+
   const res = await fetch(`${supabaseUrl}/functions/v1/chat-about-notes`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
+      'Authorization': authHeader,
     },
-    body: JSON.stringify({ message, chatHistory, notes: BRAINO_NOTES_CONTEXT }),
+    body: JSON.stringify({
+      message,
+      chatHistory,
+      notes: BRAINO_NOTES_CONTEXT,
+      userId: opts?.userId,
+      driveConnected: opts?.driveConnected ?? false,
+    }),
   });
 
   if (!res.ok) throw new Error(`API ${res.status}`);
   const data = await res.json();
-  return (data.reply as string) || "My neurons hiccuped. Try again?";
+  return {
+    text: (data.reply as string) || "My neurons hiccuped. Try again?",
+    docUrl: data.docUrl as string | undefined,
+    docName: data.docName as string | undefined,
+  };
 }
 
 type WakePhase = 'sleeping' | 'yellow' | 'green' | 'awake';
@@ -580,8 +596,8 @@ export default function BrainMascot() {
 
     setAiLoading(true);
     try {
-      const reply = await callBrainoAI(text, newMessages);
-      setMessages(prev => [...prev, { role: 'braino', text: reply }]);
+      const result = await callBrainoAI(text, newMessages);
+      setMessages(prev => [...prev, { role: 'braino', text: result.text, docUrl: result.docUrl, docName: result.docName }]);
     } catch {
       setMessages(prev => [...prev, { role: 'braino', text: "My neurons misfired. Try again? 🧠" }]);
     } finally {
@@ -690,13 +706,40 @@ export default function BrainMascot() {
                         </div>
                       </div>
                     ) : (
-                      <div style={{
-                        fontSize: 14.5,
-                        lineHeight: 1.72,
-                        color: 'rgba(255,255,255,0.92)',
-                        fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-                      }}>
-                        {msg.text}
+                      <div>
+                        <div style={{
+                          fontSize: 14.5,
+                          lineHeight: 1.72,
+                          color: 'rgba(255,255,255,0.92)',
+                          fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+                        }}>
+                          {msg.text.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '$1')}
+                        </div>
+                        {msg.docUrl && (
+                          <a
+                            href={msg.docUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              marginTop: 10,
+                              padding: '7px 14px',
+                              borderRadius: 10,
+                              background: 'rgba(66,133,244,0.18)',
+                              border: '1px solid rgba(66,133,244,0.35)',
+                              color: '#7ab3f5',
+                              fontSize: 12.5,
+                              fontWeight: 600,
+                              textDecoration: 'none',
+                              fontFamily: "'Inter',-apple-system,sans-serif",
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6z"/></svg>
+                            Open in Google Docs →
+                          </a>
+                        )}
                       </div>
                     )}
                   </div>
