@@ -380,6 +380,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (message.action === "loadXPersona") {
+    bgLoadXPersona()
+      .then(persona => sendResponse({ persona: persona || null }))
+      .catch(() => sendResponse({ persona: null }));
+    return true;
+  }
   if (message.action === "runBrainAgent") {
     const task = message.task;
     const connector = message.connector;

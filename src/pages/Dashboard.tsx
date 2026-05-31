@@ -756,6 +756,8 @@ export default function Dashboard() {
   const [xPersonaDraft, setXPersonaDraft] = useState({ display_name: "", bio: "", what_building: "", tone_notes: "" });
   const [xPersonaSaving, setXPersonaSaving] = useState(false);
   const [xPersonaSaved, setXPersonaSaved] = useState(false);
+  const [xPersonaSaveError, setXPersonaSaveError] = useState<string | null>(null);
+  const [xPersonaVerified, setXPersonaVerified] = useState<{ display_name: string; bio: string; what_building: string; tone_notes: string } | null>(null);
   const [xReplyLogs, setXReplyLogs] = useState<XReplyLog[]>([]);
   const drivePollRef = useRef<number | null>(null);
   const xPollRef = useRef<number | null>(null);
@@ -1312,14 +1314,38 @@ export default function Dashboard() {
   const handleSavePersona = async () => {
     if (!user) return;
     setXPersonaSaving(true);
-    await (supabase as any).from("x_auto_persona").upsert(
+    setXPersonaSaveError(null);
+    setXPersonaVerified(null);
+
+    const { error: upsertError } = await (supabase as any).from("x_auto_persona").upsert(
       { user_id: user.id, ...xPersonaDraft, updated_at: new Date().toISOString() },
       { onConflict: "user_id" }
     );
+
+    if (upsertError) {
+      setXPersonaSaveError(upsertError.message || "Failed to save — check Supabase migration is applied.");
+      setXPersonaSaving(false);
+      return;
+    }
+
+    // Read back what was actually written to confirm it's in the DB
+    const { data: verified, error: readError } = await (supabase as any)
+      .from("x_auto_persona")
+      .select("display_name,bio,what_building,tone_notes")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (readError || !verified) {
+      setXPersonaSaveError(readError?.message || "Saved but could not verify — try refreshing.");
+      setXPersonaSaving(false);
+      return;
+    }
+
     setXPersona({ ...xPersonaDraft });
+    setXPersonaVerified(verified);
     setXPersonaSaving(false);
     setXPersonaSaved(true);
-    window.setTimeout(() => setXPersonaSaved(false), 2000);
+    window.setTimeout(() => { setXPersonaSaved(false); setXPersonaVerified(null); }, 5000);
   };
 
   const topSearchPlaceholder =
@@ -2287,15 +2313,36 @@ export default function Dashboard() {
                       />
                     </div>
                   </div>
-                  <div className="mt-4 flex justify-end">
-                    <Button
-                      onClick={handleSavePersona}
-                      disabled={xPersonaSaving}
-                      size="sm"
-                      className="gap-1.5 rounded-xl"
-                    >
-                      {xPersonaSaved ? <><Check className="h-3.5 w-3.5" /> Saved</> : xPersonaSaving ? "Saving…" : "Save"}
-                    </Button>
+                  <div className="mt-4 space-y-3">
+                    {xPersonaSaveError && (
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-[13px] text-red-600">
+                        <span className="font-medium">Error:</span> {xPersonaSaveError}
+                        {xPersonaSaveError.includes("migration") && (
+                          <div className="mt-1 text-[12px] opacity-80">Run the SQL migration in Supabase first — see Dashboard instructions.</div>
+                        )}
+                      </div>
+                    )}
+                    {xPersonaSaved && xPersonaVerified && (
+                      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] text-emerald-700">
+                        <div className="mb-1 flex items-center gap-1.5 font-medium"><Check className="h-3.5 w-3.5" /> Synced to Braino — verified in DB</div>
+                        <div style={monoStyle} className="space-y-0.5 text-[11px] opacity-80">
+                          {xPersonaVerified.display_name && <div>name: {xPersonaVerified.display_name}</div>}
+                          {xPersonaVerified.bio && <div>bio: {xPersonaVerified.bio.slice(0, 60)}{xPersonaVerified.bio.length > 60 ? "…" : ""}</div>}
+                          {xPersonaVerified.what_building && <div>building: {xPersonaVerified.what_building.slice(0, 60)}{xPersonaVerified.what_building.length > 60 ? "…" : ""}</div>}
+                          {xPersonaVerified.tone_notes && <div>style: {xPersonaVerified.tone_notes.slice(0, 60)}{xPersonaVerified.tone_notes.length > 60 ? "…" : ""}</div>}
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={handleSavePersona}
+                        disabled={xPersonaSaving}
+                        size="sm"
+                        className={cn("gap-1.5 rounded-xl", xPersonaSaveError && "border-red-500/50 bg-red-500/10 text-red-600 hover:bg-red-500/20")}
+                      >
+                        {xPersonaSaved ? <><Check className="h-3.5 w-3.5" /> Synced</> : xPersonaSaving ? "Saving…" : xPersonaSaveError ? "Retry" : "Save"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
 

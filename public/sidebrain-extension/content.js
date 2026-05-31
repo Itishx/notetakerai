@@ -3920,6 +3920,55 @@ async function __sbPerformWebSearch(query) {
   });
 }
 
+function __sbIsOnX() {
+  return /^https?:\/\/(www\.)?(twitter|x)\.com/i.test(location.href);
+}
+
+let __sbXPersonaCache = null;
+let __sbXPersonaCacheExpiry = 0;
+
+async function __sbLoadXPersona() {
+  if (__sbXPersonaCache !== null && Date.now() < __sbXPersonaCacheExpiry) return __sbXPersonaCache;
+  return new Promise(resolve => {
+    chrome.runtime.sendMessage({ action: 'loadXPersona' }, res => {
+      void chrome.runtime.lastError;
+      __sbXPersonaCache = res?.persona || null;
+      __sbXPersonaCacheExpiry = Date.now() + 5 * 60 * 1000;
+      resolve(__sbXPersonaCache);
+    });
+  });
+}
+
+function __sbBuildXAutoContext(persona) {
+  const lines = ['=== BRAINO X AUTO CONFIGURATION ==='];
+  lines.push('You are Braino, the AI browser companion. You are currently on X/Twitter with this user.');
+  lines.push('When the user asks what you know about them, how you reply to posts on X, or what rules you follow — answer fully and specifically based on this configuration.');
+  lines.push('');
+  lines.push('USER IDENTITY:');
+  if (persona?.display_name) lines.push('Name: ' + persona.display_name);
+  if (persona?.bio) lines.push('Background: ' + persona.bio);
+  if (persona?.what_building) lines.push('Currently building: ' + persona.what_building);
+  if (persona?.tone_notes) lines.push('Writing style: ' + persona.tone_notes);
+  if (!persona?.display_name && !persona?.bio && !persona?.what_building && !persona?.tone_notes) {
+    lines.push('(Persona not configured yet — user should go to Dashboard → X Automation → Your Voice & Style)');
+  }
+  lines.push('');
+  lines.push('X AUTO REPLY RULES (what Braino follows when replying to posts):');
+  lines.push('• Max 180 characters per reply');
+  lines.push('• Reply to ONE specific detail or phrase — never generic praise or paraphrasing');
+  lines.push('• Sound human: conversational, concrete, fragments OK');
+  lines.push("• Match the tweet's energy — sharp, thoughtful, or playful as needed");
+  lines.push("• No canned openers: 'great point', 'love this', 'totally agree', 'thanks for sharing'");
+  lines.push("• No AI phrases: 'this highlights', 'this underscores', 'important conversation', 'valuable insight'");
+  lines.push('• At most one emoji, only if it feels native to the tweet');
+  lines.push('• For builder prompts (e.g. "what are you building"): can mention Braino and trybraino.com once, naturally');
+  lines.push('• For regular tweets: no self-promotion unless directly relevant');
+  lines.push('• Skips: ads, promoted posts, and political tweets (elections, Modi, party politics)');
+  lines.push('• Internally drafts 3 candidates and picks the most specific, least generic one');
+  lines.push('=====================================');
+  return lines.join('\n');
+}
+
 async function __sbFetchAssistantReply(body) {
   const resp = await fetch(`${__SB_API}/chat-about-notes`, {
     method: "POST",
@@ -4038,9 +4087,18 @@ async function __sbProcessPrompt(text, options = {}) {
   __sbChatHistory.push({ role: "user", content: promptText });
 
   try {
+    // On X/Twitter, prepend the user's persona + X Auto rules so Braino can answer
+    // questions about identity, rules, and how it replies — even before the migration is applied
+    let systemNotes = stored.currentNotes || "";
+    if (__sbIsOnX()) {
+      const xPersona = await __sbLoadXPersona();
+      const xCtx = __sbBuildXAutoContext(xPersona);
+      systemNotes = systemNotes ? xCtx + "\n\n" + systemNotes : xCtx;
+    }
+
     const body = {
       message: promptText,
-      notes: stored.currentNotes || "",
+      notes: systemNotes,
       aiProvider,
       chatHistory: previousHistory,
     };
