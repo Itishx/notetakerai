@@ -328,34 +328,52 @@ export type Database = {
       }
       x_auto_persona: {
         Row: {
+          auto_posting_enabled: boolean
+          auto_reply_enabled: boolean
           bio: string
+          content_source: string | null
           created_at: string
           display_name: string
           id: string
+          last_mention_id: string | null
+          posts_per_day: number
           tone_notes: string
           updated_at: string
           user_id: string
           what_building: string
+          x_user_id: string | null
         }
         Insert: {
+          auto_posting_enabled?: boolean
+          auto_reply_enabled?: boolean
           bio?: string
+          content_source?: string | null
           created_at?: string
           display_name?: string
           id?: string
+          last_mention_id?: string | null
+          posts_per_day?: number
           tone_notes?: string
           updated_at?: string
           user_id: string
           what_building?: string
+          x_user_id?: string | null
         }
         Update: {
+          auto_posting_enabled?: boolean
+          auto_reply_enabled?: boolean
           bio?: string
+          content_source?: string | null
           created_at?: string
           display_name?: string
           id?: string
+          last_mention_id?: string | null
+          posts_per_day?: number
           tone_notes?: string
           updated_at?: string
           user_id?: string
           what_building?: string
+          x_user_id?: string | null
         }
         Relationships: []
       }
