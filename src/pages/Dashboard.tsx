@@ -515,13 +515,41 @@ function TaskStatusIcon({ status }: { status: string }) {
   );
 }
 
-function NoteModal({ note, onClose }: { note: Note; onClose: () => void }) {
+function NoteModal({ note, onClose, userId, authHeader, driveConnected }: {
+  note: Note;
+  onClose: () => void;
+  userId?: string;
+  authHeader?: string;
+  driveConnected?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
+  const [savingToDoc, setSavingToDoc] = useState(false);
+  const [savedDocUrl, setSavedDocUrl] = useState<string | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(note.structured_notes || "");
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveToDoc = async () => {
+    if (!userId || !authHeader) return;
+    setSavingToDoc(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-docs-save-note`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: authHeader },
+        body: JSON.stringify({ userIdentifier: userId, noteId: note.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Failed to save");
+      setSavedDocUrl(data.docUrl);
+      window.open(data.docUrl, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Could not save to Google Doc");
+    } finally {
+      setSavingToDoc(false);
+    }
   };
 
   return (
@@ -557,7 +585,7 @@ function NoteModal({ note, onClose }: { note: Note; onClose: () => void }) {
           </div>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 border-b border-[var(--sb-line-2)] py-4">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--sb-line-2)] py-4">
           <Button
             size="sm"
             variant="outline"
@@ -567,6 +595,33 @@ function NoteModal({ note, onClose }: { note: Note; onClose: () => void }) {
             {copied ? <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> : <FileText className="mr-1.5 h-3.5 w-3.5" />}
             {copied ? "Copied" : "Copy markdown"}
           </Button>
+
+          {driveConnected && userId && (
+            savedDocUrl ? (
+              <a
+                href={savedDocUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Open in Google Docs →
+              </a>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSaveToDoc}
+                disabled={savingToDoc}
+                className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+              >
+                {savingToDoc
+                  ? <><span className="mr-1.5 h-3.5 w-3.5 animate-spin inline-block rounded-full border-2 border-current border-t-transparent" />Saving…</>
+                  : <><FileText className="mr-1.5 h-3.5 w-3.5 text-blue-500" />Save to Google Doc</>
+                }
+              </Button>
+            )
+          )}
         </div>
 
         <div
@@ -733,7 +788,7 @@ function MemoryAddForm({ userId, onAdded }: { userId: string; onAdded: (note: No
 }
 
 export default function Dashboard() {
-  const { user, profile, loading, signOut } = useAuth();
+  const { user, profile, loading, signOut, session } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -3348,7 +3403,15 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {selectedNote ? <NoteModal note={selectedNote} onClose={() => setSelectedNote(null)} /> : null}
+      {selectedNote ? (
+        <NoteModal
+          note={selectedNote}
+          onClose={() => setSelectedNote(null)}
+          userId={user.id}
+          authHeader={session ? `Bearer ${session.access_token}` : undefined}
+          driveConnected={!!googleDriveConn}
+        />
+      ) : null}
     </div>
   );
 }
