@@ -1679,6 +1679,7 @@ let __sbVoiceSilenceTimer = null;
 let __sbLastFinalTranscript = null;
 let __sbChatHistory = [];
 let __sbCardTurns = []; // {prompt, answer}[] — persists across calls for scrollable history
+let __sbThinkingEl = null;
 let __sbVoicePendingReply = false;
 let __sbIsSpeaking = false;
 let __sbCurrentSpeechAudio = null;
@@ -3772,25 +3773,33 @@ async function __sbSpeakText(text) {
 }
 
 
-function __sbRenderCardHistory(scroll, loadingText = null) {
+function __sbRenderCardHistory(scroll) {
   if (!scroll) return;
-  const screenH = scroll.clientHeight || 260;
-  const total = __sbCardTurns.length;
   let html = "";
   __sbCardTurns.forEach((turn, i) => {
-    const isActive = i === total - 1 && !loadingText;
-    // History turns: natural height + bottom divider. Active turn: fills full screen.
-    html += `<div style="min-height:${isActive ? screenH : 0}px;${i < total - 1 ? "padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:24px;" : ""}">`;
+    if (i > 0) html += `<div style="height:1px;background:rgba(255,255,255,0.08);margin:18px 0;"></div>`;
     if (turn.prompt) html += `<div class="sb-card-q">${__sbEscapeHtml(turn.prompt)}</div>`;
     html += `<div class="sb-card-a">${__sbRenderMarkdown(turn.answer)}</div>`;
-    html += `</div>`;
   });
-  if (loadingText) {
-    html += `<div style="min-height:${screenH}px;">`;
-    html += `<div style="font-size:13px;color:rgba(255,255,255,0.38);font-style:italic;">${__sbEscapeHtml(loadingText)}</div>`;
-    html += `</div>`;
-  }
   scroll.innerHTML = html;
+  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+}
+
+function __sbShowThinking(scroll) {
+  if (!scroll) return;
+  if (__sbThinkingEl) { __sbThinkingEl.remove(); __sbThinkingEl = null; }
+  const wrap = document.createElement("div");
+  wrap.id = "__sb_thinking_wrap__";
+  if (__sbCardTurns.length > 0) {
+    const div = document.createElement("div");
+    div.style.cssText = "height:1px;background:rgba(255,255,255,0.08);margin:18px 0;";
+    wrap.appendChild(div);
+  }
+  __sbThinkingEl = document.createElement("div");
+  __sbThinkingEl.style.cssText = "font-size:13px;color:rgba(255,255,255,0.38);font-style:italic;";
+  __sbThinkingEl.textContent = "Thinking…";
+  wrap.appendChild(__sbThinkingEl);
+  scroll.appendChild(wrap);
   requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
 }
 
@@ -4127,7 +4136,7 @@ async function __sbProcessPrompt(text, options = {}) {
   const voiceOnly = fromVoice && __sbVoiceOnlyMode;
   if (!voiceOnly) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-    __sbRenderCardHistory(scroll, hasPageText ? "Thinking…" : "Thinking…");
+    __sbShowThinking(scroll);
     __sbOpenCard({ rich: true });
     __sbSyncSpeakButtons();
   }
