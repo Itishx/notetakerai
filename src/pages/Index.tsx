@@ -1004,7 +1004,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
                 {/* Page body */}
                 <div style={{ flex:1,padding:"24px 28px",overflow:"hidden" }}>
                   {/* Greeting + progress bar */}
-                  <div style={{ display:"flex",alignItems:"flex-end",flexDirection: isMobile ? "column" : "row",alignItems: isMobile ? "flex-start" : "flex-end",justifyContent:"space-between",gap:16,marginBottom:24 }}>
+                  <div style={{ display:"flex",flexDirection: isMobile ? "column" : "row",alignItems: isMobile ? "flex-start" : "flex-end",justifyContent:"space-between",gap:16,marginBottom:24 }}>
                     <div>
                       <div style={{ fontFamily:"'Instrument Serif',serif",fontSize:38,lineHeight:1.02,letterSpacing:"-0.03em",marginBottom:6 }}>
                         Good morning, <em style={{ color:"var(--sb-accent-deep)",fontStyle:"italic" }}>Itish.</em>
