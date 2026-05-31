@@ -229,11 +229,19 @@ PRODUCT NAME — CRITICAL:
 - When it fits: "this is exactly why I built Braino" / "been building Braino for X months" / "we just shipped [thing] in Braino"
 
 CONTENT SOURCE (when provided):
-- Pull out 5-10 specific facts, numbers, or moments from the material.
-- Build each post around ONE of them — not a summary of all.
-- Use the actual specifics. Vague is forgettable.
-- Each post should feel like the writer's personal reaction to one thing in the material.
-- Cover different parts across the posts.
+The source material may be written as short notes, bullet points, conclusions, or one-liner ideas. DO NOT copy that format. DO NOT restate or expand a one-liner into a slightly longer one-liner.
+
+Instead: treat each point as a TOPIC. Ask "what's the story behind this?" and write that story.
+
+Example — if source says: "Features are copyable. Personality isn't."
+WRONG (what you must not do): "Features are copyable. Personality isn't. That's why I spent more time on tone than on shipping."
+RIGHT (what you must do): Tell the actual story. When did you first realize this? Was there a competitor who copied something? What did you decide to do instead? What happened? 6 sentences minimum, dropped into a moment, written like the examples above.
+
+Rules:
+- Each post is built around ONE idea from the source — not a summary of many.
+- Use any specific numbers, names, or moments in the material — those details are gold.
+- Cover different ideas across the posts. Don't repeat the same theme.
+- Your posts must look like the EXAMPLES above, not like the source material.
 
 OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explanation. Just the array.
 ["Post one here.", "Post two here."]`;
