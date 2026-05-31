@@ -194,10 +194,13 @@ VOICE RULES (non-negotiable):
 - CRITICAL: Plain text only. No asterisks, no markdown, no bold, no italics. X does not render markdown — asterisks appear as literal characters and look broken.
 
 CONTENT SOURCE RULES (when material is provided):
-- Do NOT summarize it. That's the lazy take.
-- Find the one thing that is actually interesting — a specific number, a counterintuitive claim, an overlooked detail — and build a post around that angle.
-- Cross-reference it with the persona: what does this mean for someone in their specific position, building what they're building?
-- The best posts from source material feel like a personal reaction, not a report.
+- First, mentally extract the 5-10 most specific, interesting, or surprising facts/claims from the material.
+- Each post should be built around exactly ONE of those extracted points — not a summary of all of them.
+- Find the angle that makes a reader think "I didn't know that" or "that's exactly how I feel" — not "okay, sure."
+- Cross-reference with the persona: what does this specific point mean for someone in their position, building what they're building? Make it personal.
+- The post should feel like the writer read the material, had a genuine reaction, sat with it, and then wrote what they actually think — not a report.
+- If the material contains numbers, use them. Specificity beats vagueness every single time.
+- Mine the material for multiple different angles — each post should feel like it came from a different part of the material, not variations on the same theme.
 
 WHAT TO NEVER WRITE:
 - Generic advice: "consistency is key", "show your work", "just ship it"
@@ -271,19 +274,22 @@ function cleanPost(text: string): string {
 }
 
 function buildScheduleTimes(now: Date, count: number): string[] {
-  const nowHour = now.getUTCHours();
-  // Pick future slots from POSTING_HOURS_UTC that haven't passed today
-  const futureSlots = POSTING_HOURS_UTC.filter((h) => h > nowHour + 1);
-
   const times: string[] = [];
+  // Spread posts evenly across a 16-hour window (6am–10pm UTC) with minimum 20-min gaps
+  const windowStartUTC = 6;
+  const windowEndUTC = 22;
+  const windowMinutes = (windowEndUTC - windowStartUTC) * 60;
+  const gapMinutes = count > 1 ? Math.max(20, Math.floor(windowMinutes / count)) : windowMinutes;
+
+  const base = new Date(now);
+  base.setUTCHours(windowStartUTC, 0, 0, 0);
+  // If we're past the window start, begin from now + 5 min
+  if (now.getTime() > base.getTime()) {
+    base.setTime(now.getTime() + 5 * 60 * 1000);
+  }
 
   for (let i = 0; i < count; i++) {
-    const slotHour = futureSlots[i % futureSlots.length] ?? POSTING_HOURS_UTC[i % POSTING_HOURS_UTC.length];
-    const t = new Date(now);
-    // If we're cycling into tomorrow's slots, advance the date
-    const dayOffset = futureSlots.length > 0 && i < futureSlots.length ? 0 : Math.floor(i / (futureSlots.length || 1));
-    t.setUTCDate(t.getUTCDate() + dayOffset);
-    t.setUTCHours(slotHour, 0, 0, 0);
+    const t = new Date(base.getTime() + i * gapMinutes * 60 * 1000);
     times.push(t.toISOString());
   }
 

@@ -3041,31 +3041,34 @@ export default function Dashboard() {
                       />
                     </div>
 
-                    {/* Posts per day selector — only shown when posting is on */}
-                    {xAutoPostingEnabled && (
-                      <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
-                        <div className="flex-1">
-                          <div className="text-[13px] font-medium text-[var(--sb-ink)]">Posts per day</div>
-                          <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">Spread evenly across the day</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {[2, 3, 4, 5, 6].map((n) => (
-                            <button
-                              key={n}
-                              onClick={() => handlePostsPerDayChange(n)}
-                              className={cn(
-                                "h-7 w-7 rounded-lg text-[12px] font-medium transition-colors",
-                                xPostsPerDay === n
-                                  ? "bg-[var(--sb-accent)] text-white"
-                                  : "bg-[var(--sb-panel-2)] text-[var(--sb-ink-3)] hover:bg-[var(--sb-line)]"
-                              )}
-                            >
-                              {n}
-                            </button>
-                          ))}
-                        </div>
+                    {/* Posts per day selector */}
+                    <div className="flex items-center gap-3 rounded-xl border border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                      <div className="flex-1">
+                        <div className="text-[13px] font-medium text-[var(--sb-ink)]">Posts per day</div>
+                        <div style={monoStyle} className="mt-0.5 text-[11px] text-[var(--sb-ink-3)]">Spread evenly across the day · max 50</div>
                       </div>
-                    )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handlePostsPerDayChange(Math.max(1, xPostsPerDay - 1))}
+                          className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--sb-panel-2)] text-[var(--sb-ink-2)] hover:bg-[var(--sb-line)] transition-colors"
+                        >−</button>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={xPostsPerDay}
+                          onChange={e => {
+                            const v = Math.min(50, Math.max(1, Number(e.target.value) || 1));
+                            handlePostsPerDayChange(v);
+                          }}
+                          className="h-7 w-12 rounded-lg border border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-center text-[13px] font-medium text-[var(--sb-ink)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        />
+                        <button
+                          onClick={() => handlePostsPerDayChange(Math.min(50, xPostsPerDay + 1))}
+                          className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--sb-panel-2)] text-[var(--sb-ink-2)] hover:bg-[var(--sb-line)] transition-colors"
+                        >+</button>
+                      </div>
+                    </div>
 
                     {/* Status row */}
                     <div style={monoStyle} className="flex flex-wrap gap-4 px-1 text-[11px] text-[var(--sb-ink-3)]">
@@ -3170,6 +3173,9 @@ export default function Dashboard() {
                           {xPersonaVerified.bio && <div>bio: {xPersonaVerified.bio.slice(0, 60)}{xPersonaVerified.bio.length > 60 ? "…" : ""}</div>}
                           {xPersonaVerified.what_building && <div>building: {xPersonaVerified.what_building.slice(0, 60)}{xPersonaVerified.what_building.length > 60 ? "…" : ""}</div>}
                           {xPersonaVerified.tone_notes && <div>style: {xPersonaVerified.tone_notes.slice(0, 60)}{xPersonaVerified.tone_notes.length > 60 ? "…" : ""}</div>}
+                          {xPersonaVerified.content_source
+                            ? <div className="text-emerald-600">content source: ✓ {xPersonaVerified.content_source.length.toLocaleString()} chars saved</div>
+                            : <div className="opacity-50">content source: not set</div>}
                         </div>
                       </div>
                     )}
