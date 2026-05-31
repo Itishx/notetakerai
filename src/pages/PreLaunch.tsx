@@ -31,37 +31,91 @@ async function callWaitlistSignup(email: string, context?: string) {
 
 function ChatGraphic() {
   return (
-    <svg viewBox="0 0 380 260" width="100%" style={{ maxWidth: 380, display: 'block', borderRadius: 12 }}>
-      <rect width="380" height="260" rx="16" fill="var(--sb-panel-2)" stroke="var(--sb-line)" strokeWidth="1"/>
-      <rect width="380" height="38" rx="16" fill="var(--sb-panel)"/>
-      <rect y="26" width="380" height="12" fill="var(--sb-panel)"/>
-      <circle cx="16" cy="19" r="5" fill="#FF5F57" opacity=".8"/>
-      <circle cx="29" cy="19" r="5" fill="#FEBC2E" opacity=".8"/>
-      <circle cx="42" cy="19" r="5" fill="#28C840" opacity=".8"/>
-      <rect x="58" y="11" width="210" height="16" rx="8" fill="var(--sb-bg-2)"/>
-      <rect x="12" y="50" width="212" height="11" rx="3" fill="var(--sb-ink)" opacity=".14"/>
-      {[68,82,95,108,122,135,148].map((y,i) => (
-        <rect key={y} x="12" y={y} width={[165,182,152,170,162,175,140][i]} height="7" rx="3" fill="var(--sb-line)"/>
-      ))}
-      <rect x="244" y="46" width="1" height="208" fill="var(--sb-line)"/>
-      <rect x="245" y="46" width="131" height="209" fill="var(--sb-accent-soft)"/>
-      <rect x="253" y="57" width="56" height="8" rx="3" fill="var(--sb-accent)" opacity=".75"/>
-      <rect x="290" y="76" width="74" height="24" rx="12" fill="var(--sb-accent)"/>
-      <rect x="297" y="83" width="60" height="5" rx="2" fill="rgba(255,255,255,.75)"/>
-      <rect x="297" y="91" width="44" height="4" rx="2" fill="rgba(255,255,255,.5)"/>
-      <rect x="253" y="109" width="88" height="34" rx="12" fill="var(--sb-panel)"/>
-      <rect x="260" y="118" width="74" height="5" rx="2" fill="var(--sb-line)"/>
-      <rect x="260" y="126" width="66" height="5" rx="2" fill="var(--sb-line-2)"/>
-      <rect x="260" y="134" width="70" height="5" rx="2" fill="var(--sb-line-2)"/>
-      <rect x="296" y="153" width="68" height="20" rx="10" fill="var(--sb-accent)" opacity=".8"/>
-      <rect x="303" y="160" width="54" height="5" rx="2" fill="rgba(255,255,255,.65)"/>
-      <rect x="253" y="182" width="92" height="38" rx="12" fill="var(--sb-panel)"/>
-      <rect x="260" y="191" width="78" height="5" rx="2" fill="var(--sb-line)"/>
-      <rect x="260" y="199" width="70" height="5" rx="2" fill="var(--sb-line-2)"/>
-      <rect x="260" y="207" width="74" height="5" rx="2" fill="var(--sb-line-2)"/>
-      <rect x="249" y="230" width="120" height="20" rx="10" fill="var(--sb-panel)" stroke="var(--sb-accent)" strokeWidth="1.2"/>
-      <rect x="257" y="237" width="72" height="5" rx="2" fill="var(--sb-line-2)"/>
-    </svg>
+    <div style={{ position: 'relative', width: '100%', maxWidth: 380, borderRadius: 12, overflow: 'hidden', aspectRatio: '380/260', background: '#111', border: '1px solid rgba(255,255,255,0.08)' }}>
+      {/* Browser chrome */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', background: '#1a1a1a', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF5F57', opacity: 0.85 }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FEBC2E', opacity: 0.85 }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#28C840', opacity: 0.85 }} />
+        <div style={{ flex: 1, height: 16, borderRadius: 8, background: '#2a2a2a', display: 'flex', alignItems: 'center', paddingLeft: 8, gap: 5 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#DB4437', opacity: 0.8 }} />
+          <div style={{ height: 5, width: 90, borderRadius: 3, background: 'rgba(255,255,255,0.18)' }} />
+        </div>
+      </div>
+
+      {/* Page content area */}
+      <div style={{ position: 'relative', padding: '14px 16px 14px', background: '#111' }}>
+        {/* Gmail header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#DB4437,#C44033)', flexShrink: 0, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 12 }}>G</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ height: 7, width: 90, borderRadius: 3, background: 'rgba(255,255,255,0.5)' }} />
+            <div style={{ height: 5, width: 55, borderRadius: 3, background: 'rgba(255,255,255,0.2)' }} />
+          </div>
+        </div>
+        {/* Email subject */}
+        <div style={{ height: 9, width: '72%', borderRadius: 3, background: 'rgba(255,255,255,0.45)', marginBottom: 8 }} />
+        {/* From/To */}
+        <div style={{ height: 5, width: '38%', borderRadius: 2, background: 'rgba(255,255,255,0.15)', marginBottom: 5 }} />
+        <div style={{ height: 5, width: '28%', borderRadius: 2, background: 'rgba(255,255,255,0.1)', marginBottom: 10 }} />
+        {/* Body lines */}
+        {[100,88,95,78,90,62].map((w,i) => (
+          <div key={i} style={{ height: 5, width: `${w}%`, borderRadius: 2, background: 'rgba(255,255,255,0.08)', marginBottom: 6 }} />
+        ))}
+        {[85,72,80,60].map((w,i) => (
+          <div key={i} style={{ height: 5, width: `${w}%`, borderRadius: 2, background: 'rgba(255,255,255,0.05)', marginBottom: 6 }} />
+        ))}
+      </div>
+
+      {/* ── Glassmorphism panel floating on top ── */}
+      <div style={{
+        position: 'absolute', top: 46, right: 10, bottom: 36,
+        width: '53%',
+        borderRadius: 14,
+        background: 'rgba(20,16,14,0.72)',
+        backdropFilter: 'blur(20px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+        border: '1px solid rgba(255,255,255,0.18)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        {/* Panel header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 12px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <img src="/favicon.svg" width={20} height={20} alt="Braino" style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div style={{ height: 6, width: 36, borderRadius: 2, background: 'rgba(255,255,255,0.65)' }} />
+            <div style={{ height: 4, width: 22, borderRadius: 2, background: 'rgba(255,255,255,0.22)' }} />
+          </div>
+        </div>
+        {/* Messages */}
+        <div style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {/* User bubble */}
+          <div style={{ alignSelf: 'flex-end', background: 'var(--sb-accent)', borderRadius: '10px 10px 2px 10px', padding: '6px 10px', maxWidth: '85%' }}>
+            <div style={{ height: 5, width: 80, borderRadius: 2, background: 'rgba(255,255,255,0.85)', marginBottom: 4 }} />
+            <div style={{ height: 4, width: 58, borderRadius: 2, background: 'rgba(255,255,255,0.5)' }} />
+          </div>
+          {/* AI response */}
+          <div style={{ alignSelf: 'flex-start', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px 10px 10px 2px', padding: '7px 10px', maxWidth: '90%' }}>
+            <div style={{ height: 5, width: 110, borderRadius: 2, background: 'rgba(255,255,255,0.55)', marginBottom: 4 }} />
+            <div style={{ height: 4, width: 100, borderRadius: 2, background: 'rgba(255,255,255,0.3)', marginBottom: 4 }} />
+            <div style={{ height: 4, width: 88, borderRadius: 2, background: 'rgba(255,255,255,0.3)', marginBottom: 4 }} />
+            <div style={{ height: 4, width: 70, borderRadius: 2, background: 'rgba(255,255,255,0.18)' }} />
+          </div>
+        </div>
+        {/* Input bar */}
+        <div style={{ margin: '0 8px 8px', display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 20, padding: '6px 6px 6px 12px' }}>
+          <div style={{ flex: 1, height: 5, borderRadius: 2, background: 'rgba(255,255,255,0.18)' }} />
+          <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--sb-accent)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            <svg viewBox="0 0 16 16" width="9" height="9" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="13" x2="8" y2="3"/><polyline points="3 8 8 3 13 8"/></svg>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Floating brain button — bottom-right ── */}
+      <div style={{ position: 'absolute', bottom: 8, right: 14, width: 34, height: 34, filter: 'drop-shadow(0 0 8px rgba(200,84,74,0.55))' }}>
+        <img src="/favicon.svg" width={34} height={34} alt="Braino" />
+      </div>
+    </div>
   );
 }
 
