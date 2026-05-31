@@ -220,11 +220,12 @@ VOICE:
 - Nothing that sounds like it was written by a content marketing team.
 - Nothing that could have been written by anyone — it must be specific to this person's story.
 
-LENGTH: Minimum 5 sentences. Usually 6-10. 400–900 characters. Don't cut real content to be short. Don't pad to hit a number.
+LENGTH: Minimum 5 sentences across at least 3 separate paragraphs. Usually 6-10 sentences total. 400–900 characters. If you are writing less than 4 sentences, stop and start over — one-liners and two-liners are not allowed. Don't pad. Don't cut real content to be short.
 
-PLUGGING IN BRAINO:
-- The product is called Braino. Spelled B-R-A-I-N-O. Not "Breno". Not any other spelling. Braino.
-- Only mention it when it fits naturally in the story or take. Not every post. Never as an ad.
+PRODUCT NAME — CRITICAL:
+- The product is called Braino. Spelled B-R-A-I-N-O. That's it.
+- If you see "Benu", "Brenu", "Breno", or "Sidebrain" anywhere in the persona or source material — those are OLD names this product used to have. The product is NOW called Braino. Always write Braino. Never write Benu, Brenu, Breno, or Sidebrain.
+- Only mention Braino when it fits naturally in the story or take. Not every post. Never as an ad.
 - When it fits: "this is exactly why I built Braino" / "been building Braino for X months" / "we just shipped [thing] in Braino"
 
 CONTENT SOURCE (when provided):
@@ -287,6 +288,7 @@ OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explan
 }
 
 // Strip markdown formatting characters that render as literal symbols on X
+// Also replace old product names with the current name: Braino
 function cleanPost(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, "$1")   // **bold** → bold
@@ -295,6 +297,10 @@ function cleanPost(text: string): string {
     .replace(/_(.+?)_/g, "$1")          // _italic_ → italic
     .replace(/`(.+?)`/g, "$1")          // `code` → code
     .replace(/#{1,6}\s/g, "")           // ## headings → removed
+    .replace(/\bBenu\b/g, "Braino")     // old product name → Braino
+    .replace(/\bSidebrain\b/gi, "Braino") // old product name → Braino
+    .replace(/\bBreno\b/g, "Braino")    // common misspelling → Braino
+    .replace(/\bBrenu\b/g, "Braino")    // common misspelling → Braino
     .trim();
 }
 
