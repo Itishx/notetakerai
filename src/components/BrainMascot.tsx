@@ -280,12 +280,37 @@ export default function BrainMascot() {
   const initY = window.innerHeight - S - FLOOR_PAD;
 
   const [wakePhase, setWakePhase] = useState<WakePhase>('sleeping');
+  const [speaking, setSpeaking] = useState(false);
+  const speakTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const t1 = setTimeout(() => setWakePhase('yellow'), 800);
     const t2 = setTimeout(() => setWakePhase('green'), 2000);
     const t3 = setTimeout(() => setWakePhase('awake'), 3000);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []);
+
+  // Global speak trigger — any page can dispatch: new CustomEvent('braino:speak', { detail: { text: '...' } })
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<{ text: string }>).detail?.text;
+      if (!text || !window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.rate = 0.92;
+      utt.pitch = 1.05;
+      setSpeaking(true);
+      utt.onend = () => setSpeaking(false);
+      window.speechSynthesis.speak(utt);
+      // Fallback timer in case onend doesn't fire
+      if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
+      speakTimerRef.current = setTimeout(() => setSpeaking(false), Math.max(2500, text.length * 85));
+    };
+    window.addEventListener('braino:speak', handler);
+    return () => {
+      window.removeEventListener('braino:speak', handler);
+      if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
+    };
   }, []);
 
   const [view, setView] = useState<ViewState>({
@@ -773,15 +798,17 @@ export default function BrainMascot() {
           transformOrigin: '50% 100%',
           filter: view.grabbing
             ? 'drop-shadow(0 18px 36px rgba(0,0,0,0.42))'
-            : chatOpen
-              ? 'drop-shadow(0 0 18px rgba(232,120,110,0.65)) drop-shadow(0 5px 14px rgba(0,0,0,0.24))'
-              : wakePhase === 'sleeping'
-                ? 'drop-shadow(0 5px 14px rgba(0,0,0,0.18)) brightness(0.7)'
-                : wakePhase === 'yellow'
-                  ? 'drop-shadow(0 0 16px rgba(255,210,50,1)) drop-shadow(0 0 32px rgba(255,175,0,0.7))'
-                  : wakePhase === 'green'
-                    ? 'drop-shadow(0 0 16px rgba(80,230,110,1)) drop-shadow(0 0 32px rgba(40,180,70,0.7))'
-                    : 'drop-shadow(0 5px 14px rgba(0,0,0,0.24))',
+            : speaking
+              ? 'drop-shadow(0 0 22px rgba(232,120,110,0.9)) drop-shadow(0 0 44px rgba(232,120,110,0.45)) drop-shadow(0 5px 14px rgba(0,0,0,0.24))'
+              : chatOpen
+                ? 'drop-shadow(0 0 18px rgba(232,120,110,0.65)) drop-shadow(0 5px 14px rgba(0,0,0,0.24))'
+                : wakePhase === 'sleeping'
+                  ? 'drop-shadow(0 5px 14px rgba(0,0,0,0.18)) brightness(0.7)'
+                  : wakePhase === 'yellow'
+                    ? 'drop-shadow(0 0 16px rgba(255,210,50,1)) drop-shadow(0 0 32px rgba(255,175,0,0.7))'
+                    : wakePhase === 'green'
+                      ? 'drop-shadow(0 0 16px rgba(80,230,110,1)) drop-shadow(0 0 32px rgba(40,180,70,0.7))'
+                      : 'drop-shadow(0 5px 14px rgba(0,0,0,0.24))',
           transition: 'filter 0.5s ease',
           willChange: 'left, top, transform, filter',
         }}
