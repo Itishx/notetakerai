@@ -134,6 +134,14 @@ const AFTER_MILESTONES = [
     title: 'Persona & Voice System',
     desc: 'Braino gets character voices. Reply history logs. Show-more expansion. X Auto integration. The foundation for a fully-personalized AI companion.',
     tags: ['Persona Voices', 'Reply History', 'X Auto'],
+  },
+  {
+    date: 'May 31, 2026',
+    version: 'v1.9.5',
+    dot: '🤖',
+    title: 'Autonomous X Pipeline + Google Docs + Drive Organise',
+    desc: '24/7 X auto-posting and reply pipeline with per-user voice. Ask Braino to research any topic and create a Google Doc in one shot. "Organise my Drive" party trick — scans, categorises, moves files. Live waitlist announcements with voice. Content source field for grounding posts in real material.',
+    tags: ['X Auto Pipeline', 'Google Docs', 'Drive Organise', 'Voice Alerts'],
     latest: true,
   },
 ];
