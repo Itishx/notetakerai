@@ -331,7 +331,19 @@ async function resolvePostContent(
         {
           role: "system",
           content:
-            "Write a polished X post in the user's authentic voice. Return only the post text, no quotes, no labels, no markdown. Keep it under 280 characters.",
+            `Write a strong X post in the user's authentic voice.
+
+Hard rules:
+- Stay at or under 280 characters total.
+- Multi-line only. Minimum 3 non-empty lines.
+- Minimum 3 sentences.
+- Sound like a real founder or builder texting a sharp friend.
+- Use one concrete detail, tension, number, decision, or observation.
+- No hashtags. No emojis. No "what do you think?" No CTA. No listicle formatting.
+- Never start with "I".
+- No generic fluff like "excited to share", "game-changer", "let's dive in", or "unpopular opinion".
+
+Return only the post text. No quotes, no labels, no markdown fences.`,
         },
         {
           role: "user",
@@ -347,10 +359,21 @@ async function resolvePostContent(
   }
 
   const payload = await response.json();
-  return String(payload?.choices?.[0]?.message?.content || "")
+  const draft = String(payload?.choices?.[0]?.message?.content || "")
     .trim()
-    .replace(/^["“”']+|["“”']+$/g, "")
-    .slice(0, 280);
+    .replace(/^["“”']+|["“”']+$/g, "");
+
+  return normalizeBriefDraft(draft).slice(0, 280);
+}
+
+function normalizeBriefDraft(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function parseJsonResponse<T>(raw: string): T {

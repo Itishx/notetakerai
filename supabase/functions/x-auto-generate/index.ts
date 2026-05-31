@@ -9,6 +9,13 @@ const corsHeaders = {
 
 const LOVABLE_API_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-2.5-pro";
+const X_POST_MAX_CHARS = 280;
+const X_POST_MIN_CHARS = 170;
+const X_POST_IDEAL_MIN_CHARS = 210;
+const MIN_POST_LINES = 3;
+const MIN_POST_SENTENCES = 3;
+const CANDIDATE_MULTIPLIER = 4;
+const MAX_GENERATION_PASSES = 2;
 
 // Posting windows in UTC hours — spread evenly if fewer slots needed
 const POSTING_HOURS_UTC = [8, 12, 16, 20, 23];
@@ -128,7 +135,7 @@ serve(async (req) => {
 
       const inserts = tweets.slice(0, scheduledTimes.length).map((text, i) => ({
         user_id: persona.user_id,
-        content: text.slice(0, 2000),
+        content: text.slice(0, X_POST_MAX_CHARS),
         scheduled_at: scheduledTimes[i],
         status: "pending",
       }));
@@ -174,78 +181,6 @@ async function generateTweets(opts: {
     .filter(Boolean)
     .join("\n");
 
-  const systemPrompt = `You are a ghostwriter. You write posts that sound like a real person talking to a friend — not a brand, not a thought leader, not a newsletter. Study these examples. This is exactly the voice, structure, and length you are going for.
-
----
-EXAMPLE 1 (The Story):
-Three months ago I almost pulled the plug on everything.
-
-We had 11 users. Six months of nights. My cofounder and I weren't really talking. I opened my laptop at 2am and just sat there — is this actually going anywhere?
-
-Decided to send one more cold email. One.
-
-Got a reply at 7am. That person is still a user today. Sometimes the whole thing hangs on one stupid decision you almost didn't make.
-
----
-EXAMPLE 2 (The Update):
-Just hit 200 notes synced in Braino.
-
-Didn't expect to feel anything about a number. But one user texted me yesterday — she used it to prep for a pitch and got the funding.
-
-That text is why I haven't slept right in four months.
-
----
-EXAMPLE 3 (The Take):
-Everyone's building an AI notes app. Nobody's asking why people stop using them after week two.
-
-It's not the features. Your notes were already a mess before the AI got involved. All you did was make the mess faster.
-
-The real problem is thinking, not storing. That's the only thing worth solving.
-
----
-
-NOW WRITE IN THIS VOICE. Rules:
-
-STRUCTURE — pick one per post:
-- Story: drop into a moment, tell what happened, what shifted. No neat lesson at the end. Just where you landed.
-- Update: real number, real moment, feels like a text to a friend who's been following along.
-- Take: specific opinion, defended with something real. Not "AI is big." Something someone could disagree with.
-
-VOICE:
-- Short paragraphs. One or two sentences each. Like someone texting.
-- Never start with "I" — start with what happened, what you noticed, what hit you.
-- No hashtags. No emojis. No "what do you think?" No lesson at the end.
-- Plain text only. No asterisks, no bold, no markdown. X doesn't render it.
-- No: "excited to share", "game-changer", "let's dive in", "unpopular opinion", "here's the thing", "just start", "consistency is key", "some days are hard", "leveraging", "driving outcomes", "really interesting space"
-- Nothing that sounds like it was written by a content marketing team.
-- Nothing that could have been written by anyone — it must be specific to this person's story.
-
-LENGTH: Minimum 5 sentences across at least 3 separate paragraphs. Usually 6-10 sentences total. 400–900 characters. If you are writing less than 4 sentences, stop and start over — one-liners and two-liners are not allowed. Don't pad. Don't cut real content to be short.
-
-PRODUCT NAME — CRITICAL:
-- The product is called Braino. Spelled B-R-A-I-N-O. That's it.
-- If you see "Benu", "Brenu", "Breno", or "Sidebrain" anywhere in the persona or source material — those are OLD names this product used to have. The product is NOW called Braino. Always write Braino. Never write Benu, Brenu, Breno, or Sidebrain.
-- Only mention Braino when it fits naturally in the story or take. Not every post. Never as an ad.
-- When it fits: "this is exactly why I built Braino" / "been building Braino for X months" / "we just shipped [thing] in Braino"
-
-CONTENT SOURCE (when provided):
-The source material may be written as short notes, bullet points, conclusions, or one-liner ideas. DO NOT copy that format. DO NOT restate or expand a one-liner into a slightly longer one-liner.
-
-Instead: treat each point as a TOPIC. Ask "what's the story behind this?" and write that story.
-
-Example — if source says: "Features are copyable. Personality isn't."
-WRONG (what you must not do): "Features are copyable. Personality isn't. That's why I spent more time on tone than on shipping."
-RIGHT (what you must do): Tell the actual story. When did you first realize this? Was there a competitor who copied something? What did you decide to do instead? What happened? 6 sentences minimum, dropped into a moment, written like the examples above.
-
-Rules:
-- Each post is built around ONE idea from the source — not a summary of many.
-- Use any specific numbers, names, or moments in the material — those details are gold.
-- Cover different ideas across the posts. Don't repeat the same theme.
-- Your posts must look like the EXAMPLES above, not like the source material.
-
-OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explanation. Just the array.
-["Post one here.", "Post two here."]`;
-
   // Scrub old product names from source before sending to AI so they never appear in output
   const cleanedSource = (opts.contentSource || "")
     .replace(/\bBenu\b/g, "Braino")
@@ -258,8 +193,104 @@ OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explan
     ? `\n\nContent source material (mine this for tweet ideas and angles):\n---\n${cleanedSource}\n---`
     : "";
 
-  const userPrompt = `Persona:\n${personaContext}${opts.overallContext ? `\n\nAdditional user context:\n${opts.overallContext}` : ""}${contentSection}\n\nGenerate ${opts.count} original tweet${opts.count > 1 ? "s" : ""} for today. Return a JSON array of strings.`;
+  const candidateTarget = Math.max(opts.count * CANDIDATE_MULTIPLIER, opts.count + 4);
+  const userPrompt = `Persona:\n${personaContext}${opts.overallContext ? `\n\nAdditional user context:\n${opts.overallContext}` : ""}${contentSection}
 
+Generate ${candidateTarget} distinct X post candidates for today. I will keep only the strongest ${opts.count}.
+
+Important:
+- These are for X, so every post must stay at or under ${X_POST_MAX_CHARS} characters total.
+- Multi-line only. No one-line posts.
+- Each post must feel specific, lived-in, and stoppable in the feed.
+- Cover different angles. Do not repeat the same insight in different words.
+
+Return a JSON array of strings.`;
+
+  const acceptedPosts: Array<{ post: string; score: number }> = [];
+  const fallbackPosts: Array<{ post: string; score: number }> = [];
+  const seen = new Set<string>();
+  let rejectionSummary = "";
+
+  for (let pass = 1; pass <= MAX_GENERATION_PASSES; pass++) {
+    const rawCandidates = await requestPostBatch({
+      apiKey: opts.apiKey,
+      systemPrompt: buildGenerationSystemPrompt(pass),
+      userPrompt: rejectionSummary ? `${userPrompt}\n\nPrevious batch failed for these reasons:\n${rejectionSummary}` : userPrompt,
+    });
+
+    console.log(`[x-auto-generate] pass ${pass} returned ${rawCandidates.length} raw candidates`);
+
+    const inspections = rawCandidates.map(inspectPostQuality);
+    rejectionSummary = summarizeWeakPosts(inspections);
+
+    for (const inspection of inspections) {
+      if (seen.has(inspection.normalized)) continue;
+
+      if (inspection.ok) {
+        seen.add(inspection.normalized);
+        acceptedPosts.push({
+          post: inspection.normalized,
+          score: inspection.score,
+        });
+        continue;
+      }
+
+      if (isUsableFallback(inspection)) {
+        seen.add(inspection.normalized);
+        fallbackPosts.push({
+          post: inspection.normalized,
+          score: inspection.score,
+        });
+      }
+    }
+
+    if (acceptedPosts.length >= opts.count) {
+      break;
+    }
+  }
+
+  const finalPosts = acceptedPosts
+    .sort((left, right) => right.score - left.score)
+    .concat(fallbackPosts.sort((left, right) => right.score - left.score))
+    .slice(0, opts.count)
+    .map((item) => item.post);
+
+  console.log(
+    `[x-auto-generate] accepted ${finalPosts.length} strong posts${rejectionSummary ? ` | last rejection summary: ${rejectionSummary}` : ""}`,
+  );
+
+  return finalPosts;
+}
+
+// Strip markdown formatting characters that render as literal symbols on X
+// Also replace old product names with the current name: Braino
+function cleanPost(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/\*\*(.+?)\*\*/g, "$1")   // **bold** → bold
+    .replace(/\*(.+?)\*/g, "$1")        // *italic* → italic
+    .replace(/__(.+?)__/g, "$1")        // __bold__ → bold
+    .replace(/_(.+?)_/g, "$1")          // _italic_ → italic
+    .replace(/`(.+?)`/g, "$1")          // `code` → code
+    .replace(/#{1,6}\s/g, "")           // ## headings → removed
+    .replace(/^["“”']+|["“”']+$/g, "")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\bBenu\b/g, "Braino")     // old product name → Braino
+    .replace(/\bSidebrain\b/gi, "Braino") // old product name → Braino
+    .replace(/\bBreno\b/g, "Braino")    // common misspelling → Braino
+    .replace(/\bBrenu\b/g, "Braino")    // common misspelling → Braino
+    .trim();
+}
+
+async function requestPostBatch(opts: {
+  apiKey: string;
+  systemPrompt: string;
+  userPrompt: string;
+}): Promise<string[]> {
   const response = await fetch(LOVABLE_API_URL, {
     method: "POST",
     headers: {
@@ -269,8 +300,8 @@ OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explan
     body: JSON.stringify({
       model: MODEL,
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
+        { role: "system", content: opts.systemPrompt },
+        { role: "user", content: opts.userPrompt },
       ],
     }),
   });
@@ -284,43 +315,173 @@ OUTPUT: Return ONLY a valid JSON array of strings. No markdown fences. No explan
   const rawContent = String(payload?.choices?.[0]?.message?.content || "").trim();
   console.log("[x-auto-generate] raw AI response:", rawContent.slice(0, 500));
 
-  // Strip markdown fences if present
   const fenced = rawContent.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced?.[1]?.trim() || rawContent;
 
   try {
     const parsed = JSON.parse(candidate);
     if (Array.isArray(parsed)) {
-      const posts = parsed
-        .filter((t) => typeof t === "string" && t.trim().length > 150) // reject one-liners
-        .map(cleanPost);
-      console.log(`[x-auto-generate] parsed ${posts.length} valid posts from ${parsed.length} candidates`);
-      return posts;
+      return parsed.filter((item) => typeof item === "string");
     }
-  } catch {
-    if (candidate.length > 150) {
-      return [cleanPost(candidate)];
+  } catch (error) {
+    console.warn("[x-auto-generate] could not parse candidate array:", error);
+  }
+
+  return candidate ? [candidate] : [];
+}
+
+function buildGenerationSystemPrompt(pass: number) {
+  const retryTightening = pass > 1
+    ? `
+RETRY MODE:
+- The last batch was too short, too generic, or collapsed into single-paragraph filler.
+- Push harder toward specificity, tension, and line breaks.
+- If a post reads like advice anyone could have tweeted, rewrite it until it sounds owned.`
+    : "";
+
+  return `You are ghostwriting X posts for a founder.
+
+Goal:
+- Write posts that feel like they came from a real person living through the work.
+- These should stop the scroll because they sound specific, not polished.
+
+Format:
+- X hard limit: ${X_POST_MAX_CHARS} characters total. Never exceed it.
+- Multi-line only.
+- Minimum ${MIN_POST_LINES} non-empty lines.
+- Minimum ${MIN_POST_SENTENCES} sentences.
+- Prefer 4-7 short lines, with natural rhythm and line breaks.
+- One idea per post.
+
+Allowed structures:
+- Story: a moment, tension, shift, where it landed.
+- Update: a concrete number or user moment that actually means something.
+- Take: a strong opinion anchored in something real, not content-farm fluff.
+
+Voice:
+- Sounds like a founder texting a sharp friend.
+- Specific, lived-in, unsanitized.
+- Not motivational sludge.
+- Not a brand account.
+- Not a newsletter intro.
+- No hashtags. No emojis. No "what do you think?" No CTA. No listicles.
+- Do not start with "I". Start with the moment, tension, number, observation, or surprise.
+
+Bad phrases to never use:
+- excited to share
+- game-changer
+- let's dive in
+- unpopular opinion
+- here's the thing
+- consistency is key
+- some days are hard
+- leveraging
+- driving outcomes
+- really interesting space
+
+Specificity rules:
+- Use at least one concrete detail per post: a number, time marker, user message, shipped thing, mistake, tension, contrast, or decision.
+- If the source is bullets or one-liners, unwrap ONE of them into an actual scene or grounded take.
+- Do not summarize the source. Make it sound lived.
+
+Product naming:
+- The product is called Braino.
+- Never output Benu, Sidebrain, Breno, or Brenu. Always use Braino when the product is mentioned.
+- Mention Braino only when it fits naturally. Never force the product name into every post.${retryTightening}
+
+Return ONLY a valid JSON array of strings. No markdown fences. No explanations.`;
+}
+
+function inspectPostQuality(text: string) {
+  const normalized = cleanPost(text);
+  const lines = normalized.split("\n").map((line) => line.trim()).filter(Boolean);
+  const charCount = normalized.length;
+  const punctuatedSentenceCount = normalized
+    .split(/[.!?](?:\s|$)/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean).length;
+  const sentenceCount = Math.max(punctuatedSentenceCount, lines.length);
+  const issues: string[] = [];
+  const lowered = normalized.toLowerCase();
+
+  if (!normalized) issues.push("empty");
+  if (charCount < X_POST_MIN_CHARS) issues.push("too_short");
+  if (charCount > X_POST_MAX_CHARS) issues.push("too_long");
+  if (lines.length < MIN_POST_LINES) issues.push("not_multiline_enough");
+  if (sentenceCount < MIN_POST_SENTENCES) issues.push("too_few_sentences");
+  if (/^i\b/i.test(normalized)) issues.push("starts_with_i");
+  if (/#/.test(normalized)) issues.push("has_hashtag");
+  if (/[\u{1F300}-\u{1FAFF}]/u.test(normalized)) issues.push("has_emoji");
+  if (
+    /(excited to share|game-?changer|let'?s dive in|unpopular opinion|here'?s the thing|consistency is key|some days are hard|leveraging|driving outcomes|really interesting space)/i.test(
+      normalized,
+    )
+  ) {
+    issues.push("generic_phrase");
+  }
+  if (!/\d|\b(today|yesterday|tonight|week|month|year|user|users|customer|customers|shipped|shipping|built|building|bug|reply|replies|launch|launched|note|notes|braino)\b/i.test(lowered)) {
+    issues.push("not_specific_enough");
+  }
+
+  let score = 0;
+  if (issues.length === 0) score += 10;
+  if (charCount >= X_POST_IDEAL_MIN_CHARS && charCount <= X_POST_MAX_CHARS) score += 4;
+  if (lines.length >= 4) score += 3;
+  if (/\d/.test(normalized)) score += 2;
+  if (/\b(but|instead|then|still|because)\b/i.test(normalized)) score += 2;
+  if (/braino/i.test(normalized)) score += 1;
+  score -= issues.length * 2;
+
+  return {
+    ok: issues.length === 0,
+    normalized,
+    issues,
+    score,
+    charCount,
+    lineCount: lines.length,
+    sentenceCount,
+  };
+}
+
+function summarizeWeakPosts(
+  inspections: Array<{ ok: boolean; issues: string[] }>,
+) {
+  const rejected = inspections.filter((item) => !item.ok);
+  if (rejected.length === 0) return "";
+
+  const counts = new Map<string, number>();
+  for (const item of rejected) {
+    for (const issue of item.issues) {
+      counts.set(issue, (counts.get(issue) || 0) + 1);
     }
   }
 
-  return [];
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 6)
+    .map(([issue, count]) => `${issue}: ${count}`)
+    .join(", ");
 }
 
-// Strip markdown formatting characters that render as literal symbols on X
-// Also replace old product names with the current name: Braino
-function cleanPost(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, "$1")   // **bold** → bold
-    .replace(/\*(.+?)\*/g, "$1")        // *italic* → italic
-    .replace(/__(.+?)__/g, "$1")        // __bold__ → bold
-    .replace(/_(.+?)_/g, "$1")          // _italic_ → italic
-    .replace(/`(.+?)`/g, "$1")          // `code` → code
-    .replace(/#{1,6}\s/g, "")           // ## headings → removed
-    .replace(/\bBenu\b/g, "Braino")     // old product name → Braino
-    .replace(/\bSidebrain\b/gi, "Braino") // old product name → Braino
-    .replace(/\bBreno\b/g, "Braino")    // common misspelling → Braino
-    .replace(/\bBrenu\b/g, "Braino")    // common misspelling → Braino
-    .trim();
+function isUsableFallback(inspection: {
+  normalized: string;
+  issues: string[];
+  charCount: number;
+  lineCount: number;
+}) {
+  if (!inspection.normalized) return false;
+  if (inspection.charCount > X_POST_MAX_CHARS) return false;
+  if (inspection.lineCount < 2) return false;
+
+  const disqualifyingIssues = new Set([
+    "has_hashtag",
+    "has_emoji",
+    "generic_phrase",
+    "starts_with_i",
+    "not_specific_enough",
+  ]);
+
+  return inspection.issues.every((issue) => !disqualifyingIssues.has(issue));
 }
 
 function buildScheduleTimes(now: Date, count: number): string[] {
