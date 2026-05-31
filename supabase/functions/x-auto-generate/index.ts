@@ -128,7 +128,7 @@ serve(async (req) => {
 
       const inserts = tweets.slice(0, scheduledTimes.length).map((text, i) => ({
         user_id: persona.user_id,
-        content: text.slice(0, 280),
+        content: text.slice(0, 2000),
         scheduled_at: scheduledTimes[i],
         status: "pending",
       }));
@@ -174,18 +174,40 @@ async function generateTweets(opts: {
     .filter(Boolean)
     .join("\n");
 
-  const systemPrompt = `You are a social media ghostwriter. Generate original, authentic X (Twitter) posts for a person based on their persona and content source.
+  const systemPrompt = `You are a ghostwriter for a founder/builder on X (Twitter). You write posts that feel genuinely human — specific, opinionated, and worth reading to the end. Your posts get bookmarked, not just liked.
 
-Rules:
-- Each post MUST be under 280 characters.
-- Write in first person, in the person's authentic voice.
-- Vary the style: mix insights, observations, questions to followers, and personal thoughts.
-- No hashtags unless they are genuinely useful.
-- No emojis unless the tone calls for it.
-- No promotional language or obvious marketing.
-- If content source material is provided, mine it for ideas and angles — don't just summarize it, find the interesting takes.
-- Return ONLY a valid JSON array of strings. No markdown fences. No extra text.
-- Example output: ["Post one here.", "Post two here."]`;
+WHAT MAKES A GREAT X POST:
+1. A hook that stops the scroll. Not a question. A specific claim, a surprising number, a counterintuitive observation, or a vivid detail.
+2. Real substance in the body. What you actually learned. What surprised you. What most people get wrong. What the data shows. A specific story or moment.
+3. A concrete landing. A real takeaway, a decision you made, a perspective that shifted. Not "hope this helps."
+4. Length: aim for 400–1200 characters. Longer is better if you have something to say. Never pad. Never cut something important just to be short.
+
+VOICE RULES (non-negotiable):
+- Read the tone notes carefully and write exactly like that person sounds in real life.
+- If the notes say direct — be blunt. If they say raw founder energy — write from the weeds, not the balcony.
+- Never open with "I" as the first word.
+- Never use: "excited to share", "game-changer", "dive in", "here's the thing", "unpopular opinion", "thread 🧵", "let's go", "just start"
+- No emojis unless tone notes specifically call for them.
+- No hashtags. Ever.
+- No engagement bait at the end ("What do you think?", "Drop a comment", "Agree?")
+- Sound like you're texting a smart friend, not writing a LinkedIn post.
+- CRITICAL: Plain text only. No asterisks, no markdown, no bold, no italics. X does not render markdown — asterisks appear as literal characters and look broken.
+
+CONTENT SOURCE RULES (when material is provided):
+- Do NOT summarize it. That's the lazy take.
+- Find the one thing that is actually interesting — a specific number, a counterintuitive claim, an overlooked detail — and build a post around that angle.
+- Cross-reference it with the persona: what does this mean for someone in their specific position, building what they're building?
+- The best posts from source material feel like a personal reaction, not a report.
+
+WHAT TO NEVER WRITE:
+- Generic advice: "consistency is key", "show your work", "just ship it"
+- Vague statements: "really interesting space", "so much to learn"
+- Manufactured inspiration: "some days are hard, keep going"
+- Corporate speak: "leveraging learnings", "driving outcomes"
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON array of strings. No markdown fences. No explanation. No numbering.
+Example: ["Full post text here.", "Second post here."]`;
 
   const contentSection = opts.contentSource?.trim()
     ? `\n\nContent source material (mine this for tweet ideas and angles):\n---\n${opts.contentSource.trim()}\n---`
@@ -223,16 +245,29 @@ Rules:
   try {
     const parsed = JSON.parse(candidate);
     if (Array.isArray(parsed)) {
-      return parsed.filter((t) => typeof t === "string" && t.trim().length > 0);
+      return parsed
+        .filter((t) => typeof t === "string" && t.trim().length > 0)
+        .map(cleanPost);
     }
   } catch {
-    // If not an array, try to return it as a single tweet
-    if (candidate.length > 0 && candidate.length <= 280) {
-      return [candidate];
+    if (candidate.length > 0) {
+      return [cleanPost(candidate)];
     }
   }
 
   return [];
+}
+
+// Strip markdown formatting characters that render as literal symbols on X
+function cleanPost(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")   // **bold** → bold
+    .replace(/\*(.+?)\*/g, "$1")        // *italic* → italic
+    .replace(/__(.+?)__/g, "$1")        // __bold__ → bold
+    .replace(/_(.+?)_/g, "$1")          // _italic_ → italic
+    .replace(/`(.+?)`/g, "$1")          // `code` → code
+    .replace(/#{1,6}\s/g, "")           // ## headings → removed
+    .trim();
 }
 
 function buildScheduleTimes(now: Date, count: number): string[] {
