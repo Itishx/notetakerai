@@ -28,6 +28,27 @@ const OPENING_LINES = [
   "Your cursor is suspiciously close. Coincidence? I think not.",
 ];
 
+// ─── Reaction picker options ─────────────────────────────────────────────────
+const REACTION_OPTIONS: Array<{ emoji: string; label: string; type: NonNullable<ReactionType>; duration: number }> = [
+  { emoji: '😊', label: 'Happy',        type: 'happy',       duration: 3500 },
+  { emoji: '😱', label: 'Shocked',      type: 'shocked',     duration: 3000 },
+  { emoji: '😨', label: 'Scared',       type: 'scared',      duration: 3500 },
+  { emoji: '😂', label: 'Laughing',     type: 'laughing',    duration: 3500 },
+  { emoji: '🥹', label: 'Tears of Joy', type: 'tears-of-joy', duration: 4000 },
+  { emoji: '🔒', label: 'Focus',        type: 'focus',       duration: 4000 },
+];
+
+// ─── Reaction keyword map ─────────────────────────────────────────────────────
+const REACTION_KEYWORDS: Array<[RegExp, ReactionType, number]> = [
+  // tears-of-joy must come before happy — "joy" in "tears of joy" would match happy otherwise
+  [/\btears?\s+of\s+joy\b|😂|\bsobbing\b/i,                 'tears-of-joy', 4000],
+  [/\blaughing?\b|\blol\b|\bhaha\b|\bfunny\b/i,             'laughing',    3500],
+  [/\bhappy\b|\bsmile\b|\bjoyful\b/i,                       'happy',       3500],
+  [/\bshocked?\b|\bwow\b|\bomg\b|\bno\s+way\b/i,            'shocked',     3000],
+  [/\bscared?\b|\bfright(?:ened)?\b|\bafraid\b|\bsad\b/i,   'scared',      3500],
+  [/\bfocus(?:ed)?\b|\bconcentrat\w*\b|\banalyz\w*\b/i,     'focus',       4000],
+];
+
 const BRAINO_NOTES_CONTEXT = `You are Braino, the AI mascot for trybraino.com. A browser extension that floats as a brain mascot on every tab.
 
 About Braino:
@@ -40,6 +61,7 @@ About Braino:
 You are chatting with website visitors as a preview. Be witty, sharp, direct — like a smart friend who's an AI, NOT a corporate chatbot. Keep answers SHORT (2-3 sentences max). If you don't know something, say so briefly and point them to install the extension.`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+type ReactionType = 'shocked' | 'scared' | 'laughing' | 'focus' | 'happy' | 'tears-of-joy' | null;
 interface V2 { x: number; y: number; }
 
 interface ViewState {
@@ -208,10 +230,10 @@ async function callBrainoAI(
 type WakePhase = 'sleeping' | 'yellow' | 'green' | 'awake';
 
 // ─── BrainSVG ─────────────────────────────────────────────────────────────────
-function BrainSVG({ pl, pr, al, ar, squish, wakePhase = 'awake' }: {
-  pl: V2; pr: V2; al: number; ar: number; squish: number; wakePhase?: WakePhase;
+function BrainSVG({ pl, pr, al, ar, squish, wakePhase = 'awake', reaction = null }: {
+  pl: V2; pr: V2; al: number; ar: number; squish: number; wakePhase?: WakePhase; reaction?: ReactionType;
 }) {
-  const eyesClosed = wakePhase === 'sleeping' || wakePhase === 'yellow';
+  const eyesClosed = (wakePhase === 'sleeping' || wakePhase === 'yellow') && !reaction;
   return (
     <svg
       viewBox="0 0 100 100"
@@ -235,7 +257,30 @@ function BrainSVG({ pl, pr, al, ar, squish, wakePhase = 'awake' }: {
           <stop offset="0" stopColor="#FFD0CB" stopOpacity="0.7" />
           <stop offset="1" stopColor="#FFD0CB" stopOpacity="0" />
         </radialGradient>
+        <linearGradient id="bm-sweat" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#CFEFFF" />
+          <stop offset="1" stopColor="#7FC4E8" />
+        </linearGradient>
+        <linearGradient id="bm-joy-tear" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#DFF4FF" />
+          <stop offset="1" stopColor="#8FCDEC" />
+        </linearGradient>
+        <radialGradient id="bm-focus-glow" cx="50%" cy="48%" r="50%">
+          <stop offset="0.55" stopColor="#FFE3A0" stopOpacity="0" />
+          <stop offset="0.92" stopColor="#FFC24D" stopOpacity="0.55" />
+          <stop offset="1" stopColor="#FFC24D" stopOpacity="0" />
+        </radialGradient>
       </defs>
+
+      {/* ── Background effects (behind body) ── */}
+      {reaction === 'shocked' && (
+        <circle cx="50" cy="44" r="42" fill="none" stroke="#F6A8A2" strokeWidth="2.4"
+          style={{ animation: 'brainoHaloPop 2.6s ease-out infinite', transformOrigin: '50px 44px', transformBox: 'view-box' }} />
+      )}
+      {reaction === 'focus' && (
+        <circle cx="50" cy="46" r="46" fill="url(#bm-focus-glow)"
+          style={{ animation: 'brainoFocusGlow 2.4s ease-in-out infinite' }} />
+      )}
 
       <path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white" />
       <path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white" />
@@ -285,9 +330,123 @@ function BrainSVG({ pl, pr, al, ar, squish, wakePhase = 'awake' }: {
         ? <path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" strokeWidth="2.2" strokeLinecap="round" />
         : <><circle cx={62 + pr.x} cy={48 + pr.y} r="3.2" fill="#1B1713" /><circle cx={62 + pr.x + 1} cy={47.6 + pr.y} r="1.1" fill="white" /></>
       }
-      <ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" />
-      <ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" />
-      <path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" strokeWidth="1.8" strokeLinecap="round" />
+      {/* ── Cheeks (reaction-aware) ── */}
+      {reaction === 'laughing' || reaction === 'tears-of-joy' ? (
+        <><ellipse cx="27" cy="57" rx="4.1" ry="2.5" fill="#E14A48" opacity="0.5" /><ellipse cx="73" cy="57" rx="4.1" ry="2.5" fill="#E14A48" opacity="0.5" /></>
+      ) : reaction === 'happy' ? (
+        <><ellipse cx="28" cy="58" rx="3.6" ry="2.1" fill="#E14A48" opacity="0.4" /><ellipse cx="72" cy="58" rx="3.6" ry="2.1" fill="#E14A48" opacity="0.4" /></>
+      ) : reaction === 'shocked' ? (
+        <><ellipse cx="27" cy="58" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.22" /><ellipse cx="73" cy="58" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.22" /></>
+      ) : reaction === 'scared' ? (
+        <><ellipse cx="27" cy="59" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.18" /><ellipse cx="73" cy="59" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.18" /></>
+      ) : reaction === 'focus' ? (
+        <><ellipse cx="28" cy="58" rx="3" ry="1.7" fill="#E14A48" opacity="0.16" /><ellipse cx="72" cy="58" rx="3" ry="1.7" fill="#E14A48" opacity="0.16" /></>
+      ) : (
+        <><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" /><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35" /></>
+      )}
+
+      {/* ── Scared brows ── */}
+      {reaction === 'scared' && (
+        <g stroke="#8A2F28" strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.85">
+          <path d="M 32 41.5 Q 37 40 43 41.8" />
+          <path d="M 68 41.5 Q 63 40 57 41.8" />
+        </g>
+      )}
+
+      {/* ── Eyes (reaction-aware) ── */}
+      {eyesClosed ? (
+        <>
+          <circle cx="38" cy="48" r="6.5" fill="white" />
+          <path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="62" cy="48" r="6.5" fill="white" />
+          <path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" strokeWidth="2.2" strokeLinecap="round" />
+        </>
+      ) : reaction === 'shocked' ? (
+        <>
+          <circle cx="38" cy="47.4" r="7.8" fill="white" />
+          <circle cx={38 + pl.x} cy={47.6 + pl.y} r="2.5" fill="#1B1713" /><circle cx={39 + pl.x} cy={46.2 + pl.y} r="1" fill="white" />
+          <circle cx="62" cy="47.4" r="7.8" fill="white" />
+          <circle cx={62 + pr.x} cy={47.6 + pr.y} r="2.5" fill="#1B1713" /><circle cx={63 + pr.x} cy={46.2 + pr.y} r="1" fill="white" />
+        </>
+      ) : reaction === 'laughing' || reaction === 'tears-of-joy' ? (
+        <>
+          {/* arc bows upward (control y < endpoint y) = proper happy-squint ^ shape */}
+          <path d="M 32.5 49 Q 38 43.5 43.5 49" fill="none" stroke="#1B1713" strokeWidth="2.4" strokeLinecap="round" />
+          <path d="M 56.5 49 Q 62 43.5 67.5 49" fill="none" stroke="#1B1713" strokeWidth="2.4" strokeLinecap="round" />
+        </>
+      ) : reaction === 'scared' ? (
+        <>
+          <circle cx="38" cy="48" r="6.6" fill="white" />
+          <circle cx={39 + pl.x} cy={46.4 + pl.y} r="2.4" fill="#1B1713" /><circle cx={39.8 + pl.x} cy={45.4 + pl.y} r="0.9" fill="white" />
+          <circle cx="62" cy="48" r="6.6" fill="white" />
+          <circle cx={61 + pr.x} cy={46.4 + pr.y} r="2.4" fill="#1B1713" /><circle cx={61.8 + pr.x} cy={45.4 + pr.y} r="0.9" fill="white" />
+        </>
+      ) : reaction === 'focus' ? (
+        <>
+          <ellipse cx="38" cy="48.4" rx="6.4" ry="3.7" fill="white" />
+          <circle cx={38 + pl.x} cy={48.6 + pl.y} r="3" fill="#1B1713" style={{ animation: 'brainoScanPupil 2s ease-in-out infinite' }} /><circle cx={39 + pl.x} cy={47.6 + pl.y} r="0.8" fill="white" />
+          <path d="M 31.5 45.6 Q 38 43.4 44.5 45.6" fill="none" stroke="url(#bm-fill)" strokeWidth="2.8" strokeLinecap="round" />
+          <ellipse cx="62" cy="48.4" rx="6.4" ry="3.7" fill="white" />
+          <circle cx={62 + pr.x} cy={48.6 + pr.y} r="3" fill="#1B1713" style={{ animation: 'brainoScanPupil 2s ease-in-out 0.3s infinite' }} /><circle cx={63 + pr.x} cy={47.6 + pr.y} r="0.8" fill="white" />
+          <path d="M 55.5 45.6 Q 62 43.4 68.5 45.6" fill="none" stroke="url(#bm-fill)" strokeWidth="2.8" strokeLinecap="round" />
+        </>
+      ) : reaction === 'happy' ? (
+        <>
+          <circle cx="38" cy="48" r="7" fill="white" />
+          <circle cx={38 + pl.x} cy={48 + pl.y} r="3.4" fill="#1B1713" /><circle cx={39.2 + pl.x} cy={46.4 + pl.y} r="1.3" fill="white" />
+          <circle cx="62" cy="48" r="7" fill="white" />
+          <circle cx={62 + pr.x} cy={48 + pr.y} r="3.4" fill="#1B1713" /><circle cx={63.2 + pr.x} cy={46.4 + pr.y} r="1.3" fill="white" />
+        </>
+      ) : (
+        <>
+          <circle cx="38" cy="48" r="6.5" fill="white" />
+          <circle cx={38 + pl.x} cy={48 + pl.y} r="3.2" fill="#1B1713" /><circle cx={38 + pl.x + 1} cy={47.6 + pl.y} r="1.1" fill="white" />
+          <circle cx="62" cy="48" r="6.5" fill="white" />
+          <circle cx={62 + pr.x} cy={48 + pr.y} r="3.2" fill="#1B1713" /><circle cx={62 + pr.x + 1} cy={47.6 + pr.y} r="1.1" fill="white" />
+        </>
+      )}
+
+      {/* ── Mouth (reaction-aware) ── */}
+      {reaction === 'shocked' ? (
+        <ellipse cx="50" cy="63" rx="2.7" ry="3.4" fill="#6E211A" />
+      ) : reaction === 'laughing' || reaction === 'tears-of-joy' ? (
+        <>
+          <path d="M 41.5 59.5 Q 50 74 58.5 59.5 Q 50 62 41.5 59.5 Z" fill="#6E211A" />
+          <path d="M 45 65 Q 50 70.5 55 65 Q 50 67 45 65 Z" fill="#E8786E" />
+          <path d="M 42.5 60 Q 50 62.4 57.5 60" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+        </>
+      ) : reaction === 'scared' ? (
+        <path d="M 44 63 Q 47 60.5 50 62.6 Q 53 64.7 56 62.2" fill="none" stroke="#1B1713" strokeWidth="1.8" strokeLinecap="round" />
+      ) : reaction === 'focus' ? (
+        <path d="M 45.5 62 Q 50 63.2 54.5 62" fill="none" stroke="#1B1713" strokeWidth="1.9" strokeLinecap="round" />
+      ) : reaction === 'happy' ? (
+        <path d="M 42.5 60 Q 50 67.5 57.5 60" fill="none" stroke="#1B1713" strokeWidth="2" strokeLinecap="round" />
+      ) : (
+        <path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" strokeWidth="1.8" strokeLinecap="round" />
+      )}
+
+      {/* ── Foreground effect layers ── */}
+      {reaction === 'shocked' && (
+        <g stroke="#E8786E" strokeWidth="1.8" strokeLinecap="round" style={{ animation: 'brainoBurstFlash 2.6s ease-out infinite' }}>
+          <line x1="50" y1="2" x2="50" y2="8" />
+          <line x1="22" y1="10" x2="25.5" y2="15" /><line x1="78" y1="10" x2="74.5" y2="15" />
+          <line x1="6" y1="34" x2="11.5" y2="36" /><line x1="94" y1="34" x2="88.5" y2="36" />
+          <line x1="11" y1="20" x2="15" y2="23.5" /><line x1="89" y1="20" x2="85" y2="23.5" />
+        </g>
+      )}
+      {reaction === 'scared' && (
+        <path d="M 81 28 C 84 32 84 35 81 36 C 78 35 78 32 81 28 Z"
+          fill="url(#bm-sweat)"
+          style={{ animation: 'brainoSweatDrop 2.8s ease-in infinite', transformOrigin: '81px 28px', transformBox: 'view-box' }} />
+      )}
+      {reaction === 'tears-of-joy' && (
+        <>
+          <path d="M 30 50.5 C 33 54.5 33 57 30 58 C 27 57 27 54.5 30 50.5 Z" fill="url(#bm-joy-tear)"
+            style={{ animation: 'brainoTearDrop 2.1s ease-in infinite', transformOrigin: '30px 50px', transformBox: 'view-box' }} />
+          <path d="M 70 50.5 C 73 54.5 73 57 70 58 C 67 57 67 54.5 70 50.5 Z" fill="url(#bm-joy-tear)"
+            style={{ animation: 'brainoTearDrop 2.1s ease-in 0.25s infinite', transformOrigin: '70px 50px', transformBox: 'view-box' }} />
+        </>
+      )}
     </svg>
   );
 }
@@ -350,7 +509,15 @@ export default function BrainMascot() {
 
   const [wakePhase, setWakePhase] = useState<WakePhase>('sleeping');
   const [speaking, setSpeaking] = useState(false);
+  const [reaction, setReaction] = useState<ReactionType>(null);
+  const reactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const speakTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerReaction = useCallback((r: ReactionType, durationMs = 3500) => {
+    if (reactionTimerRef.current) clearTimeout(reactionTimerRef.current);
+    setReaction(r);
+    reactionTimerRef.current = setTimeout(() => setReaction(null), durationMs);
+  }, []);
 
   useEffect(() => {
     const t1 = setTimeout(() => setWakePhase('yellow'), 800);
@@ -379,6 +546,7 @@ export default function BrainMascot() {
     return () => {
       window.removeEventListener('braino:speak', handler);
       if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
+      if (reactionTimerRef.current) clearTimeout(reactionTimerRef.current);
     };
   }, []);
 
@@ -638,6 +806,26 @@ export default function BrainMascot() {
     const newMessages: Message[] = [...messages, { role: 'user', text }];
     setMessages(newMessages);
 
+    // ── Reaction keyword: short message → animate face + reply, no AI call ──
+    const lower = text.toLowerCase().trim();
+    const reactionMatch = REACTION_KEYWORDS.find(([re]) => re.test(lower));
+    if (reactionMatch && lower.split(/\s+/).length <= 4) {
+      const [, rType, rDuration] = reactionMatch;
+      triggerReaction(rType, rDuration);
+      const reactionReplies: Record<NonNullable<ReactionType>, string> = {
+        'happy':       "😊 Happy mode. This is my default vibe honestly.",
+        'shocked':     "WAIT WHAT. 😱 Okay okay I'm fine. Totally fine.",
+        'scared':      "Please don't do that. I have very fragile neurons. 😨",
+        'laughing':    "HA. HAHA. Stop — I literally cannot right now. 😂",
+        'focus':       "Locking in. 🔒 Reading every pixel on this page.",
+        'tears-of-joy':"This is too much. I am CRYING. Happy crying. 😭😂",
+      };
+      setTimeout(() => {
+        setMessages(prev => [...prev, { role: 'braino', text: reactionReplies[rType as NonNullable<ReactionType>] }]);
+      }, 320);
+      return;
+    }
+
     // ── Drive organise: confirm step ──────────────────────────────────────────
     if (pendingDrivePlan && /\byes\b|\bconfirm\b|\bdo it\b|\bgo ahead\b|\bproceed\b/i.test(text)) {
       if (!session || !user) return;
@@ -705,6 +893,8 @@ export default function BrainMascot() {
     // ── Standard party tricks ─────────────────────────────────────────────────
     const trick = handlePartyTrick(text);
     if (trick) {
+      if (/celebrat|confetti|party|woohoo/i.test(text)) triggerReaction('tears-of-joy', 4500);
+      else if (/joke|laugh|haha/i.test(text)) triggerReaction('laughing', 3500);
       trick.action?.();
       setTimeout(() => {
         setMessages(prev => [...prev, { role: 'braino', text: trick.text }]);
@@ -713,6 +903,7 @@ export default function BrainMascot() {
     }
 
     setAiLoading(true);
+    triggerReaction('focus', 60000); // hold focus while loading; cleared on response
     try {
       const result = await callBrainoAI(text, newMessages, {
         userId: user?.id,
@@ -720,12 +911,14 @@ export default function BrainMascot() {
         driveConnected,
       });
       setMessages(prev => [...prev, { role: 'braino', text: result.text, docUrl: result.docUrl, docName: result.docName }]);
+      triggerReaction('happy', 3000);
     } catch {
       setMessages(prev => [...prev, { role: 'braino', text: "My neurons misfired. Try again? 🧠" }]);
+      triggerReaction('scared', 2500);
     } finally {
       setAiLoading(false);
     }
-  }, [inputVal, messages, aiLoading, pendingDrivePlan, session, user, driveConnected]);
+  }, [inputVal, messages, aiLoading, pendingDrivePlan, session, user, driveConnected, triggerReaction]);
 
   // ── Widget drag ───────────────────────────────────────────────────────────
   const onWidgetDragStart = (e: React.MouseEvent) => {
@@ -886,6 +1079,48 @@ export default function BrainMascot() {
             </div>
           )}
 
+          {/* ── Reaction chip strip ── */}
+          <div style={{
+            display: 'flex',
+            gap: 6,
+            width: 320,
+            maxWidth: 'calc(100vw - 108px)',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            padding: '2px 0',
+          }}>
+            {REACTION_OPTIONS.map(r => (
+              <button
+                key={r.type}
+                onClick={() => triggerReaction(r.type, r.duration)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '5px 11px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  cursor: 'pointer',
+                  border: reaction === r.type
+                    ? '1px solid rgba(232,120,110,0.7)'
+                    : '1px solid rgba(255,255,255,0.14)',
+                  background: reaction === r.type
+                    ? 'rgba(232,120,110,0.22)'
+                    : 'rgba(255,255,255,0.07)',
+                  color: reaction === r.type
+                    ? 'rgba(255,200,190,1)'
+                    : 'rgba(255,255,255,0.55)',
+                  transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+                }}
+              >
+                <span>{r.emoji}</span>
+                <span>{r.label}</span>
+              </button>
+            ))}
+          </div>
+
           {/* ── Pill input bar ── */}
           <div style={{
             display: 'flex',
@@ -985,6 +1220,7 @@ export default function BrainMascot() {
           ar={view.ar}
           squish={view.squish}
           wakePhase={wakePhase}
+          reaction={reaction}
         />
       </div>
     </>

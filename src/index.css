@@ -751,3 +751,37 @@
 }
 .animate-fade-up { animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .animate-fade-in { animation: fade-in 0.6s ease-out forwards; }
+
+/* ── Braino Reaction animations ───────────────────────────────────── */
+@keyframes brainoTearDrop {
+  0%,100% { transform: translateY(0); opacity: 1; }
+  65%     { transform: translateY(9px); opacity: .75; }
+  83%     { transform: translateY(13px); opacity: 0; }
+  84%     { transform: translateY(0); opacity: 0; }
+}
+@keyframes brainoSweatDrop {
+  0%,100% { transform: translateY(0); opacity: 1; }
+  68%     { transform: translateY(10px); opacity: .6; }
+  84%     { transform: translateY(13px); opacity: 0; }
+  85%     { transform: translateY(0); opacity: 0; }
+}
+@keyframes brainoHaloPop {
+  0%     { opacity: 0; transform: scale(1); }
+  12%    { opacity: .8; }
+  50%    { opacity: 0; transform: scale(1.35); }
+  100%   { opacity: 0; transform: scale(1); }
+}
+@keyframes brainoBurstFlash {
+  0%,100% { opacity: 0; }
+  8%,18%  { opacity: .95; }
+  30%     { opacity: 0; }
+}
+@keyframes brainoFocusGlow {
+  0%,100% { opacity: 0; }
+  50%     { opacity: 1; }
+}
+@keyframes brainoScanPupil {
+  0%,100% { transform: translateX(0); }
+  33%     { transform: translateX(-1.6px); }
+  66%     { transform: translateX(1.6px); }
+}

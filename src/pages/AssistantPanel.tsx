@@ -129,6 +129,23 @@ function stripMarkdown(text: string) {
     .trim();
 }
 
+type Turn = { user: ChatMessage; assistant?: ChatMessage };
+
+function groupIntoTurns(messages: ChatMessage[]): Turn[] {
+  const turns: Turn[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role === "user") {
+      const next = messages[i + 1];
+      turns.push({
+        user: messages[i],
+        assistant: next?.role === "assistant" ? next : undefined,
+      });
+      if (next?.role === "assistant") i++;
+    }
+  }
+  return turns;
+}
+
 function getHostname(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -806,38 +823,46 @@ export default function AssistantPanel() {
             </div>
           )}
 
-          <div className="mt-4 flex flex-col gap-3">
-            {messages.map((message, index) => {
-              if (message.content.startsWith("__sidebrain_busy__")) {
-                const busyLabel = message.content.slice("__sidebrain_busy__".length).replace(/^:/, "").trim();
-                return (
-                  <div
-                    key={`busy-${index}`}
-                    className="max-w-[88%] rounded-[24px] rounded-bl-md border border-[#eadfce] bg-white/85 px-4 py-3 text-sm text-[#6d5c4b]"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-[#dc7f2f]" />
-                      <span>{busyLabel || (mode === "agent" ? "Working through the page…" : "Thinking…")}</span>
+          <div className="mt-4 flex flex-col gap-1">
+            {groupIntoTurns(messages).map((turn, turnIdx, arr) => {
+              const isActive = turnIdx === arr.length - 1;
+              const isBusy = turn.assistant?.content.startsWith("__sidebrain_busy__");
+
+              return (
+                <div key={turnIdx}>
+                  {turnIdx > 0 && (
+                    <div className="my-3 flex items-center gap-2">
+                      <div className="h-px flex-1 bg-[#e8ddcf]" />
+                    </div>
+                  )}
+
+                  <div className={`flex justify-end mb-2 ${!isActive ? "opacity-55" : ""}`}>
+                    <div className={`max-w-[90%] rounded-[24px] rounded-br-md px-4 bg-[#1d1813] text-[#fff8ef] shadow-sm ${isActive ? "py-3 text-sm" : "py-2 text-xs"}`}>
+                      {turn.user.content}
                     </div>
                   </div>
-                );
-              }
 
-              const isUser = message.role === "user";
-              return (
-                <div
-                  key={`${message.role}-${index}`}
-                  className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[90%] rounded-[24px] px-4 py-3 text-sm leading-relaxed shadow-sm ${
-                      isUser
-                        ? "rounded-br-md bg-[#1d1813] text-[#fff8ef]"
-                        : "rounded-bl-md border border-[#eadfce] bg-white/85 text-[#3f352c]"
-                    }`}
-                    ref={index === messages.length - 1 ? lastMessageRef : null}
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
-                  />
+                  {turn.assistant && (
+                    <div className={`flex justify-start ${!isActive ? "opacity-55" : ""}`}>
+                      {isBusy ? (
+                        <div className="max-w-[88%] rounded-[24px] rounded-bl-md border border-[#eadfce] bg-white/85 px-4 py-3 text-sm text-[#6d5c4b]">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-[#dc7f2f]" />
+                            <span>
+                              {turn.assistant.content.slice("__sidebrain_busy__".length).replace(/^:/, "").trim() ||
+                                (mode === "agent" ? "Working through the page…" : "Thinking…")}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className={`max-w-[90%] rounded-[24px] rounded-bl-md border border-[#eadfce] bg-white/85 text-[#3f352c] leading-relaxed shadow-sm ${isActive ? "px-4 py-3 text-sm" : "px-3 py-2 text-xs"}`}
+                          ref={isActive ? lastMessageRef : null}
+                          dangerouslySetInnerHTML={{ __html: renderMarkdown(turn.assistant.content) }}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
