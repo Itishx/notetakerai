@@ -1238,6 +1238,28 @@ export default function Dashboard() {
     }
   }
 
+  async function handleClearXQueue() {
+    if (!user) return;
+    const pendingIds = scheduledXPosts.filter((p) => p.status === "pending").map((p) => p.id);
+    if (pendingIds.length === 0) return;
+    try {
+      const { error } = await supabase
+        .from("scheduled_x_posts")
+        .update({ status: "cancelled" })
+        .in("id", pendingIds)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      setScheduledXPosts((prev) =>
+        prev.map((p) => (pendingIds.includes(p.id) ? { ...p, status: "cancelled" as const } : p))
+      );
+    } catch (error) {
+      toast({
+        title: "Could not clear queue",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
   async function handleDispatchScheduledXPosts() {
     if (!user) return;
     setXDispatching(true);
@@ -3084,9 +3106,20 @@ export default function Dashboard() {
                               Posted and scheduled by the pipeline
                             </div>
                           </div>
-                          <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
-                            {scheduledXPosts.length} in queue
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {scheduledXPosts.some((p) => p.status === "pending") && (
+                              <button
+                                onClick={handleClearXQueue}
+                                className="rounded-lg border border-red-400/30 bg-red-500/8 px-3 py-1 text-[11px] text-red-500 transition-colors hover:bg-red-500/15"
+                                style={monoStyle}
+                              >
+                                Clear pending
+                              </button>
+                            )}
+                            <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[11px] text-[var(--sb-ink-3)]">
+                              {scheduledXPosts.length} in queue
+                            </span>
+                          </div>
                         </div>
                         {scheduledXPosts.length === 0 ? (
                           <div className="rounded-xl border border-dashed border-[var(--sb-line)] px-6 py-12 text-center text-[13px] text-[var(--sb-ink-3)]">
