@@ -2379,6 +2379,21 @@ function __sbBuildBrainUI() {
   `;
   document.body.appendChild(modelDd);
 
+  // On X/Twitter, lock the Braino bar to the system font — Twitter's global CSS
+  // bleeds into injected DOM elements and makes the UI look wrong.
+  if (__sbIsOnX()) {
+    const xFontFix = document.createElement("style");
+    xFontFix.id = "__sb_x_font_fix__";
+    xFontFix.textContent = `
+      #__sb_bar__, #__sb_bar__ *,
+      #__sb_card_wrap__, #__sb_card_wrap__ *,
+      #__sb_bubble__, #__sb_bubble__ * {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      }
+    `;
+    document.head.appendChild(xFontFix);
+  }
+
   // Brain hidden by default
   document.getElementById("__sb_brain_btn__").style.display = "none";
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
