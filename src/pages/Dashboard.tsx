@@ -900,7 +900,7 @@ function MemoryAddForm({ userId, onAdded }: { userId: string; onAdded: (note: No
 }
 
 export default function Dashboard() {
-  const { user, profile, loading, signOut, session } = useAuth();
+  const { user, profile, loading, signOut, session, isPremium } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -1691,7 +1691,6 @@ export default function Dashboard() {
     }
   }
 
-  const isPremium = profile?.is_premium === true;
   const firstName = profile?.display_name?.split(" ")[0] || user?.email?.split("@")[0] || "there";
 
   const activitySeries = useMemo(() => buildActivitySeries(notes, commands), [commands, notes]);

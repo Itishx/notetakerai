@@ -14,6 +14,9 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const INTERNAL_PREMIUM_EMAILS = new Set([
+  "itishpande21@gmail.com",
+]);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -75,8 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const isPremium =
+    profile?.is_premium === true ||
+    (typeof user?.email === "string" && INTERNAL_PREMIUM_EMAILS.has(user.email.toLowerCase()));
+
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, isPremium: profile?.is_premium ?? false, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, loading, isPremium, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

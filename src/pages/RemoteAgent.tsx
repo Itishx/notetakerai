@@ -171,8 +171,7 @@ function CommandCard({
 }
 
 export default function RemoteAgent() {
-  const { user, profile } = useAuth();
-  const isPremium = (profile as any)?.is_premium === true;
+  const { user, isPremium } = useAuth();
   const [commands, setCommands] = useState<Command[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
