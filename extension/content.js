@@ -1088,6 +1088,7 @@ function __sbGetSiteAdapterContext() {
 function __sbNormalizeConnectorName(value) {
   const key = String(value || "").trim().toLowerCase();
   if (!key || key === "auto" || key === "default") return "auto";
+  if (["spotify", "spot", "music"].includes(key)) return "spotify";
   if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
   if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
   return null;
@@ -1095,6 +1096,7 @@ function __sbNormalizeConnectorName(value) {
 
 function __sbGetConnectorSiteSuggestion(siteContext) {
   const site = siteContext?.site || "generic";
+  if (site === "spotify") return "spotify";
   if (site === "google-drive") return "google-drive";
   if (site === "gmail") return "gmail";
   return "auto";
@@ -1117,10 +1119,12 @@ function __sbInferConnectorFromPrompt(promptText) {
 function __sbGetConnectorLabel(connector, options = {}) {
   const key = __sbNormalizeConnectorName(connector) || "auto";
   const includeAutoHint = Boolean(options.includeAutoHint);
+  if (key === "spotify") return "♪ Spotify";
   if (key === "google-drive") return "🗂 Drive";
   if (key === "gmail") return "✉ Gmail";
   if (includeAutoHint) {
     const suggestion = __sbGetConnectorSiteSuggestion(options.siteContext || __sbGetSiteAdapterContext());
+    if (suggestion === "spotify") return "↗ Auto · Spotify";
     if (suggestion === "google-drive") return "↗ Auto · Drive";
     if (suggestion === "gmail") return "↗ Auto · Gmail";
   }
@@ -1161,6 +1165,9 @@ function __sbShouldConnectorForceAgent(connector, promptText, forcedMode, siteCo
   }
   if (key === "gmail") {
     return /\b(reply|draft|compose|send|archive|label|star|read|open|find|search|show|summarize|triage|email)\b/.test(text);
+  }
+  if (key === "spotify") {
+    return /\b(play|pause|resume|continue|next|previous|prev|back|skip|stop|shuffle|repeat|song|track|music|playlist|spotify)\b/.test(text);
   }
   return false;
 }
@@ -2702,6 +2709,37 @@ function __sbBuildBrainUI() {
       font-size: 11px;
       color: rgba(230,255,236,0.72);
     }
+    .sb-spotify-controls {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+    }
+    .sb-spotify-ctrl-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.12);
+      color: #F4FFF7;
+      font-size: 16px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .sb-spotify-ctrl-btn:hover { background: rgba(255,255,255,0.22); transform: scale(1.08); }
+    .sb-spotify-ctrl-btn.primary {
+      width: 46px;
+      height: 46px;
+      font-size: 20px;
+      background: rgba(100,255,159,0.2);
+      border: 1px solid rgba(100,255,159,0.3);
+    }
+    .sb-spotify-ctrl-btn.primary:hover { background: rgba(100,255,159,0.35); }
     .sb-spotify-grid {
       display: grid;
       grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
@@ -4749,6 +4787,11 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
               <span>${__sbEscapeHtml(track?.durationText || "Spotify")}</span>
             </div>
           </div>
+          <div class="sb-spotify-controls">
+            <button class="sb-spotify-ctrl-btn" data-sb-spotify-ctrl="previous" title="Previous">⏮</button>
+            <button class="sb-spotify-ctrl-btn primary" data-sb-spotify-ctrl="${__sbSpotifyIsPlaying() ? "pause" : "play"}" title="${__sbSpotifyIsPlaying() ? "Pause" : "Play"}">${__sbSpotifyIsPlaying() ? "⏸" : "▶"}</button>
+            <button class="sb-spotify-ctrl-btn" data-sb-spotify-ctrl="next" title="Next">⏭</button>
+          </div>
         </div>
         <div class="sb-spotify-grid">
           <div class="sb-spotify-block">
@@ -4773,6 +4816,12 @@ function __sbRenderSpotifyPanel(options = {}) {
   const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
   scroll.innerHTML = __sbBuildSpotifyPanelHtml(historyHtml);
   scroll.scrollTop = 0;
+  scroll.querySelectorAll("[data-sb-spotify-ctrl]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const ctrl = btn.dataset.sbSpotifyCtrl;
+      chrome.runtime.sendMessage({ action: "spotifyControl", control: ctrl }, () => { void chrome.runtime.lastError; });
+    });
+  });
   if (options.openCard) __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
   __sbEnsureSpotifyRefreshLoop();
@@ -4952,7 +5001,7 @@ function __sbIsExplicitWebSearchRequest(text) {
 }
 
 function __sbIsBrowserActionCommand(text) {
-  return /\b(open|go to|navigate to|visit|search for|play|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
+  return /\b(open|go to|navigate to|visit|search for|play|pause|resume|continue|next|previous|prev|skip|stop|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
 }
 
 function __sbDetectIntent(text) {

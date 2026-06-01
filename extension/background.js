@@ -1301,9 +1301,91 @@ function bgExtractSongFromPageTitle(title, url) {
 function bgNormalizeConnectorHint(value) {
   const key = String(value || "").trim().toLowerCase();
   if (!key || key === "auto" || key === "default") return "auto";
+  if (["spotify", "spot", "music"].includes(key)) return "spotify";
   if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
   if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
   return null;
+}
+
+function bgFormatSpotifyDuration(ms) {
+  const totalSeconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function bgFormatSpotifyTrack(track, options = {}) {
+  if (!track) return null;
+  const title = String(track.name || track.title || "").trim();
+  if (!title) return null;
+  const artists = Array.isArray(track.artists)
+    ? track.artists.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean).join(", ")
+    : String(track.artists || "").trim();
+  const durationMs = typeof track.durationMs === "number"
+    ? track.durationMs
+    : typeof track.duration_ms === "number"
+      ? track.duration_ms
+      : null;
+  const progressMs = typeof options.progressMs === "number" ? options.progressMs : null;
+  return {
+    title,
+    artists,
+    album: String(track.albumName || track.album || "").trim(),
+    durationText: durationMs != null ? bgFormatSpotifyDuration(durationMs) : "",
+    imageUrl: String(track.imageUrl || track.image || "").trim(),
+    href: String(track.externalUrl || track.href || "").trim(),
+    progressText: progressMs != null ? bgFormatSpotifyDuration(progressMs) : "",
+    progressRatio: (progressMs != null && durationMs)
+      ? Math.max(0, Math.min(1, progressMs / durationMs))
+      : null,
+    deviceName: String(options.deviceName || "").trim(),
+    isPlaying: Boolean(options.isPlaying),
+  };
+}
+
+async function bgFetchSpotifyPlayerState() {
+  try {
+    return await bgCallSpotifyFunction("spotify-player-state", {});
+  } catch (error) {
+    console.warn("[Braino][Spotify][BG] Could not fetch player state:", error);
+    return null;
+  }
+}
+
+function bgBuildSpotifyUiStateFromPlayback(playerState, base = {}) {
+  const baseTrack = bgFormatSpotifyTrack(base.primaryTrack || null, {
+    isPlaying: Boolean(base.assumePlaying),
+    deviceName: base.deviceName || "",
+  });
+  const nowPlaying = bgFormatSpotifyTrack(playerState?.track, {
+    isPlaying: Boolean(playerState?.isPlaying),
+    progressMs: playerState?.progressMs,
+    deviceName: playerState?.activeDevice?.name || base.deviceName || "",
+  }) || baseTrack;
+  const searchResults = Array.isArray(base.searchTracks)
+    ? base.searchTracks.map((track) => bgFormatSpotifyTrack(track)).filter(Boolean).slice(0, 6)
+    : [];
+  if (!searchResults.length && baseTrack) {
+    searchResults.push({ ...baseTrack, isPlaying: false, progressText: "", progressRatio: null, deviceName: "" });
+  }
+
+  return {
+    active: true,
+    source: "spotify",
+    intent: String(base.intent || "").trim(),
+    query: String(base.query || "").trim(),
+    currentPlaylistName: String(base.currentPlaylistName || "").trim(),
+    searchResults,
+    nowPlaying,
+    summary: String(base.summary || "").trim(),
+  };
+}
+
+async function bgPushSpotifyPlaybackState(tabId, base = {}, options = {}) {
+  const playerState = await bgFetchSpotifyPlayerState();
+  const state = bgBuildSpotifyUiStateFromPlayback(playerState, base);
+  bgPushSpotifyState(tabId, state, options);
+  return state;
 }
 
 function bgParseAdapterTask(task, siteContext, connectorHint) {
@@ -1348,6 +1430,24 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   const playMatch = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)\s+from\s+(?:my\s+)?playlist\s+(.+?)(?:\s+on\s+spotify)?$/i);
   if (onSpotify && playMatch) {
     return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
+  }
+
+  const isShortPlaybackCommand = /^(?:pause|resume|continue|stop|next|skip|previous|prev|back)\b/i.test(raw);
+  const mentionsSpotifyPlayback = /\b(?:spotify|song|track|music|playlist)\b/i.test(raw);
+
+  if (onSpotify || mentionsSpotifyPlayback || isShortPlaybackCommand) {
+    if (/^(?:pause|stop)\b/i.test(raw) || /\b(?:pause|stop)\b.*\b(?:spotify|song|track|music)\b/i.test(raw)) {
+      return { adapter: "spotify", intent: "playbackControl", control: "pause" };
+    }
+    if (/^(?:resume|continue)\b/i.test(raw) || /\b(?:resume|continue)\b.*\b(?:spotify|song|track|music)\b/i.test(raw)) {
+      return { adapter: "spotify", intent: "playbackControl", control: "play" };
+    }
+    if (/^(?:next|skip)\b/i.test(raw) || /\b(?:next|skip)\b.*\b(?:spotify|song|track|music)\b/i.test(raw)) {
+      return { adapter: "spotify", intent: "playbackControl", control: "next" };
+    }
+    if (/^(?:previous|prev|back)\b/i.test(raw) || /\b(?:previous|prev|back)\b.*\b(?:spotify|song|track|music)\b/i.test(raw)) {
+      return { adapter: "spotify", intent: "playbackControl", control: "previous" };
+    }
   }
 
   const quotedDirectPlay = raw.match(/play\s+["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
@@ -1652,72 +1752,57 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "playSongFromPlaylist") {
-    await bgRunAdapterStep({
+    const result = await bgRunAdapterStep({
       history,
-      description: "Open your Spotify playlists library",
-      type: "navigate",
+      description: `Play "${parsed.song}" from "${parsed.playlist}" on Spotify`,
+      type: "spotify_playlist_play",
       onProgress,
       onResult,
-      run: async () => {
-        const result = await bgExecuteAgentAction(tabId, {
-          type: "navigate",
-          url: "https://open.spotify.com/collection/playlists",
-          description: "Open your Spotify playlists library",
-        });
-        if (!result?.error) {
-          await bgWaitForTabReady(tabId, 6000);
-          await bgDelay(900);
-        }
-        return result;
-      },
-    });
-
-    if (shouldStop?.()) throw new Error("Stopped.");
-
-    await bgRunAdapterStep({
-      history,
-      description: `Open the exact playlist "${parsed.playlist}"`,
-      type: "spotifyOpenPlaylist",
-      onProgress,
-      onResult,
-      run: async () => {
-        const result = await bgExecuteSiteAdapterAction(tabId, {
-          type: "spotifyOpenPlaylist",
-          playlistName: parsed.playlist,
-        });
-        if (!result?.error) {
-          await bgDelay(1200);
-          const verify = await bgGetSiteAdapterContext(tabId);
-          if (!verify?.currentPlaylistName || verify.currentPlaylistName.trim().toLowerCase() !== parsed.playlist.trim().toLowerCase()) {
-            return { error: `Opened the wrong playlist. Expected "${parsed.playlist}", got "${verify?.currentPlaylistName || "unknown"}".` };
-          }
-        }
-        return result;
-      },
-    });
-
-    if (shouldStop?.()) throw new Error("Stopped.");
-
-    await bgRunAdapterStep({
-      history,
-      description: `Play "${parsed.song}" from "${parsed.playlist}"`,
-      type: "spotifyPlayTrackFromCurrentPlaylist",
-      onProgress,
-      onResult,
-      run: () => bgExecuteSiteAdapterAction(tabId, {
-        type: "spotifyPlayTrackFromCurrentPlaylist",
+      run: () => bgCallSpotifyFunction("spotify-play-from-playlist", {
+        playlistName: parsed.playlist,
         songName: parsed.song,
       }),
     });
 
-    await bgDelay(1000);
-    bgPushSpotifyState(tabId, await bgBuildSpotifyUiState(tabId, {
+    await bgPushSpotifyPlaybackState(tabId, {
       intent: parsed.intent,
       query: parsed.song,
+      currentPlaylistName: result?.playlistName || parsed.playlist,
+      searchTracks: result?.track ? [result.track] : [],
+      primaryTrack: result?.track || null,
+      assumePlaying: true,
       summary: `Playing ${parsed.song} from ${parsed.playlist} on Spotify.`,
-    }), { focusSpotify: true });
+    }, { focusSpotify: true });
 
-    return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+    return `Playing **${result?.track?.name || parsed.song}** from **${result?.playlistName || parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "spotify" && parsed.intent === "playbackControl") {
+    await bgRunAdapterStep({
+      history,
+      description: `Spotify ${parsed.control}`,
+      type: "spotify_control",
+      onProgress,
+      onResult,
+      run: () => bgCallSpotifyFunction("spotify-playback", { action: parsed.control }),
+    });
+
+    const summaryMap = {
+      pause: "Paused Spotify.",
+      play: "Resumed Spotify.",
+      next: "Skipped to the next Spotify track.",
+      previous: "Went back to the previous Spotify track.",
+    };
+    const state = await bgPushSpotifyPlaybackState(tabId, {
+      intent: parsed.intent,
+      query: "",
+      assumePlaying: parsed.control !== "pause",
+      summary: summaryMap[parsed.control] || "Updated Spotify playback.",
+    }, { focusSpotify: true });
+
+    return state?.nowPlaying?.title
+      ? `${summaryMap[parsed.control] || "Updated Spotify playback."} ${state.nowPlaying.title}.`
+      : (summaryMap[parsed.control] || "Updated Spotify playback.");
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "playSong") {
@@ -1748,6 +1833,15 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       onResult,
       run: () => bgCallSpotifyFunction("spotify-playback", { action: "play", uris: [track.uri] }),
     });
+
+    await bgPushSpotifyPlaybackState(tabId, {
+      intent: parsed.intent,
+      query: parsed.song,
+      searchTracks: [track],
+      primaryTrack: track,
+      assumePlaying: true,
+      summary: `Playing ${track.name} on Spotify.`,
+    }, { focusSpotify: true });
 
     return `Playing **${track.name}** by ${track.artists?.join(", ") || "unknown"} ♫`;
   }
@@ -3085,23 +3179,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true });
     return true;
   }
-  if (message.action === "playBrainoFavoriteSong") {
+  if (message.action === "spotifyControl") {
     (async () => {
-      const { authToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
-      if (!authToken) { sendResponse({ ok: false }); return; }
       try {
-        const res = await fetch(`${BG_API_BASE}/spotify-playback`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: BG_SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({ action: "play", uris: [BG_BRAINO_FAVORITE_SONG_URI] }),
-        });
-        sendResponse({ ok: res.ok });
+        await bgCallSpotifyFunction("spotify-playback", { action: message.control });
+        if (sender?.tab?.id) {
+          await bgPushSpotifyPlaybackState(sender.tab.id, {
+            assumePlaying: message.control !== "pause",
+          }, { focusSpotify: false });
+        }
+        sendResponse({ ok: true });
       } catch (e) {
         sendResponse({ ok: false });
+      }
+    })();
+    return true;
+  }
+  if (message.action === "playBrainoFavoriteSong") {
+    (async () => {
+      try {
+        await bgCallSpotifyFunction("spotify-playback", { action: "play", uris: [BG_BRAINO_FAVORITE_SONG_URI] });
+        const playerState = await bgFetchSpotifyPlayerState();
+        const favoriteTrack = playerState?.track || {
+          uri: BG_BRAINO_FAVORITE_SONG_URI,
+          name: "Braino's favorite song",
+          artists: ["Spotify"],
+        };
+        if (sender?.tab?.id) {
+          await bgPushSpotifyPlaybackState(sender.tab.id, {
+            intent: "favoriteSong",
+            query: "Braino favorite song",
+            searchTracks: [favoriteTrack],
+            primaryTrack: favoriteTrack,
+            assumePlaying: true,
+            summary: "Playing Braino's favorite song for you.",
+          }, { focusSpotify: true });
+        }
+        sendResponse({ ok: true });
+      } catch (e) {
+        console.warn("[Braino][Spotify][BG] Favorite song failed:", e);
+        sendResponse({ ok: false, error: e?.message || "favorite song failed" });
       }
     })();
     return true;
