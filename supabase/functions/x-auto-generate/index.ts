@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const MODEL = "gpt-5-mini";
+const MODEL = "gpt-5.4-mini";
 const X_POST_MAX_CHARS = 280;
 const X_POST_MIN_CHARS = 170;
 const X_POST_IDEAL_MIN_CHARS = 210;

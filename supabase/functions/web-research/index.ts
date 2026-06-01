@@ -6,8 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+
 type Purpose = "answer" | "delegate" | "google_doc";
-type AiProvider = "lovable" | "claude";
 
 type Source = {
   title: string;
@@ -18,13 +19,6 @@ type Source = {
   publishedDate: string | null;
   author: string | null;
   status: "opened" | "snippet_only";
-};
-
-type AiConfig = {
-  provider: AiProvider;
-  model: string;
-  apiKey: string;
-  endpoint: string;
 };
 
 function json(payload: unknown, status = 200) {
@@ -39,31 +33,14 @@ function compactText(value: string, max = 500) {
 }
 
 function serializeError(error: unknown) {
-  if (error instanceof Error) return { error: error.message || "Unknown error", details: compactText(error.stack || "") || null };
-  if (typeof error === "string") return { error, details: null };
-  return { error: "Unexpected backend error", details: null };
-}
-
-function resolveAiConfig(requestedProvider?: string): AiConfig {
-  if (requestedProvider === "claude") {
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) throw new Error("Claude API key not configured.");
+  if (error instanceof Error) {
     return {
-      provider: "claude",
-      model: "claude-sonnet-4-20250514",
-      apiKey,
-      endpoint: "https://api.anthropic.com/v1/messages",
+      error: error.message || "Unknown error",
+      details: compactText(error.stack || "") || null,
     };
   }
-
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) throw new Error("AI key not configured.");
-  return {
-    provider: "openai",
-    model: "gpt-5-mini",
-    apiKey,
-    endpoint: "https://api.openai.com/v1/chat/completions",
-  };
+  if (typeof error === "string") return { error, details: null };
+  return { error: "Unexpected backend error", details: null };
 }
 
 async function requireAuthedUser(req: Request) {
@@ -96,13 +73,6 @@ function isFreshQuery(query: string) {
   return /\b(latest|current|today|this week|this month|this year|recent|news|now|2026|update|updates)\b/i.test(query);
 }
 
-function buildSearchQuery(query: string, purpose: Purpose) {
-  const trimmed = String(query || "").trim();
-  if (isFreshQuery(trimmed)) return `${trimmed} latest credible sources`;
-  if (purpose === "google_doc") return `${trimmed} overview analysis sources`;
-  return trimmed;
-}
-
 function canonicalUrl(url: string) {
   try {
     const parsed = new URL(url);
@@ -118,344 +88,340 @@ function canonicalUrl(url: string) {
   }
 }
 
-function extractText(result: any) {
-  const text = result?.text;
-  if (typeof text === "string") return text;
-  if (text && typeof text.text === "string") return text.text;
-  if (typeof result?.summary === "string") return result.summary;
-  return "";
+function historyToText(chatHistory: unknown) {
+  if (!Array.isArray(chatHistory) || !chatHistory.length) return "";
+  const lines = chatHistory
+    .slice(-6)
+    .map((msg) => {
+      const role = String((msg as { role?: string })?.role || "").trim().toLowerCase();
+      const content = compactText(String((msg as { content?: string })?.content || ""), 1200);
+      if (!role || !content) return "";
+      return `${role}: ${content}`;
+    })
+    .filter(Boolean);
+
+  if (!lines.length) return "";
+  return `Recent conversation context:\n${lines.join("\n")}`;
 }
 
-function extractHighlights(result: any): string[] {
-  if (Array.isArray(result?.highlights)) return result.highlights.map((h: unknown) => compactText(String(h || ""), 800)).filter(Boolean);
-  if (typeof result?.highlight === "string") return [compactText(result.highlight, 800)].filter(Boolean);
-  return [];
-}
+function buildPrompt({
+  query,
+  purpose,
+  instructions,
+  chatHistory,
+}: {
+  query: string;
+  purpose: Purpose;
+  instructions?: string;
+  chatHistory?: unknown;
+}) {
+  const freshnessNote = isFreshQuery(query)
+    ? "This request is freshness-sensitive. Prefer up-to-date sources and mention exact dates when relevant."
+    : "";
+  const extraInstructions = compactText(String(instructions || ""), 1500);
+  const historyBlock = purpose === "answer" ? historyToText(chatHistory) : "";
 
-function sourceFromExa(result: any): Source | null {
-  const url = String(result?.url || "").trim();
-  if (!/^https?:\/\//i.test(url)) return null;
+  const common = [
+    "You are Braino's live web research engine.",
+    "Search the live web before answering.",
+    "Use only claims you can support from the cited web sources.",
+    "Keep inline citations in the answer.",
+    freshnessNote,
+    historyBlock,
+    extraInstructions ? `Additional instructions: ${extraInstructions}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  const text = extractText(result);
-  const highlights = extractHighlights(result);
-  const snippet =
-    compactText(String(result?.summary || ""), 700) ||
-    compactText(highlights.join(" "), 700) ||
-    compactText(String(result?.textSnippet || result?.snippet || ""), 700) ||
-    compactText(text, 700);
-
-  return {
-    title: compactText(String(result?.title || "Untitled source"), 180),
-    url,
-    snippet,
-    highlights,
-    extractedTextExcerpt: compactText(text, 5000),
-    publishedDate: result?.publishedDate || result?.published_date || null,
-    author: result?.author || null,
-    status: text.trim().length >= 300 ? "opened" : "snippet_only",
-  };
-}
-
-async function callExaSearch(query: string, purpose: Purpose, useFreshness: boolean) {
-  const exaKey = Deno.env.get("EXA_API_KEY");
-  if (!exaKey) throw new Error("EXA_API_KEY is not configured.");
-
-  const body: Record<string, unknown> = {
-    query,
-    type: "auto",
-    numResults: purpose === "google_doc" ? 8 : 6,
-    contents: {
-      text: { maxCharacters: purpose === "google_doc" ? 5000 : 3500 },
-      highlights: true,
-      summary: { query },
-    },
-  };
-
-  if (useFreshness) {
-    body.startPublishedDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 365).toISOString();
+  if (purpose === "google_doc") {
+    return [
+      common,
+      "",
+      "Write a polished research article in markdown.",
+      "Return exactly this format and nothing else:",
+      "TITLE: <concise document title>",
+      "BODY:",
+      "<article body with headings, paragraphs, and inline citations>",
+      "Do not include a separate Sources section. The app adds it later.",
+      `Topic: ${query}`,
+    ].join("\n");
   }
 
-  const res = await fetch("https://api.exa.ai/search", {
+  if (purpose === "delegate") {
+    return [
+      common,
+      "",
+      "Return a compact research brief for a browser agent.",
+      "Use short markdown bullets and keep it actionable.",
+      "Avoid fluff.",
+      `Task: ${query}`,
+    ].join("\n");
+  }
+
+  return [
+    common,
+    "",
+    "Answer directly in markdown.",
+    "Do not include a separate Sources section.",
+    `User question: ${query}`,
+  ].join("\n");
+}
+
+function toolConfigForPurpose(purpose: Purpose) {
+  return {
+    type: "web_search",
+    search_context_size: purpose === "google_doc" ? "high" : "medium",
+  };
+}
+
+async function sha256(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function callOpenAiWebSearch({
+  userId,
+  query,
+  purpose,
+  instructions,
+  chatHistory,
+}: {
+  userId: string;
+  query: string;
+  purpose: Purpose;
+  instructions?: string;
+  chatHistory?: unknown;
+}) {
+  const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
+  const model = Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || "gpt-5.5";
+  if (!openAiApiKey) throw new Error("OPENAI_API_KEY is not configured.");
+
+  const safetyIdentifier = await sha256(userId);
+  const body = {
+    model,
+    tool_choice: "required",
+    tools: [toolConfigForPurpose(purpose)],
+    input: buildPrompt({ query, purpose, instructions, chatHistory }),
+  };
+
+  const res = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: {
+      Authorization: `Bearer ${openAiApiKey}`,
       "Content-Type": "application/json",
-      "x-api-key": exaKey,
+      "OpenAI-Safety-Identifier": safetyIdentifier,
     },
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error("[web-research] Exa search error", res.status, errorText);
-    throw new Error(`Exa search failed: ${res.status}`);
+  const raw = await res.text();
+  let data: any = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { raw };
+    }
   }
 
-  return await res.json();
+  if (!res.ok) {
+    console.error("[web-research] OpenAI web search error", res.status, raw);
+    const detail =
+      compactText(String(data?.error?.message || data?.message || raw || ""), 400) || `status ${res.status}`;
+    throw new Error(`OpenAI web search failed: ${detail}`);
+  }
+
+  return data;
 }
 
-async function repairThinSources(sources: Source[], query: string, purpose: Purpose) {
-  const exaKey = Deno.env.get("EXA_API_KEY");
-  const thinSources = sources.filter((source) => source.status !== "opened").slice(0, 4);
-  if (!exaKey || !thinSources.length) return sources;
+function numberOrNull(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
 
-  try {
-    const res = await fetch("https://api.exa.ai/contents", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": exaKey,
-      },
-      body: JSON.stringify({
-        ids: thinSources.map((source) => source.url),
-        text: { maxCharacters: purpose === "google_doc" ? 5000 : 3500 },
-        highlights: true,
-        summary: { query },
-      }),
-    });
+function stripCodeFence(text: string) {
+  const trimmed = String(text || "").trim();
+  const fenced = trimmed.match(/^```(?:[a-z0-9_-]+)?\s*([\s\S]*?)```$/i);
+  return fenced ? fenced[1].trim() : trimmed;
+}
 
-    if (!res.ok) return sources;
-    const data = await res.json();
-    const repaired = new Map<string, Source>();
-    for (const result of data?.results || []) {
-      const source = sourceFromExa(result);
-      if (source) repaired.set(canonicalUrl(source.url), source);
+function extractOutputText(data: any) {
+  if (typeof data?.output_text === "string" && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  const chunks: string[] = [];
+  for (const item of Array.isArray(data?.output) ? data.output : []) {
+    if (item?.type !== "message") continue;
+    for (const content of Array.isArray(item?.content) ? item.content : []) {
+      if (content?.type === "output_text" && typeof content?.text === "string" && content.text.trim()) {
+        chunks.push(content.text.trim());
+      }
+    }
+  }
+
+  return chunks.join("\n\n").trim();
+}
+
+function extractSearchQueries(data: any, fallbackQuery: string) {
+  const queries: string[] = [];
+
+  for (const item of Array.isArray(data?.output) ? data.output : []) {
+    if (item?.type !== "web_search_call") continue;
+    const action = item?.action || {};
+
+    if (typeof action?.query === "string" && action.query.trim()) {
+      queries.push(action.query.trim());
     }
 
-    return sources.map((source) => repaired.get(canonicalUrl(source.url)) || source);
-  } catch (error) {
-    console.warn("[web-research] Exa contents repair failed", error);
-    return sources;
-  }
-}
-
-function normalizeSources(results: any[]): Source[] {
-  const seen = new Set<string>();
-  const sources: Source[] = [];
-
-  for (const result of results || []) {
-    const source = sourceFromExa(result);
-    if (!source) continue;
-    const key = canonicalUrl(source.url);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    sources.push(source);
+    if (Array.isArray(action?.queries)) {
+      for (const value of action.queries) {
+        const text = String(value || "").trim();
+        if (text) queries.push(text);
+      }
+    }
   }
 
-  return sources
-    .sort((a, b) => {
-      const openedDelta = Number(b.status === "opened") - Number(a.status === "opened");
-      if (openedDelta) return openedDelta;
-      return b.extractedTextExcerpt.length - a.extractedTextExcerpt.length;
-    })
-    .slice(0, 8);
+  return Array.from(new Set(queries.length ? queries : [fallbackQuery]));
 }
 
-function rankSources(sources: Source[]) {
-  const seen = new Set<string>();
-  const unique: Source[] = [];
-  for (const source of sources) {
-    const key = canonicalUrl(source.url);
-    if (!source.url || seen.has(key)) continue;
-    seen.add(key);
-    unique.push(source);
-  }
-  return unique
-    .sort((a, b) => {
-      const openedDelta = Number(b.status === "opened") - Number(a.status === "opened");
-      if (openedDelta) return openedDelta;
-      return b.extractedTextExcerpt.length - a.extractedTextExcerpt.length;
-    })
-    .slice(0, 8);
+function citationRangeSnippet(text: string, start: unknown, end: unknown) {
+  const startIndex = numberOrNull(start);
+  const endIndex = numberOrNull(end);
+  if (startIndex === null || endIndex === null || endIndex <= startIndex) return "";
+
+  const snippet = text.slice(Math.max(0, startIndex - 100), Math.min(text.length, endIndex + 160));
+  return compactText(snippet, 700);
 }
 
-function buildResearchContext(query: string, sources: Source[]) {
-  const chunks = sources.map((source, index) => {
-    const date = source.publishedDate ? `\nPublished: ${source.publishedDate}` : "";
-    const highlights = source.highlights.length ? `\nHighlights:\n${source.highlights.map((h) => `- ${h}`).join("\n")}` : "";
-    const text = source.extractedTextExcerpt || source.snippet || "(No page text extracted.)";
-    return `[${index + 1}] ${source.title}
-URL: ${source.url}${date}
-Status: ${source.status}${highlights}
-Content excerpt:
-${text}`;
-  });
+function extractSources(data: any) {
+  const byUrl = new Map<string, Source>();
 
-  return `Research query: ${query}
+  for (const item of Array.isArray(data?.output) ? data.output : []) {
+    if (item?.type !== "message") continue;
 
-Retrieved sources:
-${chunks.join("\n\n---\n\n")}`;
-}
+    for (const content of Array.isArray(item?.content) ? item.content : []) {
+      const text = typeof content?.text === "string" ? content.text : "";
+      const annotations = Array.isArray(content?.annotations) ? content.annotations : [];
 
-function buildSynthesisPrompt(query: string, purpose: Purpose, instructions: string | undefined, sources: Source[]) {
-  const sourceCount = sources.length;
-  const baseRules = `Use ONLY the retrieved source content. If the sources do not support a claim, do not make it.
-Use inline source markers like [1], [2] when making factual claims.
-If sources are thin or conflict, say that plainly.
-Prefer concrete facts, dates, names, and numbers from sources.
-${isFreshQuery(query) ? "This is a freshness-sensitive query: mention dates when available and avoid stale claims." : ""}`;
+      for (const annotation of annotations) {
+        const rawCitation = annotation?.url_citation || annotation;
+        const url = canonicalUrl(String(rawCitation?.url || "").trim());
+        if (!url) continue;
 
-  if (purpose === "google_doc") {
-    return `${baseRules}
+        const key = canonicalUrl(url);
+        const snippet =
+          citationRangeSnippet(text, rawCitation?.start_index, rawCitation?.end_index) ||
+          compactText(text, 700);
 
-Return ONLY valid JSON. No markdown fences.
-Shape:
-{"title":"concise document title","body":"long-form document body with headings, paragraphs, and inline source markers"}
+        const existing = byUrl.get(key);
+        if (existing) {
+          if (!existing.snippet && snippet) existing.snippet = snippet;
+          if (!existing.extractedTextExcerpt && snippet) existing.extractedTextExcerpt = snippet;
+          continue;
+        }
 
-Write a polished Google Doc about: ${query}
-Length: ${sourceCount >= 4 ? "800-1400 words" : "400-800 words"}.
-Include headings inside the body. Do not include a Sources section in the body; the app will add it separately.
-${instructions ? `Additional user instructions: ${instructions}` : ""}`;
+        byUrl.set(key, {
+          title: compactText(String(rawCitation?.title || url), 180),
+          url,
+          snippet,
+          highlights: snippet ? [snippet] : [],
+          extractedTextExcerpt: snippet,
+          publishedDate: null,
+          author: null,
+          status: "snippet_only",
+        });
+      }
+    }
   }
 
-  if (purpose === "delegate") {
-    return `${baseRules}
+  return Array.from(byUrl.values()).slice(0, 8);
+}
 
-Return a compact research brief for a browser agent to use in later actions.
-Format with short markdown bullets.
-User task/research need: ${query}
-${instructions ? `Additional user instructions: ${instructions}` : ""}`;
+function parseResearchDraft(query: string, rawText: string) {
+  const text = stripCodeFence(rawText);
+  const match = text.match(/^\s*TITLE:\s*(.+?)\n+BODY:\s*([\s\S]+)$/i);
+  if (match) {
+    return {
+      title: compactText(match[1], 180) || `${query} - Braino Research`,
+      body: match[2].trim(),
+    };
   }
 
-  return `${baseRules}
-
-Answer the user's question directly and concisely with markdown.
-End with a "Sources" section listing the source links used.
-User question: ${query}
-${instructions ? `Additional user instructions: ${instructions}` : ""}`;
-}
-
-async function callAi(config: AiConfig, messages: any[]) {
-  if (config.provider === "claude") {
-    const systemMsg = messages.find((message) => message.role === "system");
-    const nonSystem = messages.filter((message) => message.role !== "system");
-    const res = await fetch(config.endpoint, {
-      method: "POST",
-      headers: {
-        "x-api-key": config.apiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: config.model,
-        max_tokens: 4096,
-        system: systemMsg?.content || undefined,
-        messages: nonSystem,
-      }),
-    });
-    return res;
+  const headingMatch = text.match(/^\s*#\s+(.+?)\n+([\s\S]+)$/);
+  if (headingMatch) {
+    return {
+      title: compactText(headingMatch[1], 180) || `${query} - Braino Research`,
+      body: text.trim(),
+    };
   }
 
-  return await fetch(config.endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: config.model, messages }),
-  });
-}
-
-function extractAiText(provider: AiProvider, data: any) {
-  if (provider === "claude") return String(data?.content?.[0]?.text || "").trim();
-  return String(data?.choices?.[0]?.message?.content || "").trim();
-}
-
-function parseJsonFromText(text: string) {
-  const trimmed = String(text || "").trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const raw = (fenced?.[1] || trimmed.match(/(\{[\s\S]*\})/)?.[1] || trimmed).trim();
-  return JSON.parse(raw);
-}
-
-function sourceListForAnswer(sources: Source[]) {
-  return sources
-    .slice(0, 6)
-    .map((source, index) => `[${index + 1}] ${source.title}: ${source.url}`)
-    .join("\n");
+  return {
+    title: compactText(`${query} - Braino Research`, 180),
+    body: text.trim(),
+  };
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    await requireAuthedUser(req);
+    const user = await requireAuthedUser(req);
 
     const payload = await req.json().catch(() => ({}));
     const query = String(payload?.query || payload?.message || "").trim();
     if (!query) return json({ error: "query is required." }, 400);
 
     const purpose = normalizePurpose(payload?.purpose);
-    const searchQuery = buildSearchQuery(query, purpose);
-    const fresh = isFreshQuery(query);
+    const openAiData = await callOpenAiWebSearch({
+      userId: user.id,
+      query,
+      purpose,
+      instructions: payload?.instructions,
+      chatHistory: payload?.chatHistory,
+    });
 
-    let searchData = await callExaSearch(searchQuery, purpose, fresh);
-    let sources = normalizeSources(searchData?.results || []);
+    const outputText = extractOutputText(openAiData);
+    const searchQueries = extractSearchQueries(openAiData, query);
+    const sources = extractSources(openAiData);
 
-    if (!sources.length && fresh) {
-      searchData = await callExaSearch(searchQuery, purpose, false);
-      sources = normalizeSources(searchData?.results || []);
-    }
-
-    sources = rankSources(await repairThinSources(sources, query, purpose));
-
-    if (!sources.length) {
+    if (!outputText) {
       return json({
-        answer: `I could not find enough reliable web results for "${query}".`,
-        sources: [],
-        searchQueries: [searchQuery],
+        answer: `I could not find enough reliable live web results for "${query}".`,
+        sources,
+        searchQueries,
         researchContext: "",
         query,
-        engine: "Exa",
-        searchUrl: `https://exa.ai/search?q=${encodeURIComponent(query)}`,
-        results: [],
+        engine: "OpenAI web_search",
+        searchUrl: "",
+        results: sources.map((source) => ({
+          title: source.title,
+          url: source.url,
+          snippet: source.snippet,
+          highlights: source.highlights,
+          publishedDate: source.publishedDate,
+          status: source.status,
+        })),
       });
     }
 
-    const config = resolveAiConfig(payload?.aiProvider);
-    const researchContext = buildResearchContext(query, sources);
-    const messages: any[] = [
-      {
-        role: "system",
-        content: "You are Braino's web research engine. You search, read retrieved page content, and produce grounded output with citations.",
-      },
-    ];
-
-    if (Array.isArray(payload?.chatHistory) && purpose !== "google_doc") {
-      for (const msg of payload.chatHistory.slice(-6)) {
-        if (!msg?.role || !msg?.content) continue;
-        messages.push({ role: msg.role, content: String(msg.content).slice(0, 2000) });
-      }
-    }
-
-    messages.push({
-      role: "user",
-      content: `${buildSynthesisPrompt(query, purpose, payload?.instructions, sources)}
-
-${researchContext}`,
-    });
-
-    const aiRes = await callAi(config, messages);
-    if (!aiRes.ok) {
-      const errorText = await aiRes.text();
-      console.error("[web-research] AI error", aiRes.status, errorText);
-      throw new Error(`AI synthesis failed: ${aiRes.status}`);
-    }
-
-    const aiData = await aiRes.json();
-    const aiText = extractAiText(config.provider, aiData);
-
-    let answer = aiText;
+    let answer = outputText;
     let title: string | undefined;
     let body: string | undefined;
 
     if (purpose === "google_doc") {
-      const parsed = parseJsonFromText(aiText);
-      title = compactText(String(parsed?.title || `${query} - Braino Research`), 180);
-      body = String(parsed?.body || "").trim();
+      const parsed = parseResearchDraft(query, outputText);
+      title = parsed.title;
+      body = parsed.body;
       if (!body) throw new Error("Research draft came back empty.");
       answer = body;
-    } else if (!/\nSources\b/i.test(answer)) {
-      answer = `${answer}\n\nSources\n${sourceListForAnswer(sources)}`;
     }
 
     return json({
@@ -463,11 +429,11 @@ ${researchContext}`,
       title,
       body,
       sources,
-      searchQueries: [searchQuery],
-      researchContext,
+      searchQueries,
+      researchContext: "",
       query,
-      engine: "Exa",
-      searchUrl: `https://exa.ai/search?q=${encodeURIComponent(query)}`,
+      engine: "OpenAI web_search",
+      searchUrl: "",
       results: sources.map((source) => ({
         title: source.title,
         url: source.url,
