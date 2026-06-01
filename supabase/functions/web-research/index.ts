@@ -56,13 +56,13 @@ function resolveAiConfig(requestedProvider?: string): AiConfig {
     };
   }
 
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("AI key not configured.");
   return {
-    provider: "lovable",
-    model: "google/gemini-2.5-flash",
+    provider: "openai",
+    model: "gpt-4o-mini",
     apiKey,
-    endpoint: "https://ai.gateway.lovable.dev/v1/chat/completions",
+    endpoint: "https://api.openai.com/v1/chat/completions",
   };
 }
 

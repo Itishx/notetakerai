@@ -7,8 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const LOVABLE_API_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-2.5-pro";
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const MODEL = "gpt-4o-mini";
 const X_POST_MAX_CHARS = 280;
 const X_POST_MIN_CHARS = 170;
 const X_POST_IDEAL_MIN_CHARS = 210;
@@ -27,7 +27,7 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
 
   if (!supabaseUrl || !serviceRoleKey) {
     return json({ error: "Missing Supabase config" }, 500);
@@ -291,7 +291,7 @@ async function requestPostBatch(opts: {
   systemPrompt: string;
   userPrompt: string;
 }): Promise<string[]> {
-  const response = await fetch(LOVABLE_API_URL, {
+  const response = await fetch(OPENAI_API_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${opts.apiKey}`,

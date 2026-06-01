@@ -33,8 +33,8 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
       return new Response(JSON.stringify({ error: "Lovable API key not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -47,14 +47,14 @@ serve(async (req) => {
 
     for (let i = 0; i < segments.length; i++) {
       console.log(`Transcribing segment ${i + 1}/${segments.length}...`);
-      const transcribeRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const transcribeRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
@@ -161,14 +161,14 @@ Rules:
       ? `Existing lecture notes (for structure and image placement):\n\n${existingNotes}\n\nFull lecture transcript (source of truth):\n\n${combinedTranscript}\n\nUpdate the notes so they reflect the full transcript while preserving every existing image placeholder exactly.`
       : `Convert this lecture transcript into well-structured study notes:\n\n${combinedTranscript}`;
 
-    const notesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const notesRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",

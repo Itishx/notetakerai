@@ -7,16 +7,16 @@ const corsHeaders = {
 };
 
 async function callAI(prompt: string): Promise<string> {
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-  if (lovableKey) {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (openaiKey) {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableKey}`,
+        Authorization: `Bearer ${openaiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
       }),
     });

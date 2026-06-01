@@ -224,7 +224,7 @@ async function routeXAction(input: {
   const fastPath = tryFastPath(input.task);
   if (fastPath) return fastPath;
 
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) {
     return {
       action: "clarify",
@@ -267,14 +267,14 @@ Browser timezone: ${input.timeZone || "unknown"}
 User request:
 ${input.task}`;
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -316,17 +316,17 @@ async function resolvePostContent(
   const brief = String(action.brief || "").trim();
   if (!brief) return "";
 
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) return brief.slice(0, 280);
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
