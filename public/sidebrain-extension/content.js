@@ -2163,7 +2163,6 @@ function __sbBuildBrainUI() {
     .sb-card-header-btn:hover { background: var(--sb-btn-hover); }
     .sb-card-scroll {
       flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px;
-      background: rgba(0,0,0,0.45);
     }
     .sb-card-scroll::-webkit-scrollbar { width: 4px; }
     .sb-card-scroll::-webkit-scrollbar-track { background: transparent; }
