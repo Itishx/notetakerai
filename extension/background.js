@@ -1350,14 +1350,14 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
   }
 
-  const quotedDirectPlay = raw.match(/play\s+["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
-  if (onSpotify && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
-    return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
+  const quotedDirectPlay = raw.match(/play\s+[“”](.+?)[“”](?:\s+(?:on|in)\s+spotify)?$/i);
+  if (quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
+    return { adapter: “spotify”, intent: “playSong”, song: quotedDirectPlay[1].trim() };
   }
 
   const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
-  if (onSpotify && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
-    return { adapter: "spotify", intent: "playSong", song: directPlay[1].trim() };
+  if (directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
+    return { adapter: “spotify”, intent: “playSong”, song: directPlay[1].trim() };
   }
 
   // "add this song to Spotify" — infer song from current page, save to Liked Songs or playlist
@@ -1721,48 +1721,35 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "playSong") {
-    await bgRunAdapterStep({
+    const searchResult = await bgRunAdapterStep({
       history,
-      description: `Open Spotify search for "${parsed.song}"`,
-      type: "navigate",
+      description: `Searching Spotify for "${parsed.song}"`,
+      type: "spotify_search",
       onProgress,
       onResult,
       run: async () => {
-        const result = await bgExecuteAgentAction(tabId, {
-          type: "navigate",
-          url: bgBuildSpotifyTrackSearchUrl(parsed.song),
-          description: `Open Spotify search for "${parsed.song}"`,
-        });
-        if (!result?.error) {
-          await bgWaitForTabReady(tabId, 6000);
-          await bgDelay(900);
-        }
-        return result;
+        const data = await bgCallSpotifyFunction("spotify-search", { query: parsed.song, limit: 5 });
+        const track = data?.tracks?.[0];
+        if (!track) return { error: `No Spotify track found for "${parsed.song}".` };
+        return { success: true, track };
       },
     });
 
     if (shouldStop?.()) throw new Error("Stopped.");
 
+    const track = searchResult?.track;
+    if (!track?.uri) throw new Error(`Couldn't find "${parsed.song}" on Spotify.`);
+
     await bgRunAdapterStep({
       history,
-      description: `Play the best Spotify result for "${parsed.song}"`,
-      type: "spotifyPlayFirstTrackResult",
+      description: `Playing "${track.name}" by ${track.artists?.join(", ") || "unknown"}`,
+      type: "spotify_play",
       onProgress,
       onResult,
-      run: () => bgExecuteSiteAdapterAction(tabId, {
-        type: "spotifyPlayFirstTrackResult",
-        songName: parsed.song,
-      }),
+      run: () => bgCallSpotifyFunction("spotify-playback", { action: "play", uris: [track.uri] }),
     });
 
-    await bgDelay(1000);
-    bgPushSpotifyState(tabId, await bgBuildSpotifyUiState(tabId, {
-      intent: parsed.intent,
-      query: parsed.song,
-      summary: `Playing ${parsed.song} on Spotify.`,
-    }), { focusSpotify: true });
-
-    return `Playing **${parsed.song}** on Spotify.`;
+    return `Playing **${track.name}** by ${track.artists?.join(", ") || "unknown"} ♫`;
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "addCurrentPageSong") {
