@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import SpotifyPanel, { type SpotifyConnectionSummary } from "@/components/SpotifyPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,8 @@ type XConnection = {
   xUserId: string | null;
   updatedAt: string | null;
 } | null;
+
+type SpotifyConn = SpotifyConnectionSummary;
 
 type ScheduledXPost = {
   id: string;
@@ -651,7 +654,7 @@ function NoteModal({ note, onClose, userId, authHeader, driveConnected }: {
     try {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-docs-save-note`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: authHeader },
+        headers: { "Content-Type": "application/json", Authorization: authHeader, apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
         body: JSON.stringify({ userIdentifier: userId, noteId: note.id }),
       });
       const data = await res.json();
@@ -913,6 +916,7 @@ export default function Dashboard() {
   const [notionConn, setNotionConn] = useState<NotionConn>(null);
   const [googleDriveConn, setGoogleDriveConn] = useState<GoogleDriveConn>(null);
   const [xConn, setXConn] = useState<XConnection>(null);
+  const [spotifyConn, setSpotifyConn] = useState<SpotifyConn>(null);
   const [scheduledXPosts, setScheduledXPosts] = useState<ScheduledXPost[]>([]);
   const [xAutomationStats, setXAutomationStats] = useState<XAutomationStats>(null);
   const [dataLoading, setDataLoading] = useState(true);
@@ -931,6 +935,7 @@ export default function Dashboard() {
   const [overallMemoryError, setOverallMemoryError] = useState<string | null>(null);
   const [driveConnectLoading, setDriveConnectLoading] = useState(false);
   const [xConnectLoading, setXConnectLoading] = useState(false);
+  const [spotifyConnectLoading, setSpotifyConnectLoading] = useState(false);
   const [xPostDraft, setXPostDraft] = useState("");
   const [xScheduledAt, setXScheduledAt] = useState(() => defaultScheduledAtValue());
   const [xScheduling, setXScheduling] = useState(false);
@@ -967,6 +972,7 @@ export default function Dashboard() {
   const xEngageAbortRef = useRef<AbortController | null>(null);
   const drivePollRef = useRef<number | null>(null);
   const xPollRef = useRef<number | null>(null);
+  const spotifyPollRef = useRef<number | null>(null);
 
   function stopDrivePolling() {
     if (drivePollRef.current !== null) {
@@ -982,6 +988,13 @@ export default function Dashboard() {
     }
   }
 
+  function stopSpotifyPolling() {
+    if (spotifyPollRef.current !== null) {
+      window.clearInterval(spotifyPollRef.current);
+      spotifyPollRef.current = null;
+    }
+  }
+
   async function refreshGoogleDriveConnection(userId: string) {
     const { data } = await supabase
       .from("google_drive_connections")
@@ -993,10 +1006,25 @@ export default function Dashboard() {
     return (data as GoogleDriveConn) || null;
   }
 
+  async function refreshSpotifyConnection(userId: string) {
+    const { data } = await supabase
+      .from("spotify_connections")
+      .select("display_name,spotify_email,product,updated_at")
+      .eq("user_identifier", userId)
+      .maybeSingle();
+
+    setSpotifyConn((data as SpotifyConn) || null);
+    return (data as SpotifyConn) || null;
+  }
+
   async function fetchXConnection(userId: string): Promise<XConnection> {
     const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-connection-status`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
       body: JSON.stringify({ userIdentifier: userId }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -1087,7 +1115,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, driveRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -1108,6 +1136,11 @@ export default function Dashboard() {
         supabase
           .from("google_drive_connections")
           .select("google_email,updated_at")
+          .eq("user_identifier", user.id)
+          .maybeSingle(),
+        supabase
+          .from("spotify_connections")
+          .select("display_name,spotify_email,product,updated_at")
           .eq("user_identifier", user.id)
           .maybeSingle(),
         supabase
@@ -1150,6 +1183,7 @@ export default function Dashboard() {
       if (commandsRes.data) setCommands(commandsRes.data as unknown as Command[]);
       setNotionConn(notionRes.data as NotionConn);
       setGoogleDriveConn((driveRes.data as GoogleDriveConn) || null);
+      setSpotifyConn((spotifyRes.data as SpotifyConn) || null);
       const loadedOverallMemory = String((profileMemoryRes.data as { overall_memory?: string } | null)?.overall_memory || "");
       setOverallMemory(loadedOverallMemory);
       setOverallMemoryDraft(loadedOverallMemory);
@@ -1188,6 +1222,7 @@ export default function Dashboard() {
   useEffect(() => () => {
     stopDrivePolling();
     stopXPolling();
+    stopSpotifyPolling();
   }, []);
 
   useEffect(() => {
@@ -1219,7 +1254,11 @@ export default function Dashboard() {
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-oauth-start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session?.access_token}`,
+        },
         body: JSON.stringify({ userIdentifier: user.id }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -1260,7 +1299,11 @@ export default function Dashboard() {
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/x-oauth-start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session?.access_token}`,
+        },
         body: JSON.stringify({ userIdentifier: user.id }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -1304,6 +1347,68 @@ export default function Dashboard() {
       setXConnectLoading(false);
       toast({
         title: "Could not connect X",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleConnectSpotify() {
+    if (!user || !session) return;
+    setSpotifyConnectLoading(true);
+
+    const popup = window.open("about:blank", "_blank", "width=620,height=720");
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/spotify-oauth-start`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.authUrl) {
+        popup?.close();
+        throw new Error(payload.error || "Failed to start Spotify OAuth");
+      }
+
+      if (popup && !popup.closed) {
+        popup.location.href = payload.authUrl;
+      } else {
+        window.open(payload.authUrl, "_blank");
+      }
+
+      stopSpotifyPolling();
+      const startedAt = Date.now();
+      spotifyPollRef.current = window.setInterval(async () => {
+        try {
+          const connection = await refreshSpotifyConnection(user.id);
+          if (connection) {
+            stopSpotifyPolling();
+            setSpotifyConnectLoading(false);
+            toast({
+              title: "Spotify connected",
+              description: connection.display_name || connection.spotify_email || "Your Spotify account is now linked.",
+            });
+            return;
+          }
+        } catch (error) {
+          console.error("spotify connection poll failed:", error);
+        }
+
+        if (Date.now() - startedAt > 2 * 60 * 1000) {
+          stopSpotifyPolling();
+          setSpotifyConnectLoading(false);
+        }
+      }, 2000);
+    } catch (error) {
+      popup?.close();
+      console.error("spotify connect failed:", error);
+      setSpotifyConnectLoading(false);
+      toast({
+        title: "Could not connect Spotify",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
@@ -1409,7 +1514,11 @@ export default function Dashboard() {
 
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dispatch-scheduled-x-posts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({}),
       });
       const payload = await response.json().catch(() => ({}));
@@ -1700,7 +1809,11 @@ export default function Dashboard() {
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dispatch-scheduled-x-posts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({}),
       });
       const payload = await response.json().catch(() => ({}));
@@ -4201,6 +4314,28 @@ export default function Dashboard() {
                       </Button>
                     </div>
 
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
+                          <span className={cn("h-2 w-2 rounded-full", spotifyConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
+                          Spotify
+                        </div>
+                        <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
+                          {spotifyConn
+                            ? `${spotifyConn.display_name || spotifyConn.spotify_email || "Account connected"}${spotifyConn.product ? ` · ${spotifyConn.product}` : ""}`
+                            : "Search tracks, play songs, and control Spotify from Braino"}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={handleConnectSpotify}
+                        disabled={spotifyConnectLoading}
+                        className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                      >
+                        {spotifyConnectLoading ? "Waiting…" : spotifyConn ? "Reconnect" : "Connect"}
+                      </Button>
+                    </div>
+
                     {[
                       { name: "Slack", blurb: "Mentions, DMs, and team activity announcements", status: "Soon" },
                       { name: "Google Calendar", blurb: "Meeting reminders and day awareness", status: "Soon" },
@@ -4225,6 +4360,13 @@ export default function Dashboard() {
                     ))}
                   </div>
                 </div>
+
+                <SpotifyPanel
+                  sessionAccessToken={session?.access_token ?? null}
+                  connection={spotifyConn}
+                  connectLoading={spotifyConnectLoading}
+                  onConnect={handleConnectSpotify}
+                />
 
                 <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                   <h3 style={serifStyle} className="mb-1 text-[26px] leading-none tracking-[-0.02em]">
