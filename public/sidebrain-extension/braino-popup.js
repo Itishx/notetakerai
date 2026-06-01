@@ -1,4 +1,4 @@
-const API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
+const API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 
 let chatHistory = [];
 let authToken = null;

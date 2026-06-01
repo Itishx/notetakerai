@@ -1,5 +1,5 @@
 // Braino Popup Controller — Unified Chat UI
-const API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
+const API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 
 // ===== GLOBALS =====
 let audioSegments = [];
@@ -4162,7 +4162,7 @@ themeToggleBtn?.addEventListener("click", () => {
 
 
 // ===== PREMIUM =====
-const SUPABASE_URL = "https://ovapacfrzddnhrwvkbkr.supabase.co";
+const SUPABASE_URL = "https://suwhgaxxdizowbyjlljj.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2ZyemRkbmhyd3ZrYmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDc4NTUsImV4cCI6MjA5MDUyMzg1NX0.WZV4fy1XqMS3TTyR09TneueaLl-729tp-Pi4HkfzURo";
 const PREMIUM_CACHE_MS = 60 * 1000;
 
