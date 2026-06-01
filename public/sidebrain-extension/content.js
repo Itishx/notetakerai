@@ -4161,11 +4161,18 @@ function __sbAppendSearchSources(reply, results) {
   return `${reply}\n\nSources\n${sources.join("\n")}`;
 }
 
-async function __sbPerformWebSearch(query) {
+async function __sbPerformWebSearch(query, options = {}) {
   if (!__sbContextOk()) throw new Error("Reload page to reconnect Braino.");
 
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ action: "performWebSearch", query }, (res) => {
+    chrome.runtime.sendMessage({
+      action: "performWebSearch",
+      query,
+      purpose: options.purpose || "answer",
+      aiProvider: options.aiProvider,
+      chatHistory: options.chatHistory,
+      instructions: options.instructions,
+    }, (res) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
@@ -4336,19 +4343,16 @@ async function __sbProcessPrompt(text, options = {}) {
     __sbChatHistory.push({ role: "user", content: promptText });
 
     try {
-      const searchData = await __sbPerformWebSearch(promptText);
-      const { reply } = await __sbFetchAssistantReply({
+      const searchData = await __sbPerformWebSearch(promptText, {
+        purpose: "answer",
         aiProvider,
-        pageContext: __sbBuildWebSearchPageContext(promptText, searchData),
         chatHistory: previousHistory,
-        message: `Answer the user's question using the live web search results in page context. Do not pretend you visited pages beyond these result snippets. If the results are insufficient, say that plainly.\n\nUser question: ${promptText}`,
       });
-      if (!reply) {
-        if (fromVoice) await __sbSpeakText("Please sign in to continue.");
-        return;
-      }
 
-      const finalReply = __sbAppendSearchSources(String(reply), searchData.results || []);
+      const finalReply = __sbAppendSearchSources(
+        String(searchData.answer || "I couldn't turn those web results into a useful answer."),
+        searchData.results || searchData.sources || [],
+      );
       __sbChatHistory.push({ role: "assistant", content: finalReply });
       __sbCardTurns.push({ prompt: promptText, answer: finalReply });
       if (voiceOnly) {

@@ -1738,7 +1738,13 @@ async function sendChatMessage(text, imageBase64) {
 
 async function fetchWebSearchReply(text, historyOverride) {
   const searchData = await new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "performWebSearch", query: text }, (res) => {
+    chrome.runtime.sendMessage({
+      action: "performWebSearch",
+      query: text,
+      purpose: "answer",
+      aiProvider: currentAiProvider,
+      chatHistory: historyOverride,
+    }, (res) => {
       if (chrome.runtime.lastError) {
         resolve({ error: chrome.runtime.lastError.message });
         return;
@@ -1750,28 +1756,11 @@ async function fetchWebSearchReply(text, historyOverride) {
   if (searchData?.error) {
     throw new Error(searchData.error);
   }
-  if (!searchData?.results?.length) {
+  if (!searchData?.results?.length && !searchData?.answer) {
     throw new Error("I couldn't pull back any live results for that search.");
   }
 
-  const response = await fetch(`${API_BASE}/chat-about-notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      aiProvider: currentAiProvider,
-      pageContext: buildWebSearchPageContext(text, searchData),
-      chatHistory: historyOverride,
-      message: `Answer the user's question using the live web search results in page context. Do not pretend you visited pages beyond these result snippets. If the results are insufficient, say that plainly.\n\nUser question: ${text}`,
-    }),
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Request failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const rawReply = String(data.reply || "I couldn't turn those web results into a useful answer.");
+  const rawReply = String(searchData.answer || "I couldn't turn those web results into a useful answer.");
   return appendSearchSources(rawReply, searchData.results);
 }
 
@@ -2238,53 +2227,23 @@ function parseAdapterTask(task, siteContext) {
 
 async function buildArticleDraftFromWebSearch(topic) {
   const searchData = await new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "performWebSearch", query: topic }, (res) => {
+    chrome.runtime.sendMessage({
+      action: "performWebSearch",
+      query: topic,
+      purpose: "google_doc",
+      aiProvider: currentAiProvider,
+    }, (res) => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || { error: "No search response" });
     });
   });
 
   if (searchData?.error) throw new Error(searchData.error);
-  if (!searchData?.results?.length) throw new Error(`I couldn't find enough live results for "${topic}".`);
-
-  const response = await fetch(`${API_BASE}/chat-about-notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      aiProvider: currentAiProvider,
-      pageContext: buildWebSearchPageContext(topic, searchData),
-      message: `Use the live web search results in page context to draft an article for a Google Doc.
-
-Return ONLY JSON. No markdown fences. Format:
-{"title":"short article title","body":"multi-paragraph article body"}
-
-Rules:
-- The title must be concise and human-readable.
-- The body must be 4-7 paragraphs of clean prose.
-- Do not include a byline.
-- Only use facts supported by the provided search snippets.
-- If the snippets are thin, write a shorter and more cautious article.`,
-    }),
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Article drafting failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const reply = String(data.reply || "").trim();
-  const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/(\{[\s\S]*\})/);
-  const json = (match?.[1] ?? match?.[0] ?? reply).trim();
-  const parsed = JSON.parse(json);
-
-  if (!parsed?.title || !parsed?.body) {
-    throw new Error("The article draft came back in an unexpected format.");
-  }
+  if (!searchData?.body) throw new Error(`I couldn't create a grounded research draft for "${topic}".`);
 
   return {
-    title: String(parsed.title).trim(),
-    body: String(parsed.body).trim(),
+    title: String(searchData.title || `${topic} - Braino Research`).trim(),
+    body: String(searchData.body).trim(),
   };
 }
 

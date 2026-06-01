@@ -41,64 +41,67 @@ function bgIsInternalPremiumEmail(email) {
   return !!normalized && BG_INTERNAL_PREMIUM_EMAILS.has(normalized);
 }
 
-async function bgPerformRealWebSearch(query) {
+async function bgPerformRealWebSearch(query, options = {}) {
   const trimmedQuery = String(query || "").trim();
   if (!trimmedQuery) return { error: "No search query provided." };
 
-  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(trimmedQuery)}&kl=us-en`;
-
   try {
-    const resp = await fetch(searchUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
+    const stored = await bgGetStorage(["authToken"]);
+    let token = stored.authToken;
+    if (!token) token = await bgRefreshAuthToken();
+    if (!token) return { error: "Please sign in to Braino before using web research." };
+
+    const researchBody = JSON.stringify({
+      query: trimmedQuery,
+      purpose: options.purpose || "answer",
+      aiProvider: options.aiProvider,
+      chatHistory: options.chatHistory,
+      instructions: options.instructions,
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-    const html = await resp.text();
-    const results = [];
-    const seen = new Set();
+    const callResearch = (jwt) => fetch(`${BG_API_BASE}/web-research`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: BG_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: researchBody,
+    });
 
-    const clean = s => s
-      .replace(/<[^>]+>/g, "")
-      .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
-      .replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g," ").trim();
-
-    const decodeUrl = raw => {
-      try {
-        const base = raw.startsWith("//") ? "https:" + raw : raw.startsWith("/") ? "https://duckduckgo.com" + raw : raw;
-        const uddg = new URL(base).searchParams.get("uddg");
-        return uddg ? decodeURIComponent(uddg) : raw;
-      } catch { return raw; }
-    };
-
-    // Split on result blocks — each web result starts with class="result results_links
-    const blocks = html.split(/(?=<div[^>]+class="result\s)/);
-    for (const block of blocks) {
-      if (results.length >= 8) break;
-      // title anchor: class="result__a" (attr order may vary)
-      const aTag = block.match(/<a\b([^>]*\bclass="[^"]*\bresult__a\b[^"]*"[^>]*|[^>]*\bhref="[^"]*"[^>]*\bclass="[^"]*\bresult__a\b[^"]*")>([\s\S]*?)<\/a>/);
-      if (!aTag) continue;
-      const hrefM = aTag[1].match(/href="([^"]*)"/);
-      if (!hrefM) continue;
-      const url = decodeUrl(hrefM[1]);
-      if (!url || !/^https?:/i.test(url) || seen.has(url)) continue;
-
-      const title = clean(aTag[2]);
-      if (!title) continue;
-
-      const snipM = block.match(/<a\b[^>]*\bclass="[^"]*\bresult__snippet\b[^"]*"[^>]*>([\s\S]*?)<\/a>/);
-      const snippet = snipM ? clean(snipM[1]) : "";
-
-      seen.add(url);
-      results.push({ title, url, snippet });
+    let resp = await callResearch(token);
+    if (resp.status === 401) {
+      const freshToken = await bgRefreshAuthToken();
+      if (freshToken) resp = await callResearch(freshToken);
     }
 
-    if (!results.length) return { error: "No results found for that query." };
-    return { query: trimmedQuery, engine: "DuckDuckGo", searchUrl, results };
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { error: data?.error || `Web research failed: ${resp.status}` };
+    }
+
+    const sources = Array.isArray(data?.sources) ? data.sources : [];
+    const results = Array.isArray(data?.results) && data.results.length
+      ? data.results
+      : sources.map((source) => ({
+          title: source.title || source.url || "Untitled source",
+          url: source.url || "",
+          snippet: source.snippet || source.extractedTextExcerpt || "",
+          highlights: source.highlights || [],
+          publishedDate: source.publishedDate || null,
+          status: source.status || "snippet_only",
+        }));
+
+    return {
+      ...data,
+      query: data?.query || trimmedQuery,
+      engine: data?.engine || "Exa",
+      searchUrl: data?.searchUrl || `https://exa.ai/search?q=${encodeURIComponent(trimmedQuery)}`,
+      sources,
+      results,
+    };
   } catch (e) {
-    return { error: e.message || "Web search failed." };
+    return { error: e.message || "Web research failed." };
   }
 }
 
@@ -338,7 +341,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "performWebSearch") {
-    bgPerformRealWebSearch(message.query)
+    bgPerformRealWebSearch(message.query, {
+      purpose: message.purpose,
+      aiProvider: message.aiProvider,
+      chatHistory: message.chatHistory,
+      instructions: message.instructions,
+    })
       .then((result) => sendResponse(result))
       .catch((e) => sendResponse({ error: e.message || "Web search failed." }));
     return true;
@@ -1055,11 +1063,14 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
 
       if (action.type === "web_search") {
         bgBrainUpdate(currentTabId, `Searching: "${action.query}"…`);
-        const searchData = await bgPerformRealWebSearch(action.query);
+        const searchData = await bgPerformRealWebSearch(action.query, { purpose: "delegate" });
         const resultsText = searchData.results
           ? searchData.results.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet}`).join("\n\n")
           : searchData.error || "No results.";
-        history.push({ type: "web_search", query: action.query, description: action.description || `Search: "${action.query}"`, result: { success: !searchData.error, text: resultsText } });
+        const researchText = searchData.answer
+          ? `${searchData.answer}\n\nSource details:\n${resultsText}`
+          : resultsText;
+        history.push({ type: "web_search", query: action.query, description: action.description || `Search: "${action.query}"`, result: { success: !searchData.error, text: researchText } });
         continue;
       }
 
@@ -1366,57 +1377,13 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
 }
 
 async function bgBuildArticleDraftFromSearch(topic) {
-  const searchData = await bgPerformRealWebSearch(topic);
+  const searchData = await bgPerformRealWebSearch(topic, { purpose: "google_doc" });
   if (searchData?.error) throw new Error(searchData.error);
-  if (!searchData?.results?.length) throw new Error(`I couldn't find enough live results for "${topic}".`);
-
-  const response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      pageContext: {
-        title: `Web search results for "${topic}"`,
-        url: searchData.searchUrl || "",
-        text: [
-          `Live web search query: ${topic}`,
-          "",
-          searchData.results.map((result, index) =>
-            `[${index + 1}] ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet || "(no snippet provided)"}`
-          ).join("\n\n"),
-        ].join("\n"),
-      },
-      message: `Use the live web search results in page context to draft an article for a Google Doc.
-
-Return ONLY JSON. No markdown fences. Format:
-{"title":"short article title","body":"multi-paragraph article body"}
-
-Rules:
-- The title must be concise and human-readable.
-- The body must be 4-7 paragraphs of clean prose.
-- Do not include a byline.
-- Only use facts supported by the provided search snippets.
-- If the snippets are thin, write a shorter and more cautious article.`,
-    }),
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Article drafting failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const reply = String(data.reply || "").trim();
-  const match = reply.match(/```(?:json)?\s*([\s\S]*?)```/i) || reply.match(/(\{[\s\S]*\})/);
-  const json = (match?.[1] ?? match?.[0] ?? reply).trim();
-  const parsed = JSON.parse(json);
-
-  if (!parsed?.title || !parsed?.body) {
-    throw new Error("The article draft came back in an unexpected format.");
-  }
+  if (!searchData?.body) throw new Error(`I couldn't create a grounded research draft for "${topic}".`);
 
   return {
-    title: String(parsed.title).trim(),
-    body: String(parsed.body).trim(),
+    title: String(searchData.title || `${topic} - Braino Research`).trim(),
+    body: String(searchData.body).trim(),
   };
 }
 

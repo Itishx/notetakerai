@@ -11,8 +11,60 @@ import {
   serializeError,
 } from "../_shared/google-drive.ts";
 
-const LOVABLE_API_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-2.5-flash";
+type ResearchSource = {
+  title?: string;
+  url?: string;
+  publishedDate?: string | null;
+};
+
+async function buildResearchDraft({
+  env,
+  topic,
+  instructions,
+}: {
+  env: ReturnType<typeof requireDriveEnv>;
+  topic: string;
+  instructions?: string;
+}) {
+  const response = await fetch(`${env.supabaseUrl}/functions/v1/web-research`, {
+    method: "POST",
+    headers: {
+      Authorization: env.authHeader,
+      apikey: env.anonKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: topic,
+      purpose: "google_doc",
+      instructions,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || `Web research failed: ${response.status}`);
+  }
+
+  const title = String(data?.title || `${topic} - Braino Research`).trim();
+  const body = String(data?.body || "").trim();
+  if (!body) throw new Error("Web research returned an empty draft.");
+
+  const sources = Array.isArray(data?.sources) ? (data.sources as ResearchSource[]) : [];
+  return { title, body, sources };
+}
+
+function formatSourcesSection(sources: ResearchSource[]) {
+  const lines = sources
+    .filter((source) => source?.url)
+    .slice(0, 8)
+    .map((source, index) => {
+      const title = String(source.title || source.url).trim();
+      const date = source.publishedDate ? ` (${source.publishedDate})` : "";
+      return `${index + 1}. ${title}${date}\n${source.url}`;
+    });
+
+  return lines.length ? `\n\nSources\n\n${lines.join("\n\n")}` : "";
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -25,49 +77,13 @@ serve(async (req) => {
     if (!userIdentifier || userIdentifier !== user.id) return json({ error: "User mismatch." }, 403);
     if (!String(topic || "").trim()) return json({ error: "topic is required." }, 400);
 
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) return json({ error: "AI not configured." }, 500);
-
     const admin = createDriveAdmin(env);
     const connection = await getDriveConnection(admin, user.id);
     const token = await getValidAccessToken({ admin, userId: user.id, env, connection, logPrefix: "google-docs-from-prompt" });
 
     const cleanTopic = String(topic).trim();
-    const extraInstructions = instructions ? `\n\nAdditional instructions: ${instructions}` : "";
-
-    // Step 1: Generate content with AI
-    const aiRes = await fetch(LOVABLE_API_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          {
-            role: "system",
-            content: `You are a research and writing expert. Write a comprehensive, well-structured document about the given topic.
-
-Format rules:
-- Use clear headings and subheadings
-- Write in plain text (no markdown asterisks or hashes — the doc will use native Docs formatting)
-- Be thorough but scannable — use short paragraphs
-- Include key concepts, examples, and practical takeaways
-- Length: 600-1200 words depending on topic depth
-- Do NOT include a title — that will be added separately${extraInstructions}`,
-          },
-          {
-            role: "user",
-            content: `Write a comprehensive document about: ${cleanTopic}`,
-          },
-        ],
-      }),
-    });
-
-    if (!aiRes.ok) throw new Error(`AI generation failed: ${aiRes.status}`);
-    const aiData = await aiRes.json();
-    const generatedContent = String(aiData?.choices?.[0]?.message?.content || "").trim();
-    if (!generatedContent) throw new Error("AI returned no content.");
-
-    const docTitle = `${cleanTopic} — Braino Research`;
+    const draft = await buildResearchDraft({ env, topic: cleanTopic, instructions });
+    const docTitle = draft.title || `${cleanTopic} - Braino Research`;
 
     // Step 2: Create empty Google Doc
     const created = await driveRequestJson<{ id: string; webViewLink?: string }>(
@@ -85,7 +101,8 @@ Format rules:
 
     // Step 3: Write content via Docs API batchUpdate
     // Insert title + body, then style the title as Heading 1
-    const fullText = `${docTitle}\n\n${generatedContent}\n`;
+    const sourcesSection = formatSourcesSection(draft.sources);
+    const fullText = `${docTitle}\n\n${draft.body}${sourcesSection}\n`;
 
     await driveRequestJson(
       `https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`,
@@ -114,7 +131,7 @@ Format rules:
     );
 
     // Step 4: Generate a one-line summary for the chat reply
-    const wordCount = generatedContent.split(/\s+/).length;
+    const wordCount = draft.body.split(/\s+/).filter(Boolean).length;
 
     return json({
       docId,
