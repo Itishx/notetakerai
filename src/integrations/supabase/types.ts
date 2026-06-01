@@ -236,6 +236,7 @@ export type Database = {
           created_at: string
           error_message: string | null
           id: string
+          media_url: string | null
           posted_at: string | null
           scheduled_at: string
           status: string
@@ -248,6 +249,7 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          media_url?: string | null
           posted_at?: string | null
           scheduled_at: string
           status?: string
@@ -260,6 +262,7 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          media_url?: string | null
           posted_at?: string | null
           scheduled_at?: string
           status?: string
