@@ -14,17 +14,23 @@ VALUES (
 ) ON CONFLICT (id) DO NOTHING;
 
 -- Only authenticated users can upload to their own folder
-CREATE POLICY IF NOT EXISTS "x_post_media_insert"
-ON storage.objects FOR INSERT TO authenticated
-WITH CHECK (
-  bucket_id = 'x-post-media'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
+DO $$ BEGIN
+  CREATE POLICY "x_post_media_insert"
+  ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'x-post-media'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete their own files
-CREATE POLICY IF NOT EXISTS "x_post_media_delete"
-ON storage.objects FOR DELETE TO authenticated
-USING (
-  bucket_id = 'x-post-media'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
+DO $$ BEGIN
+  CREATE POLICY "x_post_media_delete"
+  ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'x-post-media'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
