@@ -1613,6 +1613,7 @@ function __sbTryClaimInlineOwner(ownerId) {
 
 if (!__sbTryClaimInlineOwner(__SB_INLINE_OWNER_ID)) { /* inline UI already wired */ } else {
 const __SB_API = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
+const __SB_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
 
 function __sbContextOk() {
   try { return !!chrome.runtime?.id; } catch { return false; }
@@ -3905,9 +3906,14 @@ async function __sbSpeakText(text) {
   let spoke = false;
 
   try {
+    const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
     const resp = await fetch(`${__SB_API}/elevenlabs-tts`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        apikey: __SB_ANON_KEY,
+        ...(ttsToken ? { Authorization: `Bearer ${ttsToken}` } : {}),
+      },
       body: JSON.stringify({
         text: clean,
         voiceId: "vBKc2FfBKJfcZNyEt1n6",
@@ -4236,9 +4242,14 @@ function __sbBuildXAutoContext(persona) {
 }
 
 async function __sbFetchAssistantReply(body) {
+  const { authToken } = await __sbStorageGet(["authToken"]);
   const resp = await fetch(`${__SB_API}/chat-about-notes`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      apikey: __SB_ANON_KEY,
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
     body: JSON.stringify(body),
   });
 
