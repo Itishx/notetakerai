@@ -3773,23 +3773,31 @@ async function __sbSpeakText(text) {
 }
 
 
-function __sbScrollToLast(scroll) {
-  const turns = scroll.querySelectorAll(".sb-turn");
-  const last = turns[turns.length - 1];
-  if (last) {
-    void last.getBoundingClientRect(); // force reflow
-    scroll.scrollTop = last.offsetTop;
-  }
+// Each previous turn occupies exactly containerH px. Dividers are 37px (1px + 18px margins each side).
+// We calculate scroll position mathematically instead of reading offsetTop (unreliable mid-layout).
+const __SB_DIVIDER_H = 37;
+let __sbCachedContainerH = 0;
+
+function __sbGetContainerH(scroll) {
+  const h = scroll ? scroll.clientHeight : 0;
+  if (h > 0) __sbCachedContainerH = h;
+  return __sbCachedContainerH || 300;
+}
+
+function __sbApplyScroll(scroll, targetScrollTop) {
+  scroll.scrollTop = targetScrollTop;
+  setTimeout(() => { scroll.scrollTop = targetScrollTop; }, 0);
+  setTimeout(() => { scroll.scrollTop = targetScrollTop; }, 80);
 }
 
 function __sbRenderCardHistory(scroll) {
   if (!scroll) return;
-  const containerH = scroll.clientHeight || 0;
+  const containerH = __sbGetContainerH(scroll);
   const total = __sbCardTurns.length;
   let html = "";
   __sbCardTurns.forEach((turn, i) => {
     const isPrev = i < total - 1;
-    const minH = isPrev && containerH ? ` style="min-height:${containerH}px;"` : "";
+    const minH = isPrev ? ` style="min-height:${containerH}px;"` : "";
     const divider = i > 0 ? `<div style="height:1px;background:rgba(255,255,255,0.08);margin:18px 0;"></div>` : "";
     html += `${divider}<div class="sb-turn"${minH}>`;
     if (turn.prompt) html += `<div class="sb-card-q">${__sbEscapeHtml(turn.prompt)}</div>`;
@@ -3797,20 +3805,19 @@ function __sbRenderCardHistory(scroll) {
     html += `</div>`;
   });
   scroll.innerHTML = html;
-  __sbScrollToLast(scroll);
-  setTimeout(() => __sbScrollToLast(scroll), 0);
-  setTimeout(() => __sbScrollToLast(scroll), 60);
+  // Each previous turn = containerH, each divider = __SB_DIVIDER_H. Last turn has no prior space.
+  const numPrev = total - 1;
+  const target = numPrev > 0 ? numPrev * (containerH + __SB_DIVIDER_H) : 0;
+  __sbApplyScroll(scroll, target);
 }
 
 function __sbShowThinking(scroll) {
   if (!scroll) return;
   document.getElementById("__sb_thinking_wrap__")?.remove();
   __sbThinkingEl = null;
-  const containerH = scroll.clientHeight || 0;
-  // Existing turns are now history — give them min-height so they're above the fold
-  if (containerH > 0) {
-    scroll.querySelectorAll(".sb-turn").forEach(t => { t.style.minHeight = containerH + "px"; });
-  }
+  const containerH = __sbGetContainerH(scroll);
+  // All existing turns become history — set min-height on them
+  scroll.querySelectorAll(".sb-turn").forEach(t => { t.style.minHeight = containerH + "px"; });
   const wrap = document.createElement("div");
   wrap.id = "__sb_thinking_wrap__";
   wrap.className = "sb-turn";
@@ -3824,10 +3831,10 @@ function __sbShowThinking(scroll) {
   __sbThinkingEl.textContent = "Thinking…";
   wrap.appendChild(__sbThinkingEl);
   scroll.appendChild(wrap);
-  void wrap.getBoundingClientRect();
-  scroll.scrollTop = wrap.offsetTop;
-  setTimeout(() => { scroll.scrollTop = wrap.offsetTop; }, 0);
-  setTimeout(() => { scroll.scrollTop = wrap.offsetTop; }, 60);
+  // N existing turns each containerH tall + (N-1) dividers between them + 1 divider before thinking
+  const N = __sbCardTurns.length;
+  const target = N > 0 ? N * containerH + N * __SB_DIVIDER_H : 0;
+  __sbApplyScroll(scroll, target);
 }
 
 function __sbShowBubble(text, autoHide = true, options = {}) {
