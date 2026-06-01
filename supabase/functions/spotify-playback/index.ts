@@ -16,6 +16,22 @@ type SpotifyPlaybackAction =
   | { action: "play"; deviceId?: string | null; uris?: string[]; contextUri?: string | null; offsetUri?: string | null; positionMs?: number | null }
   | { action: "pause" | "next" | "previous"; deviceId?: string | null };
 
+async function getFirstAvailableDeviceId(accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://api.spotify.com/v1/me/player/devices", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const devices: any[] = data?.devices ?? [];
+    const active = devices.find((d) => d.is_active);
+    const first = active ?? devices[0] ?? null;
+    return first?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -63,38 +79,59 @@ serve(async (req) => {
       return json({ ok: true });
     }
 
-    const deviceParam = payload.deviceId ? `?device_id=${encodeURIComponent(payload.deviceId)}` : "";
+    async function resolveDeviceId(preferred?: string | null): Promise<string | null> {
+      if (preferred) return preferred;
+      return await getFirstAvailableDeviceId(accessToken);
+    }
 
     if (payload.action === "play") {
       const body: Record<string, unknown> = {};
-      if (Array.isArray(payload.uris) && payload.uris.length > 0) {
-        body.uris = payload.uris;
-      }
-      if (payload.contextUri) {
-        body.context_uri = payload.contextUri;
-      }
-      if (payload.offsetUri) {
-        body.offset = { uri: payload.offsetUri };
-      }
+      if (Array.isArray(payload.uris) && payload.uris.length > 0) body.uris = payload.uris;
+      if (payload.contextUri) body.context_uri = payload.contextUri;
+      if (payload.offsetUri) body.offset = { uri: payload.offsetUri };
       if (typeof payload.positionMs === "number" && Number.isFinite(payload.positionMs)) {
         body.position_ms = payload.positionMs;
       }
 
-      await spotifyRequestRaw(
-        `https://api.spotify.com/v1/me/player/play${deviceParam}`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
+      const attemptPlay = async (deviceId: string | null) => {
+        const param = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : "";
+        await spotifyRequestRaw(
+          `https://api.spotify.com/v1/me/player/play${param}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
           },
-          body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
-        },
-        "spotify-playback",
-      );
+          "spotify-playback",
+        );
+      };
+
+      try {
+        await attemptPlay(payload.deviceId ?? null);
+      } catch (err: any) {
+        const msg = err?.message ?? "";
+        if (msg.includes("NO_ACTIVE_DEVICE") || msg.includes("404")) {
+          const deviceId = await getFirstAvailableDeviceId(accessToken);
+          if (!deviceId) {
+            return json({
+              error: "No active Spotify device found. Open Spotify on your phone, desktop, or browser and try again.",
+              reason: "NO_ACTIVE_DEVICE",
+            }, 404);
+          }
+          await attemptPlay(deviceId);
+        } else {
+          throw err;
+        }
+      }
 
       return json({ ok: true });
     }
+
+    const deviceId = await resolveDeviceId(payload.deviceId ?? null);
+    const deviceParam = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : "";
 
     const endpoint =
       payload.action === "pause"
@@ -107,9 +144,7 @@ serve(async (req) => {
       endpoint,
       {
         method: payload.action === "pause" ? "PUT" : "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { Authorization: `Bearer ${accessToken}` },
       },
       "spotify-playback",
     );
