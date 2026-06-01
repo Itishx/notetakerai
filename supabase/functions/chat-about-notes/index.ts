@@ -35,7 +35,7 @@ function resolveAiConfig(requestedProvider?: string): AiConfig {
   if (!key) throw new Error("API key not configured");
   return {
     provider: "openai",
-    model: "gpt-4o-mini",
+    model: "gpt-5-mini",
     apiKey: key,
     endpoint: "https://api.openai.com/v1/chat/completions",
   };
