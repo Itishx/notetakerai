@@ -4665,8 +4665,16 @@ function __sbEnsureSpotifyRefreshLoop() {
     return;
   }
   __sbSpotifyRefreshTimer = setInterval(() => {
-    __sbRefreshSpotifyStateFromPage({ rerender: document.getElementById("__sb_card_wrap__")?.classList.contains("visible") });
-  }, 2500);
+    const siteContext = __sbGetSiteAdapterContext();
+    const cardVisible = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+    if (siteContext?.site === "spotify") {
+      // On Spotify page — use DOM scraping (free)
+      __sbRefreshSpotifyStateFromPage({ rerender: cardVisible });
+    } else {
+      // On any other page — poll the API via background (live sync from phone/other devices)
+      chrome.runtime.sendMessage({ action: "syncSpotifyPlayerState" }, () => { void chrome.runtime.lastError; });
+    }
+  }, 5000);
   __sbSyncSpotifyVisualState();
 }
 

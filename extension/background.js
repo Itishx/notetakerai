@@ -1352,6 +1352,31 @@ async function bgFetchSpotifyPlayerState() {
   }
 }
 
+async function bgPlaySpotifyWithAutoOpen(uris) {
+  const payload = { action: "play", uris };
+  try {
+    return await bgCallSpotifyFunction("spotify-playback", payload);
+  } catch (firstErr) {
+    if (!String(firstErr?.message || "").match(/device|active/i)) throw firstErr;
+    // No active device — silently open Spotify web in a background tab to create a session
+    let spotifyTabId = null;
+    try {
+      const tab = await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: false }, r));
+      spotifyTabId = tab?.id ?? null;
+    } catch (_) {}
+    // Poll every 2s up to 10s for Spotify Web Player to register, then retry
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        await bgCallSpotifyFunction("spotify-playback", payload);
+        return { ok: true };
+      } catch (_) {}
+    }
+    if (spotifyTabId) chrome.tabs.remove(spotifyTabId, () => { void chrome.runtime.lastError; });
+    throw new Error("Opened Spotify but couldn't start playback. Try playing once in Spotify first.");
+  }
+}
+
 function bgBuildSpotifyUiStateFromPlayback(playerState, base = {}) {
   const baseTrack = bgFormatSpotifyTrack(base.primaryTrack || null, {
     isPlaying: Boolean(base.assumePlaying),
@@ -1831,7 +1856,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       type: "spotify_play",
       onProgress,
       onResult,
-      run: () => bgCallSpotifyFunction("spotify-playback", { action: "play", uris: [track.uri] }),
+      run: () => bgPlaySpotifyWithAutoOpen([track.uri]),
     });
 
     await bgPushSpotifyPlaybackState(tabId, {
@@ -3179,6 +3204,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true });
     return true;
   }
+  if (message.action === "syncSpotifyPlayerState") {
+    (async () => {
+      try {
+        if (!sender?.tab?.id) { sendResponse({}); return; }
+        await bgPushSpotifyPlaybackState(sender.tab.id, {}, { focusSpotify: false });
+        sendResponse({ ok: true });
+      } catch (_) { sendResponse({ ok: false }); }
+    })();
+    return true;
+  }
   if (message.action === "spotifyControl") {
     (async () => {
       try {
@@ -3198,7 +3233,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "playBrainoFavoriteSong") {
     (async () => {
       try {
-        await bgCallSpotifyFunction("spotify-playback", { action: "play", uris: [BG_BRAINO_FAVORITE_SONG_URI] });
+        await bgPlaySpotifyWithAutoOpen([BG_BRAINO_FAVORITE_SONG_URI]);
         const playerState = await bgFetchSpotifyPlayerState();
         const favoriteTrack = playerState?.track || {
           uri: BG_BRAINO_FAVORITE_SONG_URI,
