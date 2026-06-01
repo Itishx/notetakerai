@@ -308,7 +308,7 @@ const BuildPlan = () => (
           { label: "Polar + Supabase starter kit", url: "github.com/polarsource/polar-supabase-starter" },
           { label: "Polar webhooks docs", url: "polar.sh/docs/integrate/webhooks/endpoints" },
           { label: "Polar India payout confirmation", url: "x.com/polar_sh/status/1953085696819749358" },
-          { label: "Supabase project", url: "ovapacfrzddnhrwvkbkr.supabase.co" },
+          { label: "Supabase project", url: "suwhgaxxdizowbyjlljj.supabase.co" },
           { label: "Current transcription model", url: "google/gemini-2.5-flash via Lovable gateway" },
         ].map((ref) => (
           <div key={ref.label} className="p-5 rounded-2xl border border-border/60 bg-card/40">

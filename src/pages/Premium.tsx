@@ -76,7 +76,7 @@ export default function Premium() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL || "https://ovapacfrzddnhrwvkbkr.supabase.co"}/functions/v1/create-checkout`,
+        `${import.meta.env.VITE_SUPABASE_URL || "https://suwhgaxxdizowbyjlljj.supabase.co"}/functions/v1/create-checkout`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
