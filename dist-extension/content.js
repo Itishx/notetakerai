@@ -2222,9 +2222,38 @@ function __sbBuildBrainUI() {
     .sb-card-a hr { border: none; border-top: 1px solid var(--sb-hr); margin: 14px 0; }
     .sb-card-status { font-size: 13.5px; color: var(--sb-fg-2); line-height: 1.65; }
     .sb-card-footer {
-      display: flex; align-items: center; gap: 5px;
+      position: relative; display: flex; align-items: center; gap: 5px;
       padding: 10px 12px 12px; flex-shrink: 0;
       border-top: 1px solid var(--sb-footer-border); background: var(--sb-footer-bg);
+      overflow: hidden;
+    }
+    .sb-card-footer > * { position: relative; z-index: 1; }
+    .sb-card-footer::before {
+      content: ""; position: absolute; inset: -16px -24px;
+      pointer-events: none; opacity: 0; transform: scaleX(0.62);
+      transform-origin: 82% 50%;
+      background:
+        radial-gradient(circle at 92% 50%, rgba(255,218,142,0.52), transparent 34%),
+        radial-gradient(circle at 74% 50%, rgba(232,120,110,0.38), transparent 42%),
+        linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+      filter: blur(1px);
+    }
+    .sb-card-footer.sb-followup-glow {
+      animation: __sb_footer_border_glow__ 780ms cubic-bezier(0.2,0.8,0.2,1) both;
+    }
+    .sb-card-footer.sb-followup-glow::before {
+      animation: __sb_followup_radiate__ 780ms cubic-bezier(0.2,0.8,0.2,1) both;
+    }
+    @keyframes __sb_followup_radiate__ {
+      0% { opacity: 0; transform: scaleX(0.48); }
+      18% { opacity: 0.95; transform: scaleX(0.72); }
+      58% { opacity: 0.48; transform: scaleX(1); }
+      100% { opacity: 0; transform: scaleX(1.08); }
+    }
+    @keyframes __sb_footer_border_glow__ {
+      0% { box-shadow: inset 0 1px 0 var(--sb-footer-border); }
+      38% { box-shadow: inset 0 1px 0 rgba(255,218,142,0.65), 0 -12px 42px rgba(232,120,110,0.18); }
+      100% { box-shadow: inset 0 1px 0 var(--sb-footer-border); }
     }
     #__sb_card_input__ {
       flex: 1; border: none; outline: none; background: transparent;
@@ -3919,6 +3948,15 @@ function __sbScrollCardToLatest(scroll) {
   setTimeout(() => { scroll.scrollTop = scroll.scrollHeight; }, 80);
 }
 
+function __sbPulseFollowupBar() {
+  const footer = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-footer");
+  if (!footer) return;
+  footer.classList.remove("sb-followup-glow");
+  void footer.offsetWidth;
+  footer.classList.add("sb-followup-glow");
+  setTimeout(() => footer.classList.remove("sb-followup-glow"), 850);
+}
+
 function __sbBuildCardTurnHtml(turn = {}, options = {}) {
   const prompt = typeof turn.prompt === "string" ? turn.prompt : "";
   const answer = typeof options.answerText === "string"
@@ -4379,6 +4417,7 @@ async function __sbSendMessage() {
   if (!text) return;
   input.value = "";
   if (input.tagName === "TEXTAREA") input.style.height = "auto";
+  if (cardOpen) __sbPulseFollowupBar();
   await __sbProcessPrompt(text);
 }
 
