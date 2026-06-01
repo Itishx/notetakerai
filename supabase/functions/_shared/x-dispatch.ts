@@ -5,6 +5,7 @@ type ScheduledXPost = {
   user_id: string;
   content: string;
   scheduled_at: string;
+  media_url: string | null;
 };
 
 type SupabaseLikeClient = {
@@ -66,7 +67,7 @@ export async function dispatchDueXPosts(options: DispatchDueXPostsOptions): Prom
   const limit = options.limit ?? 25;
   let query = options.supabase
     .from("scheduled_x_posts")
-    .select("id,user_id,content,scheduled_at")
+    .select("id,user_id,content,scheduled_at,media_url")
     .eq("status", "pending")
     .lte("scheduled_at", new Date().toISOString())
     .order("scheduled_at", { ascending: true })
@@ -137,13 +138,22 @@ export async function dispatchDueXPosts(options: DispatchDueXPostsOptions): Prom
         }
       }
 
+      // Upload media to X if attached, then include media_id in tweet
+      const tweetBody: Record<string, unknown> = { text: post.content };
+      if (post.media_url) {
+        const mediaId = await uploadMediaToX(post.media_url, accessToken);
+        if (mediaId) {
+          tweetBody.media = { media_ids: [mediaId] };
+        }
+      }
+
       const response = await fetch("https://api.x.com/2/tweets", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ text: post.content }),
+        body: JSON.stringify(tweetBody),
       });
 
       const raw = await response.text();
@@ -200,6 +210,103 @@ export async function dispatchDueXPosts(options: DispatchDueXPostsOptions): Prom
     failed,
     results,
   };
+}
+
+async function uploadMediaToX(mediaUrl: string, accessToken: string): Promise<string | null> {
+  try {
+    const mediaResp = await fetch(mediaUrl);
+    if (!mediaResp.ok) {
+      console.error("Failed to fetch media from storage:", mediaResp.status);
+      return null;
+    }
+    const contentType = mediaResp.headers.get("content-type") || "image/jpeg";
+    const bytes = new Uint8Array(await mediaResp.arrayBuffer());
+    return contentType.startsWith("video/")
+      ? uploadVideoToX(bytes, contentType, accessToken)
+      : uploadImageToX(bytes, contentType, accessToken);
+  } catch (err) {
+    console.error("uploadMediaToX error:", err);
+    return null;
+  }
+}
+
+async function uploadImageToX(bytes: Uint8Array, contentType: string, accessToken: string): Promise<string | null> {
+  const form = new FormData();
+  form.append("media", new Blob([bytes], { type: contentType }));
+  const resp = await fetch("https://upload.twitter.com/1.1/media/upload.json", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  if (!resp.ok) {
+    console.error("X image upload failed:", await resp.text());
+    return null;
+  }
+  const payload = await resp.json();
+  return payload.media_id_string ?? null;
+}
+
+async function uploadVideoToX(bytes: Uint8Array, contentType: string, accessToken: string): Promise<string | null> {
+  const authHeader = { Authorization: `Bearer ${accessToken}` };
+
+  // INIT
+  const initResp = await fetch("https://upload.twitter.com/1.1/media/upload.json", {
+    method: "POST",
+    headers: { ...authHeader, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      command: "INIT",
+      total_bytes: bytes.length.toString(),
+      media_type: contentType,
+      media_category: "tweet_video",
+    }).toString(),
+  });
+  if (!initResp.ok) { console.error("X video INIT failed:", await initResp.text()); return null; }
+  const { media_id_string: mediaId } = await initResp.json();
+
+  // APPEND in 5MB chunks
+  const chunkSize = 5 * 1024 * 1024;
+  for (let i = 0, seg = 0; i < bytes.length; i += chunkSize, seg++) {
+    const form = new FormData();
+    form.append("command", "APPEND");
+    form.append("media_id", mediaId);
+    form.append("segment_index", seg.toString());
+    form.append("media", new Blob([bytes.slice(i, i + chunkSize)], { type: contentType }));
+    const appendResp = await fetch("https://upload.twitter.com/1.1/media/upload.json", {
+      method: "POST",
+      headers: authHeader,
+      body: form,
+    });
+    if (!appendResp.ok) { console.error("X video APPEND failed:", await appendResp.text()); return null; }
+  }
+
+  // FINALIZE
+  const finalResp = await fetch("https://upload.twitter.com/1.1/media/upload.json", {
+    method: "POST",
+    headers: { ...authHeader, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ command: "FINALIZE", media_id: mediaId }).toString(),
+  });
+  if (!finalResp.ok) { console.error("X video FINALIZE failed:", await finalResp.text()); return null; }
+  const finalPayload = await finalResp.json();
+
+  // Poll STATUS if async processing required
+  if (finalPayload.processing_info) {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const waitMs = (finalPayload.processing_info.check_after_secs ?? 5) * 1000;
+      await new Promise((r) => setTimeout(r, waitMs));
+      const statusResp = await fetch(
+        `https://upload.twitter.com/1.1/media/upload.json?command=STATUS&media_id=${mediaId}`,
+        { headers: authHeader },
+      );
+      const { processing_info } = await statusResp.json();
+      if (processing_info?.state === "succeeded") break;
+      if (processing_info?.state === "failed") {
+        console.error("X video processing failed:", processing_info);
+        return null;
+      }
+    }
+  }
+
+  return mediaId;
 }
 
 export function requireSupabaseServiceConfig() {

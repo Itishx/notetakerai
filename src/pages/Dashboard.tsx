@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -92,6 +92,7 @@ type ScheduledXPost = {
   posted_at: string | null;
   created_at: string;
   updated_at: string;
+  media_url: string | null;
 };
 
 type XAutomationStats = {
@@ -934,6 +935,9 @@ export default function Dashboard() {
   const [xScheduledAt, setXScheduledAt] = useState(() => defaultScheduledAtValue());
   const [xScheduling, setXScheduling] = useState(false);
   const [xPostingNow, setXPostingNow] = useState(false);
+  const [xPostMediaUrl, setXPostMediaUrl] = useState<string | null>(null);
+  const [xMediaUploading, setXMediaUploading] = useState(false);
+  const xMediaInputRef = useRef<HTMLInputElement>(null);
   const [xCancellingId, setXCancellingId] = useState<string | null>(null);
   const [xDispatching, setXDispatching] = useState(false);
   const [xPersona, setXPersona] = useState<XPersona>(null);
@@ -1339,6 +1343,7 @@ export default function Dashboard() {
           user_id: user.id,
           content,
           scheduled_at: scheduledDate.toISOString(),
+          media_url: xPostMediaUrl ?? null,
         })
         .select()
         .single();
@@ -1352,6 +1357,7 @@ export default function Dashboard() {
       );
       setXPostDraft("");
       setXScheduledAt(defaultScheduledAtValue());
+      setXPostMediaUrl(null);
       toast({
         title: "Post scheduled",
         description: `Braino will send it on ${formatDateTime(scheduledDate.toISOString())}.`,
@@ -1396,6 +1402,7 @@ export default function Dashboard() {
           user_id: user.id,
           content,
           scheduled_at: dueAt,
+          media_url: xPostMediaUrl ?? null,
         });
 
       if (error) throw error;
@@ -1413,6 +1420,7 @@ export default function Dashboard() {
       await refreshScheduledXPosts(user.id);
       setXPostDraft("");
       setXScheduledAt(defaultScheduledAtValue());
+      setXPostMediaUrl(null);
       toast({
         title: payload.posted ? "Posted to X" : "Post sent to queue",
         description: payload.posted
@@ -1427,6 +1435,31 @@ export default function Dashboard() {
       });
     } finally {
       setXPostingNow(false);
+    }
+  }
+
+  async function handleMediaFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    const isVideo = file.type.startsWith("video/");
+    const maxBytes = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      toast({ title: "File too large", description: isVideo ? "Videos must be under 50 MB." : "Images must be under 5 MB." });
+      return;
+    }
+    setXMediaUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("x-post-media").upload(path, file);
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from("x-post-media").getPublicUrl(path);
+      setXPostMediaUrl(publicUrl);
+    } catch (error) {
+      toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setXMediaUploading(false);
+      if (xMediaInputRef.current) xMediaInputRef.current.value = "";
     }
   }
 
@@ -3228,6 +3261,43 @@ export default function Dashboard() {
                           <span>{xConn ? "Braino will send exactly this text." : "OAuth link required before the queue can post."}</span>
                           <span className={cn(xPostDraft.length > 280 && "text-red-500")}>{xPostDraft.length}/280</span>
                         </div>
+
+                        {/* Media attachment */}
+                        <input
+                          ref={xMediaInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime"
+                          className="hidden"
+                          onChange={handleMediaFileSelect}
+                        />
+                        {xPostMediaUrl ? (
+                          <div className="mt-3 flex items-center gap-3 rounded-[12px] border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-2">
+                            {xPostMediaUrl.match(/\.(mp4|mov|avi)$/i) ? (
+                              <video src={xPostMediaUrl} className="h-14 w-20 rounded-[8px] object-cover" />
+                            ) : (
+                              <img src={xPostMediaUrl} alt="attached" className="h-14 w-20 rounded-[8px] object-cover" />
+                            )}
+                            <span className="flex-1 truncate text-[11px] text-[var(--sb-ink-3)]" style={monoStyle}>
+                              Media attached
+                            </span>
+                            <button
+                              onClick={() => setXPostMediaUrl(null)}
+                              className="text-[11px] text-red-400 hover:text-red-500"
+                              style={monoStyle}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => xMediaInputRef.current?.click()}
+                            disabled={!user || xMediaUploading}
+                            className="mt-3 flex items-center gap-2 rounded-[12px] border border-dashed border-[var(--sb-line)] px-3 py-2 text-[11px] text-[var(--sb-ink-3)] transition-colors hover:border-[var(--sb-ink-3)] hover:text-[var(--sb-ink-2)] disabled:opacity-50"
+                            style={monoStyle}
+                          >
+                            {xMediaUploading ? "Uploading…" : "+ Attach image or video"}
+                          </button>
+                        )}
                       </div>
 
                       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-end">
