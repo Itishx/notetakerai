@@ -120,8 +120,8 @@ export async function getDriveConnection(admin: ReturnType<typeof createClient>,
 }
 
 export function hasFullDriveScope(connection: DriveConnection) {
-  const scope = String(connection?.scope || "");
-  return scope.includes("https://www.googleapis.com/auth/drive");
+  const scopes = String(connection?.scope || "").split(/\s+/).filter(Boolean);
+  return scopes.includes("https://www.googleapis.com/auth/drive");
 }
 
 export async function getValidAccessToken({

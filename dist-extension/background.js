@@ -1144,8 +1144,35 @@ async function bgCallGoogleDriveFunction(functionName, payload) {
 
   const data = await response.json().catch(() => ({}));
   console.log("[Braino][Drive][BG] Function response:", functionName, response.status, data);
-  if (!response.ok) throw new Error([data?.error, data?.details].filter(Boolean).join(" — ") || `${functionName} failed (${response.status})`);
+  if (!response.ok) {
+    if (data?.reconnectRequired) {
+      await bgOpenGoogleDriveReconnect(stored.authUserId);
+      throw new Error(`${data.error || "Google Drive needs to be reconnected with full Drive access."} I opened the reconnect page. After approving it, run this again.`);
+    }
+    throw new Error([data?.error, data?.details].filter(Boolean).join(" — ") || `${functionName} failed (${response.status})`);
+  }
   return data;
+}
+
+async function bgOpenGoogleDriveReconnect(userIdentifier) {
+  if (!userIdentifier) return false;
+  try {
+    const response = await fetch(`${BG_API_BASE}/google-drive-oauth-start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: BG_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ userIdentifier }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.authUrl) return false;
+    await new Promise((resolve) => chrome.tabs.create({ url: data.authUrl }, resolve));
+    return true;
+  } catch (error) {
+    console.warn("[Braino][Drive][BG] Could not open reconnect flow:", error);
+    return false;
+  }
 }
 
 function bgNormalizeConnectorHint(value) {
