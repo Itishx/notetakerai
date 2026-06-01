@@ -13,12 +13,15 @@ if (location.hostname === 'trybraino.com') {
       if (!raw) return;
       const s = JSON.parse(raw);
       if (!s?.access_token) return;
+      const email = s.user?.email || null;
+      const isInternalPremium = typeof email === "string" && email.trim().toLowerCase() === "itishpande21@gmail.com";
       chrome.storage.local.set({
         authToken: s.access_token,
         authRefreshToken: s.refresh_token || null,
-        authEmail: s.user?.email || null,
+        authEmail: email,
         authUserId: s.user?.id || null,
         authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+        ...(isInternalPremium ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
       });
     } catch {}
   };
@@ -1618,6 +1621,19 @@ function __sbStorageGet(keys) {
   return new Promise((res) => {
     if (!__sbContextOk()) { res({}); return; }
     chrome.storage.local.get(keys, res);
+  });
+}
+function __sbRuntimeMessage(message) {
+  return new Promise((resolve) => {
+    if (!__sbContextOk()) { resolve(null); return; }
+    try {
+      chrome.runtime.sendMessage(message, (res) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        resolve(res || null);
+      });
+    } catch {
+      resolve(null);
+    }
   });
 }
 
@@ -4233,6 +4249,25 @@ async function __sbFetchAssistantReply(body) {
   return { reply: json.reply || json.response || json.message || json.answer || "" };
 }
 
+async function __sbResolvePremiumStatus(forceRefresh = false) {
+  const cached = await __sbStorageGet(["authEmail", "isPremium"]);
+  const normalizedEmail = typeof cached.authEmail === "string" ? cached.authEmail.trim().toLowerCase() : "";
+  if (normalizedEmail === "itishpande21@gmail.com") {
+    if (__sbContextOk()) {
+      chrome.storage.local.set({ isPremium: true, isPremiumCachedAt: Date.now() });
+    }
+    return true;
+  }
+
+  if (!forceRefresh && cached.isPremium === true) return true;
+
+  const result = await __sbRuntimeMessage({
+    action: "resolvePremiumStatus",
+    forceRefresh,
+  });
+  return result?.isPremium === true || cached.isPremium === true;
+}
+
 async function __sbProcessPrompt(text, options = {}) {
   const connectorDirective = __sbParseConnectorDirective(text);
   if (connectorDirective.connector) {
@@ -4265,11 +4300,12 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
-  const stored = await __sbStorageGet(["currentNotes", "authToken", "isPremium", "aiProvider"]);
+  const stored = await __sbStorageGet(["currentNotes", "authToken", "aiProvider"]);
   const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
 
   if (intent === "agent") {
-    if (!stored.isPremium) {
+    const hasPremium = await __sbResolvePremiumStatus(true);
+    if (!hasPremium) {
       if (fromVoice) __sbVoicePendingReply = false;
       __sbShowUpgrade("Browser Agent (Delegate)");
       if (fromVoice) await __sbSpeakText("Browser agent requires premium.");

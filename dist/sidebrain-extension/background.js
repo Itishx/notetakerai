@@ -28,6 +28,18 @@ function bgRemoveStorage(keys) {
   return new Promise((resolve) => chrome.storage.local.remove(keys, resolve));
 }
 
+const BG_INTERNAL_PREMIUM_EMAILS = new Set([
+  "itishpande21@gmail.com",
+]);
+
+function bgNormalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
+function bgIsInternalPremiumEmail(email) {
+  const normalized = bgNormalizeEmail(email);
+  return !!normalized && BG_INTERNAL_PREMIUM_EMAILS.has(normalized);
+}
 
 async function bgPerformRealWebSearch(query) {
   const trimmedQuery = String(query || "").trim();
@@ -446,12 +458,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (s?.access_token) {
               authToken = s.access_token;
               authRefreshToken = s.refresh_token || null;
+              const authEmail = s.user?.email || null;
               chrome.storage.local.set({
                 authToken,
                 authRefreshToken,
-                authEmail: s.user?.email || null,
+                authEmail,
                 authUserId: s.user?.id || null,
                 authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+                ...(bgIsInternalPremiumEmail(authEmail) ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
               });
             }
           }
@@ -473,6 +487,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch {
         sendResponse({ authenticated: !!authToken });
       }
+    })();
+    return true;
+  }
+  if (message.action === "resolvePremiumStatus") {
+    (async () => {
+      const result = await bgResolvePremiumStatus({ forceRefresh: Boolean(message.forceRefresh) });
+      sendResponse(result);
     })();
     return true;
   }
@@ -538,6 +559,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 const BG_SUPABASE_URL = "https://ovapacfrzddnhrwvkbkr.supabase.co";
 const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2ZyemRkbmhyd3ZrYmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDc4NTUsImV4cCI6MjA5MDUyMzg1NX0.WZV4fy1XqMS3TTyR09TneueaLl-729tp-Pi4HkfzURo";
 const BG_API_BASE = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
+const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 
 let bgXPersonaCache = null;
 let bgXPersonaCacheExpiry = 0;
@@ -2705,6 +2727,68 @@ async function bgRefreshAuthToken() {
   }
 }
 
+async function bgResolvePremiumStatus(options = {}) {
+  const now = Date.now();
+  const data = await bgGetStorage([
+    "authToken",
+    "authRefreshToken",
+    "authUserId",
+    "authEmail",
+    "isPremium",
+    "isPremiumCachedAt",
+  ]);
+
+  if (bgIsInternalPremiumEmail(data.authEmail)) {
+    await bgSetStorage({ isPremium: true, isPremiumCachedAt: now });
+    return { ok: true, isPremium: true, source: "internal" };
+  }
+
+  const hasFreshPositiveCache =
+    !options.forceRefresh &&
+    data.isPremium === true &&
+    data.isPremiumCachedAt &&
+    now - data.isPremiumCachedAt < BG_PREMIUM_CACHE_MS;
+
+  if (hasFreshPositiveCache) {
+    return { ok: true, isPremium: true, source: "cache" };
+  }
+
+  if (!data.authUserId) {
+    await bgSetStorage({ isPremium: false, isPremiumCachedAt: now });
+    return { ok: true, isPremium: false, source: "missing-user" };
+  }
+
+  let token = data.authToken;
+  const fetchPremium = async (accessToken) => fetch(
+    `${BG_SUPABASE_URL}/rest/v1/profiles?user_id=eq.${encodeURIComponent(data.authUserId)}&select=is_premium&limit=1`,
+    { headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}` } },
+  );
+
+  try {
+    let res = token ? await fetchPremium(token) : null;
+    if (!res || res.status === 401) {
+      token = data.authRefreshToken ? await bgRefreshAuthToken() : null;
+      res = token ? await fetchPremium(token) : null;
+    }
+
+    if (!res || !res.ok) {
+      throw new Error(`Premium lookup failed: ${res?.status || "no-token"}`);
+    }
+
+    const rows = await res.json();
+    const isPremium = rows?.[0]?.is_premium === true;
+    await bgSetStorage({ isPremium, isPremiumCachedAt: now });
+    return { ok: true, isPremium, source: "profile" };
+  } catch (error) {
+    return {
+      ok: false,
+      isPremium: data.isPremium === true,
+      source: "fallback",
+      error: error?.message || String(error),
+    };
+  }
+}
+
 // --- polling ---
 
 async function bgPollRemoteCommands() {
@@ -2808,12 +2892,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function storeAuthData(data) {
+  const isInternalPremium = bgIsInternalPremiumEmail(data.email);
   chrome.storage.local.set({
     authToken: data.token,
     authRefreshToken: data.refreshToken,
     authDisplayName: data.displayName,
     authEmail: data.email,
     authUserId: data.userId,
+    ...(isInternalPremium ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
   });
   // Auto-close the auth tab opened by the extension
   chrome.storage.local.get("__sbAuthTabId", ({ __sbAuthTabId }) => {
