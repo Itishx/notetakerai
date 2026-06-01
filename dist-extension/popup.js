@@ -2066,7 +2066,7 @@ function parseAdapterTask(task, siteContext) {
   const text = raw.toLowerCase();
   const currentSite = siteContext?.site || "generic";
   const onSpotify = currentSite === "spotify" || /\bspotify\b/.test(text);
-  const wantsGoogleDoc = /\bgoogle docs?\b|\bgdoc\b/.test(text);
+  const wantsGoogleDoc = /\bgoogle docs?\b|\bgdocs?\b|\bgoogle doc\b|\bgdoc\b|\bdocs?\.new\b|\bdocs?\b/.test(text);
   const wantsGmail = currentSite === "gmail" || /\bgmail\b|\bemail\b|\bmail\b/.test(text);
   const wantsGoogleDrive = currentSite === "google-drive" || /\bgoogle drive\b|\bdrive\b/.test(text);
 
@@ -2099,9 +2099,12 @@ function parseAdapterTask(task, siteContext) {
   }
 
   const articlePatterns = [
-    /search for\s+(.+?)\s+and\s+(?:write|draft|make)\s+(?:about it\s+)?(?:as\s+an?\s+article\s+)?in\s+(?:a\s+)?google docs?/i,
-    /research\s+(.+?)\s+and\s+(?:write|draft|make)\s+(?:an?\s+article\s+)?in\s+(?:a\s+)?google docs?/i,
+    /search for\s+(.+?)\s+and\s+(?:write|draft|make|create)\s+(?:about it\s+)?(?:(?:a|an)\s+)?(?:article|report|brief|google docs?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google docs?|docs?)?/i,
+    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+put\s+(?:it\s+)?(?:in|into)\s+(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)/i,
+    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+(?:write|draft|make|create|put|turn it into)\s+(?:(?:a|an)\s+)?(?:article|report|brief|google docs?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google docs?|docs?)?/i,
     /write\s+an?\s+article\s+about\s+(.+?)\s+in\s+(?:a\s+)?google docs?/i,
+    /(?:create|make|draft|write)\s+(?:me\s+)?(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)\s+(?:about|on)\s+(.+)/i,
+    /(?:create|make|draft|write)\s+(?:me\s+)?(?:an?\s+)?(?:article|report|brief)\s+(?:about|on)\s+(.+?)\s+(?:in|as|inside)\s+(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)/i,
   ];
 
   if (wantsGoogleDoc) {
