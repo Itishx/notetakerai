@@ -5033,7 +5033,11 @@ function __sbGetPageContext(maxChars = 12000) {
 }
 
 function __sbIsExplicitWebSearchRequest(text) {
-  return /\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|latest\b|current\b|news\b|search for\b)\b/i.test(text);
+  // Explicit search commands
+  if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|search for\b)\b/i.test(text)) return true;
+  // Freshness signals — needs live data
+  if (/\b(latest|current|today|right now|as of|this week|this month|this year|recent|news|price of|stock|weather|score|standings|live|just happened|breaking|update on|status of|is .{1,40} still|did .{1,30} happen|when did|who won|who is winning|what happened|trending)\b/i.test(text)) return true;
+  return false;
 }
 
 function __sbIsBrowserActionCommand(text) {
