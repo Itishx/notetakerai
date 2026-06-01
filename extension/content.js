@@ -5206,7 +5206,7 @@ async function __sbProcessPrompt(text, options = {}) {
   }
 
   // Braino's favorite song easter egg
-  if (/\b(play|what('?s| is)|braino'?s?)\b.*\bfavorite\b|\bfavorite\b.*\b(song|track|music|tune)\b/i.test(promptText)) {
+  if (/\bfavou?rite\b/i.test(promptText)) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
