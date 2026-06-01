@@ -2026,6 +2026,63 @@ async function callGoogleDriveFunction(functionName, payload) {
   return data;
 }
 
+async function callSpotifyFunction(functionName, payload) {
+  const token = await getAuthToken();
+  if (!token) throw new Error("Please sign in to Braino first.");
+
+  const response = await fetch(`${API_BASE}/${functionName}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (data?.reconnectRequired) {
+      await openSpotifyReconnect(token);
+      throw new Error("Spotify needs to be reconnected. I opened the reconnect page — after approving, run this again.");
+    }
+    throw new Error([data?.error, data?.details].filter(Boolean).join(" — ") || `${functionName} failed (${response.status})`);
+  }
+  return data;
+}
+
+async function openSpotifyReconnect(token) {
+  try {
+    const tok = token || (await getAuthToken());
+    if (!tok) return false;
+    const response = await fetch(`${API_BASE}/spotify-oauth-start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${tok}`,
+      },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.authUrl) return false;
+    window.open(data.authUrl);
+    return true;
+  } catch (err) {
+    console.warn("[Braino][Spotify][Popup] Could not open reconnect flow:", err);
+    return false;
+  }
+}
+
+function extractSongFromPageTitle(title, url) {
+  let s = String(title || "").trim();
+  s = s.replace(/\s*[-|–—]\s*(YouTube|SoundCloud|Vimeo|Dailymotion|Spotify|Apple Music|Tidal|Amazon Music)\s*$/i, "");
+  s = s.replace(/\s*[\[(](Official\s+(Music\s+)?Video|Official\s+Audio|Official\s+Lyric\s+Video|Lyrics?|Audio|HQ|HD|4K|MV|Live\s+(Performance|Version)?|Visualizer|Fan\s+Made|Radio\s+Edit)[)\]]\s*/gi, " ");
+  s = s.replace(/\s*VEVO\s*/gi, " ");
+  s = s.replace(/\s*\(\d{4}\)\s*$/, "");
+  s = s.replace(/\s{2,}/g, " ").trim();
+  return s;
+}
+
 // Lightweight page snapshot — URL, title, first 500 chars of visible text
 // Used to verify the agent actually landed where it intended
 async function getPageSnapshot() {
@@ -2085,6 +2142,20 @@ function parseAdapterTask(task, siteContext) {
   const playMatch = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)\s+from\s+(?:my\s+)?playlist\s+(.+?)(?:\s+on\s+spotify)?$/i);
   if (onSpotify && playMatch) {
     return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
+  }
+
+  // "add this song to Spotify" — infer song from current page, save to Liked Songs or playlist
+  const addThisQuoted = raw.match(/(?:add|save)\s+this(?:\s+(?:song|track|video|tune))?\s+to\s+(?:my\s+)?(?:playlist\s+)?[""](.+?)[""](?:\s+(?:playlist\s+)?(?:on\s+)?spotify)?/i);
+  if (addThisQuoted) {
+    return { adapter: "spotify", intent: "addCurrentPageSong", playlist: addThisQuoted[1].trim() };
+  }
+  const addThisNamed = raw.match(/(?:add|save)\s+this(?:\s+(?:song|track|video|tune))?\s+to\s+my\s+(.+?)\s+playlist(?:\s+(?:on\s+)?spotify)?\s*$/i);
+  if (addThisNamed) {
+    return { adapter: "spotify", intent: "addCurrentPageSong", playlist: addThisNamed[1].trim() };
+  }
+  if (/(?:add|save)\s+this(?:\s+(?:song|track|video|tune))?\s+to\s+(?:my\s+)?(?:liked\s+songs?\s+(?:on\s+)?)?spotify\b/i.test(raw) ||
+      /(?:add|save)\s+this(?:\s+(?:song|track|video|tune))?\s+to\s+(?:my\s+)?liked\s+songs?\b/i.test(raw)) {
+    return { adapter: "spotify", intent: "addCurrentPageSong", playlist: null };
   }
 
   const articlePatterns = [
@@ -2444,6 +2515,49 @@ async function tryRunPopupSiteAdapter(task, thinkingBlock, history, options = {}
     });
 
     return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "spotify" && parsed.intent === "addCurrentPageSong") {
+    const rawTitle = String(currentPageContext?.title || "").trim();
+    if (!rawTitle) throw new Error("I couldn't read the current page title. Make sure you're on YouTube or a music page with Braino attached.");
+
+    const songQuery = extractSongFromPageTitle(rawTitle, currentPageContext?.url || "");
+
+    const searchResult = await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Search Spotify for "${songQuery}"`,
+      type: "spotify_search",
+      onStatus,
+      run: async () => {
+        const data = await callSpotifyFunction("spotify-search", { query: songQuery, limit: 1 });
+        const track = data?.tracks?.[0];
+        if (!track) return { error: `No Spotify track found for "${songQuery}".` };
+        return { success: true, track };
+      },
+    });
+
+    if (shouldStop()) return null;
+
+    const track = searchResult.track;
+    const destination = parsed.playlist ? `playlist "${parsed.playlist}"` : "Liked Songs";
+
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Add "${track.name}" by ${track.artists?.join(", ") || "unknown"} to ${destination}`,
+      type: "spotify_add_track",
+      onStatus,
+      run: async () => {
+        const payload = parsed.playlist
+          ? { action: "addToPlaylist", trackId: track.id, playlistName: parsed.playlist }
+          : { action: "like", trackId: track.id };
+        return callSpotifyFunction("spotify-add-track", payload);
+      },
+    });
+
+    const artistStr = track.artists?.length ? ` by ${track.artists.join(", ")}` : "";
+    return `Added **${track.name}**${artistStr} to **${destination}** on Spotify.`;
   }
 
   if (parsed.adapter === "google-docs" && parsed.intent === "researchArticle") {
@@ -4659,6 +4773,36 @@ async function runRemoteCommand(cmd, token) {
           executeSiteAdapterAction({ type: "spotifyPlayTrackFromCurrentPlaylist", songName: parsed.song })
         );
         return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+      }
+
+      if (parsed.adapter === "spotify" && parsed.intent === "addCurrentPageSong") {
+        const rawTitle = String(currentPageContext?.title || "").trim();
+        if (!rawTitle) throw new Error("I couldn't read the current page title. Make sure you're on YouTube or a music page.");
+
+        const songQuery = extractSongFromPageTitle(rawTitle, currentPageContext?.url || "");
+
+        const searchResult = await (async () => {
+          const data = await callSpotifyFunction("spotify-search", { query: songQuery, limit: 1 });
+          const track = data?.tracks?.[0];
+          if (!track) throw new Error(`No Spotify track found for "${songQuery}".`);
+          history.push({ type: "spotify_search", description: `Search Spotify for "${songQuery}"`, result: { success: true, track } });
+          await pushStep(`Found "${track.name}" by ${track.artists?.join(", ") || "unknown"} on Spotify`, true, null);
+          return track;
+        })();
+
+        const destination = parsed.playlist ? `playlist "${parsed.playlist}"` : "Liked Songs";
+
+        await (async () => {
+          const payload = parsed.playlist
+            ? { action: "addToPlaylist", trackId: searchResult.id, playlistName: parsed.playlist }
+            : { action: "like", trackId: searchResult.id };
+          const result = await callSpotifyFunction("spotify-add-track", payload);
+          history.push({ type: "spotify_add_track", description: `Add to ${destination}`, result });
+          await pushStep(`Added to ${destination}`, true, null);
+        })();
+
+        const artistStr = searchResult.artists?.length ? ` by ${searchResult.artists.join(", ")}` : "";
+        return `Added **${searchResult.name}**${artistStr} to **${destination}** on Spotify.`;
       }
 
       if (parsed.adapter === "google-docs" && parsed.intent === "researchArticle") {
