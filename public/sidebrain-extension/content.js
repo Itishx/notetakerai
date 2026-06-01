@@ -1110,6 +1110,7 @@ function __sbInferConnectorFromPrompt(promptText) {
   const text = String(promptText || "").trim().toLowerCase();
   if (/\bgoogle drive\b|\bdrive\b/.test(text)) return "google-drive";
   if (/\bgmail\b|\bemail\b|\bmail\b/.test(text)) return "gmail";
+  if (/\bspotify\b/.test(text) || /^play\s+/i.test(promptText)) return "spotify";
   return "auto";
 }
 

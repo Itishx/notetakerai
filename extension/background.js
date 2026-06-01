@@ -1350,14 +1350,14 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
   }
 
-  const quotedDirectPlay = raw.match(/play\s+[“”](.+?)[“”](?:\s+(?:on|in)\s+spotify)?$/i);
+  const quotedDirectPlay = raw.match(/play\s+["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
   if (quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
-    return { adapter: “spotify”, intent: “playSong”, song: quotedDirectPlay[1].trim() };
+    return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
   }
 
   const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
   if (directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
-    return { adapter: “spotify”, intent: “playSong”, song: directPlay[1].trim() };
+    return { adapter: "spotify", intent: "playSong", song: directPlay[1].trim() };
   }
 
   // "add this song to Spotify" — infer song from current page, save to Liked Songs or playlist
