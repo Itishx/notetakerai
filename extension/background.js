@@ -3217,8 +3217,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         sendResponse({ ok: true });
       } catch (e) {
-        console.warn("[Braino][Spotify][BG] Favorite song failed:", e);
-        sendResponse({ ok: false, error: e?.message || "favorite song failed" });
+        const msg = e?.message || "favorite song failed";
+        console.warn("[Braino][Spotify][BG] Favorite song failed:", msg);
+        sendResponse({ ok: false, error: msg });
       }
     })();
     return true;

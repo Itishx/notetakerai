@@ -2141,23 +2141,9 @@ function __sbBuildBrainUI() {
     }
     #__sb_bubble__.visible { opacity: 1; pointer-events: all; }
     #__sb_bubble__.sb-spotify-active {
-      border-color: rgba(109, 255, 160, 0.34);
-      box-shadow: 0 24px 68px rgba(13,30,19,0.28), 0 6px 20px rgba(16,185,129,0.14),
-                  inset 0 1px 0 rgba(255,255,255,0.68), 0 0 0 1px rgba(93,226,142,0.1);
+      border-color: rgba(255, 255, 255, 0.18);
     }
-    #__sb_bubble__.sb-spotify-active::before {
-      content: "";
-      position: absolute;
-      inset: -18%;
-      pointer-events: none;
-      background:
-        radial-gradient(circle at 20% 18%, rgba(167,255,201,0.22), transparent 30%),
-        radial-gradient(circle at 78% 22%, rgba(94,234,212,0.18), transparent 26%),
-        radial-gradient(circle at 50% 75%, rgba(34,197,94,0.12), transparent 32%);
-      filter: blur(18px);
-      opacity: 0.92;
-      animation: __sb_spotify_card_glow__ 4.8s ease-in-out infinite;
-    }
+    #__sb_bubble__.sb-spotify-active::before { display: none; }
     #__sb_bubble__.sb-spotify-active::after {
       content: "";
       position: absolute;
@@ -2536,21 +2522,11 @@ function __sbBuildBrainUI() {
       gap: 14px;
       padding: 16px;
       border-radius: 22px;
-      background: linear-gradient(155deg, rgba(255,255,255,0.38), rgba(244,255,247,0.18));
-      border: 1px solid rgba(121, 246, 169, 0.2);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.34), 0 14px 34px rgba(16,24,20,0.08);
+      background: transparent;
+      border: none;
       overflow: hidden;
     }
-    .sb-spotify-shell::before {
-      content: "";
-      position: absolute;
-      inset: -20% 18% auto -18%;
-      height: 160px;
-      pointer-events: none;
-      background: radial-gradient(circle, rgba(103,255,159,0.28), transparent 68%);
-      filter: blur(22px);
-      opacity: 0.75;
-    }
+    .sb-spotify-shell::before { display: none; }
     .sb-spotify-hero {
       position: relative;
       display: flex;
@@ -4215,6 +4191,13 @@ function __sbToggleBrain() {
 function __sbToggleInput(open, options = {}) {
   if (!__sbOwnsInlineUi()) return;
   if (open) {
+    // While Spotify is playing, clicking the brain opens the player card, not the bar
+    if (__sbSpotifyIsPlaying()) {
+      const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+      if (cardOpen) { __sbCollapseCard(); } else { __sbRenderSpotifyPanel({ openCard: true, focusInput: false }); }
+      return;
+    }
+
     if (!__sbContextOk()) {
       __sbShowBubble("Reload this page to reconnect Braino.", true, { tone: "status" });
       return;
@@ -4657,6 +4640,14 @@ function __sbSyncSpotifyVisualState() {
   const active = __sbSpotifyIsPlaying();
   brain?.classList.toggle("sb-brain-spotify", active);
   bubble?.classList.toggle("sb-spotify-active", active);
+  // Hide the floating bar while music is playing
+  if (active) {
+    const bar = document.getElementById("__sb_bar__");
+    if (bar?.classList.contains("open") && !bar.classList.contains("sb-waking") && !bar.classList.contains("sb-signin")) {
+      bar.classList.remove("open");
+      __sbInputOpen = false;
+    }
+  }
 }
 
 function __sbEnsureSpotifyRefreshLoop() {
@@ -5197,18 +5188,37 @@ async function __sbProcessPrompt(text, options = {}) {
   // lecture and meeting both drive the recording flow
   const intent = (rawIntent === "lecture" || rawIntent === "meeting") ? "record" : rawIntent;
 
-  // Braino's favorite song easter egg
-  if (/\b(play|what('?s| is)|braino'?s?)\b.*\bfavorite\b.*\b(song|track|music)\b|\bfavorite\b.*\b(song|track|music)\b.*\bplay\b/i.test(promptText)) {
+  // "What's new with you?" — Braino reads the changelog in first person, then flips the question back
+  if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you/i.test(promptText)) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
-    const played = await new Promise(resolve =>
-      chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r?.ok))
+    __sbChatHistory.push({ role: "user", content: promptText });
+    const reply = "Oh, a lot actually! I just went through a complete rebrand — I'm officially Braino now, and trybraino.com just went live. In the past few days I got a whole physics engine: I can float, bounce when I land, and my pupils follow your cursor around. Then I got Movie Mode, where I detect what you're watching and glow with a little ambient halo that pulses with the content. I also got a full persona and voice system, so I can sound like different characters. And just now I can run 24/7 on X, write and post for you, create Google Docs from research in one shot, and even organise your entire Drive on command. It's been a wild week, honestly.\n\nBut enough about me — what's new with you?";
+    __sbChatHistory.push({ role: "assistant", content: reply });
+    __sbCardTurns.push({ prompt: promptText, answer: reply });
+    const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbRenderCardHistory(scrollEl);
+    __sbOpenCard({ rich: true });
+    __sbSyncSpeakButtons();
+    if (fromVoice) await __sbSpeakText(reply);
+    return;
+  }
+
+  // Braino's favorite song easter egg
+  if (/\b(play|what('?s| is)|braino'?s?)\b.*\bfavorite\b|\bfavorite\b.*\b(song|track|music|tune)\b/i.test(promptText)) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    const result = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r || {}))
     );
     __sbChatHistory.push({ role: "user", content: promptText });
-    const reply = played
+    const reply = result.ok
       ? "Playing my favorite song for you ♫"
-      : "I tried to play my favorite song but Spotify isn't connected — link it from the dashboard first.";
+      : result.error?.includes("device")
+        ? "Open Spotify on your phone or desktop first, then ask me again ♫"
+        : "Spotify isn't connected yet — link it from the dashboard first.";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
