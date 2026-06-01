@@ -19,8 +19,7 @@
   "externally_connectable": {
     "matches": [
       "https://trybraino.com/*",
-      
-      
+      "https://braino-eight.vercel.app/*"
     ]
   },
   "action": {
