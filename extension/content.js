@@ -2705,17 +2705,26 @@ function __sbStartOrbit() {
   // Hide the main brain button so only the orbiting one is visible
   const mainBrain = document.getElementById("__sb_brain_btn__");
   if (mainBrain) mainBrain.style.visibility = "hidden";
+  __sbUpdateOrbitPath();
+  orbitBrain.dataset.orbitActive = "1";
+  orbitBrain.style.animation = "__sb_orbit__ 12s linear infinite";
+}
+
+function __sbUpdateOrbitPath() {
+  const card = document.getElementById("__sb_bubble__");
+  const orbitBrain = document.getElementById("__sb_orbit_brain__");
+  if (!card || !orbitBrain) return;
   const w = card.offsetWidth;
   const h = card.offsetHeight;
   const r = 24;
   const path = `M ${r},0 H ${w - r} Q ${w},0 ${w},${r} V ${h - r} Q ${w},${h} ${w - r},${h} H ${r} Q 0,${h} 0,${h - r} V ${r} Q 0,0 ${r},0 Z`;
   orbitBrain.style.offsetPath = `path("${path}")`;
-  orbitBrain.style.animation = "__sb_orbit__ 12s linear infinite";
 }
 
 function __sbStopOrbit() {
   const orbitBrain = document.getElementById("__sb_orbit_brain__");
   if (orbitBrain) {
+    orbitBrain.dataset.orbitActive = "0";
     orbitBrain.style.offsetPath = "";
     orbitBrain.style.animation = "none";
   }
@@ -2730,6 +2739,9 @@ function __sbInitCardDrag(wrap) {
   const header = wrap.querySelector(".sb-card-header");
   const bubble = document.getElementById("__sb_bubble__");
   if (!header || !bubble) return;
+  const MIN_W = 280;
+  const MIN_H = 120;
+  const VIEWPORT_PAD = 16;
 
   function pin() {
     const rect = wrap.getBoundingClientRect();
@@ -2738,9 +2750,47 @@ function __sbInitCardDrag(wrap) {
     wrap.style.transform = "none";
   }
 
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function applyCardFrame(left, top, width, height) {
+    const maxWidth = Math.max(MIN_W, window.innerWidth - VIEWPORT_PAD * 2);
+    const maxHeight = Math.max(MIN_H, window.innerHeight - VIEWPORT_PAD * 2);
+    const nextWidth = clamp(width, MIN_W, maxWidth);
+    const nextHeight = clamp(height, MIN_H, maxHeight);
+    const nextLeft = clamp(left, VIEWPORT_PAD, window.innerWidth - nextWidth - VIEWPORT_PAD);
+    const nextTop = clamp(top, VIEWPORT_PAD, window.innerHeight - nextHeight - VIEWPORT_PAD);
+
+    wrap.style.left = Math.round(nextLeft) + "px";
+    wrap.style.top = Math.round(nextTop) + "px";
+    wrap.style.width = Math.round(nextWidth) + "px";
+    bubble.style.height = Math.round(nextHeight) + "px";
+    bubble.style.maxHeight = Math.round(nextHeight) + "px";
+
+    if (document.getElementById("__sb_orbit_brain__")?.dataset.orbitActive === "1") {
+      __sbUpdateOrbitPath();
+    }
+  }
+
+  function positionCard(left, top) {
+    const width = wrap.getBoundingClientRect().width;
+    const height = bubble.getBoundingClientRect().height;
+    const nextLeft = clamp(left, VIEWPORT_PAD, window.innerWidth - width - VIEWPORT_PAD);
+    const nextTop = clamp(top, VIEWPORT_PAD, window.innerHeight - height - VIEWPORT_PAD);
+    wrap.style.left = Math.round(nextLeft) + "px";
+    wrap.style.top = Math.round(nextTop) + "px";
+
+    if (document.getElementById("__sb_orbit_brain__")?.dataset.orbitActive === "1") {
+      __sbUpdateOrbitPath();
+    }
+  }
+
   // Drag from header
   header.style.cursor = "grab";
-  let dragging = false, ox = 0, oy = 0;
+  let dragging = false;
+  let ox = 0;
+  let oy = 0;
   header.addEventListener("mousedown", (e) => {
     if (e.button !== 0 || e.target.closest("button")) return;
     dragging = true;
@@ -2751,40 +2801,111 @@ function __sbInitCardDrag(wrap) {
     e.preventDefault();
   });
 
-  // Resize grip — bottom-right corner
-  const grip = document.createElement("div");
-  grip.className = "sb-resize-handle";
-  grip.style.cssText = "position:absolute;bottom:4px;right:4px;width:18px;height:18px;cursor:se-resize;z-index:10;opacity:0.5;color:currentColor;";
-  grip.innerHTML = `<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M11 3 L3 11 M11 7 L7 11"/></svg>`;
-  wrap.appendChild(grip);
+  const handles = [
+    { dir: "n", css: "top:-6px;left:18px;right:18px;height:12px;cursor:n-resize;" },
+    { dir: "s", css: "bottom:-6px;left:18px;right:18px;height:12px;cursor:s-resize;" },
+    { dir: "e", css: "top:18px;right:-6px;bottom:18px;width:12px;cursor:e-resize;" },
+    { dir: "w", css: "top:18px;left:-6px;bottom:18px;width:12px;cursor:w-resize;" },
+    { dir: "ne", css: "top:-6px;right:-6px;width:16px;height:16px;cursor:ne-resize;" },
+    { dir: "nw", css: "top:-6px;left:-6px;width:16px;height:16px;cursor:nw-resize;" },
+    {
+      dir: "se",
+      css: "bottom:-6px;right:-6px;width:18px;height:18px;cursor:se-resize;display:flex;align-items:flex-end;justify-content:flex-end;opacity:0.55;color:currentColor;",
+      icon: `<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M11 3 L3 11 M11 7 L7 11"/></svg>`,
+    },
+    { dir: "sw", css: "bottom:-6px;left:-6px;width:16px;height:16px;cursor:sw-resize;" },
+  ];
 
-  let resizing = false, rw = 0, rh = 0, rx = 0, ry = 0;
-  grip.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
-    resizing = true;
-    pin();
-    const wr = wrap.getBoundingClientRect();
-    const br = bubble.getBoundingClientRect();
-    rw = wr.width; rh = br.height; rx = e.clientX; ry = e.clientY;
-    e.preventDefault(); e.stopPropagation();
+  let resizing = null;
+  handles.forEach(({ dir, css, icon }) => {
+    const handle = document.createElement("div");
+    handle.className = "sb-resize-handle";
+    handle.dataset.dir = dir;
+    handle.style.cssText = `position:absolute;z-index:12;touch-action:none;background:transparent;${css}`;
+    if (icon) handle.innerHTML = icon;
+    wrap.appendChild(handle);
+    handle.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      pin();
+      const wr = wrap.getBoundingClientRect();
+      const br = bubble.getBoundingClientRect();
+      resizing = {
+        dir,
+        startX: e.clientX,
+        startY: e.clientY,
+        startLeft: wr.left,
+        startTop: wr.top,
+        startWidth: wr.width,
+        startHeight: br.height,
+        startRight: wr.left + wr.width,
+        startBottom: wr.top + br.height,
+      };
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = handle.style.cursor;
+      e.preventDefault();
+      e.stopPropagation();
+    });
   });
+
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(() => {
+      if (document.getElementById("__sb_orbit_brain__")?.dataset.orbitActive === "1") {
+        __sbUpdateOrbitPath();
+      }
+    });
+    observer.observe(bubble);
+  }
 
   document.addEventListener("mousemove", (e) => {
     if (dragging) {
-      wrap.style.left = (e.clientX - ox) + "px";
-      wrap.style.top = (e.clientY - oy) + "px";
+      positionCard(e.clientX - ox, e.clientY - oy);
     }
     if (resizing) {
-      const nw = Math.max(280, rw + e.clientX - rx);
-      const nh = Math.max(120, rh + e.clientY - ry);
-      wrap.style.width = nw + "px";
-      bubble.style.height = nh + "px";
-      bubble.style.maxHeight = nh + "px";
+      const dx = e.clientX - resizing.startX;
+      const dy = e.clientY - resizing.startY;
+      let left = resizing.startLeft;
+      let top = resizing.startTop;
+      let width = resizing.startWidth;
+      let height = resizing.startHeight;
+
+      if (resizing.dir.includes("e")) {
+        width = clamp(resizing.startWidth + dx, MIN_W, window.innerWidth - resizing.startLeft - VIEWPORT_PAD);
+      }
+      if (resizing.dir.includes("s")) {
+        height = clamp(resizing.startHeight + dy, MIN_H, window.innerHeight - resizing.startTop - VIEWPORT_PAD);
+      }
+      if (resizing.dir.includes("w")) {
+        left = clamp(resizing.startLeft + dx, VIEWPORT_PAD, resizing.startRight - MIN_W);
+        width = resizing.startRight - left;
+      }
+      if (resizing.dir.includes("n")) {
+        top = clamp(resizing.startTop + dy, VIEWPORT_PAD, resizing.startBottom - MIN_H);
+        height = resizing.startBottom - top;
+      }
+
+      applyCardFrame(left, top, width, height);
     }
   });
   document.addEventListener("mouseup", () => {
     if (dragging) { dragging = false; header.style.cursor = "grab"; }
-    resizing = false;
+    if (resizing) {
+      resizing = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    }
+  });
+  window.addEventListener("resize", () => {
+    pin();
+    if (bubble.style.height) {
+      applyCardFrame(
+        wrap.getBoundingClientRect().left,
+        wrap.getBoundingClientRect().top,
+        wrap.getBoundingClientRect().width,
+        bubble.getBoundingClientRect().height,
+      );
+    } else {
+      positionCard(wrap.getBoundingClientRect().left, wrap.getBoundingClientRect().top);
+    }
   });
 }
 
