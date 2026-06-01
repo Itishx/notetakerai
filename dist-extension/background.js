@@ -1311,7 +1311,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   const text = raw.toLowerCase();
   const currentSite = siteContext?.site || "generic";
   const normalizedConnector = bgNormalizeConnectorHint(connectorHint) || "auto";
-  const onSpotify = currentSite === "spotify" || /\bspotify\b/.test(text);
+  const onSpotify = currentSite === "spotify" || normalizedConnector === "spotify" || /\bspotify\b/.test(text) || /^play\s+/i.test(raw);
   const wantsGoogleDoc = /\bgoogle docs?\b|\bgdocs?\b|\bgoogle doc\b|\bgdoc\b|\bdocs?\.new\b|\bdocs?\b/.test(text);
   const wantsGmail =
     currentSite === "gmail" ||
