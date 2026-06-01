@@ -95,8 +95,8 @@ async function bgPerformRealWebSearch(query, options = {}) {
     return {
       ...data,
       query: data?.query || trimmedQuery,
-      engine: data?.engine || "Exa",
-      searchUrl: data?.searchUrl || `https://exa.ai/search?q=${encodeURIComponent(trimmedQuery)}`,
+      engine: data?.engine || "OpenAI web_search",
+      searchUrl: data?.searchUrl || "",
       sources,
       results,
     };
@@ -565,7 +565,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ===== REMOTE AGENT — panel-less execution (runs even when side panel is closed) =====
 const BG_SUPABASE_URL = "https://suwhgaxxdizowbyjlljj.supabase.co";
-const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YXBhY2ZyemRkbmhyd3ZrYmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDc4NTUsImV4cCI6MjA5MDUyMzg1NX0.WZV4fy1XqMS3TTyR09TneueaLl-729tp-Pi4HkfzURo";
+const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
 const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 
