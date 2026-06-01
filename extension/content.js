@@ -2528,22 +2528,27 @@ function __sbBuildBrainUI() {
     }
     .sb-spotify-shell::before { display: none; }
     .sb-spotify-hero {
+      --sb-ac-r: 80; --sb-ac-g: 180; --sb-ac-b: 100;
       position: relative;
       display: flex;
       flex-direction: column;
       gap: 14px;
       padding: 16px;
       border-radius: 18px;
-      background: linear-gradient(145deg, rgba(15,28,20,0.88), rgba(18,48,29,0.72));
+      background: linear-gradient(145deg,
+        rgba(calc(var(--sb-ac-r) * 0.18), calc(var(--sb-ac-g) * 0.18), calc(var(--sb-ac-b) * 0.18), 0.94),
+        rgba(calc(var(--sb-ac-r) * 0.14), calc(var(--sb-ac-g) * 0.14), calc(var(--sb-ac-b) * 0.14), 0.80)
+      );
       color: #F4FFF7;
       overflow: hidden;
+      transition: background 0.6s ease;
     }
     .sb-spotify-hero.is-playing::after {
       content: "";
       position: absolute;
       inset: -20% -25%;
       pointer-events: none;
-      background: linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.16) 46%, rgba(190,255,214,0.18) 54%, transparent 72%);
+      background: linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.16) 46%, rgba(var(--sb-ac-r), var(--sb-ac-g), var(--sb-ac-b), 0.1) 54%, transparent 72%);
       mix-blend-mode: screen;
       animation: __sb_spotify_panel_sheen__ 4s linear infinite;
     }
@@ -2579,8 +2584,8 @@ function __sbBuildBrainUI() {
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #64FF9F;
-      box-shadow: 0 0 10px rgba(100,255,159,0.7);
+      background: rgb(var(--sb-ac-r, 100), var(--sb-ac-g, 255), var(--sb-ac-b, 159));
+      box-shadow: 0 0 10px rgba(var(--sb-ac-r, 100), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.7);
       flex-shrink: 0;
     }
     .sb-spotify-badge.subtle::before {
@@ -2617,7 +2622,7 @@ function __sbBuildBrainUI() {
       align-items: center;
       justify-content: center;
       font-size: 28px;
-      background: radial-gradient(circle at 30% 20%, rgba(104,255,165,0.34), rgba(255,255,255,0.06));
+      background: radial-gradient(circle at 30% 20%, rgba(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 165), 0.34), rgba(255,255,255,0.06));
     }
     .sb-spotify-copy {
       min-width: 0;
@@ -2675,8 +2680,8 @@ function __sbBuildBrainUI() {
       display: block;
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #68FFAA 0%, #C5FFE2 100%);
-      box-shadow: 0 0 18px rgba(104,255,170,0.48);
+      background: linear-gradient(90deg, rgb(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 170)) 0%, rgba(var(--sb-ac-r, 197), var(--sb-ac-g, 255), var(--sb-ac-b, 226), 0.7) 100%);
+      box-shadow: 0 0 18px rgba(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 170), 0.48);
     }
     .sb-spotify-progress-times {
       display: flex;
@@ -2735,7 +2740,7 @@ function __sbBuildBrainUI() {
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #3A5C45;
+      color: rgb(calc(var(--sb-ac-r, 58) * 0.42), calc(var(--sb-ac-g, 92) * 0.42), calc(var(--sb-ac-b, 69) * 0.42));
     }
     .sb-spotify-results {
       display: flex;
@@ -2753,9 +2758,9 @@ function __sbBuildBrainUI() {
       border: 1px solid rgba(255,255,255,0.35);
     }
     .sb-spotify-result.is-current {
-      background: rgba(103,255,159,0.14);
-      border-color: rgba(103,255,159,0.32);
-      box-shadow: 0 10px 18px rgba(29,185,84,0.08);
+      background: rgba(var(--sb-ac-r, 103), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.14);
+      border-color: rgba(var(--sb-ac-r, 103), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.32);
+      box-shadow: 0 10px 18px rgba(var(--sb-ac-r, 29), var(--sb-ac-g, 185), var(--sb-ac-b, 84), 0.08);
     }
     .sb-spotify-result img,
     .sb-spotify-result-art {
@@ -4746,7 +4751,7 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
     track?.deviceName ? `<span class="sb-spotify-badge subtle">Device: ${__sbEscapeHtml(track.deviceName)}</span>` : "",
   ].filter(Boolean).join("");
   const coverHtml = track?.imageUrl
-    ? `<div class="sb-spotify-cover"><img src="${__sbEscapeHtml(track.imageUrl)}" alt="${__sbEscapeHtml(track.title)} cover art" /></div>`
+    ? `<div class="sb-spotify-cover"><img src="${__sbEscapeHtml(track.imageUrl)}" alt="${__sbEscapeHtml(track.title)} cover art" crossorigin="anonymous" /></div>`
     : `<div class="sb-spotify-cover"><div class="sb-spotify-cover-fallback">♪</div></div>`;
   const metaBits = [track?.album, track?.durationText].filter(Boolean).join(" · ");
   const progressWidth = typeof track?.progressRatio === "number"
@@ -4800,6 +4805,37 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
   `;
 }
 
+function __sbApplyAlbumColor(scroll) {
+  const img = scroll?.querySelector(".sb-spotify-cover img");
+  const hero = scroll?.querySelector(".sb-spotify-hero");
+  if (!img || !hero) return;
+  const apply = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 20; canvas.height = 20;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, 20, 20);
+      const data = ctx.getImageData(0, 0, 20, 20).data;
+      let bestR = 80, bestG = 180, bestB = 100, bestScore = -1;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        const sat = max === 0 ? 0 : (max - min) / max;
+        const bri = max / 255;
+        const score = sat * 0.65 + bri * 0.35;
+        if (score > bestScore && bri > 0.25 && bri < 0.97) {
+          bestScore = score; bestR = r; bestG = g; bestB = b;
+        }
+      }
+      hero.style.setProperty("--sb-ac-r", String(bestR));
+      hero.style.setProperty("--sb-ac-g", String(bestG));
+      hero.style.setProperty("--sb-ac-b", String(bestB));
+    } catch (_) {}
+  };
+  if (img.complete && img.naturalWidth > 0) { apply(); }
+  else { img.addEventListener("load", apply, { once: true }); }
+}
+
 function __sbRenderSpotifyPanel(options = {}) {
   if (!__sbHasSpotifySurface()) return;
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -4807,6 +4843,7 @@ function __sbRenderSpotifyPanel(options = {}) {
   const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
   scroll.innerHTML = __sbBuildSpotifyPanelHtml(historyHtml);
   scroll.scrollTop = 0;
+  __sbApplyAlbumColor(scroll);
   scroll.querySelectorAll("[data-sb-spotify-ctrl]").forEach(btn => {
     btn.addEventListener("click", () => {
       const ctrl = btn.dataset.sbSpotifyCtrl;
