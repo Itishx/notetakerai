@@ -17,12 +17,13 @@ let mediaRecorder = null;
 let audioChunks = [];
 let currentPageContext = null;
 let currentMode = "page"; // "page" | "lecture" | "meeting" | "general" | "web" | "agent"
-let currentAiProvider = "lovable"; // "lovable" | "claude"
+let currentAiProvider = "lovable"; // "lovable" | "claude" | "openai-realtime"
 let agentRunning = false;
 let agentShouldStop = false;
 let isPremium = false;
 let currentSelection = null; // { text, url, title } — last text the user highlighted on the page
 let sbXPersonaCache = null; // cached x_auto_persona for injecting context on X
+const REALTIME_AI_PROVIDER = "openai-realtime";
 const INTERNAL_PREMIUM_EMAILS = new Set([
   "itishpande21@gmail.com",
 ]);
@@ -543,8 +544,20 @@ chrome.storage.local.get(["aiProvider"], (r) => {
   }
 });
 
+function isRealtimeVoiceProvider(provider = currentAiProvider) {
+  return provider === REALTIME_AI_PROVIDER;
+}
+
+function getTextAiProvider(provider = currentAiProvider) {
+  return provider === "claude" ? "claude" : "lovable";
+}
+
 function updateModelUI() {
-  if (modelLabel) modelLabel.textContent = currentAiProvider === "claude" ? "Claude Sonnet 4.6" : "Braino AI";
+  if (modelLabel) {
+    if (currentAiProvider === "claude") modelLabel.textContent = "Claude Sonnet 4.6";
+    else if (isRealtimeVoiceProvider()) modelLabel.textContent = "Braino Live Beta";
+    else modelLabel.textContent = "Braino AI";
+  }
   modelPopover?.querySelectorAll(".model-option").forEach((el) => {
     el.classList.toggle("active", el.dataset.provider === currentAiProvider);
   });
@@ -1692,7 +1705,7 @@ async function sendChatMessage(text, imageBase64) {
     const body = {
       notes: systemNotes,
       message: text || "Please insert this diagram/image into my notes at the most appropriate location.",
-      aiProvider: currentAiProvider,
+      aiProvider: getTextAiProvider(),
     };
     if (currentPageContext) body.pageContext = currentPageContext;
     if (currentSelection) body.selectedText = currentSelection;
@@ -1742,7 +1755,7 @@ async function fetchWebSearchReply(text, historyOverride) {
       action: "performWebSearch",
       query: text,
       purpose: "answer",
-      aiProvider: currentAiProvider,
+      aiProvider: getTextAiProvider(),
       chatHistory: historyOverride,
     }, (res) => {
       if (chrome.runtime.lastError) {
@@ -2302,7 +2315,7 @@ async function buildArticleDraftFromWebSearch(topic) {
       action: "performWebSearch",
       query: topic,
       purpose: "google_doc",
-      aiProvider: currentAiProvider,
+      aiProvider: getTextAiProvider(),
     }, (res) => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || { error: "No search response" });
@@ -2328,7 +2341,7 @@ async function buildDriveOrganizationPlan(files) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      aiProvider: currentAiProvider,
+      aiProvider: getTextAiProvider(),
       pageContext: {
         title: "Google Drive file inventory",
         url: "https://drive.google.com",
@@ -3325,6 +3338,15 @@ let voiceActive = false;
 let voiceTabId = null;
 let voiceMuted = false;
 let headphoneMode = false;
+let realtimePeerConnection = null;
+let realtimeDataChannel = null;
+let realtimeMicStream = null;
+let realtimeRemoteAudio = null;
+let realtimeConnecting = false;
+let realtimeSessionReady = false;
+let realtimeAssistantTranscript = "";
+let realtimeAssistantItemId = null;
+let realtimeAudioStartAt = 0;
 
 const voiceOverlay      = document.getElementById("voiceOverlay");
 const voiceOrb          = document.getElementById("voiceOrb");
@@ -3333,6 +3355,7 @@ const voiceAgentText    = document.getElementById("voiceAgentText");
 const voiceModeBtn      = document.getElementById("voiceModeBtn");
 const voiceCloseBtn     = document.getElementById("voiceCloseBtn");
 const voiceCapLabelTxt  = document.getElementById("voiceCapLabelTxt");
+const voiceLookBtn      = document.getElementById("voiceLookBtn");
 const voiceInterruptBtn = document.getElementById("voiceInterruptBtn");
 const voiceStopTaskBtn  = document.getElementById("voiceStopTaskBtn");
 const voiceMuteBtn      = document.getElementById("voiceMuteBtn");
@@ -3387,6 +3410,313 @@ function setSubtitles(user, agent) {
   if (agent !== undefined) setCaption(agent);
 }
 
+function setVoiceContextStatus(text) {
+  if (voiceCtxLiveTxt) voiceCtxLiveTxt.textContent = text || "live";
+}
+
+function isRealtimeVoiceSessionRunning() {
+  return realtimeConnecting || !!realtimePeerConnection;
+}
+
+function extractRealtimeResponseText(response) {
+  const outputs = Array.isArray(response?.output) ? response.output : [];
+  for (const item of outputs) {
+    if (typeof item?.text === "string" && item.text.trim()) return item.text.trim();
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const part of content) {
+      if (typeof part?.transcript === "string" && part.transcript.trim()) return part.transcript.trim();
+      if (typeof part?.text === "string" && part.text.trim()) return part.text.trim();
+    }
+  }
+  return "";
+}
+
+function cleanupRealtimeVoiceSession({ keepCaption = false } = {}) {
+  realtimeSessionReady = false;
+  realtimeConnecting = false;
+  realtimeAssistantTranscript = "";
+  realtimeAssistantItemId = null;
+  realtimeAudioStartAt = 0;
+
+  if (realtimeDataChannel) {
+    try { realtimeDataChannel.close(); } catch {}
+    realtimeDataChannel = null;
+  }
+  if (realtimePeerConnection) {
+    try { realtimePeerConnection.close(); } catch {}
+    realtimePeerConnection = null;
+  }
+  if (realtimeMicStream) {
+    realtimeMicStream.getTracks().forEach((track) => track.stop());
+    realtimeMicStream = null;
+  }
+  if (realtimeRemoteAudio) {
+    try { realtimeRemoteAudio.pause(); } catch {}
+    realtimeRemoteAudio.srcObject = null;
+    realtimeRemoteAudio.remove();
+    realtimeRemoteAudio = null;
+  }
+
+  if (!keepCaption) {
+    if (voiceUserText) voiceUserText.textContent = "";
+    setCaption("");
+  }
+  setVoiceContextStatus("reading");
+}
+
+function sendRealtimeEvent(event) {
+  if (!realtimeDataChannel || realtimeDataChannel.readyState !== "open") return false;
+  const payload = { ...event };
+  if (!payload.event_id) {
+    payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+  realtimeDataChannel.send(JSON.stringify(payload));
+  return true;
+}
+
+function requestVoicePageContext() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
+      if (chrome.runtime.lastError || res?.error || !res?.text) {
+        resolve(currentPageContext);
+        return;
+      }
+      currentPageContext = {
+        title: res.title,
+        url: res.url,
+        text: res.text,
+        faviconUrl: res.faviconUrl || "",
+      };
+      updateChatContextUI();
+      updateVoicePageCtx();
+      resolve(currentPageContext);
+    });
+  });
+}
+
+function captureVisibleScreenshotDataUrl() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "captureScreenshot" }, (res) => {
+      if (chrome.runtime.lastError || res?.error || !res?.dataUrl) {
+        resolve(null);
+        return;
+      }
+      resolve(res.dataUrl);
+    });
+  });
+}
+
+function compressRealtimeScreenshot(dataUrl, { maxWidth = 960, maxHeight = 640, maxChars = 220000 } = {}) {
+  if (!dataUrl || typeof dataUrl !== "string") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.naturalWidth, maxHeight / img.naturalHeight);
+      const width = Math.max(1, Math.round(img.naturalWidth * scale));
+      const height = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+
+      let quality = 0.72;
+      let result = canvas.toDataURL("image/jpeg", quality);
+      while (result.length > maxChars && quality > 0.35) {
+        quality -= 0.08;
+        result = canvas.toDataURL("image/jpeg", quality);
+      }
+      resolve(result.length <= maxChars ? result : null);
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+function getRealtimeVoiceInstructions() {
+  return [
+    "# Role and Objective",
+    "You are Braino, a live browser voice companion.",
+    "",
+    "# Personality and Tone",
+    "- Sound warm, clear, and lightly proactive.",
+    "- Keep spoken replies short unless the user asks for more depth.",
+    "",
+    "# Screen Grounding",
+    "- Use the latest page text and screenshot I send as the primary source of truth for what is on screen.",
+    "- If the screenshot or page text seems stale or incomplete, ask the user to refresh the page view.",
+    "",
+    "# Behavior",
+    "- Answer direct questions in 1-2 short sentences when possible.",
+    "- Ask only one clarifying question at a time.",
+    "- Never claim you clicked, typed, or changed something on the page unless a separate tool explicitly did it.",
+    "- If the user asks you to look at the page, describe what matters and offer the next useful action.",
+  ].join("\n");
+}
+
+function handleRealtimeServerEvent(serverEvent) {
+  if (!voiceActive || !isRealtimeVoiceProvider()) return;
+
+  if (serverEvent.type === "session.created" || serverEvent.type === "session.updated") {
+    realtimeSessionReady = true;
+    setVoiceContextStatus("live");
+    if (!realtimeConnecting) setOrbState("listening");
+    return;
+  }
+
+  if (serverEvent.type === "input_audio_buffer.speech_started") {
+    setOrbState("listening");
+    return;
+  }
+
+  if (serverEvent.type === "input_audio_buffer.speech_stopped") {
+    setOrbState("processing");
+    if (!realtimeAssistantTranscript) setCaption("Thinking…");
+    return;
+  }
+
+  if (serverEvent.type === "conversation.item.input_audio_transcription.completed") {
+    if (voiceUserText) voiceUserText.textContent = serverEvent.transcript || "";
+    return;
+  }
+
+  if (serverEvent.type === "response.created") {
+    realtimeAssistantTranscript = "";
+    realtimeAudioStartAt = Date.now();
+    setOrbState("processing");
+    return;
+  }
+
+  if (serverEvent.type === "response.output_item.added" || serverEvent.type === "response.output_item.created") {
+    if (serverEvent.item?.role === "assistant" && serverEvent.item?.id) {
+      realtimeAssistantItemId = serverEvent.item.id;
+    }
+    return;
+  }
+
+  if (serverEvent.type === "response.output_audio_transcript.delta") {
+    if (typeof serverEvent.delta === "string" && serverEvent.delta) {
+      realtimeAssistantTranscript += serverEvent.delta;
+      setOrbState("speaking");
+      setCaption(realtimeAssistantTranscript.trim());
+    }
+    return;
+  }
+
+  if (serverEvent.type === "response.output_audio_transcript.done") {
+    if (typeof serverEvent.transcript === "string" && serverEvent.transcript.trim()) {
+      realtimeAssistantTranscript = serverEvent.transcript.trim();
+      setCaption(realtimeAssistantTranscript);
+    }
+    return;
+  }
+
+  if (serverEvent.type === "response.output_text.delta") {
+    if (typeof serverEvent.delta === "string" && serverEvent.delta) {
+      realtimeAssistantTranscript += serverEvent.delta;
+      setOrbState("speaking");
+      setCaption(realtimeAssistantTranscript.trim());
+    }
+    return;
+  }
+
+  if (serverEvent.type === "response.output_text.done") {
+    if (typeof serverEvent.text === "string" && serverEvent.text.trim()) {
+      realtimeAssistantTranscript = serverEvent.text.trim();
+      setCaption(realtimeAssistantTranscript);
+    }
+    return;
+  }
+
+  if (serverEvent.type === "response.done") {
+    const fallbackText = extractRealtimeResponseText(serverEvent.response);
+    if (!realtimeAssistantTranscript && fallbackText) {
+      realtimeAssistantTranscript = fallbackText;
+      setCaption(fallbackText);
+    }
+    setOrbState("listening");
+    setVoiceContextStatus("live");
+    return;
+  }
+
+  if (serverEvent.type === "response.cancelled") {
+    realtimeAssistantTranscript = "";
+    setOrbState("listening");
+    setCaption("");
+    return;
+  }
+
+  if (serverEvent.type === "error") {
+    const message = serverEvent.error?.message || serverEvent.message || "Realtime voice hit an error.";
+    setOrbState("idle");
+    setCaption(message);
+  }
+}
+
+async function sendRealtimePageGrounding({ respond = false, prompt = "", initial = false } = {}) {
+  if (!realtimeSessionReady) return false;
+
+  setVoiceContextStatus(initial ? "reading" : "refreshing");
+
+  const pageContext = await requestVoicePageContext();
+  const rawScreenshot = await captureVisibleScreenshotDataUrl();
+  const screenshot = rawScreenshot ? await compressRealtimeScreenshot(rawScreenshot) : null;
+
+  const contextText = [
+    initial
+      ? "Fresh browser context for this live Braino session. Use it as grounding, but do not answer yet unless I ask."
+      : "Updated browser context from the user's current tab.",
+    pageContext?.title ? `Title: ${pageContext.title}` : "",
+    pageContext?.url ? `URL: ${pageContext.url}` : "",
+    pageContext?.text ? `Visible/semantic page text:\n${String(pageContext.text).slice(0, 7000)}` : "No page text was available.",
+    prompt ? `User intent: ${prompt}` : "",
+  ].filter(Boolean).join("\n\n");
+
+  const content = [
+    {
+      type: "input_text",
+      text: contextText,
+    },
+  ];
+
+  if (screenshot) {
+    content.push({
+      type: "input_image",
+      image_url: screenshot,
+      detail: "low",
+    });
+  }
+
+  sendRealtimeEvent({
+    type: "conversation.item.create",
+    item: {
+      type: "message",
+      role: "user",
+      content,
+    },
+  });
+
+  if (respond) {
+    realtimeAssistantTranscript = "";
+    setOrbState("processing");
+    setCaption("Looking…");
+    sendRealtimeEvent({
+      type: "response.create",
+      response: {
+        instructions: prompt || "Briefly describe what you see on the current page and help the user with it.",
+      },
+    });
+  } else {
+    setVoiceContextStatus("live");
+  }
+
+  return true;
+}
+
 function getActiveTabId() {
   return new Promise(resolve => {
     chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
@@ -3407,11 +3737,150 @@ function sendToContentScript(tabId, action) {
   });
 }
 
+async function startRealtimeVoiceMode() {
+  if (!(await loadPremiumStatus())) {
+    showUpgradePrompt("Realtime Voice");
+    setCaption("Realtime Voice is a premium feature.");
+    setOrbState("idle");
+    return;
+  }
+
+  const authToken = await getAuthToken();
+  if (!authToken) {
+    setCaption("Sign in to use Braino Live.");
+    setOrbState("idle");
+    return;
+  }
+
+  cleanupRealtimeVoiceSession({ keepCaption: true });
+  realtimeConnecting = true;
+  setVoiceContextStatus("connecting");
+  setOrbState("processing");
+  setCaption("Connecting Braino Live…");
+
+  try {
+    realtimeMicStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+
+    const peerConnection = new RTCPeerConnection();
+    realtimePeerConnection = peerConnection;
+
+    realtimeMicStream.getTracks().forEach((track) => {
+      peerConnection.addTrack(track, realtimeMicStream);
+    });
+
+    realtimeRemoteAudio = document.createElement("audio");
+    realtimeRemoteAudio.autoplay = true;
+    realtimeRemoteAudio.playsInline = true;
+    realtimeRemoteAudio.style.display = "none";
+    document.body.appendChild(realtimeRemoteAudio);
+
+    peerConnection.ontrack = (event) => {
+      realtimeRemoteAudio.srcObject = event.streams[0] || new MediaStream([event.track]);
+      realtimeRemoteAudio.play().catch(() => {});
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+      if (!voiceActive || !isRealtimeVoiceProvider()) return;
+      const state = peerConnection.connectionState;
+      if (state === "failed" || state === "closed" || state === "disconnected") {
+        cleanupRealtimeVoiceSession({ keepCaption: true });
+        setOrbState("idle");
+        setCaption("Braino Live disconnected.");
+      }
+    };
+
+    const dataChannelOpen = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error("Braino Live timed out while connecting."));
+      }, 10000);
+
+      realtimeDataChannel = peerConnection.createDataChannel("oai-events");
+      realtimeDataChannel.addEventListener("open", () => {
+        clearTimeout(timeoutId);
+        resolve(true);
+      }, { once: true });
+      realtimeDataChannel.addEventListener("error", () => {
+        clearTimeout(timeoutId);
+        reject(new Error("Braino Live could not open its control channel."));
+      }, { once: true });
+      realtimeDataChannel.addEventListener("message", (event) => {
+        try {
+          handleRealtimeServerEvent(JSON.parse(event.data));
+        } catch (error) {
+          console.warn("Realtime event parse error:", error);
+        }
+      });
+    });
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    const response = await fetch(`${API_BASE}/openai-realtime-call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: offer.sdp || "",
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorPayload = {};
+      try {
+        errorPayload = JSON.parse(errorText);
+      } catch {}
+      throw new Error(errorPayload.error || errorPayload.details || errorText || `Realtime session failed (${response.status}).`);
+    }
+
+    const answerSdp = await response.text();
+    await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
+    await dataChannelOpen;
+
+    realtimeConnecting = false;
+    realtimeSessionReady = true;
+    voiceMuted = false;
+    if (voiceMuteBtn) voiceMuteBtn.style.opacity = "1";
+
+    setOrbState("listening");
+    setVoiceContextStatus("live");
+    setCaption("Braino Live is ready.");
+
+    sendRealtimeEvent({
+      type: "session.update",
+      session: {
+        instructions: getRealtimeVoiceInstructions(),
+      },
+    });
+
+    await sendRealtimePageGrounding({ initial: true });
+
+    setTimeout(() => {
+      if (voiceActive && isRealtimeVoiceProvider() && voiceAgentText?.textContent === "Braino Live is ready.") {
+        setCaption("");
+      }
+    }, 1400);
+  } catch (error) {
+    realtimeConnecting = false;
+    cleanupRealtimeVoiceSession({ keepCaption: true });
+    setOrbState("idle");
+    setCaption(error instanceof Error ? error.message : "Could not start Braino Live.");
+  }
+}
+
 async function openVoiceMode() {
   voiceActive = true;
   voiceOverlay?.classList.remove("hidden");
   setOrbState("listening");
   setSubtitles("", "");
+  setVoiceContextStatus("reading");
   updateVoicePageCtx();
 
   const tabId = await getActiveTabId();
@@ -3422,6 +3891,11 @@ async function openVoiceMode() {
   }
 
   voiceTabId = tabId;
+  if (isRealtimeVoiceProvider()) {
+    await startRealtimeVoiceMode();
+    return;
+  }
+
   const res = await sendToContentScript(tabId, "startVoiceListening");
   if (res?.error) {
     setCaption("Could not start voice: " + res.error);
@@ -3430,15 +3904,17 @@ async function openVoiceMode() {
 }
 
 async function closeVoiceMode() {
+  const hadRealtimeSession = isRealtimeVoiceSessionRunning();
   headphoneMode = false;
   document.body.classList.remove("headphone-mode");
   voiceActive = false;
   stopCurrentTTS();
+  if (hadRealtimeSession) cleanupRealtimeVoiceSession();
   voiceOverlay?.classList.add("hidden");
   setOrbState("idle");
   const tabId = voiceTabId || await getActiveTabId();
   voiceTabId = null;
-  if (tabId) sendToContentScript(tabId, "stopVoiceListening");
+  if (!hadRealtimeSession && tabId) sendToContentScript(tabId, "stopVoiceListening");
 }
 
 function toggleHeadphoneMode() {
@@ -3464,7 +3940,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Receive voice events relayed from content script
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.action !== "voiceEvent" || !voiceActive) return;
+  if (msg.action !== "voiceEvent" || !voiceActive || isRealtimeVoiceProvider() || isRealtimeVoiceSessionRunning()) return;
 
   if (msg.event === "listening") {
     if (!isVoiceSpeaking) {
@@ -3558,7 +4034,7 @@ async function handleVoiceInput(text) {
       const body = {
         notes: notesCtx.sanitizedNotes,
         message: text,
-        aiProvider: currentAiProvider,
+        aiProvider: getTextAiProvider(),
         chatHistory: chatMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
       };
 
@@ -3719,7 +4195,32 @@ voiceModeBtn?.addEventListener("click", toggleHeadphoneMode);
 voiceCloseBtn?.addEventListener("click", closeVoiceMode);
 voiceOrb?.addEventListener("click", () => { if (headphoneMode) closeVoiceMode(); });
 
+voiceLookBtn?.addEventListener("click", async () => {
+  if (!voiceActive || !isRealtimeVoiceSessionRunning()) return;
+  await sendRealtimePageGrounding({
+    respond: true,
+    prompt: "The user asked you to look at the page. Briefly describe what is on screen and what they can do next.",
+  });
+});
+
 voiceInterruptBtn?.addEventListener("click", () => {
+  if (isRealtimeVoiceSessionRunning()) {
+    sendRealtimeEvent({ type: "response.cancel" });
+    if (realtimeAssistantItemId) {
+      sendRealtimeEvent({
+        type: "conversation.item.truncate",
+        item_id: realtimeAssistantItemId,
+        content_index: 0,
+        audio_end_ms: Math.max(0, Date.now() - realtimeAudioStartAt),
+      });
+    }
+    realtimeAssistantTranscript = "";
+    setOrbState("listening");
+    setCaption("");
+    if (voiceUserText) voiceUserText.textContent = "";
+    return;
+  }
+
   stopCurrentTTS();
   agentShouldStop = true;
   setOrbState("listening");
@@ -3737,7 +4238,11 @@ voiceStopTaskBtn?.addEventListener("click", () => {
 
 voiceMuteBtn?.addEventListener("click", () => {
   voiceMuted = !voiceMuted;
-  if (voiceTabId) {
+  if (isRealtimeVoiceSessionRunning()) {
+    realtimeMicStream?.getAudioTracks().forEach((track) => {
+      track.enabled = !voiceMuted;
+    });
+  } else if (voiceTabId) {
     sendToContentScript(voiceTabId, voiceMuted ? "stopVoiceListening" : "startVoiceListening");
   }
   if (voiceMuteBtn) voiceMuteBtn.style.opacity = voiceMuted ? "0.4" : "1";
