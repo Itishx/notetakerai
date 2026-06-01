@@ -2164,6 +2164,23 @@ function __sbBuildBrainUI() {
     .sb-card-scroll {
       flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px;
     }
+    .sb-card-stack {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .sb-turn {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .sb-turn + .sb-turn {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    #__sb_bubble__.sb-light .sb-turn + .sb-turn { border-top-color: rgba(0,0,0,0.08); }
     .sb-card-scroll::-webkit-scrollbar { width: 4px; }
     .sb-card-scroll::-webkit-scrollbar-track { background: transparent; }
     .sb-card-scroll::-webkit-scrollbar-thumb { background: rgba(180,140,120,0.3); border-radius: 99px; }
@@ -3773,68 +3790,48 @@ async function __sbSpeakText(text) {
 }
 
 
-// Each previous turn occupies exactly containerH px. Dividers are 37px (1px + 18px margins each side).
-// We calculate scroll position mathematically instead of reading offsetTop (unreliable mid-layout).
-const __SB_DIVIDER_H = 37;
-let __sbCachedContainerH = 0;
-
-function __sbGetContainerH(scroll) {
-  const h = scroll ? scroll.clientHeight : 0;
-  if (h > 0) __sbCachedContainerH = h;
-  return __sbCachedContainerH || 300;
-}
-
-function __sbApplyScroll(scroll, targetScrollTop) {
+function __sbScrollCardToLatest(scroll) {
+  if (!scroll) return;
+  const targetScrollTop = Math.max(0, scroll.scrollHeight - scroll.clientHeight);
   scroll.scrollTop = targetScrollTop;
-  setTimeout(() => { scroll.scrollTop = targetScrollTop; }, 0);
-  setTimeout(() => { scroll.scrollTop = targetScrollTop; }, 80);
+  setTimeout(() => { scroll.scrollTop = scroll.scrollHeight; }, 0);
+  setTimeout(() => { scroll.scrollTop = scroll.scrollHeight; }, 80);
 }
 
-function __sbRenderCardHistory(scroll) {
-  if (!scroll) return;
-  const containerH = __sbGetContainerH(scroll);
-  const total = __sbCardTurns.length;
-  let html = "";
-  __sbCardTurns.forEach((turn, i) => {
-    const isPrev = i < total - 1;
-    const minH = isPrev ? ` style="min-height:${containerH}px;"` : "";
-    const divider = i > 0 ? `<div style="height:1px;background:rgba(255,255,255,0.08);margin:18px 0;"></div>` : "";
-    html += `${divider}<div class="sb-turn"${minH}>`;
-    if (turn.prompt) html += `<div class="sb-card-q">${__sbEscapeHtml(turn.prompt)}</div>`;
-    html += `<div class="sb-card-a">${__sbRenderMarkdown(turn.answer)}</div>`;
-    html += `</div>`;
-  });
-  scroll.innerHTML = html;
-  // Each previous turn = containerH, each divider = __SB_DIVIDER_H. Last turn has no prior space.
-  const numPrev = total - 1;
-  const target = numPrev > 0 ? numPrev * (containerH + __SB_DIVIDER_H) : 0;
-  __sbApplyScroll(scroll, target);
+function __sbBuildCardTurnHtml(turn = {}, options = {}) {
+  const prompt = typeof turn.prompt === "string" ? turn.prompt : "";
+  const answer = typeof options.answerText === "string"
+    ? options.answerText
+    : String(turn.answer || "");
+  const promptHtml = prompt ? `<div class="sb-card-q">${__sbEscapeHtml(prompt)}</div>` : "";
+  const answerHtml = options.rich
+    ? `<div class="sb-card-a">${__sbRenderMarkdown(answer)}</div>`
+    : `<div class="sb-card-status">${__sbEscapeHtml(answer)}</div>`;
+  return `<div class="sb-turn">${promptHtml}${answerHtml}</div>`;
 }
 
-function __sbShowThinking(scroll) {
+function __sbRenderCardHistory(scroll, options = {}) {
   if (!scroll) return;
-  document.getElementById("__sb_thinking_wrap__")?.remove();
+  const historyHtml = __sbCardTurns
+    .map((turn) => __sbBuildCardTurnHtml(turn, { rich: true }))
+    .join("");
+  const pendingHtml = options.pendingTurn
+    ? __sbBuildCardTurnHtml(options.pendingTurn, {
+        rich: false,
+        answerText: options.pendingText || "Thinking…",
+      })
+    : "";
+  scroll.innerHTML = `<div class="sb-card-stack">${historyHtml}${pendingHtml}</div>`;
+  __sbScrollCardToLatest(scroll);
+}
+
+function __sbShowThinking(scroll, promptText = "", pendingText = "Thinking…") {
+  if (!scroll) return;
   __sbThinkingEl = null;
-  const containerH = __sbGetContainerH(scroll);
-  // All existing turns become history — set min-height on them
-  scroll.querySelectorAll(".sb-turn").forEach(t => { t.style.minHeight = containerH + "px"; });
-  const wrap = document.createElement("div");
-  wrap.id = "__sb_thinking_wrap__";
-  wrap.className = "sb-turn";
-  if (__sbCardTurns.length > 0) {
-    const divider = document.createElement("div");
-    divider.style.cssText = "height:1px;background:rgba(255,255,255,0.08);margin:18px 0;";
-    wrap.appendChild(divider);
-  }
-  __sbThinkingEl = document.createElement("div");
-  __sbThinkingEl.style.cssText = "font-size:13px;color:rgba(255,255,255,0.38);font-style:italic;";
-  __sbThinkingEl.textContent = "Thinking…";
-  wrap.appendChild(__sbThinkingEl);
-  scroll.appendChild(wrap);
-  // N existing turns each containerH tall + (N-1) dividers between them + 1 divider before thinking
-  const N = __sbCardTurns.length;
-  const target = N > 0 ? N * containerH + N * __SB_DIVIDER_H : 0;
-  __sbApplyScroll(scroll, target);
+  __sbRenderCardHistory(scroll, {
+    pendingTurn: { prompt: promptText },
+    pendingText,
+  });
 }
 
 function __sbShowBubble(text, autoHide = true, options = {}) {
@@ -3844,10 +3841,12 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
   __sbRefreshInlineOwner();
   __sbLastBubbleRaw = String(text || "");
   const rich = Boolean(options.rich);
-  const promptHtml = options.prompt ? `<div class="sb-card-q">${__sbEscapeHtml(options.prompt)}</div>` : "";
-  scroll.innerHTML = rich
-    ? promptHtml + `<div class="sb-card-a">${__sbRenderMarkdown(text)}</div>`
-    : promptHtml + `<div class="sb-card-status">${__sbEscapeHtml(text)}</div>`;
+  const turnHtml = __sbBuildCardTurnHtml(
+    { prompt: options.prompt || "", answer: String(text || "") },
+    { rich, answerText: String(text || "") },
+  );
+  scroll.innerHTML = `<div class="sb-card-stack">${turnHtml}</div>`;
+  __sbScrollCardToLatest(scroll);
   __sbOpenCard({ rich });
   __sbSyncSpeakButtons();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
@@ -4133,7 +4132,12 @@ async function __sbProcessPrompt(text, options = {}) {
 
   if (intent === "web") {
     const voiceOnly = fromVoice && __sbVoiceOnlyMode;
-    if (!voiceOnly) __sbShowBubble("Searching the web…", false);
+    if (!voiceOnly) {
+      const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+      __sbShowThinking(scroll, promptText, "Searching the web…");
+      __sbOpenCard({ rich: true });
+      __sbSyncSpeakButtons();
+    }
     __sbChatHistory.push({ role: "user", content: promptText });
 
     try {
@@ -4151,11 +4155,20 @@ async function __sbProcessPrompt(text, options = {}) {
 
       const finalReply = __sbAppendSearchSources(String(reply), searchData.results || []);
       __sbChatHistory.push({ role: "assistant", content: finalReply });
+      __sbCardTurns.push({ prompt: promptText, answer: finalReply });
       if (voiceOnly) {
         const spoke = await __sbSpeakText(finalReply);
-        if (!spoke) __sbShowBubble(finalReply, false, { rich: true, prompt: promptText, title: "Couldn't speak — tap to read" });
+        if (!spoke) {
+          const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+          __sbRenderCardHistory(scroll);
+          __sbOpenCard({ rich: true });
+          __sbSyncSpeakButtons();
+        }
       } else {
-        __sbShowBubble(finalReply, false, { rich: true, prompt: promptText, title: `Web results · ${location.hostname.replace(/^www\./, "") || "current page"}` });
+        const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+        __sbRenderCardHistory(scroll);
+        __sbOpenCard({ rich: true });
+        __sbSyncSpeakButtons();
         if (fromVoice) await __sbSpeakText(finalReply);
       }
     } catch (err) {
@@ -4170,7 +4183,7 @@ async function __sbProcessPrompt(text, options = {}) {
   const voiceOnly = fromVoice && __sbVoiceOnlyMode;
   if (!voiceOnly) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-    __sbShowThinking(scroll);
+    __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
     __sbSyncSpeakButtons();
   }
@@ -4204,7 +4217,12 @@ async function __sbProcessPrompt(text, options = {}) {
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     if (voiceOnly) {
       const spoke = await __sbSpeakText(reply);
-      if (!spoke) __sbShowBubble(reply, false, { rich: true, prompt: promptText, title: "Couldn't speak — tap to read" });
+      if (!spoke) {
+        const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+        __sbRenderCardHistory(scroll);
+        __sbOpenCard({ rich: true });
+        __sbSyncSpeakButtons();
+      }
     } else {
       const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
       __sbRenderCardHistory(scroll);

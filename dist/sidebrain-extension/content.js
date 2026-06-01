@@ -1678,6 +1678,8 @@ let __sbHeadphoneMode = false;
 let __sbVoiceSilenceTimer = null;
 let __sbLastFinalTranscript = null;
 let __sbChatHistory = [];
+let __sbCardTurns = []; // {prompt, answer}[] — persists across calls for scrollable history
+let __sbThinkingEl = null;
 let __sbVoicePendingReply = false;
 let __sbIsSpeaking = false;
 let __sbCurrentSpeechAudio = null;
@@ -2162,6 +2164,23 @@ function __sbBuildBrainUI() {
     .sb-card-scroll {
       flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px;
     }
+    .sb-card-stack {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .sb-turn {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .sb-turn + .sb-turn {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    #__sb_bubble__.sb-light .sb-turn + .sb-turn { border-top-color: rgba(0,0,0,0.08); }
     .sb-card-scroll::-webkit-scrollbar { width: 4px; }
     .sb-card-scroll::-webkit-scrollbar-track { background: transparent; }
     .sb-card-scroll::-webkit-scrollbar-thumb { background: rgba(180,140,120,0.3); border-radius: 99px; }
@@ -2655,8 +2674,12 @@ function __sbOpenCard(options = {}) {
   __sbRefreshInlineOwner();
   // Hide the bar — card has its own follow-up input
   document.getElementById("__sb_bar__")?.classList.remove("open");
-  wrap.classList.add("visible", "animating-in");
-  requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
+  const alreadyOpen = wrap.classList.contains("visible");
+  wrap.classList.add("visible");
+  if (!alreadyOpen) {
+    wrap.classList.add("animating-in");
+    requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
+  }
   if (options.rich) setTimeout(() => __sbStartOrbit(), 60);
   else __sbStopOrbit();
   const bubble = wrap.querySelector("#__sb_bubble__");
@@ -3767,6 +3790,50 @@ async function __sbSpeakText(text) {
 }
 
 
+function __sbScrollCardToLatest(scroll) {
+  if (!scroll) return;
+  const targetScrollTop = Math.max(0, scroll.scrollHeight - scroll.clientHeight);
+  scroll.scrollTop = targetScrollTop;
+  setTimeout(() => { scroll.scrollTop = scroll.scrollHeight; }, 0);
+  setTimeout(() => { scroll.scrollTop = scroll.scrollHeight; }, 80);
+}
+
+function __sbBuildCardTurnHtml(turn = {}, options = {}) {
+  const prompt = typeof turn.prompt === "string" ? turn.prompt : "";
+  const answer = typeof options.answerText === "string"
+    ? options.answerText
+    : String(turn.answer || "");
+  const promptHtml = prompt ? `<div class="sb-card-q">${__sbEscapeHtml(prompt)}</div>` : "";
+  const answerHtml = options.rich
+    ? `<div class="sb-card-a">${__sbRenderMarkdown(answer)}</div>`
+    : `<div class="sb-card-status">${__sbEscapeHtml(answer)}</div>`;
+  return `<div class="sb-turn">${promptHtml}${answerHtml}</div>`;
+}
+
+function __sbRenderCardHistory(scroll, options = {}) {
+  if (!scroll) return;
+  const historyHtml = __sbCardTurns
+    .map((turn) => __sbBuildCardTurnHtml(turn, { rich: true }))
+    .join("");
+  const pendingHtml = options.pendingTurn
+    ? __sbBuildCardTurnHtml(options.pendingTurn, {
+        rich: false,
+        answerText: options.pendingText || "Thinking…",
+      })
+    : "";
+  scroll.innerHTML = `<div class="sb-card-stack">${historyHtml}${pendingHtml}</div>`;
+  __sbScrollCardToLatest(scroll);
+}
+
+function __sbShowThinking(scroll, promptText = "", pendingText = "Thinking…") {
+  if (!scroll) return;
+  __sbThinkingEl = null;
+  __sbRenderCardHistory(scroll, {
+    pendingTurn: { prompt: promptText },
+    pendingText,
+  });
+}
+
 function __sbShowBubble(text, autoHide = true, options = {}) {
   if (!__sbOwnsInlineUi()) return;
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -3774,10 +3841,12 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
   __sbRefreshInlineOwner();
   __sbLastBubbleRaw = String(text || "");
   const rich = Boolean(options.rich);
-  const promptHtml = options.prompt ? `<div class="sb-card-q">${__sbEscapeHtml(options.prompt)}</div>` : "";
-  scroll.innerHTML = rich
-    ? promptHtml + `<div class="sb-card-a">${__sbRenderMarkdown(text)}</div>`
-    : promptHtml + `<div class="sb-card-status">${__sbEscapeHtml(text)}</div>`;
+  const turnHtml = __sbBuildCardTurnHtml(
+    { prompt: options.prompt || "", answer: String(text || "") },
+    { rich, answerText: String(text || "") },
+  );
+  scroll.innerHTML = `<div class="sb-card-stack">${turnHtml}</div>`;
+  __sbScrollCardToLatest(scroll);
   __sbOpenCard({ rich });
   __sbSyncSpeakButtons();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
@@ -4063,7 +4132,12 @@ async function __sbProcessPrompt(text, options = {}) {
 
   if (intent === "web") {
     const voiceOnly = fromVoice && __sbVoiceOnlyMode;
-    if (!voiceOnly) __sbShowBubble("Searching the web…", false);
+    if (!voiceOnly) {
+      const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+      __sbShowThinking(scroll, promptText, "Searching the web…");
+      __sbOpenCard({ rich: true });
+      __sbSyncSpeakButtons();
+    }
     __sbChatHistory.push({ role: "user", content: promptText });
 
     try {
@@ -4081,11 +4155,20 @@ async function __sbProcessPrompt(text, options = {}) {
 
       const finalReply = __sbAppendSearchSources(String(reply), searchData.results || []);
       __sbChatHistory.push({ role: "assistant", content: finalReply });
+      __sbCardTurns.push({ prompt: promptText, answer: finalReply });
       if (voiceOnly) {
         const spoke = await __sbSpeakText(finalReply);
-        if (!spoke) __sbShowBubble(finalReply, false, { rich: true, prompt: promptText, title: "Couldn't speak — tap to read" });
+        if (!spoke) {
+          const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+          __sbRenderCardHistory(scroll);
+          __sbOpenCard({ rich: true });
+          __sbSyncSpeakButtons();
+        }
       } else {
-        __sbShowBubble(finalReply, false, { rich: true, prompt: promptText, title: `Web results · ${location.hostname.replace(/^www\./, "") || "current page"}` });
+        const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+        __sbRenderCardHistory(scroll);
+        __sbOpenCard({ rich: true });
+        __sbSyncSpeakButtons();
         if (fromVoice) await __sbSpeakText(finalReply);
       }
     } catch (err) {
@@ -4098,7 +4181,12 @@ async function __sbProcessPrompt(text, options = {}) {
   }
 
   const voiceOnly = fromVoice && __sbVoiceOnlyMode;
-  if (!voiceOnly) __sbShowBubble(hasPageText ? "Reading page…" : "Thinking…", false);
+  if (!voiceOnly) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    __sbSyncSpeakButtons();
+  }
   __sbChatHistory.push({ role: "user", content: promptText });
 
   try {
@@ -4126,15 +4214,20 @@ async function __sbProcessPrompt(text, options = {}) {
       return;
     }
     __sbChatHistory.push({ role: "assistant", content: reply });
+    __sbCardTurns.push({ prompt: promptText, answer: reply });
     if (voiceOnly) {
       const spoke = await __sbSpeakText(reply);
-      if (!spoke) __sbShowBubble(reply, false, { rich: true, prompt: promptText, title: "Couldn't speak — tap to read" });
+      if (!spoke) {
+        const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+        __sbRenderCardHistory(scroll);
+        __sbOpenCard({ rich: true });
+        __sbSyncSpeakButtons();
+      }
     } else {
-      __sbShowBubble(reply, false, {
-        rich: true,
-        prompt: promptText,
-        title: pageContext.title || location.hostname.replace(/^www\./, "") || "Current page",
-      });
+      const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+      __sbRenderCardHistory(scroll);
+      __sbOpenCard({ rich: true });
+      __sbSyncSpeakButtons();
       if (fromVoice) await __sbSpeakText(reply);
     }
   } catch (err) {

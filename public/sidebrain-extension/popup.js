@@ -23,6 +23,9 @@ let agentShouldStop = false;
 let isPremium = false;
 let currentSelection = null; // { text, url, title } — last text the user highlighted on the page
 let sbXPersonaCache = null; // cached x_auto_persona for injecting context on X
+const INTERNAL_PREMIUM_EMAILS = new Set([
+  "itishpande21@gmail.com",
+]);
 
 // Daily usage counters (free tier limits)
 const FREE_RECORDING_SECONDS = 30 * 60; // 30 min/day
@@ -4108,7 +4111,14 @@ async function refreshAuthToken(refreshToken) {
 }
 
 async function loadPremiumStatus(forceRefresh = false) {
-  const data = await getStorage(["authToken", "authRefreshToken", "authUserId", "isPremium", "isPremiumCachedAt"]);
+  const data = await getStorage(["authToken", "authRefreshToken", "authUserId", "authEmail", "isPremium", "isPremiumCachedAt"]);
+  const normalizedEmail = typeof data.authEmail === "string" ? data.authEmail.trim().toLowerCase() : "";
+  if (normalizedEmail && INTERNAL_PREMIUM_EMAILS.has(normalizedEmail)) {
+    isPremium = true;
+    await setStorage({ isPremium: true, isPremiumCachedAt: Date.now() });
+    return true;
+  }
+
   if (!data.authUserId) {
     isPremium = false;
     return false;
@@ -4241,8 +4251,16 @@ let currentAuthUser = null;
 
 function updateAuthUI() {
   chrome.storage.local.get(["authToken", "authDisplayName", "authEmail", "authUserId"], (data) => {
-    if (data.authToken && data.authDisplayName) {
-      currentAuthUser = { token: data.authToken, name: data.authDisplayName, email: data.authEmail, userId: data.authUserId };
+    if (data.authToken && (data.authDisplayName || data.authEmail || data.authUserId)) {
+      const fallbackName = typeof data.authEmail === "string" && data.authEmail.includes("@")
+        ? data.authEmail.split("@")[0]
+        : "Braino User";
+      currentAuthUser = {
+        token: data.authToken,
+        name: data.authDisplayName || fallbackName,
+        email: data.authEmail,
+        userId: data.authUserId,
+      };
       void loadPremiumStatus(true);
     } else {
       currentAuthUser = null;
@@ -4268,7 +4286,7 @@ logoutBtn?.addEventListener("click", () => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.authToken || changes.authDisplayName || changes.authUserId)) updateAuthUI();
+  if (area === "local" && (changes.authToken || changes.authDisplayName || changes.authEmail || changes.authUserId)) updateAuthUI();
 });
 
 
