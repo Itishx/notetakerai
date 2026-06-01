@@ -33,6 +33,7 @@ alter table public.x_auto_sessions enable row level security;
 
 drop policy if exists "Users can manage own X Auto sessions" on public.x_auto_sessions;
 
+drop policy if exists "Users can manage own X Auto sessions" on public.x_auto_sessions;
 create policy "Users can manage own X Auto sessions"
   on public.x_auto_sessions
   for all
@@ -49,6 +50,7 @@ create unique index if not exists x_auto_sessions_one_active_per_user_idx
 create index if not exists x_auto_sessions_user_started_at_idx
   on public.x_auto_sessions (user_id, started_at desc);
 
+drop trigger if exists update_x_auto_sessions_updated_at on public.x_auto_sessions;
 create trigger update_x_auto_sessions_updated_at
 before update on public.x_auto_sessions
 for each row execute function public.update_updated_at_column();

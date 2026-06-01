@@ -23,10 +23,12 @@ create index if not exists x_post_analytics_user_id_idx on public.x_post_analyti
 -- RLS
 alter table public.x_post_analytics enable row level security;
 
+drop policy if exists "Users can read own post analytics" on public.x_post_analytics;
 create policy "Users can read own post analytics"
   on public.x_post_analytics for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Service role can manage post analytics" on public.x_post_analytics;
 create policy "Service role can manage post analytics"
   on public.x_post_analytics for all
   using (true)

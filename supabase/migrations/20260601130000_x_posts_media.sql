@@ -15,7 +15,8 @@ VALUES (
 
 -- Only authenticated users can upload to their own folder
 DO $$ BEGIN
-  CREATE POLICY "x_post_media_insert"
+  drop policy if exists "x_post_media_insert" on storage.objects;
+CREATE POLICY "x_post_media_insert"
   ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (
     bucket_id = 'x-post-media'
@@ -26,7 +27,8 @@ END $$;
 
 -- Users can delete their own files
 DO $$ BEGIN
-  CREATE POLICY "x_post_media_delete"
+  drop policy if exists "x_post_media_delete" on storage.objects;
+CREATE POLICY "x_post_media_delete"
   ON storage.objects FOR DELETE TO authenticated
   USING (
     bucket_id = 'x-post-media'

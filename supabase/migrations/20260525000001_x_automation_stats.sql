@@ -14,6 +14,7 @@ create table if not exists public.x_automation_stats (
 
 alter table public.x_automation_stats enable row level security;
 
+drop policy if exists "Users can manage their own X automation stats" on public.x_automation_stats;
 create policy "Users can manage their own X automation stats"
   on public.x_automation_stats
   for all
@@ -23,6 +24,7 @@ create policy "Users can manage their own X automation stats"
 create index if not exists x_automation_stats_user_idx
   on public.x_automation_stats (user_id);
 
+drop trigger if exists update_x_automation_stats_updated_at on public.x_automation_stats;
 create trigger update_x_automation_stats_updated_at
 before update on public.x_automation_stats
 for each row execute function public.update_updated_at_column();

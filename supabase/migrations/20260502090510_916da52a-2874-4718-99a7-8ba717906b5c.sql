@@ -12,6 +12,7 @@ create table if not exists public.scheduled_reddit_posts (
 
 alter table public.scheduled_reddit_posts enable row level security;
 
+drop policy if exists "Users can manage their own scheduled posts" on public.scheduled_reddit_posts;
 create policy "Users can manage their own scheduled posts"
   on public.scheduled_reddit_posts for all
   using (auth.uid() = user_id)

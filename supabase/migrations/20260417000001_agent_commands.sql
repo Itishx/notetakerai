@@ -10,10 +10,11 @@ create table if not exists public.agent_commands (
 
 alter table public.agent_commands enable row level security;
 
+drop policy if exists "Users can manage their own commands" on public.agent_commands;
 create policy "Users can manage their own commands"
   on public.agent_commands
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-create index agent_commands_user_status on public.agent_commands (user_id, status, created_at desc);
+create index if not exists agent_commands_user_status on public.agent_commands (user_id, status, created_at desc);

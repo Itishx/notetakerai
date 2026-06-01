@@ -12,6 +12,7 @@ create table if not exists public.x_auto_persona (
 
 alter table public.x_auto_persona enable row level security;
 
+drop policy if exists "Users manage own persona" on public.x_auto_persona;
 create policy "Users manage own persona"
   on public.x_auto_persona for all
   using (auth.uid() = user_id)
@@ -31,9 +32,10 @@ create table if not exists public.x_auto_reply_logs (
 
 alter table public.x_auto_reply_logs enable row level security;
 
+drop policy if exists "Users manage own reply logs" on public.x_auto_reply_logs;
 create policy "Users manage own reply logs"
   on public.x_auto_reply_logs for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-create index x_auto_reply_logs_user_time on public.x_auto_reply_logs (user_id, replied_at desc);
+create index if not exists x_auto_reply_logs_user_time on public.x_auto_reply_logs (user_id, replied_at desc);

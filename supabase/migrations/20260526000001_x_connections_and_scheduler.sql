@@ -12,6 +12,7 @@ create table if not exists public.x_connections (
 
 alter table public.x_connections enable row level security;
 
+drop trigger if exists update_x_connections_updated_at on public.x_connections;
 create trigger update_x_connections_updated_at
 before update on public.x_connections
 for each row execute function public.update_updated_at_column();
@@ -46,6 +47,7 @@ alter table public.scheduled_x_posts enable row level security;
 
 drop policy if exists "Users can manage their own scheduled X posts" on public.scheduled_x_posts;
 
+drop policy if exists "Users can manage their own scheduled X posts" on public.scheduled_x_posts;
 create policy "Users can manage their own scheduled X posts"
   on public.scheduled_x_posts for all
   using (auth.uid() = user_id)
@@ -57,6 +59,7 @@ create index if not exists scheduled_x_posts_user_status_idx
 create index if not exists scheduled_x_posts_pending_idx
   on public.scheduled_x_posts (status, scheduled_at);
 
+drop trigger if exists update_scheduled_x_posts_updated_at on public.scheduled_x_posts;
 create trigger update_scheduled_x_posts_updated_at
 before update on public.scheduled_x_posts
 for each row execute function public.update_updated_at_column();

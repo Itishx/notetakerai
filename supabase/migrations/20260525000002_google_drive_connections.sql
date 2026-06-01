@@ -19,22 +19,27 @@ drop policy if exists "Users can update their own google drive connections" on p
 drop policy if exists "Users can delete their own google drive connections" on public.google_drive_connections;
 drop policy if exists "Allow access by user_identifier match on google_drive_connections" on public.google_drive_connections;
 
+drop policy if exists "Users can view their own google drive connections" on public.google_drive_connections;
 create policy "Users can view their own google drive connections"
 on public.google_drive_connections for select
 using (user_identifier = auth.uid()::text);
 
+drop policy if exists "Users can insert their own google drive connections" on public.google_drive_connections;
 create policy "Users can insert their own google drive connections"
 on public.google_drive_connections for insert
 with check (user_identifier = auth.uid()::text);
 
+drop policy if exists "Users can update their own google drive connections" on public.google_drive_connections;
 create policy "Users can update their own google drive connections"
 on public.google_drive_connections for update
 using (user_identifier = auth.uid()::text);
 
+drop policy if exists "Users can delete their own google drive connections" on public.google_drive_connections;
 create policy "Users can delete their own google drive connections"
 on public.google_drive_connections for delete
 using (user_identifier = auth.uid()::text);
 
+drop policy if exists "Allow access by user_identifier match on google_drive_connections" on public.google_drive_connections;
 create policy "Allow access by user_identifier match on google_drive_connections"
 on public.google_drive_connections for all
 using (true)

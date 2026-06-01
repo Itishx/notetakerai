@@ -11,6 +11,7 @@ GRANT ALL ON public.waitlist TO service_role;
 
 ALTER TABLE public.waitlist ENABLE ROW LEVEL SECURITY;
 
+drop policy if exists "Anyone can join waitlist" on public.waitlist;
 CREATE POLICY "Anyone can join waitlist"
 ON public.waitlist
 FOR INSERT

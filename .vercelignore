@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-extension
+electron-app
+extension
+braino-extension.zip
+braino-dist-extension.zip
+.env
+.env.local

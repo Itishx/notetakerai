@@ -1,4 +1,4 @@
-CREATE TABLE public.user_watched_movies (
+CREATE TABLE IF NOT EXISTS public.user_watched_movies (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid NOT NULL,
   movie_title text NOT NULL,
@@ -16,18 +16,22 @@ GRANT ALL ON public.user_watched_movies TO service_role;
 
 ALTER TABLE public.user_watched_movies ENABLE ROW LEVEL SECURITY;
 
+drop policy if exists "Users can view their own watched movies" on public.user_watched_movies;
 CREATE POLICY "Users can view their own watched movies"
   ON public.user_watched_movies FOR SELECT
   USING (auth.uid() = user_id);
 
+drop policy if exists "Users can insert their own watched movies" on public.user_watched_movies;
 CREATE POLICY "Users can insert their own watched movies"
   ON public.user_watched_movies FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+drop policy if exists "Users can update their own watched movies" on public.user_watched_movies;
 CREATE POLICY "Users can update their own watched movies"
   ON public.user_watched_movies FOR UPDATE
   USING (auth.uid() = user_id);
 
+drop policy if exists "Users can delete their own watched movies" on public.user_watched_movies;
 CREATE POLICY "Users can delete their own watched movies"
   ON public.user_watched_movies FOR DELETE
   USING (auth.uid() = user_id);
