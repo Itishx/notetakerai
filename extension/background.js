@@ -358,10 +358,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const persona = await bgLoadXPersona();
       const xReplyPrompt = bgBuildXReplyPrompt({ handle, builderPrompt, persona });
 
-      fetch(`${BG_API_BASE}/chat-about-notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      bgChatFetch({
           notes: '',
           chatHistory: [
             {
@@ -381,8 +378,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             { role: 'assistant', content: 'building Braino right now. ai browser companion that can actually act on the tab for you. trybraino.com' },
           ],
           message: `@${handle || 'user'}: "${tweetText}"`,
-        }),
-      })
+        })
         .then(r => r.json())
         .then(data => sendResponse({ reply: bgCleanXReply(data?.reply || data?.response || null) || null }))
         .catch(() => sendResponse({ reply: null }));
@@ -568,6 +564,19 @@ const BG_SUPABASE_URL = "https://suwhgaxxdizowbyjlljj.supabase.co";
 const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
 const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
+
+async function bgChatFetch(body) {
+  const { authToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
+  return fetch(`${BG_API_BASE}/chat-about-notes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: BG_SUPABASE_ANON_KEY,
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
 
 let bgXPersonaCache = null;
 let bgXPersonaCacheExpiry = 0;
@@ -1466,10 +1475,7 @@ async function bgBuildDriveOrganizationPlan(files) {
     return { folders: [], moves: [] };
   }
 
-  const response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const response = await bgChatFetch({
       pageContext: {
         title: "Google Drive file inventory",
         url: "https://drive.google.com",
@@ -1492,7 +1498,6 @@ Rules:
 - Favor simple, human folder names like Finance, Hiring, Meetings, Decks, Docs, Legal, Product, Misc.
 - Do not invent fileIds.
 - Do not include explanations outside JSON.`,
-    }),
   });
 
   if (!response.ok) {
@@ -2338,20 +2343,12 @@ What actions should be taken next? Return a single JSON object, OR a JSON array 
   const fetchBody = JSON.stringify({ notes: agentSystemPrompt, message: userMessage });
   let response;
   try {
-    response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: fetchBody,
-    });
+    response = await bgChatFetch(fetchBody);
   } catch (e) {
     if (e instanceof TypeError) {
       // Service worker woke cold — wait and retry once
       await new Promise(r => setTimeout(r, 1200));
-      response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: fetchBody,
-      });
+      response = await bgChatFetch(fetchBody);
     } else {
       throw e;
     }
@@ -2469,11 +2466,7 @@ Rules:
   const userPrompt = `TASK: ${task}\nCURRENT PAGE:\nURL: ${pageInfo.url || "(unknown)"}\nTitle: ${pageInfo.title || "(unknown)"}\nPlan the workflow.`;
 
   try {
-    const res = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
-    });
+    const res = await bgChatFetch({ notes: systemPrompt, message: userPrompt });
     if (!res.ok) return null;
     const data = await res.json();
     const reply = (data.reply || "").trim();
@@ -2501,11 +2494,7 @@ async function bgReplanWorkflow(task, completedSteps, remainingSteps, pageInfo, 
   const systemPrompt = `You revise a browser automation plan after a step failed.\nReturn ONLY a JSON array. No prose.\n[{"id":N,"goal":"...","successSignal":"..."}]`;
   const userPrompt = `ORIGINAL TASK: ${task}\nCOMPLETED:\n${completedSteps.map(s => `${s.id}. ${s.goal}`).join("\n") || "None."}\nFAILED AT: ${remainingSteps[0]?.goal || "unknown"} — Error: ${lastError}\nREMAINING:\n${remainingSteps.map(s => `${s.id}. ${s.goal}`).join("\n")}\nPAGE: ${pageInfo.url || ""} | ${pageInfo.title || ""}\nTEXT: ${(pageInfo.bodyText || "").slice(0, 500)}\nRevise remaining steps, starting from id ${(completedSteps.length || 0) + 1}.`;
   try {
-    const res = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
-    });
+    const res = await bgChatFetch({ notes: systemPrompt, message: userPrompt });
     if (!res.ok) return remainingSteps;
     const data = await res.json();
     const reply = (data.reply || "").trim();
