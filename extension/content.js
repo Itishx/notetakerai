@@ -281,6 +281,76 @@ function __sbSpotifyGetCurrentPlaylistName() {
   return fromTitle;
 }
 
+function __sbSpotifyParseDurationParts(text) {
+  const match = String(text || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+  return { minutes, seconds, totalSeconds: minutes * 60 + seconds };
+}
+
+function __sbSpotifyFindDurationText(text) {
+  const matches = String(text || "").match(/\b\d{1,2}:\d{2}\b/g);
+  return matches?.length ? matches[matches.length - 1] : "";
+}
+
+function __sbSpotifyGetVisibleText(nodes) {
+  const values = [];
+  const seen = new Set();
+  for (const node of Array.from(nodes || [])) {
+    if (!__sbAdapterIsVisible(node)) continue;
+    const text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim();
+    const normalized = __sbAdapterNormalizeText(text);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    values.push(text);
+  }
+  return values;
+}
+
+function __sbSpotifyGetRowMeta(row, anchor, title) {
+  const imageUrl =
+    row.querySelector('img[src]')?.getAttribute("src") ||
+    row.querySelector('img[srcset]')?.getAttribute("src") ||
+    "";
+  const href = anchor?.getAttribute("href") || "";
+  const artistNames = __sbSpotifyGetVisibleText(
+    row.querySelectorAll('a[href*="/artist/"], [data-testid="entitySubtitle"] a, [aria-colindex="2"] a[href*="/artist/"]')
+  );
+
+  const rawArtists =
+    artistNames.join(", ") ||
+    row.querySelector('[data-testid="entitySubtitle"]')?.innerText ||
+    row.querySelector('[aria-colindex="2"]')?.innerText ||
+    "";
+  const artists = String(rawArtists || "")
+    .split(/[•\n]/)
+    .map((part) => part.trim())
+    .filter((part) => part && !__sbAdapterTextEquals(part, title))
+    .join(", ");
+
+  const album =
+    row.querySelector('a[href*="/album/"]')?.innerText ||
+    row.querySelector('[aria-colindex="3"] a')?.innerText ||
+    row.querySelector('[aria-colindex="3"]')?.innerText ||
+    "";
+
+  const durationText =
+    row.querySelector('[data-testid="track-duration"]')?.innerText ||
+    row.querySelector('[aria-colindex="5"]')?.innerText ||
+    row.querySelector('[aria-colindex="4"]')?.innerText ||
+    __sbSpotifyFindDurationText(row.innerText || row.textContent || "");
+
+  return {
+    artists: String(artists || "").replace(/\s+/g, " ").trim(),
+    album: String(album || "").replace(/\s+/g, " ").trim(),
+    durationText: String(durationText || "").replace(/\s+/g, " ").trim(),
+    imageUrl: String(imageUrl || "").trim(),
+    href: href ? new URL(href, location.origin).href : "",
+  };
+}
+
 function __sbSpotifyGetVisibleTrackEntries() {
   const entries = [];
   const seen = new Set();
@@ -298,11 +368,17 @@ function __sbSpotifyGetVisibleTrackEntries() {
     if (seen.has(key)) return;
     seen.add(key);
 
+    const meta = __sbSpotifyGetRowMeta(row, anchor, title || rowText);
     entries.push({
       row,
       anchor: anchor || row.querySelector('a[href*="/track/"]') || row,
       title: title || rowText,
       rowText,
+      artists: meta.artists,
+      album: meta.album,
+      durationText: meta.durationText,
+      imageUrl: meta.imageUrl,
+      href: meta.href,
     });
   };
 
@@ -339,6 +415,87 @@ function __sbSpotifyGetVisibleTrackEntries() {
   }
 
   return entries;
+}
+
+function __sbSpotifyGetNowPlaying() {
+  const titleEl = __sbAdapterDeepQueryAll([
+    '[data-testid="context-item-link"]',
+    '[data-testid="context-item-info-title"] a',
+    '[data-testid="now-playing-widget"] a[href*="/track/"]',
+    'footer a[href*="/track/"]',
+  ].join(",")).find((el) => __sbAdapterIsVisible(el));
+  const title = String(titleEl?.innerText || titleEl?.textContent || "").replace(/\s+/g, " ").trim();
+  if (!title) return null;
+
+  const artistNodes = __sbAdapterDeepQueryAll([
+    '[data-testid="context-item-info-artist"] a',
+    '[data-testid="context-item-info-subtitles"] a[href*="/artist/"]',
+    '[data-testid="now-playing-widget"] a[href*="/artist/"]',
+    'footer a[href*="/artist/"]',
+  ].join(","));
+  const artists = __sbSpotifyGetVisibleText(artistNodes).join(", ");
+
+  const imageEl = __sbAdapterDeepQueryAll([
+    '[data-testid="cover-art-image"] img',
+    '[data-testid="cover-art-image"]',
+    '[data-testid="now-playing-widget"] img',
+    'footer img[src]',
+  ].join(",")).find((el) => __sbAdapterIsVisible(el));
+  const imageUrl = imageEl?.tagName === "IMG"
+    ? (imageEl.getAttribute("src") || imageEl.src || "")
+    : (imageEl?.querySelector?.("img")?.getAttribute("src") || "");
+
+  const currentTime =
+    __sbAdapterDeepQueryAll('[data-testid="playback-position"], [aria-label*="Playback position"], footer [data-testid="playback-position"]')
+      .find((el) => __sbAdapterIsVisible(el))?.innerText ||
+    "";
+  const durationText =
+    __sbAdapterDeepQueryAll('[data-testid="playback-duration"], [aria-label*="Playback duration"], footer [data-testid="playback-duration"]')
+      .find((el) => __sbAdapterIsVisible(el))?.innerText ||
+    "";
+
+  const pauseButton = __sbAdapterDeepQueryAll([
+    'button[data-testid="control-button-pause"]',
+    'footer button[aria-label*="Pause"]',
+    '[data-testid="player-controls"] button[aria-label*="Pause"]',
+  ].join(",")).find((el) => __sbAdapterIsVisible(el));
+  const playButton = __sbAdapterDeepQueryAll([
+    'button[data-testid="control-button-play"]',
+    'footer button[aria-label*="Play"]',
+    '[data-testid="player-controls"] button[aria-label*="Play"]',
+  ].join(",")).find((el) => __sbAdapterIsVisible(el));
+  const playing = pauseButton ? true : (playButton ? false : Boolean(currentTime && durationText));
+
+  const progressParts = __sbSpotifyParseDurationParts(currentTime);
+  const durationParts = __sbSpotifyParseDurationParts(durationText);
+  const progressRatio = (progressParts && durationParts?.totalSeconds)
+    ? Math.max(0, Math.min(1, progressParts.totalSeconds / durationParts.totalSeconds))
+    : null;
+
+  const deviceEl = __sbAdapterDeepQueryAll([
+    'button[data-testid="device-picker-button"]',
+    'button[aria-label*="device"]',
+    'button[title*="device"]',
+  ].join(",")).find((el) => __sbAdapterIsVisible(el));
+  const deviceName = String(
+    deviceEl?.innerText ||
+    deviceEl?.textContent ||
+    deviceEl?.getAttribute("aria-label") ||
+    deviceEl?.getAttribute("title") ||
+    ""
+  ).replace(/\s+/g, " ").trim();
+
+  return {
+    title,
+    artists,
+    imageUrl: String(imageUrl || "").trim(),
+    href: titleEl?.getAttribute("href") ? new URL(titleEl.getAttribute("href"), location.origin).href : "",
+    progressText: String(currentTime || "").replace(/\s+/g, " ").trim(),
+    durationText: String(durationText || "").replace(/\s+/g, " ").trim(),
+    progressRatio,
+    isPlaying: playing,
+    deviceName,
+  };
 }
 
 async function __sbSpotifyOpenPlaylistByName(playlistName) {
@@ -395,6 +552,37 @@ async function __sbSpotifyPlayTrackFromCurrentPlaylist(songName) {
   }
 
   return { error: `Track "${songName}" was not found in the open playlist.` };
+}
+
+async function __sbSpotifyPlayFirstTrackResult(songName) {
+  const scrollEl = __sbAdapterGetScrollContainer();
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const entries = __sbSpotifyGetVisibleTrackEntries();
+    const target =
+      entries.find((entry) => __sbAdapterTextEquals(entry.title, songName)) ||
+      entries.find((entry) => __sbAdapterTextIncludes(entry.title, songName)) ||
+      entries.find((entry) => __sbAdapterTextIncludes(entry.rowText, songName)) ||
+      entries[0];
+
+    if (target) {
+      const playButton =
+        target.row.querySelector('button[aria-label*="Play"]') ||
+        target.row.querySelector('[data-testid="play-button"]') ||
+        target.row.querySelector('button[aria-label*="play"]');
+
+      if (playButton) __sbAdapterClick(playButton);
+      else __sbAdapterClick(target.anchor);
+      return { success: true, track: target.title };
+    }
+
+    const before = scrollEl.scrollTop;
+    scrollEl.scrollBy({ top: Math.max(scrollEl.clientHeight * 0.75, 360), behavior: "auto" });
+    await __sbAdapterWait(180);
+    if (Math.abs(scrollEl.scrollTop - before) < 8) break;
+  }
+
+  return { error: `No playable Spotify track result was found for "${songName}".` };
 }
 
 async function __sbSpotifyAddTrackToPlaylist(songName, playlistName) {
@@ -848,13 +1036,23 @@ function __sbGetSiteAdapterContext() {
   const host = window.location.hostname;
 
   if (/spotify\.com$/.test(host)) {
+    const visibleTracks = __sbSpotifyGetVisibleTrackEntries().slice(0, 12);
     return {
       site: "spotify",
       url,
       title: document.title,
       currentPlaylistName: __sbSpotifyGetCurrentPlaylistName(),
       visiblePlaylists: __sbSpotifyGetPlaylistLinks().slice(0, 20).map((entry) => entry.text),
-      visibleTracks: __sbSpotifyGetVisibleTrackEntries().slice(0, 15).map((entry) => entry.title),
+      visibleTracks: visibleTracks.map((entry) => entry.title),
+      visibleTrackDetails: visibleTracks.map((entry) => ({
+        title: entry.title,
+        artists: entry.artists,
+        album: entry.album,
+        durationText: entry.durationText,
+        imageUrl: entry.imageUrl,
+        href: entry.href,
+      })),
+      nowPlaying: __sbSpotifyGetNowPlaying(),
     };
   }
 
@@ -1051,6 +1249,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try {
         if (msg.type === "spotifyOpenPlaylist") {
           sendResponse(await __sbSpotifyOpenPlaylistByName(msg.playlistName || ""));
+          return;
+        }
+        if (msg.type === "spotifyPlayFirstTrackResult") {
+          sendResponse(await __sbSpotifyPlayFirstTrackResult(msg.songName || ""));
           return;
         }
         if (msg.type === "spotifyPlayTrackFromCurrentPlaylist") {
@@ -1705,6 +1907,18 @@ let __sbCurrentUtterance = null;
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
+let __sbSpotifyUiState = {
+  active: false,
+  source: "spotify",
+  intent: "",
+  query: "",
+  currentPlaylistName: "",
+  searchResults: [],
+  nowPlaying: null,
+  summary: "",
+  updatedAt: 0,
+};
+let __sbSpotifyRefreshTimer = null;
 
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
@@ -1725,6 +1939,10 @@ if (__sbContextOk()) {
         __sbShowBubble(msg.text, false, { tone: "status" });
         __sbSetStopBtn(true);
       }
+    }
+    if (msg.action === "sbSpotifyState") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbApplySpotifyState(msg.state || {}, { openCard: !!msg.openCard, focusSpotify: !!msg.focusSpotify });
     }
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
@@ -1778,6 +1996,23 @@ function __sbBuildBrainUI() {
     }
     #__sb_brain_btn__.sb-brain-rejected {
       animation: __sb_brain_glow_rejected__ 0.85s ease-in-out infinite;
+    }
+    @keyframes __sb_brain_glow_spotify__ {
+      0%, 100% {
+        filter: drop-shadow(0 2px 10px rgba(29,185,84,0.42));
+        transform: scale(1);
+      }
+      38% {
+        filter: drop-shadow(0 0 22px rgba(30,215,96,0.95)) drop-shadow(0 0 46px rgba(29,185,84,0.52));
+        transform: scale(1.04);
+      }
+      68% {
+        filter: drop-shadow(0 0 16px rgba(145,255,188,0.78)) drop-shadow(0 0 34px rgba(29,185,84,0.32));
+        transform: scale(1.01);
+      }
+    }
+    #__sb_brain_btn__.sb-brain-spotify {
+      animation: __sb_brain_glow_spotify__ 1.7s cubic-bezier(0.2,0.8,0.2,1) infinite;
     }
     #__sb_pill__ {
       display: flex; flex-direction: column;
@@ -1897,6 +2132,46 @@ function __sbBuildBrainUI() {
       pointer-events: none;
     }
     #__sb_bubble__.visible { opacity: 1; pointer-events: all; }
+    #__sb_bubble__.sb-spotify-active {
+      border-color: rgba(109, 255, 160, 0.34);
+      box-shadow: 0 24px 68px rgba(13,30,19,0.28), 0 6px 20px rgba(16,185,129,0.14),
+                  inset 0 1px 0 rgba(255,255,255,0.68), 0 0 0 1px rgba(93,226,142,0.1);
+    }
+    #__sb_bubble__.sb-spotify-active::before {
+      content: "";
+      position: absolute;
+      inset: -18%;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 18%, rgba(167,255,201,0.22), transparent 30%),
+        radial-gradient(circle at 78% 22%, rgba(94,234,212,0.18), transparent 26%),
+        radial-gradient(circle at 50% 75%, rgba(34,197,94,0.12), transparent 32%);
+      filter: blur(18px);
+      opacity: 0.92;
+      animation: __sb_spotify_card_glow__ 4.8s ease-in-out infinite;
+    }
+    #__sb_bubble__.sb-spotify-active::after {
+      content: "";
+      position: absolute;
+      inset: -30% -18%;
+      pointer-events: none;
+      background: linear-gradient(118deg, transparent 28%, rgba(255,255,255,0.3) 46%, rgba(168,255,212,0.18) 54%, transparent 70%);
+      opacity: 0;
+      mix-blend-mode: screen;
+      animation: __sb_spotify_card_glitter__ 3.2s linear infinite;
+    }
+    @keyframes __sb_spotify_card_glow__ {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.78; }
+      33% { transform: translate3d(10px, -8px, 0) scale(1.04); opacity: 0.96; }
+      66% { transform: translate3d(-8px, 10px, 0) scale(0.98); opacity: 0.72; }
+    }
+    @keyframes __sb_spotify_card_glitter__ {
+      0% { transform: translateX(-18%) rotate(0.5deg); opacity: 0; }
+      16% { opacity: 0.2; }
+      48% { opacity: 0.56; }
+      72% { opacity: 0.14; }
+      100% { transform: translateX(18%) rotate(0.5deg); opacity: 0; }
+    }
 
     /* ── card layout fills the resizable container ── */
     .sb-bubble-card {
@@ -2238,6 +2513,306 @@ function __sbBuildBrainUI() {
     }
     .sb-card-a hr { border: none; border-top: 1px solid var(--sb-hr); margin: 14px 0; }
     .sb-card-status { font-size: 13.5px; color: var(--sb-fg-2); line-height: 1.65; }
+    .sb-card-stack.sb-card-stack-spotify {
+      justify-content: flex-start;
+      gap: 18px;
+    }
+    .sb-card-history {
+      display: flex;
+      flex-direction: column;
+    }
+    .sb-spotify-shell {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px;
+      border-radius: 22px;
+      background: linear-gradient(155deg, rgba(255,255,255,0.38), rgba(244,255,247,0.18));
+      border: 1px solid rgba(121, 246, 169, 0.2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.34), 0 14px 34px rgba(16,24,20,0.08);
+      overflow: hidden;
+    }
+    .sb-spotify-shell::before {
+      content: "";
+      position: absolute;
+      inset: -20% 18% auto -18%;
+      height: 160px;
+      pointer-events: none;
+      background: radial-gradient(circle, rgba(103,255,159,0.28), transparent 68%);
+      filter: blur(22px);
+      opacity: 0.75;
+    }
+    .sb-spotify-hero {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px;
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(15,28,20,0.88), rgba(18,48,29,0.72));
+      color: #F4FFF7;
+      overflow: hidden;
+    }
+    .sb-spotify-hero.is-playing::after {
+      content: "";
+      position: absolute;
+      inset: -20% -25%;
+      pointer-events: none;
+      background: linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.16) 46%, rgba(190,255,214,0.18) 54%, transparent 72%);
+      mix-blend-mode: screen;
+      animation: __sb_spotify_panel_sheen__ 4s linear infinite;
+    }
+    @keyframes __sb_spotify_panel_sheen__ {
+      0% { transform: translateX(-20%); opacity: 0; }
+      20% { opacity: 0.3; }
+      55% { opacity: 0.62; }
+      100% { transform: translateX(18%); opacity: 0; }
+    }
+    .sb-spotify-hero-top {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .sb-spotify-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(241,255,246,0.92);
+    }
+    .sb-spotify-badge::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #64FF9F;
+      box-shadow: 0 0 10px rgba(100,255,159,0.7);
+      flex-shrink: 0;
+    }
+    .sb-spotify-badge.subtle::before {
+      background: rgba(255,255,255,0.72);
+      box-shadow: none;
+    }
+    .sb-spotify-hero-main {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+    }
+    .sb-spotify-cover {
+      position: relative;
+      width: 82px;
+      height: 82px;
+      border-radius: 22px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.12);
+      box-shadow: 0 16px 28px rgba(0,0,0,0.26);
+    }
+    .sb-spotify-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .sb-spotify-cover-fallback {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      background: radial-gradient(circle at 30% 20%, rgba(104,255,165,0.34), rgba(255,255,255,0.06));
+    }
+    .sb-spotify-copy {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sb-spotify-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(203,255,220,0.76);
+      font-weight: 700;
+    }
+    .sb-spotify-title {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.08;
+      font-weight: 700;
+      color: #F7FFF8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sb-spotify-subtitle {
+      font-size: 14px;
+      line-height: 1.45;
+      color: rgba(235,255,241,0.84);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sb-spotify-meta {
+      font-size: 12px;
+      line-height: 1.45;
+      color: rgba(210,244,220,0.72);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sb-spotify-progress {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .sb-spotify-progress-bar {
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      overflow: hidden;
+    }
+    .sb-spotify-progress-bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #68FFAA 0%, #C5FFE2 100%);
+      box-shadow: 0 0 18px rgba(104,255,170,0.48);
+    }
+    .sb-spotify-progress-times {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+      color: rgba(230,255,236,0.72);
+    }
+    .sb-spotify-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
+      gap: 12px;
+    }
+    .sb-spotify-block {
+      min-width: 0;
+      padding: 13px 13px 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.42);
+      border: 1px solid rgba(255,255,255,0.42);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.34);
+    }
+    .sb-spotify-section-head {
+      margin-bottom: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #3A5C45;
+    }
+    .sb-spotify-results {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .sb-spotify-result {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 10px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.5);
+      border: 1px solid rgba(255,255,255,0.35);
+    }
+    .sb-spotify-result.is-current {
+      background: rgba(103,255,159,0.14);
+      border-color: rgba(103,255,159,0.32);
+      box-shadow: 0 10px 18px rgba(29,185,84,0.08);
+    }
+    .sb-spotify-result img,
+    .sb-spotify-result-art {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: rgba(0,0,0,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .sb-spotify-result-copy {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .sb-spotify-result-title,
+    .sb-spotify-result-sub,
+    .sb-spotify-result-meta {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sb-spotify-result-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #193024;
+    }
+    .sb-spotify-result-sub {
+      font-size: 12px;
+      color: #4C6657;
+    }
+    .sb-spotify-result-meta,
+    .sb-spotify-duration {
+      font-size: 11px;
+      color: #6C8376;
+    }
+    .sb-spotify-about-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #274335;
+    }
+    .sb-spotify-about-line strong {
+      color: #163224;
+    }
+    .sb-spotify-empty {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: #587061;
+    }
+    @media (max-width: 620px) {
+      .sb-spotify-hero-main {
+        grid-template-columns: 66px minmax(0, 1fr);
+      }
+      .sb-spotify-cover {
+        width: 66px;
+        height: 66px;
+        border-radius: 18px;
+      }
+      .sb-spotify-title {
+        font-size: 18px;
+      }
+      .sb-spotify-grid {
+        grid-template-columns: 1fr;
+      }
+    }
     .sb-card-footer {
       position: relative; display: flex; align-items: center; gap: 5px;
       padding: 10px 12px 12px; flex-shrink: 0;
@@ -2465,6 +3040,13 @@ function __sbBuildBrainUI() {
     if (__sbHeadphoneMode && !__sbInputOpen) {
       // Open bar so user can stop headphone mode via the headphone button
       __sbToggleInput(true);
+    } else if (__sbHasSpotifySurface()) {
+      const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+      if (cardOpen) {
+        __sbCollapseCard();
+      } else {
+        __sbRenderSpotifyPanel({ openCard: true, focusInput: false });
+      }
     } else {
       __sbToggleInput(!__sbInputOpen);
     }
@@ -2698,6 +3280,7 @@ function __sbBuildBrainUI() {
 
   window.__sbForcedConnector = __sbNormalizeConnectorName(window.__sbForcedConnector) || "auto";
   __sbRefreshConnectorUi();
+  __sbSyncSpotifyVisualState();
 }
 
 function __sbDetectPageTheme() {
@@ -3979,6 +4562,250 @@ function __sbPulseFollowupBar() {
   setTimeout(() => footer.classList.remove("sb-followup-glow"), 850);
 }
 
+function __sbNormalizeSpotifyTrack(track = {}) {
+  if (!track || typeof track !== "object") return null;
+  const title = String(track.title || track.name || "").replace(/\s+/g, " ").trim();
+  if (!title) return null;
+  const artists = Array.isArray(track.artists)
+    ? track.artists.map((item) => String(item || "").trim()).filter(Boolean).join(", ")
+    : String(track.artists || "").replace(/\s+/g, " ").trim();
+  const album = String(track.album || "").replace(/\s+/g, " ").trim();
+  const durationText = String(track.durationText || track.duration || "").replace(/\s+/g, " ").trim();
+  const imageUrl = String(track.imageUrl || track.image || track.albumArt || "").trim();
+  const href = String(track.href || track.url || "").trim();
+  const progressText = String(track.progressText || "").replace(/\s+/g, " ").trim();
+  const deviceName = String(track.deviceName || "").replace(/\s+/g, " ").trim();
+  let progressRatio = typeof track.progressRatio === "number" ? track.progressRatio : null;
+  if (progressRatio == null && progressText && durationText) {
+    const progressParts = __sbSpotifyParseDurationParts(progressText);
+    const durationParts = __sbSpotifyParseDurationParts(durationText);
+    if (progressParts && durationParts?.totalSeconds) {
+      progressRatio = Math.max(0, Math.min(1, progressParts.totalSeconds / durationParts.totalSeconds));
+    }
+  }
+  return {
+    title,
+    artists,
+    album,
+    durationText,
+    imageUrl,
+    href,
+    progressText,
+    progressRatio,
+    deviceName,
+    isPlaying: Boolean(track.isPlaying),
+  };
+}
+
+function __sbHasSpotifySurface() {
+  return Boolean(
+    __sbSpotifyUiState?.active
+    && (
+      __sbSpotifyUiState.nowPlaying
+      || __sbSpotifyUiState.query
+      || (__sbSpotifyUiState.searchResults || []).length
+    )
+  );
+}
+
+function __sbSpotifyIsPlaying() {
+  return Boolean(__sbSpotifyUiState?.nowPlaying?.isPlaying);
+}
+
+function __sbSyncSpotifyVisualState() {
+  const brain = document.getElementById("__sb_brain_btn__");
+  const bubble = document.getElementById("__sb_bubble__");
+  const active = __sbSpotifyIsPlaying();
+  brain?.classList.toggle("sb-brain-spotify", active);
+  bubble?.classList.toggle("sb-spotify-active", active);
+}
+
+function __sbEnsureSpotifyRefreshLoop() {
+  if (__sbSpotifyRefreshTimer) {
+    clearInterval(__sbSpotifyRefreshTimer);
+    __sbSpotifyRefreshTimer = null;
+  }
+  if (!__sbHasSpotifySurface()) {
+    __sbSyncSpotifyVisualState();
+    return;
+  }
+  __sbSpotifyRefreshTimer = setInterval(() => {
+    __sbRefreshSpotifyStateFromPage({ rerender: document.getElementById("__sb_card_wrap__")?.classList.contains("visible") });
+  }, 2500);
+  __sbSyncSpotifyVisualState();
+}
+
+function __sbRefreshSpotifyStateFromPage(options = {}) {
+  if (!__sbHasSpotifySurface()) return;
+  const siteContext = __sbGetSiteAdapterContext();
+  if (siteContext?.site !== "spotify") return;
+  const nowPlaying = __sbNormalizeSpotifyTrack(siteContext.nowPlaying || null);
+  const searchResults = Array.isArray(siteContext.visibleTrackDetails)
+    ? siteContext.visibleTrackDetails.map((track) => __sbNormalizeSpotifyTrack(track)).filter(Boolean).slice(0, 6)
+    : (__sbSpotifyUiState.searchResults || []);
+
+  __sbSpotifyUiState = {
+    ...__sbSpotifyUiState,
+    source: "spotify",
+    currentPlaylistName: String(siteContext.currentPlaylistName || __sbSpotifyUiState.currentPlaylistName || "").trim(),
+    nowPlaying: nowPlaying || __sbSpotifyUiState.nowPlaying,
+    searchResults: searchResults.length ? searchResults : (__sbSpotifyUiState.searchResults || []),
+    updatedAt: Date.now(),
+  };
+  __sbSyncSpotifyVisualState();
+  if (options.rerender) __sbRenderSpotifyPanel({ openCard: false, focusInput: false });
+}
+
+function __sbGetSpotifyReferenceTrack() {
+  return __sbSpotifyUiState.nowPlaying || (__sbSpotifyUiState.searchResults || [])[0] || null;
+}
+
+function __sbBuildSpotifyResultsHtml() {
+  const results = (__sbSpotifyUiState.searchResults || []).slice(0, 5);
+  if (!results.length) {
+    return `<div class="sb-spotify-empty">Search results will show here as soon as Spotify loads the track list.</div>`;
+  }
+  const currentTitle = __sbAdapterNormalizeText(__sbSpotifyUiState.nowPlaying?.title || "");
+  return results.map((track) => {
+    const isCurrent = currentTitle && __sbAdapterNormalizeText(track.title) === currentTitle;
+    const artHtml = track.imageUrl
+      ? `<img src="${__sbEscapeHtml(track.imageUrl)}" alt="${__sbEscapeHtml(track.title)} cover art" />`
+      : `<div class="sb-spotify-result-art">♪</div>`;
+    const metaBits = [track.album, track.durationText].filter(Boolean).join(" · ");
+    return `
+      <div class="sb-spotify-result${isCurrent ? " is-current" : ""}">
+        ${artHtml}
+        <div class="sb-spotify-result-copy">
+          <div class="sb-spotify-result-title">${__sbEscapeHtml(track.title)}</div>
+          <div class="sb-spotify-result-sub">${__sbEscapeHtml(track.artists || "Spotify")}</div>
+          <div class="sb-spotify-result-meta">${__sbEscapeHtml(metaBits || "Loaded from Spotify search")}</div>
+        </div>
+        <div class="sb-spotify-duration">${isCurrent ? "Live" : __sbEscapeHtml(track.durationText || "")}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function __sbBuildSpotifyAboutHtml() {
+  const track = __sbGetSpotifyReferenceTrack();
+  if (!track) {
+    return `<div class="sb-spotify-empty">Ask Branu to play a song on Spotify and this glass modal will turn into the live music view.</div>`;
+  }
+  const lines = [];
+  if (track.artists) lines.push(`<div class="sb-spotify-about-line"><strong>Artist</strong><br>${__sbEscapeHtml(track.artists)}</div>`);
+  if (track.album) lines.push(`<div class="sb-spotify-about-line"><strong>Album</strong><br>${__sbEscapeHtml(track.album)}</div>`);
+  if (__sbSpotifyUiState.query) lines.push(`<div class="sb-spotify-about-line"><strong>Search</strong><br>${__sbEscapeHtml(__sbSpotifyUiState.query)}</div>`);
+  if (__sbSpotifyUiState.currentPlaylistName) lines.push(`<div class="sb-spotify-about-line"><strong>Context</strong><br>${__sbEscapeHtml(__sbSpotifyUiState.currentPlaylistName)}</div>`);
+  if (track.deviceName) lines.push(`<div class="sb-spotify-about-line"><strong>Device</strong><br>${__sbEscapeHtml(track.deviceName)}</div>`);
+  if (track.durationText || track.progressText) {
+    const timing = [track.progressText, track.durationText].filter(Boolean).join(" / ");
+    lines.push(`<div class="sb-spotify-about-line"><strong>Timing</strong><br>${__sbEscapeHtml(timing)}</div>`);
+  }
+  if (__sbSpotifyUiState.summary) {
+    lines.push(`<div class="sb-spotify-about-line"><strong>Braino</strong><br>${__sbEscapeHtml(__sbSpotifyUiState.summary)}</div>`);
+  }
+  return lines.join("") || `<div class="sb-spotify-empty">Spotify is connected, but I need a live track to show details here.</div>`;
+}
+
+function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
+  if (!__sbHasSpotifySurface()) return "";
+  const track = __sbGetSpotifyReferenceTrack();
+  const topBadges = [
+    `<span class="sb-spotify-badge">Spotify live</span>`,
+    __sbSpotifyUiState.query ? `<span class="sb-spotify-badge subtle">Search: ${__sbEscapeHtml(__sbSpotifyUiState.query)}</span>` : "",
+    track?.deviceName ? `<span class="sb-spotify-badge subtle">Device: ${__sbEscapeHtml(track.deviceName)}</span>` : "",
+  ].filter(Boolean).join("");
+  const coverHtml = track?.imageUrl
+    ? `<div class="sb-spotify-cover"><img src="${__sbEscapeHtml(track.imageUrl)}" alt="${__sbEscapeHtml(track.title)} cover art" /></div>`
+    : `<div class="sb-spotify-cover"><div class="sb-spotify-cover-fallback">♪</div></div>`;
+  const metaBits = [track?.album, track?.durationText].filter(Boolean).join(" · ");
+  const progressWidth = typeof track?.progressRatio === "number"
+    ? `${Math.max(4, Math.min(100, Math.round(track.progressRatio * 100)))}%`
+    : "14%";
+  const fallbackHistoryHtml = __sbSpotifyUiState.summary
+    ? __sbBuildCardTurnHtml({ prompt: __sbSpotifyUiState.query || "Spotify", answer: __sbSpotifyUiState.summary }, { rich: false, answerText: __sbSpotifyUiState.summary })
+    : "";
+  const historyHtml = extraHistoryHtml || fallbackHistoryHtml;
+
+  return `
+    <div class="sb-card-stack sb-card-stack-spotify">
+      <div class="sb-spotify-shell">
+        <div class="sb-spotify-hero${__sbSpotifyIsPlaying() ? " is-playing" : ""}">
+          <div class="sb-spotify-hero-top">${topBadges}</div>
+          <div class="sb-spotify-hero-main">
+            ${coverHtml}
+            <div class="sb-spotify-copy">
+              <div class="sb-spotify-eyebrow">${__sbSpotifyIsPlaying() ? "Now playing" : "Ready on Spotify"}</div>
+              <h3 class="sb-spotify-title">${__sbEscapeHtml(track?.title || "Waiting for Spotify…")}</h3>
+              <div class="sb-spotify-subtitle">${__sbEscapeHtml(track?.artists || "Braino will pull the live song details here.")}</div>
+              <div class="sb-spotify-meta">${__sbEscapeHtml(metaBits || "Transparent Branu modal, but in music mode.")}</div>
+            </div>
+          </div>
+          <div class="sb-spotify-progress">
+            <div class="sb-spotify-progress-bar"><span style="width:${progressWidth}"></span></div>
+            <div class="sb-spotify-progress-times">
+              <span>${__sbEscapeHtml(track?.progressText || "Live")}</span>
+              <span>${__sbEscapeHtml(track?.durationText || "Spotify")}</span>
+            </div>
+          </div>
+        </div>
+        <div class="sb-spotify-grid">
+          <div class="sb-spotify-block">
+            <div class="sb-spotify-section-head">Search Results</div>
+            <div class="sb-spotify-results">${__sbBuildSpotifyResultsHtml()}</div>
+          </div>
+          <div class="sb-spotify-block">
+            <div class="sb-spotify-section-head">About This Song</div>
+            <div class="sb-spotify-about-copy">${__sbBuildSpotifyAboutHtml()}</div>
+          </div>
+        </div>
+      </div>
+      ${historyHtml ? `<div class="sb-card-history">${historyHtml}</div>` : ""}
+    </div>
+  `;
+}
+
+function __sbRenderSpotifyPanel(options = {}) {
+  if (!__sbHasSpotifySurface()) return;
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
+  scroll.innerHTML = __sbBuildSpotifyPanelHtml(historyHtml);
+  scroll.scrollTop = 0;
+  if (options.openCard) __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
+  __sbEnsureSpotifyRefreshLoop();
+  if (options.focusInput) {
+    const input = document.getElementById("__sb_card_input__");
+    input?.focus();
+  }
+}
+
+function __sbApplySpotifyState(state = {}, options = {}) {
+  const nowPlaying = __sbNormalizeSpotifyTrack(state.nowPlaying || null);
+  const searchResults = Array.isArray(state.searchResults)
+    ? state.searchResults.map((track) => __sbNormalizeSpotifyTrack(track)).filter(Boolean).slice(0, 6)
+    : (__sbSpotifyUiState.searchResults || []);
+
+  __sbSpotifyUiState = {
+    ...__sbSpotifyUiState,
+    active: state.active !== false,
+    source: "spotify",
+    intent: String(state.intent || __sbSpotifyUiState.intent || "").trim(),
+    query: String(state.query || __sbSpotifyUiState.query || "").trim(),
+    currentPlaylistName: String(state.currentPlaylistName || __sbSpotifyUiState.currentPlaylistName || "").trim(),
+    nowPlaying: nowPlaying || __sbSpotifyUiState.nowPlaying,
+    searchResults: searchResults.length ? searchResults : (__sbSpotifyUiState.searchResults || []),
+    summary: String(state.summary || __sbSpotifyUiState.summary || "").trim(),
+    updatedAt: Date.now(),
+  };
+
+  __sbEnsureSpotifyRefreshLoop();
+  if (options.focusSpotify || options.openCard || document.getElementById("__sb_card_wrap__")?.classList.contains("visible")) {
+    __sbRenderSpotifyPanel({ openCard: !!options.openCard, focusInput: false });
+  }
+}
+
 function __sbBuildCardTurnHtml(turn = {}, options = {}) {
   const prompt = typeof turn.prompt === "string" ? turn.prompt : "";
   const answer = typeof options.answerText === "string"
@@ -4002,8 +4829,14 @@ function __sbRenderCardHistory(scroll, options = {}) {
         answerText: options.pendingText || "Thinking…",
       })
     : "";
-  scroll.innerHTML = `<div class="sb-card-stack">${historyHtml}${pendingHtml}</div>`;
-  __sbScrollCardToLatest(scroll);
+  const stackHtml = `${historyHtml}${pendingHtml}`;
+  if (__sbHasSpotifySurface()) {
+    scroll.innerHTML = __sbBuildSpotifyPanelHtml(stackHtml);
+    scroll.scrollTop = 0;
+  } else {
+    scroll.innerHTML = `<div class="sb-card-stack">${stackHtml}</div>`;
+    __sbScrollCardToLatest(scroll);
+  }
 }
 
 function __sbShowThinking(scroll, promptText = "", pendingText = "Thinking…") {
@@ -4026,10 +4859,16 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
     { prompt: options.prompt || "", answer: String(text || "") },
     { rich, answerText: String(text || "") },
   );
-  scroll.innerHTML = `<div class="sb-card-stack">${turnHtml}</div>`;
-  __sbScrollCardToLatest(scroll);
+  if (__sbHasSpotifySurface()) {
+    scroll.innerHTML = __sbBuildSpotifyPanelHtml(turnHtml);
+    scroll.scrollTop = 0;
+  } else {
+    scroll.innerHTML = `<div class="sb-card-stack">${turnHtml}</div>`;
+    __sbScrollCardToLatest(scroll);
+  }
   __sbOpenCard({ rich });
   __sbSyncSpeakButtons();
+  __sbSyncSpotifyVisualState();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (autoHide) __sbBubbleTimer = setTimeout(() => __sbCollapseCard(), 8000);
 }

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   compactText,
   corsHeaders,
+  createSpotifyError,
   createSpotifyAdmin,
   getSpotifyConnection,
   getValidSpotifyAccessToken,
@@ -10,6 +11,7 @@ import {
   normalizeSpotifyTrack,
   requireAuthedSpotifyUser,
   requireSpotifyEnv,
+  serializeSpotifyError,
 } from "../_shared/spotify.ts";
 
 async function fetchSpotifyOptionalJson(url: string, accessToken: string, logPrefix: string) {
@@ -24,7 +26,10 @@ async function fetchSpotifyOptionalJson(url: string, accessToken: string, logPre
   if (!res.ok) {
     const errorText = await res.text();
     console.error(`${logPrefix} spotify api error:`, errorText);
-    throw new Error(compactText(errorText) || "Spotify request failed.");
+    throw createSpotifyError(compactText(errorText) || "Spotify request failed.", {
+      spotifyStatus: res.status,
+      reconnectRequired: res.status === 401,
+    });
   }
 
   return await res.json();
@@ -75,8 +80,7 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("spotify-player-state error:", error);
-    return json({
-      error: error instanceof Error ? error.message : "Unknown error",
-    }, 500);
+    const { payload, status } = serializeSpotifyError(error);
+    return json(payload, status);
   }
 });

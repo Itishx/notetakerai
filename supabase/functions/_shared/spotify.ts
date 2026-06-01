@@ -27,6 +27,11 @@ export type SpotifyEnv = {
   redirectUri: string;
 };
 
+type SpotifyTaggedError = Error & {
+  spotifyStatus?: number;
+  reconnectRequired?: boolean;
+};
+
 export function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -58,10 +63,40 @@ export function serializeError(error: unknown) {
   }
 }
 
+export function createSpotifyError(
+  message: string,
+  options?: {
+    spotifyStatus?: number;
+    reconnectRequired?: boolean;
+  },
+) {
+  const error = new Error(message) as SpotifyTaggedError;
+  if (typeof options?.spotifyStatus === "number") {
+    error.spotifyStatus = options.spotifyStatus;
+  }
+  if (options?.reconnectRequired) {
+    error.reconnectRequired = true;
+  }
+  return error;
+}
+
+export function serializeSpotifyError(error: unknown) {
+  const tagged = error as SpotifyTaggedError | null;
+  const reconnectRequired = Boolean(tagged?.reconnectRequired) || tagged?.spotifyStatus === 401;
+  const payload = serializeError(error);
+
+  return {
+    payload: reconnectRequired
+      ? { ...payload, reconnectRequired: true }
+      : payload,
+    status: reconnectRequired ? 400 : 500,
+  };
+}
+
 export function requireSpotifyEnv(req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const clientId = Deno.env.get("SPOTIFY_CLIENT_ID") || "";
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET") || "";
@@ -84,7 +119,7 @@ export function requireSpotifyEnv(req: Request) {
 
 export function requireSpotifyServerEnv() {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const clientId = Deno.env.get("SPOTIFY_CLIENT_ID") || "";
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET") || "";
@@ -135,7 +170,7 @@ export async function getSpotifyConnection(admin: ReturnType<typeof createClient
 
   if (error) throw error;
   if (!data) {
-    throw new Error("Spotify is not connected yet.");
+    throw createSpotifyError("Spotify is not connected yet.", { reconnectRequired: true });
   }
 
   return data as SpotifyConnection;
@@ -160,7 +195,9 @@ export async function getValidSpotifyAccessToken({
   }
 
   if (!connection.refresh_token) {
-    throw new Error("Spotify connection is missing a refresh token. Please reconnect Spotify.");
+    throw createSpotifyError("Spotify connection is missing a refresh token. Please reconnect Spotify.", {
+      reconnectRequired: true,
+    });
   }
 
   const refreshRes = await fetch("https://accounts.spotify.com/api/token", {
@@ -178,7 +215,10 @@ export async function getValidSpotifyAccessToken({
   if (!refreshRes.ok) {
     const errorText = await refreshRes.text();
     console.error(`${logPrefix} refresh error:`, errorText);
-    throw new Error(`Failed to refresh Spotify access. ${compactText(errorText)}`);
+    throw createSpotifyError(`Failed to refresh Spotify access. ${compactText(errorText)}`, {
+      spotifyStatus: refreshRes.status,
+      reconnectRequired: refreshRes.status === 400 || refreshRes.status === 401,
+    });
   }
 
   const refreshed = await refreshRes.json();
@@ -212,7 +252,10 @@ export async function spotifyRequestRaw(url: string, init: RequestInit, logPrefi
   if (!res.ok) {
     const errorText = await res.text();
     console.error(`${logPrefix} spotify api error:`, errorText);
-    throw new Error(compactText(errorText) || "Spotify request failed.");
+    throw createSpotifyError(compactText(errorText) || "Spotify request failed.", {
+      spotifyStatus: res.status,
+      reconnectRequired: res.status === 401,
+    });
   }
   return res;
 }

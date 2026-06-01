@@ -2157,6 +2157,16 @@ function parseAdapterTask(task, siteContext) {
     return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
   }
 
+  const quotedDirectPlay = raw.match(/play\s+["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
+  if (onSpotify && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
+    return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
+  }
+
+  const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
+  if (onSpotify && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
+    return { adapter: "spotify", intent: "playSong", song: directPlay[1].trim() };
+  }
+
   // "add this song to Spotify" — infer song from current page, save to Liked Songs or playlist
   const addThisQuoted = raw.match(/(?:add|save)\s+this(?:\s+(?:song|track|video|tune))?\s+to\s+(?:my\s+)?(?:playlist\s+)?[""](.+?)[""](?:\s+(?:playlist\s+)?(?:on\s+)?spotify)?/i);
   if (addThisQuoted) {
@@ -2528,6 +2538,44 @@ async function tryRunPopupSiteAdapter(task, thinkingBlock, history, options = {}
     });
 
     return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "spotify" && parsed.intent === "playSong") {
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Open Spotify search for "${parsed.song}"`,
+      type: "navigate",
+      onStatus,
+      run: async () => {
+        const result = await executeAgentAction({
+          type: "navigate",
+          url: buildSpotifyTrackSearchUrl(parsed.song),
+          description: `Open Spotify search for "${parsed.song}"`,
+        });
+        if (!result?.error) {
+          await waitForTabReady(6000);
+          await new Promise((resolve) => setTimeout(resolve, 900));
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop()) throw new Error("Stopped.");
+
+    await runPopupAdapterStep({
+      thinkingBlock,
+      history,
+      description: `Play the best Spotify result for "${parsed.song}"`,
+      type: "spotifyPlayFirstTrackResult",
+      onStatus,
+      run: () => executeSiteAdapterAction({
+        type: "spotifyPlayFirstTrackResult",
+        songName: parsed.song,
+      }),
+    });
+
+    return `Playing **${parsed.song}** on Spotify.`;
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "addCurrentPageSong") {
@@ -5278,6 +5326,25 @@ async function runRemoteCommand(cmd, token) {
           executeSiteAdapterAction({ type: "spotifyPlayTrackFromCurrentPlaylist", songName: parsed.song })
         );
         return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+      }
+
+      if (parsed.adapter === "spotify" && parsed.intent === "playSong") {
+        await runRemoteAdapterStep(`Open Spotify search for "${parsed.song}"`, "navigate", async () => {
+          const result = await executeAgentAction({
+            type: "navigate",
+            url: buildSpotifyTrackSearchUrl(parsed.song),
+            description: `Open Spotify search for "${parsed.song}"`,
+          });
+          if (!result?.error) {
+            await waitForTabReady(6000);
+            await new Promise(r => setTimeout(r, 900));
+          }
+          return result;
+        });
+        await runRemoteAdapterStep(`Play the best Spotify result for "${parsed.song}"`, "spotifyPlayFirstTrackResult", () =>
+          executeSiteAdapterAction({ type: "spotifyPlayFirstTrackResult", songName: parsed.song })
+        );
+        return `Playing **${parsed.song}** on Spotify.`;
       }
 
       if (parsed.adapter === "spotify" && parsed.intent === "addCurrentPageSong") {

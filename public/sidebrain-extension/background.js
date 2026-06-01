@@ -358,10 +358,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const persona = await bgLoadXPersona();
       const xReplyPrompt = bgBuildXReplyPrompt({ handle, builderPrompt, persona });
 
-      fetch(`${BG_API_BASE}/chat-about-notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      bgChatFetch({
           notes: '',
           chatHistory: [
             {
@@ -381,8 +378,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             { role: 'assistant', content: 'building Braino right now. ai browser companion that can actually act on the tab for you. trybraino.com' },
           ],
           message: `@${handle || 'user'}: "${tweetText}"`,
-        }),
-      })
+        })
         .then(r => r.json())
         .then(data => sendResponse({ reply: bgCleanXReply(data?.reply || data?.response || null) || null }))
         .catch(() => sendResponse({ reply: null }));
@@ -568,6 +564,19 @@ const BG_SUPABASE_URL = "https://suwhgaxxdizowbyjlljj.supabase.co";
 const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
 const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
+
+async function bgChatFetch(body) {
+  const { authToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
+  return fetch(`${BG_API_BASE}/chat-about-notes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: BG_SUPABASE_ANON_KEY,
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
 
 let bgXPersonaCache = null;
 let bgXPersonaCacheExpiry = 0;
@@ -958,6 +967,49 @@ function bgBrainUpdate(tabId, text, final = false) {
   chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final }, () => { void chrome.runtime.lastError; });
 }
 
+async function bgSendInlineUiMessage(tabId, message) {
+  if (!tabId) return null;
+  return new Promise((resolve) => {
+    function send(retrying) {
+      chrome.tabs.sendMessage(tabId, message, (res) => {
+        if (chrome.runtime.lastError) {
+          if (retrying) { resolve(null); return; }
+          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+            if (chrome.runtime.lastError) { resolve(null); return; }
+            setTimeout(() => send(true), 250);
+          });
+        } else {
+          resolve(res || null);
+        }
+      });
+    }
+    send(false);
+  });
+}
+
+async function bgBuildSpotifyUiState(tabId, base = {}) {
+  const siteContext = await bgGetSiteAdapterContext(tabId);
+  return {
+    active: true,
+    source: "spotify",
+    intent: String(base.intent || "").trim(),
+    query: String(base.query || "").trim(),
+    currentPlaylistName: String(siteContext?.currentPlaylistName || "").trim(),
+    searchResults: Array.isArray(siteContext?.visibleTrackDetails) ? siteContext.visibleTrackDetails.slice(0, 6) : [],
+    nowPlaying: siteContext?.nowPlaying || null,
+    summary: String(base.summary || "").trim(),
+  };
+}
+
+function bgPushSpotifyState(tabId, state, options = {}) {
+  void bgSendInlineUiMessage(tabId, {
+    action: "sbSpotifyState",
+    state,
+    openCard: !!options.openCard,
+    focusSpotify: !!options.focusSpotify,
+  });
+}
+
 async function bgSaveAgentTask(tabId, task, result) {
   try {
     const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
@@ -1297,6 +1349,16 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
   }
 
+  const quotedDirectPlay = raw.match(/play\s+["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
+  if (onSpotify && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
+    return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
+  }
+
+  const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
+  if (onSpotify && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
+    return { adapter: "spotify", intent: "playSong", song: directPlay[1].trim() };
+  }
+
   // "add this song to Spotify" — infer song from current page, save to Liked Songs or playlist
   const addThisQuoted = raw.match(/(?:add|save)\s+this(?:\s+(?:song|track|video|tune))?\s+to\s+(?:my\s+)?(?:playlist\s+)?[""](.+?)[""](?:\s+(?:playlist\s+)?(?:on\s+)?spotify)?/i);
   if (addThisQuoted) {
@@ -1466,10 +1528,7 @@ async function bgBuildDriveOrganizationPlan(files) {
     return { folders: [], moves: [] };
   }
 
-  const response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const response = await bgChatFetch({
       pageContext: {
         title: "Google Drive file inventory",
         url: "https://drive.google.com",
@@ -1492,7 +1551,6 @@ Rules:
 - Favor simple, human folder names like Finance, Hiring, Meetings, Decks, Docs, Legal, Product, Misc.
 - Do not invent fileIds.
 - Do not include explanations outside JSON.`,
-    }),
   });
 
   if (!response.ok) {
@@ -1651,7 +1709,59 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       }),
     });
 
+    await bgDelay(1000);
+    bgPushSpotifyState(tabId, await bgBuildSpotifyUiState(tabId, {
+      intent: parsed.intent,
+      query: parsed.song,
+      summary: `Playing ${parsed.song} from ${parsed.playlist} on Spotify.`,
+    }), { focusSpotify: true });
+
     return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "spotify" && parsed.intent === "playSong") {
+    await bgRunAdapterStep({
+      history,
+      description: `Open Spotify search for "${parsed.song}"`,
+      type: "navigate",
+      onProgress,
+      onResult,
+      run: async () => {
+        const result = await bgExecuteAgentAction(tabId, {
+          type: "navigate",
+          url: bgBuildSpotifyTrackSearchUrl(parsed.song),
+          description: `Open Spotify search for "${parsed.song}"`,
+        });
+        if (!result?.error) {
+          await bgWaitForTabReady(tabId, 6000);
+          await bgDelay(900);
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop?.()) throw new Error("Stopped.");
+
+    await bgRunAdapterStep({
+      history,
+      description: `Play the best Spotify result for "${parsed.song}"`,
+      type: "spotifyPlayFirstTrackResult",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "spotifyPlayFirstTrackResult",
+        songName: parsed.song,
+      }),
+    });
+
+    await bgDelay(1000);
+    bgPushSpotifyState(tabId, await bgBuildSpotifyUiState(tabId, {
+      intent: parsed.intent,
+      query: parsed.song,
+      summary: `Playing ${parsed.song} on Spotify.`,
+    }), { focusSpotify: true });
+
+    return `Playing **${parsed.song}** on Spotify.`;
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "addCurrentPageSong") {
@@ -2338,20 +2448,12 @@ What actions should be taken next? Return a single JSON object, OR a JSON array 
   const fetchBody = JSON.stringify({ notes: agentSystemPrompt, message: userMessage });
   let response;
   try {
-    response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: fetchBody,
-    });
+    response = await bgChatFetch(fetchBody);
   } catch (e) {
     if (e instanceof TypeError) {
       // Service worker woke cold — wait and retry once
       await new Promise(r => setTimeout(r, 1200));
-      response = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: fetchBody,
-      });
+      response = await bgChatFetch(fetchBody);
     } else {
       throw e;
     }
@@ -2469,11 +2571,7 @@ Rules:
   const userPrompt = `TASK: ${task}\nCURRENT PAGE:\nURL: ${pageInfo.url || "(unknown)"}\nTitle: ${pageInfo.title || "(unknown)"}\nPlan the workflow.`;
 
   try {
-    const res = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
-    });
+    const res = await bgChatFetch({ notes: systemPrompt, message: userPrompt });
     if (!res.ok) return null;
     const data = await res.json();
     const reply = (data.reply || "").trim();
@@ -2501,11 +2599,7 @@ async function bgReplanWorkflow(task, completedSteps, remainingSteps, pageInfo, 
   const systemPrompt = `You revise a browser automation plan after a step failed.\nReturn ONLY a JSON array. No prose.\n[{"id":N,"goal":"...","successSignal":"..."}]`;
   const userPrompt = `ORIGINAL TASK: ${task}\nCOMPLETED:\n${completedSteps.map(s => `${s.id}. ${s.goal}`).join("\n") || "None."}\nFAILED AT: ${remainingSteps[0]?.goal || "unknown"} — Error: ${lastError}\nREMAINING:\n${remainingSteps.map(s => `${s.id}. ${s.goal}`).join("\n")}\nPAGE: ${pageInfo.url || ""} | ${pageInfo.title || ""}\nTEXT: ${(pageInfo.bodyText || "").slice(0, 500)}\nRevise remaining steps, starting from id ${(completedSteps.length || 0) + 1}.`;
   try {
-    const res = await fetch(`${BG_API_BASE}/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: systemPrompt, message: userPrompt }),
-    });
+    const res = await bgChatFetch({ notes: systemPrompt, message: userPrompt });
     if (!res.ok) return remainingSteps;
     const data = await res.json();
     const reply = (data.reply || "").trim();

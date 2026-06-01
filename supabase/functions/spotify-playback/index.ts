@@ -7,6 +7,7 @@ import {
   json,
   requireAuthedSpotifyUser,
   requireSpotifyEnv,
+  serializeSpotifyError,
   spotifyRequestRaw,
 } from "../_shared/spotify.ts";
 
@@ -116,8 +117,7 @@ serve(async (req) => {
     return json({ ok: true });
   } catch (error) {
     console.error("spotify-playback error:", error);
-    return json({
-      error: error instanceof Error ? error.message : "Unknown error",
-    }, 500);
+    const { payload, status } = serializeSpotifyError(error);
+    return json(payload, status);
   }
 });

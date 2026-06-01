@@ -967,6 +967,49 @@ function bgBrainUpdate(tabId, text, final = false) {
   chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final }, () => { void chrome.runtime.lastError; });
 }
 
+async function bgSendInlineUiMessage(tabId, message) {
+  if (!tabId) return null;
+  return new Promise((resolve) => {
+    function send(retrying) {
+      chrome.tabs.sendMessage(tabId, message, (res) => {
+        if (chrome.runtime.lastError) {
+          if (retrying) { resolve(null); return; }
+          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+            if (chrome.runtime.lastError) { resolve(null); return; }
+            setTimeout(() => send(true), 250);
+          });
+        } else {
+          resolve(res || null);
+        }
+      });
+    }
+    send(false);
+  });
+}
+
+async function bgBuildSpotifyUiState(tabId, base = {}) {
+  const siteContext = await bgGetSiteAdapterContext(tabId);
+  return {
+    active: true,
+    source: "spotify",
+    intent: String(base.intent || "").trim(),
+    query: String(base.query || "").trim(),
+    currentPlaylistName: String(siteContext?.currentPlaylistName || "").trim(),
+    searchResults: Array.isArray(siteContext?.visibleTrackDetails) ? siteContext.visibleTrackDetails.slice(0, 6) : [],
+    nowPlaying: siteContext?.nowPlaying || null,
+    summary: String(base.summary || "").trim(),
+  };
+}
+
+function bgPushSpotifyState(tabId, state, options = {}) {
+  void bgSendInlineUiMessage(tabId, {
+    action: "sbSpotifyState",
+    state,
+    openCard: !!options.openCard,
+    focusSpotify: !!options.focusSpotify,
+  });
+}
+
 async function bgSaveAgentTask(tabId, task, result) {
   try {
     const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
@@ -1304,6 +1347,16 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   const playMatch = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)\s+from\s+(?:my\s+)?playlist\s+(.+?)(?:\s+on\s+spotify)?$/i);
   if (onSpotify && playMatch) {
     return { adapter: "spotify", intent: "playSongFromPlaylist", song: playMatch[1].trim(), playlist: playMatch[2].trim() };
+  }
+
+  const quotedDirectPlay = raw.match(/play\s+["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
+  if (onSpotify && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
+    return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
+  }
+
+  const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
+  if (onSpotify && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
+    return { adapter: "spotify", intent: "playSong", song: directPlay[1].trim() };
   }
 
   // "add this song to Spotify" — infer song from current page, save to Liked Songs or playlist
@@ -1656,7 +1709,59 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       }),
     });
 
+    await bgDelay(1000);
+    bgPushSpotifyState(tabId, await bgBuildSpotifyUiState(tabId, {
+      intent: parsed.intent,
+      query: parsed.song,
+      summary: `Playing ${parsed.song} from ${parsed.playlist} on Spotify.`,
+    }), { focusSpotify: true });
+
     return `Playing **${parsed.song}** from **${parsed.playlist}** on Spotify.`;
+  }
+
+  if (parsed.adapter === "spotify" && parsed.intent === "playSong") {
+    await bgRunAdapterStep({
+      history,
+      description: `Open Spotify search for "${parsed.song}"`,
+      type: "navigate",
+      onProgress,
+      onResult,
+      run: async () => {
+        const result = await bgExecuteAgentAction(tabId, {
+          type: "navigate",
+          url: bgBuildSpotifyTrackSearchUrl(parsed.song),
+          description: `Open Spotify search for "${parsed.song}"`,
+        });
+        if (!result?.error) {
+          await bgWaitForTabReady(tabId, 6000);
+          await bgDelay(900);
+        }
+        return result;
+      },
+    });
+
+    if (shouldStop?.()) throw new Error("Stopped.");
+
+    await bgRunAdapterStep({
+      history,
+      description: `Play the best Spotify result for "${parsed.song}"`,
+      type: "spotifyPlayFirstTrackResult",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "spotifyPlayFirstTrackResult",
+        songName: parsed.song,
+      }),
+    });
+
+    await bgDelay(1000);
+    bgPushSpotifyState(tabId, await bgBuildSpotifyUiState(tabId, {
+      intent: parsed.intent,
+      query: parsed.song,
+      summary: `Playing ${parsed.song} on Spotify.`,
+    }), { focusSpotify: true });
+
+    return `Playing **${parsed.song}** on Spotify.`;
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "addCurrentPageSong") {
