@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import SideBrainLogo from "@/components/SideBrainLogo";
-import { supabase } from "@/integrations/supabase/client";
 
 /**
  * This page is opened by the Chrome extension for authentication.
@@ -22,14 +21,6 @@ const ExtensionAuth = () => {
   const params = new URLSearchParams(window.location.search);
   const extensionId = params.get("ext");
 
-  const handleGoogleSignIn = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/extension?ext=${extensionId}`,
-      },
-    });
-  };
 
   // When user is authenticated, send token to extension
   useEffect(() => {
@@ -123,20 +114,6 @@ const ExtensionAuth = () => {
           <p className="text-muted-foreground mt-2 text-sm">
             Sign in to sync your notes across devices
           </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleGoogleSignIn}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-full border border-border bg-card text-sm font-medium hover:bg-muted transition-colors mb-3"
-        >
-          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#4285F4" d="M44.5 20H24v8.5h11.8C34.7 33.9 29.8 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></svg>
-          Continue with Google
-        </button>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-muted-foreground">or</span>
-          <div className="flex-1 h-px bg-border" />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3 border border-border/40 rounded-2xl p-5 bg-card/50">

@@ -9,7 +9,7 @@ if (globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ !== `${chrome.runtime?.id || "no-
 if (location.hostname === 'trybraino.com') {
   const __sbSyncWebAuth = () => {
     try {
-      const raw = localStorage.getItem('sb-ovapacfrzddnhrwvkbkr-auth-token');
+      const raw = localStorage.getItem('sb-suwhgaxxdizowbyjlljj-auth-token');
       if (!raw) return;
       const s = JSON.parse(raw);
       if (!s?.access_token) return;
@@ -27,7 +27,7 @@ if (location.hostname === 'trybraino.com') {
   };
   __sbSyncWebAuth();
   window.addEventListener('storage', (e) => {
-    if (e.key === 'sb-ovapacfrzddnhrwvkbkr-auth-token') __sbSyncWebAuth();
+    if (e.key === 'sb-suwhgaxxdizowbyjlljj-auth-token') __sbSyncWebAuth();
   });
 }
 
@@ -1612,7 +1612,7 @@ function __sbTryClaimInlineOwner(ownerId) {
 }
 
 if (!__sbTryClaimInlineOwner(__SB_INLINE_OWNER_ID)) { /* inline UI already wired */ } else {
-const __SB_API = "https://ovapacfrzddnhrwvkbkr.supabase.co/functions/v1";
+const __SB_API = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 
 function __sbContextOk() {
   try { return !!chrome.runtime?.id; } catch { return false; }
