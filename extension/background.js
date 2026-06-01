@@ -564,6 +564,7 @@ const BG_SUPABASE_URL = "https://suwhgaxxdizowbyjlljj.supabase.co";
 const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
 const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
+const BG_BRAINO_FAVORITE_SONG_URI = "spotify:track:6Hgh47WXVKtXN5zGOu0hjI";
 
 async function bgChatFetch(body) {
   const { authToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
@@ -3095,6 +3096,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "authTokenRelay") {
     storeAuthData(message);
     sendResponse({ success: true });
+    return true;
+  }
+  if (message.action === "playBrainoFavoriteSong") {
+    (async () => {
+      const { authToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
+      if (!authToken) { sendResponse({ ok: false }); return; }
+      try {
+        const res = await fetch(`${BG_API_BASE}/spotify-playback`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: BG_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ action: "play", uris: [BG_BRAINO_FAVORITE_SONG_URI] }),
+        });
+        sendResponse({ ok: res.ok });
+      } catch (e) {
+        sendResponse({ ok: false });
+      }
+    })();
     return true;
   }
 });

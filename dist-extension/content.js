@@ -4769,7 +4769,8 @@ function __sbRenderSpotifyPanel(options = {}) {
   if (!__sbHasSpotifySurface()) return;
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
-  scroll.innerHTML = __sbBuildSpotifyPanelHtml();
+  const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
+  scroll.innerHTML = __sbBuildSpotifyPanelHtml(historyHtml);
   scroll.scrollTop = 0;
   if (options.openCard) __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
@@ -5145,6 +5146,27 @@ async function __sbProcessPrompt(text, options = {}) {
     : (__sbShouldConnectorForceAgent(connectorHint, promptText, forcedMode, siteContext) ? "agent" : __sbDetectIntent(promptText));
   // lecture and meeting both drive the recording flow
   const intent = (rawIntent === "lecture" || rawIntent === "meeting") ? "record" : rawIntent;
+
+  // Braino's favorite song easter egg
+  if (/\b(play|what('?s| is)|braino'?s?)\b.*\bfavorite\b.*\b(song|track|music)\b|\bfavorite\b.*\b(song|track|music)\b.*\bplay\b/i.test(promptText)) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    const played = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r?.ok))
+    );
+    __sbChatHistory.push({ role: "user", content: promptText });
+    const reply = played
+      ? "Playing my favorite song for you ♫"
+      : "I tried to play my favorite song but Spotify isn't connected — link it from the dashboard first.";
+    __sbChatHistory.push({ role: "assistant", content: reply });
+    __sbCardTurns.push({ prompt: promptText, answer: reply });
+    const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbRenderCardHistory(scrollEl);
+    __sbOpenCard({ rich: true });
+    if (fromVoice) await __sbSpeakText(reply);
+    return;
+  }
 
   if (intent === "record") {
     if (fromVoice) __sbVoicePendingReply = false;
