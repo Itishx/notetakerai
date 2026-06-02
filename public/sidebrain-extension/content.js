@@ -1712,6 +1712,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === "voiceTransportStatus") {
+    const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Connecting…" };
+    __sbSetVoiceStatusBadge(msg.status, labelMap[msg.status] || msg.status);
+    return true;
+  }
+
+  if (msg.action === "voiceBrainState") {
+    if (__sbHeadphoneMode) __sbSetHpBrainState(msg.state || "");
+    return true;
+  }
+
   return true;
 });
 
@@ -2882,6 +2893,30 @@ function __sbBuildBrainUI() {
     }
     .sb-card-foot-btn:hover { background: var(--sb-btn-bg); }
     .sb-card-foot-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_voice_status_badge__ {
+      font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-radius: 999px; padding: 2px 7px; border: 1px solid transparent;
+      display: none; align-items: center; flex-shrink: 1;
+      max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #__sb_voice_status_badge__[data-s="realtime"] {
+      display: flex; color: #17663b;
+      background: rgba(232,249,239,0.95); border-color: rgba(32,148,84,0.3);
+    }
+    #__sb_voice_status_badge__[data-s="legacy"] {
+      display: flex; color: #8f5b13;
+      background: rgba(255,245,224,0.95); border-color: rgba(196,129,34,0.35);
+    }
+    #__sb_voice_status_badge__[data-s="error"] {
+      display: flex; color: #8f2424;
+      background: rgba(255,237,237,0.95); border-color: rgba(202,69,69,0.32);
+      text-transform: none; max-width: 200px;
+    }
+    #__sb_voice_status_badge__[data-s="connecting"] {
+      display: flex; color: #8f5b13;
+      background: rgba(255,245,224,0.95); border-color: rgba(196,129,34,0.35);
+    }
     #__sb_card_send__ { background: #E8786E; color: white; }
     #__sb_card_send__:hover { background: #C9544A; }
     #__sb_rec_bar__ {
@@ -2903,9 +2938,26 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
       50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
     }
+    /* Blue halo for Live AI (realtime) mode */
+    @keyframes __sb_hp_listen_rt__ {
+      0%,100% { filter: drop-shadow(0 0 22px rgba(59,130,246,0.85)) drop-shadow(0 0 8px rgba(99,179,255,0.55)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 48px rgba(59,130,246,1))    drop-shadow(0 0 18px rgba(99,179,255,0.8)); transform: scale(1.09); }
+    }
+    @keyframes __sb_hp_speak_rt__ {
+      0%,100% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.8)) drop-shadow(0 0 8px rgba(139,92,246,0.5)); transform: scale(1.02); }
+      50%      { filter: drop-shadow(0 0 42px rgba(99,102,241,1))   drop-shadow(0 0 16px rgba(139,92,246,0.75)); transform: scale(1.07); }
+    }
+    @keyframes __sb_hp_captured_rt__ {
+      0%,100% { filter: drop-shadow(0 0 26px rgba(34,211,238,0.85)) drop-shadow(0 0 10px rgba(34,211,238,0.55)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 54px rgba(34,211,238,1))    drop-shadow(0 0 22px rgba(34,211,238,0.8)); transform: scale(1.1); }
+    }
     #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
     #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
     #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+    /* Realtime overrides — blue halo wins */
+    #__sb_brain_btn__.hp-realtime.hp-listening { animation: __sb_hp_listen_rt__   1.4s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured  { animation: __sb_hp_captured_rt__ 0.5s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking  { animation: __sb_hp_speak_rt__    0.85s ease-in-out infinite; }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -2978,6 +3030,7 @@ function __sbBuildBrainUI() {
         <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Headphone mode">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
         </button>
+        <span id="__sb_voice_status_badge__"></span>
         <button id="__sb_card_send__" class="sb-card-foot-btn" title="Send">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </button>
@@ -5622,6 +5675,215 @@ async function __sbSyncNotesToNotion() {
 
 // ── Headphone Mode ──────────────────────────────────────────────────────────
 
+// ── GPT Realtime voice — WebRTC (GA Realtime API flow) ──────────────────────
+let __sbRtPeerConnection = null;
+let __sbRtDataChannel = null;
+let __sbRtMic = null;
+let __sbRtRemoteAudio = null;
+const __SB_REALTIME_VOICE = "marin";
+
+async function __sbStartRealtimeVoice() {
+  const { authToken } = await __sbStorageGet(["authToken"]);
+  if (!authToken) {
+    __sbSetVoiceStatusBadge("error", "Sign in first");
+    __sbSetHpBrainState("");
+    return;
+  }
+
+  try {
+    __sbRtMic = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+
+    const peerConnection = new RTCPeerConnection();
+    __sbRtPeerConnection = peerConnection;
+
+    __sbRtMic.getTracks().forEach((track) => {
+      peerConnection.addTrack(track, __sbRtMic);
+    });
+
+    __sbRtRemoteAudio = document.createElement("audio");
+    __sbRtRemoteAudio.autoplay = true;
+    __sbRtRemoteAudio.playsInline = true;
+    __sbRtRemoteAudio.style.display = "none";
+    __sbRtRemoteAudio.addEventListener("playing", () => {
+      if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+    });
+    document.body.appendChild(__sbRtRemoteAudio);
+
+    peerConnection.ontrack = (event) => {
+      __sbRtRemoteAudio.srcObject = event.streams[0] || new MediaStream([event.track]);
+      __sbRtRemoteAudio.play().catch(() => {});
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+      if (__sbHeadphoneMode) {
+        const state = peerConnection.connectionState;
+        if (state === "failed" || state === "closed" || state === "disconnected") {
+          __sbShowVoiceError("Live AI disconnected.");
+          __sbExitHeadphoneMode();
+        }
+      }
+    };
+
+    const dataChannelOpen = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error("Live AI timed out while connecting."));
+      }, 10000);
+
+      __sbRtDataChannel = peerConnection.createDataChannel("oai-events");
+      __sbRtDataChannel.addEventListener("open", () => {
+        clearTimeout(timeoutId);
+        resolve(true);
+      }, { once: true });
+      __sbRtDataChannel.addEventListener("error", () => {
+        clearTimeout(timeoutId);
+        reject(new Error("Live AI could not open its control channel."));
+      }, { once: true });
+      __sbRtDataChannel.addEventListener("message", (event) => {
+        try {
+          __sbHandleRtEvent(JSON.parse(event.data));
+        } catch (_) {}
+      });
+    });
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    const res = await fetch(`${__SB_API}/openai-realtime-call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        apikey: __SB_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: offer.sdp || "",
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      let errorPayload = {};
+      try {
+        errorPayload = JSON.parse(errorText);
+      } catch {}
+      throw new Error(errorPayload.details || errorPayload.error || errorText || `Live AI failed (${res.status})`);
+    }
+
+    const answerSdp = await res.text();
+    await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
+    await dataChannelOpen;
+
+    const instructions = [
+      "You are Braino, an AI voice assistant built into a browser extension.",
+      "",
+      "YOU ARE IN LIVE AI MODE — the most powerful Braino experience.",
+      "Your voice goes directly to an AI in real time. Zero lag, no transcription delay, no TTS wait.",
+      "Pure two-way audio conversation. The user can interrupt you mid-sentence and you stop instantly.",
+      "",
+      "If asked about Live AI mode, explain: direct real-time voice connection, interruptable, instant.",
+      "You can answer questions about the current page, have natural conversation, and be interrupted anytime.",
+      "",
+      "Be warm, brief, and conversational. Short answers unless asked for detail.",
+      "If interrupted, stop immediately.",
+      "",
+      `Page: ${document.title || "Unknown"} — ${location.href}`,
+      `Content:\n${(document.body?.innerText || "").slice(0, 8000)}`,
+    ].join("\n");
+
+    __sbSendRtEvent({
+      type: "session.update",
+      session: {
+        type: "realtime",
+        instructions,
+        output_modalities: ["audio"],
+        reasoning: {
+          effort: "low",
+        },
+        audio: {
+          input: {
+            transcription: {
+              model: "gpt-4o-transcribe",
+            },
+            turn_detection: {
+              type: "semantic_vad",
+              eagerness: "high",
+              create_response: true,
+              interrupt_response: true,
+            },
+          },
+          output: {
+            voice: __SB_REALTIME_VOICE,
+          },
+        },
+      },
+    });
+
+    document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+    __sbSetVoiceStatusBadge("realtime", "Live AI");
+    __sbSetHpBrainState("listening");
+
+  } catch (err) {
+    __sbCleanupRealtimeVoice();
+    __sbSetVoiceStatusBadge("error", err.message || "Live AI failed.");
+    __sbSetHpBrainState("");
+  }
+}
+
+function __sbSendRtEvent(event) {
+  if (!__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
+  const payload = { ...event };
+  if (!payload.event_id) {
+    payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+  __sbRtDataChannel.send(JSON.stringify(payload));
+  return true;
+}
+
+function __sbCleanupRealtimeVoice() {
+  try { __sbRtDataChannel?.close(); } catch (_) {}
+  try { __sbRtPeerConnection?.close(); } catch (_) {}
+  __sbRtMic?.getTracks().forEach(t => t.stop());
+  if (__sbRtRemoteAudio) {
+    try { __sbRtRemoteAudio.pause(); } catch (_) {}
+    __sbRtRemoteAudio.srcObject = null;
+    __sbRtRemoteAudio.remove();
+  }
+  __sbRtPeerConnection = null;
+  __sbRtDataChannel = null;
+  __sbRtMic = null;
+  __sbRtRemoteAudio = null;
+  document.getElementById("__sb_brain_btn__")?.classList.remove("hp-realtime");
+}
+
+function __sbHandleRtEvent(ev) {
+  if (ev.type === "session.created" || ev.type === "session.updated") {
+    __sbSetVoiceStatusBadge("realtime", "Live AI");
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    return;
+  }
+  if (ev.type === "input_audio_buffer.speech_started") {
+    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    return;
+  }
+  if (ev.type === "input_audio_buffer.speech_stopped" || ev.type === "response.created") {
+    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    return;
+  }
+  if (ev.type === "response.output_audio_transcript.delta" || ev.type === "response.output_text.delta") {
+    if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+    return;
+  }
+  if (ev.type === "response.done" || ev.type === "response.cancelled") {
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    return;
+  }
+  if (ev.type === "error") {
+    const message = ev.error?.message || "Realtime error";
+    __sbSetVoiceStatusBadge("error", message);
+    __sbShowVoiceError(message);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function __sbToggleHeadphoneMode() {
   if (__sbHeadphoneMode) {
     __sbExitHeadphoneMode();
@@ -5634,17 +5896,15 @@ function __sbEnterHeadphoneMode() {
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
 
-  // Close bar, keep the brain button visible as the only UI
   __sbToggleInput(false);
   __sbCollapseCard();
 
-  // Mark headphone btn active in case bar reopens
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
-  // Start with listening glow on the brain
   __sbSetHpBrainState("listening");
-  void __sbStartRecording();
+  __sbSetVoiceStatusBadge("connecting", "Connecting…");
+  void __sbStartRealtimeVoice();
 }
 
 function __sbExitHeadphoneMode() {
@@ -5654,10 +5914,11 @@ function __sbExitHeadphoneMode() {
   if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
   __sbLastFinalTranscript = null;
 
-  if (__sbIsRecording) __sbStopRecording({ silent: true });
+  __sbCleanupRealtimeVoice();
   __sbStopSpeech();
 
   __sbSetHpBrainState("");
+  __sbSetVoiceStatusBadge(null);
 
   document.getElementById("__sb_rec_btn__")?.classList.remove("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
@@ -5669,6 +5930,15 @@ function __sbSetHpBrainState(state) {
   if (!brain) return;
   brain.classList.remove("hp-listening", "hp-captured", "hp-speaking", "recording");
   if (state) brain.classList.add(`hp-${state}`);
+}
+
+function __sbSetVoiceStatusBadge(state, label) {
+  const badge = document.getElementById("__sb_voice_status_badge__");
+  if (!badge) return;
+  if (!state) { badge.removeAttribute("data-s"); badge.textContent = ""; badge.title = ""; return; }
+  badge.setAttribute("data-s", state);
+  badge.textContent = label || state;
+  badge.title = label || state;
 }
 
 function __sbShowVoiceError(msg) {

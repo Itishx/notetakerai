@@ -3530,6 +3530,7 @@ let lastRealtimeStartupError = "";
 const REALTIME_PAGE_CONTEXT_LIMIT = 12000;
 const REALTIME_NOTES_CONTEXT_LIMIT = 6000;
 const REALTIME_SELECTION_CONTEXT_LIMIT = 1600;
+const REALTIME_VOICE = "marin";
 
 const voiceOverlay      = document.getElementById("voiceOverlay");
 const voiceOrb          = document.getElementById("voiceOrb");
@@ -3708,7 +3709,7 @@ function syncRealtimeVoiceSession({ force = false } = {}) {
     session: {
       type: "realtime",
       instructions,
-      output_modalities: ["text"],
+      output_modalities: ["audio"],
       reasoning: {
         effort: "low",
       },
@@ -3723,6 +3724,9 @@ function syncRealtimeVoiceSession({ force = false } = {}) {
             create_response: false,
             interrupt_response: true,
           },
+        },
+        output: {
+          voice: REALTIME_VOICE,
         },
       },
     },
@@ -3845,13 +3849,9 @@ async function finishRealtimeResponse(status, { errorMessage = "", fallbackText 
     if (!realtimeAssistantTranscript && fallbackText) {
       realtimeAssistantTranscript = fallbackText;
       setCaption(fallbackText);
-      realtimeSpeechBuffer = fallbackText;
     }
-    flushRealtimeSpeechBuffer({ final: true });
-    await waitForRealtimeSpeechIdle();
-  } else {
-    clearRealtimeSpeechQueue();
   }
+  clearRealtimeSpeechQueue();
 
   resolveRealtimeResponse({
     status,
@@ -3960,7 +3960,7 @@ async function requestRealtimeAssistantReply(text, { relayMode = false } = {}) {
     ? sendRealtimeEvent({
         type: "response.create",
         response: {
-          output_modalities: ["text"],
+          output_modalities: ["audio"],
           input: [
             {
               type: "message",
@@ -3992,7 +3992,7 @@ async function requestRealtimeAssistantReply(text, { relayMode = false } = {}) {
       sendRealtimeEvent({
         type: "response.create",
         response: {
-          output_modalities: ["text"],
+          output_modalities: ["audio"],
         },
       })
     );
@@ -4125,8 +4125,6 @@ function handleRealtimeServerEvent(serverEvent) {
   if (serverEvent.type === "response.output_text.delta") {
     if (typeof serverEvent.delta === "string" && serverEvent.delta) {
       realtimeAssistantTranscript += serverEvent.delta;
-      realtimeSpeechBuffer += serverEvent.delta;
-      flushRealtimeSpeechBuffer();
       realtimeLastResponseStatus = "speaking";
       setOrbState("speaking");
       setCaption(realtimeAssistantTranscript.trim());
