@@ -2065,6 +2065,59 @@ button {
   min-height: 16px;
 }
 
+.voice-status-debug {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 20px 20px;
+}
+
+.voice-transport-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 7px 12px;
+  border: 1px solid var(--line-2);
+  background: rgba(255,255,255,0.82);
+  color: var(--ink-2);
+}
+
+.voice-transport-badge[data-state="pending"] {
+  border-color: rgba(243, 154, 66, 0.4);
+  background: rgba(255, 240, 220, 0.9);
+  color: var(--accent-deep);
+}
+
+.voice-transport-badge[data-state="realtime"] {
+  border-color: rgba(32, 148, 84, 0.28);
+  background: rgba(232, 249, 239, 0.92);
+  color: #17663b;
+}
+
+.voice-transport-badge[data-state="legacy"] {
+  border-color: rgba(196, 129, 34, 0.35);
+  background: rgba(255, 245, 224, 0.94);
+  color: #8f5b13;
+}
+
+.voice-transport-badge[data-state="error"] {
+  border-color: rgba(202, 69, 69, 0.32);
+  background: rgba(255, 237, 237, 0.94);
+  color: #8f2424;
+}
+
+.voice-transport-error {
+  max-width: 320px;
+  font-size: 11px;
+  line-height: 1.42;
+  color: var(--ink-3);
+  text-align: center;
+}
+
 /* Controls — mic | interrupt | [spacer] | compose */
 .voice-controls {
   display: flex;
@@ -2113,6 +2166,10 @@ body.headphone-mode .voice-stage { justify-content: center; }
 body.headphone-mode .voice-orb-wrap { padding: 0; cursor: pointer; flex-direction: column; gap: 0; }
 body.headphone-mode .voice-orb { display: none !important; }
 body.headphone-mode .braino-icon { display: block !important; }
+body.headphone-mode .voice-status-debug {
+  padding-top: 18px;
+  padding-bottom: 0;
+}
 
 .braino-icon {
   width: 120px;

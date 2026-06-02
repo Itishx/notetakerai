@@ -3438,6 +3438,7 @@ let realtimeSpeechBuffer = "";
 let realtimeSpeechQueue = [];
 let realtimeSpeechDraining = false;
 let realtimeResponseWaiter = null;
+let lastRealtimeStartupError = "";
 
 const REALTIME_PAGE_CONTEXT_LIMIT = 12000;
 const REALTIME_NOTES_CONTEXT_LIMIT = 6000;
@@ -3457,6 +3458,8 @@ const voiceCtxTitle     = document.getElementById("voiceCtxTitle");
 const voiceCtxUrl       = document.getElementById("voiceCtxUrl");
 const voiceCtxFavicon   = document.getElementById("voiceCtxFavicon");
 const voiceCtxLiveTxt   = document.getElementById("voiceCtxLiveTxt");
+const voiceTransportBadge = document.getElementById("voiceTransportBadge");
+const voiceTransportError = document.getElementById("voiceTransportError");
 
 const CAP_LABELS = { listening: "Braino · Listening", captured: "Braino · Got it", processing: "Braino · Thinking", speaking: "Braino · Speaking", idle: "Braino · Ready", acting: "Braino · Acting" };
 
@@ -3513,8 +3516,25 @@ function setSubtitles(user, agent) {
   if (agent !== undefined) setCaption(agent);
 }
 
-function setVoiceContextStatus(text) {
-  if (voiceCtxLiveTxt) voiceCtxLiveTxt.textContent = text || "live";
+function setVoiceContextStatus(text, { tone, detail = "" } = {}) {
+  const statusText = text || "live";
+  const resolvedTone = tone || (
+    statusText === "realtime" ? "realtime" :
+    statusText === "legacy" ? "legacy" :
+    statusText === "connecting" ? "pending" :
+    statusText === "error" ? "error" :
+    "neutral"
+  );
+
+  if (voiceCtxLiveTxt) voiceCtxLiveTxt.textContent = statusText;
+  if (voiceTransportBadge) {
+    voiceTransportBadge.textContent = statusText;
+    voiceTransportBadge.dataset.state = resolvedTone;
+  }
+  if (voiceTransportError) {
+    voiceTransportError.textContent = detail;
+    voiceTransportError.classList.toggle("hidden", !detail);
+  }
 }
 
 function isRealtimeVoiceSessionRunning() {
@@ -3769,6 +3789,7 @@ function cleanupRealtimeVoiceSession({ keepCaption = false } = {}) {
   realtimeLastResponseFinishedAt = 0;
   realtimeLastResponseStatus = "idle";
   realtimeContextFingerprint = "";
+  lastRealtimeStartupError = "";
   clearRealtimeSpeechQueue();
   resolveRealtimeResponse({ status: "cancelled", text: "", errorMessage: "" });
   stopCurrentTTS();
@@ -3930,7 +3951,7 @@ function handleRealtimeServerEvent(serverEvent) {
 
   if (serverEvent.type === "session.created" || serverEvent.type === "session.updated") {
     realtimeSessionReady = true;
-    setVoiceContextStatus("live");
+    setVoiceContextStatus("realtime");
     if (!realtimeConnecting) setOrbState("listening");
     return;
   }
@@ -4029,7 +4050,7 @@ function handleRealtimeServerEvent(serverEvent) {
     const fallbackText = extractRealtimeResponseText(serverEvent.response);
     realtimeLastResponseFinishedAt = Date.now();
     realtimeLastResponseStatus = "done";
-    setVoiceContextStatus("live");
+    setVoiceContextStatus("realtime");
     void finishRealtimeResponse("done", { fallbackText }).finally(() => {
       if (!voiceActive || !isRealtimeVoiceMode()) return;
       setOrbState("listening");
@@ -4081,6 +4102,7 @@ function sendToContentScript(tabId, action) {
 async function startRealtimeVoiceMode() {
   const authToken = await getAuthToken();
   if (!authToken) {
+    lastRealtimeStartupError = "No Braino auth token found.";
     return false;
   }
 
@@ -4154,15 +4176,24 @@ async function startRealtimeVoiceMode() {
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
-    const response = await fetch(`${API_BASE}/openai-realtime-call`, {
+    const callRealtime = (token) => fetch(`${API_BASE}/openai-realtime-call`, {
       method: "POST",
       headers: {
         "Content-Type": "application/sdp",
         apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${authToken}`,
+        Authorization: `Bearer ${token}`,
       },
       body: offer.sdp || "",
     });
+
+    let response = await callRealtime(authToken);
+    if (response.status === 401) {
+      const data = await getStorage(["authRefreshToken"]);
+      const refreshedToken = data.authRefreshToken ? await refreshAuthToken(data.authRefreshToken) : null;
+      if (refreshedToken) {
+        response = await callRealtime(refreshedToken);
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -4179,12 +4210,13 @@ async function startRealtimeVoiceMode() {
 
     realtimeConnecting = false;
     realtimeSessionReady = true;
+    lastRealtimeStartupError = "";
     voiceMuted = false;
     if (voiceMuteBtn) voiceMuteBtn.style.opacity = "1";
 
     await requestVoicePageContext();
     setOrbState("listening");
-    setVoiceContextStatus("live");
+    setVoiceContextStatus("realtime");
     setCaption("");
     syncRealtimeVoiceSession({ force: true });
 
@@ -4192,6 +4224,7 @@ async function startRealtimeVoiceMode() {
   } catch (error) {
     realtimeConnecting = false;
     cleanupRealtimeVoiceSession({ keepCaption: true });
+    lastRealtimeStartupError = error instanceof Error ? error.message : String(error);
     console.warn("Realtime voice setup failed:", error);
     return false;
   }
@@ -4218,10 +4251,21 @@ async function openVoiceMode() {
     return;
   }
 
+  setVoiceContextStatus("legacy", {
+    tone: "legacy",
+    detail: lastRealtimeStartupError ? `Realtime failed: ${lastRealtimeStartupError}` : "Using Braino legacy voice.",
+  });
   const res = await sendToContentScript(tabId, "startVoiceListening");
   if (res?.error) {
-    setCaption("Could not start voice: " + res.error);
+    const detail = lastRealtimeStartupError ? ` Realtime failed: ${lastRealtimeStartupError}` : "";
+    setCaption("Could not start voice: " + res.error + detail);
     setOrbState("idle");
+    setVoiceContextStatus("error", {
+      tone: "error",
+      detail: `Voice start failed: ${res.error}${lastRealtimeStartupError ? ` · Realtime failed: ${lastRealtimeStartupError}` : ""}`,
+    });
+  } else if (lastRealtimeStartupError) {
+    setCaption(`Using legacy voice. Realtime failed: ${lastRealtimeStartupError}`);
   }
 }
 
