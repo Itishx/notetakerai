@@ -5381,7 +5381,7 @@ async function __sbProcessPrompt(text, options = {}) {
       ? "Playing my favorite song for you ♫"
       : result.error?.includes("device")
         ? "Open Spotify on your phone or desktop first, then ask me again ♫"
-        : "Spotify isn't connected yet — link it from the dashboard first.";
+        : "Spotify isn't connected yet — [connect it here](https://trybraino.com/dashboard).";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");

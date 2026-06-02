@@ -93,6 +93,11 @@ export function serializeSpotifyError(error: unknown) {
   };
 }
 
+function deriveRedirectUri(supabaseUrl: string): string {
+  return Deno.env.get("SPOTIFY_REDIRECT_URI") ||
+    `${supabaseUrl.replace(/\/$/, "")}/functions/v1/spotify-oauth-callback`;
+}
+
 export function requireSpotifyEnv(req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -100,9 +105,9 @@ export function requireSpotifyEnv(req: Request) {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const clientId = Deno.env.get("SPOTIFY_CLIENT_ID") || "";
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET") || "";
-  const redirectUri = Deno.env.get("SPOTIFY_REDIRECT_URI") || "";
+  const redirectUri = deriveRedirectUri(supabaseUrl);
 
-  if (!authHeader || !supabaseUrl || !anonKey || !serviceRoleKey || !clientId || !clientSecret || !redirectUri) {
+  if (!authHeader || !supabaseUrl || !anonKey || !serviceRoleKey || !clientId || !clientSecret) {
     throw new Error("Spotify integration is not configured correctly.");
   }
 
@@ -123,9 +128,9 @@ export function requireSpotifyServerEnv() {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const clientId = Deno.env.get("SPOTIFY_CLIENT_ID") || "";
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET") || "";
-  const redirectUri = Deno.env.get("SPOTIFY_REDIRECT_URI") || "";
+  const redirectUri = deriveRedirectUri(supabaseUrl);
 
-  if (!supabaseUrl || !anonKey || !serviceRoleKey || !clientId || !clientSecret || !redirectUri) {
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !clientId || !clientSecret) {
     throw new Error("Spotify integration is not configured correctly.");
   }
 
