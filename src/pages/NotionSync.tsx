@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
+import { EXTENSION_DOWNLOAD_FILENAME, EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 
 const syncSteps = [
   {
@@ -233,9 +234,9 @@ const NotionSync = () => {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button
             onClick={() => {
-              fetch("/braino-extension.zip")
+              fetch(EXTENSION_DOWNLOAD_URL)
                 .then((res) => { if (!res.ok) throw new Error(); return res.blob(); })
-                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "braino-extension.zip"; a.click(); URL.revokeObjectURL(a.href); })
+                .then((blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = EXTENSION_DOWNLOAD_FILENAME; a.click(); URL.revokeObjectURL(a.href); })
                 .catch(() => alert("Extension not yet packaged. Please check back soon."));
             }}
             className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10 h-12 text-base"

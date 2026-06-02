@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
+import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -705,7 +706,7 @@ export default function UseCases() {
               Install Braino, sign in, and every workflow above is available in 30 seconds.
             </p>
             <a
-              href="/braino-extension.zip"
+              href={EXTENSION_DOWNLOAD_URL}
               download
               style={{
                 display: "inline-flex", alignItems: "center", gap: 8,

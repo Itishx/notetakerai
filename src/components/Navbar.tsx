@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 
 const NAV_LINKS = [
   { href: "/use-cases", label: "Use Cases" },
@@ -250,7 +251,7 @@ const Navbar = () => {
           )}
 
           <a
-            href="/braino-extension.zip"
+            href={EXTENSION_DOWNLOAD_URL}
             download
             style={{
               display: "inline-flex", alignItems: "center", gap: 5,

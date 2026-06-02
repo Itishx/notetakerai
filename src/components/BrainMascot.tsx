@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { EXTENSION_DOWNLOAD_URL } from '@/lib/extensionDownload';
 
 // ─── Physics constants ────────────────────────────────────────────────────────
 const S = 56;
@@ -145,7 +146,7 @@ function handlePartyTrick(input: string): { text: string; action?: () => void } 
   if (/how.*install|install me|download|add.*chrome|get.*extension/.test(lower)) {
     return {
       text: "Downloading now! Unzip, open chrome://extensions, enable developer mode, drag it in. ~15 seconds.",
-      action: () => window.open('/braino-extension.zip', '_blank'),
+      action: () => window.open(EXTENSION_DOWNLOAD_URL, '_blank'),
     };
   }
 

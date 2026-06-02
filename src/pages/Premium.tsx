@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 
 // ─── shared styles ────────────────────────────────────────────────────────────
 const wrap: React.CSSProperties = { maxWidth: 1100, margin: "0 auto", padding: "0 32px" };
@@ -169,7 +170,7 @@ export default function Premium() {
                 ))}
               </ul>
               <a
-                href="/braino-extension.zip"
+                href={EXTENSION_DOWNLOAD_URL}
                 download
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",

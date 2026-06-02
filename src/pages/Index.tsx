@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Navbar from "@/components/Navbar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 
 // ─── tiny helpers ────────────────────────────────────────────────────────────
 
@@ -368,7 +369,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
 
           {/* CTAs */}
           <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: isMobile ? 36 : 56, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", alignItems: "center" }}>
-            <a href="/braino-extension.zip" download style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
+            <a href={EXTENSION_DOWNLOAD_URL} download style={btnPrimary} onMouseEnter={btnPrimaryHoverIn} onMouseLeave={btnPrimaryHoverOut}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
               Install for Chrome
             </a>
@@ -1173,7 +1174,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
                   </li>
                 ))}
               </ul>
-              <a href="/braino-extension.zip" download style={{ ...btnGhost,alignSelf:"flex-start" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
+              <a href={EXTENSION_DOWNLOAD_URL} download style={{ ...btnGhost,alignSelf:"flex-start" }} onMouseEnter={btnGhostHoverIn} onMouseLeave={btnGhostHoverOut}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
                 Install free
               </a>
@@ -1233,11 +1234,11 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
             </h2>
             <p style={{ color:"rgba(251,247,241,0.7)",maxWidth:540,margin:"0 auto 32px",fontSize:18,position:"relative",zIndex:1 }}>Free during beta. Sign up in 30 seconds. Everything you save is tied to your account, forever.</p>
             <div style={{ display:"flex",gap:12,justifyContent:"center",position:"relative",zIndex:1,flexWrap:"wrap",flexDirection: isMobile ? "column" : "row",alignItems:"center" }}>
-              <a href="/braino-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"14px 24px",borderRadius:999,fontSize:14,fontWeight:500,background:"#FBF7F1",color:"#1B1713",border:"1px solid transparent",textDecoration:"none",transition:"transform .15s", width: isMobile ? "100%" : "auto", justifyContent: "center" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+              <a href={EXTENSION_DOWNLOAD_URL} download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"14px 24px",borderRadius:999,fontSize:14,fontWeight:500,background:"#FBF7F1",color:"#1B1713",border:"1px solid transparent",textDecoration:"none",transition:"transform .15s", width: isMobile ? "100%" : "auto", justifyContent: "center" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
                 Add to Chrome
               </a>
-              <a href="/braino-extension.zip" download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"14px 24px",borderRadius:999,fontSize:14,fontWeight:500,background:"transparent",color:"#FBF7F1",border:"1px solid rgba(251,247,241,0.2)",textDecoration:"none",transition:"transform .15s", width: isMobile ? "100%" : "auto", justifyContent: "center" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+              <a href={EXTENSION_DOWNLOAD_URL} download style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"14px 24px",borderRadius:999,fontSize:14,fontWeight:500,background:"transparent",color:"#FBF7F1",border:"1px solid rgba(251,247,241,0.2)",textDecoration:"none",transition:"transform .15s", width: isMobile ? "100%" : "auto", justifyContent: "center" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 Other browsers <ArrowRightIcon />
               </a>
             </div>
@@ -1258,7 +1259,7 @@ const proPrice = isIndia === null ? "…" : isIndia ? "₹399" : "$12";
             </div>
             {[
               { heading:"Product",links:[["#features","Features"],["#delegate","Delegate"],["#speed","Speed"],["#dashboard","Dashboard"],["#pricing","Pricing"]] },
-              { heading:"Install",links:[["/braino-extension.zip","Chrome"],["/braino-extension.zip","Arc"],["/braino-extension.zip","Brave"],["/braino-extension.zip","Edge"],["","Desktop app (coming later)"],["#","Firefox (soon)"]] },
+              { heading:"Install",links:[[EXTENSION_DOWNLOAD_URL,"Chrome"],[EXTENSION_DOWNLOAD_URL,"Arc"],[EXTENSION_DOWNLOAD_URL,"Brave"],[EXTENSION_DOWNLOAD_URL,"Edge"],["","Desktop app (coming later)"],["#","Firefox (soon)"]] },
               { heading:"Company",links:[["#","Manifesto"],["#","Changelog"],["/privacy","Privacy"],["/terms","Terms"],["/contact","Contact"]] },
             ].map(({heading,links})=>(
               <div key={heading}>
