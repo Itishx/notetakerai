@@ -188,6 +188,11 @@ type AiCostSummary = {
   lastUpdatedAt: string;
 };
 
+type AiCostErrorPayload = {
+  message: string;
+  setupUrl?: string;
+};
+
 type XSessionSortKey =
   | "session_number"
   | "status"
@@ -979,7 +984,7 @@ export default function Dashboard() {
   const [xAutomationStats, setXAutomationStats] = useState<XAutomationStats>(null);
   const [aiCostSummary, setAiCostSummary] = useState<AiCostSummary | null>(null);
   const [aiCostLoading, setAiCostLoading] = useState(false);
-  const [aiCostError, setAiCostError] = useState<string | null>(null);
+  const [aiCostError, setAiCostError] = useState<AiCostErrorPayload | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1177,7 +1182,13 @@ export default function Dashboard() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(payload.error || "Failed to load API cost overview");
+      const error = new Error(payload.userMessage || payload.error || "Failed to load API cost overview") as Error & {
+        setupUrl?: string;
+      };
+      if (typeof payload.setupUrl === "string") {
+        error.setupUrl = payload.setupUrl;
+      }
+      throw error;
     }
     return payload as AiCostSummary;
   }
@@ -1309,7 +1320,14 @@ export default function Dashboard() {
         setAiCostError(null);
       } catch (error) {
         if (cancelled) return;
-        setAiCostError(error instanceof Error ? error.message : "Could not load API cost overview.");
+        if (error instanceof Error) {
+          setAiCostError({
+            message: error.message,
+            setupUrl: (error as Error & { setupUrl?: string }).setupUrl,
+          });
+        } else {
+          setAiCostError({ message: "Could not load API cost overview." });
+        }
       } finally {
         if (!cancelled && !silent) setAiCostLoading(false);
       }
@@ -2918,7 +2936,17 @@ export default function Dashboard() {
                         </>
                       ) : (
                         <div className="rounded-[18px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-5 py-6 text-sm text-[var(--sb-ink-3)]">
-                          {aiCostError || "No OpenAI cost data is available yet."}
+                          <div>{aiCostError?.message || "No OpenAI cost data is available yet."}</div>
+                          {aiCostError?.setupUrl ? (
+                            <a
+                              href={aiCostError.setupUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-flex text-[13px] font-medium text-[var(--sb-accent-deep)] transition hover:opacity-80"
+                            >
+                              Open OpenAI admin keys →
+                            </a>
+                          ) : null}
                         </div>
                       )}
                     </div>

@@ -240,6 +240,14 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("openai-cost-overview error:", error);
+    if (isUsageScopeError(error)) {
+      return json({
+        error: "OpenAI usage access is not configured for dashboard costs.",
+        userMessage:
+          "OpenAI cost dashboard needs an admin or usage-read key. Add OPENAI_ADMIN_API_KEY in Supabase using an OpenAI key with the api.usage.read scope.",
+        setupUrl: "https://platform.openai.com/settings/organization/admin-keys",
+      }, 403);
+    }
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }
 });
@@ -370,4 +378,10 @@ function firstCurrencyFromBuckets(buckets: Array<OpenAiBucket<OpenAiCostResult>>
     if (currency) return currency;
   }
   return null;
+}
+
+function isUsageScopeError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message || "";
+  return message.includes("api.usage.read") || message.includes("insufficient permissions");
 }
