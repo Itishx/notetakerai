@@ -865,6 +865,7 @@ function setMode(mode) {
   chrome.storage.local.set({ currentMode: mode });
   modeDropup?.classList.add("hidden");
   updateChatContextUI();
+  if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
 }
 
 modeSelectorBtn?.addEventListener("click", (e) => {
@@ -1060,17 +1061,36 @@ function updateConvertButtonLabel() {
   convertBtn.innerHTML = `${CONVERT_BUTTON_ICON} ${label}`;
 }
 
+function applyPageContext(result) {
+  if (!result?.text) {
+    currentPageContext = null;
+    updateChatContextUI();
+    updateVoicePageCtx();
+    if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
+    return null;
+  }
+
+  currentPageContext = {
+    title: result.title,
+    url: result.url,
+    text: result.text,
+    faviconUrl: result.faviconUrl || "",
+  };
+  updateChatContextUI();
+  updateVoicePageCtx();
+  if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
+  return currentPageContext;
+}
+
 
 // ===== PAGE CONTEXT =====
 function fetchPageContext() {
   chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
     if (chrome.runtime.lastError || res?.error || !res?.text) {
-      currentPageContext = null;
-      updateChatContextUI();
+      applyPageContext(null);
       return;
     }
-    currentPageContext = { title: res.title, url: res.url, text: res.text, faviconUrl: res.faviconUrl || "" };
-    updateChatContextUI();
+    applyPageContext(res);
   });
 }
 
@@ -3283,6 +3303,7 @@ What actions should be taken next? Return a single JSON object, OR a JSON array 
 const ELEVENLABS_API_KEY = "sk_2ee3bb5258f10b54aba4d71a7ff1640d98fc322c3e2410cd";
 const ELEVENLABS_VOICE_ID = "2ajXGJNYBR0iNHpS4VZb";
 let currentAudio = null;
+let currentAudioDone = null;
 
 function stripMarkdownForTTS(text) {
   return text
@@ -3303,10 +3324,27 @@ function stripMarkdownForTTS(text) {
 let voiceWordIntervalId = null;
 let isVoiceSpeaking = false;
 
+function finishCurrentTTS() {
+  if (!currentAudioDone) return;
+  const done = currentAudioDone;
+  currentAudioDone = null;
+  done();
+}
+
 function stopCurrentTTS() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (currentAudio) {
+    try { currentAudio.onended = null; } catch {}
+    try { currentAudio.onerror = null; } catch {}
+    try { currentAudio.pause(); } catch {}
+    try {
+      currentAudio.removeAttribute("src");
+      currentAudio.load();
+    } catch {}
+    currentAudio = null;
+  }
   if (voiceWordIntervalId) { clearInterval(voiceWordIntervalId); voiceWordIntervalId = null; }
   isVoiceSpeaking = false;
+  finishCurrentTTS();
 }
 
 async function speakText(text, onWordUpdate) {
@@ -3364,9 +3402,10 @@ async function speakText(text, onWordUpdate) {
 
     isVoiceSpeaking = true;
     await new Promise(resolve => {
-      currentAudio.onended = () => { stopCurrentTTS(); resolve(); };
-      currentAudio.onerror = () => { stopCurrentTTS(); resolve(); };
-      currentAudio.play().catch(() => { stopCurrentTTS(); resolve(); });
+      currentAudioDone = resolve;
+      currentAudio.onended = () => { stopCurrentTTS(); };
+      currentAudio.onerror = () => { stopCurrentTTS(); };
+      currentAudio.play().catch(() => { stopCurrentTTS(); });
     });
     URL.revokeObjectURL(url);
   } catch (e) {
@@ -3394,6 +3433,15 @@ let realtimeUserTranscript = "";
 let realtimeOutputPromise = Promise.resolve();
 let realtimeLastResponseFinishedAt = 0;
 let realtimeLastResponseStatus = "idle";
+let realtimeContextFingerprint = "";
+let realtimeSpeechBuffer = "";
+let realtimeSpeechQueue = [];
+let realtimeSpeechDraining = false;
+let realtimeResponseWaiter = null;
+
+const REALTIME_PAGE_CONTEXT_LIMIT = 12000;
+const REALTIME_NOTES_CONTEXT_LIMIT = 6000;
+const REALTIME_SELECTION_CONTEXT_LIMIT = 1600;
 
 const voiceOverlay      = document.getElementById("voiceOverlay");
 const voiceOrb          = document.getElementById("voiceOrb");
@@ -3431,7 +3479,16 @@ function setOrbState(state) {
 }
 
 function updateVoicePageCtx() {
-  if (!currentPageContext) return;
+  if (!currentPageContext) {
+    if (voiceCtxTitle) voiceCtxTitle.textContent = "Current page";
+    if (voiceCtxUrl) voiceCtxUrl.textContent = "—";
+    if (voiceCtxFavicon) {
+      voiceCtxFavicon.className = "voice-ctx-favicon";
+      voiceCtxFavicon.textContent = "BR";
+    }
+    return;
+  }
+
   if (voiceCtxTitle) voiceCtxTitle.textContent = currentPageContext.title || "Current page";
   if (voiceCtxUrl) voiceCtxUrl.textContent = currentPageContext.url ? new URL(currentPageContext.url).hostname : "—";
   renderContextFavicon(voiceCtxFavicon, currentPageContext, "voice-ctx-favicon");
@@ -3474,6 +3531,219 @@ function setRealtimeMicEnabled(enabled) {
   });
 }
 
+function truncateRealtimeContext(text, maxChars) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars)}… [truncated]`;
+}
+
+function buildRealtimeVoiceInstructions() {
+  const lines = [
+    "You are Braino's live voice layer inside a browser extension.",
+    "These turns are already routed as conversational voice turns unless the app later feeds you a status update to relay.",
+    "Speak clearly, briefly, and naturally.",
+    "Prefer short spoken answers unless the user explicitly asks for detail.",
+    "Never say you cannot access the page when current page context is provided below.",
+    "If the app asks you to relay an update, preserve the meaning and do not add new facts.",
+    "If interrupted, stop immediately and wait for the user.",
+    `Current Braino mode: ${MODE_LABELS[currentMode] || currentMode}.`,
+  ];
+
+  if (currentMode === "page" && currentPageContext?.text) {
+    lines.push("Prioritize the current page context in your answer.");
+  } else if (currentMode === "general") {
+    lines.push("Treat page context as optional background unless the user asks about the page.");
+  }
+
+  if (currentPageContext) {
+    lines.push(`Current page title: ${currentPageContext.title || "Untitled"}`);
+    lines.push(`Current page URL: ${currentPageContext.url || "Unknown"}`);
+    const pageText = truncateRealtimeContext(currentPageContext.text, REALTIME_PAGE_CONTEXT_LIMIT);
+    if (pageText) lines.push(`Current page text:\n${pageText}`);
+  }
+
+  if (currentSelection?.text) {
+    const selectedText = truncateRealtimeContext(currentSelection.text, REALTIME_SELECTION_CONTEXT_LIMIT);
+    if (selectedText) {
+      lines.push(`Currently selected text:\n${selectedText}`);
+    }
+  }
+
+  if (hasExistingNotes()) {
+    const notesCtx = buildNotesContextForAI(notesMarkdown);
+    const notesText = truncateRealtimeContext(notesCtx.sanitizedNotes, REALTIME_NOTES_CONTEXT_LIMIT);
+    if (notesText) lines.push(`Current saved notes excerpt:\n${notesText}`);
+  }
+
+  return lines.join("\n\n");
+}
+
+function syncRealtimeVoiceSession({ force = false } = {}) {
+  if (!isRealtimeVoiceMode() || !realtimeSessionReady) return false;
+
+  const instructions = buildRealtimeVoiceInstructions();
+  const fingerprint = `${currentMode}::${instructions}`;
+  if (!force && fingerprint === realtimeContextFingerprint) return true;
+  realtimeContextFingerprint = fingerprint;
+
+  return sendRealtimeEvent({
+    type: "session.update",
+    session: {
+      type: "realtime",
+      instructions,
+      output_modalities: ["text"],
+      reasoning: {
+        effort: "low",
+      },
+      audio: {
+        input: {
+          transcription: {
+            model: "gpt-4o-transcribe",
+          },
+          turn_detection: {
+            type: "semantic_vad",
+            eagerness: "high",
+            create_response: false,
+            interrupt_response: true,
+          },
+        },
+      },
+    },
+  });
+}
+
+function clearRealtimeSpeechQueue() {
+  realtimeSpeechBuffer = "";
+  realtimeSpeechQueue = [];
+}
+
+function queueRealtimeSpeechChunk(text) {
+  const chunk = stripMarkdownForTTS(text);
+  if (!chunk) return;
+  realtimeSpeechQueue.push(chunk);
+  void drainRealtimeSpeechQueue();
+}
+
+function flushRealtimeSpeechBuffer({ final = false } = {}) {
+  let buffer = realtimeSpeechBuffer;
+  if (!buffer) return;
+
+  const chunks = [];
+  const sentencePattern = /^([\s\S]*?[.!?](?=\s|$))/;
+  let match = buffer.match(sentencePattern);
+  while (match) {
+    const chunk = match[1].trim();
+    if (chunk) chunks.push(chunk);
+    buffer = buffer.slice(match[1].length).trimStart();
+    match = buffer.match(sentencePattern);
+  }
+
+  if (!final && buffer.length > 220) {
+    const preferredBreaks = [
+      buffer.lastIndexOf(". ", 220),
+      buffer.lastIndexOf("! ", 220),
+      buffer.lastIndexOf("? ", 220),
+      buffer.lastIndexOf("; ", 220),
+      buffer.lastIndexOf(", ", 220),
+      buffer.lastIndexOf(": ", 220),
+      buffer.lastIndexOf(" ", 220),
+    ].filter((idx) => idx > 40);
+    const splitIndex = preferredBreaks.length ? Math.max(...preferredBreaks) + 1 : -1;
+    if (splitIndex > 0) {
+      const chunk = buffer.slice(0, splitIndex).trim();
+      if (chunk) chunks.push(chunk);
+      buffer = buffer.slice(splitIndex).trimStart();
+    }
+  }
+
+  if (final && buffer.trim()) {
+    chunks.push(buffer.trim());
+    buffer = "";
+  }
+
+  realtimeSpeechBuffer = buffer;
+  chunks.forEach(queueRealtimeSpeechChunk);
+}
+
+async function drainRealtimeSpeechQueue() {
+  if (realtimeSpeechDraining) return;
+  realtimeSpeechDraining = true;
+
+  try {
+    while (voiceActive && isRealtimeVoiceMode() && realtimeSpeechQueue.length > 0) {
+      const nextChunk = realtimeSpeechQueue.shift();
+      if (!nextChunk) continue;
+      setOrbState("speaking");
+      await speakText(nextChunk);
+    }
+  } finally {
+    realtimeSpeechDraining = false;
+    if (voiceActive && isRealtimeVoiceMode() && realtimeSpeechQueue.length > 0) {
+      void drainRealtimeSpeechQueue();
+    }
+  }
+}
+
+function waitForRealtimeSpeechIdle(timeoutMs = 20000) {
+  const startedAt = Date.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!realtimeSpeechDraining && !isVoiceSpeaking && realtimeSpeechQueue.length === 0) {
+        resolve();
+        return;
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 60);
+    };
+    check();
+  });
+}
+
+function createRealtimeResponseWaiter() {
+  if (realtimeResponseWaiter) {
+    realtimeResponseWaiter.resolve({
+      status: "cancelled",
+      text: realtimeAssistantTranscript.trim(),
+      errorMessage: "",
+    });
+  }
+
+  return new Promise((resolve) => {
+    realtimeResponseWaiter = { resolve };
+  });
+}
+
+function resolveRealtimeResponse(payload) {
+  if (!realtimeResponseWaiter) return;
+  const waiter = realtimeResponseWaiter;
+  realtimeResponseWaiter = null;
+  waiter.resolve(payload);
+}
+
+async function finishRealtimeResponse(status, { errorMessage = "", fallbackText = "" } = {}) {
+  if (status === "done") {
+    if (!realtimeAssistantTranscript && fallbackText) {
+      realtimeAssistantTranscript = fallbackText;
+      setCaption(fallbackText);
+      realtimeSpeechBuffer = fallbackText;
+    }
+    flushRealtimeSpeechBuffer({ final: true });
+    await waitForRealtimeSpeechIdle();
+  } else {
+    clearRealtimeSpeechQueue();
+  }
+
+  resolveRealtimeResponse({
+    status,
+    text: realtimeAssistantTranscript.trim() || fallbackText || "",
+    errorMessage,
+  });
+}
+
 function extractRealtimeResponseText(response) {
   const outputs = Array.isArray(response?.output) ? response.output : [];
   for (const item of outputs) {
@@ -3498,6 +3768,10 @@ function cleanupRealtimeVoiceSession({ keepCaption = false } = {}) {
   realtimeOutputPromise = Promise.resolve();
   realtimeLastResponseFinishedAt = 0;
   realtimeLastResponseStatus = "idle";
+  realtimeContextFingerprint = "";
+  clearRealtimeSpeechQueue();
+  resolveRealtimeResponse({ status: "cancelled", text: "", errorMessage: "" });
+  stopCurrentTTS();
 
   if (realtimeDataChannel) {
     try { realtimeDataChannel.close(); } catch {}
@@ -3542,66 +3816,112 @@ function requestVoicePageContext() {
         resolve(currentPageContext);
         return;
       }
-      currentPageContext = {
-        title: res.title,
-        url: res.url,
-        text: res.text,
-        faviconUrl: res.faviconUrl || "",
-      };
-      updateChatContextUI();
-      updateVoicePageCtx();
+      applyPageContext(res);
       resolve(currentPageContext);
     });
   });
 }
 
-function getRealtimeVoiceInstructions() {
-  return [
-    "You are the live voice layer for Braino.",
-    "Speak clearly, briefly, and naturally.",
-    "When the app asks you to speak exact text, preserve the meaning and do not add extra commentary.",
-    "If interrupted, stop immediately and wait for the user.",
-  ].join("\n");
+async function requestRealtimeAssistantReply(text, { relayMode = false } = {}) {
+  if (!text || !isRealtimeVoiceMode() || !realtimeSessionReady) {
+    return { status: "error", text: "", errorMessage: "Realtime voice is not ready." };
+  }
+
+  interruptRealtimeSpeech({ clearCaption: false });
+  realtimeAssistantTranscript = "";
+  realtimeSpeechBuffer = "";
+  realtimeSpeechQueue = [];
+  realtimeAudioStartAt = Date.now();
+  realtimeLastResponseFinishedAt = 0;
+  realtimeLastResponseStatus = "pending";
+
+  const responsePromise = createRealtimeResponseWaiter();
+  setOrbState(relayMode ? "speaking" : "processing");
+  if (!relayMode) setCaption("Thinking…");
+
+  const responseCreated = relayMode
+    ? sendRealtimeEvent({
+        type: "response.create",
+        response: {
+          output_modalities: ["text"],
+          input: [
+            {
+              type: "message",
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `Relay this update to the user in one short natural spoken reply. Preserve the meaning and do not add new facts.\n\n${text}`,
+                },
+              ],
+            },
+          ],
+        },
+      })
+    : (
+      sendRealtimeEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text,
+            },
+          ],
+        },
+      }) &&
+      sendRealtimeEvent({
+        type: "response.create",
+        response: {
+          output_modalities: ["text"],
+        },
+      })
+    );
+
+  if (!responseCreated) {
+    resolveRealtimeResponse({
+      status: "error",
+      text: "",
+      errorMessage: "Realtime voice channel is not ready.",
+    });
+  }
+
+  const result = await responsePromise;
+  if (result.status === "error") {
+    throw new Error(result.errorMessage || "Realtime voice failed.");
+  }
+  return result;
 }
 
 function interruptRealtimeSpeech({ clearCaption = true } = {}) {
   sendRealtimeEvent({ type: "response.cancel" });
   sendRealtimeEvent({ type: "output_audio_buffer.clear" });
   stopCurrentTTS();
+  clearRealtimeSpeechQueue();
   realtimeAssistantTranscript = "";
   realtimeAssistantItemId = null;
   realtimeLastResponseFinishedAt = Date.now();
   realtimeLastResponseStatus = "cancelled";
+  resolveRealtimeResponse({ status: "cancelled", text: "", errorMessage: "" });
   setRealtimeMicEnabled(!voiceMuted);
   if (clearCaption) setCaption("");
 }
 
 async function speakTextWithRealtime(text) {
   if (!text) return false;
-  interruptRealtimeSpeech({ clearCaption: false });
-  realtimeAssistantTranscript = "";
-  realtimeAudioStartAt = Date.now();
-  realtimeLastResponseFinishedAt = 0;
-  realtimeLastResponseStatus = "pending";
-  setRealtimeMicEnabled(false);
-  setOrbState("speaking");
-
   try {
-    await speakText(text, (spokenText, idx) => {
-      if (idx === -1) setCaption(spokenText);
-    });
-    realtimeLastResponseFinishedAt = Date.now();
-    realtimeLastResponseStatus = "done";
+    const result = await requestRealtimeAssistantReply(text, { relayMode: true });
+    if (result.status === "error") {
+      throw new Error(result.errorMessage || "Realtime voice is not ready.");
+    }
     return true;
   } catch (error) {
     realtimeLastResponseFinishedAt = Date.now();
     realtimeLastResponseStatus = "error";
-    console.warn("Realtime ElevenLabs playback failed:", error);
+    console.warn("Realtime relay playback failed:", error);
     return false;
-  } finally {
-    if (voiceActive && isRealtimeVoiceMode()) {
-      setRealtimeMicEnabled(!voiceMuted);
-    }
   }
 }
 
@@ -3616,8 +3936,10 @@ function handleRealtimeServerEvent(serverEvent) {
   }
 
   if (serverEvent.type === "input_audio_buffer.speech_started") {
+    if (isVoiceSpeaking || realtimeLastResponseStatus === "speaking" || realtimeLastResponseStatus === "pending") {
+      interruptRealtimeSpeech({ clearCaption: false });
+    }
     realtimeUserTranscript = "";
-    realtimeAssistantTranscript = "";
     setCaption("");
     setOrbState("listening");
     return;
@@ -3651,8 +3973,10 @@ function handleRealtimeServerEvent(serverEvent) {
 
   if (serverEvent.type === "response.created") {
     realtimeAssistantTranscript = "";
+    realtimeSpeechBuffer = "";
+    realtimeSpeechQueue = [];
     realtimeAudioStartAt = Date.now();
-    realtimeLastResponseStatus = "speaking";
+    realtimeLastResponseStatus = "pending";
     setOrbState("processing");
     return;
   }
@@ -3684,6 +4008,9 @@ function handleRealtimeServerEvent(serverEvent) {
   if (serverEvent.type === "response.output_text.delta") {
     if (typeof serverEvent.delta === "string" && serverEvent.delta) {
       realtimeAssistantTranscript += serverEvent.delta;
+      realtimeSpeechBuffer += serverEvent.delta;
+      flushRealtimeSpeechBuffer();
+      realtimeLastResponseStatus = "speaking";
       setOrbState("speaking");
       setCaption(realtimeAssistantTranscript.trim());
     }
@@ -3700,14 +4027,14 @@ function handleRealtimeServerEvent(serverEvent) {
 
   if (serverEvent.type === "response.done") {
     const fallbackText = extractRealtimeResponseText(serverEvent.response);
-    if (!realtimeAssistantTranscript && fallbackText) {
-      realtimeAssistantTranscript = fallbackText;
-      setCaption(fallbackText);
-    }
     realtimeLastResponseFinishedAt = Date.now();
     realtimeLastResponseStatus = "done";
-    setOrbState("listening");
     setVoiceContextStatus("live");
+    void finishRealtimeResponse("done", { fallbackText }).finally(() => {
+      if (!voiceActive || !isRealtimeVoiceMode()) return;
+      setOrbState("listening");
+      if (voiceUserText) voiceUserText.textContent = "";
+    });
     return;
   }
 
@@ -3717,6 +4044,7 @@ function handleRealtimeServerEvent(serverEvent) {
     realtimeLastResponseStatus = "cancelled";
     setOrbState("listening");
     setCaption("");
+    void finishRealtimeResponse("cancelled");
     return;
   }
 
@@ -3726,6 +4054,7 @@ function handleRealtimeServerEvent(serverEvent) {
     realtimeLastResponseStatus = "error";
     setOrbState("idle");
     setCaption(message);
+    void finishRealtimeResponse("error", { errorMessage: message });
   }
 }
 
@@ -3857,27 +4186,7 @@ async function startRealtimeVoiceMode() {
     setOrbState("listening");
     setVoiceContextStatus("live");
     setCaption("");
-
-    sendRealtimeEvent({
-      type: "session.update",
-      session: {
-        type: "realtime",
-        instructions: getRealtimeVoiceInstructions(),
-        output_modalities: ["text"],
-        audio: {
-          input: {
-            transcription: {
-              model: "gpt-4o-transcribe",
-            },
-            turn_detection: {
-              type: "semantic_vad",
-              create_response: false,
-              interrupt_response: true,
-            },
-          },
-        },
-      },
-    });
+    syncRealtimeVoiceSession({ force: true });
 
     return true;
   } catch (error) {
@@ -3986,6 +4295,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.action !== "selectionChanged" || !msg.text) return;
   currentSelection = { text: msg.text, url: msg.url, title: msg.title };
   showSelectionChip(msg.text);
+  if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
 });
 
 // Detect if a voice command is a browser action request
@@ -4025,6 +4335,7 @@ async function handleVoiceInput(text, { useRealtimeSpeech = isRealtimeVoiceMode(
     (currentMode !== "lecture" && currentMode !== "meeting" && !useAgent && isExplicitWebSearchRequest(text));
 
   let reply;
+  let replyAlreadySpoken = false;
 
   try {
     if (useAgent) {
@@ -4036,6 +4347,19 @@ async function handleVoiceInput(text, { useRealtimeSpeech = isRealtimeVoiceMode(
         text,
         chatMessages.slice(-10).map((message) => ({ role: message.role, content: message.content })),
       );
+
+      chatMessages.push({ role: "user", content: text });
+      chatMessages.push({ role: "assistant", content: reply });
+      saveChatMessages();
+      if (!headphoneMode) renderChatMessages();
+    } else if (useRealtimeSpeech && isRealtimeVoiceMode()) {
+      const realtimeResult = await requestRealtimeAssistantReply(text);
+      replyAlreadySpoken = true;
+      if (realtimeResult.status === "cancelled") return;
+      if (realtimeResult.status === "error") {
+        throw new Error(realtimeResult.errorMessage || "Realtime voice is not ready.");
+      }
+      reply = realtimeResult.text || "Sorry, I didn't get that.";
 
       chatMessages.push({ role: "user", content: text });
       chatMessages.push({ role: "assistant", content: reply });
@@ -4074,15 +4398,17 @@ async function handleVoiceInput(text, { useRealtimeSpeech = isRealtimeVoiceMode(
 
     if (voiceHandlingToken !== myToken || !voiceActive) return;
 
-    setOrbState("speaking");
-    if (useRealtimeSpeech) {
-      await speakTextWithRealtime(reply);
-    } else {
+    if (!replyAlreadySpoken) {
+      setOrbState("speaking");
+      if (useRealtimeSpeech) {
+        await speakTextWithRealtime(reply);
+      } else {
       // Stop mic so TTS audio isn't picked up as user input
-      if (voiceTabId) sendToContentScript(voiceTabId, "stopVoiceListening");
-      await speakText(reply, (text, _idx) => {
-        if (_idx === -1) setCaption(text); // initial render of word spans
-      });
+        if (voiceTabId) sendToContentScript(voiceTabId, "stopVoiceListening");
+        await speakText(reply, (text, _idx) => {
+          if (_idx === -1) setCaption(text); // initial render of word spans
+        });
+      }
     }
   } catch(e) {
     if (useRealtimeSpeech && isRealtimeVoiceMode()) {

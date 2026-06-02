@@ -1088,6 +1088,7 @@ function __sbGetSiteAdapterContext() {
 function __sbNormalizeConnectorName(value) {
   const key = String(value || "").trim().toLowerCase();
   if (!key || key === "auto" || key === "default") return "auto";
+  if (["spotify", "spot", "music"].includes(key)) return "spotify";
   if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
   if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
   return null;
@@ -1095,6 +1096,7 @@ function __sbNormalizeConnectorName(value) {
 
 function __sbGetConnectorSiteSuggestion(siteContext) {
   const site = siteContext?.site || "generic";
+  if (site === "spotify") return "spotify";
   if (site === "google-drive") return "google-drive";
   if (site === "gmail") return "gmail";
   return "auto";
@@ -1117,10 +1119,12 @@ function __sbInferConnectorFromPrompt(promptText) {
 function __sbGetConnectorLabel(connector, options = {}) {
   const key = __sbNormalizeConnectorName(connector) || "auto";
   const includeAutoHint = Boolean(options.includeAutoHint);
+  if (key === "spotify") return "♪ Spotify";
   if (key === "google-drive") return "🗂 Drive";
   if (key === "gmail") return "✉ Gmail";
   if (includeAutoHint) {
     const suggestion = __sbGetConnectorSiteSuggestion(options.siteContext || __sbGetSiteAdapterContext());
+    if (suggestion === "spotify") return "↗ Auto · Spotify";
     if (suggestion === "google-drive") return "↗ Auto · Drive";
     if (suggestion === "gmail") return "↗ Auto · Gmail";
   }
@@ -1161,6 +1165,9 @@ function __sbShouldConnectorForceAgent(connector, promptText, forcedMode, siteCo
   }
   if (key === "gmail") {
     return /\b(reply|draft|compose|send|archive|label|star|read|open|find|search|show|summarize|triage|email)\b/.test(text);
+  }
+  if (key === "spotify") {
+    return /\b(play|pause|resume|continue|next|previous|prev|back|skip|stop|shuffle|repeat|song|track|music|playlist|spotify)\b/.test(text);
   }
   return false;
 }
@@ -2134,23 +2141,9 @@ function __sbBuildBrainUI() {
     }
     #__sb_bubble__.visible { opacity: 1; pointer-events: all; }
     #__sb_bubble__.sb-spotify-active {
-      border-color: rgba(109, 255, 160, 0.34);
-      box-shadow: 0 24px 68px rgba(13,30,19,0.28), 0 6px 20px rgba(16,185,129,0.14),
-                  inset 0 1px 0 rgba(255,255,255,0.68), 0 0 0 1px rgba(93,226,142,0.1);
+      border-color: rgba(255, 255, 255, 0.18);
     }
-    #__sb_bubble__.sb-spotify-active::before {
-      content: "";
-      position: absolute;
-      inset: -18%;
-      pointer-events: none;
-      background:
-        radial-gradient(circle at 20% 18%, rgba(167,255,201,0.22), transparent 30%),
-        radial-gradient(circle at 78% 22%, rgba(94,234,212,0.18), transparent 26%),
-        radial-gradient(circle at 50% 75%, rgba(34,197,94,0.12), transparent 32%);
-      filter: blur(18px);
-      opacity: 0.92;
-      animation: __sb_spotify_card_glow__ 4.8s ease-in-out infinite;
-    }
+    #__sb_bubble__.sb-spotify-active::before { display: none; }
     #__sb_bubble__.sb-spotify-active::after {
       content: "";
       position: absolute;
@@ -2529,38 +2522,33 @@ function __sbBuildBrainUI() {
       gap: 14px;
       padding: 16px;
       border-radius: 22px;
-      background: linear-gradient(155deg, rgba(255,255,255,0.38), rgba(244,255,247,0.18));
-      border: 1px solid rgba(121, 246, 169, 0.2);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.34), 0 14px 34px rgba(16,24,20,0.08);
+      background: transparent;
+      border: none;
       overflow: hidden;
     }
-    .sb-spotify-shell::before {
-      content: "";
-      position: absolute;
-      inset: -20% 18% auto -18%;
-      height: 160px;
-      pointer-events: none;
-      background: radial-gradient(circle, rgba(103,255,159,0.28), transparent 68%);
-      filter: blur(22px);
-      opacity: 0.75;
-    }
+    .sb-spotify-shell::before { display: none; }
     .sb-spotify-hero {
+      --sb-ac-r: 80; --sb-ac-g: 180; --sb-ac-b: 100;
       position: relative;
       display: flex;
       flex-direction: column;
       gap: 14px;
       padding: 16px;
       border-radius: 18px;
-      background: linear-gradient(145deg, rgba(15,28,20,0.88), rgba(18,48,29,0.72));
+      background: linear-gradient(145deg,
+        rgba(calc(var(--sb-ac-r) * 0.18), calc(var(--sb-ac-g) * 0.18), calc(var(--sb-ac-b) * 0.18), 0.94),
+        rgba(calc(var(--sb-ac-r) * 0.14), calc(var(--sb-ac-g) * 0.14), calc(var(--sb-ac-b) * 0.14), 0.80)
+      );
       color: #F4FFF7;
       overflow: hidden;
+      transition: background 0.6s ease;
     }
     .sb-spotify-hero.is-playing::after {
       content: "";
       position: absolute;
       inset: -20% -25%;
       pointer-events: none;
-      background: linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.16) 46%, rgba(190,255,214,0.18) 54%, transparent 72%);
+      background: linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.16) 46%, rgba(var(--sb-ac-r), var(--sb-ac-g), var(--sb-ac-b), 0.1) 54%, transparent 72%);
       mix-blend-mode: screen;
       animation: __sb_spotify_panel_sheen__ 4s linear infinite;
     }
@@ -2596,8 +2584,8 @@ function __sbBuildBrainUI() {
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #64FF9F;
-      box-shadow: 0 0 10px rgba(100,255,159,0.7);
+      background: rgb(var(--sb-ac-r, 100), var(--sb-ac-g, 255), var(--sb-ac-b, 159));
+      box-shadow: 0 0 10px rgba(var(--sb-ac-r, 100), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.7);
       flex-shrink: 0;
     }
     .sb-spotify-badge.subtle::before {
@@ -2634,7 +2622,7 @@ function __sbBuildBrainUI() {
       align-items: center;
       justify-content: center;
       font-size: 28px;
-      background: radial-gradient(circle at 30% 20%, rgba(104,255,165,0.34), rgba(255,255,255,0.06));
+      background: radial-gradient(circle at 30% 20%, rgba(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 165), 0.34), rgba(255,255,255,0.06));
     }
     .sb-spotify-copy {
       min-width: 0;
@@ -2692,8 +2680,8 @@ function __sbBuildBrainUI() {
       display: block;
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #68FFAA 0%, #C5FFE2 100%);
-      box-shadow: 0 0 18px rgba(104,255,170,0.48);
+      background: linear-gradient(90deg, rgb(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 170)) 0%, rgba(var(--sb-ac-r, 197), var(--sb-ac-g, 255), var(--sb-ac-b, 226), 0.7) 100%);
+      box-shadow: 0 0 18px rgba(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 170), 0.48);
     }
     .sb-spotify-progress-times {
       display: flex;
@@ -2702,6 +2690,37 @@ function __sbBuildBrainUI() {
       font-size: 11px;
       color: rgba(230,255,236,0.72);
     }
+    .sb-spotify-controls {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+    }
+    .sb-spotify-ctrl-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.12);
+      color: #F4FFF7;
+      font-size: 16px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .sb-spotify-ctrl-btn:hover { background: rgba(255,255,255,0.22); transform: scale(1.08); }
+    .sb-spotify-ctrl-btn.primary {
+      width: 46px;
+      height: 46px;
+      font-size: 20px;
+      background: rgba(100,255,159,0.2);
+      border: 1px solid rgba(100,255,159,0.3);
+    }
+    .sb-spotify-ctrl-btn.primary:hover { background: rgba(100,255,159,0.35); }
     .sb-spotify-grid {
       display: grid;
       grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
@@ -2721,7 +2740,7 @@ function __sbBuildBrainUI() {
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #3A5C45;
+      color: rgb(calc(var(--sb-ac-r, 58) * 0.42), calc(var(--sb-ac-g, 92) * 0.42), calc(var(--sb-ac-b, 69) * 0.42));
     }
     .sb-spotify-results {
       display: flex;
@@ -2739,9 +2758,9 @@ function __sbBuildBrainUI() {
       border: 1px solid rgba(255,255,255,0.35);
     }
     .sb-spotify-result.is-current {
-      background: rgba(103,255,159,0.14);
-      border-color: rgba(103,255,159,0.32);
-      box-shadow: 0 10px 18px rgba(29,185,84,0.08);
+      background: rgba(var(--sb-ac-r, 103), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.14);
+      border-color: rgba(var(--sb-ac-r, 103), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.32);
+      box-shadow: 0 10px 18px rgba(var(--sb-ac-r, 29), var(--sb-ac-g, 185), var(--sb-ac-b, 84), 0.08);
     }
     .sb-spotify-result img,
     .sb-spotify-result-art {
@@ -4177,6 +4196,13 @@ function __sbToggleBrain() {
 function __sbToggleInput(open, options = {}) {
   if (!__sbOwnsInlineUi()) return;
   if (open) {
+    // While Spotify is playing, clicking the brain opens the player card, not the bar
+    if (__sbSpotifyIsPlaying()) {
+      const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+      if (cardOpen) { __sbCollapseCard(); } else { __sbRenderSpotifyPanel({ openCard: true, focusInput: false }); }
+      return;
+    }
+
     if (!__sbContextOk()) {
       __sbShowBubble("Reload this page to reconnect Braino.", true, { tone: "status" });
       return;
@@ -4491,18 +4517,27 @@ async function __sbSpeakText(text) {
 
   try {
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
+    if (!ttsToken) {
+      return await __sbSpeakWithBrowser(clean);
+    }
+
     const resp = await fetch(`${__SB_API}/elevenlabs-tts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: __SB_ANON_KEY,
-        ...(ttsToken ? { Authorization: `Bearer ${ttsToken}` } : {}),
+        Authorization: `Bearer ${ttsToken}`,
       },
       body: JSON.stringify({
         text: clean,
         voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
     });
+
+    if (resp.status === 401 || resp.status === 403) {
+      spoke = await __sbSpeakWithBrowser(clean);
+      return spoke;
+    }
 
     if (!resp.ok) throw new Error(`TTS failed: ${resp.status}`);
 
@@ -4619,6 +4654,14 @@ function __sbSyncSpotifyVisualState() {
   const active = __sbSpotifyIsPlaying();
   brain?.classList.toggle("sb-brain-spotify", active);
   bubble?.classList.toggle("sb-spotify-active", active);
+  // Hide the floating bar while music is playing
+  if (active) {
+    const bar = document.getElementById("__sb_bar__");
+    if (bar?.classList.contains("open") && !bar.classList.contains("sb-waking") && !bar.classList.contains("sb-signin")) {
+      bar.classList.remove("open");
+      __sbInputOpen = false;
+    }
+  }
 }
 
 function __sbEnsureSpotifyRefreshLoop() {
@@ -4631,8 +4674,16 @@ function __sbEnsureSpotifyRefreshLoop() {
     return;
   }
   __sbSpotifyRefreshTimer = setInterval(() => {
-    __sbRefreshSpotifyStateFromPage({ rerender: document.getElementById("__sb_card_wrap__")?.classList.contains("visible") });
-  }, 2500);
+    const siteContext = __sbGetSiteAdapterContext();
+    const cardVisible = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+    if (siteContext?.site === "spotify") {
+      // On Spotify page — use DOM scraping (free)
+      __sbRefreshSpotifyStateFromPage({ rerender: cardVisible });
+    } else {
+      // On any other page — poll the API via background (live sync from phone/other devices)
+      chrome.runtime.sendMessage({ action: "syncSpotifyPlayerState" }, () => { void chrome.runtime.lastError; });
+    }
+  }, 5000);
   __sbSyncSpotifyVisualState();
 }
 
@@ -4717,7 +4768,7 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
     track?.deviceName ? `<span class="sb-spotify-badge subtle">Device: ${__sbEscapeHtml(track.deviceName)}</span>` : "",
   ].filter(Boolean).join("");
   const coverHtml = track?.imageUrl
-    ? `<div class="sb-spotify-cover"><img src="${__sbEscapeHtml(track.imageUrl)}" alt="${__sbEscapeHtml(track.title)} cover art" /></div>`
+    ? `<div class="sb-spotify-cover"><img src="${__sbEscapeHtml(track.imageUrl)}" alt="${__sbEscapeHtml(track.title)} cover art" crossorigin="anonymous" /></div>`
     : `<div class="sb-spotify-cover"><div class="sb-spotify-cover-fallback">♪</div></div>`;
   const metaBits = [track?.album, track?.durationText].filter(Boolean).join(" · ");
   const progressWidth = typeof track?.progressRatio === "number"
@@ -4749,6 +4800,11 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
               <span>${__sbEscapeHtml(track?.durationText || "Spotify")}</span>
             </div>
           </div>
+          <div class="sb-spotify-controls">
+            <button class="sb-spotify-ctrl-btn" data-sb-spotify-ctrl="previous" title="Previous">⏮</button>
+            <button class="sb-spotify-ctrl-btn primary" data-sb-spotify-ctrl="${__sbSpotifyIsPlaying() ? "pause" : "play"}" title="${__sbSpotifyIsPlaying() ? "Pause" : "Play"}">${__sbSpotifyIsPlaying() ? "⏸" : "▶"}</button>
+            <button class="sb-spotify-ctrl-btn" data-sb-spotify-ctrl="next" title="Next">⏭</button>
+          </div>
         </div>
         <div class="sb-spotify-grid">
           <div class="sb-spotify-block">
@@ -4766,6 +4822,37 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
   `;
 }
 
+function __sbApplyAlbumColor(scroll) {
+  const img = scroll?.querySelector(".sb-spotify-cover img");
+  const hero = scroll?.querySelector(".sb-spotify-hero");
+  if (!img || !hero) return;
+  const apply = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 20; canvas.height = 20;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, 20, 20);
+      const data = ctx.getImageData(0, 0, 20, 20).data;
+      let bestR = 80, bestG = 180, bestB = 100, bestScore = -1;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        const sat = max === 0 ? 0 : (max - min) / max;
+        const bri = max / 255;
+        const score = sat * 0.65 + bri * 0.35;
+        if (score > bestScore && bri > 0.25 && bri < 0.97) {
+          bestScore = score; bestR = r; bestG = g; bestB = b;
+        }
+      }
+      hero.style.setProperty("--sb-ac-r", String(bestR));
+      hero.style.setProperty("--sb-ac-g", String(bestG));
+      hero.style.setProperty("--sb-ac-b", String(bestB));
+    } catch (_) {}
+  };
+  if (img.complete && img.naturalWidth > 0) { apply(); }
+  else { img.addEventListener("load", apply, { once: true }); }
+}
+
 function __sbRenderSpotifyPanel(options = {}) {
   if (!__sbHasSpotifySurface()) return;
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -4773,6 +4860,13 @@ function __sbRenderSpotifyPanel(options = {}) {
   const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
   scroll.innerHTML = __sbBuildSpotifyPanelHtml(historyHtml);
   scroll.scrollTop = 0;
+  __sbApplyAlbumColor(scroll);
+  scroll.querySelectorAll("[data-sb-spotify-ctrl]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const ctrl = btn.dataset.sbSpotifyCtrl;
+      chrome.runtime.sendMessage({ action: "spotifyControl", control: ctrl }, () => { void chrome.runtime.lastError; });
+    });
+  });
   if (options.openCard) __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
   __sbEnsureSpotifyRefreshLoop();
@@ -4948,11 +5042,15 @@ function __sbGetPageContext(maxChars = 12000) {
 }
 
 function __sbIsExplicitWebSearchRequest(text) {
-  return /\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|latest\b|current\b|news\b|search for\b)\b/i.test(text);
+  // Explicit search commands
+  if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|search for\b)\b/i.test(text)) return true;
+  // Freshness signals — needs live data
+  if (/\b(latest|current|today|right now|as of|this week|this month|this year|recent|news|price of|stock|weather|score|standings|live|just happened|breaking|update on|status of|is .{1,40} still|did .{1,30} happen|when did|who won|who is winning|what happened|trending)\b/i.test(text)) return true;
+  return false;
 }
 
 function __sbIsBrowserActionCommand(text) {
-  return /\b(open|go to|navigate to|visit|search for|play|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
+  return /\b(open|go to|navigate to|visit|search for|play|pause|resume|continue|next|previous|prev|skip|stop|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
 }
 
 function __sbDetectIntent(text) {
@@ -5148,18 +5246,37 @@ async function __sbProcessPrompt(text, options = {}) {
   // lecture and meeting both drive the recording flow
   const intent = (rawIntent === "lecture" || rawIntent === "meeting") ? "record" : rawIntent;
 
-  // Braino's favorite song easter egg
-  if (/\b(play|what('?s| is)|braino'?s?)\b.*\bfavorite\b.*\b(song|track|music)\b|\bfavorite\b.*\b(song|track|music)\b.*\bplay\b/i.test(promptText)) {
+  // "What's new with you?" — Braino reads the changelog in first person, then flips the question back
+  if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you/i.test(promptText)) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
-    const played = await new Promise(resolve =>
-      chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r?.ok))
+    __sbChatHistory.push({ role: "user", content: promptText });
+    const reply = "Oh, a lot actually! I just went through a complete rebrand — I'm officially Braino now, and trybraino.com just went live. In the past few days I got a whole physics engine: I can float, bounce when I land, and my pupils follow your cursor around. Then I got Movie Mode, where I detect what you're watching and glow with a little ambient halo that pulses with the content. I also got a full persona and voice system, so I can sound like different characters. And just now I can run 24/7 on X, write and post for you, create Google Docs from research in one shot, and even organise your entire Drive on command. It's been a wild week, honestly.\n\nBut enough about me — what's new with you?";
+    __sbChatHistory.push({ role: "assistant", content: reply });
+    __sbCardTurns.push({ prompt: promptText, answer: reply });
+    const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbRenderCardHistory(scrollEl);
+    __sbOpenCard({ rich: true });
+    __sbSyncSpeakButtons();
+    if (fromVoice) await __sbSpeakText(reply);
+    return;
+  }
+
+  // Braino's favorite song easter egg
+  if (/\bfavou?rite\b/i.test(promptText)) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    const result = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r || {}))
     );
     __sbChatHistory.push({ role: "user", content: promptText });
-    const reply = played
+    const reply = result.ok
       ? "Playing my favorite song for you ♫"
-      : "I tried to play my favorite song but Spotify isn't connected — link it from the dashboard first.";
+      : result.error?.includes("device")
+        ? "Open Spotify on your phone or desktop first, then ask me again ♫"
+        : "Spotify isn't connected yet — link it from the dashboard first.";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");

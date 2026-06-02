@@ -4517,18 +4517,27 @@ async function __sbSpeakText(text) {
 
   try {
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
+    if (!ttsToken) {
+      return await __sbSpeakWithBrowser(clean);
+    }
+
     const resp = await fetch(`${__SB_API}/elevenlabs-tts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: __SB_ANON_KEY,
-        ...(ttsToken ? { Authorization: `Bearer ${ttsToken}` } : {}),
+        Authorization: `Bearer ${ttsToken}`,
       },
       body: JSON.stringify({
         text: clean,
         voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
     });
+
+    if (resp.status === 401 || resp.status === 403) {
+      spoke = await __sbSpeakWithBrowser(clean);
+      return spoke;
+    }
 
     if (!resp.ok) throw new Error(`TTS failed: ${resp.status}`);
 

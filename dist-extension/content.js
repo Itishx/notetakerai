@@ -4517,18 +4517,27 @@ async function __sbSpeakText(text) {
 
   try {
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
+    if (!ttsToken) {
+      return await __sbSpeakWithBrowser(clean);
+    }
+
     const resp = await fetch(`${__SB_API}/elevenlabs-tts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: __SB_ANON_KEY,
-        ...(ttsToken ? { Authorization: `Bearer ${ttsToken}` } : {}),
+        Authorization: `Bearer ${ttsToken}`,
       },
       body: JSON.stringify({
         text: clean,
         voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
     });
+
+    if (resp.status === 401 || resp.status === 403) {
+      spoke = await __sbSpeakWithBrowser(clean);
+      return spoke;
+    }
 
     if (!resp.ok) throw new Error(`TTS failed: ${resp.status}`);
 
@@ -5033,7 +5042,11 @@ function __sbGetPageContext(maxChars = 12000) {
 }
 
 function __sbIsExplicitWebSearchRequest(text) {
-  return /\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|latest\b|current\b|news\b|search for\b)\b/i.test(text);
+  // Explicit search commands
+  if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|search for\b)\b/i.test(text)) return true;
+  // Freshness signals — needs live data
+  if (/\b(latest|current|today|right now|as of|this week|this month|this year|recent|news|price of|stock|weather|score|standings|live|just happened|breaking|update on|status of|is .{1,40} still|did .{1,30} happen|when did|who won|who is winning|what happened|trending)\b/i.test(text)) return true;
+  return false;
 }
 
 function __sbIsBrowserActionCommand(text) {
