@@ -5733,26 +5733,26 @@ async function __sbStartRealtimeVoice() {
   }
 
   try {
-    // 1. Get ephemeral key from Supabase
+    // 1. Get API key from Supabase (authenticated — only signed-in users get it)
     const res = await fetch(`${__SB_API}/openai-realtime-call`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
     });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
-      throw new Error(errBody.details || errBody.error || `Session failed (${res.status})`);
+      throw new Error(errBody.details || errBody.error || `Auth failed (${res.status})`);
     }
-    const { ephemeralKey, model } = await res.json();
+    const { apiKey, model } = await res.json();
 
     // 2. Get mic
     __sbRtMic = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
 
-    // 3. Connect WebSocket using ephemeral key via subprotocol (browser-safe)
+    // 3. Connect WebSocket with API key via subprotocol (the correct browser approach for gpt-realtime-2)
     const ws = new WebSocket(
       `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model || "gpt-realtime-2")}`,
-      ["realtime", `openai-insecure-api-key.${ephemeralKey}`, "openai-beta.realtime-v1"]
+      ["realtime", `openai-insecure-api-key.${apiKey}`, "openai-beta.realtime-v1"]
     );
     __sbRtWs = ws;
 

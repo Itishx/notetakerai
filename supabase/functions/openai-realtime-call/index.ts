@@ -39,34 +39,9 @@ serve(async (req) => {
       return json({ error: "Sign in required." }, 401);
     }
 
-    // Create a short-lived ephemeral session key for the client to use
-    const sessionRes = await fetch("https://api.openai.com/v1/realtime/sessions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiApiKey}`,
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "realtime=v1",
-      },
-      body: JSON.stringify({
-        model: realtimeModel,
-        voice: "coral",
-      }),
-    });
-
-    if (!sessionRes.ok) {
-      const errorText = await sessionRes.text();
-      console.error("openai-realtime-call session error:", sessionRes.status, errorText);
-      return json({ error: "Failed to create realtime session.", details: errorText }, sessionRes.status);
-    }
-
-    const session = await sessionRes.json();
-    const ephemeralKey = session.client_secret?.value;
-
-    if (!ephemeralKey) {
-      return json({ error: "No ephemeral key returned from OpenAI.", details: JSON.stringify(session) }, 500);
-    }
-
-    return json({ ephemeralKey, model: realtimeModel });
+    // Return the API key to the authenticated client so it can open
+    // the WebSocket directly. gpt-realtime-2 has no /sessions endpoint.
+    return json({ apiKey: openAiApiKey, model: realtimeModel });
 
   } catch (error) {
     console.error("openai-realtime-call error:", error);
