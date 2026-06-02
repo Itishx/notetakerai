@@ -34,6 +34,7 @@ import Integrations from "./pages/Integrations.tsx";
 import ConnectorsVault from "./pages/ConnectorsVault.tsx";
 import Changelog from "./pages/Changelog.tsx";
 import BrainoLive from "./pages/BrainoLive.tsx";
+import Playground from "./pages/Playground.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -81,6 +82,7 @@ const App = () => {
               <Route path="/connectors-vault" element={<ConnectorsVault />} />
               <Route path="/changelog" element={<Changelog />} />
               <Route path="/live" element={<BrainoLive />} />
+              <Route path="/playground" element={<Playground />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
