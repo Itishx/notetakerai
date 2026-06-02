@@ -5738,8 +5738,14 @@ async function __sbStartRealtimeVoice() {
 
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
-      // Prefer the raw OpenAI error in details over the generic wrapper
-      throw new Error(errBody.details || errBody.error || `Realtime failed (${res.status})`);
+      console.error("[Braino Realtime] OpenAI error:", JSON.stringify(errBody, null, 2));
+      // details is the raw OpenAI response body; error is the Supabase wrapper
+      let msg = errBody.details || errBody.error || `Realtime failed (${res.status})`;
+      try {
+        const parsed = JSON.parse(errBody.details);
+        msg = parsed?.error?.message || msg;
+      } catch (_) {}
+      throw new Error(msg);
     }
 
     await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
@@ -5864,9 +5870,10 @@ function __sbSetHpBrainState(state) {
 function __sbSetVoiceStatusBadge(state, label) {
   const badge = document.getElementById("__sb_voice_status_badge__");
   if (!badge) return;
-  if (!state) { badge.removeAttribute("data-s"); badge.textContent = ""; return; }
+  if (!state) { badge.removeAttribute("data-s"); badge.textContent = ""; badge.title = ""; return; }
   badge.setAttribute("data-s", state);
   badge.textContent = label || state;
+  badge.title = label || state;
 }
 
 function __sbShowVoiceError(msg) {
