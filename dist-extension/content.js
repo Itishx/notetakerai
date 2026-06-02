@@ -2897,7 +2897,8 @@ function __sbBuildBrainUI() {
       font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
       text-transform: uppercase; letter-spacing: 0.06em;
       border-radius: 999px; padding: 2px 7px; border: 1px solid transparent;
-      display: none; align-items: center; flex-shrink: 0; white-space: nowrap;
+      display: none; align-items: center; flex-shrink: 1;
+      max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     #__sb_voice_status_badge__[data-s="realtime"] {
       display: flex; color: #17663b;
@@ -2910,6 +2911,7 @@ function __sbBuildBrainUI() {
     #__sb_voice_status_badge__[data-s="error"] {
       display: flex; color: #8f2424;
       background: rgba(255,237,237,0.95); border-color: rgba(202,69,69,0.32);
+      text-transform: none; max-width: 200px;
     }
     #__sb_voice_status_badge__[data-s="connecting"] {
       display: flex; color: #8f5b13;
@@ -5682,8 +5684,7 @@ let __sbRtAudio = null;
 async function __sbStartRealtimeVoice() {
   const { authToken } = await __sbStorageGet(["authToken"]);
   if (!authToken) {
-    __sbSetVoiceStatusBadge("error", "Error");
-    __sbShowVoiceError("Sign in to use Live AI voice.");
+    __sbSetVoiceStatusBadge("error", "Sign in first");
     __sbSetHpBrainState("");
     return;
   }
@@ -5712,6 +5713,7 @@ async function __sbStartRealtimeVoice() {
         __sbCleanupRealtimeVoice();
         __sbSetVoiceStatusBadge("error", "Disconnected");
         __sbSetHpBrainState("");
+        __sbExitHeadphoneMode();
       }
     };
 
@@ -5735,8 +5737,9 @@ async function __sbStartRealtimeVoice() {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || err.details || `Realtime failed (${res.status})`);
+      const errBody = await res.json().catch(() => ({}));
+      // Prefer the raw OpenAI error in details over the generic wrapper
+      throw new Error(errBody.details || errBody.error || `Realtime failed (${res.status})`);
     }
 
     await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
@@ -5785,8 +5788,9 @@ async function __sbStartRealtimeVoice() {
 
   } catch (err) {
     __sbCleanupRealtimeVoice();
-    __sbSetVoiceStatusBadge("error", "Error");
-    __sbShowVoiceError(err.message || "Live AI failed.");
+    const msg = err.message || "Live AI failed.";
+    // Show error inline next to headphones, not as a floating pill
+    __sbSetVoiceStatusBadge("error", msg);
     __sbSetHpBrainState("");
   }
 }
