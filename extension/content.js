@@ -4531,7 +4531,7 @@ function __sbSyncSpeakButtons() {
 }
 
 function __sbStopSpeech() {
-  if (__sbRtCurrentResponseMode !== "idle" || __sbRtResponseWaiter) {
+  if (__sbHasActiveRealtimeResponse()) {
     __sbVoicePendingReply = false;
     __sbInterruptRealtimeResponse();
   }
@@ -4588,8 +4588,10 @@ async function __sbSpeakText(text) {
 
   __sbStopSpeech();
   let spoke = false;
+  const shouldMuteRealtimeMic = Boolean(__sbHeadphoneMode && __sbRtMic);
 
   try {
+    if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(false);
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
     if (!ttsToken) {
       return await __sbSpeakWithBrowser(clean);
@@ -4650,6 +4652,7 @@ async function __sbSpeakText(text) {
     if (__sbHeadphoneMode && !__sbVoicePendingReply) {
       __sbSetHpBrainState("listening");
     }
+    if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(true);
   }
   return spoke;
 }
@@ -5881,6 +5884,12 @@ function __sbSendRtEvent(event) {
   return true;
 }
 
+function __sbSetRealtimeMicEnabled(enabled) {
+  __sbRtMic?.getAudioTracks?.().forEach((track) => {
+    track.enabled = enabled;
+  });
+}
+
 function __sbTruncateRealtimeContext(text, maxChars = 5000) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
   if (!normalized) return "";
@@ -5932,6 +5941,22 @@ function __sbIsRealtimeVoiceReady() {
   return Boolean(__sbRtDataChannel && __sbRtDataChannel.readyState === "open");
 }
 
+function __sbHasActiveRealtimeResponse() {
+  return __sbRtCurrentResponseMode !== "idle" || Boolean(__sbRtResponseWaiter);
+}
+
+function __sbIsBenignRealtimeControlError(message) {
+  const text = String(message || "").toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("cancel") ||
+    text.includes("clear") ||
+    text.includes("no active response") ||
+    text.includes("no response to cancel") ||
+    text.includes("output audio buffer")
+  );
+}
+
 function __sbResolveRtWaiter(payload) {
   if (!__sbRtResponseWaiter) return;
   const waiter = __sbRtResponseWaiter;
@@ -5974,7 +5999,7 @@ function __sbResetRealtimeResponseState() {
 }
 
 function __sbInterruptRealtimeResponse() {
-  if (__sbIsRealtimeVoiceReady()) {
+  if (__sbIsRealtimeVoiceReady() && __sbHasActiveRealtimeResponse()) {
     __sbSendRtEvent({ type: "response.cancel" });
     __sbSendRtEvent({ type: "output_audio_buffer.clear" });
   }
@@ -5991,7 +6016,9 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
     return { status: "error", text: "", errorMessage: "Live AI is not ready." };
   }
 
-  __sbInterruptRealtimeResponse();
+  if (__sbHasActiveRealtimeResponse()) {
+    __sbInterruptRealtimeResponse();
+  }
   __sbRtAssistantTranscript = "";
   __sbRtCurrentResponseMode = relayMode ? "relay" : "conversation";
   __sbRtRelayingAppMessage = relayMode;
@@ -6135,7 +6162,9 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     }
   } catch (err) {
     __sbShowVoiceError(err.message || "Live AI failed.");
-    await __sbSpeakText("Something went wrong. Try again.");
+    if (!__sbHeadphoneMode) {
+      await __sbSpeakText("Something went wrong. Try again.");
+    }
   } finally {
     __sbRtHandlingConversationTurn = false;
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
@@ -6170,7 +6199,7 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "input_audio_buffer.speech_started") {
-    if (__sbRtCurrentResponseMode !== "idle" || __sbRtResponseWaiter) {
+    if (__sbHasActiveRealtimeResponse()) {
       __sbVoicePendingReply = false;
       __sbInterruptRealtimeResponse();
     }
@@ -6231,6 +6260,9 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "error") {
     const message = ev.error?.message || "Realtime error";
+    if (!__sbHasActiveRealtimeResponse() && __sbIsBenignRealtimeControlError(message)) {
+      return;
+    }
     __sbVoicePendingReply = false;
     __sbResetRealtimeResponseState();
     __sbResolveRtWaiter({ status: "error", text: "", errorMessage: message });
