@@ -1971,7 +1971,8 @@ function agentFinalizeBlock(block, stepCount) {
 
 function getAgentPageContext() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "getAgentPageContext" }, (res) => {
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    chrome.runtime.sendMessage({ action: "getAgentPageContext", ...(targetTabId ? { tabId: targetTabId } : {}) }, (res) => {
       if (chrome.runtime.lastError || res?.error) {
         resolve({ url: "", title: "", bodyText: "", interactiveEls: [] });
       } else {
@@ -1983,7 +1984,8 @@ function getAgentPageContext() {
 
 function executeAgentAction(actionObj) {
   return new Promise((resolve) => {
-    const msg = { action: "agentAction", ...actionObj };
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    const msg = { action: "agentAction", ...actionObj, ...(targetTabId ? { tabId: targetTabId } : {}) };
     chrome.runtime.sendMessage(msg, (res) => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || { error: "No response" });
@@ -1993,7 +1995,8 @@ function executeAgentAction(actionObj) {
 
 function getSiteAdapterContext() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "getSiteAdapterContext" }, (res) => {
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    chrome.runtime.sendMessage({ action: "getSiteAdapterContext", ...(targetTabId ? { tabId: targetTabId } : {}) }, (res) => {
       if (chrome.runtime.lastError || res?.error) {
         resolve({ site: "generic", url: "", title: "" });
       } else {
@@ -2005,7 +2008,8 @@ function getSiteAdapterContext() {
 
 function executeSiteAdapterAction(actionObj) {
   return new Promise((resolve) => {
-    const msg = { action: "siteAdapterAction", ...actionObj };
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    const msg = { action: "siteAdapterAction", ...actionObj, ...(targetTabId ? { tabId: targetTabId } : {}) };
     chrome.runtime.sendMessage(msg, (res) => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || { error: "No response" });
@@ -4340,6 +4344,7 @@ async function openVoiceMode() {
   }
 
   voiceTabId = tabId;
+  chrome.storage.local.set({ activeTabId: tabId });
   const startedRealtime = await startRealtimeVoiceMode();
   if (startedRealtime) {
     return;
