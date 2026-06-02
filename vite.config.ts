@@ -3,9 +3,31 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import fs from "fs";
 
-const extensionManifestPath = path.resolve(__dirname, "./extension/manifest.json");
-const extensionManifest = JSON.parse(fs.readFileSync(extensionManifestPath, "utf8")) as { version?: string };
-const extensionVersion = extensionManifest.version ?? "0.0.0";
+const extensionManifestPaths = [
+  path.resolve(__dirname, "./public/sidebrain-extension/manifest.json"),
+  path.resolve(__dirname, "./extension/manifest.json"),
+];
+
+function getExtensionVersion() {
+  for (const manifestPath of extensionManifestPaths) {
+    if (!fs.existsSync(manifestPath)) {
+      continue;
+    }
+
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as { version?: string };
+      if (typeof manifest.version === "string" && manifest.version.trim()) {
+        return manifest.version.trim();
+      }
+    } catch (error) {
+      console.warn(`Unable to read extension manifest at ${manifestPath}:`, error);
+    }
+  }
+
+  return process.env.BRAINO_EXTENSION_VERSION ?? "0.0.0";
+}
+
+const extensionVersion = getExtensionVersion();
 
 export default defineConfig({
   server: {
