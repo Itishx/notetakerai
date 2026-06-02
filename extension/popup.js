@@ -3304,6 +3304,7 @@ const ELEVENLABS_API_KEY = "sk_2ee3bb5258f10b54aba4d71a7ff1640d98fc322c3e2410cd"
 const ELEVENLABS_VOICE_ID = "2ajXGJNYBR0iNHpS4VZb";
 let currentAudio = null;
 let currentAudioDone = null;
+let currentUtterance = null;
 
 function stripMarkdownForTTS(text) {
   return text
@@ -3331,6 +3332,15 @@ function finishCurrentTTS() {
   done();
 }
 
+function clearCurrentUtterance() {
+  if (!currentUtterance) return;
+  try {
+    currentUtterance.onend = null;
+    currentUtterance.onerror = null;
+  } catch {}
+  currentUtterance = null;
+}
+
 function stopCurrentTTS() {
   if (currentAudio) {
     try { currentAudio.onended = null; } catch {}
@@ -3342,9 +3352,80 @@ function stopCurrentTTS() {
     } catch {}
     currentAudio = null;
   }
+  if ("speechSynthesis" in window) {
+    try { window.speechSynthesis.cancel(); } catch {}
+  }
+  clearCurrentUtterance();
   if (voiceWordIntervalId) { clearInterval(voiceWordIntervalId); voiceWordIntervalId = null; }
   isVoiceSpeaking = false;
   finishCurrentTTS();
+}
+
+function renderVoiceCaptionWords(text) {
+  if (!voiceAgentText) return [];
+  setCaption(text);
+  return Array.from(voiceAgentText.querySelectorAll(".word"));
+}
+
+async function speakTextWithBrowserVoice(text, onWordUpdate) {
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+    return false;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  currentUtterance = utterance;
+  isVoiceSpeaking = true;
+
+  let wordSpans = [];
+  if (onWordUpdate) {
+    onWordUpdate(text, -1);
+    wordSpans = Array.from(voiceAgentText ? voiceAgentText.querySelectorAll(".word") : []);
+  } else {
+    wordSpans = renderVoiceCaptionWords(text);
+  }
+
+  const estimatedDurationMs = Math.max(900, text.split(/\s+/).filter(Boolean).length * 320);
+  const startWordTimer = () => {
+    if (!wordSpans.length) return;
+    const msPerWord = Math.max(70, estimatedDurationMs / Math.max(wordSpans.length, 1));
+    let i = 0;
+    voiceWordIntervalId = setInterval(() => {
+      if (i < wordSpans.length) {
+        if (i > 0) {
+          wordSpans[i - 1].classList.remove("current");
+          wordSpans[i - 1].classList.add("said");
+        }
+        wordSpans[i].classList.add("current");
+        wordSpans[i].scrollIntoView({ block: "nearest", behavior: "smooth" });
+        i++;
+      } else {
+        if (wordSpans.length > 0) {
+          wordSpans[wordSpans.length - 1].classList.remove("current");
+          wordSpans[wordSpans.length - 1].classList.add("said");
+        }
+        clearInterval(voiceWordIntervalId);
+        voiceWordIntervalId = null;
+      }
+    }, msPerWord);
+  };
+
+  startWordTimer();
+
+  await new Promise((resolve) => {
+    currentAudioDone = resolve;
+    utterance.onend = () => {
+      clearCurrentUtterance();
+      stopCurrentTTS();
+    };
+    utterance.onerror = () => {
+      clearCurrentUtterance();
+      stopCurrentTTS();
+    };
+    try { window.speechSynthesis.cancel(); } catch {}
+    window.speechSynthesis.speak(utterance);
+  });
+
+  return true;
 }
 
 async function speakText(text, onWordUpdate) {
@@ -3360,7 +3441,12 @@ async function speakText(text, onWordUpdate) {
       headers: { "xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ text: clean, model_id: "eleven_turbo_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      console.warn("ElevenLabs TTS unavailable, falling back to browser voice:", res.status, errorText);
+      await speakTextWithBrowserVoice(clean, onWordUpdate);
+      return;
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     currentAudio = new Audio(url);
@@ -3410,7 +3496,8 @@ async function speakText(text, onWordUpdate) {
     URL.revokeObjectURL(url);
   } catch (e) {
     stopCurrentTTS();
-    console.warn("ElevenLabs TTS error:", e);
+    console.warn("ElevenLabs TTS error, falling back to browser voice:", e);
+    await speakTextWithBrowserVoice(clean, onWordUpdate);
   }
 }
 
