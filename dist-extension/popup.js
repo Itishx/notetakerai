@@ -3622,6 +3622,10 @@ function setVoiceContextStatus(text, { tone, detail = "" } = {}) {
     voiceTransportError.textContent = detail;
     voiceTransportError.classList.toggle("hidden", !detail);
   }
+  // Push status to the inline popup in the page
+  if (voiceTabId) {
+    chrome.tabs.sendMessage(voiceTabId, { action: "voiceTransportStatus", status: resolvedTone, detail });
+  }
 }
 
 function isRealtimeVoiceSessionRunning() {
@@ -4379,6 +4383,24 @@ function toggleHeadphoneMode() {
     openVoiceMode();
   }
 }
+
+// Handle headphone mode triggered from the inline floating popup
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "startHeadphoneMode") {
+    sendResponse({ ok: true });
+    if (sender?.tab?.id) voiceTabId = sender.tab.id;
+    if (!voiceActive) {
+      headphoneMode = true;
+      document.body.classList.add("headphone-mode");
+      openVoiceMode();
+    }
+    return true;
+  }
+  if (msg.action === "stopHeadphoneMode") {
+    if (voiceActive) closeVoiceMode();
+    return true;
+  }
+});
 
 // Handle remote commands forwarded by background.js
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

@@ -1712,6 +1712,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === "voiceTransportStatus") {
+    const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Connecting…" };
+    __sbSetVoiceStatusBadge(msg.status, labelMap[msg.status] || msg.status);
+    if (msg.status === "realtime") __sbSetHpBrainState("listening");
+    return true;
+  }
+
   return true;
 });
 
@@ -2882,6 +2889,28 @@ function __sbBuildBrainUI() {
     }
     .sb-card-foot-btn:hover { background: var(--sb-btn-bg); }
     .sb-card-foot-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_voice_status_badge__ {
+      font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-radius: 999px; padding: 2px 7px; border: 1px solid transparent;
+      display: none; align-items: center; flex-shrink: 0; white-space: nowrap;
+    }
+    #__sb_voice_status_badge__[data-s="realtime"] {
+      display: flex; color: #17663b;
+      background: rgba(232,249,239,0.95); border-color: rgba(32,148,84,0.3);
+    }
+    #__sb_voice_status_badge__[data-s="legacy"] {
+      display: flex; color: #8f5b13;
+      background: rgba(255,245,224,0.95); border-color: rgba(196,129,34,0.35);
+    }
+    #__sb_voice_status_badge__[data-s="error"] {
+      display: flex; color: #8f2424;
+      background: rgba(255,237,237,0.95); border-color: rgba(202,69,69,0.32);
+    }
+    #__sb_voice_status_badge__[data-s="connecting"] {
+      display: flex; color: #8f5b13;
+      background: rgba(255,245,224,0.95); border-color: rgba(196,129,34,0.35);
+    }
     #__sb_card_send__ { background: #E8786E; color: white; }
     #__sb_card_send__:hover { background: #C9544A; }
     #__sb_rec_bar__ {
@@ -2978,6 +3007,7 @@ function __sbBuildBrainUI() {
         <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Headphone mode">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
         </button>
+        <span id="__sb_voice_status_badge__"></span>
         <button id="__sb_card_send__" class="sb-card-foot-btn" title="Send">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </button>
@@ -5634,17 +5664,22 @@ function __sbEnterHeadphoneMode() {
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
 
-  // Close bar, keep the brain button visible as the only UI
   __sbToggleInput(false);
   __sbCollapseCard();
 
-  // Mark headphone btn active in case bar reopens
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
-  // Start with listening glow on the brain
   __sbSetHpBrainState("listening");
-  void __sbStartRecording();
+  __sbSetVoiceStatusBadge("connecting", "Connecting…");
+
+  // Delegate to sidepanel GPT Realtime; fall back to local recording if unavailable
+  chrome.runtime.sendMessage({ action: "startHeadphoneMode" }, (res) => {
+    if (chrome.runtime.lastError || !res?.ok) {
+      __sbSetVoiceStatusBadge("legacy", "Legacy");
+      void __sbStartRecording();
+    }
+  });
 }
 
 function __sbExitHeadphoneMode() {
@@ -5658,9 +5693,12 @@ function __sbExitHeadphoneMode() {
   __sbStopSpeech();
 
   __sbSetHpBrainState("");
+  __sbSetVoiceStatusBadge(null);
 
   document.getElementById("__sb_rec_btn__")?.classList.remove("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
+
+  chrome.runtime.sendMessage({ action: "stopHeadphoneMode" });
 }
 
 // state: "listening" | "captured" | "speaking" | ""
@@ -5669,6 +5707,14 @@ function __sbSetHpBrainState(state) {
   if (!brain) return;
   brain.classList.remove("hp-listening", "hp-captured", "hp-speaking", "recording");
   if (state) brain.classList.add(`hp-${state}`);
+}
+
+function __sbSetVoiceStatusBadge(state, label) {
+  const badge = document.getElementById("__sb_voice_status_badge__");
+  if (!badge) return;
+  if (!state) { badge.removeAttribute("data-s"); badge.textContent = ""; return; }
+  badge.setAttribute("data-s", state);
+  badge.textContent = label || state;
 }
 
 function __sbShowVoiceError(msg) {
