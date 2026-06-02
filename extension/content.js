@@ -5656,6 +5656,123 @@ async function __sbSyncNotesToNotion() {
 
 // ── Headphone Mode ──────────────────────────────────────────────────────────
 
+// ── GPT Realtime voice (self-contained WebRTC, no sidepanel needed) ──────────
+let __sbRtPc = null;
+let __sbRtDc = null;
+let __sbRtMic = null;
+let __sbRtAudio = null;
+
+async function __sbStartRealtimeVoice() {
+  const { authToken } = await __sbStorageGet(["authToken"]);
+  if (!authToken) {
+    __sbSetVoiceStatusBadge("error", "Error");
+    __sbShowVoiceError("Sign in to use Live AI voice.");
+    __sbSetHpBrainState("");
+    return;
+  }
+
+  try {
+    __sbRtMic = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+
+    const pc = new RTCPeerConnection();
+    __sbRtPc = pc;
+    __sbRtMic.getTracks().forEach(t => pc.addTrack(t, __sbRtMic));
+
+    __sbRtAudio = document.createElement("audio");
+    __sbRtAudio.autoplay = true;
+    __sbRtAudio.style.display = "none";
+    document.body.appendChild(__sbRtAudio);
+    pc.ontrack = (e) => {
+      __sbRtAudio.srcObject = e.streams[0] || new MediaStream([e.track]);
+      __sbRtAudio.play().catch(() => {});
+    };
+
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
+      if (s === "failed" || s === "closed" || s === "disconnected") {
+        __sbCleanupRealtimeVoice();
+        __sbSetVoiceStatusBadge("error", "Disconnected");
+        __sbSetHpBrainState("");
+      }
+    };
+
+    const dcReady = new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("Connection timed out.")), 10000);
+      __sbRtDc = pc.createDataChannel("oai-events");
+      __sbRtDc.addEventListener("open", () => { clearTimeout(t); resolve(); }, { once: true });
+      __sbRtDc.addEventListener("error", () => { clearTimeout(t); reject(new Error("Control channel failed.")); }, { once: true });
+      __sbRtDc.addEventListener("message", (e) => {
+        try { __sbHandleRtEvent(JSON.parse(e.data)); } catch (_) {}
+      });
+    });
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const res = await fetch(`${__SB_API}/openai-realtime-call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/sdp", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: offer.sdp,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || err.details || `Realtime failed (${res.status})`);
+    }
+
+    await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+    await dcReady;
+
+    // Send session config with page context
+    const instructions = [
+      "You are Braino, an AI voice assistant living inside a browser extension.",
+      "Speak naturally, briefly, and clearly. Short answers unless user asks for detail.",
+      "If interrupted, stop immediately.",
+      `Page title: ${document.title || "Unknown"}`,
+      `Page URL: ${location.href}`,
+      `Page content:\n${(document.body?.innerText || "").slice(0, 8000)}`,
+    ].join("\n");
+
+    __sbRtDc.send(JSON.stringify({
+      type: "session.update",
+      session: {
+        instructions,
+        voice: "coral",
+        turn_detection: { type: "server_vad", silence_duration_ms: 600, threshold: 0.5 },
+        input_audio_transcription: { model: "whisper-1" },
+      },
+    }));
+
+    __sbSetVoiceStatusBadge("realtime", "Live AI");
+    __sbSetHpBrainState("listening");
+
+  } catch (err) {
+    __sbCleanupRealtimeVoice();
+    __sbSetVoiceStatusBadge("error", "Error");
+    __sbShowVoiceError(err.message || "Live AI failed.");
+    __sbSetHpBrainState("");
+  }
+}
+
+function __sbCleanupRealtimeVoice() {
+  try { __sbRtDc?.close(); } catch (_) {}
+  try { __sbRtPc?.close(); } catch (_) {}
+  __sbRtMic?.getTracks().forEach(t => t.stop());
+  if (__sbRtAudio) { __sbRtAudio.srcObject = null; __sbRtAudio.remove(); }
+  __sbRtPc = null; __sbRtDc = null; __sbRtMic = null; __sbRtAudio = null;
+}
+
+function __sbHandleRtEvent(ev) {
+  if (ev.type === "input_audio_buffer.speech_started") __sbSetHpBrainState("captured");
+  if (ev.type === "input_audio_buffer.speech_stopped")  __sbSetHpBrainState("listening");
+  if (ev.type === "response.output_audio_transcript.delta") __sbSetHpBrainState("speaking");
+  if (ev.type === "response.done") __sbSetHpBrainState("listening");
+  if (ev.type === "error") __sbShowVoiceError(ev.error?.message || "Realtime error");
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function __sbToggleHeadphoneMode() {
   if (__sbHeadphoneMode) {
     __sbExitHeadphoneMode();
@@ -5676,14 +5793,7 @@ function __sbEnterHeadphoneMode() {
 
   __sbSetHpBrainState("listening");
   __sbSetVoiceStatusBadge("connecting", "Connecting…");
-
-  chrome.runtime.sendMessage({ action: "startHeadphoneMode" }, (res) => {
-    if (chrome.runtime.lastError || !res?.ok) {
-      __sbSetVoiceStatusBadge("error", "Error");
-      __sbSetHpBrainState("");
-      __sbShowVoiceError("Could not start Live AI — open the Braino side panel first.");
-    }
-  });
+  void __sbStartRealtimeVoice();
 }
 
 function __sbExitHeadphoneMode() {
@@ -5693,7 +5803,7 @@ function __sbExitHeadphoneMode() {
   if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
   __sbLastFinalTranscript = null;
 
-  if (__sbIsRecording) __sbStopRecording({ silent: true });
+  __sbCleanupRealtimeVoice();
   __sbStopSpeech();
 
   __sbSetHpBrainState("");
@@ -5701,8 +5811,6 @@ function __sbExitHeadphoneMode() {
 
   document.getElementById("__sb_rec_btn__")?.classList.remove("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
-
-  chrome.runtime.sendMessage({ action: "stopHeadphoneMode" });
 }
 
 // state: "listening" | "captured" | "speaking" | ""
