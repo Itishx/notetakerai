@@ -5787,7 +5787,9 @@ async function __sbStartRealtimeVoice() {
       }
     };
 
+    let _dcReject;
     const dataChannelOpen = new Promise((resolve, reject) => {
+      _dcReject = reject;
       const timeoutId = setTimeout(() => {
         reject(new Error("Live AI timed out while connecting."));
       }, 10000);
@@ -5807,6 +5809,7 @@ async function __sbStartRealtimeVoice() {
         } catch (_) {}
       });
     });
+    dataChannelOpen.catch(() => {});
 
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
@@ -5821,6 +5824,8 @@ async function __sbStartRealtimeVoice() {
       body: offer.sdp || "",
     });
     if (!res.ok) {
+      if (_dcReject) _dcReject(new Error("cancelled"));
+      if (res.status === 429) throw new Error("Live AI is busy — too many requests. Try again in a moment.");
       const errorText = await res.text();
       let errorPayload = {};
       try {
