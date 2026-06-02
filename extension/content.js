@@ -5675,11 +5675,54 @@ async function __sbSyncNotesToNotion() {
 
 // ── Headphone Mode ──────────────────────────────────────────────────────────
 
-// ── GPT Realtime voice (self-contained WebRTC, no sidepanel needed) ──────────
-let __sbRtPc = null;
-let __sbRtDc = null;
+// ── GPT Realtime voice — WebSocket (correct API protocol) ────────────────────
+let __sbRtWs = null;
 let __sbRtMic = null;
-let __sbRtAudio = null;
+let __sbRtAudioCtx = null;
+let __sbRtProcessor = null;
+let __sbRtPlayCtx = null;
+let __sbRtPlayQueue = [];
+let __sbRtPlayDraining = false;
+
+function __sbRtToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+
+function __sbRtFromBase64(b64) {
+  const s = atob(b64);
+  const buf = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) buf[i] = s.charCodeAt(i);
+  return buf.buffer;
+}
+
+async function __sbRtPlayChunk(b64) {
+  if (!__sbRtPlayCtx) __sbRtPlayCtx = new AudioContext({ sampleRate: 24000 });
+  const raw = __sbRtFromBase64(b64);
+  const i16 = new Int16Array(raw);
+  const f32 = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+  const buf = __sbRtPlayCtx.createBuffer(1, f32.length, 24000);
+  buf.getChannelData(0).set(f32);
+  return new Promise(res => {
+    const src = __sbRtPlayCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(__sbRtPlayCtx.destination);
+    src.onended = res;
+    src.start();
+  });
+}
+
+async function __sbRtDrainQueue() {
+  if (__sbRtPlayDraining) return;
+  __sbRtPlayDraining = true;
+  while (__sbRtPlayQueue.length) {
+    await __sbRtPlayChunk(__sbRtPlayQueue.shift());
+  }
+  __sbRtPlayDraining = false;
+}
 
 async function __sbStartRealtimeVoice() {
   const { authToken } = await __sbStorageGet(["authToken"]);
@@ -5690,26 +5733,37 @@ async function __sbStartRealtimeVoice() {
   }
 
   try {
+    // 1. Get ephemeral key from Supabase
+    const res = await fetch(`${__SB_API}/openai-realtime-call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.details || errBody.error || `Session failed (${res.status})`);
+    }
+    const { ephemeralKey, model } = await res.json();
+
+    // 2. Get mic
     __sbRtMic = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
 
-    const pc = new RTCPeerConnection();
-    __sbRtPc = pc;
-    __sbRtMic.getTracks().forEach(t => pc.addTrack(t, __sbRtMic));
+    // 3. Connect WebSocket using ephemeral key via subprotocol (browser-safe)
+    const ws = new WebSocket(
+      `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model || "gpt-realtime-2")}`,
+      ["realtime", `openai-insecure-api-key.${ephemeralKey}`, "openai-beta.realtime-v1"]
+    );
+    __sbRtWs = ws;
 
-    __sbRtAudio = document.createElement("audio");
-    __sbRtAudio.autoplay = true;
-    __sbRtAudio.style.display = "none";
-    document.body.appendChild(__sbRtAudio);
-    pc.ontrack = (e) => {
-      __sbRtAudio.srcObject = e.streams[0] || new MediaStream([e.track]);
-      __sbRtAudio.play().catch(() => {});
-    };
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("WebSocket timed out.")), 15000);
+      ws.onopen = () => { clearTimeout(t); resolve(); };
+      ws.onerror = () => { clearTimeout(t); reject(new Error("WebSocket failed to connect.")); };
+    });
 
-    pc.onconnectionstatechange = () => {
-      const s = pc.connectionState;
-      if (s === "failed" || s === "closed" || s === "disconnected") {
+    ws.onclose = () => {
+      if (__sbHeadphoneMode) {
         __sbCleanupRealtimeVoice();
         __sbSetVoiceStatusBadge("error", "Disconnected");
         __sbSetHpBrainState("");
@@ -5717,67 +5771,29 @@ async function __sbStartRealtimeVoice() {
       }
     };
 
-    const dcReady = new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error("Connection timed out.")), 10000);
-      __sbRtDc = pc.createDataChannel("oai-events");
-      __sbRtDc.addEventListener("open", () => { clearTimeout(t); resolve(); }, { once: true });
-      __sbRtDc.addEventListener("error", () => { clearTimeout(t); reject(new Error("Control channel failed.")); }, { once: true });
-      __sbRtDc.addEventListener("message", (e) => {
-        try { __sbHandleRtEvent(JSON.parse(e.data)); } catch (_) {}
-      });
-    });
+    ws.onmessage = (e) => {
+      try { __sbHandleRtEvent(JSON.parse(e.data)); } catch (_) {}
+    };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const res = await fetch(`${__SB_API}/openai-realtime-call`, {
-      method: "POST",
-      headers: { "Content-Type": "application/sdp", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
-      body: offer.sdp,
-    });
-
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      console.error("[Braino Realtime] OpenAI error:", JSON.stringify(errBody, null, 2));
-      // details is the raw OpenAI response body; error is the Supabase wrapper
-      let msg = errBody.details || errBody.error || `Realtime failed (${res.status})`;
-      try {
-        const parsed = JSON.parse(errBody.details);
-        msg = parsed?.error?.message || msg;
-      } catch (_) {}
-      throw new Error(msg);
-    }
-
-    await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
-    await dcReady;
-
-    // Send session config with page context
+    // 4. Send session config with page context
     const instructions = [
       "You are Braino, an AI voice assistant built into a browser extension.",
       "",
-      "RIGHT NOW YOU ARE IN LIVE AI MODE — this is the best, most powerful way to experience Braino.",
-      "In Live AI mode, your voice goes directly to an AI model in real time with zero lag.",
-      "There is no transcription step, no waiting for a reply to come back, no text-to-speech delay.",
-      "You hear the AI's voice instantly as it speaks, and it hears you the moment you speak.",
-      "You can interrupt at any time and Braino will stop and listen immediately.",
+      "YOU ARE IN LIVE AI MODE — the most powerful Braino experience.",
+      "Your voice goes directly to an AI in real time. Zero lag, no transcription delay, no TTS wait.",
+      "Pure two-way audio conversation. The user can interrupt you mid-sentence and you stop instantly.",
       "",
-      "If the user asks what Live AI mode is, explain it: you're connected directly to a real-time AI voice model.",
-      "No listen → transcribe → send → wait → speak pipeline. Pure two-way audio conversation.",
-      "You can:",
-      "- Answer questions about the current page instantly",
-      "- Have a natural back-and-forth conversation without any delays",
-      "- Be interrupted mid-sentence and respond immediately",
-      "- Read and reason about everything on the page in context",
+      "If asked about Live AI mode, explain: direct real-time voice connection, interruptable, instant.",
+      "You can answer questions about the current page, have natural conversation, and be interrupted anytime.",
       "",
-      "Be warm, natural, and conversational. Keep answers short unless asked for detail.",
-      "If interrupted, stop immediately and listen.",
+      "Be warm, brief, and conversational. Short answers unless asked for detail.",
+      "If interrupted, stop immediately.",
       "",
-      `Current page title: ${document.title || "Unknown"}`,
-      `Current page URL: ${location.href}`,
-      `Current page content:\n${(document.body?.innerText || "").slice(0, 8000)}`,
+      `Page: ${document.title || "Unknown"} — ${location.href}`,
+      `Content:\n${(document.body?.innerText || "").slice(0, 8000)}`,
     ].join("\n");
 
-    __sbRtDc.send(JSON.stringify({
+    ws.send(JSON.stringify({
       type: "session.update",
       session: {
         instructions,
@@ -5787,35 +5803,53 @@ async function __sbStartRealtimeVoice() {
       },
     }));
 
-    // Blue halo — realtime mode
+    // 5. Stream mic audio as PCM16 chunks
+    __sbRtAudioCtx = new AudioContext({ sampleRate: 24000 });
+    const source = __sbRtAudioCtx.createMediaStreamSource(__sbRtMic);
+    __sbRtProcessor = __sbRtAudioCtx.createScriptProcessor(4096, 1, 1);
+    source.connect(__sbRtProcessor);
+    __sbRtProcessor.connect(__sbRtAudioCtx.destination);
+    __sbRtProcessor.onaudioprocess = (e) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const f32 = e.inputBuffer.getChannelData(0);
+      const i16 = new Int16Array(f32.length);
+      for (let i = 0; i < f32.length; i++) i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32767));
+      ws.send(JSON.stringify({ type: "input_audio_buffer.append", audio: __sbRtToBase64(i16.buffer) }));
+    };
+
     document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
     __sbSetVoiceStatusBadge("realtime", "Live AI");
     __sbSetHpBrainState("listening");
 
   } catch (err) {
     __sbCleanupRealtimeVoice();
-    const msg = err.message || "Live AI failed.";
-    // Show error inline next to headphones, not as a floating pill
-    __sbSetVoiceStatusBadge("error", msg);
+    __sbSetVoiceStatusBadge("error", err.message || "Live AI failed.");
     __sbSetHpBrainState("");
   }
 }
 
 function __sbCleanupRealtimeVoice() {
-  try { __sbRtDc?.close(); } catch (_) {}
-  try { __sbRtPc?.close(); } catch (_) {}
+  try { __sbRtProcessor?.disconnect(); } catch (_) {}
+  try { __sbRtAudioCtx?.close(); } catch (_) {}
+  try { __sbRtWs?.close(); } catch (_) {}
   __sbRtMic?.getTracks().forEach(t => t.stop());
-  if (__sbRtAudio) { __sbRtAudio.srcObject = null; __sbRtAudio.remove(); }
-  __sbRtPc = null; __sbRtDc = null; __sbRtMic = null; __sbRtAudio = null;
+  try { __sbRtPlayCtx?.close(); } catch (_) {}
+  __sbRtWs = null; __sbRtMic = null; __sbRtAudioCtx = null;
+  __sbRtProcessor = null; __sbRtPlayCtx = null;
+  __sbRtPlayQueue = []; __sbRtPlayDraining = false;
   document.getElementById("__sb_brain_btn__")?.classList.remove("hp-realtime");
 }
 
 function __sbHandleRtEvent(ev) {
   if (ev.type === "input_audio_buffer.speech_started") __sbSetHpBrainState("captured");
   if (ev.type === "input_audio_buffer.speech_stopped")  __sbSetHpBrainState("listening");
-  if (ev.type === "response.output_audio_transcript.delta") __sbSetHpBrainState("speaking");
-  if (ev.type === "response.done") __sbSetHpBrainState("listening");
-  if (ev.type === "error") __sbShowVoiceError(ev.error?.message || "Realtime error");
+  if (ev.type === "response.audio.delta") {
+    __sbSetHpBrainState("speaking");
+    __sbRtPlayQueue.push(ev.delta);
+    __sbRtDrainQueue();
+  }
+  if (ev.type === "response.done") { __sbRtPlayQueue = []; __sbSetHpBrainState("listening"); }
+  if (ev.type === "error") __sbSetVoiceStatusBadge("error", ev.error?.message || "Realtime error");
 }
 // ─────────────────────────────────────────────────────────────────────────────
 

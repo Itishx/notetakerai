@@ -34,64 +34,49 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const {
-      data: { user },
-      error: userError,
-    } = await authClient.auth.getUser();
-
+    const { data: { user }, error: userError } = await authClient.auth.getUser();
     if (userError || !user) {
       return json({ error: "Sign in required." }, 401);
     }
 
-    const offerSdp = (await req.text()).trim();
-    if (!offerSdp) {
-      return json({ error: "Missing SDP offer." }, 400);
-    }
-
-    const openAiResponse = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(realtimeModel)}`, {
+    // Create a short-lived ephemeral session key for the client to use
+    const sessionRes = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openAiApiKey}`,
-        "Content-Type": "application/sdp",
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "realtime=v1",
       },
-      body: offerSdp,
+      body: JSON.stringify({
+        model: realtimeModel,
+        voice: "coral",
+      }),
     });
 
-    if (!openAiResponse.ok) {
-      const errorText = await openAiResponse.text();
-      console.error("openai-realtime-call upstream error:", openAiResponse.status, errorText);
-      return json(
-        {
-          error: "OpenAI Realtime session failed.",
-          details: errorText,
-        },
-        openAiResponse.status,
-      );
+    if (!sessionRes.ok) {
+      const errorText = await sessionRes.text();
+      console.error("openai-realtime-call session error:", sessionRes.status, errorText);
+      return json({ error: "Failed to create realtime session.", details: errorText }, sessionRes.status);
     }
 
-    const answerSdp = await openAiResponse.text();
-    return new Response(answerSdp, {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/sdp",
-      },
-    });
+    const session = await sessionRes.json();
+    const ephemeralKey = session.client_secret?.value;
+
+    if (!ephemeralKey) {
+      return json({ error: "No ephemeral key returned from OpenAI.", details: JSON.stringify(session) }, 500);
+    }
+
+    return json({ ephemeralKey, model: realtimeModel });
+
   } catch (error) {
     console.error("openai-realtime-call error:", error);
-    return json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      500,
-    );
+    return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }
 });
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
