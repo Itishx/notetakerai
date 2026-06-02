@@ -2936,9 +2936,26 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
       50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
     }
+    /* Blue halo for Live AI (realtime) mode */
+    @keyframes __sb_hp_listen_rt__ {
+      0%,100% { filter: drop-shadow(0 0 22px rgba(59,130,246,0.85)) drop-shadow(0 0 8px rgba(99,179,255,0.55)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 48px rgba(59,130,246,1))    drop-shadow(0 0 18px rgba(99,179,255,0.8)); transform: scale(1.09); }
+    }
+    @keyframes __sb_hp_speak_rt__ {
+      0%,100% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.8)) drop-shadow(0 0 8px rgba(139,92,246,0.5)); transform: scale(1.02); }
+      50%      { filter: drop-shadow(0 0 42px rgba(99,102,241,1))   drop-shadow(0 0 16px rgba(139,92,246,0.75)); transform: scale(1.07); }
+    }
+    @keyframes __sb_hp_captured_rt__ {
+      0%,100% { filter: drop-shadow(0 0 26px rgba(34,211,238,0.85)) drop-shadow(0 0 10px rgba(34,211,238,0.55)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 54px rgba(34,211,238,1))    drop-shadow(0 0 22px rgba(34,211,238,0.8)); transform: scale(1.1); }
+    }
     #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
     #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
     #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+    /* Realtime overrides — blue halo wins */
+    #__sb_brain_btn__.hp-realtime.hp-listening { animation: __sb_hp_listen_rt__   1.4s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured  { animation: __sb_hp_captured_rt__ 0.5s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking  { animation: __sb_hp_speak_rt__    0.85s ease-in-out infinite; }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -5727,12 +5744,28 @@ async function __sbStartRealtimeVoice() {
 
     // Send session config with page context
     const instructions = [
-      "You are Braino, an AI voice assistant living inside a browser extension.",
-      "Speak naturally, briefly, and clearly. Short answers unless user asks for detail.",
-      "If interrupted, stop immediately.",
-      `Page title: ${document.title || "Unknown"}`,
-      `Page URL: ${location.href}`,
-      `Page content:\n${(document.body?.innerText || "").slice(0, 8000)}`,
+      "You are Braino, an AI voice assistant built into a browser extension.",
+      "",
+      "RIGHT NOW YOU ARE IN LIVE AI MODE — this is the best, most powerful way to experience Braino.",
+      "In Live AI mode, your voice goes directly to an AI model in real time with zero lag.",
+      "There is no transcription step, no waiting for a reply to come back, no text-to-speech delay.",
+      "You hear the AI's voice instantly as it speaks, and it hears you the moment you speak.",
+      "You can interrupt at any time and Braino will stop and listen immediately.",
+      "",
+      "If the user asks what Live AI mode is, explain it: you're connected directly to a real-time AI voice model.",
+      "No listen → transcribe → send → wait → speak pipeline. Pure two-way audio conversation.",
+      "You can:",
+      "- Answer questions about the current page instantly",
+      "- Have a natural back-and-forth conversation without any delays",
+      "- Be interrupted mid-sentence and respond immediately",
+      "- Read and reason about everything on the page in context",
+      "",
+      "Be warm, natural, and conversational. Keep answers short unless asked for detail.",
+      "If interrupted, stop immediately and listen.",
+      "",
+      `Current page title: ${document.title || "Unknown"}`,
+      `Current page URL: ${location.href}`,
+      `Current page content:\n${(document.body?.innerText || "").slice(0, 8000)}`,
     ].join("\n");
 
     __sbRtDc.send(JSON.stringify({
@@ -5745,6 +5778,8 @@ async function __sbStartRealtimeVoice() {
       },
     }));
 
+    // Blue halo — realtime mode
+    document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
     __sbSetVoiceStatusBadge("realtime", "Live AI");
     __sbSetHpBrainState("listening");
 
@@ -5762,6 +5797,7 @@ function __sbCleanupRealtimeVoice() {
   __sbRtMic?.getTracks().forEach(t => t.stop());
   if (__sbRtAudio) { __sbRtAudio.srcObject = null; __sbRtAudio.remove(); }
   __sbRtPc = null; __sbRtDc = null; __sbRtMic = null; __sbRtAudio = null;
+  document.getElementById("__sb_brain_btn__")?.classList.remove("hp-realtime");
 }
 
 function __sbHandleRtEvent(ev) {
