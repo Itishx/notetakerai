@@ -5460,12 +5460,12 @@ function clearRemoteProcessing() {
 }
 
 async function getAuthToken() {
-  const data = await getStorage(["authToken", "authRefreshToken", "authUserId"]);
-  if (!data.authUserId) return null;
-  if (!data.authToken && data.authRefreshToken) {
+  const data = await getStorage(["authToken", "authRefreshToken"]);
+  if (data.authToken) return data.authToken;
+  if (data.authRefreshToken) {
     return (await refreshAuthToken(data.authRefreshToken)) || null;
   }
-  return data.authToken || null;
+  return null;
 }
 
 async function pollRemoteCommands() {
