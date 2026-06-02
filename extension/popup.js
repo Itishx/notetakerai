@@ -3566,6 +3566,11 @@ function setOrbState(state) {
     };
     brainoEl.style.animation = animMap[state] || "brainoGlowIdle 3.8s ease-in-out infinite";
   }
+  // Sync brain button state on the page
+  if (voiceTabId) {
+    const brainStateMap = { listening: "listening", captured: "captured", speaking: "speaking", processing: "captured", idle: "" };
+    chrome.tabs.sendMessage(voiceTabId, { action: "voiceBrainState", state: brainStateMap[state] ?? "" });
+  }
 }
 
 function updateVoicePageCtx() {

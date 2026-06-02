@@ -1715,7 +1715,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "voiceTransportStatus") {
     const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Connecting…" };
     __sbSetVoiceStatusBadge(msg.status, labelMap[msg.status] || msg.status);
-    if (msg.status === "realtime") __sbSetHpBrainState("listening");
+    return true;
+  }
+
+  if (msg.action === "voiceBrainState") {
+    if (__sbHeadphoneMode) __sbSetHpBrainState(msg.state || "");
     return true;
   }
 
@@ -5673,11 +5677,11 @@ function __sbEnterHeadphoneMode() {
   __sbSetHpBrainState("listening");
   __sbSetVoiceStatusBadge("connecting", "Connecting…");
 
-  // Delegate to sidepanel GPT Realtime; fall back to local recording if unavailable
   chrome.runtime.sendMessage({ action: "startHeadphoneMode" }, (res) => {
     if (chrome.runtime.lastError || !res?.ok) {
-      __sbSetVoiceStatusBadge("legacy", "Legacy");
-      void __sbStartRecording();
+      __sbSetVoiceStatusBadge("error", "Error");
+      __sbSetHpBrainState("");
+      __sbShowVoiceError("Could not start Live AI — open the Braino side panel first.");
     }
   });
 }
