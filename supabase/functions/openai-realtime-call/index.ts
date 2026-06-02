@@ -48,23 +48,13 @@ serve(async (req) => {
       return json({ error: "Missing SDP offer." }, 400);
     }
 
-    const sessionConfig = {
-      type: "realtime",
-      model: realtimeModel,
-    };
-
-    const form = new FormData();
-    form.set("sdp", offerSdp);
-    form.set("session", JSON.stringify(sessionConfig));
-
-    const safetyIdentifier = await sha256(user.id);
-    const openAiResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
+    const openAiResponse = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(realtimeModel)}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openAiApiKey}`,
-        "OpenAI-Safety-Identifier": safetyIdentifier,
+        "Content-Type": "application/sdp",
       },
-      body: form,
+      body: offerSdp,
     });
 
     if (!openAiResponse.ok) {
@@ -95,14 +85,6 @@ serve(async (req) => {
     );
   }
 });
-
-async function sha256(value: string) {
-  const bytes = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(hash))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
