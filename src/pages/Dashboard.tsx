@@ -153,6 +153,41 @@ type XAutoSession = {
   total_views: number;
 };
 
+type AiCostPoint = {
+  date: string;
+  costUsd: number;
+  currency: string;
+};
+
+type AiCostLineItem = {
+  lineItem: string;
+  costUsd: number;
+  currency: string;
+};
+
+type AiCostModelUsage = {
+  model: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  inputAudioTokens: number;
+  outputAudioTokens: number;
+};
+
+type AiCostSummary = {
+  currency: string;
+  trackedTotalUsd: number;
+  currentMonthUsd: number;
+  last30DaysUsd: number;
+  trackingStartDate: string;
+  requestCountLast30Days: number;
+  dailyCosts: AiCostPoint[];
+  lineItemBreakdownLast30Days: AiCostLineItem[];
+  modelBreakdownLast30Days: AiCostModelUsage[];
+  scopedProjectIds: string[];
+  lastUpdatedAt: string;
+};
+
 type XSessionSortKey =
   | "session_number"
   | "status"
@@ -313,6 +348,29 @@ function shortDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
+  });
+}
+
+function formatMoney(value: number, currency = "usd") {
+  const normalizedCurrency = currency.toUpperCase();
+  const maxFractionDigits = Math.abs(value) > 0 && Math.abs(value) < 1 ? 3 : 2;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: normalizedCurrency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxFractionDigits,
+  }).format(value);
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatLongDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
   });
 }
 
@@ -919,6 +977,9 @@ export default function Dashboard() {
   const [spotifyConn, setSpotifyConn] = useState<SpotifyConn>(null);
   const [scheduledXPosts, setScheduledXPosts] = useState<ScheduledXPost[]>([]);
   const [xAutomationStats, setXAutomationStats] = useState<XAutomationStats>(null);
+  const [aiCostSummary, setAiCostSummary] = useState<AiCostSummary | null>(null);
+  const [aiCostLoading, setAiCostLoading] = useState(false);
+  const [aiCostError, setAiCostError] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1106,6 +1167,21 @@ export default function Dashboard() {
     return { sessions, logs };
   }
 
+  async function fetchAiCostSummary(accessToken: string) {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openai-cost-overview`, {
+      method: "GET",
+      headers: {
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "Failed to load API cost overview");
+    }
+    return payload as AiCostSummary;
+  }
+
   useEffect(() => {
     if (!loading && !user) navigate("/auth");
   }, [loading, navigate, user]);
@@ -1218,6 +1294,37 @@ export default function Dashboard() {
 
     load();
   }, [profile, user]);
+
+  useEffect(() => {
+    if (!user || !session?.access_token) return;
+
+    let cancelled = false;
+
+    const loadCostSummary = async (silent = false) => {
+      if (!silent) setAiCostLoading(true);
+      try {
+        const summary = await fetchAiCostSummary(session.access_token);
+        if (cancelled) return;
+        setAiCostSummary(summary);
+        setAiCostError(null);
+      } catch (error) {
+        if (cancelled) return;
+        setAiCostError(error instanceof Error ? error.message : "Could not load API cost overview.");
+      } finally {
+        if (!cancelled && !silent) setAiCostLoading(false);
+      }
+    };
+
+    loadCostSummary();
+    const interval = window.setInterval(() => {
+      loadCostSummary(true).catch(() => null);
+    }, 120000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [session?.access_token, user]);
 
   useEffect(() => () => {
     stopDrivePolling();
@@ -1919,6 +2026,8 @@ export default function Dashboard() {
     const created = new Date(user.created_at).getTime();
     return Math.max(1, Math.ceil((Date.now() - created) / 86400000));
   }, [user?.created_at]);
+  const topCostLineItem = aiCostSummary?.lineItemBreakdownLast30Days[0] || null;
+  const topCostModel = aiCostSummary?.modelBreakdownLast30Days[0] || null;
 
   const notesByFilter = useMemo(
     () =>
@@ -2007,6 +2116,12 @@ export default function Dashboard() {
     200,
     28,
     4,
+  );
+  const aiCostSparkPoints = buildLinePoints(
+    (aiCostSummary?.dailyCosts || []).map((point) => point.costUsd),
+    260,
+    76,
+    6,
   );
   const chartTaskPoints = buildLinePoints(
     activitySeries.map((point) => point.taskCount),
@@ -2662,6 +2777,208 @@ export default function Dashboard() {
                         strokeWidth="1.5"
                       />
                     </svg>
+                  </div>
+                </div>
+
+                <div className="mb-8 overflow-hidden rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)]">
+                  <div className="grid gap-5 px-6 pb-6 pt-5 xl:grid-cols-[1.35fr_0.9fr]">
+                    <div>
+                      <div className="mb-5 flex items-start justify-between gap-4">
+                        <div>
+                          <div style={monoStyle} className="mb-2 text-[10.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+                            API spend
+                          </div>
+                          <h3 style={serifStyle} className="text-[28px] leading-none tracking-[-0.02em]">
+                            OpenAI costs, <em className="text-[var(--sb-accent-deep)]">including Realtime.</em>
+                          </h3>
+                          <div style={monoStyle} className="mt-2 text-[11px] text-[var(--sb-ink-3)]">
+                            {aiCostSummary?.scopedProjectIds?.length
+                              ? `Scoped to ${aiCostSummary.scopedProjectIds.length} OpenAI project${aiCostSummary.scopedProjectIds.length === 1 ? "" : "s"}.`
+                              : "All spend billed to this OpenAI org is counted here, including browser Realtime sessions."}
+                          </div>
+                        </div>
+                        <span className="grid h-9 w-9 place-items-center rounded-[12px] bg-[var(--sb-bg-2)] text-[var(--sb-accent-deep)]">
+                          <Sparkles className="h-4 w-4" />
+                        </span>
+                      </div>
+
+                      {aiCostLoading && !aiCostSummary ? (
+                        <div className="space-y-4">
+                          <div className="grid gap-3 md:grid-cols-3">
+                            {Array.from({ length: 3 }).map((_, index) => (
+                              <Skeleton key={index} className="h-28 rounded-[16px] bg-[var(--sb-bg-2)]" />
+                            ))}
+                          </div>
+                          <Skeleton className="h-28 rounded-[18px] bg-[var(--sb-bg-2)]" />
+                        </div>
+                      ) : aiCostSummary ? (
+                        <>
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <div className="rounded-[16px] border border-[var(--sb-line)] bg-[var(--sb-panel)] p-4">
+                              <div style={monoStyle} className="mb-2 text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                Tracked total
+                              </div>
+                              <div style={serifStyle} className="text-[34px] leading-none tracking-[-0.03em] text-[var(--sb-ink)]">
+                                {formatMoney(aiCostSummary.trackedTotalUsd, aiCostSummary.currency)}
+                              </div>
+                              <div className="mt-2 text-[13px] text-[var(--sb-ink-2)]">
+                                Since {formatLongDate(aiCostSummary.trackingStartDate)}
+                              </div>
+                            </div>
+
+                            <div className="rounded-[16px] border border-[var(--sb-line)] bg-[var(--sb-panel)] p-4">
+                              <div style={monoStyle} className="mb-2 text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                This month
+                              </div>
+                              <div style={serifStyle} className="text-[34px] leading-none tracking-[-0.03em] text-[var(--sb-ink)]">
+                                {formatMoney(aiCostSummary.currentMonthUsd, aiCostSummary.currency)}
+                              </div>
+                              <div className="mt-2 text-[13px] text-[var(--sb-ink-2)]">
+                                Live dashboard total for the current calendar month
+                              </div>
+                            </div>
+
+                            <div className="rounded-[16px] border border-[var(--sb-line)] bg-[var(--sb-panel)] p-4">
+                              <div style={monoStyle} className="mb-2 text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                Last 30 days
+                              </div>
+                              <div style={serifStyle} className="text-[34px] leading-none tracking-[-0.03em] text-[var(--sb-ink)]">
+                                {formatMoney(aiCostSummary.last30DaysUsd, aiCostSummary.currency)}
+                              </div>
+                              <div className="mt-2 text-[13px] text-[var(--sb-ink-2)]">
+                                {formatCount(aiCostSummary.requestCountLast30Days)} completions / realtime requests in the latest usage window
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+                            <div className="rounded-[18px] border border-[var(--sb-line)] bg-[var(--sb-panel)] p-4">
+                              <div className="mb-2 flex items-center justify-between gap-3">
+                                <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                  30-day cost trend
+                                </div>
+                                <div style={monoStyle} className="text-[10.5px] text-[var(--sb-ink-3)]">
+                                  {aiCostError
+                                    ? "Last refresh failed"
+                                    : `Updated ${timeAgo(aiCostSummary.lastUpdatedAt)}`}
+                                </div>
+                              </div>
+                              <div className="text-[13px] text-[var(--sb-ink-2)]">
+                                Use this to catch runaway voice sessions fast. If Realtime spikes, it will show up in the org costs even when the audio session started in the browser.
+                              </div>
+                              <div className="mt-4 flex items-end justify-between gap-4">
+                                <div className="max-w-[280px]">
+                                  <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                    Biggest line item
+                                  </div>
+                                  <div className="mt-1 text-sm font-medium text-[var(--sb-ink)]">
+                                    {topCostLineItem?.lineItem || "No breakdown yet"}
+                                  </div>
+                                  <div className="mt-1 text-[13px] text-[var(--sb-ink-2)]">
+                                    {topCostLineItem
+                                      ? `${formatMoney(topCostLineItem.costUsd, topCostLineItem.currency)} in the last 30 days`
+                                      : "Spend details will populate after the first successful sync."}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                    Top model activity
+                                  </div>
+                                  <div className="mt-1 text-sm font-medium text-[var(--sb-ink)]">
+                                    {topCostModel?.model || "No model usage yet"}
+                                  </div>
+                                  <div className="mt-1 text-[13px] text-[var(--sb-ink-2)]">
+                                    {topCostModel
+                                      ? `${formatCount(topCostModel.requests)} requests in the last 30 days`
+                                      : "Model usage appears after OpenAI usage data comes through."}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-[18px] border border-[var(--sb-line)] bg-[linear-gradient(180deg,var(--sb-panel)_0%,rgba(255,255,255,0.78)_100%)] p-4">
+                              <div className="mb-2 flex items-center justify-between">
+                                <div style={monoStyle} className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                                  Daily burn
+                                </div>
+                                <div style={monoStyle} className="text-[10.5px] text-[var(--sb-ink-3)]">
+                                  30d
+                                </div>
+                              </div>
+                              <svg className="h-[76px] w-full" viewBox="0 0 260 76" preserveAspectRatio="none">
+                                <path d={areaPath(aiCostSparkPoints, 76, 6)} fill="rgba(226,125,57,0.14)" />
+                                <path d={linePath(aiCostSparkPoints)} fill="none" stroke="oklch(0.66 0.18 52)" strokeWidth="2" />
+                              </svg>
+                              <div className="mt-2 flex items-center justify-between text-[12px] text-[var(--sb-ink-2)]">
+                                <span>{aiCostSummary.dailyCosts[0] ? shortDate(aiCostSummary.dailyCosts[0].date) : "—"}</span>
+                                <span>{aiCostSummary.dailyCosts[aiCostSummary.dailyCosts.length - 1] ? shortDate(aiCostSummary.dailyCosts[aiCostSummary.dailyCosts.length - 1].date) : "—"}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="rounded-[18px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-5 py-6 text-sm text-[var(--sb-ink-3)]">
+                          {aiCostError || "No OpenAI cost data is available yet."}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="rounded-[18px] border border-[var(--sb-line)] bg-[var(--sb-panel)] p-4">
+                        <div style={monoStyle} className="mb-3 text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                          Top cost drivers
+                        </div>
+                        {aiCostSummary?.lineItemBreakdownLast30Days?.length ? (
+                          <div className="space-y-3">
+                            {aiCostSummary.lineItemBreakdownLast30Days.slice(0, 4).map((item) => (
+                              <div key={item.lineItem} className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-[var(--sb-ink)]">{item.lineItem}</div>
+                                  <div style={monoStyle} className="mt-1 text-[10.5px] text-[var(--sb-ink-3)]">
+                                    Last 30 days
+                                  </div>
+                                </div>
+                                <div style={monoStyle} className="text-[12px] text-[var(--sb-ink)]">
+                                  {formatMoney(item.costUsd, item.currency)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-[var(--sb-ink-3)]">
+                            Cost line items will appear after the first sync from OpenAI.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="rounded-[18px] border border-[var(--sb-line)] bg-[var(--sb-panel)] p-4">
+                        <div style={monoStyle} className="mb-3 text-[10.5px] uppercase tracking-[0.12em] text-[var(--sb-ink-3)]">
+                          Model activity
+                        </div>
+                        {aiCostSummary?.modelBreakdownLast30Days?.length ? (
+                          <div className="space-y-3">
+                            {aiCostSummary.modelBreakdownLast30Days.slice(0, 4).map((item) => (
+                              <div key={item.model} className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-[var(--sb-ink)]">{item.model}</div>
+                                  <div style={monoStyle} className="mt-1 text-[10.5px] text-[var(--sb-ink-3)]">
+                                    {formatCount(item.requests)} requests
+                                  </div>
+                                </div>
+                                <div style={monoStyle} className="text-right text-[10.5px] text-[var(--sb-ink-3)]">
+                                  <div>in {formatCount(item.inputTokens + item.inputAudioTokens)}</div>
+                                  <div>out {formatCount(item.outputTokens + item.outputAudioTokens)}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-[var(--sb-ink-3)]">
+                            Model usage will show here once the usage API returns data for recent calls.
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
