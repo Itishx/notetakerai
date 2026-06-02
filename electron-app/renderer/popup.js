@@ -5624,6 +5624,30 @@ async function getAuthToken() {
   return null;
 }
 
+async function announceRemoteCommandResult(message) {
+  if (!message || !voiceActive) return;
+
+  const spoken = stripMarkdownForTTS(String(message).replace(/^[\u2705\u274c]\s*/, "").trim());
+  if (!spoken) return;
+
+  setOrbState("speaking");
+
+  try {
+    if (isRealtimeVoiceMode()) {
+      const relayed = await speakTextWithRealtime(spoken);
+      if (!relayed) {
+        await speakText(spoken);
+      }
+    } else {
+      await speakText(spoken);
+    }
+  } finally {
+    if (voiceActive) {
+      setOrbState(isRealtimeVoiceMode() ? "listening" : "idle");
+    }
+  }
+}
+
 async function pollRemoteCommands() {
   if (agentRunning) return; // don't stack if agent already running
   let token = await getAuthToken();
@@ -5684,7 +5708,9 @@ async function updateRemoteCommand(id, token, patch) {
 
 async function runRemoteCommand(cmd, token) {
   if (!(await loadPremiumStatus())) {
-    await updateRemoteCommand(cmd.id, token, { status: "error", result: "Premium required to run remote commands." });
+    const result = "Premium required to run remote commands.";
+    await updateRemoteCommand(cmd.id, token, { status: "error", result });
+    await announceRemoteCommandResult(result);
     clearRemoteProcessing();
     return;
   }
@@ -5857,11 +5883,14 @@ async function runRemoteCommand(cmd, token) {
       chatMessagesEl.appendChild(doneBubble);
       chatArea.scrollTop = chatArea.scrollHeight;
       await updateRemoteCommand(cmd.id, token, { status: "done", result: adapterMessage, steps });
+      await announceRemoteCommandResult(adapterMessage);
       clearRemoteProcessing();
       return;
     }
   } catch (e) {
-    await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
+    const result = `Error: ${e.message}`;
+    await updateRemoteCommand(cmd.id, token, { status: "error", result, steps });
+    await announceRemoteCommandResult(result);
     clearRemoteProcessing();
     return;
   }
@@ -5875,7 +5904,9 @@ async function runRemoteCommand(cmd, token) {
       try {
         actions = await callAgentStep(cmd.task, pageInfo, history, []);
       } catch (e) {
-        await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
+        const result = `Error: ${e.message}`;
+        await updateRemoteCommand(cmd.id, token, { status: "error", result, steps });
+        await announceRemoteCommandResult(result);
         clearRemoteProcessing();
         return;
       }
@@ -5899,6 +5930,7 @@ async function runRemoteCommand(cmd, token) {
       chatMessagesEl.appendChild(doneBubble);
       chatArea.scrollTop = chatArea.scrollHeight;
       await updateRemoteCommand(cmd.id, token, { status: "done", result: doneMsg, steps });
+      await announceRemoteCommandResult(doneMsg);
       clearRemoteProcessing();
       return;
     }
@@ -5914,6 +5946,7 @@ async function runRemoteCommand(cmd, token) {
         chatMessagesEl.appendChild(doneBubble2);
         chatArea.scrollTop = chatArea.scrollHeight;
         await updateRemoteCommand(cmd.id, token, { status: "done", result: doneMsg2, steps });
+        await announceRemoteCommandResult(doneMsg2);
         clearRemoteProcessing();
         return;
       }
@@ -5945,11 +5978,13 @@ async function runRemoteCommand(cmd, token) {
   errBubble.innerHTML = `<div class="chat-bubble-text">❌ Ran out of steps. Check your desktop browser.</div>`;
   chatMessagesEl.appendChild(errBubble);
   chatArea.scrollTop = chatArea.scrollHeight;
+  const result = "Ran out of steps. Check your desktop browser.";
   await updateRemoteCommand(cmd.id, token, {
     status: "error",
-    result: "Ran out of steps. Check your desktop browser.",
+    result,
     steps,
   });
+  await announceRemoteCommandResult(result);
   clearRemoteProcessing();
 }
 
