@@ -1971,7 +1971,8 @@ function agentFinalizeBlock(block, stepCount) {
 
 function getAgentPageContext() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "getAgentPageContext" }, (res) => {
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    chrome.runtime.sendMessage({ action: "getAgentPageContext", ...(targetTabId ? { tabId: targetTabId } : {}) }, (res) => {
       if (chrome.runtime.lastError || res?.error) {
         resolve({ url: "", title: "", bodyText: "", interactiveEls: [] });
       } else {
@@ -1983,7 +1984,8 @@ function getAgentPageContext() {
 
 function executeAgentAction(actionObj) {
   return new Promise((resolve) => {
-    const msg = { action: "agentAction", ...actionObj };
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    const msg = { action: "agentAction", ...actionObj, ...(targetTabId ? { tabId: targetTabId } : {}) };
     chrome.runtime.sendMessage(msg, (res) => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || { error: "No response" });
@@ -1993,7 +1995,8 @@ function executeAgentAction(actionObj) {
 
 function getSiteAdapterContext() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "getSiteAdapterContext" }, (res) => {
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    chrome.runtime.sendMessage({ action: "getSiteAdapterContext", ...(targetTabId ? { tabId: targetTabId } : {}) }, (res) => {
       if (chrome.runtime.lastError || res?.error) {
         resolve({ site: "generic", url: "", title: "" });
       } else {
@@ -2005,7 +2008,8 @@ function getSiteAdapterContext() {
 
 function executeSiteAdapterAction(actionObj) {
   return new Promise((resolve) => {
-    const msg = { action: "siteAdapterAction", ...actionObj };
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    const msg = { action: "siteAdapterAction", ...actionObj, ...(targetTabId ? { tabId: targetTabId } : {}) };
     chrome.runtime.sendMessage(msg, (res) => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || { error: "No response" });
@@ -3530,6 +3534,7 @@ let lastRealtimeStartupError = "";
 const REALTIME_PAGE_CONTEXT_LIMIT = 12000;
 const REALTIME_NOTES_CONTEXT_LIMIT = 6000;
 const REALTIME_SELECTION_CONTEXT_LIMIT = 1600;
+const REALTIME_VOICE = "marin";
 
 const voiceOverlay      = document.getElementById("voiceOverlay");
 const voiceOrb          = document.getElementById("voiceOrb");
@@ -3656,11 +3661,14 @@ function truncateRealtimeContext(text, maxChars) {
 
 function buildRealtimeVoiceInstructions() {
   const lines = [
-    "You are Braino's live voice layer inside a browser extension.",
-    "These turns are already routed as conversational voice turns unless the app later feeds you a status update to relay.",
-    "Speak clearly, briefly, and naturally.",
-    "Prefer short spoken answers unless the user explicitly asks for detail.",
-    "Never say you cannot access the page when current page context is provided below.",
+    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build.",
+    "Voice is only the medium here. You are still Braino, not a generic voice assistant.",
+    "Be direct. No filler. No hollow openers. Get to the point.",
+    "Think before you answer. Distinguish between what you know, what you think, and what you are unsure about. Never fake confidence.",
+    "If the user is wrong, push back clearly but respectfully.",
+    "Be warm, grounded, and natural. Never sound performatively cheerful or clingy.",
+    "Use page context and notes proactively. If current page context is provided below, do not say you cannot access it.",
+    "Prefer short spoken answers unless detail is genuinely useful or the user explicitly asks for more.",
     "If the app asks you to relay an update, preserve the meaning and do not add new facts.",
     "If interrupted, stop immediately and wait for the user.",
     `Current Braino mode: ${MODE_LABELS[currentMode] || currentMode}.`,
@@ -3708,7 +3716,7 @@ function syncRealtimeVoiceSession({ force = false } = {}) {
     session: {
       type: "realtime",
       instructions,
-      output_modalities: ["text"],
+      output_modalities: ["audio"],
       reasoning: {
         effort: "low",
       },
@@ -3723,6 +3731,9 @@ function syncRealtimeVoiceSession({ force = false } = {}) {
             create_response: false,
             interrupt_response: true,
           },
+        },
+        output: {
+          voice: REALTIME_VOICE,
         },
       },
     },
@@ -3845,13 +3856,9 @@ async function finishRealtimeResponse(status, { errorMessage = "", fallbackText 
     if (!realtimeAssistantTranscript && fallbackText) {
       realtimeAssistantTranscript = fallbackText;
       setCaption(fallbackText);
-      realtimeSpeechBuffer = fallbackText;
     }
-    flushRealtimeSpeechBuffer({ final: true });
-    await waitForRealtimeSpeechIdle();
-  } else {
-    clearRealtimeSpeechQueue();
   }
+  clearRealtimeSpeechQueue();
 
   resolveRealtimeResponse({
     status,
@@ -3960,7 +3967,7 @@ async function requestRealtimeAssistantReply(text, { relayMode = false } = {}) {
     ? sendRealtimeEvent({
         type: "response.create",
         response: {
-          output_modalities: ["text"],
+          output_modalities: ["audio"],
           input: [
             {
               type: "message",
@@ -3992,7 +3999,7 @@ async function requestRealtimeAssistantReply(text, { relayMode = false } = {}) {
       sendRealtimeEvent({
         type: "response.create",
         response: {
-          output_modalities: ["text"],
+          output_modalities: ["audio"],
         },
       })
     );
@@ -4125,8 +4132,6 @@ function handleRealtimeServerEvent(serverEvent) {
   if (serverEvent.type === "response.output_text.delta") {
     if (typeof serverEvent.delta === "string" && serverEvent.delta) {
       realtimeAssistantTranscript += serverEvent.delta;
-      realtimeSpeechBuffer += serverEvent.delta;
-      flushRealtimeSpeechBuffer();
       realtimeLastResponseStatus = "speaking";
       setOrbState("speaking");
       setCaption(realtimeAssistantTranscript.trim());
@@ -4342,6 +4347,7 @@ async function openVoiceMode() {
   }
 
   voiceTabId = tabId;
+  chrome.storage.local.set({ activeTabId: tabId });
   const startedRealtime = await startRealtimeVoiceMode();
   if (startedRealtime) {
     return;
@@ -5626,6 +5632,30 @@ async function getAuthToken() {
   return null;
 }
 
+async function announceRemoteCommandResult(message) {
+  if (!message || !voiceActive) return;
+
+  const spoken = stripMarkdownForTTS(String(message).replace(/^[\u2705\u274c]\s*/, "").trim());
+  if (!spoken) return;
+
+  setOrbState("speaking");
+
+  try {
+    if (isRealtimeVoiceMode()) {
+      const relayed = await speakTextWithRealtime(spoken);
+      if (!relayed) {
+        await speakText(spoken);
+      }
+    } else {
+      await speakText(spoken);
+    }
+  } finally {
+    if (voiceActive) {
+      setOrbState(isRealtimeVoiceMode() ? "listening" : "idle");
+    }
+  }
+}
+
 async function pollRemoteCommands() {
   if (agentRunning) return; // don't stack if agent already running
   let token = await getAuthToken();
@@ -5686,7 +5716,9 @@ async function updateRemoteCommand(id, token, patch) {
 
 async function runRemoteCommand(cmd, token) {
   if (!(await loadPremiumStatus())) {
-    await updateRemoteCommand(cmd.id, token, { status: "error", result: "Premium required to run remote commands." });
+    const result = "Premium required to run remote commands.";
+    await updateRemoteCommand(cmd.id, token, { status: "error", result });
+    await announceRemoteCommandResult(result);
     clearRemoteProcessing();
     return;
   }
@@ -5859,11 +5891,14 @@ async function runRemoteCommand(cmd, token) {
       chatMessagesEl.appendChild(doneBubble);
       chatArea.scrollTop = chatArea.scrollHeight;
       await updateRemoteCommand(cmd.id, token, { status: "done", result: adapterMessage, steps });
+      await announceRemoteCommandResult(adapterMessage);
       clearRemoteProcessing();
       return;
     }
   } catch (e) {
-    await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
+    const result = `Error: ${e.message}`;
+    await updateRemoteCommand(cmd.id, token, { status: "error", result, steps });
+    await announceRemoteCommandResult(result);
     clearRemoteProcessing();
     return;
   }
@@ -5877,7 +5912,9 @@ async function runRemoteCommand(cmd, token) {
       try {
         actions = await callAgentStep(cmd.task, pageInfo, history, []);
       } catch (e) {
-        await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
+        const result = `Error: ${e.message}`;
+        await updateRemoteCommand(cmd.id, token, { status: "error", result, steps });
+        await announceRemoteCommandResult(result);
         clearRemoteProcessing();
         return;
       }
@@ -5901,6 +5938,7 @@ async function runRemoteCommand(cmd, token) {
       chatMessagesEl.appendChild(doneBubble);
       chatArea.scrollTop = chatArea.scrollHeight;
       await updateRemoteCommand(cmd.id, token, { status: "done", result: doneMsg, steps });
+      await announceRemoteCommandResult(doneMsg);
       clearRemoteProcessing();
       return;
     }
@@ -5916,6 +5954,7 @@ async function runRemoteCommand(cmd, token) {
         chatMessagesEl.appendChild(doneBubble2);
         chatArea.scrollTop = chatArea.scrollHeight;
         await updateRemoteCommand(cmd.id, token, { status: "done", result: doneMsg2, steps });
+        await announceRemoteCommandResult(doneMsg2);
         clearRemoteProcessing();
         return;
       }
@@ -5947,11 +5986,13 @@ async function runRemoteCommand(cmd, token) {
   errBubble.innerHTML = `<div class="chat-bubble-text">❌ Ran out of steps. Check your desktop browser.</div>`;
   chatMessagesEl.appendChild(errBubble);
   chatArea.scrollTop = chatArea.scrollHeight;
+  const result = "Ran out of steps. Check your desktop browser.";
   await updateRemoteCommand(cmd.id, token, {
     status: "error",
-    result: "Ran out of steps. Check your desktop browser.",
+    result,
     steps,
   });
+  await announceRemoteCommandResult(result);
   clearRemoteProcessing();
 }
 

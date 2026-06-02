@@ -508,7 +508,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     message.action === "getSiteAdapterContext"
   ) {
     chrome.storage.local.get("activeTabId", (store) => {
-      const tabId = store.activeTabId;
+      const tabId = message.tabId || store.activeTabId;
       if (!tabId) { sendResponse({ error: "No active tab" }); return; }
 
       // Navigate can be done directly — works even on pages without content scripts

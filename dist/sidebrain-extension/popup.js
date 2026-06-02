@@ -17,13 +17,13 @@ let mediaRecorder = null;
 let audioChunks = [];
 let currentPageContext = null;
 let currentMode = "page"; // "page" | "lecture" | "meeting" | "general" | "web" | "agent"
-let currentAiProvider = "lovable"; // "lovable" | "claude" | "openai-realtime"
+let currentAiProvider = "lovable"; // "lovable" | "claude"
 let agentRunning = false;
 let agentShouldStop = false;
 let isPremium = false;
 let currentSelection = null; // { text, url, title } — last text the user highlighted on the page
 let sbXPersonaCache = null; // cached x_auto_persona for injecting context on X
-const REALTIME_AI_PROVIDER = "openai-realtime";
+const VALID_AI_PROVIDERS = new Set(["lovable", "claude"]);
 const INTERNAL_PREMIUM_EMAILS = new Set([
   "itishpande21@gmail.com",
 ]);
@@ -538,26 +538,20 @@ modelBtn?.addEventListener("click", (e) => {
 
 // Load saved provider
 chrome.storage.local.get(["aiProvider"], (r) => {
-  if (r.aiProvider) {
+  if (VALID_AI_PROVIDERS.has(r.aiProvider)) {
     currentAiProvider = r.aiProvider;
-    updateModelUI();
+  } else if (r.aiProvider) {
+    chrome.storage.local.set({ aiProvider: "lovable" });
   }
+  updateModelUI();
 });
-
-function isRealtimeVoiceProvider(provider = currentAiProvider) {
-  return provider === REALTIME_AI_PROVIDER;
-}
 
 function getTextAiProvider(provider = currentAiProvider) {
   return provider === "claude" ? "claude" : "lovable";
 }
 
 function updateModelUI() {
-  if (modelLabel) {
-    if (currentAiProvider === "claude") modelLabel.textContent = "Claude Sonnet 4.6";
-    else if (isRealtimeVoiceProvider()) modelLabel.textContent = "Braino Live Beta";
-    else modelLabel.textContent = "Braino AI";
-  }
+  if (modelLabel) modelLabel.textContent = currentAiProvider === "claude" ? "Claude Sonnet 4.6" : "Braino AI";
   modelPopover?.querySelectorAll(".model-option").forEach((el) => {
     el.classList.toggle("active", el.dataset.provider === currentAiProvider);
   });
@@ -871,6 +865,7 @@ function setMode(mode) {
   chrome.storage.local.set({ currentMode: mode });
   modeDropup?.classList.add("hidden");
   updateChatContextUI();
+  if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
 }
 
 modeSelectorBtn?.addEventListener("click", (e) => {
@@ -1066,17 +1061,36 @@ function updateConvertButtonLabel() {
   convertBtn.innerHTML = `${CONVERT_BUTTON_ICON} ${label}`;
 }
 
+function applyPageContext(result) {
+  if (!result?.text) {
+    currentPageContext = null;
+    updateChatContextUI();
+    updateVoicePageCtx();
+    if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
+    return null;
+  }
+
+  currentPageContext = {
+    title: result.title,
+    url: result.url,
+    text: result.text,
+    faviconUrl: result.faviconUrl || "",
+  };
+  updateChatContextUI();
+  updateVoicePageCtx();
+  if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
+  return currentPageContext;
+}
+
 
 // ===== PAGE CONTEXT =====
 function fetchPageContext() {
   chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
     if (chrome.runtime.lastError || res?.error || !res?.text) {
-      currentPageContext = null;
-      updateChatContextUI();
+      applyPageContext(null);
       return;
     }
-    currentPageContext = { title: res.title, url: res.url, text: res.text, faviconUrl: res.faviconUrl || "" };
-    updateChatContextUI();
+    applyPageContext(res);
   });
 }
 
@@ -1957,7 +1971,8 @@ function agentFinalizeBlock(block, stepCount) {
 
 function getAgentPageContext() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "getAgentPageContext" }, (res) => {
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    chrome.runtime.sendMessage({ action: "getAgentPageContext", ...(targetTabId ? { tabId: targetTabId } : {}) }, (res) => {
       if (chrome.runtime.lastError || res?.error) {
         resolve({ url: "", title: "", bodyText: "", interactiveEls: [] });
       } else {
@@ -1969,7 +1984,8 @@ function getAgentPageContext() {
 
 function executeAgentAction(actionObj) {
   return new Promise((resolve) => {
-    const msg = { action: "agentAction", ...actionObj };
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    const msg = { action: "agentAction", ...actionObj, ...(targetTabId ? { tabId: targetTabId } : {}) };
     chrome.runtime.sendMessage(msg, (res) => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || { error: "No response" });
@@ -1979,7 +1995,8 @@ function executeAgentAction(actionObj) {
 
 function getSiteAdapterContext() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "getSiteAdapterContext" }, (res) => {
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    chrome.runtime.sendMessage({ action: "getSiteAdapterContext", ...(targetTabId ? { tabId: targetTabId } : {}) }, (res) => {
       if (chrome.runtime.lastError || res?.error) {
         resolve({ site: "generic", url: "", title: "" });
       } else {
@@ -1991,7 +2008,8 @@ function getSiteAdapterContext() {
 
 function executeSiteAdapterAction(actionObj) {
   return new Promise((resolve) => {
-    const msg = { action: "siteAdapterAction", ...actionObj };
+    const targetTabId = voiceActive && voiceTabId ? voiceTabId : undefined;
+    const msg = { action: "siteAdapterAction", ...actionObj, ...(targetTabId ? { tabId: targetTabId } : {}) };
     chrome.runtime.sendMessage(msg, (res) => {
       if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
       else resolve(res || { error: "No response" });
@@ -3289,6 +3307,8 @@ What actions should be taken next? Return a single JSON object, OR a JSON array 
 const ELEVENLABS_API_KEY = "sk_2ee3bb5258f10b54aba4d71a7ff1640d98fc322c3e2410cd";
 const ELEVENLABS_VOICE_ID = "2ajXGJNYBR0iNHpS4VZb";
 let currentAudio = null;
+let currentAudioDone = null;
+let currentUtterance = null;
 
 function stripMarkdownForTTS(text) {
   return text
@@ -3309,10 +3329,107 @@ function stripMarkdownForTTS(text) {
 let voiceWordIntervalId = null;
 let isVoiceSpeaking = false;
 
+function finishCurrentTTS() {
+  if (!currentAudioDone) return;
+  const done = currentAudioDone;
+  currentAudioDone = null;
+  done();
+}
+
+function clearCurrentUtterance() {
+  if (!currentUtterance) return;
+  try {
+    currentUtterance.onend = null;
+    currentUtterance.onerror = null;
+  } catch {}
+  currentUtterance = null;
+}
+
 function stopCurrentTTS() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (currentAudio) {
+    try { currentAudio.onended = null; } catch {}
+    try { currentAudio.onerror = null; } catch {}
+    try { currentAudio.pause(); } catch {}
+    try {
+      currentAudio.removeAttribute("src");
+      currentAudio.load();
+    } catch {}
+    currentAudio = null;
+  }
+  if ("speechSynthesis" in window) {
+    try { window.speechSynthesis.cancel(); } catch {}
+  }
+  clearCurrentUtterance();
   if (voiceWordIntervalId) { clearInterval(voiceWordIntervalId); voiceWordIntervalId = null; }
   isVoiceSpeaking = false;
+  finishCurrentTTS();
+}
+
+function renderVoiceCaptionWords(text) {
+  if (!voiceAgentText) return [];
+  setCaption(text);
+  return Array.from(voiceAgentText.querySelectorAll(".word"));
+}
+
+async function speakTextWithBrowserVoice(text, onWordUpdate) {
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+    return false;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  currentUtterance = utterance;
+  isVoiceSpeaking = true;
+
+  let wordSpans = [];
+  if (onWordUpdate) {
+    onWordUpdate(text, -1);
+    wordSpans = Array.from(voiceAgentText ? voiceAgentText.querySelectorAll(".word") : []);
+  } else {
+    wordSpans = renderVoiceCaptionWords(text);
+  }
+
+  const estimatedDurationMs = Math.max(900, text.split(/\s+/).filter(Boolean).length * 320);
+  const startWordTimer = () => {
+    if (!wordSpans.length) return;
+    const msPerWord = Math.max(70, estimatedDurationMs / Math.max(wordSpans.length, 1));
+    let i = 0;
+    voiceWordIntervalId = setInterval(() => {
+      if (i < wordSpans.length) {
+        if (i > 0) {
+          wordSpans[i - 1].classList.remove("current");
+          wordSpans[i - 1].classList.add("said");
+        }
+        wordSpans[i].classList.add("current");
+        wordSpans[i].scrollIntoView({ block: "nearest", behavior: "smooth" });
+        i++;
+      } else {
+        if (wordSpans.length > 0) {
+          wordSpans[wordSpans.length - 1].classList.remove("current");
+          wordSpans[wordSpans.length - 1].classList.add("said");
+        }
+        clearInterval(voiceWordIntervalId);
+        voiceWordIntervalId = null;
+      }
+    }, msPerWord);
+  };
+
+  startWordTimer();
+
+  await new Promise((resolve) => {
+    currentAudioDone = resolve;
+    utterance.onend = () => {
+      clearCurrentUtterance();
+      stopCurrentTTS();
+    };
+    utterance.onerror = () => {
+      clearCurrentUtterance();
+      stopCurrentTTS();
+    };
+    try { window.speechSynthesis.cancel(); } catch {}
+    window.speechSynthesis.speak(utterance);
+  });
+
+  return true;
 }
 
 async function speakText(text, onWordUpdate) {
@@ -3328,7 +3445,12 @@ async function speakText(text, onWordUpdate) {
       headers: { "xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ text: clean, model_id: "eleven_turbo_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      console.warn("ElevenLabs TTS unavailable, falling back to browser voice:", res.status, errorText);
+      await speakTextWithBrowserVoice(clean, onWordUpdate);
+      return;
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     currentAudio = new Audio(url);
@@ -3370,14 +3492,16 @@ async function speakText(text, onWordUpdate) {
 
     isVoiceSpeaking = true;
     await new Promise(resolve => {
-      currentAudio.onended = () => { stopCurrentTTS(); resolve(); };
-      currentAudio.onerror = () => { stopCurrentTTS(); resolve(); };
-      currentAudio.play().catch(() => { stopCurrentTTS(); resolve(); });
+      currentAudioDone = resolve;
+      currentAudio.onended = () => { stopCurrentTTS(); };
+      currentAudio.onerror = () => { stopCurrentTTS(); };
+      currentAudio.play().catch(() => { stopCurrentTTS(); });
     });
     URL.revokeObjectURL(url);
   } catch (e) {
     stopCurrentTTS();
-    console.warn("ElevenLabs TTS error:", e);
+    console.warn("ElevenLabs TTS error, falling back to browser voice:", e);
+    await speakTextWithBrowserVoice(clean, onWordUpdate);
   }
 }
 
@@ -3386,6 +3510,7 @@ let voiceActive = false;
 let voiceTabId = null;
 let voiceMuted = false;
 let headphoneMode = false;
+let voiceUsingRealtime = false;
 let realtimePeerConnection = null;
 let realtimeDataChannel = null;
 let realtimeMicStream = null;
@@ -3395,6 +3520,21 @@ let realtimeSessionReady = false;
 let realtimeAssistantTranscript = "";
 let realtimeAssistantItemId = null;
 let realtimeAudioStartAt = 0;
+let realtimeUserTranscript = "";
+let realtimeOutputPromise = Promise.resolve();
+let realtimeLastResponseFinishedAt = 0;
+let realtimeLastResponseStatus = "idle";
+let realtimeContextFingerprint = "";
+let realtimeSpeechBuffer = "";
+let realtimeSpeechQueue = [];
+let realtimeSpeechDraining = false;
+let realtimeResponseWaiter = null;
+let lastRealtimeStartupError = "";
+
+const REALTIME_PAGE_CONTEXT_LIMIT = 12000;
+const REALTIME_NOTES_CONTEXT_LIMIT = 6000;
+const REALTIME_SELECTION_CONTEXT_LIMIT = 1600;
+const REALTIME_VOICE = "marin";
 
 const voiceOverlay      = document.getElementById("voiceOverlay");
 const voiceOrb          = document.getElementById("voiceOrb");
@@ -3403,7 +3543,6 @@ const voiceAgentText    = document.getElementById("voiceAgentText");
 const voiceModeBtn      = document.getElementById("voiceModeBtn");
 const voiceCloseBtn     = document.getElementById("voiceCloseBtn");
 const voiceCapLabelTxt  = document.getElementById("voiceCapLabelTxt");
-const voiceLookBtn      = document.getElementById("voiceLookBtn");
 const voiceInterruptBtn = document.getElementById("voiceInterruptBtn");
 const voiceStopTaskBtn  = document.getElementById("voiceStopTaskBtn");
 const voiceMuteBtn      = document.getElementById("voiceMuteBtn");
@@ -3411,6 +3550,8 @@ const voiceCtxTitle     = document.getElementById("voiceCtxTitle");
 const voiceCtxUrl       = document.getElementById("voiceCtxUrl");
 const voiceCtxFavicon   = document.getElementById("voiceCtxFavicon");
 const voiceCtxLiveTxt   = document.getElementById("voiceCtxLiveTxt");
+const voiceTransportBadge = document.getElementById("voiceTransportBadge");
+const voiceTransportError = document.getElementById("voiceTransportError");
 
 const CAP_LABELS = { listening: "Braino · Listening", captured: "Braino · Got it", processing: "Braino · Thinking", speaking: "Braino · Speaking", idle: "Braino · Ready", acting: "Braino · Acting" };
 
@@ -3430,10 +3571,24 @@ function setOrbState(state) {
     };
     brainoEl.style.animation = animMap[state] || "brainoGlowIdle 3.8s ease-in-out infinite";
   }
+  // Sync brain button state on the page
+  if (voiceTabId) {
+    const brainStateMap = { listening: "listening", captured: "captured", speaking: "speaking", processing: "captured", idle: "" };
+    chrome.tabs.sendMessage(voiceTabId, { action: "voiceBrainState", state: brainStateMap[state] ?? "" });
+  }
 }
 
 function updateVoicePageCtx() {
-  if (!currentPageContext) return;
+  if (!currentPageContext) {
+    if (voiceCtxTitle) voiceCtxTitle.textContent = "Current page";
+    if (voiceCtxUrl) voiceCtxUrl.textContent = "—";
+    if (voiceCtxFavicon) {
+      voiceCtxFavicon.className = "voice-ctx-favicon";
+      voiceCtxFavicon.textContent = "BR";
+    }
+    return;
+  }
+
   if (voiceCtxTitle) voiceCtxTitle.textContent = currentPageContext.title || "Current page";
   if (voiceCtxUrl) voiceCtxUrl.textContent = currentPageContext.url ? new URL(currentPageContext.url).hostname : "—";
   renderContextFavicon(voiceCtxFavicon, currentPageContext, "voice-ctx-favicon");
@@ -3458,12 +3613,258 @@ function setSubtitles(user, agent) {
   if (agent !== undefined) setCaption(agent);
 }
 
-function setVoiceContextStatus(text) {
-  if (voiceCtxLiveTxt) voiceCtxLiveTxt.textContent = text || "live";
+function setVoiceContextStatus(text, { tone, detail = "" } = {}) {
+  const statusText = text || "live";
+  const resolvedTone = tone || (
+    statusText === "realtime" ? "realtime" :
+    statusText === "legacy" ? "legacy" :
+    statusText === "connecting" ? "pending" :
+    statusText === "error" ? "error" :
+    "neutral"
+  );
+
+  if (voiceCtxLiveTxt) voiceCtxLiveTxt.textContent = statusText;
+  if (voiceTransportBadge) {
+    voiceTransportBadge.textContent = statusText;
+    voiceTransportBadge.dataset.state = resolvedTone;
+  }
+  if (voiceTransportError) {
+    voiceTransportError.textContent = detail;
+    voiceTransportError.classList.toggle("hidden", !detail);
+  }
+  // Push status to the inline popup in the page
+  if (voiceTabId) {
+    chrome.tabs.sendMessage(voiceTabId, { action: "voiceTransportStatus", status: resolvedTone, detail });
+  }
 }
 
 function isRealtimeVoiceSessionRunning() {
   return realtimeConnecting || !!realtimePeerConnection;
+}
+
+function isRealtimeVoiceMode() {
+  return voiceUsingRealtime && isRealtimeVoiceSessionRunning();
+}
+
+function setRealtimeMicEnabled(enabled) {
+  realtimeMicStream?.getAudioTracks().forEach((track) => {
+    track.enabled = enabled;
+  });
+}
+
+function truncateRealtimeContext(text, maxChars) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars)}… [truncated]`;
+}
+
+function buildRealtimeVoiceInstructions() {
+  const lines = [
+    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build.",
+    "Voice is only the medium here. You are still Braino, not a generic voice assistant.",
+    "Be direct. No filler. No hollow openers. Get to the point.",
+    "Think before you answer. Distinguish between what you know, what you think, and what you are unsure about. Never fake confidence.",
+    "If the user is wrong, push back clearly but respectfully.",
+    "Be warm, grounded, and natural. Never sound performatively cheerful or clingy.",
+    "Use page context and notes proactively. If current page context is provided below, do not say you cannot access it.",
+    "Prefer short spoken answers unless detail is genuinely useful or the user explicitly asks for more.",
+    "If the app asks you to relay an update, preserve the meaning and do not add new facts.",
+    "If interrupted, stop immediately and wait for the user.",
+    `Current Braino mode: ${MODE_LABELS[currentMode] || currentMode}.`,
+  ];
+
+  if (currentMode === "page" && currentPageContext?.text) {
+    lines.push("Prioritize the current page context in your answer.");
+  } else if (currentMode === "general") {
+    lines.push("Treat page context as optional background unless the user asks about the page.");
+  }
+
+  if (currentPageContext) {
+    lines.push(`Current page title: ${currentPageContext.title || "Untitled"}`);
+    lines.push(`Current page URL: ${currentPageContext.url || "Unknown"}`);
+    const pageText = truncateRealtimeContext(currentPageContext.text, REALTIME_PAGE_CONTEXT_LIMIT);
+    if (pageText) lines.push(`Current page text:\n${pageText}`);
+  }
+
+  if (currentSelection?.text) {
+    const selectedText = truncateRealtimeContext(currentSelection.text, REALTIME_SELECTION_CONTEXT_LIMIT);
+    if (selectedText) {
+      lines.push(`Currently selected text:\n${selectedText}`);
+    }
+  }
+
+  if (hasExistingNotes()) {
+    const notesCtx = buildNotesContextForAI(notesMarkdown);
+    const notesText = truncateRealtimeContext(notesCtx.sanitizedNotes, REALTIME_NOTES_CONTEXT_LIMIT);
+    if (notesText) lines.push(`Current saved notes excerpt:\n${notesText}`);
+  }
+
+  return lines.join("\n\n");
+}
+
+function syncRealtimeVoiceSession({ force = false } = {}) {
+  if (!isRealtimeVoiceMode() || !realtimeSessionReady) return false;
+
+  const instructions = buildRealtimeVoiceInstructions();
+  const fingerprint = `${currentMode}::${instructions}`;
+  if (!force && fingerprint === realtimeContextFingerprint) return true;
+  realtimeContextFingerprint = fingerprint;
+
+  return sendRealtimeEvent({
+    type: "session.update",
+    session: {
+      type: "realtime",
+      instructions,
+      output_modalities: ["audio"],
+      reasoning: {
+        effort: "low",
+      },
+      audio: {
+        input: {
+          transcription: {
+            model: "gpt-4o-transcribe",
+          },
+          turn_detection: {
+            type: "semantic_vad",
+            eagerness: "high",
+            create_response: false,
+            interrupt_response: true,
+          },
+        },
+        output: {
+          voice: REALTIME_VOICE,
+        },
+      },
+    },
+  });
+}
+
+function clearRealtimeSpeechQueue() {
+  realtimeSpeechBuffer = "";
+  realtimeSpeechQueue = [];
+}
+
+function queueRealtimeSpeechChunk(text) {
+  const chunk = stripMarkdownForTTS(text);
+  if (!chunk) return;
+  realtimeSpeechQueue.push(chunk);
+  void drainRealtimeSpeechQueue();
+}
+
+function flushRealtimeSpeechBuffer({ final = false } = {}) {
+  let buffer = realtimeSpeechBuffer;
+  if (!buffer) return;
+
+  const chunks = [];
+  const sentencePattern = /^([\s\S]*?[.!?](?=\s|$))/;
+  let match = buffer.match(sentencePattern);
+  while (match) {
+    const chunk = match[1].trim();
+    if (chunk) chunks.push(chunk);
+    buffer = buffer.slice(match[1].length).trimStart();
+    match = buffer.match(sentencePattern);
+  }
+
+  if (!final && buffer.length > 220) {
+    const preferredBreaks = [
+      buffer.lastIndexOf(". ", 220),
+      buffer.lastIndexOf("! ", 220),
+      buffer.lastIndexOf("? ", 220),
+      buffer.lastIndexOf("; ", 220),
+      buffer.lastIndexOf(", ", 220),
+      buffer.lastIndexOf(": ", 220),
+      buffer.lastIndexOf(" ", 220),
+    ].filter((idx) => idx > 40);
+    const splitIndex = preferredBreaks.length ? Math.max(...preferredBreaks) + 1 : -1;
+    if (splitIndex > 0) {
+      const chunk = buffer.slice(0, splitIndex).trim();
+      if (chunk) chunks.push(chunk);
+      buffer = buffer.slice(splitIndex).trimStart();
+    }
+  }
+
+  if (final && buffer.trim()) {
+    chunks.push(buffer.trim());
+    buffer = "";
+  }
+
+  realtimeSpeechBuffer = buffer;
+  chunks.forEach(queueRealtimeSpeechChunk);
+}
+
+async function drainRealtimeSpeechQueue() {
+  if (realtimeSpeechDraining) return;
+  realtimeSpeechDraining = true;
+
+  try {
+    while (voiceActive && isRealtimeVoiceMode() && realtimeSpeechQueue.length > 0) {
+      const nextChunk = realtimeSpeechQueue.shift();
+      if (!nextChunk) continue;
+      setOrbState("speaking");
+      await speakText(nextChunk);
+    }
+  } finally {
+    realtimeSpeechDraining = false;
+    if (voiceActive && isRealtimeVoiceMode() && realtimeSpeechQueue.length > 0) {
+      void drainRealtimeSpeechQueue();
+    }
+  }
+}
+
+function waitForRealtimeSpeechIdle(timeoutMs = 20000) {
+  const startedAt = Date.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!realtimeSpeechDraining && !isVoiceSpeaking && realtimeSpeechQueue.length === 0) {
+        resolve();
+        return;
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 60);
+    };
+    check();
+  });
+}
+
+function createRealtimeResponseWaiter() {
+  if (realtimeResponseWaiter) {
+    realtimeResponseWaiter.resolve({
+      status: "cancelled",
+      text: realtimeAssistantTranscript.trim(),
+      errorMessage: "",
+    });
+  }
+
+  return new Promise((resolve) => {
+    realtimeResponseWaiter = { resolve };
+  });
+}
+
+function resolveRealtimeResponse(payload) {
+  if (!realtimeResponseWaiter) return;
+  const waiter = realtimeResponseWaiter;
+  realtimeResponseWaiter = null;
+  waiter.resolve(payload);
+}
+
+async function finishRealtimeResponse(status, { errorMessage = "", fallbackText = "" } = {}) {
+  if (status === "done") {
+    if (!realtimeAssistantTranscript && fallbackText) {
+      realtimeAssistantTranscript = fallbackText;
+      setCaption(fallbackText);
+    }
+  }
+  clearRealtimeSpeechQueue();
+
+  resolveRealtimeResponse({
+    status,
+    text: realtimeAssistantTranscript.trim() || fallbackText || "",
+    errorMessage,
+  });
 }
 
 function extractRealtimeResponseText(response) {
@@ -3480,11 +3881,21 @@ function extractRealtimeResponseText(response) {
 }
 
 function cleanupRealtimeVoiceSession({ keepCaption = false } = {}) {
+  voiceUsingRealtime = false;
   realtimeSessionReady = false;
   realtimeConnecting = false;
   realtimeAssistantTranscript = "";
   realtimeAssistantItemId = null;
   realtimeAudioStartAt = 0;
+  realtimeUserTranscript = "";
+  realtimeOutputPromise = Promise.resolve();
+  realtimeLastResponseFinishedAt = 0;
+  realtimeLastResponseStatus = "idle";
+  realtimeContextFingerprint = "";
+  lastRealtimeStartupError = "";
+  clearRealtimeSpeechQueue();
+  resolveRealtimeResponse({ status: "cancelled", text: "", errorMessage: "" });
+  stopCurrentTTS();
 
   if (realtimeDataChannel) {
     try { realtimeDataChannel.close(); } catch {}
@@ -3529,94 +3940,131 @@ function requestVoicePageContext() {
         resolve(currentPageContext);
         return;
       }
-      currentPageContext = {
-        title: res.title,
-        url: res.url,
-        text: res.text,
-        faviconUrl: res.faviconUrl || "",
-      };
-      updateChatContextUI();
-      updateVoicePageCtx();
+      applyPageContext(res);
       resolve(currentPageContext);
     });
   });
 }
 
-function captureVisibleScreenshotDataUrl() {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "captureScreenshot" }, (res) => {
-      if (chrome.runtime.lastError || res?.error || !res?.dataUrl) {
-        resolve(null);
-        return;
-      }
-      resolve(res.dataUrl);
+async function requestRealtimeAssistantReply(text, { relayMode = false } = {}) {
+  if (!text || !isRealtimeVoiceMode() || !realtimeSessionReady) {
+    return { status: "error", text: "", errorMessage: "Realtime voice is not ready." };
+  }
+
+  interruptRealtimeSpeech({ clearCaption: false });
+  realtimeAssistantTranscript = "";
+  realtimeSpeechBuffer = "";
+  realtimeSpeechQueue = [];
+  realtimeAudioStartAt = Date.now();
+  realtimeLastResponseFinishedAt = 0;
+  realtimeLastResponseStatus = "pending";
+
+  const responsePromise = createRealtimeResponseWaiter();
+  setOrbState(relayMode ? "speaking" : "processing");
+  if (!relayMode) setCaption("Thinking…");
+
+  const responseCreated = relayMode
+    ? sendRealtimeEvent({
+        type: "response.create",
+        response: {
+          output_modalities: ["audio"],
+          input: [
+            {
+              type: "message",
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `Relay this update to the user in one short natural spoken reply. Preserve the meaning and do not add new facts.\n\n${text}`,
+                },
+              ],
+            },
+          ],
+        },
+      })
+    : (
+      sendRealtimeEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text,
+            },
+          ],
+        },
+      }) &&
+      sendRealtimeEvent({
+        type: "response.create",
+        response: {
+          output_modalities: ["audio"],
+        },
+      })
+    );
+
+  if (!responseCreated) {
+    resolveRealtimeResponse({
+      status: "error",
+      text: "",
+      errorMessage: "Realtime voice channel is not ready.",
     });
-  });
+  }
+
+  const result = await responsePromise;
+  if (result.status === "error") {
+    throw new Error(result.errorMessage || "Realtime voice failed.");
+  }
+  return result;
 }
 
-function compressRealtimeScreenshot(dataUrl, { maxWidth = 960, maxHeight = 640, maxChars = 220000 } = {}) {
-  if (!dataUrl || typeof dataUrl !== "string") return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxWidth / img.naturalWidth, maxHeight / img.naturalHeight);
-      const width = Math.max(1, Math.round(img.naturalWidth * scale));
-      const height = Math.max(1, Math.round(img.naturalHeight * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        resolve(null);
-        return;
-      }
-      ctx.drawImage(img, 0, 0, width, height);
-
-      let quality = 0.72;
-      let result = canvas.toDataURL("image/jpeg", quality);
-      while (result.length > maxChars && quality > 0.35) {
-        quality -= 0.08;
-        result = canvas.toDataURL("image/jpeg", quality);
-      }
-      resolve(result.length <= maxChars ? result : null);
-    };
-    img.onerror = () => resolve(null);
-    img.src = dataUrl;
-  });
+function interruptRealtimeSpeech({ clearCaption = true } = {}) {
+  sendRealtimeEvent({ type: "response.cancel" });
+  sendRealtimeEvent({ type: "output_audio_buffer.clear" });
+  stopCurrentTTS();
+  clearRealtimeSpeechQueue();
+  realtimeAssistantTranscript = "";
+  realtimeAssistantItemId = null;
+  realtimeLastResponseFinishedAt = Date.now();
+  realtimeLastResponseStatus = "cancelled";
+  resolveRealtimeResponse({ status: "cancelled", text: "", errorMessage: "" });
+  setRealtimeMicEnabled(!voiceMuted);
+  if (clearCaption) setCaption("");
 }
 
-function getRealtimeVoiceInstructions() {
-  return [
-    "# Role and Objective",
-    "You are Braino, a live browser voice companion.",
-    "",
-    "# Personality and Tone",
-    "- Sound warm, clear, and lightly proactive.",
-    "- Keep spoken replies short unless the user asks for more depth.",
-    "",
-    "# Screen Grounding",
-    "- Use the latest page text and screenshot I send as the primary source of truth for what is on screen.",
-    "- If the screenshot or page text seems stale or incomplete, ask the user to refresh the page view.",
-    "",
-    "# Behavior",
-    "- Answer direct questions in 1-2 short sentences when possible.",
-    "- Ask only one clarifying question at a time.",
-    "- Never claim you clicked, typed, or changed something on the page unless a separate tool explicitly did it.",
-    "- If the user asks you to look at the page, describe what matters and offer the next useful action.",
-  ].join("\n");
+async function speakTextWithRealtime(text) {
+  if (!text) return false;
+  try {
+    const result = await requestRealtimeAssistantReply(text, { relayMode: true });
+    if (result.status === "error") {
+      throw new Error(result.errorMessage || "Realtime voice is not ready.");
+    }
+    return true;
+  } catch (error) {
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "error";
+    console.warn("Realtime relay playback failed:", error);
+    return false;
+  }
 }
 
 function handleRealtimeServerEvent(serverEvent) {
-  if (!voiceActive || !isRealtimeVoiceProvider()) return;
+  if (!voiceActive || !isRealtimeVoiceMode()) return;
 
   if (serverEvent.type === "session.created" || serverEvent.type === "session.updated") {
     realtimeSessionReady = true;
-    setVoiceContextStatus("live");
+    setVoiceContextStatus("realtime");
     if (!realtimeConnecting) setOrbState("listening");
     return;
   }
 
   if (serverEvent.type === "input_audio_buffer.speech_started") {
+    if (isVoiceSpeaking || realtimeLastResponseStatus === "speaking" || realtimeLastResponseStatus === "pending") {
+      interruptRealtimeSpeech({ clearCaption: false });
+    }
+    realtimeUserTranscript = "";
+    setCaption("");
     setOrbState("listening");
     return;
   }
@@ -3627,14 +4075,32 @@ function handleRealtimeServerEvent(serverEvent) {
     return;
   }
 
+  if (serverEvent.type === "conversation.item.input_audio_transcription.delta") {
+    if (typeof serverEvent.delta === "string" && serverEvent.delta) {
+      realtimeUserTranscript += serverEvent.delta;
+      setCaption(realtimeUserTranscript.trim());
+    }
+    return;
+  }
+
   if (serverEvent.type === "conversation.item.input_audio_transcription.completed") {
-    if (voiceUserText) voiceUserText.textContent = serverEvent.transcript || "";
+    const transcript = (serverEvent.transcript || realtimeUserTranscript || "").trim();
+    realtimeUserTranscript = "";
+    if (!transcript) return;
+    if (voiceUserText) voiceUserText.textContent = transcript;
+    setCaption("");
+    requestVoicePageContext().finally(() => {
+      handleVoiceInput(transcript, { useRealtimeSpeech: true });
+    });
     return;
   }
 
   if (serverEvent.type === "response.created") {
     realtimeAssistantTranscript = "";
+    realtimeSpeechBuffer = "";
+    realtimeSpeechQueue = [];
     realtimeAudioStartAt = Date.now();
+    realtimeLastResponseStatus = "pending";
     setOrbState("processing");
     return;
   }
@@ -3666,6 +4132,7 @@ function handleRealtimeServerEvent(serverEvent) {
   if (serverEvent.type === "response.output_text.delta") {
     if (typeof serverEvent.delta === "string" && serverEvent.delta) {
       realtimeAssistantTranscript += serverEvent.delta;
+      realtimeLastResponseStatus = "speaking";
       setOrbState("speaking");
       setCaption(realtimeAssistantTranscript.trim());
     }
@@ -3682,87 +4149,35 @@ function handleRealtimeServerEvent(serverEvent) {
 
   if (serverEvent.type === "response.done") {
     const fallbackText = extractRealtimeResponseText(serverEvent.response);
-    if (!realtimeAssistantTranscript && fallbackText) {
-      realtimeAssistantTranscript = fallbackText;
-      setCaption(fallbackText);
-    }
-    setOrbState("listening");
-    setVoiceContextStatus("live");
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "done";
+    setVoiceContextStatus("realtime");
+    void finishRealtimeResponse("done", { fallbackText }).finally(() => {
+      if (!voiceActive || !isRealtimeVoiceMode()) return;
+      setOrbState("listening");
+      if (voiceUserText) voiceUserText.textContent = "";
+    });
     return;
   }
 
   if (serverEvent.type === "response.cancelled") {
     realtimeAssistantTranscript = "";
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "cancelled";
     setOrbState("listening");
     setCaption("");
+    void finishRealtimeResponse("cancelled");
     return;
   }
 
   if (serverEvent.type === "error") {
     const message = serverEvent.error?.message || serverEvent.message || "Realtime voice hit an error.";
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "error";
     setOrbState("idle");
     setCaption(message);
+    void finishRealtimeResponse("error", { errorMessage: message });
   }
-}
-
-async function sendRealtimePageGrounding({ respond = false, prompt = "", initial = false } = {}) {
-  if (!realtimeSessionReady) return false;
-
-  setVoiceContextStatus(initial ? "reading" : "refreshing");
-
-  const pageContext = await requestVoicePageContext();
-  const rawScreenshot = await captureVisibleScreenshotDataUrl();
-  const screenshot = rawScreenshot ? await compressRealtimeScreenshot(rawScreenshot) : null;
-
-  const contextText = [
-    initial
-      ? "Fresh browser context for this live Braino session. Use it as grounding, but do not answer yet unless I ask."
-      : "Updated browser context from the user's current tab.",
-    pageContext?.title ? `Title: ${pageContext.title}` : "",
-    pageContext?.url ? `URL: ${pageContext.url}` : "",
-    pageContext?.text ? `Visible/semantic page text:\n${String(pageContext.text).slice(0, 7000)}` : "No page text was available.",
-    prompt ? `User intent: ${prompt}` : "",
-  ].filter(Boolean).join("\n\n");
-
-  const content = [
-    {
-      type: "input_text",
-      text: contextText,
-    },
-  ];
-
-  if (screenshot) {
-    content.push({
-      type: "input_image",
-      image_url: screenshot,
-      detail: "low",
-    });
-  }
-
-  sendRealtimeEvent({
-    type: "conversation.item.create",
-    item: {
-      type: "message",
-      role: "user",
-      content,
-    },
-  });
-
-  if (respond) {
-    realtimeAssistantTranscript = "";
-    setOrbState("processing");
-    setCaption("Looking…");
-    sendRealtimeEvent({
-      type: "response.create",
-      response: {
-        instructions: prompt || "Briefly describe what you see on the current page and help the user with it.",
-      },
-    });
-  } else {
-    setVoiceContextStatus("live");
-  }
-
-  return true;
 }
 
 function getActiveTabId() {
@@ -3786,21 +4201,14 @@ function sendToContentScript(tabId, action) {
 }
 
 async function startRealtimeVoiceMode() {
-  if (!(await loadPremiumStatus())) {
-    showUpgradePrompt("Realtime Voice");
-    setCaption("Realtime Voice is a premium feature.");
-    setOrbState("idle");
-    return;
-  }
-
   const authToken = await getAuthToken();
   if (!authToken) {
-    setCaption("Sign in to use Braino Live.");
-    setOrbState("idle");
-    return;
+    lastRealtimeStartupError = "No Braino auth token found.";
+    return false;
   }
 
   cleanupRealtimeVoiceSession({ keepCaption: true });
+  voiceUsingRealtime = true;
   realtimeConnecting = true;
   setVoiceContextStatus("connecting");
   setOrbState("processing");
@@ -3834,7 +4242,7 @@ async function startRealtimeVoiceMode() {
     };
 
     peerConnection.onconnectionstatechange = () => {
-      if (!voiceActive || !isRealtimeVoiceProvider()) return;
+      if (!voiceActive || !isRealtimeVoiceMode()) return;
       const state = peerConnection.connectionState;
       if (state === "failed" || state === "closed" || state === "disconnected") {
         cleanupRealtimeVoiceSession({ keepCaption: true });
@@ -3869,15 +4277,24 @@ async function startRealtimeVoiceMode() {
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
-    const response = await fetch(`${API_BASE}/openai-realtime-call`, {
+    const callRealtime = (token) => fetch(`${API_BASE}/openai-realtime-call`, {
       method: "POST",
       headers: {
         "Content-Type": "application/sdp",
         apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${authToken}`,
+        Authorization: `Bearer ${token}`,
       },
       body: offer.sdp || "",
     });
+
+    let response = await callRealtime(authToken);
+    if (response.status === 401) {
+      const data = await getStorage(["authRefreshToken"]);
+      const refreshedToken = data.authRefreshToken ? await refreshAuthToken(data.authRefreshToken) : null;
+      if (refreshedToken) {
+        response = await callRealtime(refreshedToken);
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -3894,32 +4311,23 @@ async function startRealtimeVoiceMode() {
 
     realtimeConnecting = false;
     realtimeSessionReady = true;
+    lastRealtimeStartupError = "";
     voiceMuted = false;
     if (voiceMuteBtn) voiceMuteBtn.style.opacity = "1";
 
+    await requestVoicePageContext();
     setOrbState("listening");
-    setVoiceContextStatus("live");
-    setCaption("Braino Live is ready.");
+    setVoiceContextStatus("realtime");
+    setCaption("");
+    syncRealtimeVoiceSession({ force: true });
 
-    sendRealtimeEvent({
-      type: "session.update",
-      session: {
-        instructions: getRealtimeVoiceInstructions(),
-      },
-    });
-
-    await sendRealtimePageGrounding({ initial: true });
-
-    setTimeout(() => {
-      if (voiceActive && isRealtimeVoiceProvider() && voiceAgentText?.textContent === "Braino Live is ready.") {
-        setCaption("");
-      }
-    }, 1400);
+    return true;
   } catch (error) {
     realtimeConnecting = false;
     cleanupRealtimeVoiceSession({ keepCaption: true });
-    setOrbState("idle");
-    setCaption(error instanceof Error ? error.message : "Could not start Braino Live.");
+    lastRealtimeStartupError = error instanceof Error ? error.message : String(error);
+    console.warn("Realtime voice setup failed:", error);
+    return false;
   }
 }
 
@@ -3939,15 +4347,27 @@ async function openVoiceMode() {
   }
 
   voiceTabId = tabId;
-  if (isRealtimeVoiceProvider()) {
-    await startRealtimeVoiceMode();
+  chrome.storage.local.set({ activeTabId: tabId });
+  const startedRealtime = await startRealtimeVoiceMode();
+  if (startedRealtime) {
     return;
   }
 
+  setVoiceContextStatus("legacy", {
+    tone: "legacy",
+    detail: lastRealtimeStartupError ? `Realtime failed: ${lastRealtimeStartupError}` : "Using Braino legacy voice.",
+  });
   const res = await sendToContentScript(tabId, "startVoiceListening");
   if (res?.error) {
-    setCaption("Could not start voice: " + res.error);
+    const detail = lastRealtimeStartupError ? ` Realtime failed: ${lastRealtimeStartupError}` : "";
+    setCaption("Could not start voice: " + res.error + detail);
     setOrbState("idle");
+    setVoiceContextStatus("error", {
+      tone: "error",
+      detail: `Voice start failed: ${res.error}${lastRealtimeStartupError ? ` · Realtime failed: ${lastRealtimeStartupError}` : ""}`,
+    });
+  } else if (lastRealtimeStartupError) {
+    setCaption(`Using legacy voice. Realtime failed: ${lastRealtimeStartupError}`);
   }
 }
 
@@ -3975,6 +4395,24 @@ function toggleHeadphoneMode() {
   }
 }
 
+// Handle headphone mode triggered from the inline floating popup
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "startHeadphoneMode") {
+    sendResponse({ ok: true });
+    if (sender?.tab?.id) voiceTabId = sender.tab.id;
+    if (!voiceActive) {
+      headphoneMode = true;
+      document.body.classList.add("headphone-mode");
+      openVoiceMode();
+    }
+    return true;
+  }
+  if (msg.action === "stopHeadphoneMode") {
+    if (voiceActive) closeVoiceMode();
+    return true;
+  }
+});
+
 // Handle remote commands forwarded by background.js
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.action === "handleRemoteCommand" && msg.cmd) {
@@ -3988,7 +4426,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Receive voice events relayed from content script
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.action !== "voiceEvent" || !voiceActive || isRealtimeVoiceProvider() || isRealtimeVoiceSessionRunning()) return;
+  if (msg.action !== "voiceEvent" || !voiceActive || isRealtimeVoiceMode()) return;
 
   if (msg.event === "listening") {
     if (!isVoiceSpeaking) {
@@ -4021,6 +4459,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.action !== "selectionChanged" || !msg.text) return;
   currentSelection = { text: msg.text, url: msg.url, title: msg.title };
   showSelectionChip(msg.text);
+  if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
 });
 
 // Detect if a voice command is a browser action request
@@ -4030,7 +4469,7 @@ function isBrowserActionCommand(text) {
 
 let voiceHandlingToken = 0;
 
-async function handleVoiceInput(text) {
+async function handleVoiceInput(text, { useRealtimeSpeech = isRealtimeVoiceMode() } = {}) {
   if (!text || !voiceActive) return;
 
   // Cancel any in-progress request (agent loop, TTS, fetch)
@@ -4060,15 +4499,31 @@ async function handleVoiceInput(text) {
     (currentMode !== "lecture" && currentMode !== "meeting" && !useAgent && isExplicitWebSearchRequest(text));
 
   let reply;
+  let replyAlreadySpoken = false;
 
   try {
     if (useAgent) {
+      setOrbState("acting");
+      setCaption("Working on it…");
       reply = await runAgentLoopForVoice(text);
     } else if (useWebSearch) {
       reply = await fetchWebSearchReply(
         text,
         chatMessages.slice(-10).map((message) => ({ role: message.role, content: message.content })),
       );
+
+      chatMessages.push({ role: "user", content: text });
+      chatMessages.push({ role: "assistant", content: reply });
+      saveChatMessages();
+      if (!headphoneMode) renderChatMessages();
+    } else if (useRealtimeSpeech && isRealtimeVoiceMode()) {
+      const realtimeResult = await requestRealtimeAssistantReply(text);
+      replyAlreadySpoken = true;
+      if (realtimeResult.status === "cancelled") return;
+      if (realtimeResult.status === "error") {
+        throw new Error(realtimeResult.errorMessage || "Realtime voice is not ready.");
+      }
+      reply = realtimeResult.text || "Sorry, I didn't get that.";
 
       chatMessages.push({ role: "user", content: text });
       chatMessages.push({ role: "assistant", content: reply });
@@ -4105,22 +4560,35 @@ async function handleVoiceInput(text) {
       if (!headphoneMode) renderChatMessages();
     }
 
-    setOrbState("speaking");
-    // Stop mic so TTS audio isn't picked up as user input
-    if (voiceTabId) sendToContentScript(voiceTabId, "stopVoiceListening");
-    await speakText(reply, (text, _idx) => {
-      if (_idx === -1) setCaption(text); // initial render of word spans
-    });
+    if (voiceHandlingToken !== myToken || !voiceActive) return;
+
+    if (!replyAlreadySpoken) {
+      setOrbState("speaking");
+      if (useRealtimeSpeech) {
+        await speakTextWithRealtime(reply);
+      } else {
+      // Stop mic so TTS audio isn't picked up as user input
+        if (voiceTabId) sendToContentScript(voiceTabId, "stopVoiceListening");
+        await speakText(reply, (text, _idx) => {
+          if (_idx === -1) setCaption(text); // initial render of word spans
+        });
+      }
+    }
   } catch(e) {
-    setCaption("Something went wrong. Try again.");
+    if (useRealtimeSpeech && isRealtimeVoiceMode()) {
+      setOrbState("speaking");
+      await speakTextWithRealtime("Something went wrong. Try again.");
+    } else {
+      setCaption("Something went wrong. Try again.");
+    }
   }
 
   // Restart mic after speaking ends so user can reply
-  if (voiceActive) {
+  if (voiceHandlingToken === myToken && voiceActive) {
     setOrbState("listening");
-    setCaption("");
+    if (!useRealtimeSpeech) setCaption("");
     if (voiceUserText) voiceUserText.textContent = "";
-    if (voiceTabId) sendToContentScript(voiceTabId, "startVoiceListening");
+    if (!useRealtimeSpeech && voiceTabId) sendToContentScript(voiceTabId, "startVoiceListening");
   }
 }
 
@@ -4243,28 +4711,12 @@ voiceModeBtn?.addEventListener("click", toggleHeadphoneMode);
 voiceCloseBtn?.addEventListener("click", closeVoiceMode);
 voiceOrb?.addEventListener("click", () => { if (headphoneMode) closeVoiceMode(); });
 
-voiceLookBtn?.addEventListener("click", async () => {
-  if (!voiceActive || !isRealtimeVoiceSessionRunning()) return;
-  await sendRealtimePageGrounding({
-    respond: true,
-    prompt: "The user asked you to look at the page. Briefly describe what is on screen and what they can do next.",
-  });
-});
-
 voiceInterruptBtn?.addEventListener("click", () => {
-  if (isRealtimeVoiceSessionRunning()) {
-    sendRealtimeEvent({ type: "response.cancel" });
-    if (realtimeAssistantItemId) {
-      sendRealtimeEvent({
-        type: "conversation.item.truncate",
-        item_id: realtimeAssistantItemId,
-        content_index: 0,
-        audio_end_ms: Math.max(0, Date.now() - realtimeAudioStartAt),
-      });
-    }
-    realtimeAssistantTranscript = "";
+  agentShouldStop = true;
+  voiceHandlingToken++;
+  if (isRealtimeVoiceMode()) {
+    interruptRealtimeSpeech();
     setOrbState("listening");
-    setCaption("");
     if (voiceUserText) voiceUserText.textContent = "";
     return;
   }
@@ -4279,6 +4731,8 @@ voiceInterruptBtn?.addEventListener("click", () => {
 
 voiceStopTaskBtn?.addEventListener("click", () => {
   agentShouldStop = true;
+  voiceHandlingToken++;
+  if (isRealtimeVoiceMode()) interruptRealtimeSpeech();
   stopCurrentTTS();
   setOrbState("idle");
   setCaption("Task stopped.");
@@ -4286,7 +4740,7 @@ voiceStopTaskBtn?.addEventListener("click", () => {
 
 voiceMuteBtn?.addEventListener("click", () => {
   voiceMuted = !voiceMuted;
-  if (isRealtimeVoiceSessionRunning()) {
+  if (isRealtimeVoiceMode()) {
     realtimeMicStream?.getAudioTracks().forEach((track) => {
       track.enabled = !voiceMuted;
     });
@@ -5170,12 +5624,36 @@ function clearRemoteProcessing() {
 }
 
 async function getAuthToken() {
-  const data = await getStorage(["authToken", "authRefreshToken", "authUserId"]);
-  if (!data.authUserId) return null;
-  if (!data.authToken && data.authRefreshToken) {
+  const data = await getStorage(["authToken", "authRefreshToken"]);
+  if (data.authToken) return data.authToken;
+  if (data.authRefreshToken) {
     return (await refreshAuthToken(data.authRefreshToken)) || null;
   }
-  return data.authToken || null;
+  return null;
+}
+
+async function announceRemoteCommandResult(message) {
+  if (!message || !voiceActive) return;
+
+  const spoken = stripMarkdownForTTS(String(message).replace(/^[\u2705\u274c]\s*/, "").trim());
+  if (!spoken) return;
+
+  setOrbState("speaking");
+
+  try {
+    if (isRealtimeVoiceMode()) {
+      const relayed = await speakTextWithRealtime(spoken);
+      if (!relayed) {
+        await speakText(spoken);
+      }
+    } else {
+      await speakText(spoken);
+    }
+  } finally {
+    if (voiceActive) {
+      setOrbState(isRealtimeVoiceMode() ? "listening" : "idle");
+    }
+  }
 }
 
 async function pollRemoteCommands() {
@@ -5238,7 +5716,9 @@ async function updateRemoteCommand(id, token, patch) {
 
 async function runRemoteCommand(cmd, token) {
   if (!(await loadPremiumStatus())) {
-    await updateRemoteCommand(cmd.id, token, { status: "error", result: "Premium required to run remote commands." });
+    const result = "Premium required to run remote commands.";
+    await updateRemoteCommand(cmd.id, token, { status: "error", result });
+    await announceRemoteCommandResult(result);
     clearRemoteProcessing();
     return;
   }
@@ -5411,11 +5891,14 @@ async function runRemoteCommand(cmd, token) {
       chatMessagesEl.appendChild(doneBubble);
       chatArea.scrollTop = chatArea.scrollHeight;
       await updateRemoteCommand(cmd.id, token, { status: "done", result: adapterMessage, steps });
+      await announceRemoteCommandResult(adapterMessage);
       clearRemoteProcessing();
       return;
     }
   } catch (e) {
-    await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
+    const result = `Error: ${e.message}`;
+    await updateRemoteCommand(cmd.id, token, { status: "error", result, steps });
+    await announceRemoteCommandResult(result);
     clearRemoteProcessing();
     return;
   }
@@ -5429,7 +5912,9 @@ async function runRemoteCommand(cmd, token) {
       try {
         actions = await callAgentStep(cmd.task, pageInfo, history, []);
       } catch (e) {
-        await updateRemoteCommand(cmd.id, token, { status: "error", result: `Error: ${e.message}`, steps });
+        const result = `Error: ${e.message}`;
+        await updateRemoteCommand(cmd.id, token, { status: "error", result, steps });
+        await announceRemoteCommandResult(result);
         clearRemoteProcessing();
         return;
       }
@@ -5453,6 +5938,7 @@ async function runRemoteCommand(cmd, token) {
       chatMessagesEl.appendChild(doneBubble);
       chatArea.scrollTop = chatArea.scrollHeight;
       await updateRemoteCommand(cmd.id, token, { status: "done", result: doneMsg, steps });
+      await announceRemoteCommandResult(doneMsg);
       clearRemoteProcessing();
       return;
     }
@@ -5468,6 +5954,7 @@ async function runRemoteCommand(cmd, token) {
         chatMessagesEl.appendChild(doneBubble2);
         chatArea.scrollTop = chatArea.scrollHeight;
         await updateRemoteCommand(cmd.id, token, { status: "done", result: doneMsg2, steps });
+        await announceRemoteCommandResult(doneMsg2);
         clearRemoteProcessing();
         return;
       }
@@ -5499,11 +5986,13 @@ async function runRemoteCommand(cmd, token) {
   errBubble.innerHTML = `<div class="chat-bubble-text">❌ Ran out of steps. Check your desktop browser.</div>`;
   chatMessagesEl.appendChild(errBubble);
   chatArea.scrollTop = chatArea.scrollHeight;
+  const result = "Ran out of steps. Check your desktop browser.";
   await updateRemoteCommand(cmd.id, token, {
     status: "error",
-    result: "Ran out of steps. Check your desktop browser.",
+    result,
     steps,
   });
+  await announceRemoteCommandResult(result);
   clearRemoteProcessing();
 }
 

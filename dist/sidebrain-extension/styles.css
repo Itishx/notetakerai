@@ -2065,6 +2065,66 @@ button {
   min-height: 16px;
 }
 
+.voice-status-debug {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.voice-transport-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 6px 14px;
+  border: 1px solid var(--line-2);
+  background: rgba(255,255,255,0.92);
+  color: var(--ink-2);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  white-space: nowrap;
+}
+
+.voice-transport-badge[data-state="pending"] {
+  border-color: rgba(243, 154, 66, 0.4);
+  background: rgba(255, 240, 220, 0.9);
+  color: var(--accent-deep);
+}
+
+.voice-transport-badge[data-state="realtime"] {
+  border-color: rgba(32, 148, 84, 0.28);
+  background: rgba(232, 249, 239, 0.92);
+  color: #17663b;
+}
+
+.voice-transport-badge[data-state="legacy"] {
+  border-color: rgba(196, 129, 34, 0.35);
+  background: rgba(255, 245, 224, 0.94);
+  color: #8f5b13;
+}
+
+.voice-transport-badge[data-state="error"] {
+  border-color: rgba(202, 69, 69, 0.32);
+  background: rgba(255, 237, 237, 0.94);
+  color: #8f2424;
+}
+
+.voice-transport-error {
+  max-width: 320px;
+  font-size: 11px;
+  line-height: 1.42;
+  color: var(--ink-3);
+  text-align: center;
+}
+
 /* Controls — mic | interrupt | [spacer] | compose */
 .voice-controls {
   display: flex;
@@ -2109,10 +2169,32 @@ body.headphone-mode .shell-header { display: none !important; }
 body.headphone-mode #pageContextChip { display: none !important; }
 body.headphone-mode .voice-caption-wrap { display: none !important; }
 body.headphone-mode .voice-controls { display: none !important; }
-body.headphone-mode .voice-stage { justify-content: center; }
-body.headphone-mode .voice-orb-wrap { padding: 0; cursor: pointer; flex-direction: column; gap: 0; }
+body.headphone-mode .voice-stage { justify-content: center; position: relative; }
+body.headphone-mode .voice-orb-wrap { padding: 0; cursor: pointer; flex-direction: column; gap: 0; flex: 0 0 auto; }
 body.headphone-mode .voice-orb { display: none !important; }
 body.headphone-mode .braino-icon { display: block !important; }
+body.headphone-mode .voice-status-debug {
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  transform: translateX(-50%);
+  width: min(340px, calc(100% - 32px));
+  padding: 0;
+  z-index: 2;
+}
+body.headphone-mode .voice-transport-badge {
+  font-size: 11px;
+  padding: 9px 14px;
+  box-shadow: 0 12px 28px rgba(30, 24, 20, 0.12);
+}
+body.headphone-mode .voice-transport-error {
+  font-size: 12px;
+  max-width: 360px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(33, 26, 20, 0.08);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
 
 .braino-icon {
   width: 120px;

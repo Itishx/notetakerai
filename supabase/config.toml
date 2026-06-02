@@ -1,5 +1,8 @@
 project_id = "suwhgaxxdizowbyjlljj"
 
+[functions.waitlist-signup]
+verify_jwt = false
+
 [functions.polar-webhook]
 verify_jwt = false
 

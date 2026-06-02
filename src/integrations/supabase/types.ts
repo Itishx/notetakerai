@@ -272,6 +272,54 @@ export type Database = {
         }
         Relationships: []
       }
+      spotify_connections: {
+        Row: {
+          access_token: string
+          country: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          product: string | null
+          refresh_token: string | null
+          scope: string | null
+          spotify_email: string | null
+          spotify_user_id: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_identifier: string
+        }
+        Insert: {
+          access_token: string
+          country?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          product?: string | null
+          refresh_token?: string | null
+          scope?: string | null
+          spotify_email?: string | null
+          spotify_user_id?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier: string
+        }
+        Update: {
+          access_token?: string
+          country?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          product?: string | null
+          refresh_token?: string | null
+          scope?: string | null
+          spotify_email?: string | null
+          spotify_user_id?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier?: string
+        }
+        Relationships: []
+      }
       user_watched_movies: {
         Row: {
           completed: boolean | null

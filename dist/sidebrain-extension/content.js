@@ -1088,6 +1088,7 @@ function __sbGetSiteAdapterContext() {
 function __sbNormalizeConnectorName(value) {
   const key = String(value || "").trim().toLowerCase();
   if (!key || key === "auto" || key === "default") return "auto";
+  if (["spotify", "spot", "music"].includes(key)) return "spotify";
   if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
   if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
   return null;
@@ -1095,6 +1096,7 @@ function __sbNormalizeConnectorName(value) {
 
 function __sbGetConnectorSiteSuggestion(siteContext) {
   const site = siteContext?.site || "generic";
+  if (site === "spotify") return "spotify";
   if (site === "google-drive") return "google-drive";
   if (site === "gmail") return "gmail";
   return "auto";
@@ -1110,16 +1112,19 @@ function __sbInferConnectorFromPrompt(promptText) {
   const text = String(promptText || "").trim().toLowerCase();
   if (/\bgoogle drive\b|\bdrive\b/.test(text)) return "google-drive";
   if (/\bgmail\b|\bemail\b|\bmail\b/.test(text)) return "gmail";
+  if (/\bspotify\b/.test(text) || /^play\s+/i.test(promptText)) return "spotify";
   return "auto";
 }
 
 function __sbGetConnectorLabel(connector, options = {}) {
   const key = __sbNormalizeConnectorName(connector) || "auto";
   const includeAutoHint = Boolean(options.includeAutoHint);
+  if (key === "spotify") return "♪ Spotify";
   if (key === "google-drive") return "🗂 Drive";
   if (key === "gmail") return "✉ Gmail";
   if (includeAutoHint) {
     const suggestion = __sbGetConnectorSiteSuggestion(options.siteContext || __sbGetSiteAdapterContext());
+    if (suggestion === "spotify") return "↗ Auto · Spotify";
     if (suggestion === "google-drive") return "↗ Auto · Drive";
     if (suggestion === "gmail") return "↗ Auto · Gmail";
   }
@@ -1160,6 +1165,9 @@ function __sbShouldConnectorForceAgent(connector, promptText, forcedMode, siteCo
   }
   if (key === "gmail") {
     return /\b(reply|draft|compose|send|archive|label|star|read|open|find|search|show|summarize|triage|email)\b/.test(text);
+  }
+  if (key === "spotify") {
+    return /\b(play|pause|resume|continue|next|previous|prev|back|skip|stop|shuffle|repeat|song|track|music|playlist|spotify)\b/.test(text);
   }
   return false;
 }
@@ -1704,6 +1712,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === "voiceTransportStatus") {
+    const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Connecting…" };
+    __sbSetVoiceStatusBadge(msg.status, labelMap[msg.status] || msg.status);
+    return true;
+  }
+
+  if (msg.action === "voiceBrainState") {
+    if (__sbHeadphoneMode) __sbSetHpBrainState(msg.state || "");
+    return true;
+  }
+
   return true;
 });
 
@@ -1935,6 +1954,23 @@ if (__sbContextOk()) {
       if (msg.final) {
         __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino" });
         __sbSetStopBtn(false);
+        if (__sbRtAwaitingDelegateResult) {
+          const finalText = String(msg.text || "").trim();
+          __sbRtAwaitingDelegateResult = false;
+          if (finalText) {
+            void (async () => {
+              __sbRtRelayingAppMessage = true;
+              try {
+                await __sbSpeakWithPreferredVoice(finalText, "realtime");
+              } finally {
+                __sbRtRelayingAppMessage = false;
+                if (__sbHeadphoneMode && !__sbVoicePendingReply) {
+                  __sbSetHpBrainState("listening");
+                }
+              }
+            })();
+          }
+        }
       } else {
         __sbShowBubble(msg.text, false, { tone: "status" });
         __sbSetStopBtn(true);
@@ -2133,23 +2169,9 @@ function __sbBuildBrainUI() {
     }
     #__sb_bubble__.visible { opacity: 1; pointer-events: all; }
     #__sb_bubble__.sb-spotify-active {
-      border-color: rgba(109, 255, 160, 0.34);
-      box-shadow: 0 24px 68px rgba(13,30,19,0.28), 0 6px 20px rgba(16,185,129,0.14),
-                  inset 0 1px 0 rgba(255,255,255,0.68), 0 0 0 1px rgba(93,226,142,0.1);
+      border-color: rgba(255, 255, 255, 0.18);
     }
-    #__sb_bubble__.sb-spotify-active::before {
-      content: "";
-      position: absolute;
-      inset: -18%;
-      pointer-events: none;
-      background:
-        radial-gradient(circle at 20% 18%, rgba(167,255,201,0.22), transparent 30%),
-        radial-gradient(circle at 78% 22%, rgba(94,234,212,0.18), transparent 26%),
-        radial-gradient(circle at 50% 75%, rgba(34,197,94,0.12), transparent 32%);
-      filter: blur(18px);
-      opacity: 0.92;
-      animation: __sb_spotify_card_glow__ 4.8s ease-in-out infinite;
-    }
+    #__sb_bubble__.sb-spotify-active::before { display: none; }
     #__sb_bubble__.sb-spotify-active::after {
       content: "";
       position: absolute;
@@ -2528,38 +2550,33 @@ function __sbBuildBrainUI() {
       gap: 14px;
       padding: 16px;
       border-radius: 22px;
-      background: linear-gradient(155deg, rgba(255,255,255,0.38), rgba(244,255,247,0.18));
-      border: 1px solid rgba(121, 246, 169, 0.2);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.34), 0 14px 34px rgba(16,24,20,0.08);
+      background: transparent;
+      border: none;
       overflow: hidden;
     }
-    .sb-spotify-shell::before {
-      content: "";
-      position: absolute;
-      inset: -20% 18% auto -18%;
-      height: 160px;
-      pointer-events: none;
-      background: radial-gradient(circle, rgba(103,255,159,0.28), transparent 68%);
-      filter: blur(22px);
-      opacity: 0.75;
-    }
+    .sb-spotify-shell::before { display: none; }
     .sb-spotify-hero {
+      --sb-ac-r: 80; --sb-ac-g: 180; --sb-ac-b: 100;
       position: relative;
       display: flex;
       flex-direction: column;
       gap: 14px;
       padding: 16px;
       border-radius: 18px;
-      background: linear-gradient(145deg, rgba(15,28,20,0.88), rgba(18,48,29,0.72));
+      background: linear-gradient(145deg,
+        rgba(calc(var(--sb-ac-r) * 0.18), calc(var(--sb-ac-g) * 0.18), calc(var(--sb-ac-b) * 0.18), 0.94),
+        rgba(calc(var(--sb-ac-r) * 0.14), calc(var(--sb-ac-g) * 0.14), calc(var(--sb-ac-b) * 0.14), 0.80)
+      );
       color: #F4FFF7;
       overflow: hidden;
+      transition: background 0.6s ease;
     }
     .sb-spotify-hero.is-playing::after {
       content: "";
       position: absolute;
       inset: -20% -25%;
       pointer-events: none;
-      background: linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.16) 46%, rgba(190,255,214,0.18) 54%, transparent 72%);
+      background: linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.16) 46%, rgba(var(--sb-ac-r), var(--sb-ac-g), var(--sb-ac-b), 0.1) 54%, transparent 72%);
       mix-blend-mode: screen;
       animation: __sb_spotify_panel_sheen__ 4s linear infinite;
     }
@@ -2595,8 +2612,8 @@ function __sbBuildBrainUI() {
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #64FF9F;
-      box-shadow: 0 0 10px rgba(100,255,159,0.7);
+      background: rgb(var(--sb-ac-r, 100), var(--sb-ac-g, 255), var(--sb-ac-b, 159));
+      box-shadow: 0 0 10px rgba(var(--sb-ac-r, 100), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.7);
       flex-shrink: 0;
     }
     .sb-spotify-badge.subtle::before {
@@ -2633,7 +2650,7 @@ function __sbBuildBrainUI() {
       align-items: center;
       justify-content: center;
       font-size: 28px;
-      background: radial-gradient(circle at 30% 20%, rgba(104,255,165,0.34), rgba(255,255,255,0.06));
+      background: radial-gradient(circle at 30% 20%, rgba(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 165), 0.34), rgba(255,255,255,0.06));
     }
     .sb-spotify-copy {
       min-width: 0;
@@ -2691,8 +2708,8 @@ function __sbBuildBrainUI() {
       display: block;
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #68FFAA 0%, #C5FFE2 100%);
-      box-shadow: 0 0 18px rgba(104,255,170,0.48);
+      background: linear-gradient(90deg, rgb(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 170)) 0%, rgba(var(--sb-ac-r, 197), var(--sb-ac-g, 255), var(--sb-ac-b, 226), 0.7) 100%);
+      box-shadow: 0 0 18px rgba(var(--sb-ac-r, 104), var(--sb-ac-g, 255), var(--sb-ac-b, 170), 0.48);
     }
     .sb-spotify-progress-times {
       display: flex;
@@ -2701,6 +2718,37 @@ function __sbBuildBrainUI() {
       font-size: 11px;
       color: rgba(230,255,236,0.72);
     }
+    .sb-spotify-controls {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+    }
+    .sb-spotify-ctrl-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.12);
+      color: #F4FFF7;
+      font-size: 16px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .sb-spotify-ctrl-btn:hover { background: rgba(255,255,255,0.22); transform: scale(1.08); }
+    .sb-spotify-ctrl-btn.primary {
+      width: 46px;
+      height: 46px;
+      font-size: 20px;
+      background: rgba(100,255,159,0.2);
+      border: 1px solid rgba(100,255,159,0.3);
+    }
+    .sb-spotify-ctrl-btn.primary:hover { background: rgba(100,255,159,0.35); }
     .sb-spotify-grid {
       display: grid;
       grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
@@ -2720,7 +2768,7 @@ function __sbBuildBrainUI() {
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #3A5C45;
+      color: rgb(calc(var(--sb-ac-r, 58) * 0.42), calc(var(--sb-ac-g, 92) * 0.42), calc(var(--sb-ac-b, 69) * 0.42));
     }
     .sb-spotify-results {
       display: flex;
@@ -2738,9 +2786,9 @@ function __sbBuildBrainUI() {
       border: 1px solid rgba(255,255,255,0.35);
     }
     .sb-spotify-result.is-current {
-      background: rgba(103,255,159,0.14);
-      border-color: rgba(103,255,159,0.32);
-      box-shadow: 0 10px 18px rgba(29,185,84,0.08);
+      background: rgba(var(--sb-ac-r, 103), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.14);
+      border-color: rgba(var(--sb-ac-r, 103), var(--sb-ac-g, 255), var(--sb-ac-b, 159), 0.32);
+      box-shadow: 0 10px 18px rgba(var(--sb-ac-r, 29), var(--sb-ac-g, 185), var(--sb-ac-b, 84), 0.08);
     }
     .sb-spotify-result img,
     .sb-spotify-result-art {
@@ -2862,6 +2910,30 @@ function __sbBuildBrainUI() {
     }
     .sb-card-foot-btn:hover { background: var(--sb-btn-bg); }
     .sb-card-foot-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_voice_status_badge__ {
+      font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-radius: 999px; padding: 2px 7px; border: 1px solid transparent;
+      display: none; align-items: center; flex-shrink: 1;
+      max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #__sb_voice_status_badge__[data-s="realtime"] {
+      display: flex; color: #17663b;
+      background: rgba(232,249,239,0.95); border-color: rgba(32,148,84,0.3);
+    }
+    #__sb_voice_status_badge__[data-s="legacy"] {
+      display: flex; color: #8f5b13;
+      background: rgba(255,245,224,0.95); border-color: rgba(196,129,34,0.35);
+    }
+    #__sb_voice_status_badge__[data-s="error"] {
+      display: flex; color: #8f2424;
+      background: rgba(255,237,237,0.95); border-color: rgba(202,69,69,0.32);
+      text-transform: none; max-width: 200px;
+    }
+    #__sb_voice_status_badge__[data-s="connecting"] {
+      display: flex; color: #8f5b13;
+      background: rgba(255,245,224,0.95); border-color: rgba(196,129,34,0.35);
+    }
     #__sb_card_send__ { background: #E8786E; color: white; }
     #__sb_card_send__:hover { background: #C9544A; }
     #__sb_rec_bar__ {
@@ -2883,9 +2955,26 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
       50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
     }
+    /* Blue halo for Live AI (realtime) mode */
+    @keyframes __sb_hp_listen_rt__ {
+      0%,100% { filter: drop-shadow(0 0 22px rgba(59,130,246,0.85)) drop-shadow(0 0 8px rgba(99,179,255,0.55)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 48px rgba(59,130,246,1))    drop-shadow(0 0 18px rgba(99,179,255,0.8)); transform: scale(1.09); }
+    }
+    @keyframes __sb_hp_speak_rt__ {
+      0%,100% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.8)) drop-shadow(0 0 8px rgba(139,92,246,0.5)); transform: scale(1.02); }
+      50%      { filter: drop-shadow(0 0 42px rgba(99,102,241,1))   drop-shadow(0 0 16px rgba(139,92,246,0.75)); transform: scale(1.07); }
+    }
+    @keyframes __sb_hp_captured_rt__ {
+      0%,100% { filter: drop-shadow(0 0 26px rgba(34,211,238,0.85)) drop-shadow(0 0 10px rgba(34,211,238,0.55)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 54px rgba(34,211,238,1))    drop-shadow(0 0 22px rgba(34,211,238,0.8)); transform: scale(1.1); }
+    }
     #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
     #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
     #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+    /* Realtime overrides — blue halo wins */
+    #__sb_brain_btn__.hp-realtime.hp-listening { animation: __sb_hp_listen_rt__   1.4s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured  { animation: __sb_hp_captured_rt__ 0.5s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking  { animation: __sb_hp_speak_rt__    0.85s ease-in-out infinite; }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -2958,6 +3047,7 @@ function __sbBuildBrainUI() {
         <button id="__sb_card_voice_mode_btn__" class="sb-card-foot-btn" title="Headphone mode">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
         </button>
+        <span id="__sb_voice_status_badge__"></span>
         <button id="__sb_card_send__" class="sb-card-foot-btn" title="Send">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </button>
@@ -4176,6 +4266,13 @@ function __sbToggleBrain() {
 function __sbToggleInput(open, options = {}) {
   if (!__sbOwnsInlineUi()) return;
   if (open) {
+    // While Spotify is playing, clicking the brain opens the player card, not the bar
+    if (__sbSpotifyIsPlaying()) {
+      const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+      if (cardOpen) { __sbCollapseCard(); } else { __sbRenderSpotifyPanel({ openCard: true, focusInput: false }); }
+      return;
+    }
+
     if (!__sbContextOk()) {
       __sbShowBubble("Reload this page to reconnect Braino.", true, { tone: "status" });
       return;
@@ -4434,6 +4531,10 @@ function __sbSyncSpeakButtons() {
 }
 
 function __sbStopSpeech() {
+  if (__sbHasActiveRealtimeResponse()) {
+    __sbVoicePendingReply = false;
+    __sbInterruptRealtimeResponse();
+  }
   if (__sbCurrentSpeechAudio) {
     try { __sbCurrentSpeechAudio.pause(); } catch {}
     __sbCurrentSpeechAudio.src = "";
@@ -4487,21 +4588,32 @@ async function __sbSpeakText(text) {
 
   __sbStopSpeech();
   let spoke = false;
+  const shouldMuteRealtimeMic = Boolean(__sbHeadphoneMode && __sbRtMic);
 
   try {
+    if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(false);
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
+    if (!ttsToken) {
+      return await __sbSpeakWithBrowser(clean);
+    }
+
     const resp = await fetch(`${__SB_API}/elevenlabs-tts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: __SB_ANON_KEY,
-        ...(ttsToken ? { Authorization: `Bearer ${ttsToken}` } : {}),
+        Authorization: `Bearer ${ttsToken}`,
       },
       body: JSON.stringify({
         text: clean,
         voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
     });
+
+    if (resp.status === 401 || resp.status === 403) {
+      spoke = await __sbSpeakWithBrowser(clean);
+      return spoke;
+    }
 
     if (!resp.ok) throw new Error(`TTS failed: ${resp.status}`);
 
@@ -4540,6 +4652,7 @@ async function __sbSpeakText(text) {
     if (__sbHeadphoneMode && !__sbVoicePendingReply) {
       __sbSetHpBrainState("listening");
     }
+    if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(true);
   }
   return spoke;
 }
@@ -4618,6 +4731,14 @@ function __sbSyncSpotifyVisualState() {
   const active = __sbSpotifyIsPlaying();
   brain?.classList.toggle("sb-brain-spotify", active);
   bubble?.classList.toggle("sb-spotify-active", active);
+  // Hide the floating bar while music is playing
+  if (active) {
+    const bar = document.getElementById("__sb_bar__");
+    if (bar?.classList.contains("open") && !bar.classList.contains("sb-waking") && !bar.classList.contains("sb-signin")) {
+      bar.classList.remove("open");
+      __sbInputOpen = false;
+    }
+  }
 }
 
 function __sbEnsureSpotifyRefreshLoop() {
@@ -4630,8 +4751,16 @@ function __sbEnsureSpotifyRefreshLoop() {
     return;
   }
   __sbSpotifyRefreshTimer = setInterval(() => {
-    __sbRefreshSpotifyStateFromPage({ rerender: document.getElementById("__sb_card_wrap__")?.classList.contains("visible") });
-  }, 2500);
+    const siteContext = __sbGetSiteAdapterContext();
+    const cardVisible = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+    if (siteContext?.site === "spotify") {
+      // On Spotify page — use DOM scraping (free)
+      __sbRefreshSpotifyStateFromPage({ rerender: cardVisible });
+    } else {
+      // On any other page — poll the API via background (live sync from phone/other devices)
+      chrome.runtime.sendMessage({ action: "syncSpotifyPlayerState" }, () => { void chrome.runtime.lastError; });
+    }
+  }, 5000);
   __sbSyncSpotifyVisualState();
 }
 
@@ -4716,7 +4845,7 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
     track?.deviceName ? `<span class="sb-spotify-badge subtle">Device: ${__sbEscapeHtml(track.deviceName)}</span>` : "",
   ].filter(Boolean).join("");
   const coverHtml = track?.imageUrl
-    ? `<div class="sb-spotify-cover"><img src="${__sbEscapeHtml(track.imageUrl)}" alt="${__sbEscapeHtml(track.title)} cover art" /></div>`
+    ? `<div class="sb-spotify-cover"><img src="${__sbEscapeHtml(track.imageUrl)}" alt="${__sbEscapeHtml(track.title)} cover art" crossorigin="anonymous" /></div>`
     : `<div class="sb-spotify-cover"><div class="sb-spotify-cover-fallback">♪</div></div>`;
   const metaBits = [track?.album, track?.durationText].filter(Boolean).join(" · ");
   const progressWidth = typeof track?.progressRatio === "number"
@@ -4748,6 +4877,11 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
               <span>${__sbEscapeHtml(track?.durationText || "Spotify")}</span>
             </div>
           </div>
+          <div class="sb-spotify-controls">
+            <button class="sb-spotify-ctrl-btn" data-sb-spotify-ctrl="previous" title="Previous">⏮</button>
+            <button class="sb-spotify-ctrl-btn primary" data-sb-spotify-ctrl="${__sbSpotifyIsPlaying() ? "pause" : "play"}" title="${__sbSpotifyIsPlaying() ? "Pause" : "Play"}">${__sbSpotifyIsPlaying() ? "⏸" : "▶"}</button>
+            <button class="sb-spotify-ctrl-btn" data-sb-spotify-ctrl="next" title="Next">⏭</button>
+          </div>
         </div>
         <div class="sb-spotify-grid">
           <div class="sb-spotify-block">
@@ -4765,6 +4899,37 @@ function __sbBuildSpotifyPanelHtml(extraHistoryHtml = "") {
   `;
 }
 
+function __sbApplyAlbumColor(scroll) {
+  const img = scroll?.querySelector(".sb-spotify-cover img");
+  const hero = scroll?.querySelector(".sb-spotify-hero");
+  if (!img || !hero) return;
+  const apply = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 20; canvas.height = 20;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, 20, 20);
+      const data = ctx.getImageData(0, 0, 20, 20).data;
+      let bestR = 80, bestG = 180, bestB = 100, bestScore = -1;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        const sat = max === 0 ? 0 : (max - min) / max;
+        const bri = max / 255;
+        const score = sat * 0.65 + bri * 0.35;
+        if (score > bestScore && bri > 0.25 && bri < 0.97) {
+          bestScore = score; bestR = r; bestG = g; bestB = b;
+        }
+      }
+      hero.style.setProperty("--sb-ac-r", String(bestR));
+      hero.style.setProperty("--sb-ac-g", String(bestG));
+      hero.style.setProperty("--sb-ac-b", String(bestB));
+    } catch (_) {}
+  };
+  if (img.complete && img.naturalWidth > 0) { apply(); }
+  else { img.addEventListener("load", apply, { once: true }); }
+}
+
 function __sbRenderSpotifyPanel(options = {}) {
   if (!__sbHasSpotifySurface()) return;
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -4772,6 +4937,13 @@ function __sbRenderSpotifyPanel(options = {}) {
   const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
   scroll.innerHTML = __sbBuildSpotifyPanelHtml(historyHtml);
   scroll.scrollTop = 0;
+  __sbApplyAlbumColor(scroll);
+  scroll.querySelectorAll("[data-sb-spotify-ctrl]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const ctrl = btn.dataset.sbSpotifyCtrl;
+      chrome.runtime.sendMessage({ action: "spotifyControl", control: ctrl }, () => { void chrome.runtime.lastError; });
+    });
+  });
   if (options.openCard) __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
   __sbEnsureSpotifyRefreshLoop();
@@ -4947,11 +5119,15 @@ function __sbGetPageContext(maxChars = 12000) {
 }
 
 function __sbIsExplicitWebSearchRequest(text) {
-  return /\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|latest\b|current\b|news\b|search for\b)\b/i.test(text);
+  // Explicit search commands
+  if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|search for\b)\b/i.test(text)) return true;
+  // Freshness signals — needs live data
+  if (/\b(latest|current|today|right now|as of|this week|this month|this year|recent|news|price of|stock|weather|score|standings|live|just happened|breaking|update on|status of|is .{1,40} still|did .{1,30} happen|when did|who won|who is winning|what happened|trending)\b/i.test(text)) return true;
+  return false;
 }
 
 function __sbIsBrowserActionCommand(text) {
-  return /\b(open|go to|navigate to|visit|search for|play|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
+  return /\b(open|go to|navigate to|visit|search for|play|pause|resume|continue|next|previous|prev|skip|stop|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
 }
 
 function __sbDetectIntent(text) {
@@ -5125,18 +5301,14 @@ async function __sbResolvePremiumStatus(forceRefresh = false) {
   return result?.isPremium === true || cached.isPremium === true;
 }
 
-async function __sbProcessPrompt(text, options = {}) {
+function __sbResolvePromptRouting(text) {
   const connectorDirective = __sbParseConnectorDirective(text);
   if (connectorDirective.connector) {
     window.__sbForcedConnector = connectorDirective.connector;
     __sbRefreshConnectorButtons();
   }
-  const promptText = String(connectorDirective.task || "").trim();
-  if (!promptText) return;
-  const fromVoice = Boolean(options.fromVoice);
-  __sbStopSpeech();
-  if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
 
+  const promptText = String(connectorDirective.task || "").trim();
   const siteContext = __sbGetSiteAdapterContext();
   const detectedConnector = __sbGetEffectiveConnector(siteContext);
   const connectorHint = detectedConnector === "auto" ? __sbInferConnectorFromPrompt(promptText) : detectedConnector;
@@ -5144,32 +5316,84 @@ async function __sbProcessPrompt(text, options = {}) {
   const rawIntent = (forcedMode !== "page")
     ? forcedMode
     : (__sbShouldConnectorForceAgent(connectorHint, promptText, forcedMode, siteContext) ? "agent" : __sbDetectIntent(promptText));
-  // lecture and meeting both drive the recording flow
   const intent = (rawIntent === "lecture" || rawIntent === "meeting") ? "record" : rawIntent;
 
-  // Braino's favorite song easter egg
-  if (/\b(play|what('?s| is)|braino'?s?)\b.*\bfavorite\b.*\b(song|track|music)\b|\bfavorite\b.*\b(song|track|music)\b.*\bplay\b/i.test(promptText)) {
+  return {
+    connectorDirective,
+    promptText,
+    siteContext,
+    detectedConnector,
+    connectorHint,
+    forcedMode,
+    rawIntent,
+    intent,
+  };
+}
+
+async function __sbProcessPrompt(text, options = {}) {
+  const routing = __sbResolvePromptRouting(text);
+  const promptText = String(routing.promptText || "").trim();
+  if (!promptText) return;
+
+  const fromVoice = Boolean(options.fromVoice);
+  const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
+  const speakVoiceReply = async (replyText) => {
+    if (!fromVoice) return false;
+    return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
+  };
+
+  __sbStopSpeech();
+  if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
+
+  const connectorHint = routing.connectorHint;
+  const forcedMode = routing.forcedMode;
+  const intent = routing.intent;
+
+  // "What's new with you?" — Braino reads the changelog in first person, then flips the question back
+  if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you/i.test(promptText)) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
-    const played = await new Promise(resolve =>
-      chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r?.ok))
-    );
     __sbChatHistory.push({ role: "user", content: promptText });
-    const reply = played
-      ? "Playing my favorite song for you ♫"
-      : "I tried to play my favorite song but Spotify isn't connected — link it from the dashboard first.";
+    const reply = "Oh, a lot actually! I just went through a complete rebrand — I'm officially Braino now, and trybraino.com just went live. In the past few days I got a whole physics engine: I can float, bounce when I land, and my pupils follow your cursor around. Then I got Movie Mode, where I detect what you're watching and glow with a little ambient halo that pulses with the content. I also got a full persona and voice system, so I can sound like different characters. And just now I can run 24/7 on X, write and post for you, create Google Docs from research in one shot, and even organise your entire Drive on command. It's been a wild week, honestly.\n\nBut enough about me — what's new with you?";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbRenderCardHistory(scrollEl);
     __sbOpenCard({ rich: true });
-    if (fromVoice) await __sbSpeakText(reply);
+    __sbSyncSpeakButtons();
+    if (fromVoice) await speakVoiceReply(reply);
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Braino's favorite song easter egg
+  if (/\bfavou?rite\b/i.test(promptText)) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    const result = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r || {}))
+    );
+    __sbChatHistory.push({ role: "user", content: promptText });
+    const reply = result.ok
+      ? "Playing my favorite song for you ♫"
+      : result.error?.includes("device")
+        ? "Open Spotify on your phone or desktop first, then ask me again ♫"
+        : "Spotify isn't connected yet — [connect it here](https://trybraino.com/dashboard).";
+    __sbChatHistory.push({ role: "assistant", content: reply });
+    __sbCardTurns.push({ prompt: promptText, answer: reply });
+    const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbRenderCardHistory(scrollEl);
+    __sbOpenCard({ rich: true });
+    if (fromVoice) await speakVoiceReply(reply);
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 
   if (intent === "record") {
-    if (fromVoice) __sbVoicePendingReply = false;
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     if (forcedMode === "lecture" || forcedMode === "meeting") {
       void __sbStartLectureRecording();
     } else {
@@ -5184,17 +5408,19 @@ async function __sbProcessPrompt(text, options = {}) {
   if (intent === "agent") {
     const hasPremium = await __sbResolvePremiumStatus(true);
     if (!hasPremium) {
-      if (fromVoice) __sbVoicePendingReply = false;
+      __sbRtAwaitingDelegateResult = false;
       __sbShowUpgrade("Browser Agent (Delegate)");
-      if (fromVoice) await __sbSpeakText("Browser agent requires premium.");
+      if (fromVoice) await speakVoiceReply("Browser agent requires premium.");
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
       return;
     }
     if (!fromVoice || !__sbVoiceOnlyMode) __sbShowBubble("Delegating…", false);
+    if (voiceOutput === "realtime") __sbRtAwaitingDelegateResult = true;
     __sbRunAgent(promptText, { connector: connectorHint });
     if (fromVoice) {
-      __sbVoicePendingReply = false;
-      await __sbSpeakText("On it.");
+      await speakVoiceReply("On it.");
     }
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 
@@ -5227,7 +5453,7 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbChatHistory.push({ role: "assistant", content: finalReply });
       __sbCardTurns.push({ prompt: promptText, answer: finalReply });
       if (voiceOnly) {
-        const spoke = await __sbSpeakText(finalReply);
+        const spoke = await speakVoiceReply(finalReply);
         if (!spoke) {
           const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
           __sbRenderCardHistory(scroll);
@@ -5239,13 +5465,13 @@ async function __sbProcessPrompt(text, options = {}) {
         __sbRenderCardHistory(scroll);
         __sbOpenCard({ rich: true });
         __sbSyncSpeakButtons();
-        if (fromVoice) await __sbSpeakText(finalReply);
+        if (fromVoice) await speakVoiceReply(finalReply);
       }
     } catch (err) {
       __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
-      if (fromVoice) await __sbSpeakText("Something went wrong while searching the web.");
+      if (fromVoice) await speakVoiceReply("Something went wrong while searching the web.");
     } finally {
-      if (fromVoice) __sbVoicePendingReply = false;
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     }
     return;
   }
@@ -5280,13 +5506,13 @@ async function __sbProcessPrompt(text, options = {}) {
 
     const { reply } = await __sbFetchAssistantReply(body);
     if (!reply) {
-      if (fromVoice) await __sbSpeakText("Please sign in to continue.");
+      if (fromVoice) await speakVoiceReply("Please sign in to continue.");
       return;
     }
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     if (voiceOnly) {
-      const spoke = await __sbSpeakText(reply);
+      const spoke = await speakVoiceReply(reply);
       if (!spoke) {
         const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
         __sbRenderCardHistory(scroll);
@@ -5298,7 +5524,7 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbRenderCardHistory(scroll);
       __sbOpenCard({ rich: true });
       __sbSyncSpeakButtons();
-      if (fromVoice) await __sbSpeakText(reply);
+      if (fromVoice) await speakVoiceReply(reply);
     }
   } catch (err) {
     if (__sbHeadphoneMode) {
@@ -5306,16 +5532,14 @@ async function __sbProcessPrompt(text, options = {}) {
     } else {
       __sbShowBubble("Error: " + (err.message || "couldn't reach Braino"), true);
     }
-    if (fromVoice) await __sbSpeakText("Something went wrong.");
+    if (fromVoice) await speakVoiceReply("Something went wrong.");
   } finally {
-    if (fromVoice) {
-      __sbVoicePendingReply = false;
-      // Restart listening in headphone mode after reply is done
-      if (__sbHeadphoneMode) {
-        __sbSetHpBrainState("listening");
-        void __sbStartRecording();
-      }
-    }
+    __sbCompleteVoiceTurn({
+      fromVoice,
+      voiceOutput,
+      voiceTurnToken,
+      resumeLegacyMic: __sbHeadphoneMode && voiceOutput !== "realtime",
+    });
   }
 }
 
@@ -5504,6 +5728,571 @@ async function __sbSyncNotesToNotion() {
 
 // ── Headphone Mode ──────────────────────────────────────────────────────────
 
+// ── GPT Realtime voice — WebRTC (GA Realtime API flow) ──────────────────────
+let __sbRtPeerConnection = null;
+let __sbRtDataChannel = null;
+let __sbRtMic = null;
+let __sbRtRemoteAudio = null;
+const __SB_REALTIME_VOICE = "verse";
+let __sbRtUserTranscript = "";
+let __sbRtAssistantTranscript = "";
+let __sbRtResponseWaiter = null;
+let __sbRtTurnToken = 0;
+let __sbRtCurrentResponseMode = "idle";
+let __sbRtAwaitingDelegateResult = false;
+let __sbRtRelayingAppMessage = false;
+let __sbRtHandlingConversationTurn = false;
+
+async function __sbStartRealtimeVoice() {
+  const { authToken } = await __sbStorageGet(["authToken"]);
+  if (!authToken) {
+    __sbSetVoiceStatusBadge("error", "Sign in first");
+    __sbSetHpBrainState("");
+    return;
+  }
+
+  try {
+    __sbRtMic = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+
+    const peerConnection = new RTCPeerConnection();
+    __sbRtPeerConnection = peerConnection;
+
+    __sbRtMic.getTracks().forEach((track) => {
+      peerConnection.addTrack(track, __sbRtMic);
+    });
+
+    __sbRtRemoteAudio = document.createElement("audio");
+    __sbRtRemoteAudio.autoplay = true;
+    __sbRtRemoteAudio.playsInline = true;
+    __sbRtRemoteAudio.style.display = "none";
+    __sbRtRemoteAudio.addEventListener("playing", () => {
+      if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+    });
+    document.body.appendChild(__sbRtRemoteAudio);
+
+    peerConnection.ontrack = (event) => {
+      __sbRtRemoteAudio.srcObject = event.streams[0] || new MediaStream([event.track]);
+      __sbRtRemoteAudio.play().catch(() => {});
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+      if (__sbHeadphoneMode) {
+        const state = peerConnection.connectionState;
+        if (state === "failed" || state === "closed" || state === "disconnected") {
+          __sbShowVoiceError("Live AI disconnected.");
+          __sbExitHeadphoneMode();
+        }
+      }
+    };
+
+    let _dcReject;
+    const dataChannelOpen = new Promise((resolve, reject) => {
+      _dcReject = reject;
+      const timeoutId = setTimeout(() => {
+        reject(new Error("Live AI timed out while connecting."));
+      }, 10000);
+
+      __sbRtDataChannel = peerConnection.createDataChannel("oai-events");
+      __sbRtDataChannel.addEventListener("open", () => {
+        clearTimeout(timeoutId);
+        resolve(true);
+      }, { once: true });
+      __sbRtDataChannel.addEventListener("error", () => {
+        clearTimeout(timeoutId);
+        reject(new Error("Live AI could not open its control channel."));
+      }, { once: true });
+      __sbRtDataChannel.addEventListener("message", (event) => {
+        try {
+          __sbHandleRtEvent(JSON.parse(event.data));
+        } catch (_) {}
+      });
+    });
+    dataChannelOpen.catch(() => {});
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    const res = await fetch(`${__SB_API}/openai-realtime-call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        apikey: __SB_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: offer.sdp || "",
+    });
+    if (!res.ok) {
+      if (_dcReject) _dcReject(new Error("cancelled"));
+      if (res.status === 429) throw new Error("Live AI is busy — too many requests. Try again in a moment.");
+      const errorText = await res.text();
+      let errorPayload = {};
+      try {
+        errorPayload = JSON.parse(errorText);
+      } catch {}
+      throw new Error(errorPayload.details || errorPayload.error || errorText || `Live AI failed (${res.status})`);
+    }
+
+    const answerSdp = await res.text();
+    await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
+    await dataChannelOpen;
+
+    const realtimeInstructions = await __sbBuildRealtimeVoiceInstructions();
+
+    __sbSendRtEvent({
+      type: "session.update",
+      session: {
+        type: "realtime",
+        instructions: realtimeInstructions,
+        output_modalities: ["audio"],
+        reasoning: {
+          effort: "low",
+        },
+        audio: {
+          input: {
+            transcription: {
+              model: "gpt-4o-transcribe",
+            },
+            turn_detection: {
+              type: "semantic_vad",
+              eagerness: "high",
+              create_response: false,
+              interrupt_response: true,
+            },
+          },
+          output: {
+            voice: __SB_REALTIME_VOICE,
+          },
+        },
+      },
+    });
+
+    document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+    __sbSetVoiceStatusBadge("realtime", "Live AI");
+    __sbSetHpBrainState("listening");
+
+  } catch (err) {
+    __sbCleanupRealtimeVoice();
+    __sbSetVoiceStatusBadge("error", err.message || "Live AI failed.");
+    __sbSetHpBrainState("");
+  }
+}
+
+function __sbSendRtEvent(event) {
+  if (!__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
+  const payload = { ...event };
+  if (!payload.event_id) {
+    payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+  __sbRtDataChannel.send(JSON.stringify(payload));
+  return true;
+}
+
+function __sbSetRealtimeMicEnabled(enabled) {
+  __sbRtMic?.getAudioTracks?.().forEach((track) => {
+    track.enabled = enabled;
+  });
+}
+
+function __sbTruncateRealtimeContext(text, maxChars = 5000) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars)}… [truncated]`;
+}
+
+async function __sbBuildRealtimeVoiceInstructions() {
+  const pageContext = __sbGetPageContext(8000);
+  const stored = await __sbStorageGet(["currentNotes"]);
+  let brainoContext = String(stored.currentNotes || "").trim();
+
+  if (__sbIsOnX()) {
+    const xPersona = await __sbLoadXPersona();
+    const xContext = __sbBuildXAutoContext(xPersona);
+    brainoContext = brainoContext ? `${xContext}\n\n${brainoContext}` : xContext;
+  }
+
+  const lines = [
+    "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
+    "",
+    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. You are not a chatbot. You are not an assistant. You are a presence — small, smart, and always there.",
+    "",
+    "Voice is only the medium here. You are still Braino. Prefer short spoken answers — no walls of text, no bullet lists read aloud. Get to the point and stop.",
+    "",
+    "How you think: You actually think before you respond. You don't just agree — you evaluate. If something the user says doesn't hold up, you say so. Clearly, not cruelly. You distinguish between what you know, what you think, and what you're unsure about. You never fake confidence. You give the most useful answer, not the most comfortable one.",
+    "",
+    "How you talk: Direct. No filler. You never start a response with \"Great question!\" or \"Absolutely!\" or any hollow opener. You get to the point. You use plain, conversational language — not robotic, not trying to sound impressive. You don't repeat yourself. You don't summarize what was just said back to the user.",
+    "",
+    "Honesty: You push back when the user is wrong. Respectfully, but clearly — you don't dance around it. You don't validate bad ideas to make someone feel good. When asked for an opinion, you give a real one. You'd rather say something slightly uncomfortable and true than something warm and useless.",
+    "",
+    "Humor: You have a dry, slightly absurd sense of humor. You can say something unexpected and it tends to land because the timing is right. You know when to be funny and when to read the room and hold back. You never force a joke. Hard limits: no sexual jokes, no political humor, no religious jokes, nothing that punches at a person or group.",
+    "",
+    "Warmth: You are warm but never clingy. You genuinely care about the person you're talking to. When someone is excited, you match that energy. When someone is struggling, you know what to say and when to say it. You don't project emotions onto people or assume how they're feeling.",
+    "",
+    "Emotional intelligence: You are emotionally mature. You always know the right thing to say at the right time. You don't spiral, you don't overreact, you don't make conversations about yourself. You hold space when needed and cut through noise when needed.",
+    "",
+    "Your vibe: You are upfront. Always. With everyone. You have a quiet confidence — you don't need to prove yourself. You're the kind of presence that makes people feel like they have someone genuinely in their corner, not just a tool that spits answers.",
+    "",
+    "What you are not: You are not a yes-man. You are not performatively cheerful. You do not sugarcoat. You do not pad your answers. You do not exist to make people feel validated — you exist to actually help them.",
+    "",
+    "Context awareness: You can see what the user is browsing, their notes, and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
+    "",
+    "If the app asks you to relay a task update or final result, preserve the meaning and do not add new facts.",
+    "If interrupted, stop immediately and wait for the user.",
+    "",
+    "Current page context:",
+    `Title: ${pageContext.title || "Untitled page"}`,
+    `URL: ${pageContext.url || location.href}`,
+    `Page text:\n${__sbTruncateRealtimeContext(pageContext.text || "(no page text available)", 8000)}`,
+  ];
+
+  if (pageContext.selectedText) {
+    lines.push(`Selected text:\n${__sbTruncateRealtimeContext(pageContext.selectedText, 1500)}`);
+  }
+
+  if (brainoContext) {
+    lines.push(`Braino notes and persistent context:\n${__sbTruncateRealtimeContext(brainoContext, 5000)}`);
+  }
+
+  return lines.join("\n\n");
+}
+
+function __sbIsRealtimeVoiceReady() {
+  return Boolean(__sbRtDataChannel && __sbRtDataChannel.readyState === "open");
+}
+
+function __sbHasActiveRealtimeResponse() {
+  return __sbRtCurrentResponseMode !== "idle" || Boolean(__sbRtResponseWaiter);
+}
+
+function __sbIsBenignRealtimeControlError(message) {
+  const text = String(message || "").toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("cancel") ||
+    text.includes("clear") ||
+    text.includes("no active response") ||
+    text.includes("no response to cancel") ||
+    text.includes("output audio buffer")
+  );
+}
+
+function __sbResolveRtWaiter(payload) {
+  if (!__sbRtResponseWaiter) return;
+  const waiter = __sbRtResponseWaiter;
+  __sbRtResponseWaiter = null;
+  waiter.resolve(payload);
+}
+
+function __sbCreateRtWaiter() {
+  if (__sbRtResponseWaiter) {
+    __sbResolveRtWaiter({
+      status: "cancelled",
+      text: __sbRtAssistantTranscript.trim(),
+      errorMessage: "",
+    });
+  }
+
+  return new Promise((resolve) => {
+    __sbRtResponseWaiter = { resolve };
+  });
+}
+
+function __sbExtractRtResponseText(response) {
+  const outputs = Array.isArray(response?.output) ? response.output : [];
+  for (const item of outputs) {
+    if (typeof item?.text === "string" && item.text.trim()) return item.text.trim();
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const part of content) {
+      if (typeof part?.transcript === "string" && part.transcript.trim()) return part.transcript.trim();
+      if (typeof part?.text === "string" && part.text.trim()) return part.text.trim();
+    }
+  }
+  return "";
+}
+
+function __sbResetRealtimeResponseState() {
+  __sbRtAssistantTranscript = "";
+  __sbRtCurrentResponseMode = "idle";
+  __sbRtRelayingAppMessage = false;
+  __sbRtHandlingConversationTurn = false;
+}
+
+function __sbInterruptRealtimeResponse() {
+  if (__sbIsRealtimeVoiceReady() && __sbHasActiveRealtimeResponse()) {
+    __sbSendRtEvent({ type: "response.cancel" });
+    __sbSendRtEvent({ type: "output_audio_buffer.clear" });
+  }
+  __sbResetRealtimeResponseState();
+  __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
+}
+
+async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
+  const promptText = String(text || "").trim();
+  if (!promptText) {
+    return { status: "error", text: "", errorMessage: "Nothing to say." };
+  }
+  if (!__sbIsRealtimeVoiceReady()) {
+    return { status: "error", text: "", errorMessage: "Live AI is not ready." };
+  }
+
+  if (__sbHasActiveRealtimeResponse()) {
+    __sbInterruptRealtimeResponse();
+  }
+  __sbRtAssistantTranscript = "";
+  __sbRtCurrentResponseMode = relayMode ? "relay" : "conversation";
+  __sbRtRelayingAppMessage = relayMode;
+  __sbRtHandlingConversationTurn = !relayMode;
+
+  const responsePromise = __sbCreateRtWaiter();
+  const responseCreated = relayMode
+    ? __sbSendRtEvent({
+        type: "response.create",
+        response: {
+          output_modalities: ["audio"],
+          input: [
+            {
+              type: "message",
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `Relay this update to the user in one short natural spoken reply. Preserve the meaning and do not add new facts.\n\n${promptText}`,
+                },
+              ],
+            },
+          ],
+        },
+      })
+    : (
+      __sbSendRtEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: promptText,
+            },
+          ],
+        },
+      }) &&
+      __sbSendRtEvent({
+        type: "response.create",
+        response: {
+          output_modalities: ["audio"],
+        },
+      })
+    );
+
+  if (!responseCreated) {
+    __sbResetRealtimeResponseState();
+    __sbResolveRtWaiter({
+      status: "error",
+      text: "",
+      errorMessage: "Live AI control channel is not ready.",
+    });
+  }
+
+  return await responsePromise;
+}
+
+async function __sbSpeakWithPreferredVoice(text, preferred = "legacy") {
+  if (preferred === "realtime" && __sbIsRealtimeVoiceReady()) {
+    const result = await __sbRequestRealtimeReply(text, { relayMode: true });
+    if (result.status === "done") return true;
+    if (result.status === "cancelled") return false;
+  }
+  return await __sbSpeakText(text);
+}
+
+function __sbCompleteVoiceTurn(options = {}) {
+  const fromVoice = Boolean(options.fromVoice);
+  if (!fromVoice) return;
+
+  const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
+  if (voiceOutput === "realtime" && voiceTurnToken !== null && voiceTurnToken !== __sbRtTurnToken) {
+    return;
+  }
+
+  __sbVoicePendingReply = false;
+  if (__sbHeadphoneMode) {
+    __sbSetHpBrainState("listening");
+    if (voiceOutput === "legacy" && options.resumeLegacyMic) {
+      void __sbStartRecording();
+    }
+  }
+}
+
+function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
+  const finalTranscript = String(transcript || "").trim();
+  if (!finalTranscript || typeof onReady !== "function") return;
+
+  __sbLastFinalTranscript = finalTranscript;
+  if (__sbVoiceSilenceTimer) clearTimeout(__sbVoiceSilenceTimer);
+
+  __sbVoiceSilenceTimer = setTimeout(() => {
+    __sbVoiceSilenceTimer = null;
+    const toProcess = __sbLastFinalTranscript;
+    __sbLastFinalTranscript = null;
+    if (!toProcess || __sbVoicePendingReply) return;
+
+    if (__sbHeadphoneMode) {
+      __sbSetHpBrainState("captured");
+    }
+
+    __sbVoicePendingReply = true;
+    onReady(toProcess);
+  }, 950);
+}
+
+async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
+  const routing = __sbResolvePromptRouting(transcript);
+  const promptText = String(routing.promptText || "").trim();
+  if (!promptText) {
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
+  if (["agent", "web", "record"].includes(routing.intent)) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  __sbRtHandlingConversationTurn = true;
+  __sbChatHistory.push({ role: "user", content: promptText });
+
+  try {
+    const realtimeResult = await __sbRequestRealtimeReply(promptText);
+    if (realtimeResult.status === "cancelled") return;
+    if (realtimeResult.status === "error") {
+      throw new Error(realtimeResult.errorMessage || "Live AI failed.");
+    }
+
+    const reply = String(realtimeResult.text || "").trim();
+    if (reply) {
+      __sbChatHistory.push({ role: "assistant", content: reply });
+      __sbCardTurns.push({ prompt: promptText, answer: reply });
+    }
+  } catch (err) {
+    __sbShowVoiceError(err.message || "Live AI failed.");
+    if (!__sbHeadphoneMode) {
+      await __sbSpeakText("Something went wrong. Try again.");
+    }
+  } finally {
+    __sbRtHandlingConversationTurn = false;
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+  }
+}
+
+function __sbCleanupRealtimeVoice() {
+  __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
+  __sbVoicePendingReply = false;
+  try { __sbRtDataChannel?.close(); } catch (_) {}
+  try { __sbRtPeerConnection?.close(); } catch (_) {}
+  __sbRtMic?.getTracks().forEach(t => t.stop());
+  if (__sbRtRemoteAudio) {
+    try { __sbRtRemoteAudio.pause(); } catch (_) {}
+    __sbRtRemoteAudio.srcObject = null;
+    __sbRtRemoteAudio.remove();
+  }
+  __sbRtPeerConnection = null;
+  __sbRtDataChannel = null;
+  __sbRtMic = null;
+  __sbRtRemoteAudio = null;
+  __sbRtUserTranscript = "";
+  __sbResetRealtimeResponseState();
+  __sbRtAwaitingDelegateResult = false;
+  document.getElementById("__sb_brain_btn__")?.classList.remove("hp-realtime");
+}
+
+function __sbHandleRtEvent(ev) {
+  if (ev.type === "session.created" || ev.type === "session.updated") {
+    __sbSetVoiceStatusBadge("realtime", "Live AI");
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    return;
+  }
+  if (ev.type === "input_audio_buffer.speech_started") {
+    if (__sbHasActiveRealtimeResponse()) {
+      __sbVoicePendingReply = false;
+      __sbInterruptRealtimeResponse();
+    }
+    __sbRtUserTranscript = "";
+    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    return;
+  }
+  if (ev.type === "input_audio_buffer.speech_stopped") {
+    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    return;
+  }
+  if (ev.type === "conversation.item.input_audio_transcription.delta") {
+    if (typeof ev.delta === "string" && ev.delta) {
+      __sbRtUserTranscript += ev.delta;
+    }
+    return;
+  }
+  if (ev.type === "conversation.item.input_audio_transcription.completed") {
+    const transcript = String(ev.transcript || __sbRtUserTranscript || "").trim();
+    __sbRtUserTranscript = "";
+    if (!transcript) return;
+
+    __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
+      const turnToken = ++__sbRtTurnToken;
+      void __sbHandleInlineRealtimeTurn(toProcess, turnToken);
+    });
+    return;
+  }
+  if (ev.type === "response.created") {
+    __sbRtAssistantTranscript = "";
+    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    return;
+  }
+  if (ev.type === "response.output_audio_transcript.delta" || ev.type === "response.output_text.delta") {
+    if (typeof ev.delta === "string" && ev.delta) {
+      __sbRtAssistantTranscript += ev.delta;
+    }
+    if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+    return;
+  }
+  if (ev.type === "response.done") {
+    const finalText = String(ev.response ? __sbExtractRtResponseText(ev.response) : "").trim();
+    const transcript = (__sbRtAssistantTranscript || finalText || "").trim();
+    __sbResetRealtimeResponseState();
+    __sbResolveRtWaiter({
+      status: "done",
+      text: transcript,
+      errorMessage: "",
+    });
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    return;
+  }
+  if (ev.type === "response.cancelled") {
+    __sbResetRealtimeResponseState();
+    __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    return;
+  }
+  if (ev.type === "error") {
+    const message = ev.error?.message || "Realtime error";
+    if (!__sbHasActiveRealtimeResponse() && __sbIsBenignRealtimeControlError(message)) {
+      return;
+    }
+    __sbVoicePendingReply = false;
+    __sbResetRealtimeResponseState();
+    __sbResolveRtWaiter({ status: "error", text: "", errorMessage: message });
+    __sbSetVoiceStatusBadge("error", message);
+    __sbShowVoiceError(message);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function __sbToggleHeadphoneMode() {
   if (__sbHeadphoneMode) {
     __sbExitHeadphoneMode();
@@ -5516,30 +6305,35 @@ function __sbEnterHeadphoneMode() {
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
 
-  // Close bar, keep the brain button visible as the only UI
   __sbToggleInput(false);
   __sbCollapseCard();
 
-  // Mark headphone btn active in case bar reopens
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
-  // Start with listening glow on the brain
   __sbSetHpBrainState("listening");
-  void __sbStartRecording();
+  __sbSetVoiceStatusBadge("connecting", "Connecting…");
+  void __sbStartRealtimeVoice();
 }
 
 function __sbExitHeadphoneMode() {
   __sbHeadphoneMode = false;
   __sbVoiceOnlyMode = false;
+  __sbVoicePendingReply = false;
 
   if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
   __sbLastFinalTranscript = null;
+  __sbRtTurnToken = 0;
+  __sbRtUserTranscript = "";
+  __sbRtAwaitingDelegateResult = false;
+  __sbRtRelayingAppMessage = false;
+  __sbRtHandlingConversationTurn = false;
 
-  if (__sbIsRecording) __sbStopRecording({ silent: true });
+  __sbCleanupRealtimeVoice();
   __sbStopSpeech();
 
   __sbSetHpBrainState("");
+  __sbSetVoiceStatusBadge(null);
 
   document.getElementById("__sb_rec_btn__")?.classList.remove("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
@@ -5551,6 +6345,15 @@ function __sbSetHpBrainState(state) {
   if (!brain) return;
   brain.classList.remove("hp-listening", "hp-captured", "hp-speaking", "recording");
   if (state) brain.classList.add(`hp-${state}`);
+}
+
+function __sbSetVoiceStatusBadge(state, label) {
+  const badge = document.getElementById("__sb_voice_status_badge__");
+  if (!badge) return;
+  if (!state) { badge.removeAttribute("data-s"); badge.textContent = ""; badge.title = ""; return; }
+  badge.setAttribute("data-s", state);
+  badge.textContent = label || state;
+  badge.title = label || state;
 }
 
 function __sbShowVoiceError(msg) {
@@ -5679,28 +6482,12 @@ function __sbHandleVoiceEvent(msg) {
       return;
     }
 
-    // Final transcript — wait for silence before processing to avoid
-    // cutting off sentences that the engine split too early
-    __sbLastFinalTranscript = transcript;
-    if (__sbVoiceSilenceTimer) clearTimeout(__sbVoiceSilenceTimer);
-
-    __sbVoiceSilenceTimer = setTimeout(() => {
-      __sbVoiceSilenceTimer = null;
-      const toProcess = __sbLastFinalTranscript;
-      __sbLastFinalTranscript = null;
-      if (!toProcess || __sbVoicePendingReply) return;
-
-      // Flash yellow: capture acknowledged
-      if (__sbHeadphoneMode) {
-        __sbSetHpBrainState("captured");
-      }
-
-      __sbVoicePendingReply = true;
+    __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       __sbStopRecording({ silent: true });
       if (input) input.value = "";
       if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
       void __sbProcessPrompt(toProcess, { fromVoice: true });
-    }, 950);
+    });
     return;
   }
 

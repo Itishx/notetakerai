@@ -186,6 +186,11 @@
         <div id="voiceCtxUrl"></div>
         <div id="voiceCtxLive"><span class="voice-pulse"></span><span id="voiceCtxLiveTxt">reading</span></div>
       </div>
+      <!-- Transport status — pinned top center -->
+      <div class="voice-status-debug">
+        <div id="voiceTransportBadge" class="voice-transport-badge" data-state="neutral">connecting</div>
+        <div id="voiceTransportError" class="voice-transport-error hidden"></div>
+      </div>
       <!-- Stage -->
       <div class="voice-stage">
         <div class="voice-orb-wrap">
@@ -199,10 +204,6 @@
           </div>
           <div id="voiceAgentText" class="voice-caption"></div>
           <div id="voiceUserText" class="voice-user-text"></div>
-        </div>
-        <div class="voice-status-debug">
-          <div id="voiceTransportBadge" class="voice-transport-badge" data-state="neutral">reading</div>
-          <div id="voiceTransportError" class="voice-transport-error hidden"></div>
         </div>
       </div>
       <!-- Controls -->

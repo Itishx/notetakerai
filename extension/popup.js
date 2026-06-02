@@ -4089,9 +4089,8 @@ function handleRealtimeServerEvent(serverEvent) {
     if (!transcript) return;
     if (voiceUserText) voiceUserText.textContent = transcript;
     setCaption("");
-    requestVoicePageContext().finally(() => {
-      handleVoiceInput(transcript, { useRealtimeSpeech: true });
-    });
+    requestVoicePageContext(); // refresh in background; don't block response
+    handleVoiceInput(transcript, { useRealtimeSpeech: true });
     return;
   }
 
@@ -4485,8 +4484,10 @@ async function handleVoiceInput(text, { useRealtimeSpeech = isRealtimeVoiceMode(
   setOrbState("captured");
   if (voiceUserText) voiceUserText.textContent = text;
   setCaption("");
-  await new Promise(r => setTimeout(r, 800));
-  if (voiceHandlingToken !== myToken || !voiceActive) return;
+  if (!headphoneMode) {
+    await new Promise(r => setTimeout(r, 800));
+    if (voiceHandlingToken !== myToken || !voiceActive) return;
+  }
 
   setOrbState("processing");
   setCaption("Thinking…");
