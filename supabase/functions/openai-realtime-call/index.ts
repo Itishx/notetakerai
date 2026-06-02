@@ -22,7 +22,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
     const realtimeModel = Deno.env.get("OPENAI_REALTIME_MODEL") || "gpt-realtime-2";
-    const realtimeVoice = Deno.env.get("OPENAI_REALTIME_VOICE") || "marin";
 
     if (!anonKey || !supabaseUrl) {
       return json({ error: "Missing Supabase configuration." }, 500);
@@ -52,11 +51,6 @@ serve(async (req) => {
     const sessionConfig = {
       type: "realtime",
       model: realtimeModel,
-      audio: {
-        output: {
-          voice: realtimeVoice,
-        },
-      },
     };
 
     const form = new FormData();

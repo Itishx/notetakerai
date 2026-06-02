@@ -17,13 +17,13 @@ let mediaRecorder = null;
 let audioChunks = [];
 let currentPageContext = null;
 let currentMode = "page"; // "page" | "lecture" | "meeting" | "general" | "web" | "agent"
-let currentAiProvider = "lovable"; // "lovable" | "claude" | "openai-realtime"
+let currentAiProvider = "lovable"; // "lovable" | "claude"
 let agentRunning = false;
 let agentShouldStop = false;
 let isPremium = false;
 let currentSelection = null; // { text, url, title } — last text the user highlighted on the page
 let sbXPersonaCache = null; // cached x_auto_persona for injecting context on X
-const REALTIME_AI_PROVIDER = "openai-realtime";
+const VALID_AI_PROVIDERS = new Set(["lovable", "claude"]);
 const INTERNAL_PREMIUM_EMAILS = new Set([
   "itishpande21@gmail.com",
 ]);
@@ -538,26 +538,20 @@ modelBtn?.addEventListener("click", (e) => {
 
 // Load saved provider
 chrome.storage.local.get(["aiProvider"], (r) => {
-  if (r.aiProvider) {
+  if (VALID_AI_PROVIDERS.has(r.aiProvider)) {
     currentAiProvider = r.aiProvider;
-    updateModelUI();
+  } else if (r.aiProvider) {
+    chrome.storage.local.set({ aiProvider: "lovable" });
   }
+  updateModelUI();
 });
-
-function isRealtimeVoiceProvider(provider = currentAiProvider) {
-  return provider === REALTIME_AI_PROVIDER;
-}
 
 function getTextAiProvider(provider = currentAiProvider) {
   return provider === "claude" ? "claude" : "lovable";
 }
 
 function updateModelUI() {
-  if (modelLabel) {
-    if (currentAiProvider === "claude") modelLabel.textContent = "Claude Sonnet 4.6";
-    else if (isRealtimeVoiceProvider()) modelLabel.textContent = "Braino Live Beta";
-    else modelLabel.textContent = "Braino AI";
-  }
+  if (modelLabel) modelLabel.textContent = currentAiProvider === "claude" ? "Claude Sonnet 4.6" : "Braino AI";
   modelPopover?.querySelectorAll(".model-option").forEach((el) => {
     el.classList.toggle("active", el.dataset.provider === currentAiProvider);
   });
@@ -3386,6 +3380,7 @@ let voiceActive = false;
 let voiceTabId = null;
 let voiceMuted = false;
 let headphoneMode = false;
+let voiceUsingRealtime = false;
 let realtimePeerConnection = null;
 let realtimeDataChannel = null;
 let realtimeMicStream = null;
@@ -3395,6 +3390,10 @@ let realtimeSessionReady = false;
 let realtimeAssistantTranscript = "";
 let realtimeAssistantItemId = null;
 let realtimeAudioStartAt = 0;
+let realtimeUserTranscript = "";
+let realtimeOutputPromise = Promise.resolve();
+let realtimeLastResponseFinishedAt = 0;
+let realtimeLastResponseStatus = "idle";
 
 const voiceOverlay      = document.getElementById("voiceOverlay");
 const voiceOrb          = document.getElementById("voiceOrb");
@@ -3403,7 +3402,6 @@ const voiceAgentText    = document.getElementById("voiceAgentText");
 const voiceModeBtn      = document.getElementById("voiceModeBtn");
 const voiceCloseBtn     = document.getElementById("voiceCloseBtn");
 const voiceCapLabelTxt  = document.getElementById("voiceCapLabelTxt");
-const voiceLookBtn      = document.getElementById("voiceLookBtn");
 const voiceInterruptBtn = document.getElementById("voiceInterruptBtn");
 const voiceStopTaskBtn  = document.getElementById("voiceStopTaskBtn");
 const voiceMuteBtn      = document.getElementById("voiceMuteBtn");
@@ -3466,6 +3464,16 @@ function isRealtimeVoiceSessionRunning() {
   return realtimeConnecting || !!realtimePeerConnection;
 }
 
+function isRealtimeVoiceMode() {
+  return voiceUsingRealtime && isRealtimeVoiceSessionRunning();
+}
+
+function setRealtimeMicEnabled(enabled) {
+  realtimeMicStream?.getAudioTracks().forEach((track) => {
+    track.enabled = enabled;
+  });
+}
+
 function extractRealtimeResponseText(response) {
   const outputs = Array.isArray(response?.output) ? response.output : [];
   for (const item of outputs) {
@@ -3480,11 +3488,16 @@ function extractRealtimeResponseText(response) {
 }
 
 function cleanupRealtimeVoiceSession({ keepCaption = false } = {}) {
+  voiceUsingRealtime = false;
   realtimeSessionReady = false;
   realtimeConnecting = false;
   realtimeAssistantTranscript = "";
   realtimeAssistantItemId = null;
   realtimeAudioStartAt = 0;
+  realtimeUserTranscript = "";
+  realtimeOutputPromise = Promise.resolve();
+  realtimeLastResponseFinishedAt = 0;
+  realtimeLastResponseStatus = "idle";
 
   if (realtimeDataChannel) {
     try { realtimeDataChannel.close(); } catch {}
@@ -3542,72 +3555,58 @@ function requestVoicePageContext() {
   });
 }
 
-function captureVisibleScreenshotDataUrl() {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: "captureScreenshot" }, (res) => {
-      if (chrome.runtime.lastError || res?.error || !res?.dataUrl) {
-        resolve(null);
-        return;
-      }
-      resolve(res.dataUrl);
-    });
-  });
-}
-
-function compressRealtimeScreenshot(dataUrl, { maxWidth = 960, maxHeight = 640, maxChars = 220000 } = {}) {
-  if (!dataUrl || typeof dataUrl !== "string") return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxWidth / img.naturalWidth, maxHeight / img.naturalHeight);
-      const width = Math.max(1, Math.round(img.naturalWidth * scale));
-      const height = Math.max(1, Math.round(img.naturalHeight * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        resolve(null);
-        return;
-      }
-      ctx.drawImage(img, 0, 0, width, height);
-
-      let quality = 0.72;
-      let result = canvas.toDataURL("image/jpeg", quality);
-      while (result.length > maxChars && quality > 0.35) {
-        quality -= 0.08;
-        result = canvas.toDataURL("image/jpeg", quality);
-      }
-      resolve(result.length <= maxChars ? result : null);
-    };
-    img.onerror = () => resolve(null);
-    img.src = dataUrl;
-  });
-}
-
 function getRealtimeVoiceInstructions() {
   return [
-    "# Role and Objective",
-    "You are Braino, a live browser voice companion.",
-    "",
-    "# Personality and Tone",
-    "- Sound warm, clear, and lightly proactive.",
-    "- Keep spoken replies short unless the user asks for more depth.",
-    "",
-    "# Screen Grounding",
-    "- Use the latest page text and screenshot I send as the primary source of truth for what is on screen.",
-    "- If the screenshot or page text seems stale or incomplete, ask the user to refresh the page view.",
-    "",
-    "# Behavior",
-    "- Answer direct questions in 1-2 short sentences when possible.",
-    "- Ask only one clarifying question at a time.",
-    "- Never claim you clicked, typed, or changed something on the page unless a separate tool explicitly did it.",
-    "- If the user asks you to look at the page, describe what matters and offer the next useful action.",
+    "You are the live voice layer for Braino.",
+    "Speak clearly, briefly, and naturally.",
+    "When the app asks you to speak exact text, preserve the meaning and do not add extra commentary.",
+    "If interrupted, stop immediately and wait for the user.",
   ].join("\n");
 }
 
+function interruptRealtimeSpeech({ clearCaption = true } = {}) {
+  sendRealtimeEvent({ type: "response.cancel" });
+  sendRealtimeEvent({ type: "output_audio_buffer.clear" });
+  stopCurrentTTS();
+  realtimeAssistantTranscript = "";
+  realtimeAssistantItemId = null;
+  realtimeLastResponseFinishedAt = Date.now();
+  realtimeLastResponseStatus = "cancelled";
+  setRealtimeMicEnabled(!voiceMuted);
+  if (clearCaption) setCaption("");
+}
+
+async function speakTextWithRealtime(text) {
+  if (!text) return false;
+  interruptRealtimeSpeech({ clearCaption: false });
+  realtimeAssistantTranscript = "";
+  realtimeAudioStartAt = Date.now();
+  realtimeLastResponseFinishedAt = 0;
+  realtimeLastResponseStatus = "pending";
+  setRealtimeMicEnabled(false);
+  setOrbState("speaking");
+
+  try {
+    await speakText(text, (spokenText, idx) => {
+      if (idx === -1) setCaption(spokenText);
+    });
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "done";
+    return true;
+  } catch (error) {
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "error";
+    console.warn("Realtime ElevenLabs playback failed:", error);
+    return false;
+  } finally {
+    if (voiceActive && isRealtimeVoiceMode()) {
+      setRealtimeMicEnabled(!voiceMuted);
+    }
+  }
+}
+
 function handleRealtimeServerEvent(serverEvent) {
-  if (!voiceActive || !isRealtimeVoiceProvider()) return;
+  if (!voiceActive || !isRealtimeVoiceMode()) return;
 
   if (serverEvent.type === "session.created" || serverEvent.type === "session.updated") {
     realtimeSessionReady = true;
@@ -3617,6 +3616,9 @@ function handleRealtimeServerEvent(serverEvent) {
   }
 
   if (serverEvent.type === "input_audio_buffer.speech_started") {
+    realtimeUserTranscript = "";
+    realtimeAssistantTranscript = "";
+    setCaption("");
     setOrbState("listening");
     return;
   }
@@ -3627,14 +3629,30 @@ function handleRealtimeServerEvent(serverEvent) {
     return;
   }
 
+  if (serverEvent.type === "conversation.item.input_audio_transcription.delta") {
+    if (typeof serverEvent.delta === "string" && serverEvent.delta) {
+      realtimeUserTranscript += serverEvent.delta;
+      setCaption(realtimeUserTranscript.trim());
+    }
+    return;
+  }
+
   if (serverEvent.type === "conversation.item.input_audio_transcription.completed") {
-    if (voiceUserText) voiceUserText.textContent = serverEvent.transcript || "";
+    const transcript = (serverEvent.transcript || realtimeUserTranscript || "").trim();
+    realtimeUserTranscript = "";
+    if (!transcript) return;
+    if (voiceUserText) voiceUserText.textContent = transcript;
+    setCaption("");
+    requestVoicePageContext().finally(() => {
+      handleVoiceInput(transcript, { useRealtimeSpeech: true });
+    });
     return;
   }
 
   if (serverEvent.type === "response.created") {
     realtimeAssistantTranscript = "";
     realtimeAudioStartAt = Date.now();
+    realtimeLastResponseStatus = "speaking";
     setOrbState("processing");
     return;
   }
@@ -3686,6 +3704,8 @@ function handleRealtimeServerEvent(serverEvent) {
       realtimeAssistantTranscript = fallbackText;
       setCaption(fallbackText);
     }
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "done";
     setOrbState("listening");
     setVoiceContextStatus("live");
     return;
@@ -3693,6 +3713,8 @@ function handleRealtimeServerEvent(serverEvent) {
 
   if (serverEvent.type === "response.cancelled") {
     realtimeAssistantTranscript = "";
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "cancelled";
     setOrbState("listening");
     setCaption("");
     return;
@@ -3700,69 +3722,11 @@ function handleRealtimeServerEvent(serverEvent) {
 
   if (serverEvent.type === "error") {
     const message = serverEvent.error?.message || serverEvent.message || "Realtime voice hit an error.";
+    realtimeLastResponseFinishedAt = Date.now();
+    realtimeLastResponseStatus = "error";
     setOrbState("idle");
     setCaption(message);
   }
-}
-
-async function sendRealtimePageGrounding({ respond = false, prompt = "", initial = false } = {}) {
-  if (!realtimeSessionReady) return false;
-
-  setVoiceContextStatus(initial ? "reading" : "refreshing");
-
-  const pageContext = await requestVoicePageContext();
-  const rawScreenshot = await captureVisibleScreenshotDataUrl();
-  const screenshot = rawScreenshot ? await compressRealtimeScreenshot(rawScreenshot) : null;
-
-  const contextText = [
-    initial
-      ? "Fresh browser context for this live Braino session. Use it as grounding, but do not answer yet unless I ask."
-      : "Updated browser context from the user's current tab.",
-    pageContext?.title ? `Title: ${pageContext.title}` : "",
-    pageContext?.url ? `URL: ${pageContext.url}` : "",
-    pageContext?.text ? `Visible/semantic page text:\n${String(pageContext.text).slice(0, 7000)}` : "No page text was available.",
-    prompt ? `User intent: ${prompt}` : "",
-  ].filter(Boolean).join("\n\n");
-
-  const content = [
-    {
-      type: "input_text",
-      text: contextText,
-    },
-  ];
-
-  if (screenshot) {
-    content.push({
-      type: "input_image",
-      image_url: screenshot,
-      detail: "low",
-    });
-  }
-
-  sendRealtimeEvent({
-    type: "conversation.item.create",
-    item: {
-      type: "message",
-      role: "user",
-      content,
-    },
-  });
-
-  if (respond) {
-    realtimeAssistantTranscript = "";
-    setOrbState("processing");
-    setCaption("Looking…");
-    sendRealtimeEvent({
-      type: "response.create",
-      response: {
-        instructions: prompt || "Briefly describe what you see on the current page and help the user with it.",
-      },
-    });
-  } else {
-    setVoiceContextStatus("live");
-  }
-
-  return true;
 }
 
 function getActiveTabId() {
@@ -3786,21 +3750,13 @@ function sendToContentScript(tabId, action) {
 }
 
 async function startRealtimeVoiceMode() {
-  if (!(await loadPremiumStatus())) {
-    showUpgradePrompt("Realtime Voice");
-    setCaption("Realtime Voice is a premium feature.");
-    setOrbState("idle");
-    return;
-  }
-
   const authToken = await getAuthToken();
   if (!authToken) {
-    setCaption("Sign in to use Braino Live.");
-    setOrbState("idle");
-    return;
+    return false;
   }
 
   cleanupRealtimeVoiceSession({ keepCaption: true });
+  voiceUsingRealtime = true;
   realtimeConnecting = true;
   setVoiceContextStatus("connecting");
   setOrbState("processing");
@@ -3834,7 +3790,7 @@ async function startRealtimeVoiceMode() {
     };
 
     peerConnection.onconnectionstatechange = () => {
-      if (!voiceActive || !isRealtimeVoiceProvider()) return;
+      if (!voiceActive || !isRealtimeVoiceMode()) return;
       const state = peerConnection.connectionState;
       if (state === "failed" || state === "closed" || state === "disconnected") {
         cleanupRealtimeVoiceSession({ keepCaption: true });
@@ -3897,29 +3853,38 @@ async function startRealtimeVoiceMode() {
     voiceMuted = false;
     if (voiceMuteBtn) voiceMuteBtn.style.opacity = "1";
 
+    await requestVoicePageContext();
     setOrbState("listening");
     setVoiceContextStatus("live");
-    setCaption("Braino Live is ready.");
+    setCaption("");
 
     sendRealtimeEvent({
       type: "session.update",
       session: {
+        type: "realtime",
         instructions: getRealtimeVoiceInstructions(),
+        output_modalities: ["text"],
+        audio: {
+          input: {
+            transcription: {
+              model: "gpt-4o-transcribe",
+            },
+            turn_detection: {
+              type: "semantic_vad",
+              create_response: false,
+              interrupt_response: true,
+            },
+          },
+        },
       },
     });
 
-    await sendRealtimePageGrounding({ initial: true });
-
-    setTimeout(() => {
-      if (voiceActive && isRealtimeVoiceProvider() && voiceAgentText?.textContent === "Braino Live is ready.") {
-        setCaption("");
-      }
-    }, 1400);
+    return true;
   } catch (error) {
     realtimeConnecting = false;
     cleanupRealtimeVoiceSession({ keepCaption: true });
-    setOrbState("idle");
-    setCaption(error instanceof Error ? error.message : "Could not start Braino Live.");
+    console.warn("Realtime voice setup failed:", error);
+    return false;
   }
 }
 
@@ -3939,8 +3904,8 @@ async function openVoiceMode() {
   }
 
   voiceTabId = tabId;
-  if (isRealtimeVoiceProvider()) {
-    await startRealtimeVoiceMode();
+  const startedRealtime = await startRealtimeVoiceMode();
+  if (startedRealtime) {
     return;
   }
 
@@ -3988,7 +3953,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Receive voice events relayed from content script
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.action !== "voiceEvent" || !voiceActive || isRealtimeVoiceProvider() || isRealtimeVoiceSessionRunning()) return;
+  if (msg.action !== "voiceEvent" || !voiceActive || isRealtimeVoiceMode()) return;
 
   if (msg.event === "listening") {
     if (!isVoiceSpeaking) {
@@ -4030,7 +3995,7 @@ function isBrowserActionCommand(text) {
 
 let voiceHandlingToken = 0;
 
-async function handleVoiceInput(text) {
+async function handleVoiceInput(text, { useRealtimeSpeech = isRealtimeVoiceMode() } = {}) {
   if (!text || !voiceActive) return;
 
   // Cancel any in-progress request (agent loop, TTS, fetch)
@@ -4063,6 +4028,8 @@ async function handleVoiceInput(text) {
 
   try {
     if (useAgent) {
+      setOrbState("acting");
+      setCaption("Working on it…");
       reply = await runAgentLoopForVoice(text);
     } else if (useWebSearch) {
       reply = await fetchWebSearchReply(
@@ -4105,22 +4072,33 @@ async function handleVoiceInput(text) {
       if (!headphoneMode) renderChatMessages();
     }
 
+    if (voiceHandlingToken !== myToken || !voiceActive) return;
+
     setOrbState("speaking");
-    // Stop mic so TTS audio isn't picked up as user input
-    if (voiceTabId) sendToContentScript(voiceTabId, "stopVoiceListening");
-    await speakText(reply, (text, _idx) => {
-      if (_idx === -1) setCaption(text); // initial render of word spans
-    });
+    if (useRealtimeSpeech) {
+      await speakTextWithRealtime(reply);
+    } else {
+      // Stop mic so TTS audio isn't picked up as user input
+      if (voiceTabId) sendToContentScript(voiceTabId, "stopVoiceListening");
+      await speakText(reply, (text, _idx) => {
+        if (_idx === -1) setCaption(text); // initial render of word spans
+      });
+    }
   } catch(e) {
-    setCaption("Something went wrong. Try again.");
+    if (useRealtimeSpeech && isRealtimeVoiceMode()) {
+      setOrbState("speaking");
+      await speakTextWithRealtime("Something went wrong. Try again.");
+    } else {
+      setCaption("Something went wrong. Try again.");
+    }
   }
 
   // Restart mic after speaking ends so user can reply
-  if (voiceActive) {
+  if (voiceHandlingToken === myToken && voiceActive) {
     setOrbState("listening");
-    setCaption("");
+    if (!useRealtimeSpeech) setCaption("");
     if (voiceUserText) voiceUserText.textContent = "";
-    if (voiceTabId) sendToContentScript(voiceTabId, "startVoiceListening");
+    if (!useRealtimeSpeech && voiceTabId) sendToContentScript(voiceTabId, "startVoiceListening");
   }
 }
 
@@ -4243,28 +4221,12 @@ voiceModeBtn?.addEventListener("click", toggleHeadphoneMode);
 voiceCloseBtn?.addEventListener("click", closeVoiceMode);
 voiceOrb?.addEventListener("click", () => { if (headphoneMode) closeVoiceMode(); });
 
-voiceLookBtn?.addEventListener("click", async () => {
-  if (!voiceActive || !isRealtimeVoiceSessionRunning()) return;
-  await sendRealtimePageGrounding({
-    respond: true,
-    prompt: "The user asked you to look at the page. Briefly describe what is on screen and what they can do next.",
-  });
-});
-
 voiceInterruptBtn?.addEventListener("click", () => {
-  if (isRealtimeVoiceSessionRunning()) {
-    sendRealtimeEvent({ type: "response.cancel" });
-    if (realtimeAssistantItemId) {
-      sendRealtimeEvent({
-        type: "conversation.item.truncate",
-        item_id: realtimeAssistantItemId,
-        content_index: 0,
-        audio_end_ms: Math.max(0, Date.now() - realtimeAudioStartAt),
-      });
-    }
-    realtimeAssistantTranscript = "";
+  agentShouldStop = true;
+  voiceHandlingToken++;
+  if (isRealtimeVoiceMode()) {
+    interruptRealtimeSpeech();
     setOrbState("listening");
-    setCaption("");
     if (voiceUserText) voiceUserText.textContent = "";
     return;
   }
@@ -4279,6 +4241,8 @@ voiceInterruptBtn?.addEventListener("click", () => {
 
 voiceStopTaskBtn?.addEventListener("click", () => {
   agentShouldStop = true;
+  voiceHandlingToken++;
+  if (isRealtimeVoiceMode()) interruptRealtimeSpeech();
   stopCurrentTTS();
   setOrbState("idle");
   setCaption("Task stopped.");
@@ -4286,7 +4250,7 @@ voiceStopTaskBtn?.addEventListener("click", () => {
 
 voiceMuteBtn?.addEventListener("click", () => {
   voiceMuted = !voiceMuted;
-  if (isRealtimeVoiceSessionRunning()) {
+  if (isRealtimeVoiceMode()) {
     realtimeMicStream?.getAudioTracks().forEach((track) => {
       track.enabled = !voiceMuted;
     });
