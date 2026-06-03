@@ -28,25 +28,22 @@ const X_MGMT_TIERS = [
   { tier: "Full",    posts: null,                  price: 109 },
 ] as const;
 
+// Premium includes: 500 queries, 1 hr voice, 150 delegate tasks.
+// These milestones/options represent extras ON TOP of that baseline.
 const INTEL_MILESTONES = [
-  { queries: 100,  price: 5  },
-  { queries: 500,  price: 10 },
-  { queries: 1000, price: 15 },
-  { queries: 2500, price: 22 },
-  { queries: 5000, price: 30 },
+  { queries: 1000, price: 5  },   // +500 above Premium's 500
+  { queries: 2500, price: 12 },
+  { queries: 5000, price: 20 },
 ] as const;
 
 const VOICE_OPTIONS = [
-  { hours: 1,  price: 3,  label: "1 hr / month"  },
-  { hours: 5,  price: 9,  label: "5 hrs / month"  },
-  { hours: 20, price: 19, label: "20 hrs / month" },
-  { hours: 50, price: 39, label: "50 hrs / month" },
+  { hours: 5,  price: 6,  label: "5 hrs / month"  },   // +4 above Premium's 1hr
+  { hours: 20, price: 16, label: "20 hrs / month" },
+  { hours: 50, price: 36, label: "50 hrs / month" },
 ] as const;
 
 const DELEGATE_OPTIONS = [
-  { tasks: 25  as number | null, price: 0,  label: "Light",    sub: "25 tasks / month" },
-  { tasks: 150 as number | null, price: 8,  label: "Regular",  sub: "150 tasks / month" },
-  { tasks: null,                 price: 18, label: "Unlimited", sub: "No cap" },
+  { tasks: null, price: 10, label: "Unlimited", sub: "No cap — above Premium's 150" },
 ];
 
 const INTEGRATIONS_LIST = [
@@ -189,28 +186,37 @@ function IntelModalContent({ current, onSave, onFree }: {
   onSave: (s: IntelSel) => void;
   onFree: () => void;
 }) {
-  const [tier, setTier] = useState<IntelTier>(current?.tier ?? "standard");
+  const [tier, setTier] = useState<IntelTier>(current?.tier ?? "advanced");
   const [idx,  setIdx]  = useState(() => {
-    if (!current || current.tier === "standard") return [2];
+    if (!current || current.tier === "standard") return [0];
     const f = INTEL_MILESTONES.findIndex(m => m.queries === current.queriesPerMonth);
-    return [f >= 0 ? f : 2];
+    return [f >= 0 ? f : 0];
   });
   const m = INTEL_MILESTONES[Math.max(0, Math.min(idx[0], INTEL_MILESTONES.length - 1))];
 
   return (
     <div>
-      <FreeBlock items={["Standard AI (GPT-mini) — fast, capable", "10 chat questions / day", "Session memory only"]} />
+      {/* Premium baseline — already included */}
+      <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(76,175,125,0.07)", border: "1px solid rgba(76,175,125,0.18)", marginBottom: 20 }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--sb-ok)", marginBottom: 8 }}>Included with Premium</div>
+        {["Advanced AI (Claude Sonnet)", "500 queries / month", "Persistent memory"].map((item, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: i < 2 ? 5 : 0 }}>
+            <span style={{ color: "var(--sb-ok)", marginTop: 1, flexShrink: 0 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg></span>
+            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-2)", lineHeight: 1.45 }}>{item}</span>
+          </div>
+        ))}
+      </div>
 
-      <UpgradeLabel>Want more?</UpgradeLabel>
+      <UpgradeLabel>Need more queries?</UpgradeLabel>
 
       <ModalOptionCard selected={tier === "advanced"} onClick={() => setTier("advanced")}>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: "var(--sb-ink)" }}>Advanced</div>
-            <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: "var(--sb-ink-3)", marginTop: 2 }}>Claude Sonnet · deep reasoning · persistent memory</div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: "var(--sb-ink-3)", marginTop: 2 }}>Claude Sonnet · set your query limit</div>
           </div>
           <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, color: tier === "advanced" ? CORAL : "var(--sb-ink-3)" }}>
-            {tier === "advanced" ? `$${m.price}/mo` : "Set limit"}
+            +${m.price}/mo
           </div>
         </div>
       </ModalOptionCard>
@@ -225,39 +231,40 @@ function IntelModalContent({ current, onSave, onFree }: {
             <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: "var(--sb-ink-3)", marginTop: 2 }}>Frontier models · latest, most capable</div>
           </div>
           <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, color: tier === "experimental" ? CORAL : "var(--sb-ink-3)" }}>
-            {tier === "experimental" ? `$${m.price}/mo` : "Set limit"}
+            +${m.price}/mo
           </div>
         </div>
       </ModalOptionCard>
 
-      {(tier === "advanced" || tier === "experimental") && (
-        <div style={{ marginTop: 16, padding: "18px 18px 14px", background: "var(--sb-bg)", borderRadius: 12, border: "1px solid var(--sb-line)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
-            <div>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--sb-ink-4)", marginBottom: 3 }}>Queries / month</div>
+      <div style={{ marginTop: 16, padding: "18px 18px 14px", background: "var(--sb-bg)", borderRadius: 12, border: "1px solid var(--sb-line)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--sb-ink-4)", marginBottom: 3 }}>Total queries / month</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 32, lineHeight: 1, color: "var(--sb-ink)" }}>{m.queries.toLocaleString()}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--sb-ink-4)", marginBottom: 3 }}>Monthly</div>
-              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 32, lineHeight: 1, color: CORAL }}>${m.price}</div>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: "var(--sb-ok)" }}>500 base + {(m.queries - 500).toLocaleString()} extra</div>
             </div>
           </div>
-          <Slider value={idx} onValueChange={setIdx} min={0} max={INTEL_MILESTONES.length - 1} step={1} />
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-            {INTEL_MILESTONES.map((ml, i) => (
-              <span key={i} style={{ fontFamily: FONT_MONO, fontSize: 9, color: i === idx[0] ? CORAL : "var(--sb-ink-4)" }}>
-                {ml.queries >= 1000 ? `${ml.queries/1000}k` : ml.queries}
-              </span>
-            ))}
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--sb-ink-4)", marginBottom: 3 }}>Extra / mo</div>
+            <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 32, lineHeight: 1, color: CORAL }}>+${m.price}</div>
           </div>
         </div>
-      )}
+        <Slider value={idx} onValueChange={setIdx} min={0} max={INTEL_MILESTONES.length - 1} step={1} />
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+          {INTEL_MILESTONES.map((ml, i) => (
+            <span key={i} style={{ fontFamily: FONT_MONO, fontSize: 9, color: i === idx[0] ? CORAL : "var(--sb-ink-4)" }}>
+              {ml.queries >= 1000 ? `${ml.queries/1000}k` : ml.queries}
+            </span>
+          ))}
+        </div>
+      </div>
 
       <ModalFooter
-        onFree={() => { onSave({ tier: "standard", price: 0 }); onFree(); }}
-        onAdd={() => { if (tier !== "standard") onSave({ tier, queriesPerMonth: m.queries, price: m.price }); onFree(); }}
-        addLabel={tier === "standard" ? "Select an upgrade above" : `Add ${tier} — $${m.price}/mo`}
-        addDisabled={tier === "standard"}
+        onFree={() => { onSave({ tier: "advanced", price: 0 }); onFree(); }}
+        onAdd={() => { onSave({ tier, queriesPerMonth: m.queries, price: m.price }); onFree(); }}
+        addLabel={`Add ${m.queries.toLocaleString()} queries — +$${m.price}/mo`}
+        addDisabled={false}
       />
     </div>
   );
@@ -278,17 +285,20 @@ function VoiceModalContent({ current, onSave, onFree }: {
         <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>⚡</span>
         <div>
           <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13.5, color: CORAL, marginBottom: 3 }}>Premium feature</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--sb-ink-3)", lineHeight: 1.45 }}>Voice requires a Premium plan. 1 hr / month is included with Premium — add more below.</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--sb-ink-3)", lineHeight: 1.45 }}>Voice requires Premium. <strong style={{ color: "var(--sb-ink-2)" }}>1 hr / month is already included</strong> — prices below are extra on top of that.</div>
         </div>
       </div>
 
-      <UpgradeLabel>Additional voice time</UpgradeLabel>
+      <UpgradeLabel>Extra voice time</UpgradeLabel>
 
       {VOICE_OPTIONS.map(opt => (
         <ModalOptionCard key={opt.hours} selected={sel === opt.hours && !showCustom} onClick={() => { setSel(opt.hours); setShowCustom(false); }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 14, color: "var(--sb-ink)" }}>{opt.label}</span>
-            <span style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, color: "var(--sb-ink)" }}>${opt.price}/mo</span>
+            <div>
+              <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 14, color: "var(--sb-ink)" }}>{opt.label}</span>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: "var(--sb-ok)", marginTop: 2 }}>1 hr base + {opt.hours - 1} extra</div>
+            </div>
+            <span style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, color: "var(--sb-ink)" }}>+${opt.price}/mo</span>
           </div>
         </ModalOptionCard>
       ))}
@@ -302,25 +312,25 @@ function VoiceModalContent({ current, onSave, onFree }: {
 
       {showCustom && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, marginBottom: 8 }}>
-          <input type="number" value={customHrs} onChange={e => setCustomHrs(e.target.value)} placeholder="e.g. 30" min={1} max={500}
+          <input type="number" value={customHrs} onChange={e => setCustomHrs(e.target.value)} placeholder="e.g. 30" min={2} max={500}
             style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1px solid var(--sb-line)", fontFamily: "'Inter', sans-serif", fontSize: 15, background: "var(--sb-bg)", color: "var(--sb-ink)", outline: "none" }}
             onFocus={e => (e.currentTarget.style.borderColor = CORAL)} onBlur={e => (e.currentTarget.style.borderColor = "var(--sb-line)")} />
-          <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--sb-ink-3)", whiteSpace: "nowrap" }}>hrs / mo</span>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--sb-ink-3)", whiteSpace: "nowrap" }}>hrs / mo total</span>
           {customHrs && Number(customHrs) > 0 && (
-            <span style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, color: CORAL, whiteSpace: "nowrap" }}>${customPrice}/mo</span>
+            <span style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, color: CORAL, whiteSpace: "nowrap" }}>+${customPrice}/mo</span>
           )}
         </div>
       )}
 
       <ModalFooter
-        onFree={() => { onSave({ hours: 0, price: 0 }); onFree(); }}
+        onFree={() => { onSave({ hours: 1, price: 0 }); onFree(); }}
         onAdd={() => {
           if (showCustom && Number(customHrs) > 0) { onSave({ hours: Number(customHrs), price: customPrice, isCustom: true }); onFree(); }
           else if (selected) { onSave({ hours: selected.hours, price: selected.price }); onFree(); }
         }}
         addLabel={
-          showCustom && customHrs && Number(customHrs) > 0 ? `Add ${customHrs} hrs — $${customPrice}/mo` :
-          selected ? `Add ${selected.label} — $${selected.price}/mo` : "Select an option above"
+          showCustom && customHrs && Number(customHrs) > 0 ? `Add ${customHrs} hrs total — +$${customPrice}/mo` :
+          selected ? `Add ${selected.label} — +$${selected.price}/mo` : "Select an option above"
         }
         addDisabled={!selected && !(showCustom && Number(customHrs) > 0)}
       />
@@ -331,31 +341,44 @@ function VoiceModalContent({ current, onSave, onFree }: {
 function DelegateModalContent({ current, onSave, onFree }: {
   current: DelegateSel; onSave: (s: DelegateSel) => void; onFree: () => void;
 }) {
-  const [sel, setSel] = useState<number>(DELEGATE_OPTIONS.findIndex(o => o.tasks === current?.tasks && o.price === current?.price));
+  const [unlimitedOn, setUnlimitedOn] = useState(current?.tasks === null);
+  const opt = DELEGATE_OPTIONS[0];
 
   return (
     <div>
-      <FreeBlock items={["25 Delegate tasks / month", "Web browsing, form filling, automation", "Full supervision mode"]} />
-
-      <UpgradeLabel>More tasks</UpgradeLabel>
-
-      {DELEGATE_OPTIONS.slice(1).map((opt, i) => (
-        <ModalOptionCard key={opt.label} selected={sel === i + 1} onClick={() => setSel(i + 1)}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: "var(--sb-ink)", marginBottom: 2 }}>{opt.label}</div>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: "var(--sb-ink-3)" }}>{opt.sub}</div>
-            </div>
-            <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, color: "var(--sb-ink)" }}>${opt.price}/mo</div>
+      <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(76,175,125,0.07)", border: "1px solid rgba(76,175,125,0.18)", marginBottom: 20 }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--sb-ok)", marginBottom: 8 }}>Included with Premium</div>
+        {["150 tasks / month", "Web browsing, form filling, automation", "Full supervision mode"].map((item, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: i < 2 ? 5 : 0 }}>
+            <span style={{ color: "var(--sb-ok)", marginTop: 1, flexShrink: 0 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg></span>
+            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-2)", lineHeight: 1.45 }}>{item}</span>
           </div>
-        </ModalOptionCard>
-      ))}
+        ))}
+      </div>
+
+      <UpgradeLabel>Need more?</UpgradeLabel>
+
+      <button
+        onClick={() => setUnlimitedOn(v => !v)}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderRadius: 12, border: unlimitedOn ? `1.5px solid ${CORAL}` : "1px solid var(--sb-line)", background: unlimitedOn ? `${CORAL}0e` : "var(--sb-bg)", cursor: "pointer", transition: "all .15s" }}
+      >
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: "var(--sb-ink)", marginBottom: 2 }}>Unlimited tasks</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: "var(--sb-ink-3)" }}>No cap — above Premium's 150</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontFamily: "'Instrument Serif', serif", fontSize: 20, color: unlimitedOn ? CORAL : "var(--sb-ink-3)" }}>+${opt.price}/mo</span>
+          <div style={{ width: 38, height: 21, borderRadius: 999, background: unlimitedOn ? CORAL : "var(--sb-line)", position: "relative", flexShrink: 0, transition: "background .2s" }}>
+            <div style={{ width: 15, height: 15, borderRadius: 999, background: "#fff", position: "absolute", top: 3, left: unlimitedOn ? 20 : 3, transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+          </div>
+        </div>
+      </button>
 
       <ModalFooter
-        onFree={() => { onSave({ tasks: 25, price: 0 }); onFree(); }}
-        onAdd={() => { const o = DELEGATE_OPTIONS[sel]; if (o) { onSave({ tasks: o.tasks, price: o.price }); onFree(); } }}
-        addLabel={sel > 0 ? `Add ${DELEGATE_OPTIONS[sel]?.label} — $${DELEGATE_OPTIONS[sel]?.price}/mo` : "Select an option above"}
-        addDisabled={sel <= 0}
+        onFree={() => { onSave({ tasks: 150, price: 0 }); onFree(); }}
+        onAdd={() => { onSave({ tasks: opt.tasks, price: opt.price }); onFree(); }}
+        addLabel={unlimitedOn ? `Add Unlimited tasks — +$${opt.price}/mo` : "Enable Unlimited above"}
+        addDisabled={!unlimitedOn}
       />
     </div>
   );
@@ -1197,7 +1220,7 @@ export default function BuildYourBraino() {
                 <VoiceModalContent current={voice} onSave={s => { setVoice(s); saveModule("voice"); }} onFree={() => { setVoice({ hours: 0, price: 0 }); saveModule("voice"); closeModal(); }} />
               )}
               {activeModal === 2 && (
-                <DelegateModalContent current={delegate} onSave={s => { setDelegate(s); saveModule("delegate"); }} onFree={() => { setDelegate({ tasks: 25, price: 0 }); saveModule("delegate"); closeModal(); }} />
+                <DelegateModalContent current={delegate} onSave={s => { setDelegate(s); saveModule("delegate"); }} onFree={() => { setDelegate({ tasks: 150, price: 0 }); saveModule("delegate"); closeModal(); }} />
               )}
               {activeModal === 3 && (
                 <IntegrationsModalContent
