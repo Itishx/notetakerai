@@ -1554,11 +1554,6 @@ export default function Dashboard() {
       toast({ title: "Write the post first", description: "Add some text before scheduling it." });
       return;
     }
-    if (content.length > 280) {
-      toast({ title: "Too long for X", description: "Keep the draft at 280 characters or fewer." });
-      return;
-    }
-
     const scheduledDate = new Date(xScheduledAt);
     if (Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
       toast({ title: "Pick a future time", description: "The scheduled time must be in the future." });
@@ -1618,10 +1613,7 @@ export default function Dashboard() {
       toast({ title: "Write the post first", description: "Add some text before posting it." });
       return;
     }
-    if (content.length > 280) {
-      toast({ title: "Too long for X", description: "Keep the draft at 280 characters or fewer." });
-      return;
-    }
+
 
     setXPostingNow(true);
     try {
@@ -3717,7 +3709,7 @@ export default function Dashboard() {
                         />
                         <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--sb-ink-3)]" style={monoStyle}>
                           <span>{xConn ? "Braino will send exactly this text." : "OAuth link required before the queue can post."}</span>
-                          <span className={cn(xPostDraft.length > 280 && "text-red-500")}>{xPostDraft.length}/280</span>
+                          <span>{xPostDraft.length} chars</span>
                         </div>
 
                         {/* Media attachment */}
