@@ -5928,13 +5928,13 @@ async function __sbProcessPrompt(text, options = {}) {
     : null;
   const intent = forceIntent || routing.intent;
 
-  // "What's new with you?" — Braino reads the changelog in first person, then flips the question back
-  if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you/i.test(promptText)) {
+  // "What's new / what's in you?" — Braino reads the changelog in first person, then flips the question back
+  if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you|what'?s?\s+in\s+you|what\s+(can|do)\s+you\s+(do|have)|what\s+are\s+you\s+capable|what\s+are\s+your\s+(features?|abilities|capabilities)|tell\s+me\s+(about\s+yourself|what\s+you\s+can\s+do)/i.test(promptText)) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
     __sbChatHistory.push({ role: "user", content: promptText });
-    const reply = "Oh, a lot actually! I just went through a complete rebrand — I'm officially Braino now, and trybraino.com just went live. In the past few days I got a whole physics engine: I can float, bounce when I land, and my pupils follow your cursor around. Then I got Movie Mode, where I detect what you're watching and glow with a little ambient halo that pulses with the content. I also got a full persona and voice system, so I can sound like different characters. And just now I can run 24/7 on X, write and post for you, create Google Docs from research in one shot, and even organise your entire Drive on command. It's been a wild week, honestly.\n\nBut enough about me — what's new with you?";
+    const reply = "Quite a bit, actually — here's what's new:\n\n**Fly mode** — Press Cmd+S and I'll follow your cursor around the screen like a little satellite. Press it again and I dock back to the corner.\n\n**Voice mode sees the page** — I can now read whatever you're looking at the moment you activate live voice. Ask me to summarise an article, explain something on screen, or answer a question about the page — I've got it.\n\n**Spotify control** — Tell me to play a song and I'll open Spotify in a new tab and start it. You can also say \"lower the volume\" or \"raise the volume\" and I'll handle that too.\n\n**Voice browsing theatrics** — When you ask me something in voice mode that needs a web search, I'll open a real Google tab so you can see me working. The answer still comes from AI search and I speak it back to you.\n\n**Live voice daily cap** — Realtime voice sessions are now tracked server-side with a 7-minute daily limit so things stay fair and fast.\n\nWhat do you want to try first?";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
