@@ -995,6 +995,10 @@ export default function Dashboard() {
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
+  const [voicePref, setVoicePref] = useState<"realtime" | "elevenlabs">(() => {
+    const stored = localStorage.getItem("brainoVoicePref");
+    return stored === "elevenlabs" ? "elevenlabs" : "realtime";
+  });
   const [overallMemory, setOverallMemory] = useState("");
   const [overallMemoryDraft, setOverallMemoryDraft] = useState("");
   const [overallMemorySaving, setOverallMemorySaving] = useState(false);
@@ -4621,21 +4625,51 @@ export default function Dashboard() {
                     Voice & language
                   </h3>
                   <p className="mb-5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    The extension owns playback and speech settings today. These controls will sync here soon.
+                    Choose which voice Braino uses in live voice mode. The realtime AI voice is low-latency; the ElevenLabs voice is Braino's signature sound.
                   </p>
 
                   <div className="space-y-3">
+                    {(["realtime", "elevenlabs"] as const).map((option) => {
+                      const isSelected = voicePref === option;
+                      const label = option === "realtime" ? "Realtime AI" : "Braino (ElevenLabs)";
+                      const desc = option === "realtime"
+                        ? "OpenAI's native voice — lowest latency, interruption-aware"
+                        : "Braino's signature ElevenLabs voice — richer, more character";
+                      return (
+                        <button
+                          key={option}
+                          onClick={() => {
+                            setVoicePref(option);
+                            localStorage.setItem("brainoVoicePref", option);
+                            window.postMessage({ type: "sbSetVoicePref", pref: option }, "*");
+                          }}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-xl border p-4 text-left transition",
+                            isSelected
+                              ? "border-[var(--sb-ink-3)] bg-[var(--sb-panel)]"
+                              : "border-[var(--sb-line-2)] bg-[var(--sb-panel)] opacity-60 hover:opacity-90",
+                          )}
+                        >
+                          <div>
+                            <div className="text-sm font-medium text-[var(--sb-ink)]">{label}</div>
+                            <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">{desc}</div>
+                          </div>
+                          <div className={cn(
+                            "h-4 w-4 rounded-full border-2 transition",
+                            isSelected ? "border-[var(--sb-ink)] bg-[var(--sb-ink)]" : "border-[var(--sb-ink-4)]",
+                          )} />
+                        </button>
+                      );
+                    })}
+
                     {[
-                      ["Voice", "Warm narrator default"],
                       ["Language", "English (US)"],
                       ["Speech rate", "1.0x - natural"],
                     ].map(([label, value]) => (
                       <div key={label} className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
                         <div>
                           <div className="text-sm font-medium text-[var(--sb-ink)]">{label}</div>
-                          <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
-                            {value}
-                          </div>
+                          <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">{value}</div>
                         </div>
                         <button className="rounded-full border border-[var(--sb-line)] px-3 py-1.5 text-xs text-[var(--sb-ink-3)] transition hover:border-[var(--sb-ink-4)] hover:text-[var(--sb-ink)]">
                           Soon

@@ -2199,6 +2199,14 @@ let __sbCursorFollowRaf = 0;
 let __sbCursorFollowNeedsFrame = false;
 let __sbCursorFollowPosition = null;
 
+// Dashboard (trybraino.com) can set voice preference via postMessage
+window.addEventListener("message", (event) => {
+  if (event.data?.type !== "sbSetVoicePref") return;
+  const pref = event.data.pref === "elevenlabs" ? "elevenlabs" : "realtime";
+  __sbVoiceOutputPref = pref;
+  chrome.storage.local.set({ brainoVoicePref: pref });
+});
+
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -6407,6 +6415,7 @@ let __sbRtDataChannel = null;
 let __sbRtMic = null;
 let __sbRtRemoteAudio = null;
 const __SB_REALTIME_VOICE = "verse";
+let __sbVoiceOutputPref = "realtime"; // "realtime" | "elevenlabs"
 let __sbRtUserTranscript = "";
 let __sbRtAssistantTranscript = "";
 let __sbRtResponseWaiter = null;
@@ -6538,12 +6547,13 @@ function __sbBuildRealtimeBootInstructions() {
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
+  const useElevenLabs = __sbVoiceOutputPref === "elevenlabs";
   return {
     type: "session.update",
     session: {
       type: "realtime",
       instructions,
-      output_modalities: ["audio"],
+      output_modalities: useElevenLabs ? ["text"] : ["audio"],
       reasoning: {
         effort: "low",
       },
@@ -6954,7 +6964,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
 }
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy") {
-  if (preferred === "realtime" && __sbIsRealtimeVoiceReady()) {
+  if (preferred === "realtime" && __sbIsRealtimeVoiceReady() && __sbVoiceOutputPref !== "elevenlabs") {
     const result = await __sbRequestRealtimeReply(text, { relayMode: true });
     if (result.status === "done") return true;
     if (result.status === "cancelled") return false;
@@ -7048,6 +7058,10 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     if (reply) {
       __sbChatHistory.push({ role: "assistant", content: reply });
       __sbCardTurns.push({ prompt: promptText, answer: reply });
+      // ElevenLabs mode: OpenAI returns text only, so we speak it ourselves
+      if (__sbVoiceOutputPref === "elevenlabs") {
+        await __sbSpeakText(reply);
+      }
     }
   } catch (err) {
     __sbShowVoiceError(err.message || "Live AI failed.");
@@ -7193,7 +7207,12 @@ function __sbEnterHeadphoneMode() {
 
   __sbSetHpBrainState("connecting");
   __sbSetVoiceStatusBadge("connecting", "Connecting…");
-  void __sbStartRealtimeVoice();
+
+  // Load voice output preference before starting the session
+  __sbStorageGet(["brainoVoicePref"]).then((stored) => {
+    __sbVoiceOutputPref = stored.brainoVoicePref === "elevenlabs" ? "elevenlabs" : "realtime";
+    void __sbStartRealtimeVoice();
+  });
 }
 
 function __sbExitHeadphoneMode() {
