@@ -14,7 +14,8 @@ import {
 type SpotifyPlaybackAction =
   | { action: "transfer"; deviceId: string; play?: boolean }
   | { action: "play"; deviceId?: string | null; uris?: string[]; contextUri?: string | null; offsetUri?: string | null; positionMs?: number | null }
-  | { action: "pause" | "next" | "previous"; deviceId?: string | null };
+  | { action: "pause" | "next" | "previous"; deviceId?: string | null }
+  | { action: "volume"; volumePercent: number; deviceId?: string | null };
 
 async function getFirstAvailableDeviceId(accessToken: string): Promise<string | null> {
   try {
@@ -128,6 +129,19 @@ serve(async (req) => {
       }
 
       return json({ ok: true });
+    }
+
+    if (payload.action === "volume") {
+      const volumePercent = Math.min(100, Math.max(0, Math.round(Number(payload.volumePercent) || 0)));
+      const deviceId = await resolveDeviceId(payload.deviceId ?? null);
+      const params = new URLSearchParams({ volume_percent: String(volumePercent) });
+      if (deviceId) params.set("device_id", deviceId);
+      await spotifyRequestRaw(
+        `https://api.spotify.com/v1/me/player/volume?${params}`,
+        { method: "PUT", headers: { Authorization: `Bearer ${accessToken}` } },
+        "spotify-playback",
+      );
+      return json({ ok: true, volumePercent });
     }
 
     const deviceId = await resolveDeviceId(payload.deviceId ?? null);

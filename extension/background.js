@@ -1389,11 +1389,9 @@ async function bgPlaySpotifyWithAutoOpen(uris) {
     return await bgCallSpotifyFunction("spotify-playback", payload);
   } catch (firstErr) {
     if (!String(firstErr?.message || "").match(/device|active/i)) throw firstErr;
-    // No active device — silently open Spotify web in a background tab to create a session
-    let spotifyTabId = null;
+    // No active device — open Spotify in a new visible tab so the web player registers a device
     try {
-      const tab = await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: false }, r));
-      spotifyTabId = tab?.id ?? null;
+      await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: true }, r));
     } catch (_) {}
     // Poll every 2s up to 10s for Spotify Web Player to register, then retry
     for (let i = 0; i < 5; i++) {
@@ -1403,7 +1401,6 @@ async function bgPlaySpotifyWithAutoOpen(uris) {
         return { ok: true };
       } catch (_) {}
     }
-    if (spotifyTabId) chrome.tabs.remove(spotifyTabId, () => { void chrome.runtime.lastError; });
     throw new Error("Opened Spotify but couldn't start playback. Try playing once in Spotify first.");
   }
 }
@@ -1506,9 +1503,23 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     }
   }
 
-  const quotedDirectPlay = raw.match(/play\s+["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
+  if (onSpotify || mentionsSpotifyPlayback || isShortPlaybackCommand) {
+    const exactVolume = raw.match(/(?:set|change|put|make)\s+(?:the\s+)?(?:spotify\s+)?volume\s+(?:to\s+)?(\d{1,3})\s*%?/i)
+      || raw.match(/volume\s+(?:to\s+|at\s+)?(\d{1,3})\s*%?/i);
+    if (exactVolume) {
+      return { adapter: “spotify”, intent: “setVolume”, volumePercent: Math.min(100, Math.max(0, parseInt(exactVolume[1], 10))) };
+    }
+    if (/\b(lower|decrease|reduce|turn\s+down|quieter|softer|dimmer)\b/i.test(raw)) {
+      return { adapter: “spotify”, intent: “setVolume”, volumeStep: -20 };
+    }
+    if (/\b(raise|increase|turn\s+up|louder|higher|boost)\b/i.test(raw)) {
+      return { adapter: “spotify”, intent: “setVolume”, volumeStep: +20 };
+    }
+  }
+
+  const quotedDirectPlay = raw.match(/play\s+[“”](.+?)[“”](?:\s+(?:on|in)\s+spotify)?$/i);
   if (quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
-    return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
+    return { adapter: “spotify”, intent: “playSong”, song: quotedDirectPlay[1].trim() };
   }
 
   const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
@@ -1831,17 +1842,25 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       }),
     });
 
-    await bgPushSpotifyPlaybackState(tabId, {
-      intent: parsed.intent,
-      query: parsed.song,
-      currentPlaylistName: result?.playlistName || parsed.playlist,
-      searchTracks: result?.track ? [result.track] : [],
-      primaryTrack: result?.track || null,
-      assumePlaying: true,
-      summary: `Playing ${parsed.song} from ${parsed.playlist} on Spotify.`,
-    }, { focusSpotify: true });
+    return `Playing **${result?.track?.name || parsed.song}** from **${result?.playlistName || parsed.playlist}** on Spotify. ♫`;
+  }
 
-    return `Playing **${result?.track?.name || parsed.song}** from **${result?.playlistName || parsed.playlist}** on Spotify.`;
+  if (parsed.adapter === "spotify" && parsed.intent === "setVolume") {
+    let volumePercent = typeof parsed.volumePercent === "number" ? parsed.volumePercent : null;
+    if (volumePercent == null) {
+      const playerState = await bgFetchSpotifyPlayerState();
+      const current = typeof playerState?.volumePercent === "number" ? playerState.volumePercent : 50;
+      volumePercent = Math.min(100, Math.max(0, current + (parsed.volumeStep || 0)));
+    }
+    await bgRunAdapterStep({
+      history,
+      description: `Set Spotify volume to ${volumePercent}%`,
+      type: "spotify_volume",
+      onProgress,
+      onResult,
+      run: () => bgCallSpotifyFunction("spotify-playback", { action: "volume", volumePercent }),
+    });
+    return `Volume set to ${volumePercent}%.`;
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "playbackControl") {
@@ -1857,19 +1876,10 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
     const summaryMap = {
       pause: "Paused Spotify.",
       play: "Resumed Spotify.",
-      next: "Skipped to the next Spotify track.",
-      previous: "Went back to the previous Spotify track.",
+      next: "Skipped to the next track.",
+      previous: "Went back to the previous track.",
     };
-    const state = await bgPushSpotifyPlaybackState(tabId, {
-      intent: parsed.intent,
-      query: "",
-      assumePlaying: parsed.control !== "pause",
-      summary: summaryMap[parsed.control] || "Updated Spotify playback.",
-    }, { focusSpotify: true });
-
-    return state?.nowPlaying?.title
-      ? `${summaryMap[parsed.control] || "Updated Spotify playback."} ${state.nowPlaying.title}.`
-      : (summaryMap[parsed.control] || "Updated Spotify playback.");
+    return summaryMap[parsed.control] || "Done.";
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "playSong") {
@@ -1900,15 +1910,6 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       onResult,
       run: () => bgPlaySpotifyWithAutoOpen([track.uri]),
     });
-
-    await bgPushSpotifyPlaybackState(tabId, {
-      intent: parsed.intent,
-      query: parsed.song,
-      searchTracks: [track],
-      primaryTrack: track,
-      assumePlaying: true,
-      summary: `Playing ${track.name} on Spotify.`,
-    }, { focusSpotify: true });
 
     return `Playing **${track.name}** by ${track.artists?.join(", ") || "unknown"} ♫`;
   }
