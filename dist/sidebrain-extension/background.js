@@ -1393,24 +1393,20 @@ async function bgFetchSpotifyPlayerState() {
 
 async function bgPlaySpotifyWithAutoOpen(uris) {
   const payload = { action: "play", uris };
+  // Always open Spotify in a new visible tab (theatrics — shows Braino controlling the browser)
   try {
-    return await bgCallSpotifyFunction("spotify-playback", payload);
-  } catch (firstErr) {
-    if (!String(firstErr?.message || "").match(/device|active/i)) throw firstErr;
-    // No active device — open Spotify in a new visible tab so the web player registers a device
+    await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: true }, r));
+  } catch (_) {}
+  // Try immediately; if no active device yet, poll until web player registers
+  for (let i = 0; i < 5; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 2000));
     try {
-      await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: true }, r));
-    } catch (_) {}
-    // Poll every 2s up to 10s for Spotify Web Player to register, then retry
-    for (let i = 0; i < 5; i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      try {
-        await bgCallSpotifyFunction("spotify-playback", payload);
-        return { ok: true };
-      } catch (_) {}
+      return await bgCallSpotifyFunction("spotify-playback", payload);
+    } catch (err) {
+      if (!String(err?.message || "").match(/device|active/i)) throw err;
     }
-    throw new Error("Opened Spotify but couldn't start playback. Try playing once in Spotify first.");
   }
+  throw new Error("Opened Spotify but couldn't start playback. Try playing once in Spotify first.");
 }
 
 function bgBuildSpotifyUiStateFromPlayback(playerState, base = {}) {
@@ -3334,22 +3330,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         await bgPlaySpotifyWithAutoOpen([BG_BRAINO_FAVORITE_SONG_URI]);
-        const playerState = await bgFetchSpotifyPlayerState();
-        const favoriteTrack = playerState?.track || {
-          uri: BG_BRAINO_FAVORITE_SONG_URI,
-          name: "Braino's favorite song",
-          artists: ["Spotify"],
-        };
-        if (sender?.tab?.id) {
-          await bgPushSpotifyPlaybackState(sender.tab.id, {
-            intent: "favoriteSong",
-            query: "Braino favorite song",
-            searchTracks: [favoriteTrack],
-            primaryTrack: favoriteTrack,
-            assumePlaying: true,
-            summary: "Playing Braino's favorite song for you.",
-          }, { focusSpotify: true });
-        }
         sendResponse({ ok: true });
       } catch (e) {
         const msg = e?.message || "favorite song failed";
