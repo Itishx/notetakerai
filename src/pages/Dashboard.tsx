@@ -3798,9 +3798,9 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {scheduledXPosts.length ? (
+                    {scheduledXPosts.filter((p) => p.status !== "cancelled").length ? (
                       <div className="space-y-3">
-                        {scheduledXPosts.map((post) => (
+                        {scheduledXPosts.filter((p) => p.status !== "cancelled").map((post) => (
                           <div key={post.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
                             <div className="flex items-start justify-between gap-3">
                               <p className="whitespace-pre-wrap text-[14px] leading-6 text-[var(--sb-ink)]">{post.content}</p>
