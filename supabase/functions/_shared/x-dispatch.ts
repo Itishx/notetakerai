@@ -6,6 +6,7 @@ type ScheduledXPost = {
   content: string;
   scheduled_at: string;
   media_url: string | null;
+  thread_mode: boolean;
 };
 
 type SupabaseLikeClient = {
@@ -67,7 +68,7 @@ export async function dispatchDueXPosts(options: DispatchDueXPostsOptions): Prom
   const limit = options.limit ?? 25;
   let query = options.supabase
     .from("scheduled_x_posts")
-    .select("id,user_id,content,scheduled_at,media_url")
+    .select("id,user_id,content,scheduled_at,media_url,thread_mode")
     .eq("status", "pending")
     .lte("scheduled_at", new Date().toISOString())
     .order("scheduled_at", { ascending: true })
@@ -137,8 +138,8 @@ export async function dispatchDueXPosts(options: DispatchDueXPostsOptions): Prom
         }
       }
 
-      // Split into thread chunks if over 280 chars
-      const chunks = splitIntoThreadChunks(post.content);
+      // Split into thread chunks only when thread_mode is enabled
+      const chunks = post.thread_mode ? splitIntoThreadChunks(post.content) : [post.content];
       let xPostId: string | null = null;
       let replyToId: string | null = null;
 

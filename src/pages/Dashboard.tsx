@@ -96,6 +96,7 @@ type ScheduledXPost = {
   created_at: string;
   updated_at: string;
   media_url: string | null;
+  thread_mode: boolean;
 };
 
 type XAutomationStats = {
@@ -1005,6 +1006,7 @@ export default function Dashboard() {
   const [xPostDraft, setXPostDraft] = useState("");
   const [xScheduledAt, setXScheduledAt] = useState(() => defaultScheduledAtValue());
   const [xScheduling, setXScheduling] = useState(false);
+  const [xThreadMode, setXThreadMode] = useState(false);
   const [xPostingNow, setXPostingNow] = useState(false);
   const [xPostMediaUrl, setXPostMediaUrl] = useState<string | null>(null);
   const [xMediaUploading, setXMediaUploading] = useState(false);
@@ -1570,6 +1572,7 @@ export default function Dashboard() {
           content,
           scheduled_at: scheduledDate.toISOString(),
           media_url: xPostMediaUrl ?? null,
+          thread_mode: xThreadMode,
         })
         .select()
         .single();
@@ -1626,6 +1629,7 @@ export default function Dashboard() {
           content,
           scheduled_at: dueAt,
           media_url: xPostMediaUrl ?? null,
+          thread_mode: xThreadMode,
         });
 
       if (error) throw error;
@@ -3732,6 +3736,30 @@ export default function Dashboard() {
                         <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--sb-ink-3)]" style={monoStyle}>
                           <span>{xConn ? "Braino will send exactly this text." : "OAuth link required before the queue can post."}</span>
                           <span>{xPostDraft.length} chars</span>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[12px] font-medium text-[var(--sb-ink)]">Thread mode</span>
+                            <span className="text-[11px] text-[var(--sb-ink-3)]" style={monoStyle}>
+                              {xThreadMode ? "Each paragraph → separate tweet" : "Post everything as one tweet"}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setXThreadMode((v) => !v)}
+                            disabled={!xConn}
+                            className={cn(
+                              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+                              xThreadMode ? "bg-[var(--sb-accent)]" : "bg-[var(--sb-line-2)]"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200",
+                                xThreadMode ? "translate-x-4" : "translate-x-0"
+                              )}
+                            />
+                          </button>
                         </div>
 
                         {/* Media attachment */}
