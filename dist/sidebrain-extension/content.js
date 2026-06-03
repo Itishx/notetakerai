@@ -6509,13 +6509,24 @@ function __sbBuildRealtimeTranscriptionPrompt() {
 }
 
 function __sbBuildRealtimeBootInstructions() {
+  const pageCtx = __sbGetPageContext(8000);
+  const pageLines = [];
+  if (pageCtx.url || pageCtx.title) {
+    pageLines.push(`The user is currently viewing: "${pageCtx.title || "Untitled"}" (${pageCtx.url || "unknown URL"})`);
+  }
+  if (pageCtx.text) {
+    pageLines.push(`Page content:\n${pageCtx.text}`);
+  }
+
   return [
     "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
     "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. Voice is only the medium here. You are still Braino.",
+    "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
     "Reply in the same language the user is currently using. Do not switch languages because of accents, names, quoted text, code, noise, or a few foreign words. If the user's language is mixed or unclear, ask one short clarification instead of guessing.",
     "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
     "If interrupted, stop immediately and wait for the user.",
-  ].join("\n\n");
+    ...pageLines,
+  ].filter(Boolean).join("\n\n");
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
@@ -6992,7 +7003,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
-  if (["agent", "web", "record"].includes(routing.intent)) {
+  if (["agent", "web", "record", "page"].includes(routing.intent)) {
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
@@ -7014,6 +7025,9 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 
   __sbRtHandlingConversationTurn = true;
   __sbChatHistory.push({ role: "user", content: promptText });
+
+  // Refresh page context in session instructions synchronously before the model responds
+  __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
 
   try {
     const realtimeResult = await __sbRequestRealtimeReply(promptText);
