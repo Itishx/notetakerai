@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: "/delegate", label: "Delegate" },
   { href: "/compare", label: "vs Claude" },
   { href: "/premium", label: "Pricing" },
+  { href: "/build-braino", label: "Build Yours" },
 ];
 
 const MoonIcon = () => (
