@@ -5957,23 +5957,17 @@ async function __sbProcessPrompt(text, options = {}) {
 
   // Braino's favorite song easter egg
   if (/\bfavou?rite\b/i.test(promptText)) {
-    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-    __sbShowThinking(scroll, promptText);
-    __sbOpenCard({ rich: true });
     const result = await new Promise(resolve =>
       chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r || {}))
     );
-    __sbChatHistory.push({ role: "user", content: promptText });
     const reply = result.ok
       ? "Playing my favorite song for you ♫"
       : result.error?.includes("device")
         ? "Open Spotify on your phone or desktop first, then ask me again ♫"
         : "Spotify isn't connected yet — [connect it here](https://trybraino.com/dashboard).";
+    __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: reply });
-    __sbCardTurns.push({ prompt: promptText, answer: reply });
-    const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-    __sbRenderCardHistory(scrollEl);
-    __sbOpenCard({ rich: true });
+    __sbShowBubble(reply, true, { rich: true });
     if (fromVoice) await speakVoiceReply(reply);
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;

@@ -3334,22 +3334,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         await bgPlaySpotifyWithAutoOpen([BG_BRAINO_FAVORITE_SONG_URI]);
-        const playerState = await bgFetchSpotifyPlayerState();
-        const favoriteTrack = playerState?.track || {
-          uri: BG_BRAINO_FAVORITE_SONG_URI,
-          name: "Braino's favorite song",
-          artists: ["Spotify"],
-        };
-        if (sender?.tab?.id) {
-          await bgPushSpotifyPlaybackState(sender.tab.id, {
-            intent: "favoriteSong",
-            query: "Braino favorite song",
-            searchTracks: [favoriteTrack],
-            primaryTrack: favoriteTrack,
-            assumePlaying: true,
-            summary: "Playing Braino's favorite song for you.",
-          }, { focusSpotify: true });
-        }
         sendResponse({ ok: true });
       } catch (e) {
         const msg = e?.message || "favorite song failed";
