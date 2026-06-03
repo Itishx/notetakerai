@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const STATS_URL = `${SUPABASE_URL}/functions/v1/x-auto-public-stats?username=brainosays`;
+const STATS_URL = `${SUPABASE_URL}/functions/v1/x-auto-public-stats?username=brainoai`;
 
 type PublicStats = {
   account: { username: string; display_name: string };
