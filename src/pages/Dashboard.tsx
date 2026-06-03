@@ -3803,7 +3803,7 @@ export default function Dashboard() {
                         {scheduledXPosts.map((post) => (
                           <div key={post.id} className="rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
                             <div className="flex items-start justify-between gap-3">
-                              <p className="text-[14px] leading-6 text-[var(--sb-ink)]">{post.content}</p>
+                              <p className="whitespace-pre-wrap text-[14px] leading-6 text-[var(--sb-ink)]">{post.content}</p>
                               <Badge
                                 variant="outline"
                                 className={cn(
