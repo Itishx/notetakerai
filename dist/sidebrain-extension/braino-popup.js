@@ -72,25 +72,34 @@ function fetchPageContext() {
   bpCtxChip.className = "bp-ctx-chip loading";
   if (!bpCtxTitle.textContent) bpCtxTitle.textContent = "Reading page…";
 
-  chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
-    if (chrome.runtime.lastError || res?.error || !res?.text) {
-      // Can't read page (restricted page or no content script)
-      bpCtxChip.className = "bp-ctx-chip error";
-      bpCtxTitle.textContent = "Can't read this page";
-      bpCtxUrl.textContent = "Restricted — switch to General Chat";
-      bpInput.placeholder = "Ask me anything… (page unavailable)";
-      return;
-    }
-    currentPageContext = { title: res.title, url: res.url, text: res.text };
-    bpCtxChip.className = "bp-ctx-chip ready";
-    bpCtxTitle.textContent = res.title || "Current page";
-    try {
-      bpCtxUrl.textContent = new URL(res.url || "").hostname || res.url;
-    } catch (_) {
-      bpCtxUrl.textContent = res.url || "";
-    }
-    bpInput.placeholder = "Ask about this page…";
-    bpBadge.textContent = "page";
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
+      if (chrome.runtime.lastError || res?.error || !res?.text) {
+        // Can't read page (restricted page or no content script)
+        bpCtxChip.className = "bp-ctx-chip error";
+        bpCtxTitle.textContent = "Can't read this page";
+        bpCtxUrl.textContent = "Restricted — switch to General Chat";
+        bpInput.placeholder = "Ask me anything… (page unavailable)";
+        resolve(null);
+        return;
+      }
+      currentPageContext = {
+        title: res.title,
+        url: res.url,
+        text: res.text,
+        hoveredContext: res.hoveredContext || null,
+      };
+      bpCtxChip.className = "bp-ctx-chip ready";
+      bpCtxTitle.textContent = res.title || "Current page";
+      try {
+        bpCtxUrl.textContent = new URL(res.url || "").hostname || res.url;
+      } catch (_) {
+        bpCtxUrl.textContent = res.url || "";
+      }
+      bpInput.placeholder = "Ask about this page…";
+      bpBadge.textContent = "page";
+      resolve(currentPageContext);
+    });
   });
 }
 
@@ -140,6 +149,10 @@ async function send() {
   const thinkingEl = addMessage("assistant", "Thinking…", { thinking: true });
 
   try {
+    if (currentMode === "page") {
+      await fetchPageContext().catch(() => null);
+    }
+
     const body = {
       message: text,
       chatHistory: chatHistory.slice(0, -1),

@@ -194,6 +194,42 @@ export type Database = {
         }
         Relationships: []
       }
+      realtime_voice_sessions: {
+        Row: {
+          allocated_ms: number
+          created_at: string
+          disconnect_reason: string | null
+          ended_at: string | null
+          id: string
+          last_heartbeat_at: string
+          started_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allocated_ms: number
+          created_at?: string
+          disconnect_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          last_heartbeat_at?: string
+          started_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allocated_ms?: number
+          created_at?: string
+          disconnect_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          last_heartbeat_at?: string
+          started_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       scheduled_reddit_posts: {
         Row: {
           agent_command_id: string | null

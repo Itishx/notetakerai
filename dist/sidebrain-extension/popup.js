@@ -22,6 +22,7 @@ let agentRunning = false;
 let agentShouldStop = false;
 let isPremium = false;
 let currentSelection = null; // { text, url, title } — last text the user highlighted on the page
+let realtimeContextSyncTimer = null;
 let sbXPersonaCache = null; // cached x_auto_persona for injecting context on X
 const VALID_AI_PROVIDERS = new Set(["lovable", "claude"]);
 const INTERNAL_PREMIUM_EMAILS = new Set([
@@ -1061,12 +1062,41 @@ function updateConvertButtonLabel() {
   convertBtn.innerHTML = `${CONVERT_BUTTON_ICON} ${label}`;
 }
 
-function applyPageContext(result) {
+function cloneHoveredContext(value) {
+  return value && typeof value === "object" ? { ...value } : null;
+}
+
+function buildHoveredContextPrompt(hoveredContext) {
+  if (!hoveredContext || typeof hoveredContext !== "object") return "";
+  const lines = [];
+  if (hoveredContext.tag) lines.push(`Element: <${hoveredContext.tag}>`);
+  if (hoveredContext.role) lines.push(`Role: ${hoveredContext.role}`);
+  if (hoveredContext.inputType) lines.push(`Input type: ${hoveredContext.inputType}`);
+  if (hoveredContext.label) lines.push(`Label: ${hoveredContext.label}`);
+  if (hoveredContext.text) lines.push(`Visible text: ${hoveredContext.text}`);
+  if (hoveredContext.heading) lines.push(`Nearby heading: ${hoveredContext.heading}`);
+  if (hoveredContext.nearbyText) lines.push(`Nearby content: ${hoveredContext.nearbyText}`);
+  if (hoveredContext.href) lines.push(`Link: ${hoveredContext.href}`);
+  return lines.join("\n");
+}
+
+function scheduleRealtimeVoiceContextSync(delay = 280) {
+  if (!voiceActive || !isRealtimeVoiceMode()) return false;
+  window.clearTimeout(realtimeContextSyncTimer);
+  realtimeContextSyncTimer = window.setTimeout(() => {
+    realtimeContextSyncTimer = null;
+    syncRealtimeVoiceSession();
+  }, delay);
+  return true;
+}
+
+function applyPageContext(result, options = {}) {
+  const syncRealtime = options.syncRealtime !== false;
   if (!result?.text) {
     currentPageContext = null;
     updateChatContextUI();
     updateVoicePageCtx();
-    if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
+    if (syncRealtime && voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
     return null;
   }
 
@@ -1075,22 +1105,25 @@ function applyPageContext(result) {
     url: result.url,
     text: result.text,
     faviconUrl: result.faviconUrl || "",
+    hoveredContext: cloneHoveredContext(result.hoveredContext),
   };
   updateChatContextUI();
   updateVoicePageCtx();
-  if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
+  if (syncRealtime && voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
   return currentPageContext;
 }
 
 
 // ===== PAGE CONTEXT =====
-function fetchPageContext() {
-  chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
-    if (chrome.runtime.lastError || res?.error || !res?.text) {
-      applyPageContext(null);
-      return;
-    }
-    applyPageContext(res);
+function fetchPageContext(options = {}) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "getPageContent" }, (res) => {
+      if (chrome.runtime.lastError || res?.error || !res?.text) {
+        resolve(applyPageContext(null, options));
+        return;
+      }
+      resolve(applyPageContext(res, options));
+    });
   });
 }
 
@@ -1705,6 +1738,8 @@ async function sendChatMessage(text, imageBase64) {
   }, 2000);
 
   try {
+    await fetchPageContext({ syncRealtime: false }).catch(() => null);
+
     const hasNotes = hasExistingNotes();
     const notesCtx = hasNotes ? buildNotesContextForAI(notesMarkdown) : { sanitizedNotes: "", existingImages: {} };
 
@@ -3694,6 +3729,12 @@ function buildRealtimeVoiceInstructions() {
     }
   }
 
+  const hoveredPrompt = buildHoveredContextPrompt(currentPageContext?.hoveredContext);
+  if (hoveredPrompt) {
+    lines.push("The user's cursor is currently hovering over this element. If they say \"this\", \"here\", or ask about what they're pointing at, treat it as the primary reference.");
+    lines.push(hoveredPrompt);
+  }
+
   if (hasExistingNotes()) {
     const notesCtx = buildNotesContextForAI(notesMarkdown);
     const notesText = truncateRealtimeContext(notesCtx.sanitizedNotes, REALTIME_NOTES_CONTEXT_LIMIT);
@@ -4089,9 +4130,8 @@ function handleRealtimeServerEvent(serverEvent) {
     if (!transcript) return;
     if (voiceUserText) voiceUserText.textContent = transcript;
     setCaption("");
-    requestVoicePageContext().finally(() => {
-      handleVoiceInput(transcript, { useRealtimeSpeech: true });
-    });
+    requestVoicePageContext(); // refresh in background; don't block response
+    handleVoiceInput(transcript, { useRealtimeSpeech: true });
     return;
   }
 
@@ -4462,6 +4502,17 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (voiceActive && isRealtimeVoiceMode()) syncRealtimeVoiceSession();
 });
 
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action !== "hoverContextChanged" || !currentPageContext) return;
+  currentPageContext = {
+    ...currentPageContext,
+    title: msg.title || currentPageContext.title,
+    url: msg.url || currentPageContext.url,
+    hoveredContext: cloneHoveredContext(msg.hoveredContext),
+  };
+  scheduleRealtimeVoiceContextSync();
+});
+
 // Detect if a voice command is a browser action request
 function isBrowserActionCommand(text) {
   return /\b(open|go to|navigate to|search for|play|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|visit|book)\b/i.test(text);
@@ -4485,8 +4536,10 @@ async function handleVoiceInput(text, { useRealtimeSpeech = isRealtimeVoiceMode(
   setOrbState("captured");
   if (voiceUserText) voiceUserText.textContent = text;
   setCaption("");
-  await new Promise(r => setTimeout(r, 800));
-  if (voiceHandlingToken !== myToken || !voiceActive) return;
+  if (!headphoneMode) {
+    await new Promise(r => setTimeout(r, 800));
+    if (voiceHandlingToken !== myToken || !voiceActive) return;
+  }
 
   setOrbState("processing");
   setCaption("Thinking…");
@@ -4531,6 +4584,8 @@ async function handleVoiceInput(text, { useRealtimeSpeech = isRealtimeVoiceMode(
       if (!headphoneMode) renderChatMessages();
     } else {
       // Use same rich context as sendChatMessage — notes + page context + chat history + mode
+      await fetchPageContext({ syncRealtime: false }).catch(() => null);
+
       const hasNotes = hasExistingNotes();
       const notesCtx = hasNotes ? buildNotesContextForAI(notesMarkdown) : { sanitizedNotes: "", existingImages: {} };
 

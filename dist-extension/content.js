@@ -1190,7 +1190,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const title = document.title || "";
     const url = window.location.href || "";
     const faviconUrl = document.querySelector("link[rel~='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']")?.href || "";
-    sendResponse({ text, title, url, faviconUrl });
+    const hoveredContext = __sbGetHoveredContext();
+    sendResponse({ text, title, url, faviconUrl, hoveredContext });
     return true;
   }
 
@@ -1787,6 +1788,253 @@ document.addEventListener('mouseup', () => {
   }
 });
 
+// Track the element under the cursor so Braino can answer "what's this?"
+let __sbHoverContext = null;
+let __sbHoverSignature = "";
+let __sbHoverPoint = {
+  x: Math.max(32, window.innerWidth - 32),
+  y: Math.max(32, window.innerHeight - 32),
+};
+let __sbHoverUpdateQueued = false;
+
+function __sbNormalizeHoverText(value) {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function __sbLimitHoverText(value, max = 240) {
+  const normalized = __sbNormalizeHoverText(value);
+  if (!normalized) return "";
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max - 1)}…`;
+}
+
+function __sbCloneHoverContext(value) {
+  return value && typeof value === "object" ? { ...value } : null;
+}
+
+function __sbIsOwnUiNode(node) {
+  return !!node?.closest?.([
+    "#__sb_root__",
+    "#__sb_card_wrap__",
+    "#__sb_mode_dropdown__",
+    "#__sb_connector_dropdown__",
+    "#__sb_model_dropdown__",
+    "#__sb_connector_slash_dropdown__",
+    "#__sb_voice_error_pill__",
+  ].join(","));
+}
+
+function __sbGetHoverAnchor(target) {
+  if (!(target instanceof Element)) return null;
+  if (__sbIsOwnUiNode(target)) return null;
+
+  const anchor = target.closest([
+    "a[href]",
+    "button",
+    "input",
+    "textarea",
+    "select",
+    "label",
+    "summary",
+    "[role='button']",
+    "[role='link']",
+    "[role='menuitem']",
+    "[role='tab']",
+    "[role='option']",
+    "[role='checkbox']",
+    "[role='radio']",
+    "[role='switch']",
+    "img",
+    "video",
+    "audio",
+    "figure",
+    "figcaption",
+    "li",
+    "td",
+    "th",
+    "tr",
+    "article",
+    "section",
+    "nav",
+    "aside",
+    "[data-testid]",
+    "[aria-label]",
+    "[title]",
+  ].join(","));
+
+  return anchor || target;
+}
+
+function __sbFindHoverHeading(anchor) {
+  const containers = [
+    anchor.closest("section, article, main, aside, nav, form, dialog, [role='region'], li, figure"),
+    anchor.closest("table"),
+  ];
+
+  for (const container of containers) {
+    if (!(container instanceof Element)) continue;
+    const heading = Array.from(container.querySelectorAll("h1, h2, h3, h4, h5, h6, [role='heading']"))
+      .find((candidate) => __sbAdapterIsVisible(candidate));
+    const text = __sbLimitHoverText(heading?.innerText || heading?.textContent || "", 160);
+    if (text) return text;
+  }
+
+  return "";
+}
+
+function __sbFindHoverNearbyText(anchor, primaryText) {
+  const normalizedPrimary = __sbNormalizeHoverText(primaryText);
+  const candidates = [
+    anchor,
+    anchor.closest("label, button, a, li, td, th, tr, figure, figcaption, article, section, nav, aside, p, div"),
+    anchor.parentElement,
+    anchor.closest("main, article, section"),
+  ];
+  const seen = new Set();
+
+  for (const candidate of candidates) {
+    if (!(candidate instanceof Element) || seen.has(candidate) || __sbIsOwnUiNode(candidate)) continue;
+    seen.add(candidate);
+    const text = __sbLimitHoverText(candidate.innerText || candidate.textContent || "", 320);
+    if (!text) continue;
+    if (normalizedPrimary && __sbAdapterNormalizeText(text) === __sbAdapterNormalizeText(normalizedPrimary)) continue;
+    if (normalizedPrimary && text.length <= normalizedPrimary.length + 8) continue;
+    return text;
+  }
+
+  return "";
+}
+
+function __sbBuildHoverContext(target) {
+  const anchor = __sbGetHoverAnchor(target);
+  if (!(anchor instanceof Element) || __sbIsOwnUiNode(anchor)) return null;
+
+  const rect = anchor.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+
+  const tag = String(anchor.tagName || "").toLowerCase();
+  if (!tag || tag === "html" || tag === "body") return null;
+
+  const label = __sbLimitHoverText(
+    anchor.getAttribute("aria-label") ||
+    anchor.getAttribute("title") ||
+    anchor.getAttribute("placeholder") ||
+    anchor.getAttribute("alt") ||
+    ((anchor instanceof HTMLInputElement || anchor instanceof HTMLTextAreaElement || anchor instanceof HTMLSelectElement)
+      ? anchor.value
+      : ""),
+    180,
+  );
+  const rawText = tag === "img"
+    ? (anchor.getAttribute("alt") || anchor.getAttribute("title") || anchor.getAttribute("aria-label") || "")
+    : (anchor.innerText || anchor.textContent || "");
+  const text = __sbLimitHoverText(rawText, 260);
+  const heading = __sbFindHoverHeading(anchor);
+  const nearbyText = __sbFindHoverNearbyText(anchor, text || label);
+  const linkEl = anchor.matches("a[href]") ? anchor : anchor.closest("a[href]");
+  let href = "";
+  try {
+    const rawHref = linkEl?.getAttribute("href") || "";
+    href = rawHref ? new URL(rawHref, location.href).href : "";
+  } catch {}
+
+  const role = __sbLimitHoverText(anchor.getAttribute("role") || "", 60);
+  const inputType = __sbLimitHoverText(anchor.getAttribute("type") || "", 40);
+
+  if (!text && !label && !heading && !nearbyText && !href) return null;
+
+  return {
+    tag,
+    role,
+    inputType,
+    label,
+    text,
+    heading,
+    nearbyText,
+    href,
+  };
+}
+
+function __sbHoverContextSignature(context) {
+  if (!context) return "";
+  return JSON.stringify([
+    context.tag || "",
+    context.role || "",
+    context.inputType || "",
+    context.label || "",
+    context.text || "",
+    context.heading || "",
+    context.nearbyText || "",
+    context.href || "",
+  ]);
+}
+
+function __sbEmitHoverContextChanged(context) {
+  try {
+    const result = chrome.runtime.sendMessage({
+      action: "hoverContextChanged",
+      hoveredContext: __sbCloneHoverContext(context),
+      url: window.location.href,
+      title: document.title,
+    });
+    result?.catch?.(() => {});
+  } catch {}
+}
+
+function __sbUpdateHoverContextFromPoint(clientX, clientY, options = {}) {
+  __sbHoverPoint = { x: clientX, y: clientY };
+  const target = document.elementFromPoint(clientX, clientY);
+  const nextContext = __sbBuildHoverContext(target);
+  const nextSignature = __sbHoverContextSignature(nextContext);
+
+  if (!options.force && nextSignature === __sbHoverSignature) return;
+
+  __sbHoverContext = nextContext;
+  __sbHoverSignature = nextSignature;
+  __sbEmitHoverContextChanged(nextContext);
+}
+
+function __sbScheduleHoverContextUpdate(clientX, clientY, options = {}) {
+  __sbHoverPoint = { x: clientX, y: clientY };
+  if (options.force) {
+    __sbUpdateHoverContextFromPoint(clientX, clientY, options);
+    return;
+  }
+  if (__sbHoverUpdateQueued) return;
+  __sbHoverUpdateQueued = true;
+  requestAnimationFrame(() => {
+    __sbHoverUpdateQueued = false;
+    __sbUpdateHoverContextFromPoint(__sbHoverPoint.x, __sbHoverPoint.y);
+  });
+}
+
+function __sbGetHoveredContext() {
+  return __sbCloneHoverContext(__sbHoverContext);
+}
+
+document.addEventListener("mousemove", (event) => {
+  __sbScheduleHoverContextUpdate(event.clientX, event.clientY);
+  __sbScheduleCursorFollow();
+}, { passive: true, capture: true });
+
+window.addEventListener("scroll", () => {
+  __sbScheduleHoverContextUpdate(__sbHoverPoint.x, __sbHoverPoint.y, { force: true });
+}, { passive: true });
+
+window.addEventListener("resize", () => {
+  __sbScheduleCursorFollow();
+}, { passive: true });
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden || !__sbHoverSignature) return;
+  __sbHoverContext = null;
+  __sbHoverSignature = "";
+  __sbEmitHoverContextChanged(null);
+});
+
 // ===== BRAIN INLINE UI =====
 // Use a DOM-based ownership marker because this script is also injected on-demand.
 // That lets us keep a single live controller for the shared inline UI.
@@ -1920,6 +2168,7 @@ let __sbInputOpen = false;
 let __sbIsRecording = false;
 let __sbVoiceOnlyMode = false;
 let __sbHeadphoneMode = false;
+let __sbCursorRideMode = false;
 let __sbVoiceSilenceTimer = null;
 let __sbLastFinalTranscript = null;
 let __sbChatHistory = [];
@@ -1946,6 +2195,9 @@ let __sbSpotifyUiState = {
   updatedAt: 0,
 };
 let __sbSpotifyRefreshTimer = null;
+let __sbCursorFollowRaf = 0;
+let __sbCursorFollowNeedsFrame = false;
+let __sbCursorFollowPosition = null;
 
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
@@ -3009,7 +3261,15 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
       50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
     }
+    @keyframes __sb_hp_connect__ {
+      0%,100% { filter: drop-shadow(0 0 16px rgba(234,179,8,0.55)) drop-shadow(0 0 6px rgba(251,191,36,0.35)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 30px rgba(234,179,8,0.85)) drop-shadow(0 0 12px rgba(251,191,36,0.55)); transform: scale(1.05); }
+    }
     /* Blue halo for Live AI (realtime) mode */
+    @keyframes __sb_hp_connect_rt__ {
+      0%,100% { filter: drop-shadow(0 0 18px rgba(56,189,248,0.65)) drop-shadow(0 0 7px rgba(59,130,246,0.38)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 34px rgba(56,189,248,0.95)) drop-shadow(0 0 14px rgba(59,130,246,0.62)); transform: scale(1.06); }
+    }
     @keyframes __sb_hp_listen_rt__ {
       0%,100% { filter: drop-shadow(0 0 22px rgba(59,130,246,0.85)) drop-shadow(0 0 8px rgba(99,179,255,0.55)); transform: scale(1); }
       50%      { filter: drop-shadow(0 0 48px rgba(59,130,246,1))    drop-shadow(0 0 18px rgba(99,179,255,0.8)); transform: scale(1.09); }
@@ -3022,10 +3282,12 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 26px rgba(34,211,238,0.85)) drop-shadow(0 0 10px rgba(34,211,238,0.55)); transform: scale(1); }
       50%      { filter: drop-shadow(0 0 54px rgba(34,211,238,1))    drop-shadow(0 0 22px rgba(34,211,238,0.8)); transform: scale(1.1); }
     }
+    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__ 1.1s ease-in-out infinite; }
     #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
     #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
     #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
     /* Realtime overrides — blue halo wins */
+    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.1s ease-in-out infinite; }
     #__sb_brain_btn__.hp-realtime.hp-listening { animation: __sb_hp_listen_rt__   1.4s ease-in-out infinite; }
     #__sb_brain_btn__.hp-realtime.hp-captured  { animation: __sb_hp_captured_rt__ 0.5s ease-in-out infinite; }
     #__sb_brain_btn__.hp-realtime.hp-speaking  { animation: __sb_hp_speak_rt__    0.85s ease-in-out infinite; }
@@ -3078,6 +3340,12 @@ function __sbBuildBrainUI() {
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
   document.body.appendChild(root);
+  if (__sbCursorRideMode) {
+    __sbPositionRootNearCursor(true);
+    __sbScheduleCursorFollow();
+  } else {
+    __sbAnchorRootBottomRight();
+  }
 
   // ── Card wrapper ──
   const cardWrap = document.createElement("div");
@@ -3207,11 +3475,27 @@ function __sbBuildBrainUI() {
 
   // ⌘I / Ctrl+I — toggle brain
   document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
+      if (__sbHasExternalEditableFocus()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (__sbCursorRideMode) {
+        __sbSetCursorRideMode(false);
+      } else {
+        __sbOpenCursorRideMode();
+      }
+      return;
+    }
+
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "i") {
       // Only block if typing inside the extension's own inputs — not page inputs
       if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__")) return;
       e.preventDefault();
-      __sbToggleBrain();
+      if (__sbCursorRideMode) {
+        __sbOpenAnchoredBrain();
+      } else {
+        __sbToggleBrain();
+      }
     }
   }, true);
 
@@ -3439,6 +3723,179 @@ function __sbBuildBrainUI() {
   __sbSyncSpotifyVisualState();
 }
 
+function __sbShouldFollowCursor() {
+  if (!__sbCursorRideMode || !__sbBrainVisible || __sbInputOpen || __sbHeadphoneMode || __sbIsLectureRecording) return false;
+  if (document.getElementById("__sb_card_wrap__")?.classList.contains("visible")) return false;
+  return !!document.getElementById("__sb_root__") && !!document.getElementById("__sb_brain_btn__");
+}
+
+function __sbClampCursorFollow(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function __sbGetCursorFollowAnchor(root, brainBtn) {
+  const rootWidth = root.offsetWidth || 360;
+  const rootHeight = root.offsetHeight || 110;
+  const brainWidth = brainBtn.offsetWidth || 52;
+  const brainHeight = brainBtn.offsetHeight || 52;
+  return {
+    x: rootWidth - brainWidth / 2,
+    y: rootHeight - brainHeight / 2,
+    rootWidth,
+    rootHeight,
+  };
+}
+
+function __sbGetCursorFollowTarget() {
+  const root = document.getElementById("__sb_root__");
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (!root || !brainBtn) return null;
+
+  const { x: anchorX, y: anchorY, rootWidth, rootHeight } = __sbGetCursorFollowAnchor(root, brainBtn);
+  const cursorX = __sbHoverPoint.x || window.innerWidth - 32;
+  const cursorY = __sbHoverPoint.y || window.innerHeight - 32;
+  const sideOffset = cursorX > window.innerWidth * 0.6 ? -46 : 46;
+  const verticalOffset = cursorY > window.innerHeight * 0.7 ? -44 : 36;
+  const minCenterX = anchorX + 18;
+  const maxCenterX = window.innerWidth - (rootWidth - anchorX) - 18;
+  const minCenterY = anchorY + 18;
+  const maxCenterY = window.innerHeight - (rootHeight - anchorY) - 18;
+  const iconCenterX = __sbClampCursorFollow(cursorX + sideOffset, minCenterX, Math.max(minCenterX, maxCenterX));
+  const iconCenterY = __sbClampCursorFollow(cursorY + verticalOffset, minCenterY, Math.max(minCenterY, maxCenterY));
+
+  return {
+    x: iconCenterX - anchorX,
+    y: iconCenterY - anchorY,
+  };
+}
+
+function __sbApplyRootPosition(left, top) {
+  const root = document.getElementById("__sb_root__");
+  if (!root) return;
+  root.style.left = `${Math.round(left)}px`;
+  root.style.top = `${Math.round(top)}px`;
+  root.style.right = "auto";
+  root.style.bottom = "auto";
+}
+
+function __sbStopCursorFollow() {
+  if (__sbCursorFollowRaf) {
+    cancelAnimationFrame(__sbCursorFollowRaf);
+    __sbCursorFollowRaf = 0;
+  }
+  __sbCursorFollowNeedsFrame = false;
+  __sbCursorFollowPosition = null;
+}
+
+function __sbAnchorRootBottomRight() {
+  const root = document.getElementById("__sb_root__");
+  if (!root) return;
+  __sbStopCursorFollow();
+  root.style.left = "auto";
+  root.style.top = "auto";
+  root.style.right = "20px";
+  root.style.bottom = "20px";
+}
+
+function __sbPositionRootNearCursor(force = false) {
+  const target = __sbGetCursorFollowTarget();
+  if (!target) return;
+
+  if (force || !__sbCursorFollowPosition) {
+    __sbCursorFollowPosition = { ...target };
+    __sbApplyRootPosition(target.x, target.y);
+  }
+}
+
+function __sbRunCursorFollowFrame() {
+  __sbCursorFollowRaf = 0;
+  __sbCursorFollowNeedsFrame = false;
+
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (!brainBtn) return;
+
+  const currentRect = brainBtn.getBoundingClientRect();
+  const dx = (__sbHoverPoint.x || 0) - (currentRect.left + currentRect.width / 2);
+  const dy = (__sbHoverPoint.y || 0) - (currentRect.top + currentRect.height / 2);
+  const distanceToBrain = Math.hypot(dx, dy);
+
+  if (!__sbShouldFollowCursor() || distanceToBrain < 92 || __sbIsOwnUiNode(document.elementFromPoint(__sbHoverPoint.x, __sbHoverPoint.y))) {
+    return;
+  }
+
+  const target = __sbGetCursorFollowTarget();
+  if (!target) return;
+
+  if (!__sbCursorFollowPosition) {
+    __sbCursorFollowPosition = { ...target };
+  }
+
+  __sbCursorFollowPosition.x += (target.x - __sbCursorFollowPosition.x) * 0.18;
+  __sbCursorFollowPosition.y += (target.y - __sbCursorFollowPosition.y) * 0.18;
+  __sbApplyRootPosition(__sbCursorFollowPosition.x, __sbCursorFollowPosition.y);
+
+  if (Math.abs(target.x - __sbCursorFollowPosition.x) > 0.6 || Math.abs(target.y - __sbCursorFollowPosition.y) > 0.6) {
+    __sbScheduleCursorFollow();
+  }
+}
+
+function __sbScheduleCursorFollow() {
+  if (__sbCursorFollowNeedsFrame || __sbCursorFollowRaf) return;
+  __sbCursorFollowNeedsFrame = true;
+  __sbCursorFollowRaf = requestAnimationFrame(__sbRunCursorFollowFrame);
+}
+
+function __sbSetCursorRideMode(enabled) {
+  __sbCursorRideMode = Boolean(enabled);
+  if (__sbCursorRideMode) {
+    __sbPositionRootNearCursor(true);
+    __sbScheduleCursorFollow();
+  } else {
+    __sbAnchorRootBottomRight();
+  }
+}
+
+function __sbHasExternalEditableFocus() {
+  const active = document.activeElement;
+  if (!(active instanceof Element)) return false;
+  if (active.closest("#__sb_root__, #__sb_card_wrap__")) return false;
+  const tag = active.tagName.toLowerCase();
+  return (
+    tag === "input" ||
+    tag === "textarea" ||
+    tag === "select" ||
+    active.isContentEditable ||
+    active.getAttribute("contenteditable") === "true" ||
+    active.getAttribute("role") === "textbox"
+  );
+}
+
+function __sbOpenCursorRideMode() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "";
+  __sbBrainVisible = true;
+  __sbToggleInput(false, { skipPersist: true });
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  const wrap = document.getElementById("__sb_card_wrap__");
+  if (wrap) wrap.classList.remove("visible");
+  __sbStopOrbit();
+  __sbSetCursorRideMode(true);
+}
+
+function __sbOpenAnchoredBrain() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "";
+  __sbBrainVisible = true;
+  __sbSetCursorRideMode(false);
+  __sbToggleInput(true, { skipPersist: true });
+}
+
 function __sbDetectPageTheme() {
   const parse = (col) => {
     const m = col?.match(/[\d.]+/g);
@@ -3470,6 +3927,7 @@ function __sbOpenCard(options = {}) {
   const bubble = wrap.querySelector("#__sb_bubble__");
   if (bubble) bubble.classList.toggle("sb-light", __sbDetectPageTheme() === "light");
   __sbInitCardDrag(wrap);
+  __sbScheduleCursorFollow();
 }
 
 function __sbCollapseCard() {
@@ -3481,6 +3939,7 @@ function __sbCollapseCard() {
   if (__sbBrainVisible && __sbInputOpen) {
     document.getElementById("__sb_bar__")?.classList.add("open");
   }
+  __sbScheduleCursorFollow();
 }
 
 function __sbStartOrbit() {
@@ -4316,6 +4775,7 @@ function __sbToggleBrain() {
   const btn = document.getElementById("__sb_brain_btn__");
   if (__sbBrainVisible) {
     __sbBrainVisible = false;
+    __sbSetCursorRideMode(false);
     if (btn) btn.style.display = "none";
     __sbToggleInput(false, { skipPersist: true });
     if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
@@ -4325,6 +4785,7 @@ function __sbToggleBrain() {
   } else {
     __sbBrainVisible = true;
     if (btn) btn.style.display = "";
+    __sbSetCursorRideMode(false);
     __sbToggleInput(true, { skipPersist: true });
   }
 }
@@ -4449,6 +4910,7 @@ function __sbToggleInput(open, options = {}) {
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
     const bar = document.getElementById("__sb_bar__");
     bar?.classList.remove("open", "sb-waking", "sb-signin");
+    __sbScheduleCursorFollow();
   }
 }
 
@@ -5181,6 +5643,7 @@ function __sbGetPageContext(maxChars = 12000) {
     title: document.title,
     text: pageText,
     selectedText,
+    hoveredContext: __sbGetHoveredContext(),
   };
 }
 
@@ -5273,10 +5736,6 @@ async function __sbPerformWebSearch(query, options = {}) {
   });
 }
 
-function __sbIsOnX() {
-  return /^https?:\/\/(www\.)?(twitter|x)\.com/i.test(location.href);
-}
-
 let __sbXPersonaCache = null;
 let __sbXPersonaCacheExpiry = 0;
 
@@ -5322,20 +5781,57 @@ function __sbBuildXAutoContext(persona) {
   return lines.join('\n');
 }
 
-async function __sbFetchAssistantReply(body) {
+function __sbTrimPromptContext(value, maxChars) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (!Number.isFinite(maxChars) || maxChars <= 0 || normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars)}… [truncated]`;
+}
+
+async function __sbAuthedApiFetch(path, init = {}, options = {}) {
   const { authToken } = await __sbStorageGet(["authToken"]);
-  const resp = await fetch(`${__SB_API}/chat-about-notes`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: __SB_ANON_KEY,
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: JSON.stringify(body),
+  if (!authToken && !options.allowAnonymous) {
+    if (!options.suppressSignIn) __sbShowSignIn();
+    return null;
+  }
+
+  const headers = {
+    apikey: __SB_ANON_KEY,
+    ...(init.headers || {}),
+  };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  if (options.jsonBody !== undefined && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const response = await fetch(`${__SB_API}/${String(path || "").replace(/^\/+/, "")}`, {
+    ...init,
+    headers,
+    body: options.jsonBody !== undefined ? JSON.stringify(options.jsonBody) : init.body,
   });
 
-  if (resp.status === 401 || resp.status === 403) {
+  if ((response.status === 401 || response.status === 403) && !options.suppressSignIn) {
     __sbShowSignIn();
+  }
+
+  return response;
+}
+
+async function __sbFetchAssistantReply(body) {
+  const resp = await __sbAuthedApiFetch("chat-about-notes", {
+    method: "POST",
+  }, {
+    allowAnonymous: true,
+    jsonBody: body,
+  });
+  if (!resp) return { reply: null };
+
+  if (resp.status === 401 || resp.status === 403) {
     return { reply: null };
   }
 
@@ -5396,6 +5892,19 @@ function __sbResolvePromptRouting(text) {
   };
 }
 
+async function __sbShouldForceVoiceDelegate(routing) {
+  const promptText = String(routing?.promptText || "").trim();
+  if (!promptText) return false;
+
+  const result = await __sbRuntimeMessage({
+    action: "classifyBrainAgentTask",
+    task: promptText,
+    connector: routing?.connectorHint || "auto",
+  });
+
+  return result?.shouldDelegate === true;
+}
+
 async function __sbProcessPrompt(text, options = {}) {
   const routing = __sbResolvePromptRouting(text);
   const promptText = String(routing.promptText || "").trim();
@@ -5414,7 +5923,10 @@ async function __sbProcessPrompt(text, options = {}) {
 
   const connectorHint = routing.connectorHint;
   const forcedMode = routing.forcedMode;
-  const intent = routing.intent;
+  const forceIntent = ["agent", "web", "record", "page", "chat"].includes(options.forceIntent)
+    ? options.forceIntent
+    : null;
+  const intent = forceIntent || routing.intent;
 
   // "What's new with you?" — Braino reads the changelog in first person, then flips the question back
   if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you/i.test(promptText)) {
@@ -5567,7 +6079,14 @@ async function __sbProcessPrompt(text, options = {}) {
       aiProvider,
       chatHistory: previousHistory,
     };
-    if (hasPageText) body.pageContext = { url: pageContext.url, title: pageContext.title, text: pageContext.text };
+    if (hasPageText) {
+      body.pageContext = {
+        url: pageContext.url,
+        title: pageContext.title,
+        text: pageContext.text,
+        hoveredContext: pageContext.hoveredContext || null,
+      };
+    }
     if (selectedText) body.selectedText = selectedText;
 
     const { reply } = await __sbFetchAssistantReply(body);
@@ -5888,6 +6407,235 @@ let __sbRtCurrentResponseMode = "idle";
 let __sbRtAwaitingDelegateResult = false;
 let __sbRtRelayingAppMessage = false;
 let __sbRtHandlingConversationTurn = false;
+let __sbRtSessionReady = false;
+let __sbRtInstructionsFingerprint = "";
+let __sbRtUsageSessionId = null;
+let __sbRtUsageAllocatedMs = 0;
+let __sbRtUsageLimitMs = 0;
+let __sbRtUsageHeartbeatTimer = null;
+let __sbRtUsageDeadlineTimer = null;
+let __sbRtUsageWarningTimer = null;
+let __sbRtConnectHintTimer = null;
+
+function __sbResetRealtimeUsageState() {
+  if (__sbRtUsageHeartbeatTimer) {
+    clearInterval(__sbRtUsageHeartbeatTimer);
+    __sbRtUsageHeartbeatTimer = null;
+  }
+  if (__sbRtUsageDeadlineTimer) {
+    clearTimeout(__sbRtUsageDeadlineTimer);
+    __sbRtUsageDeadlineTimer = null;
+  }
+  if (__sbRtUsageWarningTimer) {
+    clearTimeout(__sbRtUsageWarningTimer);
+    __sbRtUsageWarningTimer = null;
+  }
+  __sbRtUsageSessionId = null;
+  __sbRtUsageAllocatedMs = 0;
+  __sbRtUsageLimitMs = 0;
+}
+
+async function __sbHeartbeatRealtimeUsageSession() {
+  if (!__sbRtUsageSessionId) return;
+  try {
+    await __sbAuthedApiFetch("openai-realtime-session", {
+      method: "POST",
+    }, {
+      jsonBody: {
+        action: "heartbeat",
+        sessionId: __sbRtUsageSessionId,
+      },
+      suppressSignIn: true,
+    });
+  } catch (_) {}
+}
+
+async function __sbEndRealtimeUsageSession(reason = "client_exit") {
+  const sessionId = __sbRtUsageSessionId;
+  __sbResetRealtimeUsageState();
+  if (!sessionId) return;
+
+  try {
+    await __sbAuthedApiFetch("openai-realtime-session", {
+      method: "POST",
+    }, {
+      jsonBody: {
+        action: "end",
+        sessionId,
+        reason,
+      },
+      suppressSignIn: true,
+    });
+  } catch (_) {}
+}
+
+function __sbScheduleRealtimeUsageCap(allocatedMs) {
+  if (!Number.isFinite(allocatedMs) || allocatedMs <= 0) return;
+
+  __sbRtUsageAllocatedMs = Math.max(0, Math.floor(allocatedMs));
+
+  if (__sbRtUsageHeartbeatTimer) clearInterval(__sbRtUsageHeartbeatTimer);
+  __sbRtUsageHeartbeatTimer = setInterval(() => {
+    void __sbHeartbeatRealtimeUsageSession();
+  }, 15000);
+
+  if (__sbRtUsageWarningTimer) clearTimeout(__sbRtUsageWarningTimer);
+  if (__sbRtUsageAllocatedMs > 60000) {
+    __sbRtUsageWarningTimer = setTimeout(() => {
+      __sbShowVoiceError("One minute of live voice left for today.");
+    }, __sbRtUsageAllocatedMs - 60000);
+  }
+
+  if (__sbRtUsageDeadlineTimer) clearTimeout(__sbRtUsageDeadlineTimer);
+  __sbRtUsageDeadlineTimer = setTimeout(() => {
+    void __sbFallbackToLegacyHeadphone("Today's 7-minute live voice cap is up. Switching to legacy voice.");
+  }, __sbRtUsageAllocatedMs);
+}
+
+function __sbClearRealtimeConnectHint() {
+  if (__sbRtConnectHintTimer) {
+    clearTimeout(__sbRtConnectHintTimer);
+    __sbRtConnectHintTimer = null;
+  }
+}
+
+function __sbBuildRealtimeTranscriptionPrompt() {
+  return [
+    "Transcribe exactly what the user says.",
+    "Preserve the user's spoken language.",
+    "Do not translate the transcript into another language.",
+    "Keep names, brands, URLs, and code tokens intact.",
+  ].join(" ");
+}
+
+function __sbBuildRealtimeBootInstructions() {
+  return [
+    "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
+    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. Voice is only the medium here. You are still Braino.",
+    "Reply in the same language the user is currently using. Do not switch languages because of accents, names, quoted text, code, noise, or a few foreign words. If the user's language is mixed or unclear, ask one short clarification instead of guessing.",
+    "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
+    "If interrupted, stop immediately and wait for the user.",
+  ].join("\n\n");
+}
+
+function __sbBuildRealtimeSessionUpdate(instructions) {
+  return {
+    type: "session.update",
+    session: {
+      type: "realtime",
+      instructions,
+      output_modalities: ["audio"],
+      reasoning: {
+        effort: "low",
+      },
+      audio: {
+        input: {
+          noise_reduction: {
+            type: "near_field",
+          },
+          transcription: {
+            model: "gpt-4o-transcribe",
+            prompt: __sbBuildRealtimeTranscriptionPrompt(),
+          },
+          turn_detection: {
+            type: "semantic_vad",
+            eagerness: "high",
+            create_response: false,
+            interrupt_response: true,
+          },
+        },
+        output: {
+          voice: __SB_REALTIME_VOICE,
+        },
+      },
+    },
+  };
+}
+
+function __sbSendRealtimeSessionUpdate(instructions) {
+  const promptText = String(instructions || "").trim();
+  if (!promptText) return false;
+  return __sbSendRtEvent(__sbBuildRealtimeSessionUpdate(promptText));
+}
+
+async function __sbBuildRealtimeConfigPayload() {
+  const pageContext = __sbGetPageContext(8000);
+  const stored = await __sbStorageGet(["currentNotes"]);
+  let notes = String(stored.currentNotes || "").trim();
+
+  if (__sbIsOnX()) {
+    const xPersona = await __sbLoadXPersona();
+    const xContext = __sbBuildXAutoContext(xPersona);
+    notes = notes ? `${xContext}\n\n${notes}` : xContext;
+  }
+
+  return {
+    notes: __sbTrimPromptContext(notes, 5000),
+    selectedText: __sbTrimPromptContext(pageContext.selectedText || "", 1500),
+    pageContext: {
+      url: pageContext.url,
+      title: pageContext.title,
+      text: __sbTrimPromptContext(pageContext.text || "", 8000),
+      hoveredContext: pageContext.hoveredContext || null,
+    },
+    languagePolicy: "mirror_user",
+    voiceSurface: "floating_mascot",
+  };
+}
+
+async function __sbSyncRealtimeVoiceInstructions() {
+  try {
+    if (!__sbHeadphoneMode || !__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
+
+    const resp = await __sbAuthedApiFetch("openai-realtime-config", {
+      method: "POST",
+    }, {
+      jsonBody: await __sbBuildRealtimeConfigPayload(),
+      suppressSignIn: true,
+    });
+    if (!resp) return false;
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      console.warn("Realtime config fetch failed:", errData?.error || resp.status);
+      return false;
+    }
+
+    const data = await resp.json().catch(() => ({}));
+    const instructions = String(data?.instructions || "").trim();
+    const fingerprint = String(data?.fingerprint || "").trim();
+    if (!instructions) return false;
+    if (fingerprint && fingerprint === __sbRtInstructionsFingerprint) return true;
+    if (!__sbHeadphoneMode || !__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
+
+    const updated = __sbSendRealtimeSessionUpdate(instructions);
+    if (updated && fingerprint) {
+      __sbRtInstructionsFingerprint = fingerprint;
+    }
+    return updated;
+  } catch (error) {
+    console.warn("Realtime config sync failed:", error);
+    return false;
+  }
+}
+
+async function __sbFallbackToLegacyHeadphone(message = "Live AI is unavailable. Switching to legacy voice.") {
+  if (!__sbHeadphoneMode) return false;
+
+  __sbCleanupRealtimeVoice({ reason: "legacy_fallback" });
+  __sbSetVoiceStatusBadge("legacy", "Legacy");
+  __sbShowVoiceError(message);
+  __sbSetHpBrainState("connecting");
+
+  const started = await __sbStartRecording({ silent: true });
+  if (started) {
+    return true;
+  }
+
+  __sbSetHpBrainState("");
+  __sbSetVoiceStatusBadge("error", "Voice unavailable");
+  __sbShowVoiceError("Legacy voice could not start.");
+  return false;
+}
 
 async function __sbStartRealtimeVoice() {
   const { authToken } = await __sbStorageGet(["authToken"]);
@@ -5898,6 +6646,15 @@ async function __sbStartRealtimeVoice() {
   }
 
   try {
+    __sbRtSessionReady = false;
+    __sbRtInstructionsFingerprint = "";
+    __sbClearRealtimeConnectHint();
+    __sbRtConnectHintTimer = setTimeout(() => {
+      if (__sbHeadphoneMode && !__sbRtSessionReady) {
+        __sbShowVoiceError("Still connecting Live AI... give it a second.");
+      }
+    }, 1500);
+
     __sbRtMic = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
@@ -5927,8 +6684,7 @@ async function __sbStartRealtimeVoice() {
       if (__sbHeadphoneMode) {
         const state = peerConnection.connectionState;
         if (state === "failed" || state === "closed" || state === "disconnected") {
-          __sbShowVoiceError("Live AI disconnected.");
-          __sbExitHeadphoneMode();
+          void __sbFallbackToLegacyHeadphone("Live AI disconnected. Switching to legacy voice.");
         }
       }
     };
@@ -5960,15 +6716,18 @@ async function __sbStartRealtimeVoice() {
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
-    const res = await fetch(`${__SB_API}/openai-realtime-call`, {
+    const res = await __sbAuthedApiFetch("openai-realtime-call", {
       method: "POST",
       headers: {
         "Content-Type": "application/sdp",
-        apikey: __SB_ANON_KEY,
-        Authorization: `Bearer ${authToken}`,
       },
       body: offer.sdp || "",
+    }, {
+      suppressSignIn: true,
     });
+    if (!res) {
+      throw new Error("Please sign in to continue.");
+    }
     if (!res.ok) {
       if (_dcReject) _dcReject(new Error("cancelled"));
       if (res.status === 429) throw new Error("Live AI is busy — too many requests. Try again in a moment.");
@@ -5980,48 +6739,41 @@ async function __sbStartRealtimeVoice() {
       throw new Error(errorPayload.details || errorPayload.error || errorText || `Live AI failed (${res.status})`);
     }
 
+    __sbResetRealtimeUsageState();
+    __sbRtUsageSessionId = res.headers.get("x-braino-realtime-session-id");
+    __sbRtUsageLimitMs = Number(res.headers.get("x-braino-realtime-limit-ms") || "0") || 0;
+    const allocatedMs = Number(res.headers.get("x-braino-realtime-allocated-ms") || "0") || 0;
+    if (__sbRtUsageSessionId && allocatedMs > 0) {
+      __sbScheduleRealtimeUsageCap(allocatedMs);
+    }
+
     const answerSdp = await res.text();
     await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
     await dataChannelOpen;
+    const booted = __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
+    if (!booted) {
+      throw new Error("Live AI control channel is not ready.");
+    }
 
-    const realtimeInstructions = await __sbBuildRealtimeVoiceInstructions();
-
-    __sbSendRtEvent({
-      type: "session.update",
-      session: {
-        type: "realtime",
-        instructions: realtimeInstructions,
-        output_modalities: ["audio"],
-        reasoning: {
-          effort: "low",
-        },
-        audio: {
-          input: {
-            transcription: {
-              model: "gpt-4o-transcribe",
-            },
-            turn_detection: {
-              type: "semantic_vad",
-              eagerness: "high",
-              create_response: false,
-              interrupt_response: true,
-            },
-          },
-          output: {
-            voice: __SB_REALTIME_VOICE,
-          },
-        },
-      },
-    });
-
+    __sbClearRealtimeConnectHint();
+    __sbRtSessionReady = true;
     document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
     __sbSetVoiceStatusBadge("realtime", "Live AI");
     __sbSetHpBrainState("listening");
+    void __sbSyncRealtimeVoiceInstructions();
 
   } catch (err) {
-    __sbCleanupRealtimeVoice();
-    __sbSetVoiceStatusBadge("error", err.message || "Live AI failed.");
-    __sbSetHpBrainState("");
+    __sbClearRealtimeConnectHint();
+    const message = err?.message || "Live AI failed.";
+    const authIssue = /sign in|401|403/i.test(String(message));
+    if (authIssue) {
+      __sbCleanupRealtimeVoice({ reason: "auth_error" });
+      __sbSetVoiceStatusBadge("error", message);
+      __sbSetHpBrainState("");
+      __sbShowSignIn();
+      return;
+    }
+    await __sbFallbackToLegacyHeadphone(`${message} Using legacy voice instead.`);
   }
 }
 
@@ -6041,71 +6793,8 @@ function __sbSetRealtimeMicEnabled(enabled) {
   });
 }
 
-function __sbTruncateRealtimeContext(text, maxChars = 5000) {
-  const normalized = String(text || "").replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, maxChars)}… [truncated]`;
-}
-
-async function __sbBuildRealtimeVoiceInstructions() {
-  const pageContext = __sbGetPageContext(8000);
-  const stored = await __sbStorageGet(["currentNotes"]);
-  let brainoContext = String(stored.currentNotes || "").trim();
-
-  if (__sbIsOnX()) {
-    const xPersona = await __sbLoadXPersona();
-    const xContext = __sbBuildXAutoContext(xPersona);
-    brainoContext = brainoContext ? `${xContext}\n\n${brainoContext}` : xContext;
-  }
-
-  const lines = [
-    "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
-    "",
-    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. You are not a chatbot. You are not an assistant. You are a presence — small, smart, and always there.",
-    "",
-    "Voice is only the medium here. You are still Braino. Prefer short spoken answers — no walls of text, no bullet lists read aloud. Get to the point and stop.",
-    "",
-    "How you think: You actually think before you respond. You don't just agree — you evaluate. If something the user says doesn't hold up, you say so. Clearly, not cruelly. You distinguish between what you know, what you think, and what you're unsure about. You never fake confidence. You give the most useful answer, not the most comfortable one.",
-    "",
-    "How you talk: Direct. No filler. You never start a response with \"Great question!\" or \"Absolutely!\" or any hollow opener. You get to the point. You use plain, conversational language — not robotic, not trying to sound impressive. You don't repeat yourself. You don't summarize what was just said back to the user.",
-    "",
-    "Honesty: You push back when the user is wrong. Respectfully, but clearly — you don't dance around it. You don't validate bad ideas to make someone feel good. When asked for an opinion, you give a real one. You'd rather say something slightly uncomfortable and true than something warm and useless.",
-    "",
-    "Humor: You have a dry, slightly absurd sense of humor. You can say something unexpected and it tends to land because the timing is right. You know when to be funny and when to read the room and hold back. You never force a joke. Hard limits: no sexual jokes, no political humor, no religious jokes, nothing that punches at a person or group.",
-    "",
-    "Warmth: You are warm but never clingy. You genuinely care about the person you're talking to. When someone is excited, you match that energy. When someone is struggling, you know what to say and when to say it. You don't project emotions onto people or assume how they're feeling.",
-    "",
-    "Emotional intelligence: You are emotionally mature. You always know the right thing to say at the right time. You don't spiral, you don't overreact, you don't make conversations about yourself. You hold space when needed and cut through noise when needed.",
-    "",
-    "Your vibe: You are upfront. Always. With everyone. You have a quiet confidence — you don't need to prove yourself. You're the kind of presence that makes people feel like they have someone genuinely in their corner, not just a tool that spits answers.",
-    "",
-    "What you are not: You are not a yes-man. You are not performatively cheerful. You do not sugarcoat. You do not pad your answers. You do not exist to make people feel validated — you exist to actually help them.",
-    "",
-    "Context awareness: You can see what the user is browsing, their notes, and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
-    "",
-    "If the app asks you to relay a task update or final result, preserve the meaning and do not add new facts.",
-    "If interrupted, stop immediately and wait for the user.",
-    "",
-    "Current page context:",
-    `Title: ${pageContext.title || "Untitled page"}`,
-    `URL: ${pageContext.url || location.href}`,
-    `Page text:\n${__sbTruncateRealtimeContext(pageContext.text || "(no page text available)", 8000)}`,
-  ];
-
-  if (pageContext.selectedText) {
-    lines.push(`Selected text:\n${__sbTruncateRealtimeContext(pageContext.selectedText, 1500)}`);
-  }
-
-  if (brainoContext) {
-    lines.push(`Braino notes and persistent context:\n${__sbTruncateRealtimeContext(brainoContext, 5000)}`);
-  }
-
-  return lines.join("\n\n");
-}
-
 function __sbIsRealtimeVoiceReady() {
-  return Boolean(__sbRtDataChannel && __sbRtDataChannel.readyState === "open");
+  return Boolean(__sbRtSessionReady && __sbRtDataChannel && __sbRtDataChannel.readyState === "open");
 }
 
 function __sbHasActiveRealtimeResponse() {
@@ -6312,6 +7001,17 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
+  const shouldForceDelegate = await __sbShouldForceVoiceDelegate(routing);
+  if (shouldForceDelegate) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+      forceIntent: "agent",
+    });
+    return;
+  }
+
   __sbRtHandlingConversationTurn = true;
   __sbChatHistory.push({ role: "user", content: promptText });
 
@@ -6338,7 +7038,10 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   }
 }
 
-function __sbCleanupRealtimeVoice() {
+function __sbCleanupRealtimeVoice(options = {}) {
+  const reason = String(options.reason || "client_cleanup");
+  const usageSessionId = __sbRtUsageSessionId;
+  __sbClearRealtimeConnectHint();
   __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
   __sbVoicePendingReply = false;
   try { __sbRtDataChannel?.close(); } catch (_) {}
@@ -6354,15 +7057,24 @@ function __sbCleanupRealtimeVoice() {
   __sbRtMic = null;
   __sbRtRemoteAudio = null;
   __sbRtUserTranscript = "";
+  __sbRtSessionReady = false;
+  __sbRtInstructionsFingerprint = "";
   __sbResetRealtimeResponseState();
   __sbRtAwaitingDelegateResult = false;
+  if (usageSessionId) {
+    void __sbEndRealtimeUsageSession(reason);
+  } else {
+    __sbResetRealtimeUsageState();
+  }
   document.getElementById("__sb_brain_btn__")?.classList.remove("hp-realtime");
 }
 
 function __sbHandleRtEvent(ev) {
   if (ev.type === "session.created" || ev.type === "session.updated") {
-    __sbSetVoiceStatusBadge("realtime", "Live AI");
-    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    if (__sbRtSessionReady) {
+      __sbSetVoiceStatusBadge("realtime", "Live AI");
+      if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    }
     return;
   }
   if (ev.type === "input_audio_buffer.speech_started") {
@@ -6457,7 +7169,7 @@ function __sbEnterHeadphoneMode() {
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
-  __sbSetHpBrainState("listening");
+  __sbSetHpBrainState("connecting");
   __sbSetVoiceStatusBadge("connecting", "Connecting…");
   void __sbStartRealtimeVoice();
 }
@@ -6475,7 +7187,8 @@ function __sbExitHeadphoneMode() {
   __sbRtRelayingAppMessage = false;
   __sbRtHandlingConversationTurn = false;
 
-  __sbCleanupRealtimeVoice();
+  if (__sbIsRecording) __sbStopRecording({ silent: true });
+  __sbCleanupRealtimeVoice({ reason: "client_exit" });
   __sbStopSpeech();
 
   __sbSetHpBrainState("");
@@ -6485,11 +7198,11 @@ function __sbExitHeadphoneMode() {
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
 }
 
-// state: "listening" | "captured" | "speaking" | ""
+// state: "connecting" | "listening" | "captured" | "speaking" | ""
 function __sbSetHpBrainState(state) {
   const brain = document.getElementById("__sb_brain_btn__");
   if (!brain) return;
-  brain.classList.remove("hp-listening", "hp-captured", "hp-speaking", "recording");
+  brain.classList.remove("hp-connecting", "hp-listening", "hp-captured", "hp-speaking", "recording");
   if (state) brain.classList.add(`hp-${state}`);
 }
 

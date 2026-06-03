@@ -501,6 +501,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+  if (message.action === "classifyBrainAgentTask") {
+    (async () => {
+      const task = String(message.task || "").trim();
+      if (!task) {
+        sendResponse({ shouldDelegate: false, matched: null });
+        return;
+      }
+
+      const senderTabId = sender?.tab?.id || null;
+      const activeTabId = senderTabId || await bgGetActiveTabId();
+      const siteContext = activeTabId ? await bgGetSiteAdapterContext(activeTabId) : { site: "generic", url: "", title: "" };
+      const connectorHint = message.connector;
+      const parsed = bgParseAdapterTask(task, siteContext, connectorHint);
+      const fastActions = bgTryFastPath(task, []);
+      const looksLikeBrowserTask = bgLooksLikeBrowserTask(task);
+
+      sendResponse({
+        shouldDelegate: Boolean(parsed || fastActions || looksLikeBrowserTask),
+        matched: parsed
+          ? "adapter"
+          : fastActions
+            ? "fastpath"
+            : looksLikeBrowserTask
+              ? "browser-task"
+              : null,
+        adapter: parsed?.adapter || null,
+        intent: parsed?.intent || null,
+      });
+    })();
+    return true;
+  }
   if (
     message.action === "agentAction" ||
     message.action === "getAgentPageContext" ||
@@ -1637,6 +1668,17 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   return null;
 }
 
+function bgLooksLikeBrowserTask(task) {
+  const raw = String(task || "").trim();
+  if (!raw) return false;
+
+  const strongImperative = /^(?:open|go to|navigate to|visit|search|find|look up|pull up|bring up|take me to|show me|create|make|draft|compose|send|reply|play|pause|resume|continue|next|skip|previous|prev|book|buy|order|post|tweet|get directions|show directions|route|move|rename|delete|remove|archive|label|organize|organise)\b/i.test(raw);
+  if (!strongImperative) return false;
+
+  const actionableTarget = /\b(gmail|email|google drive|drive|spotify|youtube|netflix|google docs?|docs?\.new|google sheets?|sheets?\.new|google slides?|slides?\.new|maps?|directions?|calendar|flight|flights|hotel|hotels|restaurant|restaurants|whatsapp|x|twitter|linkedin|amazon|reddit)\b/i.test(raw);
+  return actionableTarget;
+}
+
 async function bgBuildArticleDraftFromSearch(topic) {
   const searchData = await bgPerformRealWebSearch(topic, { purpose: "google_doc" });
   if (searchData?.error) throw new Error(searchData.error);
@@ -2242,6 +2284,24 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
 function bgTryFastPath(task, history) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
+  if (/^(?:open|go to)\s+gmail\b/i.test(task)) {
+    return [{ type: "navigate", url: "https://mail.google.com/mail/u/0/#inbox", description: "Open Gmail" }];
+  }
+  if (/^(?:open|go to)\s+(?:google\s+)?drive\b/i.test(task)) {
+    return [{ type: "navigate", url: "https://drive.google.com", description: "Open Google Drive" }];
+  }
+  if (/^(?:open|go to)\s+(?:google\s+)?calendar\b/i.test(task)) {
+    return [{ type: "navigate", url: "https://calendar.google.com/calendar/u/0/r", description: "Open Google Calendar" }];
+  }
+  if (/^(?:new|create|open)\s+(?:a\s+)?google doc\b|^(?:new|open)\s+docs\.new\b/i.test(task)) {
+    return [{ type: "navigate", url: "https://docs.new", description: "Open a new Google Doc" }];
+  }
+  if (/^(?:new|create|open)\s+(?:a\s+)?google sheet\b|^(?:new|open)\s+sheets\.new\b/i.test(task)) {
+    return [{ type: "navigate", url: "https://sheets.new", description: "Open a new Google Sheet" }];
+  }
+  if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
+    return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
+  }
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
     const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
@@ -2256,6 +2316,37 @@ function bgTryFastPath(task, history) {
   if (gMatch) {
     const q = encodeURIComponent((gMatch[1] || gMatch[2]).trim());
     return [{ type: "navigate", url: `https://www.google.com/search?q=${q}`, description: `Google search` }];
+  }
+  const spotifyMatch = t.match(/search\s+(.+?)\s+on\s+spotify/i) || t.match(/spotify\s+search\s+(.+)/i);
+  if (spotifyMatch) {
+    const query = (spotifyMatch[1] || spotifyMatch[2] || "").trim();
+    const q = encodeURIComponent(query);
+    return [{ type: "navigate", url: `https://open.spotify.com/search/${q}`, description: `Search Spotify for "${query}"` }];
+  }
+  const netflixMatch = t.match(/search\s+(.+?)\s+on\s+netflix/i) || t.match(/netflix\s+search\s+(.+)/i);
+  if (netflixMatch) {
+    const query = (netflixMatch[1] || netflixMatch[2] || "").trim();
+    const q = encodeURIComponent(query);
+    return [{ type: "navigate", url: `https://www.netflix.com/search?q=${q}`, description: `Search Netflix for "${query}"` }];
+  }
+  const mapDirectionsMatch = t.match(/(?:directions|route)\s+from\s+(.+?)\s+to\s+(.+)/i);
+  if (mapDirectionsMatch) {
+    const origin = encodeURIComponent(mapDirectionsMatch[1].trim());
+    const destination = encodeURIComponent(mapDirectionsMatch[2].trim());
+    return [{
+      type: "navigate",
+      url: `https://www.google.com/maps/dir/${origin}/${destination}`,
+      description: `Open directions from "${mapDirectionsMatch[1].trim()}" to "${mapDirectionsMatch[2].trim()}"`,
+    }];
+  }
+  const mapsSearchMatch = t.match(/(?:search|find|look up)\s+(.+?)\s+on\s+(?:google\s+)?maps/i);
+  if (mapsSearchMatch) {
+    const query = encodeURIComponent(mapsSearchMatch[1].trim());
+    return [{
+      type: "navigate",
+      url: `https://www.google.com/maps/search/${query}`,
+      description: `Search Google Maps for "${mapsSearchMatch[1].trim()}"`,
+    }];
   }
   if (/^scroll\s+(down|up)/.test(t)) {
     const dir = t.includes("up") ? "up" : "down";

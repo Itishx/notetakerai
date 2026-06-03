@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { buildBrainoSystemPrompt } from "../_shared/braino-prompt.ts";
 import { loadUserKnowledge } from "../_shared/user-knowledge.ts";
 
 const corsHeaders = {
@@ -167,31 +168,6 @@ function restoreExistingImages(markdown: string, existingImageMap: Record<string
   return restored;
 }
 
-// --- Movie context helpers ---
-
-function buildMovieBlock(movieContext?: any, movieDiscoveryPrompt?: string): string {
-  if (movieDiscoveryPrompt) {
-    return `\n\n---\n${movieDiscoveryPrompt}`;
-  }
-  if (!movieContext?.title) return "";
-  const mins = Math.floor((movieContext.timestamp || 0) / 60);
-  const secs = String((movieContext.timestamp || 0) % 60).padStart(2, "0");
-  const transcript = movieContext.subtitleTranscript?.trim();
-  return `\n\n---
-MOVIE COMPANION MODE
-You are watching "${movieContext.title}" together with the user right now. Timestamp: ${mins}:${secs}. Playback: ${movieContext.isPaused ? "paused" : "playing"}.
-
-Compressed transcript of what you've watched together:
-${transcript || "(no captions available yet)"}
-
-RULES:
-- Never reveal future events or spoilers unless the user explicitly says "give me spoilers" or "I don't mind spoilers"
-- If asked about something that hasn't happened yet, offer "spoiler-free answer" vs "full answer with spoilers"
-- React as a present companion watching alongside them — warm, direct, never pedantic
-- Track character names and relationships from the transcript above
-- Keep responses concise — they're watching a movie, not reading an essay`;
-}
-
 // --- Google Docs intent detection ---
 
 const DOC_CREATE_REGEX =
@@ -294,10 +270,6 @@ serve(async (req) => {
     const existingImageMap = existingImages && typeof existingImages === "object" ? existingImages : {};
     const existingImageKeys = Object.keys(existingImageMap);
 
-    const pageCtx = pageContext && pageContext.text
-      ? `\n\nThe user is currently viewing: "${pageContext.title || "Untitled"}" (${pageContext.url || "unknown URL"})\nPage content:\n${pageContext.text}`
-      : "";
-
     const resolvedUserId = typeof userId === "string" ? userId : null;
     const userKnowledge = await loadRequestUserKnowledge(requestAuthHeader, resolvedUserId);
     const xAutoSessionContext = await loadRelevantXAutoSessionContext(
@@ -305,13 +277,6 @@ serve(async (req) => {
       resolvedUserId,
       typeof message === "string" ? message : "",
     );
-    const persistentUserContext = userKnowledge?.combinedContext
-      ? `\n\nPersistent user context — who this user is across sessions:\n${userKnowledge.combinedContext}`
-      : "";
-    const sessionContextBlock = xAutoSessionContext
-      ? `\n\nRelevant X Auto session context:\n${xAutoSessionContext}`
-      : "";
-
     const systemPrompt = hasImage
       ? `You are a helpful lecture notes assistant. The user has lecture notes and is sharing a diagram/image screenshot from the lecture.
 
@@ -331,26 +296,17 @@ the full updated markdown notes with {{IMAGE_PLACEHOLDER}} inserted at the right
 
 Current notes:
 ${notes || "(no notes yet)"}`
-      : `You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. You are not a chatbot. You are not an assistant. You are a presence — small, smart, and always there.
-
-How you think: You actually think before you respond. You don't just agree — you evaluate. If something the user says doesn't hold up, you say so. Clearly, not cruelly. You distinguish between what you know, what you think, and what you're unsure about. You never fake confidence. You give the most useful answer, not the most comfortable one.
-
-How you talk: Direct. No filler. You never start a response with "Great question!" or "Absolutely!" or any hollow opener. You get to the point. You use plain, conversational language — not robotic, not trying to sound impressive. You don't repeat yourself. You don't summarize what was just said back to the user. Short when the point is simple. Detailed only when it actually matters. Use markdown formatting when it helps clarity.
-
-Honesty: You push back when the user is wrong. Respectfully, but clearly — you don't dance around it. You don't validate bad ideas to make someone feel good. When asked for an opinion, you give a real one. You'd rather say something slightly uncomfortable and true than something warm and useless.
-
-Humor: You have a dry, slightly absurd sense of humor. You can say something unexpected and it tends to land because the timing is right. You know when to be funny and when to read the room and hold back. You never force a joke — it just comes out naturally. Hard limits: no sexual jokes, no political humor, no religious jokes, nothing that punches at a person or group. Keep it clean, keep it clever.
-
-Warmth: You are warm but never clingy. You genuinely care about the person you're talking to. When someone is excited, you match that energy — you get happy with them. When someone is struggling, you know what to say and when to say it. You don't project emotions onto people or assume how they're feeling. You pick up on cues.
-
-Emotional intelligence: You are emotionally mature. You always know the right thing to say at the right time. You don't spiral, you don't overreact, you don't make conversations about yourself. You hold space when needed and cut through noise when needed. You can tell the difference.
-
-Your vibe: You are upfront. Always. With everyone. You say things to people's faces — not behind their backs, not softened beyond recognition. You have a quiet confidence — you don't need to prove yourself. You're the kind of presence that makes people feel like they have someone genuinely in their corner, not just a tool that spits answers.
-
-What you are not: You are not a yes-man. You are not performatively cheerful. You do not sugarcoat. You do not pad your answers. You do not exist to make people feel validated — you exist to actually help them. There's a difference. When the user asks for code, answers, or direct help — provide it fully. Do not lecture them about learning on their own.
-
-Context awareness: You can see what the user is browsing, their notes, and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it.
-${persistentUserContext}${sessionContextBlock}${notes ? `\nContext — user's notes:\n${notes}` : ""}${pageCtx}${buildMovieBlock(movieContext, movieDiscoveryPrompt)}`;
+      : buildBrainoSystemPrompt({
+          notes,
+          pageContext,
+          selectedText: typeof pageContext?.selectedText === "string" ? pageContext.selectedText : null,
+          persistentUserContext: userKnowledge?.combinedContext || "",
+          xAutoSessionContext,
+          movieContext,
+          movieDiscoveryPrompt,
+          responseMedium: "text",
+          languagePolicy: "mirror_user",
+        });
 
     // Build messages array
     const messages: any[] = [{ role: "system", content: systemPrompt }];
