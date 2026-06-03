@@ -58,9 +58,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "sidepanel.html",
-        "popup.js",
-        "styles.css",
         "offscreen.html",
         "offscreen.js",
         "fonts/*",
