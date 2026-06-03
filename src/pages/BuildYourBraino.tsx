@@ -942,6 +942,7 @@ export default function BuildYourBraino() {
           0%, 100% { transform: translateY(0); }
           50%       { transform: translateY(7px); }
         }
+        .byb-chips::-webkit-scrollbar { display: none; }
       `}</style>
 
       {/* ── PRICING TIERS ─────────────────────────────────────── */}
@@ -1137,55 +1138,55 @@ export default function BuildYourBraino() {
       {hasSaved && activeModal === null && (
         <div style={{
           position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)",
-          zIndex: 90, background: "var(--sb-ink)", borderRadius: 999,
-          padding: isMobile ? "10px 16px" : "12px 14px 12px 18px",
-          display: "flex", alignItems: "center", gap: isMobile ? 10 : 14,
-          boxShadow: "0 8px 40px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.15)",
-          maxWidth: "calc(100vw - 32px)",
+          zIndex: 90, background: "var(--sb-ink)", borderRadius: 20,
+          padding: "10px 10px 10px 16px",
+          display: "flex", alignItems: "center", gap: 10,
+          boxShadow: "0 8px 40px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.18)",
+          maxWidth: "calc(100vw - 32px)", minWidth: 0,
         }}>
-          {/* On mobile show count pill; on desktop show full chips */}
-          {isMobile ? (
-            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "rgba(255,255,255,0.85)" }}>
-              {saved.size} / 6 configured
-            </span>
-          ) : (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {MODULES.filter(m => saved.has(m.key)).map(m => {
-                const priceMap: Record<ModuleKey, number> = {
-                  intel: intel && intel.tier !== "standard" ? intel.price : 0,
-                  voice: voice && voice.hours > 0 ? voice.price : 0,
-                  delegate: delegate?.price ?? 0,
-                  integrations: 0,
-                  xAuto: (xAuto && xAuto.price > 0 ? xAuto.price : 0) + (xMgmt?.price ?? 0),
-                  basics: 0,
-                  music: 0,
-                  entertainment: 0,
-                };
-                const price = priceMap[m.key];
-                return (
-                  <span key={m.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 999, background: "rgba(255,255,255,0.1)", fontFamily: "'Inter', sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.85)" }}>
-                    {m.label}
-                    <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: price > 0 ? CORAL_LIGHT : "rgba(76,175,125,0.9)" }}>
-                      {price > 0 ? `$${price}` : "free"}
-                    </span>
+          {/* Scrollable chips — single row, no wrap */}
+          <div className="byb-chips" style={{ display: "flex", gap: 5, overflowX: "auto", flexShrink: 1, minWidth: 0, scrollbarWidth: "none" }}>
+            {MODULES.filter(m => saved.has(m.key)).map(m => {
+              const priceMap: Record<ModuleKey, number> = {
+                intel: intel && intel.tier !== "standard" ? intel.price : 0,
+                voice: voice && voice.hours > 0 ? voice.price : 0,
+                delegate: delegate?.price ?? 0,
+                integrations: 0,
+                xAuto: (xAuto && xAuto.price > 0 ? xAuto.price : 0) + (xMgmt?.price ?? 0),
+                basics: 0, music: 0, entertainment: 0,
+              };
+              const price = priceMap[m.key];
+              return (
+                <span key={m.key} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 11px", borderRadius: 999, background: "rgba(255,255,255,0.09)", fontFamily: "'Inter', sans-serif", fontSize: 12, color: "rgba(255,255,255,0.8)", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {m.label}
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: price > 0 ? CORAL_LIGHT : "rgba(76,175,125,0.85)" }}>
+                    {price > 0 ? `+$${price}` : "✓"}
                   </span>
-                );
-              })}
-            </div>
-          )}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-            <div>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>Total</div>
-              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: isMobile ? 18 : 22, color: "#fff", lineHeight: 1 }}>
-                ${30 + paidTotal}<span style={{ fontSize: isMobile ? 12 : 14, color: "rgba(255,255,255,0.45)", fontFamily: "'Inter', sans-serif" }}>/mo</span>
-              </div>
-              {paidTotal > 0 && (
-                <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
-                  $30 + ${paidTotal} extras
-                </div>
-              )}
+                </span>
+              );
+            })}
+          </div>
+
+          {/* Divider */}
+          <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.1)", flexShrink: 0 }} />
+
+          {/* Total */}
+          <div style={{ flexShrink: 0, textAlign: "right" }}>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 8.5, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 1 }}>Total</div>
+            <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 20, color: "#fff", lineHeight: 1 }}>
+              ${30 + paidTotal}<span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", fontFamily: "'Inter', sans-serif" }}>/mo</span>
             </div>
           </div>
+
+          {/* Build It button */}
+          <Link
+            to="/auth?redirect=/premium"
+            style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", padding: "10px 18px", borderRadius: 12, fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, background: CORAL, color: "#fff", textDecoration: "none", transition: "opacity .15s", whiteSpace: "nowrap" }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+          >
+            Build It →
+          </Link>
         </div>
       )}
 
