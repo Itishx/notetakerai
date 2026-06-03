@@ -115,7 +115,6 @@ export async function dispatchDueXPosts(options: DispatchDueXPostsOptions): Prom
       if (connectionError) throw connectionError;
       if (!connection?.access_token) throw new Error("No linked X account for this user.");
       if (!post.content?.trim()) throw new Error("Scheduled post is empty.");
-      if (post.content.length > 280) throw new Error("Scheduled post exceeds 280 characters.");
 
       let accessToken = connection.access_token;
       const expiresAt = connection.token_expires_at ? new Date(connection.token_expires_at).getTime() : 0;
@@ -138,43 +137,49 @@ export async function dispatchDueXPosts(options: DispatchDueXPostsOptions): Prom
         }
       }
 
-      // Upload media to X if attached, then include media_id in tweet
-      const tweetBody: Record<string, unknown> = { text: post.content };
-      if (post.media_url) {
-        const mediaId = await uploadMediaToX(post.media_url, accessToken);
-        if (mediaId) {
-          tweetBody.media = { media_ids: [mediaId] };
+      // Split into thread chunks if over 280 chars
+      const chunks = splitIntoThreadChunks(post.content);
+      let xPostId: string | null = null;
+      let replyToId: string | null = null;
+
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const tweetBody: Record<string, unknown> = { text: chunks[ci] };
+        if (replyToId) {
+          tweetBody.reply = { in_reply_to_tweet_id: replyToId };
+        } else if (post.media_url) {
+          const mediaId = await uploadMediaToX(post.media_url, accessToken);
+          if (mediaId) tweetBody.media = { media_ids: [mediaId] };
         }
+
+        const response = await fetch("https://api.x.com/2/tweets", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(tweetBody),
+        });
+
+        const raw = await response.text();
+        let payload: Record<string, unknown> | null = null;
+        try { payload = raw ? JSON.parse(raw) : null; } catch { payload = null; }
+
+        if (!response.ok) {
+          const message =
+            (payload?.detail as string | undefined) ||
+            (payload?.title as string | undefined) ||
+            raw ||
+            "Unknown X API error";
+          throw new Error(message);
+        }
+
+        const tweetId = (payload?.data as { id?: string } | undefined)?.id;
+        if (!tweetId) throw new Error("X API response did not include a post ID.");
+        if (!xPostId) xPostId = tweetId;
+        replyToId = tweetId;
       }
 
-      const response = await fetch("https://api.x.com/2/tweets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(tweetBody),
-      });
-
-      const raw = await response.text();
-      let payload: Record<string, unknown> | null = null;
-      try {
-        payload = raw ? JSON.parse(raw) : null;
-      } catch {
-        payload = null;
-      }
-
-      if (!response.ok) {
-        const message =
-          (payload?.detail as string | undefined) ||
-          (payload?.title as string | undefined) ||
-          raw ||
-          "Unknown X API error";
-        throw new Error(message);
-      }
-
-      const xPostId = (payload?.data as { id?: string } | undefined)?.id;
-      if (!xPostId) throw new Error("X API response did not include a post ID.");
+      if (!xPostId) throw new Error("No tweet ID returned.");
 
       const { error: updateError } = await options.supabase
         .from("scheduled_x_posts")
@@ -210,6 +215,44 @@ export async function dispatchDueXPosts(options: DispatchDueXPostsOptions): Prom
     failed,
     results,
   };
+}
+
+function splitIntoThreadChunks(text: string, limit = 280): string[] {
+  if (text.length <= limit) return [text];
+  const paragraphs = text.split(/\n\n+/);
+  const chunks: string[] = [];
+  let current = "";
+
+  const flush = (s: string) => { if (s.trim()) chunks.push(s.trim()); };
+
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+
+    const candidate = current ? `${current}\n\n${trimmed}` : trimmed;
+    if (candidate.length <= limit) {
+      current = candidate;
+      continue;
+    }
+
+    // paragraph doesn't fit — flush current, then fit words of this paragraph
+    flush(current);
+    current = "";
+
+    const words = trimmed.split(/\s+/);
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word;
+      if (next.length <= limit) {
+        current = next;
+      } else {
+        flush(current);
+        current = word.slice(0, limit);
+      }
+    }
+  }
+
+  flush(current);
+  return chunks;
 }
 
 async function uploadMediaToX(mediaUrl: string, accessToken: string): Promise<string | null> {
