@@ -6642,7 +6642,10 @@ async function __sbSyncRealtimeVoiceInstructions() {
     }
     return updated;
   } catch (error) {
-    console.warn("Realtime config sync failed:", error);
+    // Suppress plain network failures (function not deployed yet) — boot instructions cover the fallback
+    if (!(error instanceof TypeError)) {
+      console.warn("Realtime config sync failed:", error);
+    }
     return false;
   }
 }
