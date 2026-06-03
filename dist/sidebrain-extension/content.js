@@ -5170,7 +5170,8 @@ async function __sbSpeakText(text) {
       audio.play().catch(reject);
     });
     spoke = true;
-  } catch (_err) {
+  } catch (ttsErr) {
+    console.warn("[Braino] ElevenLabs TTS failed, using browser voice:", ttsErr?.message || ttsErr);
     spoke = await __sbSpeakWithBrowser(clean);
   } finally {
     if (__sbCurrentSpeechAudio) {
@@ -6912,12 +6913,13 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
   __sbRtRelayingAppMessage = relayMode;
   __sbRtHandlingConversationTurn = !relayMode;
 
+  const rtOutputModalities = __sbVoiceOutputPref === "elevenlabs" ? ["text"] : ["audio"];
   const responsePromise = __sbCreateRtWaiter();
   const responseCreated = relayMode
     ? __sbSendRtEvent({
         type: "response.create",
         response: {
-          output_modalities: ["audio"],
+          output_modalities: rtOutputModalities,
           input: [
             {
               type: "message",
@@ -6949,7 +6951,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
       __sbSendRtEvent({
         type: "response.create",
         response: {
-          output_modalities: ["audio"],
+          output_modalities: rtOutputModalities,
         },
       })
     );
