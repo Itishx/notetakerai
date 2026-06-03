@@ -1900,6 +1900,13 @@ const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
 
+// Pupils shifted up-left to look toward top-left (center of screen when brain is at bottom-right)
+const __SB_BRAIN_SVG_LISTENING = __SB_BRAIN_SVG
+  .replace('<circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/>',
+           '<circle cx="36.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="37.2" cy="45.1" r="1.1" fill="white"/>')
+  .replace('<circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
+           '<circle cx="60.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="61.2" cy="45.1" r="1.1" fill="white"/>');
+
 const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
   .replace('<circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
     '<circle cx="38" cy="48" r="6.5" fill="white"/><path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/><circle cx="62" cy="48" r="6.5" fill="white"/><path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/>')
@@ -3174,6 +3181,15 @@ function __sbBuildBrainUI() {
   // Brain hidden by default
   document.getElementById("__sb_brain_btn__").style.display = "none";
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
+    if (__sbIsLectureRecording) {
+      const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
+      if (cardOpen) {
+        __sbCollapseCard();
+      } else {
+        __sbShowLectureRecordingCard();
+      }
+      return;
+    }
     if (__sbHeadphoneMode && !__sbInputOpen) {
       // Open bar so user can stop headphone mode via the headphone button
       __sbToggleInput(true);
@@ -5710,7 +5726,8 @@ async function __sbStartLectureRecording() {
     return;
   }
 
-  document.getElementById("__sb_brain_btn__")?.classList.add("recording");
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (brainBtn) { brainBtn.classList.add("recording"); brainBtn.innerHTML = __SB_BRAIN_SVG_LISTENING; }
   __sbShowLectureRecordingBar(false);
   __sbShowLectureRecordingCard();
 
@@ -5763,7 +5780,8 @@ async function __sbCaptureLectureSegment() {
 
 async function __sbStopLectureRecording() {
   if (__sbLectureInterval) { clearInterval(__sbLectureInterval); __sbLectureInterval = null; }
-  document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
+  const brainBtnStop = document.getElementById("__sb_brain_btn__");
+  if (brainBtnStop) { brainBtnStop.classList.remove("recording"); brainBtnStop.innerHTML = __SB_BRAIN_SVG; }
   __sbShowLectureRecordingBar(false);
   __sbIsLectureRecording = false;
 
