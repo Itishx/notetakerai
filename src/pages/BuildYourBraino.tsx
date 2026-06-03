@@ -755,6 +755,13 @@ export default function BuildYourBraino() {
   const [saved,        setSaved]        = useState<Set<ModuleKey>>(new Set());
   const [activeModal,  setActiveModal]  = useState<number | null>(null);
   const [hoveredNode,  setHoveredNode]  = useState<number | null>(null);
+  const [isMobile,     setIsMobile]     = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   // Hide the global floating mascot — it conflicts with the brain visualization
   useEffect(() => {
@@ -801,29 +808,33 @@ export default function BuildYourBraino() {
 
       {/* ── BRAIN SECTION (full page) ─────────────────────────── */}
       <section style={{
-        padding: `96px 0 ${hasSaved ? 120 : 80}px`,
+        padding: isMobile ? "64px 0 56px" : `96px 0 ${hasSaved ? 120 : 80}px`,
         background: "linear-gradient(180deg, #0E0A07 0%, #130D09 60%, #0E0A07 100%)",
         overflow: "hidden", position: "relative",
-        minHeight: "100vh",
+        minHeight: isMobile ? "auto" : "100vh",
         display: "flex", flexDirection: "column", justifyContent: "center",
       }}>
-        <div style={{ ...wrap, textAlign: "center" }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", color: `${CORAL_LIGHT}70`, marginBottom: 20 }}>
+        <div style={{ ...wrap, padding: isMobile ? "0 16px" : "0 32px", textAlign: "center" }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: isMobile ? 10 : 11, letterSpacing: "0.2em", textTransform: "uppercase", color: `${CORAL_LIGHT}70`, marginBottom: 16 }}>
             Customize · Configure · Build
           </div>
-          <h1 style={{ fontFamily: FONT_SANS, fontWeight: 700, fontSize: "clamp(48px, 7vw, 96px)", lineHeight: 0.94, letterSpacing: "-0.03em", color: "#fff", marginBottom: 18 }}>
+          <h1 style={{ fontFamily: FONT_SANS, fontWeight: 700, fontSize: isMobile ? "38px" : "clamp(48px, 7vw, 96px)", lineHeight: 0.94, letterSpacing: "-0.03em", color: "#fff", marginBottom: 14 }}>
             Build Your Braino.
           </h1>
-          <p style={{ fontFamily: "'Inter', sans-serif", fontSize: "clamp(14px, 1.5vw, 17px)", color: `${CORAL_LIGHT}70`, marginBottom: 52, lineHeight: 1.55 }}>
+          <p style={{ fontFamily: "'Inter', sans-serif", fontSize: isMobile ? 14 : "clamp(14px, 1.5vw, 17px)", color: `${CORAL_LIGHT}70`, marginBottom: isMobile ? 24 : 52, lineHeight: 1.55 }}>
             Everything is free to start. Click a lobe to see what's included — and optionally upgrade it.
           </p>
 
-          <BrainScene
-            saved={saved}
-            openModal={openModal}
-            hoveredNode={hoveredNode}
-            setHoveredNode={setHoveredNode}
-          />
+          <div style={isMobile ? { overflowX: "auto", overflowY: "visible", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16 } : {}}>
+            <div style={isMobile ? { minWidth: 480 } : {}}>
+              <BrainScene
+                saved={saved}
+                openModal={openModal}
+                hoveredNode={hoveredNode}
+                setHoveredNode={setHoveredNode}
+              />
+            </div>
+          </div>
 
           {/* Status */}
           <div style={{ marginTop: 28, minHeight: 26 }}>
@@ -836,20 +847,25 @@ export default function BuildYourBraino() {
                 <span style={{ fontFamily: FONT_MONO, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: `${CORAL_LIGHT}70` }}>
                   {saved.size} / 6 regions active
                 </span>
-                <span style={{ width: 1, height: 14, background: `${CORAL}40`, display: "inline-block" }} />
-                {MODULES.filter(m => saved.has(m.key)).map(m => (
-                  <span key={m.key} style={{ width: 8, height: 8, borderRadius: "50%", background: m.color, boxShadow: `0 0 8px ${m.color}`, display: "inline-block" }} />
-                ))}
               </div>
             )}
           </div>
 
-          {/* Build It CTA — appears below brain once any module is saved */}
+          {/* Build It CTA — appears once any module is saved */}
           {hasSaved && (
-            <div style={{ marginTop: 32 }}>
+            <div style={{ marginTop: 28 }}>
               <Link
                 to="/auth?redirect=/premium"
-                style={{ display: "inline-flex", alignItems: "center", padding: "14px 32px", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500, background: CORAL, color: "#fff", textDecoration: "none", transition: "opacity .15s", whiteSpace: "nowrap" }}
+                style={{
+                  display: isMobile ? "block" : "inline-flex",
+                  textAlign: "center",
+                  alignItems: "center",
+                  padding: isMobile ? "15px 0" : "14px 32px",
+                  borderRadius: 999,
+                  fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500,
+                  background: CORAL, color: "#fff", textDecoration: "none",
+                  transition: "opacity .15s", whiteSpace: "nowrap",
+                }}
                 onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
                 onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
               >
@@ -862,33 +878,47 @@ export default function BuildYourBraino() {
 
       {/* ── STICKY SUMMARY BAR ──────────────────────────────────── */}
       {hasSaved && activeModal === null && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 90, background: "var(--sb-ink)", borderRadius: 999, padding: "12px 14px 12px 18px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 8px 40px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.15)", maxWidth: "calc(100vw - 48px)" }}>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {MODULES.filter(m => saved.has(m.key)).map(m => {
-              const priceMap: Record<ModuleKey, number> = {
-                intel: intel && intel.tier !== "standard" ? intel.price : 0,
-                voice: voice && voice.hours > 0 ? voice.price : 0,
-                delegate: delegate?.price ?? 0,
-                integrations: 0,
-                xAuto: (xAuto && xAuto.price > 0 ? xAuto.price : 0) + (xMgmt?.price ?? 0),
-                basics: 0,
-              };
-              const price = priceMap[m.key];
-              return (
-                <span key={m.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 999, background: "rgba(255,255,255,0.1)", fontFamily: "'Inter', sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.85)" }}>
-                  {m.label}
-                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: price > 0 ? CORAL_LIGHT : "rgba(76,175,125,0.9)" }}>
-                    {price > 0 ? `$${price}` : "free"}
+        <div style={{
+          position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)",
+          zIndex: 90, background: "var(--sb-ink)", borderRadius: 999,
+          padding: isMobile ? "10px 16px" : "12px 14px 12px 18px",
+          display: "flex", alignItems: "center", gap: isMobile ? 10 : 14,
+          boxShadow: "0 8px 40px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.15)",
+          maxWidth: "calc(100vw - 32px)",
+        }}>
+          {/* On mobile show count pill; on desktop show full chips */}
+          {isMobile ? (
+            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "rgba(255,255,255,0.85)" }}>
+              {saved.size} / 6 configured
+            </span>
+          ) : (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {MODULES.filter(m => saved.has(m.key)).map(m => {
+                const priceMap: Record<ModuleKey, number> = {
+                  intel: intel && intel.tier !== "standard" ? intel.price : 0,
+                  voice: voice && voice.hours > 0 ? voice.price : 0,
+                  delegate: delegate?.price ?? 0,
+                  integrations: 0,
+                  xAuto: (xAuto && xAuto.price > 0 ? xAuto.price : 0) + (xMgmt?.price ?? 0),
+                  basics: 0,
+                };
+                const price = priceMap[m.key];
+                return (
+                  <span key={m.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 999, background: "rgba(255,255,255,0.1)", fontFamily: "'Inter', sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.85)" }}>
+                    {m.label}
+                    <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: price > 0 ? CORAL_LIGHT : "rgba(76,175,125,0.9)" }}>
+                      {price > 0 ? `$${price}` : "free"}
+                    </span>
                   </span>
-                </span>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
             <div>
               <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: 1 }}>Upgrades</div>
-              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 22, color: "#fff", lineHeight: 1 }}>
-                {paidTotal === 0 ? <span style={{ color: "rgba(76,175,125,0.9)", fontSize: 16 }}>All free</span> : <>${paidTotal}<span style={{ fontSize: 14, color: "rgba(255,255,255,0.55)" }}>/mo</span></>}
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: isMobile ? 18 : 22, color: "#fff", lineHeight: 1 }}>
+                {paidTotal === 0 ? <span style={{ color: "rgba(76,175,125,0.9)", fontSize: isMobile ? 13 : 16 }}>All free</span> : <>${paidTotal}<span style={{ fontSize: isMobile ? 12 : 14, color: "rgba(255,255,255,0.55)" }}>/mo</span></>}
               </div>
             </div>
           </div>
@@ -898,7 +928,7 @@ export default function BuildYourBraino() {
       {/* ── MODULE MODAL ──────────────────────────────────────── */}
       <Dialog open={activeModal !== null} onOpenChange={v => !v && closeModal()}>
         <DialogContent style={{ borderRadius: 22, maxWidth: 480, width: "calc(100vw - 32px)", padding: 0, background: "var(--sb-panel-2)", border: "1px solid var(--sb-line)", overflow: "hidden" }}>
-          <div style={{ maxHeight: "90vh", overflowY: "auto", padding: "32px 32px 28px" }}>
+          <div style={{ maxHeight: isMobile ? "85vh" : "90vh", overflowY: "auto", padding: isMobile ? "24px 20px 20px" : "32px 32px 28px" }}>
             <DialogHeader>
               <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: activeModal !== null ? MODULES[activeModal].color : "var(--sb-ink-4)", marginBottom: 6 }}>
                 {modalLobe}
