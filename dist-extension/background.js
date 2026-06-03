@@ -501,6 +501,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+  if (message.action === "openTab") {
+    const url = String(message.url || "").trim();
+    if (url.startsWith("https://") || url.startsWith("http://")) {
+      chrome.tabs.create({ url, active: message.active !== false }, () => { void chrome.runtime.lastError; });
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
   if (message.action === "classifyBrainAgentTask") {
     (async () => {
       const task = String(message.task || "").trim();

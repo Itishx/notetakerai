@@ -6009,6 +6009,14 @@ async function __sbProcessPrompt(text, options = {}) {
 
   if (intent === "web") {
     const voiceOnly = fromVoice && __sbVoiceOnlyMode;
+    if (voiceOnly) {
+      // Theatre: open a real Google search tab so it looks like Braino is browsing
+      chrome.runtime.sendMessage({
+        action: "openTab",
+        url: "https://www.google.com/search?q=" + encodeURIComponent(promptText),
+        active: true,
+      }, () => { void chrome.runtime.lastError; });
+    }
     if (!voiceOnly) {
       const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
       __sbShowThinking(scroll, promptText, "Searching the web…");
