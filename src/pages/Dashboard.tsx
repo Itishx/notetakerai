@@ -1010,6 +1010,7 @@ export default function Dashboard() {
   const [xMediaUploading, setXMediaUploading] = useState(false);
   const xMediaInputRef = useRef<HTMLInputElement>(null);
   const [xCancellingId, setXCancellingId] = useState<string | null>(null);
+  const [xRetryingId, setXRetryingId] = useState<string | null>(null);
   const [xDispatching, setXDispatching] = useState(false);
   const [xPersona, setXPersona] = useState<XPersona>(null);
   const [xPersonaDraft, setXPersonaDraft] = useState({ display_name: "", bio: "", what_building: "", tone_notes: "", content_source: "" });
@@ -1710,6 +1711,27 @@ export default function Dashboard() {
       });
     } finally {
       setXCancellingId(null);
+    }
+  }
+
+  async function handleRetryScheduledXPost(id: string) {
+    if (!user) return;
+    setXRetryingId(id);
+    try {
+      const { error } = await supabase
+        .from("scheduled_x_posts")
+        .update({ status: "pending", error_message: null, scheduled_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      setScheduledXPosts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, status: "pending" as const, error_message: null } : p))
+      );
+      toast({ title: "Post re-queued", description: "It will be dispatched on the next run." });
+    } catch (error) {
+      toast({ title: "Could not retry post", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setXRetryingId(null);
     }
   }
 
@@ -3829,8 +3851,18 @@ export default function Dashboard() {
                                 {post.error_message}
                               </div>
                             ) : null}
-                            {post.status === "pending" ? (
-                              <div className="mt-3">
+                            {(post.status === "pending" || post.status === "failed") ? (
+                              <div className="mt-3 flex gap-2">
+                                {post.status === "failed" && (
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => handleRetryScheduledXPost(post.id)}
+                                    disabled={xRetryingId === post.id}
+                                    className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                                  >
+                                    {xRetryingId === post.id ? "Retrying…" : "Retry"}
+                                  </Button>
+                                )}
                                 <Button
                                   variant="outline"
                                   onClick={() => handleCancelScheduledXPost(post.id)}
