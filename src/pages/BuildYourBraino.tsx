@@ -973,7 +973,7 @@ export default function BuildYourBraino() {
                 MOST POPULAR
               </div>
               <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: CORAL, marginBottom: 10 }}>Premium</div>
-              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$15<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$30<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
               {[
                 "Advanced AI (Claude Sonnet)",
                 "500 AI queries / month",
@@ -1001,9 +1001,9 @@ export default function BuildYourBraino() {
             {/* CUSTOM */}
             <div style={{ padding: "28px 24px 24px", borderRadius: 20, border: "1px solid var(--sb-line)", background: "var(--sb-bg)" }}>
               <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-4)", marginBottom: 10 }}>Custom</div>
-              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$15+<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$30+<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
               <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", lineHeight: 1.6, marginBottom: 18 }}>
-                Everything in Premium, plus exactly what you need — more voice time, deeper AI, X automation, and more.
+                Starts at $30 (Premium included) — then add exactly what you need on top.
               </div>
               {[
                 "Set your own AI query limit",
@@ -1076,14 +1076,25 @@ export default function BuildYourBraino() {
 
           {/* Build It CTA — appears once any module is saved */}
           {hasSaved && (
-            <div style={{ marginTop: 28 }}>
+            <div style={{ marginTop: 28, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+              {/* Price breakdown */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT_MONO, fontSize: 11, color: `${CORAL_LIGHT}80` }}>
+                <span>$30 Premium</span>
+                {paidTotal > 0 && <>
+                  <span style={{ opacity: 0.4 }}>+</span>
+                  <span style={{ color: CORAL_LIGHT }}>${paidTotal} extras</span>
+                  <span style={{ opacity: 0.4 }}>=</span>
+                  <span style={{ color: "#fff", fontWeight: 600 }}>${30 + paidTotal} / mo</span>
+                </>}
+                {paidTotal === 0 && <span style={{ color: "rgba(76,175,125,0.85)" }}>+ no extras yet</span>}
+              </div>
               <Link
                 to="/auth?redirect=/premium"
                 style={{
                   display: isMobile ? "block" : "inline-flex",
                   textAlign: "center",
                   alignItems: "center",
-                  padding: isMobile ? "15px 0" : "14px 32px",
+                  padding: isMobile ? "15px 0" : "14px 36px",
                   borderRadius: 999,
                   fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500,
                   background: CORAL, color: "#fff", textDecoration: "none",
@@ -1092,7 +1103,7 @@ export default function BuildYourBraino() {
                 onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
                 onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
               >
-                Build It →
+                Build It — {paidTotal > 0 ? `$${30 + paidTotal}` : "$30"} / mo →
               </Link>
             </div>
           )}
@@ -1141,10 +1152,15 @@ export default function BuildYourBraino() {
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
             <div>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: 1 }}>Upgrades</div>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>Total</div>
               <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: isMobile ? 18 : 22, color: "#fff", lineHeight: 1 }}>
-                {paidTotal === 0 ? <span style={{ color: "rgba(76,175,125,0.9)", fontSize: isMobile ? 13 : 16 }}>All free</span> : <>${paidTotal}<span style={{ fontSize: isMobile ? 12 : 14, color: "rgba(255,255,255,0.55)" }}>/mo</span></>}
+                ${30 + paidTotal}<span style={{ fontSize: isMobile ? 12 : 14, color: "rgba(255,255,255,0.45)", fontFamily: "'Inter', sans-serif" }}>/mo</span>
               </div>
+              {paidTotal > 0 && (
+                <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
+                  $30 + ${paidTotal} extras
+                </div>
+              )}
             </div>
           </div>
         </div>
