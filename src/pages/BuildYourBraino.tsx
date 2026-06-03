@@ -58,12 +58,14 @@ const INTEGRATIONS_LIST = [
 // ── Brain visualization ────────────────────────────────────────
 // Nodes around a 900×640 viewBox. Brain mascot centered at (450, 315).
 const MODULES = [
-  { key: "intel",        label: "Intelligence", lobe: "Frontal Lobe",   cx: 158, cy: 110, d1: "1.4s", d2: "2.2s" },
-  { key: "voice",        label: "Voice",         lobe: "Temporal Lobe",  cx: 745, cy: 110, d1: "1.7s", d2: "2.5s" },
-  { key: "delegate",     label: "Delegate",      lobe: "Parietal Lobe",  cx: 818, cy: 348, d1: "1.3s", d2: "2.0s" },
-  { key: "integrations", label: "Integrations",  lobe: "Occipital Lobe", cx: 650, cy: 530, d1: "1.6s", d2: "2.3s" },
-  { key: "xAuto",        label: "X",             lobe: "Cerebellum",     cx: 178, cy: 528, d1: "1.5s", d2: "2.4s" },
-  { key: "basics",       label: "Basics",        lobe: "Brainstem",      cx: 450, cy: 575, d1: "1.9s", d2: "2.7s" },
+  { key: "intel",         label: "Intelligence",  lobe: "Frontal Lobe",    cx: 158, cy: 110, d1: "1.4s", d2: "2.2s" },
+  { key: "voice",         label: "Voice",          lobe: "Temporal Lobe",   cx: 745, cy: 110, d1: "1.7s", d2: "2.5s" },
+  { key: "delegate",      label: "Delegate",       lobe: "Parietal Lobe",   cx: 818, cy: 348, d1: "1.3s", d2: "2.0s" },
+  { key: "integrations",  label: "Integrations",   lobe: "Occipital Lobe",  cx: 650, cy: 530, d1: "1.6s", d2: "2.3s" },
+  { key: "xAuto",         label: "X",              lobe: "Cerebellum",      cx: 178, cy: 528, d1: "1.5s", d2: "2.4s" },
+  { key: "basics",        label: "Basics",         lobe: "Brainstem",       cx: 450, cy: 575, d1: "1.9s", d2: "2.7s" },
+  { key: "music",         label: "Music",          lobe: "Auditory Cortex", cx: 82,  cy: 348, d1: "2.1s", d2: "2.9s" },
+  { key: "entertainment", label: "Entertainment",  lobe: "Visual Cortex",   cx: 450, cy: 52,  d1: "1.2s", d2: "1.9s" },
 ] as const;
 
 type ModuleKey = typeof MODULES[number]["key"];
@@ -75,6 +77,8 @@ const AXONS = [
   "M 450,315 C 525,400 592,468 650,530",
   "M 450,315 C 368,402 278,462 178,528",
   "M 450,315 C 432,400 465,488 450,575",
+  "M 450,315 C 310,315 192,340 82,348",
+  "M 450,315 C 450,228 450,148 450,52",
 ] as const;
 
 const AMBIENT = [
@@ -95,9 +99,11 @@ type IntelTier   = "standard" | "advanced" | "experimental";
 type IntelSel    = { tier: IntelTier; queriesPerMonth?: number; price: number } | null;
 type VoiceSel    = { hours: number; price: number; isCustom?: boolean } | null;
 type DelegateSel = { tasks: number | null; price: number } | null;
-type XAutoSel    = { replies: number; price: number; tier: string } | null;
-type XMgmtSel    = { posts: number | null; price: number; tier: string } | null;
-type BasicsSel   = { aboutMe: string; persistMemory: boolean } | null;
+type XAutoSel         = { replies: number; price: number; tier: string } | null;
+type XMgmtSel         = { posts: number | null; price: number; tier: string } | null;
+type BasicsSel        = { aboutMe: string; persistMemory: boolean } | null;
+type MusicSel         = { spotifyOn: boolean; noMusic: boolean } | null;
+type EntertainmentSel = { movieMode: boolean } | null;
 
 // ── Shared modal UI pieces ─────────────────────────────────────
 
@@ -268,9 +274,15 @@ function VoiceModalContent({ current, onSave, onFree }: {
 
   return (
     <div>
-      <FreeBlock items={["5 minutes of voice / day", "English language only", "Default Braino voice"]} />
+      <div style={{ padding: "13px 16px", borderRadius: 12, background: `${CORAL}10`, border: `1px solid ${CORAL}35`, marginBottom: 20, display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>⚡</span>
+        <div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13.5, color: CORAL, marginBottom: 3 }}>Premium feature</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--sb-ink-3)", lineHeight: 1.45 }}>Voice requires a Premium plan. 1 hr / month is included with Premium — add more below.</div>
+        </div>
+      </div>
 
-      <UpgradeLabel>More voice time</UpgradeLabel>
+      <UpgradeLabel>Additional voice time</UpgradeLabel>
 
       {VOICE_OPTIONS.map(opt => (
         <ModalOptionCard key={opt.hours} selected={sel === opt.hours && !showCustom} onClick={() => { setSel(opt.hours); setShowCustom(false); }}>
@@ -524,6 +536,107 @@ function XModalContent({ currentAuto, currentMgmt, onSaveAuto, onSaveMgmt, onClo
   );
 }
 
+// ── Music modal ───────────────────────────────────────────────
+
+function MusicModalContent({ current, onSave, onClose }: {
+  current: MusicSel; onSave: (s: MusicSel) => void; onClose: () => void;
+}) {
+  const [spotifyOn, setSpotifyOn] = useState(current?.spotifyOn ?? false);
+  const [noMusic,   setNoMusic]   = useState(current?.noMusic   ?? false);
+
+  function Toggle({ on }: { on: boolean }) {
+    return (
+      <div style={{ width: 38, height: 21, borderRadius: 999, background: on ? CORAL : "var(--sb-line)", position: "relative", flexShrink: 0, transition: "background .2s" }}>
+        <div style={{ width: 15, height: 15, borderRadius: 999, background: "#fff", position: "absolute", top: 3, left: on ? 20 : 3, transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <FreeBlock items={["Music plays from your own device", "No Braino music control by default"]} />
+      <UpgradeLabel>Configure music</UpgradeLabel>
+
+      <button
+        onClick={() => { setNoMusic(v => !v); if (!noMusic) setSpotifyOn(false); }}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", borderRadius: 12, border: noMusic ? `1.5px solid ${CORAL}` : "1px solid var(--sb-line)", background: noMusic ? `${CORAL}0e` : "var(--sb-bg)", cursor: "pointer", marginBottom: 8, transition: "all .15s" }}
+      >
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: "var(--sb-ink)" }}>No music</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: "var(--sb-ink-3)", marginTop: 2 }}>Braino won't suggest or play music during sessions</div>
+        </div>
+        <Toggle on={noMusic} />
+      </button>
+
+      <button
+        onClick={() => { setSpotifyOn(v => !v); if (!spotifyOn) setNoMusic(false); }}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", borderRadius: 12, border: spotifyOn ? `1.5px solid ${CORAL}` : "1px solid var(--sb-line)", background: spotifyOn ? `${CORAL}0e` : "var(--sb-bg)", cursor: "pointer", marginBottom: 8, transition: "all .15s" }}
+      >
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: "var(--sb-ink)" }}>Connect Spotify</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: "var(--sb-ink-3)", marginTop: 2 }}>Play and control music · Braino matches the vibe</div>
+        </div>
+        <Toggle on={spotifyOn} />
+      </button>
+
+      <button
+        onClick={() => { onSave({ spotifyOn, noMusic }); onClose(); }}
+        style={{ width: "100%", marginTop: 20, padding: "13px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 500, background: "var(--sb-ink)", color: "var(--sb-on-ink)", border: "none", cursor: "pointer", transition: "opacity .15s" }}
+        onMouseEnter={e => (e.currentTarget.style.opacity = "0.82")}
+        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+      >
+        Save music preference
+      </button>
+    </div>
+  );
+}
+
+// ── Entertainment modal ───────────────────────────────────────
+
+function EntertainmentModalContent({ current, onSave, onClose }: {
+  current: EntertainmentSel; onSave: (s: EntertainmentSel) => void; onClose: () => void;
+}) {
+  const [movieMode, setMovieMode] = useState(current?.movieMode ?? false);
+
+  function Toggle({ on }: { on: boolean }) {
+    return (
+      <div style={{ width: 38, height: 21, borderRadius: 999, background: on ? CORAL : "var(--sb-line)", position: "relative", flexShrink: 0, transition: "background .2s" }}>
+        <div style={{ width: 15, height: 15, borderRadius: 999, background: "#fff", position: "absolute", top: 3, left: on ? 20 : 3, transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <FreeBlock items={["Standard Braino responses across all topics"]} />
+      <UpgradeLabel>Entertainment modes</UpgradeLabel>
+
+      <button
+        onClick={() => setMovieMode(v => !v)}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", borderRadius: 12, border: movieMode ? `1.5px solid ${CORAL}` : "1px solid var(--sb-line)", background: movieMode ? `${CORAL}0e` : "var(--sb-bg)", cursor: "pointer", marginBottom: 8, transition: "all .15s" }}
+      >
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: "var(--sb-ink)", display: "flex", alignItems: "center", gap: 7 }}>
+            Movie Mode
+            <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: "0.1em", background: "var(--sb-accent)", color: "#fff", padding: "2px 6px", borderRadius: 999 }}>NEW</span>
+          </div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: "var(--sb-ink-3)", marginTop: 2 }}>Cinematic style · film recs · full critic mode</div>
+        </div>
+        <Toggle on={movieMode} />
+      </button>
+
+      <button
+        onClick={() => { onSave({ movieMode }); onClose(); }}
+        style={{ width: "100%", marginTop: 20, padding: "13px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 500, background: "var(--sb-ink)", color: "var(--sb-on-ink)", border: "none", cursor: "pointer", transition: "opacity .15s" }}
+        onMouseEnter={e => (e.currentTarget.style.opacity = "0.82")}
+        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+      >
+        Save entertainment settings
+      </button>
+    </div>
+  );
+}
+
 // ── Basics modal ──────────────────────────────────────────────
 
 function BasicsModalContent({ current, onSave, onClose }: {
@@ -744,13 +857,15 @@ function BrainScene({
 // ── Page ───────────────────────────────────────────────────────
 
 export default function BuildYourBraino() {
-  const [intel,        setIntel]        = useState<IntelSel>(null);
-  const [voice,        setVoice]        = useState<VoiceSel>(null);
-  const [delegate,     setDelegate]     = useState<DelegateSel>(null);
-  const [integrations, setIntegrations] = useState<string[]>([]);
-  const [xAuto,        setXAuto]        = useState<XAutoSel>(null);
-  const [xMgmt,        setXMgmt]        = useState<XMgmtSel>(null);
-  const [basics,       setBasics]       = useState<BasicsSel>(null);
+  const [intel,         setIntel]         = useState<IntelSel>(null);
+  const [voice,         setVoice]         = useState<VoiceSel>(null);
+  const [delegate,      setDelegate]      = useState<DelegateSel>(null);
+  const [integrations,  setIntegrations]  = useState<string[]>([]);
+  const [xAuto,         setXAuto]         = useState<XAutoSel>(null);
+  const [xMgmt,         setXMgmt]         = useState<XMgmtSel>(null);
+  const [basics,        setBasics]        = useState<BasicsSel>(null);
+  const [music,         setMusic]         = useState<MusicSel>(null);
+  const [entertainment, setEntertainment] = useState<EntertainmentSel>(null);
 
   const [saved,        setSaved]        = useState<Set<ModuleKey>>(new Set());
   const [activeModal,  setActiveModal]  = useState<number | null>(null);
@@ -791,9 +906,9 @@ export default function BuildYourBraino() {
   const hasSaved = saved.size > 0;
 
   const modalTitle = activeModal !== null
-    ? (activeModal === 4 ? "X — Automation & Management" : activeModal === 5 ? "Basics" : MODULES[activeModal].label)
+    ? (activeModal === 4 ? "X — Automation & Management" : activeModal === 5 ? "Basics" : activeModal === 6 ? "Music" : activeModal === 7 ? "Entertainment" : MODULES[activeModal].label)
     : "";
-  const modalLobe  = activeModal !== null ? MODULES[activeModal].lobe : "";
+  const modalLobe = activeModal !== null ? MODULES[activeModal]?.lobe ?? "" : "";
 
   return (
     <div style={{ background: "var(--sb-bg)", color: "var(--sb-ink)", minHeight: "100vh", overflowX: "hidden" }}>
@@ -806,8 +921,116 @@ export default function BuildYourBraino() {
         }
       `}</style>
 
+      {/* ── PRICING TIERS ─────────────────────────────────────── */}
+      <section style={{ padding: isMobile ? "64px 0 48px" : "80px 0 72px", background: "var(--sb-bg)", borderBottom: "1px solid var(--sb-line)" }}>
+        <div style={{ ...wrap, padding: isMobile ? "0 16px" : "0 32px" }}>
+          <div style={{ textAlign: "center", marginBottom: isMobile ? 36 : 52 }}>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: `${CORAL_LIGHT}60`, marginBottom: 14 }}>Plans</div>
+            <h2 style={{ fontFamily: FONT_SANS, fontWeight: 700, fontSize: isMobile ? 32 : 48, lineHeight: 1, letterSpacing: "-0.025em", color: "var(--sb-ink)", margin: 0 }}>
+              Start free. Upgrade when ready.
+            </h2>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: isMobile ? 14 : 20, alignItems: "start" }}>
+
+            {/* FREE */}
+            <div style={{ padding: "28px 24px 24px", borderRadius: 20, border: "1px solid var(--sb-line)", background: "var(--sb-bg)" }}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-4)", marginBottom: 10 }}>Free</div>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$0<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
+              {[
+                "10 chat questions / day",
+                "Standard AI (GPT-mini)",
+                "Session memory only",
+                "Basic integrations",
+                "25 delegate tasks / mo",
+                { text: "Voice — Premium only", locked: true },
+              ].map((item, i) => {
+                const isObj = typeof item === "object";
+                return (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
+                    <span style={{ color: isObj ? "var(--sb-ink-4)" : "var(--sb-ok)", marginTop: 1, flexShrink: 0 }}>
+                      {isObj
+                        ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
+                      }
+                    </span>
+                    <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: isObj ? "var(--sb-ink-4)" : "var(--sb-ink-2)", lineHeight: 1.4 }}>
+                      {isObj ? item.text : item}
+                    </span>
+                  </div>
+                );
+              })}
+              <Link to="/" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "11px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", border: "1px solid var(--sb-line)", textDecoration: "none", transition: "all .15s" }}
+                onMouseEnter={e => { e.currentTarget.style.color = "var(--sb-ink)"; e.currentTarget.style.borderColor = "var(--sb-line-2)"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "var(--sb-ink-3)"; e.currentTarget.style.borderColor = "var(--sb-line)"; }}>
+                Continue free
+              </Link>
+            </div>
+
+            {/* PREMIUM */}
+            <div style={{ padding: "28px 24px 24px", borderRadius: 20, border: `1.5px solid ${CORAL}`, background: `${CORAL}08`, position: "relative" }}>
+              <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: CORAL, color: "#fff", fontFamily: FONT_MONO, fontSize: 9.5, letterSpacing: "0.12em", padding: "4px 14px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                MOST POPULAR
+              </div>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: CORAL, marginBottom: 10 }}>Premium</div>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$15<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
+              {[
+                "Advanced AI (Claude Sonnet)",
+                "500 AI queries / month",
+                "1 hr voice / month",
+                "Persistent memory",
+                "All integrations + Spotify",
+                "150 delegate tasks / mo",
+                "Music + Entertainment modes",
+                "X auto-replies preview",
+              ].map((item, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
+                  <span style={{ color: CORAL, marginTop: 1, flexShrink: 0 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
+                  </span>
+                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-2)", lineHeight: 1.4 }}>{item}</span>
+                </div>
+              ))}
+              <Link to="/auth?redirect=/premium" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "12px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 13.5, fontWeight: 500, background: CORAL, color: "#fff", textDecoration: "none", transition: "opacity .15s" }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
+                Get Premium →
+              </Link>
+            </div>
+
+            {/* CUSTOM */}
+            <div style={{ padding: "28px 24px 24px", borderRadius: 20, border: "1px solid var(--sb-line)", background: "var(--sb-bg)" }}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-4)", marginBottom: 10 }}>Custom</div>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$15+<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", lineHeight: 1.6, marginBottom: 18 }}>
+                Everything in Premium, plus exactly what you need — more voice time, deeper AI, X automation, and more.
+              </div>
+              {[
+                "Set your own AI query limit",
+                "Extra voice hours",
+                "Full X automation & management",
+                "Unlimited delegate tasks",
+                "Fine-tune every module",
+              ].map((item, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
+                  <span style={{ color: "var(--sb-ink-4)", marginTop: 1, flexShrink: 0 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
+                  </span>
+                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", lineHeight: 1.4 }}>{item}</span>
+                </div>
+              ))}
+              <a href="#brain-builder" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "11px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", border: "1px solid var(--sb-line)", textDecoration: "none", transition: "all .15s" }}
+                onMouseEnter={e => { e.currentTarget.style.color = "var(--sb-ink)"; e.currentTarget.style.borderColor = "var(--sb-line-2)"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "var(--sb-ink-3)"; e.currentTarget.style.borderColor = "var(--sb-line)"; }}>
+                Configure below ↓
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── BRAIN SECTION (full page) ─────────────────────────── */}
-      <section style={{
+      <section id="brain-builder" style={{
         padding: isMobile ? "64px 0 56px" : `96px 0 ${hasSaved ? 120 : 80}px`,
         background: "linear-gradient(180deg, #0E0A07 0%, #130D09 60%, #0E0A07 100%)",
         overflow: "hidden", position: "relative",
@@ -822,7 +1045,7 @@ export default function BuildYourBraino() {
             Build Your Braino.
           </h1>
           <p style={{ fontFamily: "'Inter', sans-serif", fontSize: isMobile ? 14 : "clamp(14px, 1.5vw, 17px)", color: `${CORAL_LIGHT}70`, marginBottom: isMobile ? 24 : 52, lineHeight: 1.55 }}>
-            Everything is free to start. Click a lobe to see what's included — and optionally upgrade it.
+            Customize every lobe. Configure beyond Premium — click any node to tune it.
           </p>
 
           <div style={isMobile ? { overflowX: "auto", overflowY: "visible", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16 } : {}}>
@@ -840,12 +1063,12 @@ export default function BuildYourBraino() {
           <div style={{ marginTop: 28, minHeight: 26 }}>
             {saved.size === 0 ? (
               <span style={{ fontFamily: FONT_MONO, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: `${CORAL_LIGHT}38` }}>
-                No regions configured yet — click a lobe above
+                No lobes configured yet — click a node above
               </span>
             ) : (
               <div style={{ display: "inline-flex", alignItems: "center", gap: 14 }}>
                 <span style={{ fontFamily: FONT_MONO, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: `${CORAL_LIGHT}70` }}>
-                  {saved.size} / 6 regions active
+                  {saved.size} / 8 lobes active
                 </span>
               </div>
             )}
@@ -901,6 +1124,8 @@ export default function BuildYourBraino() {
                   integrations: 0,
                   xAuto: (xAuto && xAuto.price > 0 ? xAuto.price : 0) + (xMgmt?.price ?? 0),
                   basics: 0,
+                  music: 0,
+                  entertainment: 0,
                 };
                 const price = priceMap[m.key];
                 return (
@@ -930,7 +1155,7 @@ export default function BuildYourBraino() {
         <DialogContent style={{ borderRadius: 22, maxWidth: 480, width: "calc(100vw - 32px)", padding: 0, background: "var(--sb-panel-2)", border: "1px solid var(--sb-line)", overflow: "hidden" }}>
           <div style={{ maxHeight: isMobile ? "85vh" : "90vh", overflowY: "auto", padding: isMobile ? "24px 20px 20px" : "32px 32px 28px" }}>
             <DialogHeader>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: activeModal !== null ? MODULES[activeModal].color : "var(--sb-ink-4)", marginBottom: 6 }}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: activeModal !== null ? CORAL : "var(--sb-ink-4)", marginBottom: 6 }}>
                 {modalLobe}
               </div>
               <DialogTitle style={{ fontFamily: "'Instrument Serif', serif", fontWeight: 400, fontSize: 26, color: "var(--sb-ink)", marginBottom: 4 }}>
@@ -943,6 +1168,8 @@ export default function BuildYourBraino() {
                 {activeModal === 3 && "Connect the apps you already use every day."}
                 {activeModal === 4 && "Auto-replies and full account management — pick what you need."}
                 {activeModal === 5 && "Tell Braino who you are so every interaction is personalised from day one."}
+                {activeModal === 6 && "Set your music preferences — connect Spotify or go quiet."}
+                {activeModal === 7 && "Enable entertainment modes like Movie Mode for a richer experience."}
               </DialogDescription>
             </DialogHeader>
 
@@ -976,6 +1203,20 @@ export default function BuildYourBraino() {
                   current={basics}
                   onSave={s => { setBasics(s); saveModule("basics"); }}
                   onClose={closeModal}
+                />
+              )}
+              {activeModal === 6 && (
+                <MusicModalContent
+                  current={music}
+                  onSave={s => { setMusic(s); saveModule("music"); }}
+                  onClose={() => { saveModule("music"); closeModal(); }}
+                />
+              )}
+              {activeModal === 7 && (
+                <EntertainmentModalContent
+                  current={entertainment}
+                  onSave={s => { setEntertainment(s); saveModule("entertainment"); }}
+                  onClose={() => { saveModule("entertainment"); closeModal(); }}
                 />
               )}
             </div>
