@@ -1515,19 +1515,19 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     const exactVolume = raw.match(/(?:set|change|put|make)\s+(?:the\s+)?(?:spotify\s+)?volume\s+(?:to\s+)?(\d{1,3})\s*%?/i)
       || raw.match(/volume\s+(?:to\s+|at\s+)?(\d{1,3})\s*%?/i);
     if (exactVolume) {
-      return { adapter: “spotify”, intent: “setVolume”, volumePercent: Math.min(100, Math.max(0, parseInt(exactVolume[1], 10))) };
+      return { adapter: "spotify", intent: "setVolume", volumePercent: Math.min(100, Math.max(0, parseInt(exactVolume[1], 10))) };
     }
     if (/\b(lower|decrease|reduce|turn\s+down|quieter|softer|dimmer)\b/i.test(raw)) {
-      return { adapter: “spotify”, intent: “setVolume”, volumeStep: -20 };
+      return { adapter: "spotify", intent: "setVolume", volumeStep: -20 };
     }
     if (/\b(raise|increase|turn\s+up|louder|higher|boost)\b/i.test(raw)) {
-      return { adapter: “spotify”, intent: “setVolume”, volumeStep: +20 };
+      return { adapter: "spotify", intent: "setVolume", volumeStep: +20 };
     }
   }
 
   const quotedDirectPlay = raw.match(/play\s+[“”](.+?)[“”](?:\s+(?:on|in)\s+spotify)?$/i);
   if (quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
-    return { adapter: “spotify”, intent: “playSong”, song: quotedDirectPlay[1].trim() };
+    return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
   }
 
   const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
