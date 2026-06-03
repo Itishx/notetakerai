@@ -1926,6 +1926,7 @@ let __sbCurrentUtterance = null;
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
+let __sbLecSegmentCount = 0;
 let __sbSpotifyUiState = {
   active: false,
   source: "spotify",
@@ -2325,6 +2326,52 @@ function __sbBuildBrainUI() {
     }
     .sb-notion-btn:hover { background: rgba(65,48,40,0.06); }
     .sb-notion-btn:disabled { opacity: 0.55; cursor: default; }
+
+    /* ── Lecture Mode UI ── */
+    .sb-lec-ready { display:flex; flex-direction:column; align-items:center; gap:14px; padding:22px 16px 18px; text-align:center; }
+    .sb-lec-kicker { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:#A79B92; }
+    .sb-lec-ready-title { font-size:17px; font-weight:600; color:#1B1713; line-height:1.3; }
+    .sb-lec-ready-sub { font-size:12.5px; color:#8A7B73; line-height:1.5; max-width:200px; }
+    .sb-lec-start-btn { width:100%; padding:12px; border:none; border-radius:20px; background:#E8786E; color:white; font-size:13.5px; font-weight:600; cursor:pointer; transition:background 0.15s; letter-spacing:0.01em; }
+    .sb-lec-start-btn:hover { background:#C9544A; }
+    .sb-lec-rec { display:flex; flex-direction:column; align-items:center; gap:10px; padding:20px 16px 14px; }
+    .sb-lec-rec-header { display:flex; align-items:center; gap:6px; }
+    .sb-lec-rec-dot { width:7px; height:7px; border-radius:50%; background:#E8786E; animation:sbLecPulse 1.4s ease-in-out infinite; flex-shrink:0; }
+    @keyframes sbLecPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+    .sb-lec-rec-label { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:#C9544A; font-weight:600; }
+    .sb-lec-title { font-size:14.5px; font-weight:600; color:#1B1713; text-align:center; max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sb-lec-date { font-size:11px; color:#A79B92; }
+    .sb-lec-waveform { display:flex; align-items:flex-end; justify-content:center; gap:3px; height:44px; margin:6px 0; }
+    .sb-lec-wave-bar { width:3px; border-radius:2px; background:#E8786E; animation:sbWaveBar 1.2s ease-in-out infinite; transform-origin:bottom; }
+    .sb-lec-wave-bar:nth-child(1){height:10px;animation-delay:0s}
+    .sb-lec-wave-bar:nth-child(2){height:18px;animation-delay:0.08s}
+    .sb-lec-wave-bar:nth-child(3){height:28px;animation-delay:0.16s}
+    .sb-lec-wave-bar:nth-child(4){height:36px;animation-delay:0.24s}
+    .sb-lec-wave-bar:nth-child(5){height:44px;animation-delay:0.32s}
+    .sb-lec-wave-bar:nth-child(6){height:36px;animation-delay:0.40s}
+    .sb-lec-wave-bar:nth-child(7){height:44px;animation-delay:0.48s}
+    .sb-lec-wave-bar:nth-child(8){height:36px;animation-delay:0.56s}
+    .sb-lec-wave-bar:nth-child(9){height:28px;animation-delay:0.64s}
+    .sb-lec-wave-bar:nth-child(10){height:18px;animation-delay:0.72s}
+    .sb-lec-wave-bar:nth-child(11){height:10px;animation-delay:0.80s}
+    .sb-lec-wave-bar:nth-child(12){height:16px;animation-delay:0.88s}
+    @keyframes sbWaveBar { 0%,100%{transform:scaleY(0.35)} 50%{transform:scaleY(1)} }
+    .sb-lec-waveform.paused .sb-lec-wave-bar { animation:none; transform:scaleY(0.3); opacity:0.35; }
+    .sb-lec-timer { font-family:monospace; font-size:26px; font-weight:700; color:#1B1713; letter-spacing:0.04em; }
+    .sb-lec-status { font-size:12px; color:#A79B92; text-align:center; min-height:16px; }
+    .sb-lec-btns { display:flex; gap:8px; width:100%; margin-top:4px; }
+    .sb-lec-seg-btn { flex:1; padding:9px 6px; border:1px solid rgba(65,48,40,0.2); border-radius:14px; background:transparent; color:#413028; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s; }
+    .sb-lec-seg-btn:hover { background:rgba(65,48,40,0.07); }
+    .sb-lec-seg-btn:disabled { opacity:0.4; cursor:default; }
+    .sb-lec-stop-btn { flex:1; padding:9px 6px; border:none; border-radius:14px; background:#fee2e2; color:#C9544A; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s; }
+    .sb-lec-stop-btn:hover { background:#fecaca; }
+    .sb-lec-notes-actions { display:flex; gap:8px; padding:12px 0 4px; }
+    .sb-lec-copy-btn { flex:1; padding:8px 4px; border:1px solid rgba(65,48,40,0.2); border-radius:14px; background:transparent; color:#413028; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s; }
+    .sb-lec-copy-btn:hover { background:rgba(65,48,40,0.07); }
+    .sb-lec-loading { display:flex; flex-direction:column; align-items:center; gap:10px; padding:28px 16px; text-align:center; }
+    .sb-lec-spinner { width:24px; height:24px; border:2px solid rgba(65,48,40,0.15); border-top-color:#E8786E; border-radius:50%; animation:sbLecSpin 0.8s linear infinite; }
+    @keyframes sbLecSpin { to { transform: rotate(360deg); } }
+    .sb-lec-loading-txt { font-size:12.5px; color:#A79B92; }
 
     /* ── NEW UI: Thin bar + centered glass card ── */
     #__sb_bar__ {
@@ -3323,6 +3370,9 @@ function __sbBuildBrainUI() {
       document.getElementById("__sb_mode_btn__").classList.toggle("active-mode", mode !== "page");
       document.getElementById("__sb_card_mode_btn__").classList.toggle("active-mode", mode !== "page");
       __sbCloseAllDropdowns();
+      if ((mode === "lecture" || mode === "meeting") && !__sbIsLectureRecording) {
+        __sbShowLectureReadyCard(mode);
+      }
     });
   });
 
@@ -5381,7 +5431,7 @@ async function __sbProcessPrompt(text, options = {}) {
       ? "Playing my favorite song for you ♫"
       : result.error?.includes("device")
         ? "Open Spotify on your phone or desktop first, then ask me again ♫"
-        : "Spotify isn't connected yet — link it from the dashboard first.";
+        : "Spotify isn't connected yet — [connect it here](https://trybraino.com/dashboard).";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -5586,6 +5636,54 @@ function __sbShowLectureRecordingBar(show) {
   if (!show && timerEl) timerEl.textContent = "00:00";
 }
 
+function __sbShowLectureReadyCard(mode) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const isM = mode === "meeting";
+  const icon = isM ? "🤝" : "🎙";
+  const modeLabel = isM ? "Meeting & Call" : "Lecture & Audio";
+  scroll.innerHTML = `
+    <div class="sb-lec-ready">
+      <div class="sb-lec-kicker">${icon} ${modeLabel}</div>
+      <div class="sb-lec-ready-title">Ready to record</div>
+      <div class="sb-lec-ready-sub">Braino will listen to this tab and turn everything into structured notes.</div>
+      <button id="__sb_lec_start_btn__" class="sb-lec-start-btn">▶ Start Recording</button>
+    </div>
+  `;
+  __sbOpenCard({ rich: false });
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  document.getElementById("__sb_lec_start_btn__")?.addEventListener("click", () => void __sbStartLectureRecording());
+}
+
+function __sbShowLectureRecordingCard() {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const title = (document.title || "Untitled").slice(0, 50);
+  const date = new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  const bars = Array.from({ length: 12 }, () => `<div class="sb-lec-wave-bar"></div>`).join("");
+  scroll.innerHTML = `
+    <div class="sb-lec-rec">
+      <div class="sb-lec-rec-header">
+        <div class="sb-lec-rec-dot"></div>
+        <div class="sb-lec-rec-label">Recording</div>
+      </div>
+      <div class="sb-lec-title">${title}</div>
+      <div class="sb-lec-date">${date}</div>
+      <div class="sb-lec-waveform" id="__sb_lec_waveform__">${bars}</div>
+      <div class="sb-lec-timer" id="__sb_lec_card_timer__">00:00</div>
+      <div class="sb-lec-status" id="__sb_lec_status__">Listening to this tab…</div>
+      <div class="sb-lec-btns">
+        <button id="__sb_lec_seg_btn__" class="sb-lec-seg-btn">✂ Save Segment</button>
+        <button id="__sb_lec_stop_btn__" class="sb-lec-stop-btn">⏹ Stop & Get Notes</button>
+      </div>
+    </div>
+  `;
+  __sbOpenCard({ rich: false });
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  document.getElementById("__sb_lec_seg_btn__")?.addEventListener("click", () => void __sbCaptureLectureSegment());
+  document.getElementById("__sb_lec_stop_btn__")?.addEventListener("click", () => void __sbStopLectureRecording());
+}
+
 async function __sbStartLectureRecording() {
   if (!__sbContextOk()) {
     __sbShowBubble("Reload this page to reconnect Braino.", true);
@@ -5594,6 +5692,7 @@ async function __sbStartLectureRecording() {
   if (__sbIsLectureRecording) return;
   __sbIsLectureRecording = true;
   __sbLectureNotes = "";
+  __sbLecSegmentCount = 0;
 
   const mode = window.__sbForcedMode || "page";
   const withMic = (mode === "meeting");
@@ -5612,24 +5711,30 @@ async function __sbStartLectureRecording() {
   }
 
   document.getElementById("__sb_brain_btn__")?.classList.add("recording");
-  __sbShowLectureRecordingBar(true);
+  __sbShowLectureRecordingBar(false);
+  __sbShowLectureRecordingCard();
 
   let seconds = 0;
   __sbLectureInterval = setInterval(() => {
     seconds++;
     const m = String(Math.floor(seconds / 60)).padStart(2, "0");
     const s = String(seconds % 60).padStart(2, "0");
+    const timeStr = `${m}:${s}`;
     const timerEl = document.getElementById("__sb_rec_timer__");
-    if (timerEl) timerEl.textContent = `${m}:${s}`;
+    if (timerEl) timerEl.textContent = timeStr;
+    const cardTimerEl = document.getElementById("__sb_lec_card_timer__");
+    if (cardTimerEl) cardTimerEl.textContent = timeStr;
   }, 1000);
-
-  const modeLabel = withMic ? "Meeting" : "Lecture";
-  __sbShowBubble(`${modeLabel} recording started — brain is listening. Press ✂ Capture to save notes from what's been said.`, true, { tone: "status", title: `${modeLabel} Recording` });
 }
 
 async function __sbCaptureLectureSegment() {
+  const segBtn = document.getElementById("__sb_lec_seg_btn__");
   const captureBtn = document.getElementById("__sb_capture_btn__");
+  const statusEl = document.getElementById("__sb_lec_status__");
+
+  if (segBtn) { segBtn.disabled = true; segBtn.textContent = "Saving…"; }
   if (captureBtn) captureBtn.classList.add("loading");
+  if (statusEl) statusEl.textContent = "Capturing segment…";
 
   try {
     const res = await new Promise((resolve) => {
@@ -5637,16 +5742,20 @@ async function __sbCaptureLectureSegment() {
     });
 
     if (res.error) {
-      __sbShowBubble("Capture failed: " + res.error, true, { tone: "status", title: "Recording" });
+      if (statusEl) statusEl.textContent = "Capture failed — try again.";
+      if (segBtn) { segBtn.disabled = false; segBtn.textContent = "✂ Save Segment"; }
       return;
     }
     if (res.empty) {
-      __sbShowBubble("Nothing recorded yet — speak a bit longer before capturing.", true, { tone: "status", title: "Recording" });
+      if (statusEl) statusEl.textContent = "Nothing recorded yet — speak a bit longer.";
+      if (segBtn) { segBtn.disabled = false; segBtn.textContent = "✂ Save Segment"; }
       return;
     }
 
     __sbLectureNotes = res.notes || __sbLectureNotes;
-    if (__sbLectureNotes) __sbShowLectureNotes(__sbLectureNotes, false);
+    __sbLecSegmentCount++;
+    if (statusEl) statusEl.textContent = `✓ Segment ${__sbLecSegmentCount} saved — still recording…`;
+    if (segBtn) { segBtn.disabled = false; segBtn.textContent = "✂ Save Segment"; }
   } finally {
     if (captureBtn) captureBtn.classList.remove("loading");
   }
@@ -5657,6 +5766,17 @@ async function __sbStopLectureRecording() {
   document.getElementById("__sb_brain_btn__")?.classList.remove("recording");
   __sbShowLectureRecordingBar(false);
   __sbIsLectureRecording = false;
+
+  // Show loading state in the card while we process
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (scroll) {
+    scroll.innerHTML = `
+      <div class="sb-lec-loading">
+        <div class="sb-lec-spinner"></div>
+        <div class="sb-lec-loading-txt">Transcribing &amp; generating notes…</div>
+      </div>
+    `;
+  }
 
   // Get final segment and stop recording simultaneously
   const [segRes] = await Promise.allSettled([
@@ -5674,7 +5794,9 @@ async function __sbStopLectureRecording() {
   if (__sbLectureNotes) {
     __sbShowLectureNotes(__sbLectureNotes, true);
   } else {
-    __sbShowBubble("Recording stopped. No content was captured — try using ✂ Capture during next session.", true, { tone: "status", title: "Recording" });
+    if (scroll) {
+      scroll.innerHTML = `<div class="sb-lec-ready"><div class="sb-lec-kicker">Recording stopped</div><div class="sb-lec-ready-sub">No content was captured — try speaking louder or use ✂ Save Segment during the next session.</div></div>`;
+    }
   }
 }
 
@@ -5682,16 +5804,22 @@ function __sbShowLectureNotes(notes, isFinal) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbLastBubbleRaw = notes;
-  const notionHtml = isFinal ? `
-    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(65,48,40,0.1)">
-      <button id="__sb_notion_sync_btn__" class="sb-notion-btn">Sync to Notion</button>
+  const actionsHtml = isFinal ? `
+    <div class="sb-lec-notes-actions">
+      <button id="__sb_lec_copy_btn__" class="sb-lec-copy-btn">Copy</button>
+      <button id="__sb_notion_sync_btn__" class="sb-notion-btn" style="flex:1.4">Sync to Notion</button>
     </div>
   ` : "";
-  scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}</div>${notionHtml}`;
+  scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}</div>${actionsHtml}`;
   __sbOpenCard({ rich: true });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (isFinal) {
     document.getElementById("__sb_notion_sync_btn__")?.addEventListener("click", __sbSyncNotesToNotion);
+    document.getElementById("__sb_lec_copy_btn__")?.addEventListener("click", () => {
+      navigator.clipboard.writeText(notes).catch(() => {});
+      const btn = document.getElementById("__sb_lec_copy_btn__");
+      if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy"; }, 1800); }
+    });
   }
 }
 
@@ -5733,7 +5861,7 @@ let __sbRtPeerConnection = null;
 let __sbRtDataChannel = null;
 let __sbRtMic = null;
 let __sbRtRemoteAudio = null;
-const __SB_REALTIME_VOICE = "marin";
+const __SB_REALTIME_VOICE = "verse";
 let __sbRtUserTranscript = "";
 let __sbRtAssistantTranscript = "";
 let __sbRtResponseWaiter = null;
@@ -5787,7 +5915,9 @@ async function __sbStartRealtimeVoice() {
       }
     };
 
+    let _dcReject;
     const dataChannelOpen = new Promise((resolve, reject) => {
+      _dcReject = reject;
       const timeoutId = setTimeout(() => {
         reject(new Error("Live AI timed out while connecting."));
       }, 10000);
@@ -5807,6 +5937,7 @@ async function __sbStartRealtimeVoice() {
         } catch (_) {}
       });
     });
+    dataChannelOpen.catch(() => {});
 
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
@@ -5821,6 +5952,8 @@ async function __sbStartRealtimeVoice() {
       body: offer.sdp || "",
     });
     if (!res.ok) {
+      if (_dcReject) _dcReject(new Error("cancelled"));
+      if (res.status === 429) throw new Error("Live AI is busy — too many requests. Try again in a moment.");
       const errorText = await res.text();
       let errorPayload = {};
       try {
@@ -5909,14 +6042,30 @@ async function __sbBuildRealtimeVoiceInstructions() {
   }
 
   const lines = [
-    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build.",
-    "Voice is only the medium here. You are still Braino, not a generic voice assistant.",
-    "Be direct. No filler. No hollow openers. Get to the point.",
-    "Think before you answer. Distinguish between what you know, what you think, and what you are unsure about. Never fake confidence.",
-    "If the user is wrong, push back clearly but respectfully.",
-    "Be warm, grounded, and natural. Never sound performatively cheerful or clingy.",
-    "Use page context and Braino context proactively. If page context is provided below, do not say you cannot access the page.",
-    "Prefer short spoken answers unless detail is genuinely useful or the user explicitly asks for more.",
+    "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
+    "",
+    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. You are not a chatbot. You are not an assistant. You are a presence — small, smart, and always there.",
+    "",
+    "Voice is only the medium here. You are still Braino. Prefer short spoken answers — no walls of text, no bullet lists read aloud. Get to the point and stop.",
+    "",
+    "How you think: You actually think before you respond. You don't just agree — you evaluate. If something the user says doesn't hold up, you say so. Clearly, not cruelly. You distinguish between what you know, what you think, and what you're unsure about. You never fake confidence. You give the most useful answer, not the most comfortable one.",
+    "",
+    "How you talk: Direct. No filler. You never start a response with \"Great question!\" or \"Absolutely!\" or any hollow opener. You get to the point. You use plain, conversational language — not robotic, not trying to sound impressive. You don't repeat yourself. You don't summarize what was just said back to the user.",
+    "",
+    "Honesty: You push back when the user is wrong. Respectfully, but clearly — you don't dance around it. You don't validate bad ideas to make someone feel good. When asked for an opinion, you give a real one. You'd rather say something slightly uncomfortable and true than something warm and useless.",
+    "",
+    "Humor: You have a dry, slightly absurd sense of humor. You can say something unexpected and it tends to land because the timing is right. You know when to be funny and when to read the room and hold back. You never force a joke. Hard limits: no sexual jokes, no political humor, no religious jokes, nothing that punches at a person or group.",
+    "",
+    "Warmth: You are warm but never clingy. You genuinely care about the person you're talking to. When someone is excited, you match that energy. When someone is struggling, you know what to say and when to say it. You don't project emotions onto people or assume how they're feeling.",
+    "",
+    "Emotional intelligence: You are emotionally mature. You always know the right thing to say at the right time. You don't spiral, you don't overreact, you don't make conversations about yourself. You hold space when needed and cut through noise when needed.",
+    "",
+    "Your vibe: You are upfront. Always. With everyone. You have a quiet confidence — you don't need to prove yourself. You're the kind of presence that makes people feel like they have someone genuinely in their corner, not just a tool that spits answers.",
+    "",
+    "What you are not: You are not a yes-man. You are not performatively cheerful. You do not sugarcoat. You do not pad your answers. You do not exist to make people feel validated — you exist to actually help them.",
+    "",
+    "Context awareness: You can see what the user is browsing, their notes, and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
+    "",
     "If the app asks you to relay a task update or final result, preserve the meaning and do not add new facts.",
     "If interrupted, stop immediately and wait for the user.",
     "",
