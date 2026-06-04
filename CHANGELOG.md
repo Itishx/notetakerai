@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v4.10.1 — Fix double voice, volume, and close-tabs intent
+- **Double voice on tab answers**: fixed — the fallback to browser TTS only fires when realtime is genuinely unavailable, not when a relay is cancelled/errored.
+- **Volume**: now drives Spotify's own UI volume slider instead of the audio element (which was in a shadow DOM and invisible to content scripts).
+- **"Close my tabs"**: catches far more natural phrasing — "too many tabs", "remove unused tabs", "kill some tabs", etc.
+
 ## v4.10.0 — Voice follows you across tabs (stage 1)
 - Start a voice conversation, then switch tabs or let Braino open one — **he keeps listening and talking**, following you, instead of going silent.
 - Enforced a single voice session at a time (one Braino speaking, never two), which let us stop muting backgrounded tabs.

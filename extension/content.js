@@ -588,23 +588,37 @@ async function __sbSpotifyPlayFirstTrackResult(songName) {
 // Set the Spotify WEB PLAYER volume directly via its media element. The Spotify Web
 // API cannot control the web player's volume, so we do it in the DOM where Braino lives.
 function __sbSpotifySetVolume(volumePercent, volumeStep) {
-  const media = [...document.querySelectorAll("audio, video")];
-  if (!media.length) return { ok: false };
+  // Drive Spotify's own volume slider via its data-testid — more reliable than
+  // querySelectorAll("audio") which misses their shadow-DOM / iframe audio nodes.
+  const slider = document.querySelector('[data-testid="volume-bar"] input[type="range"]')
+    || document.querySelector('[data-testid="volume-bar-slider"]')
+    || document.querySelector('.volume-bar input[type="range"]');
+
+  let current = 50;
+  if (slider) current = Math.round(parseFloat(slider.value || "50"));
+
   let target;
   if (typeof volumePercent === "number" && !Number.isNaN(volumePercent)) {
     target = volumePercent;
   } else {
-    const current = Math.round(Math.max(...media.map((el) => (typeof el.volume === "number" ? el.volume : 1))) * 100);
     target = current + (Number(volumeStep) || 0);
   }
   target = Math.min(100, Math.max(0, Math.round(target)));
+
+  if (slider) {
+    // React-controlled input: set nativeInputValueSetter then fire input + change.
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    if (nativeInputValueSetter) nativeInputValueSetter.call(slider, target);
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+    return { ok: true, volumePercent: target };
+  }
+
+  // Fallback: try HTML audio/video elements (works on some setups)
+  const media = [...document.querySelectorAll("audio, video")];
   let applied = false;
   media.forEach((el) => {
-    try {
-      if (target > 0 && el.muted) el.muted = false;
-      el.volume = target / 100;
-      applied = true;
-    } catch (_) {}
+    try { if (target > 0 && el.muted) el.muted = false; el.volume = target / 100; applied = true; } catch (_) {}
   });
   return { ok: applied, volumePercent: target };
 }
@@ -5730,8 +5744,13 @@ function __sbIsVolumeCommand(text) {
 
 function __sbIsCloseTabsCommand(text) {
   const t = String(text || "").toLowerCase();
-  if (!/\btabs?\b/.test(t)) return false;
-  return /\bclose\b/.test(t) || /\bclean\s*up\b/.test(t) || /\bget\s+rid\s+of\b/.test(t);
+  // "can you close some tabs" / "remove unused tabs" / "kill some tabs" / "too many tabs"
+  if (/\btabs?\b/.test(t)) {
+    if (/\b(close|shut|kill|remove|get\s+rid\s+of|clean\s*up|clear|declutter|trim|wipe|dump|fewer)\b/.test(t)) return true;
+    if (/\b(too\s+many|a\s+lot\s+of|so\s+many)\b/.test(t)) return true;
+    if (/\b(not\s+need(ed|ing)?|not\s+us(ing|ed)|unused|irrelevant|unnecessary|unimportant|useless)\b/.test(t)) return true;
+  }
+  return false;
 }
 
 function __sbIsTabsQuery(text) {
@@ -7337,13 +7356,12 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 }
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
-  // Always use the user's CONFIGURED voice (realtime AI vs ElevenLabs) so we never speak
-  // in two different voices. For factual replies (counts) pass verbatim so the realtime
-  // relay reads the exact text word-for-word instead of paraphrasing the numbers.
+  // Always use the user's CONFIGURED voice. Only fall through to ElevenLabs/browser TTS
+  // when realtime is genuinely NOT available (not when the reply was cancelled/errored) —
+  // that fallthrough was the "second voice" bug.
   if (preferred === "realtime" && __sbIsRealtimeVoiceReady() && __sbVoiceOutputPref !== "elevenlabs") {
-    const result = await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
-    if (result.status === "done") return true;
-    if (result.status === "cancelled") return false;
+    await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
+    return true; // realtime was ready — one voice, done regardless of outcome
   }
   return await __sbSpeakText(text);
 }
