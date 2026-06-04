@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v4.8.4 — Spotify: no more inline modal
+- Spotify actions (play/pause/search) no longer pop the inline card. Braino opens Spotify in a new tab and confirms verbally — no panel.
+- The manual Spotify visual (click the mascot's now-playing) still opens the panel on demand; the Spotify API integration is unchanged.
+
 ## v4.8.3 — X status works in voice mode
 - **Voice mode now answers X questions from the backend** instead of opening X in a tab. "How's my Twitter looking?" spoken aloud is intercepted before delegate routing.
 - Looser phrasing matched — "how **is** my twitter", "twitter doing", "my x stats", etc. (previously only "how's my twitter" matched).

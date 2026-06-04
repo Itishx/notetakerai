@@ -2247,7 +2247,11 @@ if (__sbContextOk()) {
     }
     if (msg.action === "sbSpotifyState") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-      __sbApplySpotifyState(msg.state || {}, { openCard: !!msg.openCard, focusSpotify: !!msg.focusSpotify });
+      // FIX 3: never auto-open the inline Spotify modal on an action. Spotify opens in a
+      // new tab and Braino confirms verbally; we only update internal state (mascot
+      // visual). The panel still re-renders if the user already has it open, and the
+      // manual Spotify-visual click stays unaffected.
+      __sbApplySpotifyState(msg.state || {}, { openCard: false, focusSpotify: false });
     }
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
