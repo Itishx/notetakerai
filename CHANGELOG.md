@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v4.9.1 — "Read my tabs" + cleaner tab count
+- "Read the tabs out", "tell me my tabs", "name my tabs" now work (intent detection was missing these).
+- Tab count now counts only real web pages (ignores new-tab/chrome:// pages) and mentions how many windows when you have more than one.
+
 ## v4.9.0 — One voice for tab answers, exact numbers
 - Tab/count replies are now spoken by your **single configured voice** (no more a second browser/ElevenLabs voice chiming in alongside the realtime voice).
 - The realtime voice now reads counts **word-for-word**, so "how many tabs" and "closed N tabs" say the exact number instead of a paraphrased one.

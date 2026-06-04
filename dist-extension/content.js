@@ -5733,10 +5733,10 @@ function __sbIsTabsQuery(text) {
   const t = String(text || "").toLowerCase();
   if (!/\btabs?\b/.test(t)) return false;
   return /\bhow\s+many\s+tabs?\b/.test(t)
-    || /\bwhat\s+tabs?\b/.test(t)
-    || /\b(list|show|see)\b.*\btabs?\b/.test(t)
+    || /\bwhat('?s| is| are)?\b.*\btabs?\b/.test(t)
+    || /\b(list|show|see|read|name|tell\s+me|go\s+through|run\s+through)\b.*\btabs?\b/.test(t)
+    || /\btabs?\b.*\b(out|open|list|are)\b/.test(t)
     || /\b(across|all)\b.*\btabs?\b/.test(t)
-    || /\bwhat\b.*\b(doing|open|have)\b.*\btabs?\b/.test(t)
     || /\bmy\s+(other\s+)?tabs?\b/.test(t);
 }
 
@@ -5947,17 +5947,21 @@ async function __sbHandleTabsQuery(promptText, ctx = {}) {
       formatted = "I couldn't read your tabs just now — try again in a moment.";
     } else {
       const count = Number(data.count || 0);
-      if (count <= 1) {
+      const windowCount = Number(data.windowCount || 1);
+      const windowSuffix = windowCount > 1 ? ` across ${windowCount} windows` : "";
+      const wantsList = /\b(list|show|see|read|name|tell\s+me|go\s+through|run\s+through|what\s+tabs?|which\s+tabs?)\b/.test(promptText.toLowerCase());
+      if (count <= 1 && !wantsList) {
         formatted = "You only have this tab open right now.";
-      } else if (/\bhow\s+many\b/.test(promptText.toLowerCase())) {
-        formatted = `You have ${count} tabs open.`;
+      } else if (!wantsList) {
+        formatted = `You have ${count} tab${count === 1 ? "" : "s"} open${windowSuffix}.`;
       } else {
         const titles = (data.tabs || [])
-          .filter((t) => !t.active)
-          .slice(0, 5)
           .map((t) => t.title)
-          .filter(Boolean);
-        formatted = `You have ${count} tabs open.${titles.length ? ` A few of them: ${titles.join("; ")}.` : ""}`;
+          .filter(Boolean)
+          .slice(0, 8);
+        formatted = titles.length
+          ? `You have ${count} tab${count === 1 ? "" : "s"} open${windowSuffix}: ${titles.join("; ")}.`
+          : `You have ${count} tab${count === 1 ? "" : "s"} open${windowSuffix}.`;
       }
     }
     __sbChatHistory.push({ role: "user", content: promptText });

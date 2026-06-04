@@ -412,17 +412,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const tabs = await chrome.tabs.query({});
-        const list = tabs
-          .filter((t) => t.id != null)
-          .map((t) => ({
-            id: t.id,
-            title: t.title || "(untitled)",
-            host: bgHostOf(t.url),
-            active: !!t.active,
-            pinned: !!t.pinned,
-            audible: !!t.audible,
-          }));
-        sendResponse({ count: list.length, tabs: list, activeTabId: sender?.tab?.id ?? null });
+        // Count only real web pages — exclude new-tab, chrome://, extension, devtools, etc.
+        const contentTabs = tabs.filter((t) => t.id != null && /^https?:\/\//i.test(t.url || ""));
+        const list = contentTabs.map((t) => ({
+          id: t.id,
+          title: t.title || "(untitled)",
+          host: bgHostOf(t.url),
+          active: !!t.active,
+          pinned: !!t.pinned,
+          audible: !!t.audible,
+        }));
+        const windowCount = new Set(contentTabs.map((t) => t.windowId)).size;
+        sendResponse({
+          count: list.length,
+          windowCount: Math.max(1, windowCount),
+          tabs: list,
+          activeTabId: sender?.tab?.id ?? null,
+        });
       } catch (e) {
         sendResponse({ error: e.message || "Could not read tabs." });
       }
