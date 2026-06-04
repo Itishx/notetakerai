@@ -5693,21 +5693,28 @@ function __sbDetectIntent(text) {
 
 function __sbIsXStatusRequest(text) {
   const t = String(text || "").toLowerCase();
-  return /\bhow'?s\s+my\s+(twitter|x)\b/.test(t)
-    || /\bcheck\s+my\s+(twitter|x)\b/.test(t)
-    || /\b(twitter|x)\s+stats\b/.test(t)
-    || /\b(any|got\s+any|new)\s+mentions?\b/.test(t)
-    || /\bdid\s+anyone\s+mention\s+me\b/.test(t)
-    || /\bhow(?:'?d| did| is)\s+my\s+last\s+(tweet|post)\s+do(?:ing)?\b/.test(t)
-    || /\b(tweet|post)\s+performance\b/.test(t)
-    || /\bhow\s+many\s+followers?\b/.test(t)
-    || /\bfollower\s+count\b/.test(t);
+  // Always-X signals (no "twitter"/"x" word needed)
+  if (/\bhow many followers?\b/.test(t) || /\bfollower count\b/.test(t)) return true;
+  if (/\bdid anyone mention me\b/.test(t)) return true;
+  if (/\b(tweet|post) performance\b/.test(t)) return true;
+  if (/\bhow\b.*\blast (tweet|post)\b/.test(t)) return true; // "how did my last tweet do"
+  if (/\b(any|got any|new|check (my|for))\b.*\bmentions?\b/.test(t)) return true;
+  // Does it reference the user's X / Twitter account?
+  const aboutX = /\btwitter\b/.test(t)
+    || /\bmy x\b/.test(t)
+    || /\bon x\b/.test(t)
+    || /\bx (account|profile|stats?|statistics|status|summary|numbers?)\b/.test(t)
+    || /\b(twitter|x) (stats?|statistics|status|summary|numbers?)\b/.test(t);
+  if (!aboutX) return false;
+  // X reference + a status/stat-ish word (loose phrasing: "how is my twitter looking", "twitter doing")
+  return /\b(how|hows|doing|look|looking|going|perform|performance|stat|stats|statistics|status|summary|update|check|number|numbers|grow|growing|growth|engagement|mention|mentions|followers?)\b/.test(t);
 }
 
 function __sbIsXLastTweetRequest(text) {
   const t = String(text || "").toLowerCase();
-  return /\bwhat\s+(did|was)\s+my\s+last\s+(tweet|post)\s+(say|said|about)\b/.test(t)
-    || /\bread\s+(me\s+)?my\s+last\s+(tweet|post)\b/.test(t);
+  return /\bwhat\s+(did|was|does)\b.*\blast\s+(tweet|post)\b/.test(t)
+    || /\bread\s+(me\s+)?my\s+last\s+(tweet|post)\b/.test(t)
+    || /\bmy\s+last\s+(tweet|post)\b.*\b(say|said|about|content|text)\b/.test(t);
 }
 
 function __sbXFirst12Words(text) {
@@ -7199,6 +7206,17 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   const promptText = String(routing.promptText || "").trim();
   if (!promptText) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
+  // X (Twitter) status — answer from the backend and speak it, BEFORE any delegate
+  // classification (which would otherwise open X in a tab).
+  if (__sbIsXLastTweetRequest(promptText)) {
+    await __sbHandleXLastTweet(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbIsXStatusRequest(promptText)) {
+    await __sbHandleXStatus(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
 

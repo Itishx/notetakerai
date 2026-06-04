@@ -1,5 +1,11 @@
 # Braino Changelog
 
+## v4.8.3 — X status works in voice mode
+- **Voice mode now answers X questions from the backend** instead of opening X in a tab. "How's my Twitter looking?" spoken aloud is intercepted before delegate routing.
+- Looser phrasing matched — "how **is** my twitter", "twitter doing", "my x stats", etc. (previously only "how's my twitter" matched).
+- Delegate tasks no longer pop the panel in voice mode.
+- `x-status` no longer says "not connected" on a transient X API hiccup — it stays connected and degrades gracefully.
+
 ## v4.8.1 — Twitter/X status in Delegate
 - Ask Braino **"how's my Twitter looking?"**, "any new mentions?", "how many followers?", or "how did my last tweet do?" in Delegate mode and it answers with **real X data**, spoken aloud.
 - New `x-status` edge function exposes live follower count, recent mentions, and last-tweet engagement (previously locked inside the auto-engage cron).
