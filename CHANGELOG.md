@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v4.8.7 — Cross-tab awareness & cleanup
+- Ask **"how many tabs do I have open?"** or **"what am I doing across my tabs?"** and Braino answers from all your open windows.
+- Say **"close the tabs I'm not using"** and Braino says "Closing, sir" then closes only the clutter — never your active tab, pinned tabs, or anything playing audio/video.
+- Works in both chat and realtime voice.
+
 ## v4.8.6 — Braino follows you across tabs
 - Once you activate Braino, the floating mascot now **persists on every tab** — open a new tab (or let Braino open one) and he's already there, docked.
 - Collapsing the card now returns to the docked mascot instead of disappearing, so you never have to re-invoke.

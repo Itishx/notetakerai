@@ -408,6 +408,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message || "Could not reach X." }));
     return true;
   }
+  if (message.action === "getTabsOverview") {
+    (async () => {
+      try {
+        const tabs = await chrome.tabs.query({});
+        const list = tabs
+          .filter((t) => t.id != null)
+          .map((t) => ({
+            id: t.id,
+            title: t.title || "(untitled)",
+            host: bgHostOf(t.url),
+            active: !!t.active,
+            pinned: !!t.pinned,
+            audible: !!t.audible,
+          }));
+        sendResponse({ count: list.length, tabs: list, activeTabId: sender?.tab?.id ?? null });
+      } catch (e) {
+        sendResponse({ error: e.message || "Could not read tabs." });
+      }
+    })();
+    return true;
+  }
+  if (message.action === "closeIrrelevantTabs") {
+    (async () => {
+      try {
+        const protectedId = sender?.tab?.id ?? null;
+        const tabs = await chrome.tabs.query({});
+        // Hard safety filter — protected tabs are removed before the LLM ever sees them.
+        const candidates = tabs.filter(
+          (t) => t.id != null && t.id !== protectedId && !t.active && !t.pinned && !t.audible,
+        );
+        if (!candidates.length) {
+          sendResponse({ closed: [], closedCount: 0, keptCount: tabs.length, reason: "nothing-to-close" });
+          return;
+        }
+        const picked = await bgPickIrrelevantTabs(String(message.instruction || ""), candidates);
+        const candidateIds = new Set(candidates.map((c) => c.id));
+        const safeIds = [...new Set(picked)].filter((id) => candidateIds.has(id));
+        const closedTitles = candidates.filter((c) => safeIds.includes(c.id)).map((c) => c.title || "(untitled)");
+        if (safeIds.length) await chrome.tabs.remove(safeIds);
+        sendResponse({ closed: closedTitles, closedCount: safeIds.length, keptCount: tabs.length - safeIds.length });
+      } catch (e) {
+        sendResponse({ error: e.message || "Could not close tabs." });
+      }
+    })();
+    return true;
+  }
   if (message.action === "runBrainAgent") {
     const task = message.task;
     const connector = message.connector;
@@ -622,6 +668,44 @@ async function bgChatFetch(body) {
     },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
+}
+
+function bgHostOf(url) {
+  try { return new URL(url || "").hostname.replace(/^www\./, ""); } catch { return ""; }
+}
+
+// Ask the LLM which of the (already safety-filtered) candidate tabs to close.
+// Returns an array of tab IDs. Closes nothing if the response can't be parsed.
+async function bgPickIrrelevantTabs(instruction, candidates) {
+  const numbered = candidates
+    .map((t, i) => `${i}. ${String(t.title || "(untitled)").slice(0, 80)} — ${t.host || "?"}`)
+    .join("\n");
+  const prompt = [
+    "You help a user close irrelevant browser tabs.",
+    `User request: "${instruction || "close the tabs I don't need"}"`,
+    "",
+    "Closable tabs (already excludes the active, pinned, and audio-playing tabs):",
+    numbered,
+    "",
+    "Return ONLY a JSON array of the indices to close (e.g. [0,2,3]).",
+    "Keep tabs that look like active work; close clutter (duplicates, search-result pages, finished reading, ads, empty/new tabs).",
+    "If the user gave no specific criteria, be conservative. Never return every index unless the user explicitly asked to close all tabs.",
+  ].join("\n");
+
+  try {
+    const res = await bgChatFetch({ notes: "", chatHistory: [], message: prompt });
+    const data = await res.json().catch(() => ({}));
+    const raw = String(data?.reply || data?.response || "");
+    const match = raw.match(/\[[\s\S]*?\]/);
+    if (!match) return [];
+    const indices = JSON.parse(match[0]);
+    if (!Array.isArray(indices)) return [];
+    return indices
+      .map((n) => candidates[Number(n)]?.id)
+      .filter((id) => id != null);
+  } catch {
+    return [];
+  }
 }
 
 let bgXPersonaCache = null;

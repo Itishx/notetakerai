@@ -5692,6 +5692,23 @@ function __sbIsVolumeCommand(text) {
     || /\bturn\s+(it|the\s+(music|sound|volume))\s+(up|down)\b/.test(t);
 }
 
+function __sbIsCloseTabsCommand(text) {
+  const t = String(text || "").toLowerCase();
+  if (!/\btabs?\b/.test(t)) return false;
+  return /\bclose\b/.test(t) || /\bclean\s*up\b/.test(t) || /\bget\s+rid\s+of\b/.test(t);
+}
+
+function __sbIsTabsQuery(text) {
+  const t = String(text || "").toLowerCase();
+  if (!/\btabs?\b/.test(t)) return false;
+  return /\bhow\s+many\s+tabs?\b/.test(t)
+    || /\bwhat\s+tabs?\b/.test(t)
+    || /\b(list|show|see)\b.*\btabs?\b/.test(t)
+    || /\b(across|all)\b.*\btabs?\b/.test(t)
+    || /\bwhat\b.*\b(doing|open|have)\b.*\btabs?\b/.test(t)
+    || /\bmy\s+(other\s+)?tabs?\b/.test(t);
+}
+
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
   // Volume is a Spotify delegate action — route to agent (works in chat & realtime voice).
@@ -5871,6 +5888,81 @@ async function __sbHandleXLastTweet(promptText, ctx = {}) {
       ? `Your last tweet said: '${lt.text}'`
       : "You haven't posted anything through Braino yet.";
     console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
+    __sbChatHistory.push({ role: "user", content: promptText });
+    __sbChatHistory.push({ role: "assistant", content: formatted });
+    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput);
+  } finally {
+    if (brainBtn) brainBtn.classList.remove("recording");
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+async function __sbHandleTabsQuery(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (showUi) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    if (brainBtn) brainBtn.classList.add("recording");
+  }
+  try {
+    const data = await __sbRuntimeMessage({ action: "getTabsOverview" });
+    let formatted;
+    if (!data || data.error) {
+      formatted = "I couldn't read your tabs just now — try again in a moment.";
+    } else {
+      const count = Number(data.count || 0);
+      if (count <= 1) {
+        formatted = "You only have this tab open right now.";
+      } else if (/\bhow\s+many\b/.test(promptText.toLowerCase())) {
+        formatted = `You have ${count} tabs open.`;
+      } else {
+        const titles = (data.tabs || [])
+          .filter((t) => !t.active)
+          .slice(0, 5)
+          .map((t) => t.title)
+          .filter(Boolean);
+        formatted = `You have ${count} tabs open.${titles.length ? ` A few of them: ${titles.join("; ")}.` : ""}`;
+      }
+    }
+    __sbChatHistory.push({ role: "user", content: promptText });
+    __sbChatHistory.push({ role: "assistant", content: formatted });
+    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput);
+  } finally {
+    if (brainBtn) brainBtn.classList.remove("recording");
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+async function __sbHandleCloseTabs(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (showUi) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    if (brainBtn) brainBtn.classList.add("recording");
+  }
+  try {
+    // Immediate verbal ack, then close.
+    if (fromVoice) await __sbSpeakWithPreferredVoice("Closing, sir.", voiceOutput);
+    const data = await __sbRuntimeMessage({ action: "closeIrrelevantTabs", instruction: promptText });
+    let formatted;
+    if (!data || data.error) {
+      formatted = "I couldn't close any tabs just now — try again in a moment.";
+    } else if (!data.closedCount) {
+      formatted = "Nothing to close — everything looks in use.";
+    } else {
+      const names = (data.closed || []).slice(0, 5).join("; ");
+      formatted = `Closed ${data.closedCount} tab${data.closedCount === 1 ? "" : "s"}${names ? `: ${names}` : ""}. Kept your active, pinned, and playing tabs.`;
+    }
     __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: formatted });
     if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
@@ -6184,6 +6276,16 @@ async function __sbProcessPrompt(text, options = {}) {
   }
   if (__sbIsXStatusRequest(promptText)) {
     await __sbHandleXStatus(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Cross-tab awareness & control (close before query — a close command also says "tabs").
+  if (__sbIsCloseTabsCommand(promptText)) {
+    await __sbHandleCloseTabs(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  if (__sbIsTabsQuery(promptText)) {
+    await __sbHandleTabsQuery(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 
@@ -7242,6 +7344,16 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   }
   if (__sbIsXStatusRequest(promptText)) {
     await __sbHandleXStatus(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
+  // Cross-tab awareness & control (before delegate classification, which would mis-route).
+  if (__sbIsCloseTabsCommand(promptText)) {
+    await __sbHandleCloseTabs(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbIsTabsQuery(promptText)) {
+    await __sbHandleTabsQuery(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
 
