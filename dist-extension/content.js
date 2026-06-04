@@ -2207,15 +2207,23 @@ const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
 
 // Pupils shifted up-left to look toward top-left (center of screen when brain is at bottom-right)
+// Pupils are now inside <g id="sbb-pupil-*"> wrappers — target the content inside.
 const __SB_BRAIN_SVG_LISTENING = __SB_BRAIN_SVG
-  .replace('<circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/>',
-           '<circle cx="36.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="37.2" cy="45.1" r="1.1" fill="white"/>')
-  .replace('<circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
-           '<circle cx="60.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="61.2" cy="45.1" r="1.1" fill="white"/>');
+  .replace('<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+           '<g id="sbb-pupil-l"><circle cx="36.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="37.2" cy="45.1" r="1.1" fill="white"/></g>')
+  .replace('<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+           '<g id="sbb-pupil-r"><circle cx="60.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="61.2" cy="45.1" r="1.1" fill="white"/></g>');
 
+// Eye whites + pupils are now in separate <g id> groups — replace each group's content.
 const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
-  .replace('<circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
-    '<circle cx="38" cy="48" r="6.5" fill="white"/><path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/><circle cx="62" cy="48" r="6.5" fill="white"/><path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/>')
+  .replace('<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>')
+  .replace('<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/></g>')
+  .replace('<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>')
+  .replace('<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/></g>')
   .replace('<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
     '<ellipse cx="28" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/><ellipse cx="72" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/>')
   .replace('<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
@@ -2433,8 +2441,8 @@ function __sbBuildBrainUI() {
     }
     @keyframes __sb_gaze__ {
       0%   { transform: translate(0px, 0px);    }
-      30%  { transform: translate(-1.8px, 0.4px);  }
-      65%  { transform: translate(1.8px, -0.4px); }
+      30%  { transform: translate(-0.8px, 0.2px); }
+      65%  { transform: translate(0.8px, -0.2px); }
       100% { transform: translate(0px, 0px);    }
     }
     /* Blink: eye whites scaleY collapse every ~4s, super quick */

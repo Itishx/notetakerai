@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v4.11.3 — Restore auth wakeup sequence + calmer eyes
+- Restored the authentication sleeping/wakeup SVG variants — the SVG restructuring broke the .replace() calls that produce the sleeping/listening faces, so the cinematic wakeup was silently skipping.
+- Gaze drift reduced from ±1.8px to ±0.8px — eyes move naturally, not frantically.
+
 ## v4.11.2 — Idle animations: float, eyes, arms + Spotify music glow
 - Braino now **floats, swings his arms, and scans around with his eyes** while docked — matching the home page mascot. He blinks every ~4s.
 - On Spotify while music is playing: distinct **green-cyan pulsing glow** so you know he's aware of the music.
