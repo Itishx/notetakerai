@@ -142,6 +142,14 @@ const AFTER_MILESTONES = [
     title: 'Autonomous X Pipeline + Google Docs + Drive Organise',
     desc: '24/7 X auto-posting and reply pipeline with per-user voice. Ask Braino to research any topic and create a Google Doc in one shot. "Organise my Drive" party trick — scans, categorises, moves files. Live waitlist announcements with voice. Content source field for grounding posts in real material.',
     tags: ['X Auto Pipeline', 'Google Docs', 'Drive Organise', 'Voice Alerts'],
+  },
+  {
+    date: 'June 4, 2026',
+    version: 'v2.0.0',
+    dot: '🐦',
+    title: 'Ask Braino About Your X',
+    desc: 'Just ask "how\'s my Twitter looking?" Braino pulls your real follower count, recent mentions, and last-tweet engagement and answers on the spot. In voice mode he simply speaks it; in chat he replies inline — and stays open for follow-ups like "what did my last tweet say?"',
+    tags: ['X Status', 'Delegate', 'Voice', 'Live Stats'],
     latest: true,
   },
 ];

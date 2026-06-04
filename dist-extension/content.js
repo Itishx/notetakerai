@@ -5763,19 +5763,23 @@ let __sbXLastStatus = null;
 async function __sbHandleXStatus(promptText, ctx = {}) {
   const fromVoice = Boolean(ctx.fromVoice);
   const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  // Voice mode (voice-only) speaks with no UI; chat mode renders the reply and never speaks.
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
   const brainBtn = document.getElementById("__sb_brain_btn__");
-  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-  __sbShowThinking(scroll, promptText);
-  __sbOpenCard({ rich: true });
-  if (brainBtn) brainBtn.classList.add("recording");
+  if (showUi) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    if (brainBtn) brainBtn.classList.add("recording");
+  }
 
   try {
     const data = await __sbRuntimeMessage({ action: "getXStatus" });
 
     if (!data || data.error) {
       const msg = "I couldn't reach X right now — try again in a moment.";
-      __sbShowBubble(msg, false, { rich: true, kicker: "Braino" });
-      if (fromVoice) await __sbSpeakWithPreferredVoice(msg, voiceOutput); else await __sbSpeakText(msg);
+      if (showUi) __sbShowBubble(msg, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(msg, voiceOutput);
       return;
     }
 
@@ -5784,8 +5788,8 @@ async function __sbHandleXStatus(promptText, ctx = {}) {
       const rich = `${spoken}\n\n[Open Braino settings](https://trybraino.com/dashboard)`;
       __sbChatHistory.push({ role: "user", content: promptText });
       __sbChatHistory.push({ role: "assistant", content: rich });
-      __sbShowBubble(rich, false, { rich: true, kicker: "Braino" });
-      if (fromVoice) await __sbSpeakWithPreferredVoice(spoken, voiceOutput); else await __sbSpeakText(spoken);
+      if (showUi) __sbShowBubble(rich, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(spoken, voiceOutput);
       return;
     }
 
@@ -5794,8 +5798,8 @@ async function __sbHandleXStatus(promptText, ctx = {}) {
     console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
     __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: formatted });
-    __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
-    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput); else await __sbSpeakText(formatted);
+    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput);
   } finally {
     if (brainBtn) brainBtn.classList.remove("recording");
     __sbCompleteVoiceTurn(ctx);
@@ -5805,11 +5809,14 @@ async function __sbHandleXStatus(promptText, ctx = {}) {
 async function __sbHandleXLastTweet(promptText, ctx = {}) {
   const fromVoice = Boolean(ctx.fromVoice);
   const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
   const brainBtn = document.getElementById("__sb_brain_btn__");
-  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-  __sbShowThinking(scroll, promptText);
-  __sbOpenCard({ rich: true });
-  if (brainBtn) brainBtn.classList.add("recording");
+  if (showUi) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    if (brainBtn) brainBtn.classList.add("recording");
+  }
 
   try {
     let data = __sbXLastStatus;
@@ -5819,8 +5826,8 @@ async function __sbHandleXLastTweet(promptText, ctx = {}) {
     if (data && data.connected === false) {
       const spoken = "Your X account isn't connected. Want me to open settings?";
       const rich = `${spoken}\n\n[Open Braino settings](https://trybraino.com/dashboard)`;
-      __sbShowBubble(rich, false, { rich: true, kicker: "Braino" });
-      if (fromVoice) await __sbSpeakWithPreferredVoice(spoken, voiceOutput); else await __sbSpeakText(spoken);
+      if (showUi) __sbShowBubble(rich, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(spoken, voiceOutput);
       return;
     }
 
@@ -5831,8 +5838,8 @@ async function __sbHandleXLastTweet(promptText, ctx = {}) {
     console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
     __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: formatted });
-    __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
-    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput); else await __sbSpeakText(formatted);
+    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput);
   } finally {
     if (brainBtn) brainBtn.classList.remove("recording");
     __sbCompleteVoiceTurn(ctx);
