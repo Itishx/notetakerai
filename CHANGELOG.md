@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v4.10.0 — Voice follows you across tabs (stage 1)
+- Start a voice conversation, then switch tabs or let Braino open one — **he keeps listening and talking**, following you, instead of going silent.
+- Enforced a single voice session at a time (one Braino speaking, never two), which let us stop muting backgrounded tabs.
+- Note: the session still lives on the tab where you started it, so it survives tab *switches* but not *closing* that tab — making it survive anything (offscreen) is the next stage.
+
 ## v4.9.1 — "Read my tabs" + cleaner tab count
 - "Read the tabs out", "tell me my tabs", "name my tabs" now work (intent detection was missing these).
 - Tab count now counts only real web pages (ignores new-tab/chrome:// pages) and mentions how many windows when you have more than one.

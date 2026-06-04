@@ -1,6 +1,7 @@
 // Background service worker for Braino (MV3)
 let isRecording = false;
 let bgAgentShouldStop = false;
+let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
 
 function doCapture(windowId, sendResponse) {
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
@@ -407,6 +408,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: `x-status ${res.status}` }))
       .catch((e) => sendResponse({ error: e.message || "Could not reach X." }));
     return true;
+  }
+  if (message.action === "rtVoiceClaim") {
+    // One voice session at a time: record the owner and tell every other tab to stand down.
+    const ownerId = sender?.tab?.id ?? null;
+    rtVoiceOwnerTabId = ownerId;
+    chrome.tabs.query({}, (tabs) => {
+      for (const t of tabs) {
+        if (t.id != null && t.id !== ownerId) {
+          chrome.tabs.sendMessage(t.id, { action: "rtVoiceYield" }, () => { void chrome.runtime.lastError; });
+        }
+      }
+    });
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (message.action === "rtVoiceRelease") {
+    if (rtVoiceOwnerTabId === (sender?.tab?.id ?? null)) rtVoiceOwnerTabId = null;
+    sendResponse({ ok: true });
+    return false;
   }
   if (message.action === "getTabsOverview") {
     (async () => {

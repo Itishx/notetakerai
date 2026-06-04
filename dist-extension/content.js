@@ -2284,6 +2284,11 @@ if (__sbContextOk()) {
       // manual Spotify-visual click stays unaffected.
       __sbApplySpotifyState(msg.state || {}, { openCard: false, focusSpotify: false });
     }
+    if (msg.action === "rtVoiceYield") {
+      // Another tab claimed the single voice session — stand down here so only one runs.
+      if (__sbHeadphoneMode) __sbExitHeadphoneMode();
+      else if (__sbIsRealtimeVoiceReady()) __sbCleanupRealtimeVoice({ reason: "yielded_to_other_tab" });
+    }
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
   });
@@ -7135,6 +7140,10 @@ async function __sbStartRealtimeVoice() {
 
     __sbClearRealtimeConnectHint();
     __sbRtSessionReady = true;
+    // Claim the single voice session — tells any other tab running voice to stand down,
+    // so only one Braino ever listens/speaks (no "two tabs talking"). Because mic + audio
+    // are global, this session keeps following the user across tab switches.
+    try { chrome.runtime.sendMessage({ action: "rtVoiceClaim" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
     document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
     __sbSetVoiceStatusBadge("realtime", "Live AI");
     __sbSetHpBrainState("listening");
@@ -7171,18 +7180,15 @@ function __sbSetRealtimeMicEnabled(enabled) {
   });
 }
 
-// Only the foreground tab should listen and speak. When a tab is backgrounded it
-// stops talking and mutes its mic so a previous tab can't answer over the tab the
-// user is actually on (fixes two tabs speaking at once now that Braino persists
-// on every tab). When it returns to the foreground, voice resumes if active here.
+// The single realtime voice session keeps running across tab switches (mic + audio are
+// system-global), so Braino follows you from tab to tab and stays listening. Single-owner
+// enforcement (rtVoiceClaim/rtVoiceYield) prevents the old "two tabs talking" problem, so
+// we no longer mute a backgrounded voice tab. We only stop legacy (tab-local)
+// SpeechRecognition when hidden, since it can't follow and would double up.
 document.addEventListener("visibilitychange", () => {
   if (!__sbOwnsInlineUi()) return;
-  if (document.hidden) {
-    __sbStopSpeech();
-    __sbSetRealtimeMicEnabled(false);
-    if (__sbIsRecording) { try { __sbStopRecording({ silent: true }); } catch (_) {} }
-  } else if (__sbVoiceOnlyMode || __sbHeadphoneMode) {
-    __sbSetRealtimeMicEnabled(true);
+  if (document.hidden && __sbIsRecording && !__sbHeadphoneMode) {
+    try { __sbStopRecording({ silent: true }); } catch (_) {}
   }
 });
 
@@ -7468,6 +7474,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 function __sbCleanupRealtimeVoice(options = {}) {
   const reason = String(options.reason || "client_cleanup");
   const usageSessionId = __sbRtUsageSessionId;
+  try { chrome.runtime.sendMessage({ action: "rtVoiceRelease" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
   __sbClearRealtimeConnectHint();
   __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
   __sbVoicePendingReply = false;
