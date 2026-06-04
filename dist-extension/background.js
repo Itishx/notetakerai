@@ -2,6 +2,7 @@
 let isRecording = false;
 let bgAgentShouldStop = false;
 let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
+let bgRtSessionActive = false; // offscreen realtime session is running
 
 function doCapture(windowId, sendResponse) {
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
@@ -409,6 +410,76 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message || "Could not reach X." }));
     return true;
   }
+  // ── Offscreen realtime bridge ──────────────────────────────────────────────
+  if (message.action === "startOffscreenRealtime") {
+    (async () => {
+      try {
+        await ensureOffscreenForRealtime();
+        rtVoiceOwnerTabId = sender?.tab?.id ?? null;
+        bgRtSessionActive = false; // set true when offscreen confirms ready
+        chrome.storage.local.set({ sbRtSessionActive: true });
+        chrome.runtime.sendMessage(
+          { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions },
+          (res) => {
+            if (chrome.runtime.lastError || res?.error) {
+              chrome.storage.local.set({ sbRtSessionActive: false });
+              chrome.tabs.sendMessage(rtVoiceOwnerTabId || 0, { action: "sbRtSessionFailed", error: res?.error || "Offscreen start failed" }, () => { void chrome.runtime.lastError; });
+            }
+          }
+        );
+        sendResponse({ ok: true });
+      } catch (e) {
+        chrome.storage.local.set({ sbRtSessionActive: false });
+        sendResponse({ error: e.message || "Failed to start offscreen realtime" });
+      }
+    })();
+    return true;
+  }
+  if (message.action === "offscreenRtReady") {
+    bgRtSessionActive = true;
+    // Forward session info to the owner tab so it can set up usage tracking.
+    if (rtVoiceOwnerTabId) {
+      chrome.tabs.sendMessage(rtVoiceOwnerTabId, { action: "sbRtSessionReady", sessionId: message.sessionId, limitMs: message.limitMs, allocatedMs: message.allocatedMs }, () => { void chrome.runtime.lastError; });
+    }
+    return false;
+  }
+  if (message.action === "offscreenRtEvent") {
+    // Forward realtime events to the currently active tab (not necessarily the owner).
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      const tabId = tabs?.[0]?.id;
+      if (tabId) chrome.tabs.sendMessage(tabId, { action: "sbRtEvent", event: message.event }, () => { void chrome.runtime.lastError; });
+    });
+    return false;
+  }
+  if (message.action === "offscreenRtDisconnected") {
+    bgRtSessionActive = false;
+    chrome.storage.local.set({ sbRtSessionActive: false });
+    // Tell the active tab so it can fall back to legacy voice.
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      const tabId = tabs?.[0]?.id;
+      if (tabId) chrome.tabs.sendMessage(tabId, { action: "sbRtSessionEnded", reason: message.reason }, () => { void chrome.runtime.lastError; });
+    });
+    return false;
+  }
+  if (message.action === "offscreenRtSend") {
+    chrome.runtime.sendMessage({ target: "offscreen", action: "sendRtEvent", event: message.event }, () => { void chrome.runtime.lastError; });
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.action === "offscreenRtMic") {
+    chrome.runtime.sendMessage({ target: "offscreen", action: "setRtMicEnabled", enabled: message.enabled }, () => { void chrome.runtime.lastError; });
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.action === "stopOffscreenRealtime") {
+    bgRtSessionActive = false;
+    rtVoiceOwnerTabId = null;
+    chrome.storage.local.set({ sbRtSessionActive: false });
+    chrome.runtime.sendMessage({ target: "offscreen", action: "stopRealtimeSession" }, () => { void chrome.runtime.lastError; });
+    sendResponse({ ok: true });
+    return false;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
   if (message.action === "rtVoiceClaim") {
     // One voice session at a time: record the owner and tell every other tab to stand down.
     const ownerId = sender?.tab?.id ?? null;
@@ -3516,9 +3587,7 @@ function storeAuthData(data) {
 }
 
 async function ensureOffscreen() {
-  const contexts = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-  });
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
   if (contexts.length === 0) {
     await chrome.offscreen.createDocument({
       url: "offscreen.html",
@@ -3527,6 +3596,30 @@ async function ensureOffscreen() {
     });
   }
 }
+
+async function ensureOffscreenForRealtime() {
+  // Realtime voice needs AUDIO_PLAYBACK so remote AI audio plays from the offscreen
+  // doc (extension-global, heard regardless of active tab). Close and recreate if the
+  // existing offscreen was opened without that reason.
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+  if (contexts.length > 0) {
+    const hasAudio = contexts[0].documentUrl && true; // can't inspect reasons, so just check recording isn't active
+    if (isRecording) return; // don't disrupt an active lecture recording — realtime will fallback in-tab
+    await chrome.offscreen.closeDocument().catch(() => {});
+  }
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: ["USER_MEDIA", "AUDIO_PLAYBACK"],
+    justification: "Realtime voice AI — mic input and AI audio output, global across all tabs",
+  });
+}
+
+// When the user switches to a new tab and a realtime session is running in offscreen,
+// tell the new tab to enter headphone mode UI so Braino is already listening there.
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  if (!bgRtSessionActive) return;
+  chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
+});
 
 async function startRecording(tabId, existingStreamId, withMic) {
   let streamId;

@@ -595,7 +595,12 @@ function __sbSpotifySetVolume(volumePercent, volumeStep) {
     || document.querySelector('.volume-bar input[type="range"]');
 
   let current = 50;
-  if (slider) current = Math.round(parseFloat(slider.value || "50"));
+  if (slider) {
+    const sMin = parseFloat(slider.min || "0");
+    const sMax = parseFloat(slider.max || "1");
+    const raw = parseFloat(slider.value || "0");
+    current = Math.round(((raw - sMin) / Math.max(sMax - sMin, 0.001)) * 100);
+  }
 
   let target;
   if (typeof volumePercent === "number" && !Number.isNaN(volumePercent)) {
@@ -606,9 +611,13 @@ function __sbSpotifySetVolume(volumePercent, volumeStep) {
   target = Math.min(100, Math.max(0, Math.round(target)));
 
   if (slider) {
-    // React-controlled input: set nativeInputValueSetter then fire input + change.
+    // Spotify's slider range is 0–1, not 0–100. Scale target into slider's actual range.
+    const sMin = parseFloat(slider.min || "0");
+    const sMax = parseFloat(slider.max || "1");
+    const scaledValue = sMin + (target / 100) * (sMax - sMin);
+    // React-controlled input: set nativeInputValueSetter then fire synthetic events.
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-    if (nativeInputValueSetter) nativeInputValueSetter.call(slider, target);
+    if (nativeInputValueSetter) nativeInputValueSetter.call(slider, scaledValue);
     slider.dispatchEvent(new Event("input", { bubbles: true }));
     slider.dispatchEvent(new Event("change", { bubbles: true }));
     return { ok: true, volumePercent: target };
@@ -2303,6 +2312,59 @@ if (__sbContextOk()) {
       if (__sbHeadphoneMode) __sbExitHeadphoneMode();
       else if (__sbIsRealtimeVoiceReady()) __sbCleanupRealtimeVoice({ reason: "yielded_to_other_tab" });
     }
+    // ── Offscreen realtime events ──────────────────────────────────────────
+    if (msg.action === "sbRtEvent") {
+      // Realtime event forwarded from offscreen via background — process it here.
+      try { __sbHandleRtEvent(msg.event); } catch (_) {}
+    }
+    if (msg.action === "sbRtSessionReady") {
+      // Offscreen session is up — configure usage tracking and mark ready.
+      __sbUseOffscreenRt = true;
+      __sbRtSessionReady = true;
+      __sbResetRealtimeUsageState();
+      if (msg.sessionId) {
+        __sbRtUsageSessionId = msg.sessionId;
+        __sbRtUsageLimitMs = Number(msg.limitMs || 0);
+      }
+      if (msg.allocatedMs > 0) __sbScheduleRealtimeUsageCap(msg.allocatedMs);
+      try { chrome.runtime.sendMessage({ action: "rtVoiceClaim" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+      document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+      __sbSetVoiceStatusBadge("realtime", "Live AI");
+      __sbSetHpBrainState("listening");
+      void __sbSyncRealtimeVoiceInstructions();
+    }
+    if (msg.action === "sbRtSessionFailed") {
+      // Offscreen start failed — fall back to in-tab realtime.
+      __sbUseOffscreenRt = false;
+      void __sbStartRealtimeVoice();
+    }
+    if (msg.action === "sbRtSessionEnded") {
+      // Offscreen session dropped — fall back to legacy voice if in headphone mode.
+      __sbUseOffscreenRt = false;
+      __sbRtSessionReady = false;
+      if (__sbHeadphoneMode) void __sbFallbackToLegacyHeadphone("Live AI disconnected. Switching to legacy voice.");
+    }
+    if (msg.action === "sbRtAttach") {
+      // Background tells this tab the offscreen session is active and it's now the
+      // active tab — enter headphone mode UI state so Braino is visibly listening here.
+      if (!__sbOwnsInlineUi()) return;
+      if (!__sbHeadphoneMode) {
+        __sbHeadphoneMode = true;
+        __sbVoiceOnlyMode = true;
+        __sbUseOffscreenRt = true;
+        __sbRtSessionReady = true;
+        document.getElementById("__sb_rec_btn__")?.classList.add("active");
+        document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+        document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+        __sbSetVoiceStatusBadge("realtime", "Live AI");
+        __sbSetHpBrainState("listening");
+        void __sbSyncRealtimeVoiceInstructions(); // update session with this page's context
+      } else {
+        // Already in headphone mode — just refresh the session instructions for new page.
+        void __sbSyncRealtimeVoiceInstructions();
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
   });
@@ -6784,6 +6846,7 @@ let __sbRtPeerConnection = null;
 let __sbRtDataChannel = null;
 let __sbRtMic = null;
 let __sbRtRemoteAudio = null;
+let __sbUseOffscreenRt = false; // true when realtime session lives in the offscreen doc
 const __SB_REALTIME_VOICE = "verse";
 let __sbVoiceOutputPref = "realtime"; // "realtime" | "elevenlabs"
 let __sbRtUserTranscript = "";
@@ -7184,6 +7247,13 @@ async function __sbStartRealtimeVoice() {
 }
 
 function __sbSendRtEvent(event) {
+  if (__sbUseOffscreenRt) {
+    if (!__sbRtSessionReady) return false;
+    const payload = { ...event };
+    if (!payload.event_id) payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    chrome.runtime.sendMessage({ action: "offscreenRtSend", event: payload }, () => { void chrome.runtime.lastError; });
+    return true;
+  }
   if (!__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
   const payload = { ...event };
   if (!payload.event_id) {
@@ -7194,9 +7264,11 @@ function __sbSendRtEvent(event) {
 }
 
 function __sbSetRealtimeMicEnabled(enabled) {
-  __sbRtMic?.getAudioTracks?.().forEach((track) => {
-    track.enabled = enabled;
-  });
+  if (__sbUseOffscreenRt) {
+    chrome.runtime.sendMessage({ action: "offscreenRtMic", enabled }, () => { void chrome.runtime.lastError; });
+    return;
+  }
+  __sbRtMic?.getAudioTracks?.().forEach((track) => { track.enabled = enabled; });
 }
 
 // The single realtime voice session keeps running across tab switches (mic + audio are
@@ -7206,8 +7278,11 @@ function __sbSetRealtimeMicEnabled(enabled) {
 // SpeechRecognition when hidden, since it can't follow and would double up.
 document.addEventListener("visibilitychange", () => {
   if (!__sbOwnsInlineUi()) return;
-  if (document.hidden && __sbIsRecording && !__sbHeadphoneMode) {
-    try { __sbStopRecording({ silent: true }); } catch (_) {}
+  if (document.hidden) {
+    // Offscreen mode: session is global, don't touch it. Just stop legacy recording.
+    if (!__sbUseOffscreenRt && __sbIsRecording && !__sbHeadphoneMode) {
+      try { __sbStopRecording({ silent: true }); } catch (_) {}
+    }
   }
 });
 
@@ -7492,6 +7567,10 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 function __sbCleanupRealtimeVoice(options = {}) {
   const reason = String(options.reason || "client_cleanup");
   const usageSessionId = __sbRtUsageSessionId;
+  if (__sbUseOffscreenRt) {
+    __sbUseOffscreenRt = false;
+    chrome.runtime.sendMessage({ action: "stopOffscreenRealtime" }, () => { void chrome.runtime.lastError; });
+  }
   try { chrome.runtime.sendMessage({ action: "rtVoiceRelease" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
   __sbClearRealtimeConnectHint();
   __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
@@ -7624,10 +7703,27 @@ function __sbEnterHeadphoneMode() {
   __sbSetHpBrainState("connecting");
   __sbSetVoiceStatusBadge("connecting", "Connecting…");
 
-  // Load voice output preference before starting the session
-  __sbStorageGet(["brainoVoicePref"]).then((stored) => {
+  // Load voice output preference then start the session via offscreen (global) with
+  // in-tab fallback so existing behavior is never broken.
+  __sbStorageGet(["brainoVoicePref", "authToken"]).then((stored) => {
     __sbVoiceOutputPref = stored.brainoVoicePref === "elevenlabs" ? "elevenlabs" : "realtime";
-    void __sbStartRealtimeVoice();
+    const authToken = stored.authToken || null;
+    if (authToken) {
+      const bootInstructions = __sbBuildRealtimeBootInstructions();
+      chrome.runtime.sendMessage(
+        { action: "startOffscreenRealtime", authToken, bootInstructions },
+        (res) => {
+          if (chrome.runtime.lastError || res?.error) {
+            // Offscreen failed — fall back to the original in-tab approach.
+            void __sbStartRealtimeVoice();
+          } else {
+            __sbUseOffscreenRt = true;
+          }
+        }
+      );
+    } else {
+      void __sbStartRealtimeVoice();
+    }
   });
 }
 

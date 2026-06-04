@@ -1,5 +1,13 @@
 # Braino Changelog
 
+## v4.11.0 — Voice session follows you everywhere (Phase 2: offscreen)
+- The realtime voice session now lives in the extension's offscreen document — global, not tied to any tab.
+- Switch tabs, open new tabs, let Braino open Spotify — he is **always listening and speaking**, no matter where you go.
+- The AI audio plays from the offscreen context so you hear it on any tab.
+- Switching to a new tab auto-enters headphone mode with the live session already active.
+- Falls back to the previous in-tab approach if anything goes wrong.
+- Volume fix: slider scaling corrected (Spotify's range is 0–1, not 0–100).
+
 ## v4.10.1 — Fix double voice, volume, and close-tabs intent
 - **Double voice on tab answers**: fixed — the fallback to browser TTS only fires when realtime is genuinely unavailable, not when a relay is cancelled/errored.
 - **Volume**: now drives Spotify's own UI volume slider instead of the audio element (which was in a shadow DOM and invisible to content scripts).
