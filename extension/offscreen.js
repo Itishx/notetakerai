@@ -75,9 +75,10 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
   const answerSdp = await res.text();
   await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
-  // Send initial session config (system prompt, tools, etc.)
+  // Send the full session.update event (system prompt + turn_detection + modalities).
+  // This MUST include create_response:false or the model auto-responds to everything.
   if (bootInstructions) {
-    rtSendEvent({ type: "session.update", session: bootInstructions });
+    rtSendEvent(bootInstructions); // caller passes the full session.update event object
   }
 
   return {

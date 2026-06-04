@@ -7283,6 +7283,27 @@ document.addEventListener("visibilitychange", () => {
     if (!__sbUseOffscreenRt && __sbIsRecording && !__sbHeadphoneMode) {
       try { __sbStopRecording({ silent: true }); } catch (_) {}
     }
+  } else {
+    // Tab became foreground. If a global RT session is active but we missed the
+    // sbRtAttach (timing race on page load), self-attach now.
+    if (!__sbHeadphoneMode && !__sbUseOffscreenRt) {
+      __sbStorageGet(["sbRtSessionActive"]).then(({ sbRtSessionActive }) => {
+        if (sbRtSessionActive && __sbOwnsInlineUi()) {
+          if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+          // Trigger the attach logic inline
+          __sbHeadphoneMode = true;
+          __sbVoiceOnlyMode = true;
+          __sbUseOffscreenRt = true;
+          __sbRtSessionReady = true;
+          document.getElementById("__sb_rec_btn__")?.classList.add("active");
+          document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+          document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+          __sbSetVoiceStatusBadge("realtime", "Live AI");
+          __sbSetHpBrainState("listening");
+          void __sbSyncRealtimeVoiceInstructions();
+        }
+      });
+    }
   }
 });
 
@@ -7709,7 +7730,9 @@ function __sbEnterHeadphoneMode() {
     __sbVoiceOutputPref = stored.brainoVoicePref === "elevenlabs" ? "elevenlabs" : "realtime";
     const authToken = stored.authToken || null;
     if (authToken) {
-      const bootInstructions = __sbBuildRealtimeBootInstructions();
+      // Pass the full session.update event (not just the string) so offscreen gets
+      // turn_detection + create_response:false — without it the model hallucinates.
+      const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
       chrome.runtime.sendMessage(
         { action: "startOffscreenRealtime", authToken, bootInstructions },
         (res) => {

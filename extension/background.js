@@ -1697,11 +1697,26 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   // Volume — unambiguous media control; recognized regardless of current tab so it
   // works in realtime voice (where the session tab isn't Spotify).
   const hasVolumeWord = /\bvolume\b/i.test(raw);
-  const wantsLouder = /\b(louder|raise|increase|boost|higher|turn\s+(?:it|the\s+(?:music|sound|volume))\s+up)\b/i.test(raw);
-  const wantsQuieter = /\b(quieter|softer|dimmer|lower|decrease|reduce|turn\s+(?:it|the\s+(?:music|sound|volume))\s+down)\b/i.test(raw);
+  const wantsLouder = /\b(louder|raise|increase|boost|higher)\b/i.test(raw)
+    || /\bturn\s+up\b/i.test(raw)
+    || /\bturn\s+(?:it|the\s+(?:music|sound|volume))\s+up\b/i.test(raw)
+    || /\b(full|max(imum)?)\s+(volume|vol)\b/i.test(raw)
+    || /\b(volume|vol)\s+(up|higher|full|max)\b/i.test(raw);
+  const wantsQuieter = /\b(quieter|softer|dimmer|lower|decrease|reduce)\b/i.test(raw)
+    || /\bturn\s+down\b/i.test(raw)
+    || /\bturn\s+(?:it|the\s+(?:music|sound|volume))\s+down\b/i.test(raw)
+    || /\b(mute|silence)\b/i.test(raw);
   if (hasVolumeWord || wantsLouder || wantsQuieter) {
+    // Full / max → 100%. Mute / silence → 0%. Exact % → that value.
+    if (/\b(full|max(imum)?)\s*(volume|vol)?$|\b(volume|vol)\s+(full|max)\b/i.test(raw)) {
+      return { adapter: "spotify", intent: "setVolume", volumePercent: 100 };
+    }
+    if (/\b(mute|silence)\b/i.test(raw)) {
+      return { adapter: "spotify", intent: "setVolume", volumePercent: 0 };
+    }
     const exactVolume = raw.match(/(?:set|change|put|make)\s+(?:the\s+)?(?:spotify\s+)?volume\s+(?:to\s+)?(\d{1,3})\s*%?/i)
-      || raw.match(/\bvolume\s+(?:to\s+|at\s+)?(\d{1,3})\s*%?/i);
+      || raw.match(/\bvolume\s+(?:to\s+|at\s+)?(\d{1,3})\s*%?/i)
+      || raw.match(/\b(\d{1,3})\s*%?\s+(?:volume|vol)\b/i);
     if (exactVolume) {
       return { adapter: "spotify", intent: "setVolume", volumePercent: Math.min(100, Math.max(0, parseInt(exactVolume[1], 10))) };
     }
@@ -3618,7 +3633,22 @@ async function ensureOffscreenForRealtime() {
 // tell the new tab to enter headphone mode UI so Braino is already listening there.
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   if (!bgRtSessionActive) return;
-  chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
+  // Small delay so the content script has time to initialise on fresh tabs.
+  setTimeout(() => {
+    chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
+  }, 400);
+});
+
+// Also re-attach when a tab finishes loading (catches navigations within the same tab).
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (!bgRtSessionActive || changeInfo.status !== "complete") return;
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs?.[0]?.id === tabId) {
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
+      }, 400);
+    }
+  });
 });
 
 async function startRecording(tabId, existingStreamId, withMic) {

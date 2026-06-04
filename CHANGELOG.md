@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v4.11.1 — Fix foreign-language hallucination + auto-attach + volume increase
+- **Hallucination/foreign language**: the offscreen session was missing `turn_detection.create_response:false` — the model was auto-responding to every sound. Fixed by passing the full session.update config, not just the instructions string.
+- **Auto-attach on new tab**: two-path fix — background retries with a 400ms delay, and the tab self-checks storage on becoming visible (catches timing races).
+- **Volume increase**: "turn up the volume", "full volume", "max volume", "mute" now all work.
+
 ## v4.11.0 — Voice session follows you everywhere (Phase 2: offscreen)
 - The realtime voice session now lives in the extension's offscreen document — global, not tied to any tab.
 - Switch tabs, open new tabs, let Braino open Spotify — he is **always listening and speaking**, no matter where you go.
