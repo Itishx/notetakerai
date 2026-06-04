@@ -7252,7 +7252,7 @@ function __sbInterruptRealtimeResponse() {
   __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
 }
 
-async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
+async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = false } = {}) {
   const promptText = String(text || "").trim();
   if (!promptText) {
     return { status: "error", text: "", errorMessage: "Nothing to say." };
@@ -7283,7 +7283,9 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
               content: [
                 {
                   type: "input_text",
-                  text: `Relay this update to the user in one short natural spoken reply. Preserve the meaning and do not add new facts.\n\n${promptText}`,
+                  text: verbatim
+                    ? `Read this to the user out loud, exactly as written, word for word. Do not rephrase, summarize, or change any numbers. Say only this:\n\n${promptText}`
+                    : `Relay this update to the user in one short natural spoken reply. Preserve the meaning and do not add new facts.\n\n${promptText}`,
                 },
               ],
             },
@@ -7325,10 +7327,11 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
 }
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
-  // verbatim: skip the realtime relay (which paraphrases via the model and can change
-  // numbers) and speak the exact text — required for factual replies like tab/follower counts.
-  if (!options.verbatim && preferred === "realtime" && __sbIsRealtimeVoiceReady() && __sbVoiceOutputPref !== "elevenlabs") {
-    const result = await __sbRequestRealtimeReply(text, { relayMode: true });
+  // Always use the user's CONFIGURED voice (realtime AI vs ElevenLabs) so we never speak
+  // in two different voices. For factual replies (counts) pass verbatim so the realtime
+  // relay reads the exact text word-for-word instead of paraphrasing the numbers.
+  if (preferred === "realtime" && __sbIsRealtimeVoiceReady() && __sbVoiceOutputPref !== "elevenlabs") {
+    const result = await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
     if (result.status === "done") return true;
     if (result.status === "cancelled") return false;
   }

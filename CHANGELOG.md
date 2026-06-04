@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v4.9.0 — One voice for tab answers, exact numbers
+- Tab/count replies are now spoken by your **single configured voice** (no more a second browser/ElevenLabs voice chiming in alongside the realtime voice).
+- The realtime voice now reads counts **word-for-word**, so "how many tabs" and "closed N tabs" say the exact number instead of a paraphrased one.
+
 ## v4.8.9 — Volume control actually works
 - Volume commands now change the Spotify **web player** directly (its media element) instead of calling the Web API, which silently ignored web-player volume. "Lower the volume" / "set volume to 30%" now really moves it.
 - If a song isn't actually playing, Braino says so instead of falsely claiming success.
