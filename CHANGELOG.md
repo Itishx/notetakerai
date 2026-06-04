@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v4.8.9 — Volume control actually works
+- Volume commands now change the Spotify **web player** directly (its media element) instead of calling the Web API, which silently ignored web-player volume. "Lower the volume" / "set volume to 30%" now really moves it.
+- If a song isn't actually playing, Braino says so instead of falsely claiming success.
+
 ## v4.8.8 — One voice at a time + accurate counts
 - Fixed two tabs talking over each other: a backgrounded tab now stops speaking and mutes its mic, so only the tab you're on responds.
 - Tab counts and "closed N tabs" are now spoken **exactly** — numbers are read verbatim instead of being paraphrased by the voice model (also applies to follower/X counts).

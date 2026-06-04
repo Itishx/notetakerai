@@ -585,6 +585,30 @@ async function __sbSpotifyPlayFirstTrackResult(songName) {
   return { error: `No playable Spotify track result was found for "${songName}".` };
 }
 
+// Set the Spotify WEB PLAYER volume directly via its media element. The Spotify Web
+// API cannot control the web player's volume, so we do it in the DOM where Braino lives.
+function __sbSpotifySetVolume(volumePercent, volumeStep) {
+  const media = [...document.querySelectorAll("audio, video")];
+  if (!media.length) return { ok: false };
+  let target;
+  if (typeof volumePercent === "number" && !Number.isNaN(volumePercent)) {
+    target = volumePercent;
+  } else {
+    const current = Math.round(Math.max(...media.map((el) => (typeof el.volume === "number" ? el.volume : 1))) * 100);
+    target = current + (Number(volumeStep) || 0);
+  }
+  target = Math.min(100, Math.max(0, Math.round(target)));
+  let applied = false;
+  media.forEach((el) => {
+    try {
+      if (target > 0 && el.muted) el.muted = false;
+      el.volume = target / 100;
+      applied = true;
+    } catch (_) {}
+  });
+  return { ok: applied, volumePercent: target };
+}
+
 async function __sbSpotifyAddTrackToPlaylist(songName, playlistName) {
   const scrollEl = __sbAdapterGetScrollContainer();
 
@@ -1262,6 +1286,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "spotifyPlayFirstTrackResult") {
           sendResponse(await __sbSpotifyPlayFirstTrackResult(msg.songName || ""));
+          return;
+        }
+        if (msg.type === "spotifySetVolume") {
+          sendResponse(__sbSpotifySetVolume(
+            typeof msg.volumePercent === "number" ? msg.volumePercent : null,
+            msg.volumeStep,
+          ));
           return;
         }
         if (msg.type === "spotifyPlayTrackFromCurrentPlaylist") {

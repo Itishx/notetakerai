@@ -1883,6 +1883,16 @@ async function bgRunAdapterStep({ history, description, type, run, onProgress, o
   return result;
 }
 
+// Find the Spotify web-player tab (prefer the one actually playing audio).
+async function bgFindSpotifyTab() {
+  try {
+    const tabs = await chrome.tabs.query({ url: ["*://open.spotify.com/*", "*://*.spotify.com/*"] });
+    return tabs.find((t) => t.audible) || tabs[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, onResult, shouldStop, connectorHint }) {
   const siteContext = await bgGetSiteAdapterContext(tabId);
   const parsed = bgParseAdapterTask(task, siteContext, connectorHint);
@@ -1945,6 +1955,28 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "setVolume") {
+    // Prefer the Spotify web-player tab (the one Braino opens): the Web API can't set
+    // its volume, but we can set the media element directly. Fall back to the API for
+    // real devices (desktop/phone) only when no web tab is open.
+    const spotifyTab = await bgFindSpotifyTab();
+    if (spotifyTab?.id != null) {
+      const res = await bgRunAdapterStep({
+        history,
+        description: parsed.volumePercent != null ? `Set Spotify volume to ${parsed.volumePercent}%` : "Adjust Spotify volume",
+        type: "spotify_volume",
+        onProgress,
+        onResult,
+        run: () => bgExecuteSiteAdapterAction(spotifyTab.id, {
+          type: "spotifySetVolume",
+          volumePercent: typeof parsed.volumePercent === "number" ? parsed.volumePercent : null,
+          volumeStep: parsed.volumeStep || 0,
+        }),
+      });
+      if (res?.ok) return `Volume set to ${res.volumePercent}%.`;
+      return "I couldn't change the volume — make sure a song is actually playing in the Spotify tab.";
+    }
+
+    // No web player open — try the API (works only for active real devices).
     let volumePercent = typeof parsed.volumePercent === "number" ? parsed.volumePercent : null;
     if (volumePercent == null) {
       const playerState = await bgFetchSpotifyPlayerState();
