@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v4.8.6 — Braino follows you across tabs
+- Once you activate Braino, the floating mascot now **persists on every tab** — open a new tab (or let Braino open one) and he's already there, docked.
+- Collapsing the card now returns to the docked mascot instead of disappearing, so you never have to re-invoke.
+- Hiding Braino (Cmd/⌘+I toggle) is remembered too; he stays hidden across tabs until you bring him back.
+
 ## v4.8.5 — Volume control in realtime voice
 - "Raise/lower the volume", "make it louder/quieter", "set volume to 40%" now work in **realtime voice** (and anywhere), not just when you're already on the Spotify tab.
 - Volume is routed as a Spotify delegate action and recognized regardless of the current tab.

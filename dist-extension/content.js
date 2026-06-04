@@ -3459,8 +3459,17 @@ function __sbBuildBrainUI() {
     document.head.appendChild(xFontFix);
   }
 
-  // Brain hidden by default
+  // Brain hidden by default — but if Braino is active (docked), show it on this tab too.
+  // This makes Braino persist across tabs: once invoked, it follows you to every tab
+  // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
+  __sbStorageGet(["sbBrainDocked"]).then(({ sbBrainDocked }) => {
+    if (sbBrainDocked && __sbOwnsInlineUi()) {
+      const b = document.getElementById("__sb_brain_btn__");
+      if (b) b.style.display = "";
+      __sbBrainVisible = true;
+    }
+  });
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
     if (__sbIsLectureRecording) {
       const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
@@ -3907,6 +3916,7 @@ function __sbOpenAnchoredBrain() {
   __sbBrainVisible = true;
   __sbSetCursorRideMode(false);
   __sbToggleInput(true, { skipPersist: true });
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
 }
 
 function __sbDetectPageTheme() {
@@ -4795,11 +4805,13 @@ function __sbToggleBrain() {
     const wrap = document.getElementById("__sb_card_wrap__");
     if (wrap) wrap.classList.remove("visible");
     __sbStopOrbit();
+    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: false });
   } else {
     __sbBrainVisible = true;
     if (btn) btn.style.display = "";
     __sbSetCursorRideMode(false);
     __sbToggleInput(true, { skipPersist: true });
+    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
   }
 }
 
