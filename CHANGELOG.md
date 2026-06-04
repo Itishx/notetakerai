@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v4.11.2 — Idle animations: float, eyes, arms + Spotify music glow
+- Braino now **floats, swings his arms, and scans around with his eyes** while docked — matching the home page mascot. He blinks every ~4s.
+- On Spotify while music is playing: distinct **green-cyan pulsing glow** so you know he's aware of the music.
+- Animations pause automatically when he's busy (recording, speaking, headphone mode) and resume when he returns to idle.
+
 ## v4.11.1 — Fix foreign-language hallucination + auto-attach + volume increase
 - **Hallucination/foreign language**: the offscreen session was missing `turn_detection.create_response:false` — the model was auto-responding to every sound. Fixed by passing the full session.update config, not just the instructions string.
 - **Auto-attach on new tab**: two-path fix — background retries with a 400ms delay, and the tab self-checks storage on becoming visible (catches timing races).

@@ -2197,7 +2197,11 @@ new MutationObserver(() => {
   }
 }).observe(document.body || document.documentElement, { childList: true, subtree: false });
 
-const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+// Animated SVG — groups have IDs so CSS keyframes can drive idle behaviour.
+// sbb-arm-l / sbb-arm-r : arm pivot groups (rotate at shoulder origin)
+// sbb-pupil-l / sbb-pupil-r : pupil + highlight pairs (translate for gaze drift)
+// sbb-eye-l / sbb-eye-r : eye whites (scaleY for blink)
+const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g><g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g><g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
@@ -2390,6 +2394,69 @@ function __sbBuildBrainUI() {
       flex-shrink: 0;
     }
     #__sb_brain_btn__:hover { transform: scale(1.1); filter: drop-shadow(0 4px 16px rgba(200,84,74,0.7)); }
+
+    /* ── Idle animations: float + arm swing + gaze drift + blink ── */
+    #__sb_brain_btn__.sb-brain-idle {
+      animation: __sb_idle_float__ 3.8s ease-in-out infinite;
+    }
+    @keyframes __sb_idle_float__ {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-5px); }
+    }
+    /* Arms: left leads, right follows half-cycle behind — matches home mascot idle math */
+    #__sb_brain_btn__.sb-brain-idle #sbb-arm-l,
+    #__sb_brain_btn__.sb-brain-idle #sbb-arm-l-fill {
+      animation: __sb_arm_l__ 3.4s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-idle #sbb-arm-r,
+    #__sb_brain_btn__.sb-brain-idle #sbb-arm-r-fill {
+      animation: __sb_arm_r__ 3.4s ease-in-out infinite;
+    }
+    @keyframes __sb_arm_l__ {
+      0%   { transform: rotate(0deg);   }
+      25%  { transform: rotate(11deg);  }
+      75%  { transform: rotate(-11deg); }
+      100% { transform: rotate(0deg);   }
+    }
+    @keyframes __sb_arm_r__ {
+      0%   { transform: rotate(0deg);   }
+      25%  { transform: rotate(-11deg); }
+      75%  { transform: rotate(11deg);  }
+      100% { transform: rotate(0deg);   }
+    }
+    /* Gaze drift: pupils scan left→right slowly, offset slightly between eyes */
+    #__sb_brain_btn__.sb-brain-idle #sbb-pupil-l {
+      animation: __sb_gaze__ 4.2s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-idle #sbb-pupil-r {
+      animation: __sb_gaze__ 4.2s ease-in-out 0.4s infinite;
+    }
+    @keyframes __sb_gaze__ {
+      0%   { transform: translate(0px, 0px);    }
+      30%  { transform: translate(-1.8px, 0.4px);  }
+      65%  { transform: translate(1.8px, -0.4px); }
+      100% { transform: translate(0px, 0px);    }
+    }
+    /* Blink: eye whites scaleY collapse every ~4s, super quick */
+    #__sb_brain_btn__.sb-brain-idle #sbb-eye-l {
+      animation: __sb_blink__ 4s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-idle #sbb-eye-r {
+      animation: __sb_blink__ 4s ease-in-out 0.06s infinite;
+    }
+    @keyframes __sb_blink__ {
+      0%, 88%, 100% { transform: scaleY(1); }
+      92%            { transform: scaleY(0.08); }
+    }
+
+    /* ── Spotify / music glow — green-cyan pulsing to indicate listening to music ── */
+    @keyframes __sb_brain_glow_music__ {
+      0%, 100% { filter: drop-shadow(0 2px 8px rgba(29,185,84,0.35)); }
+      45%      { filter: drop-shadow(0 0 20px rgba(29,215,96,0.9)) drop-shadow(0 0 38px rgba(0,230,150,0.45)); }
+    }
+    #__sb_brain_btn__.sb-brain-music {
+      animation: __sb_brain_glow_music__ 2.2s ease-in-out infinite;
+    }
     #__sb_brain_btn__.recording {
       animation: __sb_pulse__ 1s ease-in-out infinite;
     }
@@ -3580,6 +3647,7 @@ function __sbBuildBrainUI() {
       const b = document.getElementById("__sb_brain_btn__");
       if (b) b.style.display = "";
       __sbBrainVisible = true;
+      __sbSyncIdleState();
     }
   });
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
@@ -4029,6 +4097,7 @@ function __sbOpenAnchoredBrain() {
   __sbSetCursorRideMode(false);
   __sbToggleInput(true, { skipPersist: true });
   if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
+  __sbSyncIdleState();
 }
 
 function __sbDetectPageTheme() {
@@ -4075,6 +4144,7 @@ function __sbCollapseCard() {
     document.getElementById("__sb_bar__")?.classList.add("open");
   }
   __sbScheduleCursorFollow();
+  __sbSyncIdleState(); // back to docked idle — resume animations
 }
 
 function __sbStartOrbit() {
@@ -5391,12 +5461,30 @@ function __sbSpotifyIsPlaying() {
   return Boolean(__sbSpotifyUiState?.nowPlaying?.isPlaying);
 }
 
+function __sbSyncIdleState() {
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (!brain || !__sbBrainVisible) return;
+  // Idle animation runs when Braino is docked but not doing anything active.
+  // Removed by music/recording/headphone/speaking states below; re-added here.
+  const busy = brain.classList.contains("recording")
+    || brain.classList.contains("sb-brain-spotify")
+    || brain.classList.contains("sb-brain-music")
+    || brain.classList.contains("hp-connecting")
+    || brain.classList.contains("hp-listening")
+    || brain.classList.contains("hp-captured")
+    || brain.classList.contains("hp-speaking");
+  brain.classList.toggle("sb-brain-idle", !busy);
+}
+
 function __sbSyncSpotifyVisualState() {
   const brain = document.getElementById("__sb_brain_btn__");
   const bubble = document.getElementById("__sb_bubble__");
   const active = __sbSpotifyIsPlaying();
-  brain?.classList.toggle("sb-brain-spotify", active);
+  // Swap the orange Spotify class for a distinct music-glow class while playing.
+  brain?.classList.toggle("sb-brain-spotify", false); // retire the old orange glow
+  brain?.classList.toggle("sb-brain-music", active);
   bubble?.classList.toggle("sb-spotify-active", active);
+  __sbSyncIdleState();
   // Hide the floating bar while music is playing
   if (active) {
     const bar = document.getElementById("__sb_bar__");
