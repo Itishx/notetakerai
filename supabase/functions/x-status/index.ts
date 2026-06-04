@@ -45,43 +45,72 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // X connection — getAuthorizedXContext throws "No X account linked" when not connected.
-    let ctx;
-    try {
-      ctx = await getAuthorizedXContext(supabase, user.id);
-    } catch (_connErr) {
+    // Connection pre-check — decide "connected" from the DB row ALONE, with no live X
+    // call. A momentarily-expired-but-refreshable token (or a transient X API error)
+    // must NOT read as "disconnected" and send the user to settings.
+    const { data: conn } = await supabase
+      .from("x_connections")
+      .select("access_token, username, display_name")
+      .eq("user_identifier", user.id)
+      .maybeSingle();
+
+    if (!conn?.access_token) {
       return json({ connected: false });
     }
 
-    // Live account snapshot + recent mentions (best-effort; tolerate X API hiccups).
-    const [snapshotResult, mentionsResult] = await Promise.allSettled([
-      fetchAccountSnapshot(ctx.accessToken, ctx.xUserId),
-      fetchMentionsSince(ctx.accessToken, ctx.xUserId, null, 5),
-    ]);
+    // Linked. Pull live data best-effort; if X is unreachable, degrade gracefully
+    // (still connected) rather than claiming the account isn't linked.
+    let followersCount: number | null = null;
+    let mentions: Array<{ handle: string; text: string }> = [];
+    let username = conn.username ?? null;
+    let displayName = conn.display_name ?? null;
+    let degraded = false;
 
-    const followersCount =
-      snapshotResult.status === "fulfilled" ? snapshotResult.value.followersCount : 0;
+    try {
+      const ctx = await getAuthorizedXContext(supabase, user.id);
+      username = ctx.username ?? username;
+      displayName = ctx.displayName ?? displayName;
 
-    const mentions =
-      mentionsResult.status === "fulfilled"
-        ? mentionsResult.value.mentions.map((m) => ({
-            handle: mentionsResult.value.usersById[m.author_id]?.username ?? "someone",
-            text: m.text ?? "",
-          }))
-        : [];
+      const [snapshotResult, mentionsResult] = await Promise.allSettled([
+        fetchAccountSnapshot(ctx.accessToken, ctx.xUserId),
+        fetchMentionsSince(ctx.accessToken, ctx.xUserId, null, 5),
+      ]);
+
+      if (snapshotResult.status === "fulfilled") {
+        followersCount = snapshotResult.value.followersCount;
+      } else {
+        degraded = true;
+      }
+
+      if (mentionsResult.status === "fulfilled") {
+        mentions = mentionsResult.value.mentions.map((m) => ({
+          handle: mentionsResult.value.usersById[m.author_id]?.username ?? "someone",
+          text: m.text ?? "",
+        }));
+      } else {
+        degraded = true;
+      }
+    } catch (liveErr) {
+      console.error("x-status live fetch failed (account still linked):", liveErr);
+      degraded = true;
+    }
 
     // Last posted tweet + its analytics (same DB shape as x-auto-public-stats).
-    const lastTweet = await fetchLastTweet(supabase, user.id, ctx.username);
+    const lastTweet = await fetchLastTweet(supabase, user.id, username);
 
-    // Follower 7-day delta — omit when no baseline exists yet. Self-populates via the
-    // daily snapshot we upsert below.
-    const delta7d = await computeFollowerDelta(supabase, user.id, followersCount);
-    await upsertFollowerSnapshot(supabase, user.id, followersCount);
+    // Follower 7-day delta — only when we actually got a live count. Self-populates
+    // via the daily snapshot we upsert.
+    let delta7d: number | null = null;
+    if (followersCount != null) {
+      delta7d = await computeFollowerDelta(supabase, user.id, followersCount);
+      await upsertFollowerSnapshot(supabase, user.id, followersCount);
+    }
 
     return json({
       connected: true,
-      username: ctx.username,
-      displayName: ctx.displayName,
+      degraded,
+      username,
+      displayName,
       followers: { count: followersCount, delta7d },
       lastTweet,
       mentions,

@@ -2220,7 +2220,8 @@ if (__sbContextOk()) {
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
-        __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino" });
+        // Voice mode speaks the result with no panel; chat mode shows it.
+        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino" });
         __sbSetStopBtn(false);
         if (__sbRtAwaitingDelegateResult) {
           const finalText = String(msg.text || "").trim();
@@ -2240,7 +2241,7 @@ if (__sbContextOk()) {
           }
         }
       } else {
-        __sbShowBubble(msg.text, false, { tone: "status" });
+        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { tone: "status" });
         __sbSetStopBtn(true);
       }
     }
@@ -5725,7 +5726,9 @@ function __sbFormatXStatus(promptText, data) {
   const general = !(wantsFollowers || wantsMentions || wantsLastTweet);
 
   const followerSentence = () => {
-    const count = Number(data?.followers?.count ?? 0).toLocaleString();
+    const raw = data?.followers?.count;
+    if (raw == null) return "You're connected to X, but I couldn't pull your live follower count just now — try again in a moment.";
+    const count = Number(raw).toLocaleString();
     const delta = data?.followers?.delta7d;
     let s = `You have ${count} followers on X.`;
     if (delta != null && delta !== 0) {
