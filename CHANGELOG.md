@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v4.8.5 — Volume control in realtime voice
+- "Raise/lower the volume", "make it louder/quieter", "set volume to 40%" now work in **realtime voice** (and anywhere), not just when you're already on the Spotify tab.
+- Volume is routed as a Spotify delegate action and recognized regardless of the current tab.
+
 ## v4.8.4 — Spotify: no more inline modal
 - Spotify actions (play/pause/search) no longer pop the inline card. Braino opens Spotify in a new tab and confirms verbally — no panel.
 - The manual Spotify visual (click the mascot's now-playing) still opens the panel on demand; the Spotify API integration is unchanged.

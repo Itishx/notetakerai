@@ -5673,8 +5673,17 @@ function __sbIsBrowserActionCommand(text) {
   return /\b(open|go to|navigate to|visit|search for|play|pause|resume|continue|next|previous|prev|skip|stop|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
 }
 
+function __sbIsVolumeCommand(text) {
+  const t = String(text || "").toLowerCase();
+  return /\bvolume\b/.test(t)
+    || /\b(louder|quieter|softer)\b/.test(t)
+    || /\bturn\s+(it|the\s+(music|sound|volume))\s+(up|down)\b/.test(t);
+}
+
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
+  // Volume is a Spotify delegate action — route to agent (works in chat & realtime voice).
+  if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (__sbIsBrowserActionCommand(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
