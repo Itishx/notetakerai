@@ -12,6 +12,10 @@ verify_jwt = false
 [functions.x-connection-status]
 verify_jwt = false
 
+# Public stats for the /live dashboard — called from the browser with no auth.
+[functions.x-auto-public-stats]
+verify_jwt = false
+
 [functions.x-oauth-start]
 verify_jwt = false
 
