@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v4.8.8 — One voice at a time + accurate counts
+- Fixed two tabs talking over each other: a backgrounded tab now stops speaking and mutes its mic, so only the tab you're on responds.
+- Tab counts and "closed N tabs" are now spoken **exactly** — numbers are read verbatim instead of being paraphrased by the voice model (also applies to follower/X counts).
+
 ## v4.8.7 — Cross-tab awareness & cleanup
 - Ask **"how many tabs do I have open?"** or **"what am I doing across my tabs?"** and Braino answers from all your open windows.
 - Say **"close the tabs I'm not using"** and Braino says "Closing, sir" then closes only the clutter — never your active tab, pinned tabs, or anything playing audio/video.

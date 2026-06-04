@@ -5851,7 +5851,7 @@ async function __sbHandleXStatus(promptText, ctx = {}) {
     __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: formatted });
     if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
-    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput);
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
   } finally {
     if (brainBtn) brainBtn.classList.remove("recording");
     __sbCompleteVoiceTurn(ctx);
@@ -5891,7 +5891,7 @@ async function __sbHandleXLastTweet(promptText, ctx = {}) {
     __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: formatted });
     if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
-    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput);
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
   } finally {
     if (brainBtn) brainBtn.classList.remove("recording");
     __sbCompleteVoiceTurn(ctx);
@@ -5932,7 +5932,7 @@ async function __sbHandleTabsQuery(promptText, ctx = {}) {
     __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: formatted });
     if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
-    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput);
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
   } finally {
     if (brainBtn) brainBtn.classList.remove("recording");
     __sbCompleteVoiceTurn(ctx);
@@ -5966,7 +5966,7 @@ async function __sbHandleCloseTabs(promptText, ctx = {}) {
     __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: formatted });
     if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
-    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput);
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
   } finally {
     if (brainBtn) brainBtn.classList.remove("recording");
     __sbCompleteVoiceTurn(ctx);
@@ -7136,6 +7136,21 @@ function __sbSetRealtimeMicEnabled(enabled) {
   });
 }
 
+// Only the foreground tab should listen and speak. When a tab is backgrounded it
+// stops talking and mutes its mic so a previous tab can't answer over the tab the
+// user is actually on (fixes two tabs speaking at once now that Braino persists
+// on every tab). When it returns to the foreground, voice resumes if active here.
+document.addEventListener("visibilitychange", () => {
+  if (!__sbOwnsInlineUi()) return;
+  if (document.hidden) {
+    __sbStopSpeech();
+    __sbSetRealtimeMicEnabled(false);
+    if (__sbIsRecording) { try { __sbStopRecording({ silent: true }); } catch (_) {} }
+  } else if (__sbVoiceOnlyMode || __sbHeadphoneMode) {
+    __sbSetRealtimeMicEnabled(true);
+  }
+});
+
 function __sbIsRealtimeVoiceReady() {
   return Boolean(__sbRtSessionReady && __sbRtDataChannel && __sbRtDataChannel.readyState === "open");
 }
@@ -7278,8 +7293,10 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
   return await responsePromise;
 }
 
-async function __sbSpeakWithPreferredVoice(text, preferred = "legacy") {
-  if (preferred === "realtime" && __sbIsRealtimeVoiceReady() && __sbVoiceOutputPref !== "elevenlabs") {
+async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
+  // verbatim: skip the realtime relay (which paraphrases via the model and can change
+  // numbers) and speak the exact text — required for factual replies like tab/follower counts.
+  if (!options.verbatim && preferred === "realtime" && __sbIsRealtimeVoiceReady() && __sbVoiceOutputPref !== "elevenlabs") {
     const result = await __sbRequestRealtimeReply(text, { relayMode: true });
     if (result.status === "done") return true;
     if (result.status === "cancelled") return false;
