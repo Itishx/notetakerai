@@ -1768,7 +1768,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === "voiceTransportStatus") {
-    const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Connecting…" };
+    const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Waking up…" };
     __sbSetVoiceStatusBadge(msg.status, labelMap[msg.status] || msg.status);
     return true;
   }
@@ -2377,6 +2377,11 @@ if (__sbContextOk()) {
       }
     }
     // ────────────────────────────────────────────────────────────────────────
+    if (msg.action === "toggleHeadphoneMode") {
+      if (!__sbOwnsInlineUi()) return;
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbToggleHeadphoneMode();
+    }
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
   });
@@ -7212,7 +7217,7 @@ async function __sbStartRealtimeVoice() {
     __sbClearRealtimeConnectHint();
     __sbRtConnectHintTimer = setTimeout(() => {
       if (__sbHeadphoneMode && !__sbRtSessionReady) {
-        __sbShowVoiceError("Still connecting Live AI... give it a second.");
+        __sbShowVoiceError("Hold up, give me a second…");
       }
     }, 1500);
 
@@ -7818,7 +7823,7 @@ function __sbEnterHeadphoneMode() {
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
   __sbSetHpBrainState("connecting");
-  __sbSetVoiceStatusBadge("connecting", "Connecting…");
+  __sbSetVoiceStatusBadge("connecting", "Waking up…");
 
   // Load voice output preference then start the session via offscreen (global) with
   // in-tab fallback so existing behavior is never broken.

@@ -3629,6 +3629,17 @@ async function ensureOffscreenForRealtime() {
   });
 }
 
+// Keyboard shortcut: Cmd+Shift+Space (Mac) / Ctrl+Shift+Space — toggle voice mode.
+chrome.commands.onCommand.addListener((command) => {
+  if (command !== "toggle-voice-mode") return;
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+    const tabId = tabs?.[0]?.id;
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, { action: "toggleHeadphoneMode" }, () => { void chrome.runtime.lastError; });
+    }
+  });
+});
+
 // When the user switches to a new tab and a realtime session is running in offscreen,
 // tell the new tab to enter headphone mode UI so Braino is already listening there.
 chrome.tabs.onActivated.addListener(({ tabId }) => {

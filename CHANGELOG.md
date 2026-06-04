@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v5.0.0 — Voice mode shortcut + friendlier connection message
+- **`Cmd+Shift+Space`** (Mac) / **`Ctrl+Shift+Space`** (Windows/Linux) — instantly toggles hands-free voice mode from any tab. No more hunting for the headphone button.
+- Connection message changed from "Connecting…" to **"Waking up…"** and the slow-connect hint now says **"Hold up, give me a second…"** instead of the technical error text.
+
 ## v4.11.3 — Restore auth wakeup sequence + calmer eyes
 - Restored the authentication sleeping/wakeup SVG variants — the SVG restructuring broke the .replace() calls that produce the sleeping/listening faces, so the cinematic wakeup was silently skipping.
 - Gaze drift reduced from ±1.8px to ±0.8px — eyes move naturally, not frantically.
