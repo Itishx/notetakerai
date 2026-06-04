@@ -5677,6 +5677,168 @@ function __sbDetectIntent(text) {
   return "chat";
 }
 
+/* === BRAINO X INTEGRATION MAP (as of this change) ===
+ * On-demand read endpoints:
+ *   - x-status             (Bearer JWT, POST) -> { connected, followers:{count,delta7d}, lastTweet, mentions[], totals }  (NEW)
+ *   - x-auto-public-stats  (service role, ?username=) -> totals, recent_posts[] (likes/rt/replies/text), recent_replies[]  — NO followers
+ *   - x-connection-status  (?userIdentifier=)         -> { connected, username, displayName }
+ * Buried read helpers (cron-only, exposed via x-status) in _shared/x-auto-sessions.ts:
+ *   - getAuthorizedXContext(supabase,userId) -> {accessToken,xUserId,username,displayName}; throws "No X account linked" if disconnected
+ *   - fetchAccountSnapshot(token,xUserId)    -> { followersCount, repliesReceived, totalViews }   (LIVE)
+ *   - fetchMentionsSince(token,xUserId,since,n) -> { mentions[], usersById, newestMentionId }      (LIVE)
+ * Write/automation: x-assistant (post/schedule/queue), x-auto-generate, x-auto-engage, dispatch-scheduled-x-posts.
+ * Delta baseline: x_follower_snapshots table (upserted daily by x-status); delta omitted until a 7-day baseline exists.
+ */
+
+function __sbIsXStatusRequest(text) {
+  const t = String(text || "").toLowerCase();
+  return /\bhow'?s\s+my\s+(twitter|x)\b/.test(t)
+    || /\bcheck\s+my\s+(twitter|x)\b/.test(t)
+    || /\b(twitter|x)\s+stats\b/.test(t)
+    || /\b(any|got\s+any|new)\s+mentions?\b/.test(t)
+    || /\bdid\s+anyone\s+mention\s+me\b/.test(t)
+    || /\bhow(?:'?d| did| is)\s+my\s+last\s+(tweet|post)\s+do(?:ing)?\b/.test(t)
+    || /\b(tweet|post)\s+performance\b/.test(t)
+    || /\bhow\s+many\s+followers?\b/.test(t)
+    || /\bfollower\s+count\b/.test(t);
+}
+
+function __sbIsXLastTweetRequest(text) {
+  const t = String(text || "").toLowerCase();
+  return /\bwhat\s+(did|was)\s+my\s+last\s+(tweet|post)\s+(say|said|about)\b/.test(t)
+    || /\bread\s+(me\s+)?my\s+last\s+(tweet|post)\b/.test(t);
+}
+
+function __sbXFirst12Words(text) {
+  const words = String(text || "").trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  if (words.length <= 12) return words.join(" ");
+  return words.slice(0, 12).join(" ") + "…";
+}
+
+// Build the spoken/displayed summary. Specific asks get a single sentence; a general
+// "stats" ask gets the 3-sentence combo. Sentences are omitted when data is missing.
+function __sbFormatXStatus(promptText, data) {
+  const t = String(promptText || "").toLowerCase();
+  const wantsFollowers = /\bfollowers?\b/.test(t);
+  const wantsMentions = /\bmention/.test(t);
+  const wantsLastTweet = /\blast\s+(tweet|post)\b/.test(t) || /\b(tweet|post)\s+performance\b/.test(t);
+  const general = !(wantsFollowers || wantsMentions || wantsLastTweet);
+
+  const followerSentence = () => {
+    const count = Number(data?.followers?.count ?? 0).toLocaleString();
+    const delta = data?.followers?.delta7d;
+    let s = `You have ${count} followers on X.`;
+    if (delta != null && delta !== 0) {
+      const sign = delta > 0 ? "+" : "";
+      s += ` You ${delta > 0 ? "gained" : "lost"} ${sign}${delta} in the last 7 days.`;
+    }
+    return s;
+  };
+
+  const mentionSentence = () => {
+    const mentions = Array.isArray(data?.mentions) ? data.mentions : [];
+    if (!mentions.length) return "You have no new mentions right now.";
+    const top = mentions[0];
+    return `You have ${mentions.length} new mention${mentions.length === 1 ? "" : "s"}. `
+      + `The most recent is from @${top.handle}: '${__sbXFirst12Words(top.text)}'.`;
+  };
+
+  const lastTweetSentence = () => {
+    const lt = data?.lastTweet;
+    if (!lt) return "";
+    return `Your last tweet got ${lt.likes} likes, ${lt.retweets} retweets, and ${lt.replies} replies.`;
+  };
+
+  if (general) {
+    return [followerSentence(), mentionSentence(), lastTweetSentence()].filter(Boolean).join(" ");
+  }
+  if (wantsFollowers) return followerSentence();
+  if (wantsMentions) return mentionSentence();
+  if (wantsLastTweet) return lastTweetSentence() || "You haven't posted anything through Braino yet.";
+  return followerSentence();
+}
+
+let __sbXLastStatus = null;
+
+async function __sbHandleXStatus(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  __sbShowThinking(scroll, promptText);
+  __sbOpenCard({ rich: true });
+  if (brainBtn) brainBtn.classList.add("recording");
+
+  try {
+    const data = await __sbRuntimeMessage({ action: "getXStatus" });
+
+    if (!data || data.error) {
+      const msg = "I couldn't reach X right now — try again in a moment.";
+      __sbShowBubble(msg, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(msg, voiceOutput); else await __sbSpeakText(msg);
+      return;
+    }
+
+    if (data.connected === false) {
+      const spoken = "Your X account isn't connected. Want me to open settings?";
+      const rich = `${spoken}\n\n[Open Braino settings](https://trybraino.com/dashboard)`;
+      __sbChatHistory.push({ role: "user", content: promptText });
+      __sbChatHistory.push({ role: "assistant", content: rich });
+      __sbShowBubble(rich, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(spoken, voiceOutput); else await __sbSpeakText(spoken);
+      return;
+    }
+
+    __sbXLastStatus = data;
+    const formatted = __sbFormatXStatus(promptText, data);
+    console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
+    __sbChatHistory.push({ role: "user", content: promptText });
+    __sbChatHistory.push({ role: "assistant", content: formatted });
+    __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput); else await __sbSpeakText(formatted);
+  } finally {
+    if (brainBtn) brainBtn.classList.remove("recording");
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+async function __sbHandleXLastTweet(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  __sbShowThinking(scroll, promptText);
+  __sbOpenCard({ rich: true });
+  if (brainBtn) brainBtn.classList.add("recording");
+
+  try {
+    let data = __sbXLastStatus;
+    if (!data?.lastTweet) data = await __sbRuntimeMessage({ action: "getXStatus" }) || data;
+    if (data) __sbXLastStatus = data;
+
+    if (data && data.connected === false) {
+      const spoken = "Your X account isn't connected. Want me to open settings?";
+      const rich = `${spoken}\n\n[Open Braino settings](https://trybraino.com/dashboard)`;
+      __sbShowBubble(rich, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(spoken, voiceOutput); else await __sbSpeakText(spoken);
+      return;
+    }
+
+    const lt = data?.lastTweet;
+    const formatted = lt?.text
+      ? `Your last tweet said: '${lt.text}'`
+      : "You haven't posted anything through Braino yet.";
+    console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
+    __sbChatHistory.push({ role: "user", content: promptText });
+    __sbChatHistory.push({ role: "assistant", content: formatted });
+    __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput); else await __sbSpeakText(formatted);
+  } finally {
+    if (brainBtn) brainBtn.classList.remove("recording");
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
 function __sbFormatWebSearchResults(query, searchData) {
   const lines = (searchData?.results || []).map((result, index) => {
     const title = String(result.title || "Untitled result").trim();
@@ -5970,6 +6132,16 @@ async function __sbProcessPrompt(text, options = {}) {
     __sbShowBubble(reply, true, { rich: true });
     if (fromVoice) await speakVoiceReply(reply);
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // X (Twitter) status — answered inline with real data + TTS, panel stays open.
+  if (__sbIsXLastTweetRequest(promptText)) {
+    await __sbHandleXLastTweet(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  if (__sbIsXStatusRequest(promptText)) {
+    await __sbHandleXStatus(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 

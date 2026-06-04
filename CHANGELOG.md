@@ -1,5 +1,11 @@
 # Braino Changelog
 
+## v4.8.1 — Twitter/X status in Delegate
+- Ask Braino **"how's my Twitter looking?"**, "any new mentions?", "how many followers?", or "how did my last tweet do?" in Delegate mode and it answers with **real X data**, spoken aloud.
+- New `x-status` edge function exposes live follower count, recent mentions, and last-tweet engagement (previously locked inside the auto-engage cron).
+- Delegate panel now **stays open** during and after the call so you can ask follow-ups like "what did my last tweet say?".
+- Follower 7-day delta is spoken only when a real baseline exists — never guessed.
+
 ## v4.7.3 — Voice Web Search Theatrics
 - In **voice mode**, web searches now open a real Google tab so it looks like Braino is controlling the browser. The actual answer still comes from AI search and is spoken back. Chat mode is unchanged.
 

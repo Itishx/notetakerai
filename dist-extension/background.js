@@ -402,6 +402,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(() => sendResponse({ persona: null }));
     return true;
   }
+  if (message.action === "getXStatus") {
+    bgAuthedSupabaseFetch(`${BG_API_BASE}/x-status`, { method: "POST" })
+      .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: `x-status ${res.status}` }))
+      .catch((e) => sendResponse({ error: e.message || "Could not reach X." }));
+    return true;
+  }
   if (message.action === "runBrainAgent") {
     const task = message.task;
     const connector = message.connector;
