@@ -1,5 +1,9 @@
 # Braino Changelog
 
+## v5.0.3 — Voice consciousness shifts to the new tab
+- **Root cause fixed**: when Braino opens a new tab (e.g. Spotify), the content script now reads `sbRtSessionActive` at startup and enters headphone mode immediately — no longer depends on a message arriving before the script is ready.
+- The old tab's Braino hands off cleanly; the new tab's Braino shows "Live AI" and picks up listening right where it left off.
+
 ## v5.0.1 — Instant voice re-attach + simpler shortcut (Alt+V)
 - **Shortcut changed to `Alt+V`** (Option+V on Mac) — 2 keys instead of 3.
 - **Zero reconnect time** on tab switch: if a session is already running in offscreen, pressing Alt+V (or switching to any tab) attaches instantly — no WebRTC setup, no "Waking up…" delay.

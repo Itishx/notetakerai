@@ -3650,12 +3650,26 @@ function __sbBuildBrainUI() {
   // This makes Braino persist across tabs: once invoked, it follows you to every tab
   // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  __sbStorageGet(["sbBrainDocked"]).then(({ sbBrainDocked }) => {
+  __sbStorageGet(["sbBrainDocked", "sbRtSessionActive"]).then(({ sbBrainDocked, sbRtSessionActive }) => {
     if (sbBrainDocked && __sbOwnsInlineUi()) {
       const b = document.getElementById("__sb_brain_btn__");
       if (b) b.style.display = "";
       __sbBrainVisible = true;
       __sbSyncIdleState();
+    }
+    // If a global offscreen voice session is already running, enter headphone mode on this
+    // fresh page immediately — no waiting for sbRtAttach (which races against script load).
+    if (sbRtSessionActive && __sbOwnsInlineUi() && !__sbHeadphoneMode) {
+      __sbHeadphoneMode = true;
+      __sbVoiceOnlyMode = true;
+      __sbUseOffscreenRt = true;
+      __sbRtSessionReady = true;
+      document.getElementById("__sb_rec_btn__")?.classList.add("active");
+      document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+      document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+      __sbSetVoiceStatusBadge("realtime", "Live AI");
+      __sbSetHpBrainState("listening");
+      void __sbSyncRealtimeVoiceInstructions();
     }
   });
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {

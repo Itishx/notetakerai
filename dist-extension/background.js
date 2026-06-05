@@ -3637,15 +3637,16 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
   chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
 });
 
-// Re-attach when a tab finishes navigating — content script needs a moment to load.
+// Re-attach when a tab finishes navigating — send to the tab unconditionally (content.js
+// will self-filter via __sbOwnsInlineUi). The startup storage check in __sbBuildBrainUI is
+// the primary attach path; this is belt-and-suspenders for SPA navigations.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!bgRtSessionActive || changeInfo.status !== "complete") return;
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs?.[0]?.id === tabId) {
-      setTimeout(() => {
-        chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
-      }, 300);
-    }
+  chrome.tabs.get(tabId, (tab) => {
+    if (chrome.runtime.lastError || !tab?.active) return;
+    setTimeout(() => {
+      chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
+    }, 300);
   });
 });
 
