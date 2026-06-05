@@ -2304,7 +2304,7 @@ let __sbCursorFollowPosition = null;
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
   if (event.data?.type !== "sbSetVoicePref") return;
-  const pref = ["fish", "elevenlabs", "realtime"].includes(event.data.pref) ? event.data.pref : "realtime";
+  const pref = ["fish", "elevenlabs", "realtime"].includes(event.data.pref) ? event.data.pref : "elevenlabs";
   __sbVoiceOutputPref = pref;
   chrome.storage.local.set({ brainoVoicePref: pref });
 });
@@ -7247,7 +7247,7 @@ let __sbRtMic = null;
 let __sbRtRemoteAudio = null;
 let __sbUseOffscreenRt = false; // true when realtime session lives in the offscreen doc
 const __SB_REALTIME_VOICE = "verse";
-let __sbVoiceOutputPref = "realtime"; // "realtime" | "fish" | "elevenlabs"
+let __sbVoiceOutputPref = "elevenlabs"; // "realtime" | "fish" | "elevenlabs"
 let __sbRtUserTranscript = "";
 let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
@@ -7832,7 +7832,7 @@ try {
 
     if ("brainoVoicePref" in changes) {
       const v = changes.brainoVoicePref.newValue;
-      __sbVoiceOutputPref = (v === "fish" || v === "elevenlabs") ? v : "realtime";
+      __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
     }
 
     if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
