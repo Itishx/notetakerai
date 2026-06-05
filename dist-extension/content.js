@@ -5363,29 +5363,22 @@ async function __sbSpeakText(text) {
   try {
     if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(false);
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
-    if (!ttsToken) {
-      return await __sbSpeakWithBrowser(clean);
-    }
+
+    // elevenlabs-tts is public (verify_jwt=false) and uses a server-side key, so it works
+    // with just the anon apikey — no user token required. Send the token when we have it.
+    const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
+    if (ttsToken) headers.Authorization = `Bearer ${ttsToken}`;
 
     const resp = await fetch(`${__SB_API}/elevenlabs-tts`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: __SB_ANON_KEY,
-        Authorization: `Bearer ${ttsToken}`,
-      },
+      headers,
       body: JSON.stringify({
         text: clean,
         voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
     });
 
-    if (resp.status === 401 || resp.status === 403) {
-      spoke = await __sbSpeakWithBrowser(clean);
-      return spoke;
-    }
-
-    if (!resp.ok) throw new Error(`TTS failed: ${resp.status}`);
+    if (!resp.ok) throw new Error(`ElevenLabs TTS failed: ${resp.status}`);
 
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
@@ -7174,8 +7167,8 @@ function __sbClearRealtimeConnectHint() {
 
 function __sbBuildRealtimeTranscriptionPrompt() {
   return [
-    "The user is speaking English. Transcribe in English only.",
-    "If audio is unclear, noisy, or contains music, output nothing rather than guessing in another language.",
+    "Transcribe exactly what the user says, in the language they are speaking.",
+    "If the audio is unclear, silent, or just music/noise, output nothing rather than guessing.",
     "Keep names, brands, URLs, and code tokens intact.",
   ].join(" ");
 }
@@ -7196,7 +7189,7 @@ function __sbBuildRealtimeBootInstructions() {
     "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
     "You can act in the browser: search the web, open tabs and websites, play music, and read the page. NEVER say 'I can't open that from here', 'I can't browse', or 'I cannot do that' — you can. When the user asks you to look something up, search for something, find an article, or open a site, treat it as an action you will carry out, not a limitation. Briefly acknowledge ('On it' / 'Pulling that up') — the system performs the action.",
     "If you only caught noise, music, or unclear audio — or you are not confident what the user said — ask them to repeat it. NEVER invent or guess a response when you didn't actually understand the words.",
-    "ALWAYS speak and reply in English. Never switch to another language — not for accents, names, quoted text, code, background noise, music, or a few foreign-sounding words. If you ever find yourself about to answer in a non-English language, stop and answer in English instead.",
+    "Reply in the SAME language the user is actually speaking — mirror them. But do not switch languages because of background noise, music, a stray name, quoted text, or a few foreign-sounding words; only switch when the user is clearly speaking that language in full sentences. When in doubt, stay in the language of the previous turn.",
     "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
     "If interrupted, stop immediately and wait for the user.",
     ...pageLines,
@@ -7221,10 +7214,9 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
           },
           transcription: {
             model: "gpt-4o-transcribe",
-            // LOCK to English. Without this, the model auto-detects language from audio and
-            // mis-detects on noise/music/accents → foreign-language hallucinations that the
-            // assistant then mirrors. This is the root cause of "Braino speaks random languages".
-            language: "en",
+            // No hard language lock — the user wants multilingual mirroring (speak any
+            // language, Braino mirrors it). Noise-induced language hallucinations are held
+            // back by __sbIsJunkTranscript + calmer VAD instead.
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
@@ -7389,7 +7381,7 @@ async function __sbStartRealtimeVoice() {
       _dcReject = reject;
       const timeoutId = setTimeout(() => {
         reject(new Error("Live AI timed out while connecting."));
-      }, 10000);
+      }, 15000);
 
       __sbRtDataChannel = peerConnection.createDataChannel("oai-events");
       __sbRtDataChannel.addEventListener("open", () => {
@@ -7532,6 +7524,12 @@ try {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (!__sbOwnsInlineUi()) return;
+
+    // Voice output preference (realtime vs ElevenLabs) — apply live on every tab so changing
+    // it in settings takes effect immediately, not just on the next headphone-mode entry.
+    if ("brainoVoicePref" in changes) {
+      __sbVoiceOutputPref = changes.brainoVoicePref.newValue === "elevenlabs" ? "elevenlabs" : "realtime";
+    }
 
     if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
       // Voice fully off everywhere.
@@ -7824,37 +7822,16 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
-  __sbRtHandlingConversationTurn = true;
-  __sbChatHistory.push({ role: "user", content: promptText });
-
-  // Refresh page context in session instructions synchronously before the model responds
-  __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
-
-  try {
-    const realtimeResult = await __sbRequestRealtimeReply(promptText);
-    if (realtimeResult.status === "cancelled") return;
-    if (realtimeResult.status === "error") {
-      throw new Error(realtimeResult.errorMessage || "Live AI failed.");
-    }
-
-    const reply = String(realtimeResult.text || "").trim();
-    if (reply) {
-      __sbChatHistory.push({ role: "assistant", content: reply });
-      __sbCardTurns.push({ prompt: promptText, answer: reply });
-      // ElevenLabs mode: OpenAI returns text only, so we speak it ourselves
-      if (__sbVoiceOutputPref === "elevenlabs") {
-        await __sbSpeakText(reply);
-      }
-    }
-  } catch (err) {
-    __sbShowVoiceError(err.message || "Live AI failed.");
-    if (!__sbHeadphoneMode) {
-      await __sbSpeakText("Something went wrong. Try again.");
-    }
-  } finally {
-    __sbRtHandlingConversationTurn = false;
-    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
-  }
+  // General conversation — route through the SAME smart text pipeline legacy voice uses
+  // (chat-about-notes, with the full page DOM context + user notes + selected text), then
+  // speak the answer in the realtime voice. The bare realtime model couldn't see the page
+  // properly and felt dumb; this gives realtime legacy's brain + realtime's voice.
+  await __sbProcessPrompt(promptText, {
+    fromVoice: true,
+    voiceOutput: "realtime",
+    voiceTurnToken: turnToken,
+    forceIntent: "chat",
+  });
 }
 
 function __sbCleanupRealtimeVoice(options = {}) {

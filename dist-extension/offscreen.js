@@ -42,7 +42,7 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
   rtDc = dc;
 
   await new Promise((resolve, reject) => {
-    const to = setTimeout(() => reject(new Error("Live AI timed out while connecting.")), 10000);
+    const to = setTimeout(() => reject(new Error("Live AI timed out while connecting.")), 15000);
     dc.addEventListener("open", () => { clearTimeout(to); resolve(); }, { once: true });
     dc.addEventListener("error", () => { clearTimeout(to); reject(new Error("Live AI could not open its control channel.")); }, { once: true });
     dc.addEventListener("message", (ev) => {

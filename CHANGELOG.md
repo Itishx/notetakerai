@@ -1,5 +1,12 @@
 # Braino Changelog
 
+## v5.4.0 — Realtime gets legacy's brain + ElevenLabs actually works
+- **Live AI is now as smart as legacy.** Root cause of "legacy was smarter": legacy voice routed conversation through the full `chat-about-notes` pipeline (your page's text + your notes), while Live AI used the bare realtime model that barely saw the page. Now **both** use the same smart, page-aware pipeline — Live AI just speaks the answer in its realtime voice.
+- **ElevenLabs voice actually works now.** The `elevenlabs-tts` function was requiring a login token it never even used, so an expired token silently dropped Braino to the robotic browser voice. Made it public — ElevenLabs is now used for legacy replies and for the ElevenLabs voice setting.
+- **Multilingual mirroring restored.** Reverted the English-only lock — speak any language and Braino mirrors it (noise-induced language flips are still held back by the transcript gate + calmer turn detection).
+- **Fewer Live AI timeouts.** Connect timeout raised from 10s to 15s so slower networks don't get bumped to legacy unnecessarily.
+- **Voice setting applies instantly** on every tab (no longer only on the next voice session).
+
 ## v5.3.0 — Language lock, smarter volume, clean searches, same-tab mic
 - **No more random languages.** Root cause: the transcription model auto-detected language from audio and mis-detected on noise/music/accents, then the assistant mirrored the wrong language. Fixed by locking transcription to English (`language: "en"`) and instructing Braino to always reply in English.
 - **Volume "increase/decrease" works without a number.** Volume is now handled directly (no premium agent in the loop): "turn it up / louder / increase" = **+20%**, "lower / quieter / decrease" = **−20%**, plus exact %, mute, and max.
