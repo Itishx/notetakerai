@@ -8561,7 +8561,7 @@ function __sbEnterHeadphoneMode(options = {}) {
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
   __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
     const v = stored.brainoVoicePref;
-    __sbVoiceOutputPref = (v === "fish" || v === "elevenlabs") ? v : "realtime";
+    __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
 
     if (stored.sbRtSessionActive) {
       __sbUseOffscreenRt = true;
