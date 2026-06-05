@@ -2377,11 +2377,6 @@ if (__sbContextOk()) {
       }
     }
     // ────────────────────────────────────────────────────────────────────────
-    if (msg.action === "toggleHeadphoneMode") {
-      if (!__sbOwnsInlineUi()) return;
-      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-      __sbToggleHeadphoneMode();
-    }
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
   });
