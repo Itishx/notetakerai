@@ -3509,47 +3509,47 @@ function __sbBuildBrainUI() {
 
     /* ── Headphone Mode Brain Glows ── */
     @keyframes __sb_hp_listen__ {
-      0%,100% { filter: drop-shadow(0 0 20px rgba(210,40,40,0.75)) drop-shadow(0 0 7px rgba(210,40,40,0.5)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 44px rgba(220,40,40,1))    drop-shadow(0 0 16px rgba(220,40,40,0.7)); transform: scale(1.08); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.65)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(220,40,40,0.8))  drop-shadow(0 0 8px rgba(220,40,40,0.5)); }
     }
     @keyframes __sb_hp_captured__ {
-      0%,100% { filter: drop-shadow(0 0 24px rgba(255,195,0,0.9)) drop-shadow(0 0 10px rgba(255,170,0,0.6)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 52px rgba(255,215,0,1))   drop-shadow(0 0 22px rgba(255,185,0,0.8)); transform: scale(1.1); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(255,195,0,0.75)) drop-shadow(0 0 7px rgba(255,170,0,0.5)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(255,215,0,0.9))  drop-shadow(0 0 10px rgba(255,185,0,0.6)); }
     }
     @keyframes __sb_hp_speak__ {
-      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
-      50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
+      0%,100% { filter: drop-shadow(0 0 16px rgba(210,40,40,0.6))  drop-shadow(0 0 5px rgba(210,40,40,0.35)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 30px rgba(220,40,40,0.85)) drop-shadow(0 0 10px rgba(220,40,40,0.55)); transform: scale(1.04); }
     }
     @keyframes __sb_hp_connect__ {
-      0%,100% { filter: drop-shadow(0 0 16px rgba(234,179,8,0.55)) drop-shadow(0 0 6px rgba(251,191,36,0.35)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 30px rgba(234,179,8,0.85)) drop-shadow(0 0 12px rgba(251,191,36,0.55)); transform: scale(1.05); }
+      0%,100% { filter: drop-shadow(0 0 14px rgba(234,179,8,0.5))  drop-shadow(0 0 5px rgba(251,191,36,0.3)); }
+      50%      { filter: drop-shadow(0 0 22px rgba(234,179,8,0.75)) drop-shadow(0 0 8px rgba(251,191,36,0.45)); }
     }
     /* Blue halo for Live AI (realtime) mode */
     @keyframes __sb_hp_connect_rt__ {
-      0%,100% { filter: drop-shadow(0 0 18px rgba(56,189,248,0.65)) drop-shadow(0 0 7px rgba(59,130,246,0.38)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 34px rgba(56,189,248,0.95)) drop-shadow(0 0 14px rgba(59,130,246,0.62)); transform: scale(1.06); }
+      0%,100% { filter: drop-shadow(0 0 16px rgba(56,189,248,0.55)) drop-shadow(0 0 6px rgba(59,130,246,0.32)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(56,189,248,0.8))  drop-shadow(0 0 10px rgba(59,130,246,0.5)); }
     }
     @keyframes __sb_hp_listen_rt__ {
-      0%,100% { filter: drop-shadow(0 0 22px rgba(59,130,246,0.85)) drop-shadow(0 0 8px rgba(99,179,255,0.55)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 48px rgba(59,130,246,1))    drop-shadow(0 0 18px rgba(99,179,255,0.8)); transform: scale(1.09); }
+      0%,100% { filter: drop-shadow(0 0 20px rgba(59,130,246,0.75)) drop-shadow(0 0 7px rgba(99,179,255,0.45)); }
+      50%      { filter: drop-shadow(0 0 30px rgba(59,130,246,0.9))  drop-shadow(0 0 11px rgba(99,179,255,0.6)); }
     }
     @keyframes __sb_hp_speak_rt__ {
-      0%,100% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.8)) drop-shadow(0 0 8px rgba(139,92,246,0.5)); transform: scale(1.02); }
-      50%      { filter: drop-shadow(0 0 42px rgba(99,102,241,1))   drop-shadow(0 0 16px rgba(139,92,246,0.75)); transform: scale(1.07); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(99,102,241,0.7))  drop-shadow(0 0 7px rgba(139,92,246,0.42)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 32px rgba(99,102,241,0.9))  drop-shadow(0 0 12px rgba(139,92,246,0.65)); transform: scale(1.04); }
     }
     @keyframes __sb_hp_captured_rt__ {
-      0%,100% { filter: drop-shadow(0 0 26px rgba(34,211,238,0.85)) drop-shadow(0 0 10px rgba(34,211,238,0.55)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 54px rgba(34,211,238,1))    drop-shadow(0 0 22px rgba(34,211,238,0.8)); transform: scale(1.1); }
+      0%,100% { filter: drop-shadow(0 0 20px rgba(34,211,238,0.75)) drop-shadow(0 0 8px rgba(34,211,238,0.45)); }
+      50%      { filter: drop-shadow(0 0 30px rgba(34,211,238,0.9))  drop-shadow(0 0 12px rgba(34,211,238,0.6)); }
     }
-    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__ 1.1s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite; }
     /* Realtime overrides — blue halo wins */
-    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.1s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-listening { animation: __sb_hp_listen_rt__   1.4s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-captured  { animation: __sb_hp_captured_rt__ 0.5s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-speaking  { animation: __sb_hp_speak_rt__    0.85s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite; }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
