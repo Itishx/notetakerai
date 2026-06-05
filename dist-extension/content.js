@@ -5121,6 +5121,9 @@ function __sbToggleInput(open, options = {}) {
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       __sbSetGreetingPlaceholder();
+      // Sync voice/headphone button state with current runtime state
+      document.getElementById("__sb_rec_btn__")?.classList.toggle("active", __sbHeadphoneMode);
+      document.getElementById("__sb_card_voice_mode_btn__")?.classList.toggle("active", __sbHeadphoneMode);
       __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
         const model = aiProvider === "claude" ? "claude" : "lovable";
         document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
