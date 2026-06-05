@@ -2278,7 +2278,7 @@ let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
 let __sbSpeechGeneration = 0;
 const __SB_TTS_PROVIDER = "fish-audio";
-const __SB_TTS_ENDPOINT = "fish-audio-tts";
+const __SB_TTS_ENDPOINT = "elevenlabs-tts";
 const __SB_TTS_RETRY_MIN_MS = 5000;
 const __SB_TTS_RETRY_MAX_MS = 12000;
 let __sbIsLectureRecording = false;
@@ -5515,7 +5515,6 @@ async function __sbSpeakText(text, options = {}) {
       headers,
       body: JSON.stringify({
         text: clean,
-        providerMode: "fish_only",
       }),
     }, speechToken);
     if (!resp) return false;
