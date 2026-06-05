@@ -2320,8 +2320,11 @@ if (__sbContextOk()) {
       __sbApplySpotifyState(msg.state || {}, { openCard: false, focusSpotify: false });
     }
     if (msg.action === "rtVoiceYield") {
-      // Another tab claimed the single voice session — stand down here so only one runs.
-      if (__sbHeadphoneMode) __sbExitHeadphoneMode();
+      // Another tab took over voice — stand down here so only one runs. Crucially, do NOT
+      // clear the global sbVoiceModeOn flag (that would turn voice off everywhere); just
+      // release this tab's presence. __sbReleaseVoicePresence keeps the global session
+      // alive in offscreen mode and tears down only the in-tab session otherwise.
+      if (__sbHeadphoneMode) __sbReleaseVoicePresence();
       else if (__sbIsRealtimeVoiceReady()) __sbCleanupRealtimeVoice({ reason: "yielded_to_other_tab" });
     }
     // ── Offscreen realtime events ──────────────────────────────────────────
@@ -2346,9 +2349,12 @@ if (__sbContextOk()) {
       void __sbSyncRealtimeVoiceInstructions();
     }
     if (msg.action === "sbRtSessionFailed") {
-      // Offscreen start failed — fall back to in-tab realtime.
+      // Offscreen start failed (e.g. mic permission can't be granted in an invisible
+      // offscreen doc). Remember that so future tab switches skip offscreen and go straight
+      // to the in-tab session, then start the in-tab session here now.
       __sbUseOffscreenRt = false;
-      void __sbStartRealtimeVoice();
+      if (__sbContextOk()) chrome.storage.local.set({ sbOffscreenRtBroken: true });
+      if (__sbHeadphoneMode && !__sbIsRealtimeVoiceReady()) void __sbStartRealtimeVoice();
     }
     if (msg.action === "sbRtSessionEnded") {
       // Offscreen session dropped — fall back to legacy voice if in headphone mode.
@@ -2357,29 +2363,16 @@ if (__sbContextOk()) {
       if (__sbHeadphoneMode) void __sbFallbackToLegacyHeadphone("Live AI disconnected. Switching to legacy voice.");
     }
     if (msg.action === "sbRtAttach") {
-      // Background tells this tab the offscreen session is active and it's now the
-      // active tab — enter headphone mode UI state so Braino is visibly listening here.
+      // Background says this tab is now focused and voice mode is on — take over presence.
+      // (Belt-and-suspenders alongside startup check + visibilitychange.)
       if (!__sbOwnsInlineUi()) return;
-      // Ensure brain is visible even if not previously docked.
-      const b = document.getElementById("__sb_brain_btn__");
-      if (b && b.style.display === "none") { b.style.display = ""; __sbBrainVisible = true; }
-      if (!__sbHeadphoneMode) {
-        __sbHeadphoneMode = true;
-        __sbVoiceOnlyMode = true;
-        __sbUseOffscreenRt = true;
-        __sbRtSessionReady = true;
-        document.getElementById("__sb_rec_btn__")?.classList.add("active");
-        document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
-        document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
-        __sbSetVoiceStatusBadge("realtime", "Live AI");
-        __sbSetHpBrainState("listening");
-        __sbSyncIdleState();
-        if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
-        void __sbSyncRealtimeVoiceInstructions();
-      } else {
-        // Already in headphone mode — just refresh the session instructions for new page.
-        void __sbSyncRealtimeVoiceInstructions();
-      }
+      if (__sbHeadphoneMode) void __sbSyncRealtimeVoiceInstructions();
+      else __sbEnsureVoicePresence();
+    }
+    if (msg.action === "sbRtDetach") {
+      // This tab lost focus to another — hand voice off.
+      if (!__sbOwnsInlineUi()) return;
+      __sbReleaseVoicePresence();
     }
     // ────────────────────────────────────────────────────────────────────────
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
@@ -3655,33 +3648,23 @@ function __sbBuildBrainUI() {
   // This makes Braino persist across tabs: once invoked, it follows you to every tab
   // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  __sbStorageGet(["sbBrainDocked", "sbRtSessionActive"]).then(({ sbBrainDocked, sbRtSessionActive }) => {
+  __sbStorageGet(["sbBrainDocked", "sbVoiceModeOn"]).then(({ sbBrainDocked, sbVoiceModeOn }) => {
     if (!__sbOwnsInlineUi()) return;
-    // Show brain if docked OR if a voice session is running (voice takes over, so show it either way).
-    if (sbBrainDocked || sbRtSessionActive) {
+    // Show brain if docked OR if voice mode is on (voice takes over, so show it either way).
+    if (sbBrainDocked || sbVoiceModeOn) {
       const b = document.getElementById("__sb_brain_btn__");
       if (b) b.style.display = "";
       __sbBrainVisible = true;
-      if (sbBrainDocked && !sbRtSessionActive) __sbSyncIdleState();
-      // Also ensure sbBrainDocked is persisted so the next tab picks up the brain too.
-      if (!sbBrainDocked && sbRtSessionActive && __sbContextOk()) {
+      if (sbBrainDocked && !sbVoiceModeOn) __sbSyncIdleState();
+      if (!sbBrainDocked && sbVoiceModeOn && __sbContextOk()) {
         chrome.storage.local.set({ sbBrainDocked: true });
       }
     }
-    // If a global offscreen voice session is already running, enter headphone mode on this
-    // fresh page immediately — no waiting for sbRtAttach (which races against script load).
-    if (sbRtSessionActive && !__sbHeadphoneMode) {
-      __sbHeadphoneMode = true;
-      __sbVoiceOnlyMode = true;
-      __sbUseOffscreenRt = true;
-      __sbRtSessionReady = true;
-      document.getElementById("__sb_rec_btn__")?.classList.add("active");
-      document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
-      document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
-      __sbSetVoiceStatusBadge("realtime", "Live AI");
-      __sbSetHpBrainState("listening");
-      __sbSyncIdleState(); // removes sb-brain-idle now that hp-listening is set
-      void __sbSyncRealtimeVoiceInstructions();
+    // If voice mode is on AND this is the visible tab, take over presence immediately —
+    // no waiting for sbRtAttach (which races against script load). This is THE primary
+    // path for freshly-opened tabs (e.g. Braino opening Spotify). Hidden tabs stay idle.
+    if (sbVoiceModeOn && document.visibilityState === "visible") {
+      __sbEnsureVoicePresence();
     }
   });
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
@@ -5910,6 +5893,8 @@ function __sbGetPageContext(maxChars = 12000) {
 function __sbIsExplicitWebSearchRequest(text) {
   // Explicit search commands
   if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|search for\b)\b/i.test(text)) return true;
+  // Find/read an article/paper/info — generic look-ups with no specific app
+  if (/\b(find|pull up|bring up|read)\b.{0,20}\b(article|articles|paper|papers|story|post|info|information|page|website|link)\b/i.test(text)) return true;
   // Freshness signals — needs live data
   if (/\b(latest|current|today|right now|as of|this week|this month|this year|recent|news|price of|stock|weather|score|standings|live|just happened|breaking|update on|status of|is .{1,40} still|did .{1,30} happen|when did|who won|who is winning|what happened|trending)\b/i.test(text)) return true;
   return false;
@@ -5924,6 +5909,28 @@ function __sbIsVolumeCommand(text) {
   return /\bvolume\b/.test(t)
     || /\b(louder|quieter|softer)\b/.test(t)
     || /\bturn\s+(it|the\s+(music|sound|volume))\s+(up|down)\b/.test(t);
+}
+
+// Detect transcription hallucinations that gpt-4o-transcribe / Whisper emit on music,
+// silence, or background noise — so we don't feed garbage to the model (→ gibberish replies).
+// Conservative: only filters non-speech symbols and the well-known phantom phrases, so real
+// short commands ("stop", "next", "louder", "yes") still pass through.
+function __sbIsJunkTranscript(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return true;
+  // No word characters at all (pure punctuation / music notes ♪ ♫ / dots).
+  if (!/[a-z0-9]/i.test(raw)) return true;
+  // Bracketed sound-effect captions: [music], (applause), [silence], *laughs*.
+  if (/^[\[\(\*].*[\]\)\*]$/.test(raw)) return true;
+  const norm = raw.toLowerCase().replace(/[^a-z\s]/g, "").replace(/\s+/g, " ").trim();
+  // Classic silence/music phantom outputs.
+  const phantoms = new Set([
+    "you", "thank you", "thank you so much", "thanks for watching",
+    "thanks for watching everyone", "please subscribe", "subscribe",
+    "bye", "bye bye", "okay", "music", "applause", "silence", "the end",
+  ]);
+  if (phantoms.has(norm)) return true;
+  return false;
 }
 
 function __sbIsCloseTabsCommand(text) {
@@ -6972,6 +6979,7 @@ let __sbUseOffscreenRt = false; // true when realtime session lives in the offsc
 const __SB_REALTIME_VOICE = "verse";
 let __sbVoiceOutputPref = "realtime"; // "realtime" | "elevenlabs"
 let __sbRtUserTranscript = "";
+let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
 let __sbRtResponseWaiter = null;
 let __sbRtTurnToken = 0;
@@ -7094,6 +7102,8 @@ function __sbBuildRealtimeBootInstructions() {
     "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
     "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. Voice is only the medium here. You are still Braino.",
     "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
+    "You can act in the browser: search the web, open tabs and websites, play music, and read the page. NEVER say 'I can't open that from here', 'I can't browse', or 'I cannot do that' — you can. When the user asks you to look something up, search for something, find an article, or open a site, treat it as an action you will carry out, not a limitation. Briefly acknowledge ('On it' / 'Pulling that up') — the system performs the action.",
+    "If you only caught noise, music, or unclear audio — or you are not confident what the user said — ask them to repeat it. NEVER invent or guess a response when you didn't actually understand the words.",
     "Reply in the same language the user is currently using. Do not switch languages because of accents, names, quoted text, code, noise, or a few foreign words. If the user's language is mixed or unclear, ask one short clarification instead of guessing.",
     "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
     "If interrupted, stop immediately and wait for the user.",
@@ -7122,8 +7132,10 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
+            // "auto" eagerness is calmer than "high" — it waits for a clearer end-of-speech,
+            // so loud background music/noise is less likely to be chopped into false turns.
             type: "semantic_vad",
-            eagerness: "high",
+            eagerness: "auto",
             create_response: false,
             interrupt_response: true,
           },
@@ -7401,34 +7413,72 @@ function __sbSetRealtimeMicEnabled(enabled) {
 document.addEventListener("visibilitychange", () => {
   if (!__sbOwnsInlineUi()) return;
   if (document.hidden) {
-    // Offscreen mode: session is global, don't touch it. Just stop legacy recording.
-    if (!__sbUseOffscreenRt && __sbIsRecording && !__sbHeadphoneMode) {
+    // Lost focus — hand voice off to whatever tab the user moved to.
+    if (__sbHeadphoneMode) {
+      __sbReleaseVoicePresence();
+    } else if (!__sbUseOffscreenRt && __sbIsRecording) {
       try { __sbStopRecording({ silent: true }); } catch (_) {}
     }
   } else {
-    // Tab became foreground. If a global RT session is active but we missed sbRtAttach,
-    // self-attach now — instant, no new WebRTC.
-    if (!__sbHeadphoneMode) {
-      __sbStorageGet(["sbRtSessionActive"]).then(({ sbRtSessionActive }) => {
-        if (!sbRtSessionActive || !__sbOwnsInlineUi()) return;
-        if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-        __sbHeadphoneMode = true;
-        __sbVoiceOnlyMode = true;
-        __sbUseOffscreenRt = true;
-        __sbRtSessionReady = true;
-        document.getElementById("__sb_rec_btn__")?.classList.add("active");
-        document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
-        document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
-        __sbSetVoiceStatusBadge("realtime", "Live AI");
-        __sbSetHpBrainState("listening");
-        void __sbSyncRealtimeVoiceInstructions();
-      });
-    }
+    // Became the foreground tab — take over voice presence (instant if a global session
+    // exists; otherwise start an in-tab session here).
+    __sbEnsureVoicePresence();
   }
 });
 
+// Storage is the race-free backbone — every tab converges no matter which signal lands first.
+//  - sbVoiceModeOn → false : user turned voice off → every tab fully tears down.
+//  - sbRtSessionActive → true : a global offscreen session came up → the focused tab
+//    attaches to it instantly (and an in-tab session it may have started is redundant).
+//  - sbRtSessionActive → false : global session ended → the focused tab re-ensures
+//    presence (will start in-tab if voice mode is still on).
+try {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (!__sbOwnsInlineUi()) return;
+
+    if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
+      // Voice fully off everywhere.
+      __sbUseOffscreenRt = false;
+      if (__sbHeadphoneMode) {
+        __sbCleanupRealtimeVoice({ reason: "voice_mode_off" });
+        __sbDetachVoiceVisual();
+        __sbStopSpeech();
+      }
+      return;
+    }
+
+    if ("sbRtSessionActive" in changes) {
+      const active = changes.sbRtSessionActive.newValue;
+      if (active) {
+        if (document.visibilityState === "visible") {
+          // A global session is now live. If we'd started an in-tab one, drop it and
+          // attach to the global one instead (single source of audio).
+          if (__sbHeadphoneMode && !__sbUseOffscreenRt) {
+            __sbCleanupRealtimeVoice({ reason: "superseded_by_offscreen" });
+          }
+          if (!__sbHeadphoneMode || !__sbUseOffscreenRt) __sbAttachVoiceVisual();
+        }
+      } else if (__sbUseOffscreenRt) {
+        // Global session dropped. Re-ensure presence on the focused tab.
+        __sbUseOffscreenRt = false;
+        __sbDetachVoiceVisual();
+        if (document.visibilityState === "visible") __sbEnsureVoicePresence();
+      }
+    }
+  });
+} catch (_) {}
+
 function __sbIsRealtimeVoiceReady() {
   return Boolean(__sbRtSessionReady && __sbRtDataChannel && __sbRtDataChannel.readyState === "open");
+}
+
+// Readiness for sending control events / relays — accounts for offscreen mode, where the
+// data channel lives in the offscreen doc (so __sbRtDataChannel is null here but the
+// session is still ready and events route via background → offscreen).
+function __sbRtControlReady() {
+  if (__sbUseOffscreenRt) return Boolean(__sbRtSessionReady);
+  return __sbIsRealtimeVoiceReady();
 }
 
 function __sbHasActiveRealtimeResponse() {
@@ -7502,7 +7552,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
   if (!promptText) {
     return { status: "error", text: "", errorMessage: "Nothing to say." };
   }
-  if (!__sbIsRealtimeVoiceReady()) {
+  if (!__sbRtControlReady()) {
     return { status: "error", text: "", errorMessage: "Live AI is not ready." };
   }
 
@@ -7575,7 +7625,7 @@ async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options =
   // Always use the user's CONFIGURED voice. Only fall through to ElevenLabs/browser TTS
   // when realtime is genuinely NOT available (not when the reply was cancelled/errored) —
   // that fallthrough was the "second voice" bug.
-  if (preferred === "realtime" && __sbIsRealtimeVoiceReady() && __sbVoiceOutputPref !== "elevenlabs") {
+  if (preferred === "realtime" && __sbRtControlReady() && __sbVoiceOutputPref !== "elevenlabs") {
     await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
     return true; // realtime was ready — one voice, done regardless of outcome
   }
@@ -7773,6 +7823,18 @@ function __sbHandleRtEvent(ev) {
     __sbRtUserTranscript = "";
     if (!transcript) return;
 
+    // Guard against transcription hallucinations on loud music / background noise / silence.
+    // The model would otherwise "hear" junk and answer with gibberish. Skip it; if it keeps
+    // happening, gently ask the user to repeat (rate-limited so we don't nag).
+    if (__sbIsJunkTranscript(transcript)) {
+      const now = Date.now();
+      if (now - __sbLastRepeatPromptAt > 8000 && !__sbHasActiveRealtimeResponse()) {
+        __sbLastRepeatPromptAt = now;
+        void __sbSpeakWithPreferredVoice("Sorry, I didn't catch that — could you say it again?", "realtime");
+      }
+      return;
+    }
+
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       const turnToken = ++__sbRtTurnToken;
       void __sbHandleInlineRealtimeTurn(toProcess, turnToken);
@@ -7831,52 +7893,132 @@ function __sbToggleHeadphoneMode() {
   }
 }
 
-function __sbEnterHeadphoneMode() {
+// ── Voice presence model ─────────────────────────────────────────────────────
+// `sbVoiceModeOn` (storage) = "the user turned voice on; Braino should be live on
+// whatever tab is focused." Two ways the session can live:
+//   • GLOBAL offscreen session (sbRtSessionActive=true): truly follows; switching
+//     tabs is an instant visual attach with no reconnect.
+//   • IN-TAB session (offscreen unavailable): bound to one tab, so we MIGRATE it —
+//     tear down on the tab losing focus, start fresh on the tab gaining focus.
+// Either way, the focused tab shows the blue presence and the unfocused tab goes
+// back to idle. `__sbEnsureVoicePresence`/`__sbReleaseVoicePresence` are the single
+// entry points; they're driven by visibilitychange, startup, storage.onChanged,
+// and background attach/detach messages — so it converges no matter what races.
+
+// Called when THIS tab becomes the focused tab. Brings voice here.
+function __sbEnsureVoicePresence() {
+  if (!__sbOwnsInlineUi()) return;
+  if (__sbHeadphoneMode) return; // already present here
+  __sbStorageGet(["sbVoiceModeOn", "sbRtSessionActive"]).then(({ sbVoiceModeOn, sbRtSessionActive }) => {
+    if (!sbVoiceModeOn || !__sbOwnsInlineUi() || __sbHeadphoneMode) return;
+    if (document.visibilityState !== "visible") return; // only the focused tab takes over
+    if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+    if (sbRtSessionActive) {
+      __sbAttachVoiceVisual(); // global offscreen session — instant, no reconnect
+    } else {
+      __sbEnterHeadphoneMode({ keepFlag: true }); // start an in-tab session on this tab
+    }
+  });
+}
+
+// Called when THIS tab loses focus. Hands voice off to whatever tab the user moved to.
+function __sbReleaseVoicePresence() {
+  if (!__sbHeadphoneMode) return;
+  if (__sbUseOffscreenRt) {
+    __sbDetachVoiceVisual(); // global session keeps running; just drop the local halo
+  } else {
+    // In-tab session is bound to this tab and can't follow — tear it down so this tab
+    // stops listening/speaking. Keep sbVoiceModeOn so the next focused tab starts fresh.
+    __sbCleanupRealtimeVoice({ reason: "tab_blur_migrate" });
+    __sbDetachVoiceVisual();
+    __sbStopSpeech();
+  }
+}
+
+function __sbAttachVoiceVisual() {
+  if (!__sbOwnsInlineUi()) return;
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (brain && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
+  __sbUseOffscreenRt = true;
+  __sbRtSessionReady = true;
+  document.getElementById("__sb_rec_btn__")?.classList.add("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+  document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+  __sbSetVoiceStatusBadge("realtime", "Live AI");
+  __sbSetHpBrainState("listening"); // blue halo
+  __sbSyncIdleState();              // strips sb-brain-idle now that hp-listening is on
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
+  void __sbSyncRealtimeVoiceInstructions(); // teach the session what page we're now on
+}
+
+// Visual-only teardown — does NOT stop any session. Resets local flags + halo to idle.
+function __sbDetachVoiceVisual() {
+  __sbHeadphoneMode = false;
+  __sbVoiceOnlyMode = false;
+  __sbRtSessionReady = false;
+  __sbVoicePendingReply = false;
+  __sbRtHandlingConversationTurn = false;
+  document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
+  __sbSetHpBrainState("");
+  __sbSetVoiceStatusBadge(null);
+  __sbSyncIdleState(); // back to the floating idle animation
+}
+
+function __sbEnterHeadphoneMode(options = {}) {
+  __sbHeadphoneMode = true;
+  __sbVoiceOnlyMode = true;
+  // Mark voice mode ON globally so every tab knows Braino should follow the user.
+  if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: true, sbBrainDocked: true });
 
   __sbToggleInput(false);
   __sbCollapseCard();
 
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (brain && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
-  // Only start a fresh session if nothing is running yet.
-  __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken"]).then((stored) => {
+  __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
     __sbVoiceOutputPref = stored.brainoVoicePref === "elevenlabs" ? "elevenlabs" : "realtime";
 
     if (stored.sbRtSessionActive) {
-      // Session already live in offscreen — instant attach, no reconnect.
       __sbUseOffscreenRt = true;
       __sbRtSessionReady = true;
       document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
       __sbSetVoiceStatusBadge("realtime", "Live AI");
       __sbSetHpBrainState("listening");
-      void __sbSyncRealtimeVoiceInstructions(); // refresh page context for this tab
+      __sbSyncIdleState();
+      void __sbSyncRealtimeVoiceInstructions();
       return;
     }
 
-    // No existing session — connect now.
     __sbSetHpBrainState("connecting");
     __sbSetVoiceStatusBadge("connecting", "Waking up…");
 
     const authToken = stored.authToken || null;
-    if (authToken) {
-      const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
-      chrome.runtime.sendMessage(
-        { action: "startOffscreenRealtime", authToken, bootInstructions },
-        (res) => {
-          if (chrome.runtime.lastError || res?.error) {
-            void __sbStartRealtimeVoice();
-          } else {
-            __sbUseOffscreenRt = true;
-          }
+    if (!authToken) { void __sbStartRealtimeVoice(); return; }
+
+    // If offscreen mic proved unavailable before, skip it — go straight to the in-tab
+    // session (avoids re-closing/recreating the offscreen doc on every tab switch).
+    if (stored.sbOffscreenRtBroken) { void __sbStartRealtimeVoice(); return; }
+
+    const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
+    chrome.runtime.sendMessage(
+      { action: "startOffscreenRealtime", authToken, bootInstructions },
+      (res) => {
+        if (chrome.runtime.lastError || res?.error) {
+          // Remember offscreen is broken so future tab switches go in-tab immediately.
+          if (__sbContextOk()) chrome.storage.local.set({ sbOffscreenRtBroken: true });
+          void __sbStartRealtimeVoice();
+        } else {
+          __sbUseOffscreenRt = true;
         }
-      );
-    } else {
-      void __sbStartRealtimeVoice();
-    }
+      }
+    );
   });
 }
 
@@ -7884,6 +8026,8 @@ function __sbExitHeadphoneMode() {
   __sbHeadphoneMode = false;
   __sbVoiceOnlyMode = false;
   __sbVoicePendingReply = false;
+  // User explicitly turned voice OFF — clear the global flag so no tab re-arms it.
+  if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: false });
 
   if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
   __sbLastFinalTranscript = null;

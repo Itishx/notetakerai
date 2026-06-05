@@ -416,8 +416,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         await ensureOffscreenForRealtime();
         rtVoiceOwnerTabId = sender?.tab?.id ?? null;
-        bgRtSessionActive = false; // set true when offscreen confirms ready
-        chrome.storage.local.set({ sbRtSessionActive: true });
+        bgRtSessionActive = false; // set true ONLY when offscreen confirms ready (offscreenRtReady)
+        // NOTE: do NOT set sbRtSessionActive optimistically — that caused a true→false flip
+        // on fallback that thrashed the content-side presence listener. It's set in
+        // offscreenRtReady once the global session is genuinely live.
         chrome.runtime.sendMessage(
           { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions },
           (res) => {
@@ -437,6 +439,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "offscreenRtReady") {
     bgRtSessionActive = true;
+    chrome.storage.local.set({ sbRtSessionActive: true }); // global session is genuinely live now
+    bgVoiceVisualTabId = rtVoiceOwnerTabId; // the starting tab shows the presence first
     // Forward session info to the owner tab so it can set up usage tracking.
     if (rtVoiceOwnerTabId) {
       chrome.tabs.sendMessage(rtVoiceOwnerTabId, { action: "sbRtSessionReady", sessionId: message.sessionId, limitMs: message.limitMs, allocatedMs: message.allocatedMs }, () => { void chrome.runtime.lastError; });
@@ -453,6 +457,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "offscreenRtDisconnected") {
     bgRtSessionActive = false;
+    bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });
     // Tell the active tab so it can fall back to legacy voice.
     chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
@@ -474,6 +479,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "stopOffscreenRealtime") {
     bgRtSessionActive = false;
     rtVoiceOwnerTabId = null;
+    bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });
     chrome.runtime.sendMessage({ target: "offscreen", action: "stopRealtimeSession" }, () => { void chrome.runtime.lastError; });
     sendResponse({ ok: true });
@@ -484,6 +490,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // One voice session at a time: record the owner and tell every other tab to stand down.
     const ownerId = sender?.tab?.id ?? null;
     rtVoiceOwnerTabId = ownerId;
+    bgVoiceVisualTabId = ownerId; // this tab now shows the presence
     chrome.tabs.query({}, (tabs) => {
       for (const t of tabs) {
         if (t.id != null && t.id !== ownerId) {
@@ -1894,6 +1901,18 @@ function bgLooksLikeBrowserTask(task) {
   const raw = String(task || "").trim();
   if (!raw) return false;
 
+  // 1) Generic web search / look-up — needs NO app target. This is the default agent
+  //    behavior: "look up X", "search for X", "find me an article on X", "google X",
+  //    "pull up X". These must delegate (search → open → offer summary), never be
+  //    answered conversationally with "I can't open that from here".
+  const searchLookup = /\b(look(?:ing)?\s+(?:this|that|it|them)?\s*up|look\s+up|search(?:\s+for|\s+the\s+web|\s+online)?|google|find\s+(?:me\s+)?(?:an?\s+)?(?:article|articles|paper|papers|info|information|something|page|website|result|link)|pull\s+up|bring\s+up|read\s+(?:me\s+)?(?:an?\s+)?(?:article|paper|story|post))\b/i.test(raw);
+  if (searchLookup) return true;
+
+  // 2) Questions that need live/fresh web data (no app target needed either).
+  const freshness = /\b(latest|current|today|right\s+now|as\s+of|this\s+week|this\s+month|this\s+year|recent|news|price\s+of|stock|weather|score|standings|live|just\s+happened|breaking|update\s+on|status\s+of|who\s+won|who\s+is\s+winning|what\s+happened|trending)\b/i.test(raw);
+  if (freshness) return true;
+
+  // 3) App/site actions — strong imperative + a known actionable target.
   const strongImperative = /^(?:open|go to|navigate to|visit|search|find|look up|pull up|bring up|take me to|show me|create|make|draft|compose|send|reply|play|pause|resume|continue|next|skip|previous|prev|book|buy|order|post|tweet|get directions|show directions|route|move|rename|delete|remove|archive|label|organize|organise)\b/i.test(raw);
   if (!strongImperative) return false;
 
@@ -3629,24 +3648,54 @@ async function ensureOffscreenForRealtime() {
   });
 }
 
-// When the user switches to a new tab and a realtime session is running in offscreen,
-// tell the new tab to enter headphone mode UI so Braino is already listening there.
-chrome.tabs.onActivated.addListener(({ tabId }) => {
-  if (!bgRtSessionActive) return;
-  // Existing tab — send immediately (content script is already loaded).
-  chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
+// Voice "presence" (blue globe) follows the focused tab: the tab losing focus drops it,
+// the tab gaining focus takes it over. Works for BOTH session types — a global offscreen
+// session (instant visual attach) and a migrating in-tab session (the new tab spins one up,
+// the old tab tears its down). Gated on voice mode being on (offscreen active OR the
+// persistent sbVoiceModeOn flag), not just the offscreen session.
+let bgVoiceVisualTabId = null;
+let bgVoiceModeOn = false;
+chrome.storage.local.get(["sbVoiceModeOn"], (r) => { bgVoiceModeOn = !!r?.sbVoiceModeOn; });
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && "sbVoiceModeOn" in changes) {
+    bgVoiceModeOn = !!changes.sbVoiceModeOn.newValue;
+    if (!bgVoiceModeOn) bgVoiceVisualTabId = null;
+  }
 });
 
-// Re-attach when a tab finishes navigating — send to the tab unconditionally (content.js
-// will self-filter via __sbOwnsInlineUi). The startup storage check in __sbBuildBrainUI is
-// the primary attach path; this is belt-and-suspenders for SPA navigations.
+function bgVoiceFollowing() { return bgRtSessionActive || bgVoiceModeOn; }
+
+function bgHandoffVoicePresence(newTabId) {
+  if (!bgVoiceFollowing() || newTabId == null) return;
+  // Detach the previous presence tab (if different) so it goes back to idle / stops.
+  if (bgVoiceVisualTabId != null && bgVoiceVisualTabId !== newTabId) {
+    chrome.tabs.sendMessage(bgVoiceVisualTabId, { action: "sbRtDetach" }, () => { void chrome.runtime.lastError; });
+  }
+  bgVoiceVisualTabId = newTabId;
+  chrome.tabs.sendMessage(newTabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
+}
+
+// Tab switch within a window.
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  bgHandoffVoicePresence(tabId);
+});
+
+// Window switch (e.g. moving to another browser window) — hand off to that window's active tab.
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (!bgVoiceFollowing() || windowId === chrome.windows.WINDOW_ID_NONE) return;
+  chrome.tabs.query({ active: true, windowId }, (tabs) => {
+    const id = tabs?.[0]?.id;
+    if (id != null) bgHandoffVoicePresence(id);
+  });
+});
+
+// Re-attach when the focused tab finishes navigating (fresh content script). The startup
+// storage check in __sbBuildBrainUI is the primary path; this is belt-and-suspenders.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (!bgRtSessionActive || changeInfo.status !== "complete") return;
+  if (!bgVoiceFollowing() || changeInfo.status !== "complete") return;
   chrome.tabs.get(tabId, (tab) => {
     if (chrome.runtime.lastError || !tab?.active) return;
-    setTimeout(() => {
-      chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
-    }, 300);
+    setTimeout(() => bgHandoffVoicePresence(tabId), 300);
   });
 });
 

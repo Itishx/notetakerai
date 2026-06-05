@@ -1,5 +1,16 @@
 # Braino Changelog
 
+## v5.1.0 — Voice truly follows you across tabs + smarter delegate + noise-proof
+**The big root-cause fix.** Previous versions only followed across tabs when the *offscreen* global session started — but on most setups that session silently fails (a microphone can't be granted to an invisible offscreen document), so it fell back to an in-tab session bound to one tab. That's why the old tab kept talking and the new tab never lit up.
+
+- **Voice now follows you no matter what.** A persistent "voice mode on" flag drives presence on whichever tab is focused:
+  - If the global offscreen session works → instant visual hand-off, no reconnect.
+  - If it doesn't → the session **migrates**: the tab you leave tears down and goes idle, the tab you land on spins up and turns blue. Brief reconnect, but it actually works every time.
+  - Once offscreen is detected as unavailable, we skip it on future switches so there's no wasted delay.
+- **Old tab stops, new tab glows blue** — the blue halo always lives on the tab you're actually looking at; the one you left returns to its idle float.
+- **Delegate is the real default.** Generic look-ups now delegate even without naming an app: "look up an article on machine learning", "find me a paper on X", "search for…", "what's the latest…" all trigger web search → open → answer. Braino will **never say "I can't open that from here"** in voice mode again.
+- **Noise-proof voice.** Calmer turn-detection + a transcript sanity gate stop loud music / background noise from being "heard" as gibberish. If Braino genuinely didn't catch you, it asks you to repeat instead of hallucinating a reply.
+
 ## v5.0.4 — Voice consciousness shifts to every new tab (airtight)
 - Brain is now shown AND glows blue on any tab that opens while voice is active — even if that tab was never docked before.
 - `sbBrainDocked` is written to storage on attach so all subsequent tabs inherit visibility automatically.
