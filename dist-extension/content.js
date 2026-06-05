@@ -2245,6 +2245,7 @@ let __sbIsSpeaking = false;
 let __sbCurrentSpeechAudio = null;
 let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
+let __sbSpeechGeneration = 0;
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
@@ -2352,7 +2353,13 @@ if (__sbContextOk()) {
       // Offscreen start failed (e.g. mic permission can't be granted in an invisible
       // offscreen doc). Remember that so future tab switches skip offscreen and go straight
       // to the in-tab session, then start the in-tab session here now.
+      const errorText = String(msg.error || "Live AI could not start.");
       __sbUseOffscreenRt = false;
+      const quotaError = /limit|cap|used .*today|7-minute|429/i.test(errorText);
+      if (quotaError) {
+        if (__sbHeadphoneMode) void __sbFallbackToLegacyHeadphone(errorText);
+        return;
+      }
       if (__sbContextOk()) chrome.storage.local.set({ sbOffscreenRtBroken: true });
       if (__sbHeadphoneMode && !__sbIsRealtimeVoiceReady()) void __sbStartRealtimeVoice();
     }
@@ -5301,6 +5308,7 @@ function __sbSyncSpeakButtons() {
 }
 
 function __sbStopSpeech() {
+  __sbSpeechGeneration += 1;
   if (__sbHasActiveRealtimeResponse()) {
     __sbVoicePendingReply = false;
     __sbInterruptRealtimeResponse();
@@ -5323,9 +5331,13 @@ function __sbStopSpeech() {
   __sbSyncSpeakButtons();
 }
 
-function __sbSpeakWithBrowser(text) {
+function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
   return new Promise((resolve) => {
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      resolve(false);
+      return;
+    }
+    if (speechToken !== __sbSpeechGeneration) {
       resolve(false);
       return;
     }
@@ -5338,11 +5350,13 @@ function __sbSpeakWithBrowser(text) {
     if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
 
     const finish = () => {
-      if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
-      __sbIsSpeaking = false;
-      __sbSetVoiceButtonState(__sbIsRecording);
-      __sbSyncSpeakButtons();
-      resolve(true);
+      if (speechToken === __sbSpeechGeneration) {
+        if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
+        __sbIsSpeaking = false;
+        __sbSetVoiceButtonState(__sbIsRecording);
+        __sbSyncSpeakButtons();
+      }
+      resolve(speechToken === __sbSpeechGeneration);
     };
 
     utterance.onend = finish;
@@ -5357,12 +5371,19 @@ async function __sbSpeakText(text) {
   if (!clean) return false;
 
   __sbStopSpeech();
+  const speechToken = ++__sbSpeechGeneration;
   let spoke = false;
-  const shouldMuteRealtimeMic = Boolean(__sbHeadphoneMode && __sbRtMic);
+  // In headphone (realtime) mode we DON'T mute the mic while ElevenLabs speaks — the whole
+  // point of the realtime mechanism is that the user can barge in. The browser's echo
+  // cancellation (echoCancellation:true on the mic) keeps Braino's own voice from
+  // self-triggering, and speech_started stops playback the instant the user talks. We only
+  // mute in legacy (non-headphone) recording, where there's no barge-in VAD.
+  const shouldMuteRealtimeMic = false;
 
   try {
     if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(false);
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
+    if (speechToken !== __sbSpeechGeneration) return false;
 
     // elevenlabs-tts is public (verify_jwt=false) and uses a server-side key, so it works
     // with just the anon apikey — no user token required. Send the token when we have it.
@@ -5381,6 +5402,7 @@ async function __sbSpeakText(text) {
     if (!resp.ok) throw new Error(`ElevenLabs TTS failed: ${resp.status}`);
 
     const blob = await resp.blob();
+    if (speechToken !== __sbSpeechGeneration) return false;
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
 
@@ -5396,25 +5418,28 @@ async function __sbSpeakText(text) {
       audio.onerror = reject;
       audio.play().catch(reject);
     });
-    spoke = true;
+    spoke = speechToken === __sbSpeechGeneration;
   } catch (ttsErr) {
+    if (speechToken !== __sbSpeechGeneration) return false;
     console.warn("[Braino] ElevenLabs TTS failed, using browser voice:", ttsErr?.message || ttsErr);
-    spoke = await __sbSpeakWithBrowser(clean);
+    spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
-    if (__sbCurrentSpeechAudio) {
-      try { __sbCurrentSpeechAudio.pause(); } catch {}
-      __sbCurrentSpeechAudio = null;
-    }
-    if (__sbCurrentSpeechUrl) {
-      URL.revokeObjectURL(__sbCurrentSpeechUrl);
-      __sbCurrentSpeechUrl = null;
-    }
-    __sbIsSpeaking = false;
-    __sbSetVoiceButtonState(__sbIsRecording);
-    __sbSyncSpeakButtons();
-    // After speaking ends in headphone mode, go back to listening
-    if (__sbHeadphoneMode && !__sbVoicePendingReply) {
-      __sbSetHpBrainState("listening");
+    if (speechToken === __sbSpeechGeneration) {
+      if (__sbCurrentSpeechAudio) {
+        try { __sbCurrentSpeechAudio.pause(); } catch {}
+        __sbCurrentSpeechAudio = null;
+      }
+      if (__sbCurrentSpeechUrl) {
+        URL.revokeObjectURL(__sbCurrentSpeechUrl);
+        __sbCurrentSpeechUrl = null;
+      }
+      __sbIsSpeaking = false;
+      __sbSetVoiceButtonState(__sbIsRecording);
+      __sbSyncSpeakButtons();
+      // After speaking ends in headphone mode, go back to listening
+      if (__sbHeadphoneMode && !__sbVoicePendingReply) {
+        __sbSetHpBrainState("listening");
+      }
     }
     if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(true);
   }
@@ -7269,7 +7294,7 @@ async function __sbBuildRealtimeConfigPayload() {
 
 async function __sbSyncRealtimeVoiceInstructions() {
   try {
-    if (!__sbHeadphoneMode || !__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
+    if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
     const resp = await __sbAuthedApiFetch("openai-realtime-config", {
       method: "POST",
@@ -7289,7 +7314,7 @@ async function __sbSyncRealtimeVoiceInstructions() {
     const fingerprint = String(data?.fingerprint || "").trim();
     if (!instructions) return false;
     if (fingerprint && fingerprint === __sbRtInstructionsFingerprint) return true;
-    if (!__sbHeadphoneMode || !__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
+    if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
     const updated = __sbSendRealtimeSessionUpdate(instructions);
     if (updated && fingerprint) {
@@ -7533,7 +7558,6 @@ try {
 
     if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
       // Voice fully off everywhere.
-      __sbUseOffscreenRt = false;
       if (__sbHeadphoneMode) {
         __sbCleanupRealtimeVoice({ reason: "voice_mode_off" });
         __sbDetachVoiceVisual();
@@ -7573,6 +7597,17 @@ function __sbIsRealtimeVoiceReady() {
 function __sbRtControlReady() {
   if (__sbUseOffscreenRt) return Boolean(__sbRtSessionReady);
   return __sbIsRealtimeVoiceReady();
+}
+
+async function __sbWaitForRealtimeControlReady(timeoutMs = 16000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (__sbRtControlReady()) return true;
+    if (__sbIsRecording) return false;
+    if (!__sbHeadphoneMode || __sbVoiceOutputPref === "elevenlabs") return false;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  return __sbRtControlReady();
 }
 
 function __sbHasActiveRealtimeResponse() {
@@ -7633,7 +7668,7 @@ function __sbResetRealtimeResponseState() {
 }
 
 function __sbInterruptRealtimeResponse() {
-  if (__sbIsRealtimeVoiceReady() && __sbHasActiveRealtimeResponse()) {
+  if (__sbRtControlReady() && __sbHasActiveRealtimeResponse()) {
     __sbSendRtEvent({ type: "response.cancel" });
     __sbSendRtEvent({ type: "output_audio_buffer.clear" });
   }
@@ -7719,7 +7754,20 @@ async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options =
   // Always use the user's CONFIGURED voice. Only fall through to ElevenLabs/browser TTS
   // when realtime is genuinely NOT available (not when the reply was cancelled/errored) —
   // that fallthrough was the "second voice" bug.
-  if (preferred === "realtime" && __sbRtControlReady() && __sbVoiceOutputPref !== "elevenlabs") {
+  if (preferred === "realtime" && __sbVoiceOutputPref !== "elevenlabs") {
+    if (!__sbRtControlReady() && __sbHeadphoneMode && !__sbIsRecording) {
+      __sbSetVoiceStatusBadge("connecting", "Waking up…");
+      __sbSetHpBrainState("connecting");
+      await __sbWaitForRealtimeControlReady(options.realtimeWaitMs || 16000);
+    }
+    if (!__sbRtControlReady() && __sbHeadphoneMode && !__sbIsRecording) {
+      __sbShowVoiceError("Live AI is still connecting. I won't start a second voice on top of it.");
+      return false;
+    }
+    if (!__sbRtControlReady()) {
+      return await __sbSpeakText(text);
+    }
+    __sbStopSpeech();
     await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
     return true; // realtime was ready — one voice, done regardless of outcome
   }
@@ -7879,10 +7927,16 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "input_audio_buffer.speech_started") {
+    // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
+    // This is the whole point of the realtime mechanism, and it must work the SAME for both
+    // voices: cancel the realtime model's audio (realtime-voice mode) AND stop the ElevenLabs/
+    // fallback <audio> (ElevenLabs mode). Without the __sbStopSpeech call, ElevenLabs kept
+    // playing and felt "not realtime".
     if (__sbHasActiveRealtimeResponse()) {
       __sbVoicePendingReply = false;
       __sbInterruptRealtimeResponse();
     }
+    __sbStopSpeech(); // stop ElevenLabs / browser TTS playback so the user can barge in
     __sbRtUserTranscript = "";
     if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
     return;

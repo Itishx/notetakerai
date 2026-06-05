@@ -3,6 +3,8 @@ let isRecording = false;
 let bgAgentShouldStop = false;
 let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
 let bgRtSessionActive = false; // offscreen realtime session is running
+let bgRtSessionStarting = false;
+let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0 };
 
 // On install/update, clear the "offscreen is broken" flag so every client re-attempts the
 // global offscreen voice path once (now backed by a one-time mic-permission grant). If it
@@ -456,12 +458,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "startOffscreenRealtime") {
     (async () => {
       try {
+        bgVoiceModeOn = true;
+        const requesterTabId = sender?.tab?.id ?? null;
+        if (bgRtSessionActive) {
+          rtVoiceOwnerTabId = requesterTabId || rtVoiceOwnerTabId;
+          bgVoiceVisualTabId = requesterTabId || bgVoiceVisualTabId;
+          if (requesterTabId) {
+            chrome.tabs.sendMessage(requesterTabId, { action: "sbRtSessionReady", ...bgRtSessionInfo }, () => { void chrome.runtime.lastError; });
+          }
+          sendResponse({ ok: true, alreadyActive: true });
+          return;
+        }
+        if (bgRtSessionStarting) {
+          rtVoiceOwnerTabId = requesterTabId || rtVoiceOwnerTabId;
+          sendResponse({ ok: true, starting: true });
+          return;
+        }
+        bgRtSessionStarting = true;
         // The offscreen document is invisible and cannot show a mic prompt. Make sure the
         // extension already holds microphone permission (granted once via a visible helper
         // window) — without it, offscreen getUserMedia fails and we'd fall back to per-tab
         // sessions. With it, the session is global and follows across tabs instantly.
         const micOk = await ensureExtensionMicPermission();
         if (!micOk) {
+          bgRtSessionStarting = false;
           chrome.storage.local.set({ sbRtSessionActive: false });
           chrome.tabs.sendMessage(sender?.tab?.id || 0, { action: "sbRtSessionFailed", error: "Microphone not granted" }, () => { void chrome.runtime.lastError; });
           sendResponse({ ok: true, micDenied: true });
@@ -469,7 +489,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         await ensureOffscreenForRealtime();
-        rtVoiceOwnerTabId = sender?.tab?.id ?? null;
+        rtVoiceOwnerTabId = requesterTabId;
         bgRtSessionActive = false; // set true ONLY when offscreen confirms ready (offscreenRtReady)
         // NOTE: do NOT set sbRtSessionActive optimistically — that caused a true→false flip
         // on fallback that thrashed the content-side presence listener. It's set in
@@ -478,15 +498,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions },
           (res) => {
             if (chrome.runtime.lastError || res?.error) {
+              bgRtSessionStarting = false;
               // Offscreen failed even though permission was granted — maybe the OS-level
-              // grant was revoked. Forget it so we re-prompt next time, then fall back.
-              chrome.storage.local.set({ sbRtSessionActive: false, sbMicPermission: null });
-              chrome.tabs.sendMessage(rtVoiceOwnerTabId || 0, { action: "sbRtSessionFailed", error: res?.error || "Offscreen start failed" }, () => { void chrome.runtime.lastError; });
+              // grant was revoked. Only forget the permission on mic-looking failures;
+              // quota/API failures should not cause a pointless permission re-prompt.
+              const errText = String(res?.error || chrome.runtime.lastError?.message || "Offscreen start failed");
+              const storageUpdate = { sbRtSessionActive: false };
+              if (/microphone|permission|notallowed|notreadable|getusermedia|device/i.test(errText)) {
+                storageUpdate.sbMicPermission = null;
+              }
+              chrome.storage.local.set(storageUpdate);
+              chrome.tabs.sendMessage(rtVoiceOwnerTabId || requesterTabId || 0, { action: "sbRtSessionFailed", error: errText }, () => { void chrome.runtime.lastError; });
             }
           }
         );
         sendResponse({ ok: true });
       } catch (e) {
+        bgRtSessionStarting = false;
         chrome.storage.local.set({ sbRtSessionActive: false });
         sendResponse({ error: e.message || "Failed to start offscreen realtime" });
       }
@@ -494,12 +522,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "offscreenRtReady") {
+    bgRtSessionStarting = false;
     bgRtSessionActive = true;
+    bgRtSessionInfo = {
+      sessionId: message.sessionId || null,
+      limitMs: Number(message.limitMs || 0),
+      allocatedMs: Number(message.allocatedMs || 0),
+    };
     chrome.storage.local.set({ sbRtSessionActive: true }); // global session is genuinely live now
     bgVoiceVisualTabId = rtVoiceOwnerTabId; // the starting tab shows the presence first
     // Forward session info to the owner tab so it can set up usage tracking.
     if (rtVoiceOwnerTabId) {
-      chrome.tabs.sendMessage(rtVoiceOwnerTabId, { action: "sbRtSessionReady", sessionId: message.sessionId, limitMs: message.limitMs, allocatedMs: message.allocatedMs }, () => { void chrome.runtime.lastError; });
+      chrome.tabs.sendMessage(rtVoiceOwnerTabId, { action: "sbRtSessionReady", ...bgRtSessionInfo }, () => { void chrome.runtime.lastError; });
     }
     return false;
   }
@@ -512,7 +546,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message.action === "offscreenRtDisconnected") {
+    if (!bgVoiceModeOn) return false;
+    bgRtSessionStarting = false;
     bgRtSessionActive = false;
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0 };
     bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });
     // Tell the active tab so it can fall back to legacy voice.
@@ -533,7 +570,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message.action === "stopOffscreenRealtime") {
+    bgRtSessionStarting = false;
     bgRtSessionActive = false;
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0 };
     rtVoiceOwnerTabId = null;
     bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });

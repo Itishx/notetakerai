@@ -14,78 +14,86 @@ let rtRemoteAudio = null;
 async function startRealtimeSession({ authToken, bootInstructions }) {
   stopRealtimeSession();
 
-  rtMic = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
-
-  const pc = new RTCPeerConnection();
-  rtPc = pc;
-  rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
-
-  // Remote audio plays from offscreen (extension-global) so it's heard on any tab.
-  rtRemoteAudio = new Audio();
-  rtRemoteAudio.autoplay = true;
-  document.body.appendChild(rtRemoteAudio);
-  pc.ontrack = (ev) => {
-    rtRemoteAudio.srcObject = ev.streams[0] || new MediaStream([ev.track]);
-    rtRemoteAudio.play().catch(() => {});
-  };
-
-  pc.onconnectionstatechange = () => {
-    const s = pc.connectionState;
-    if (s === "failed" || s === "closed" || s === "disconnected") {
-      chrome.runtime.sendMessage({ action: "offscreenRtDisconnected", reason: s }, () => { void chrome.runtime.lastError; });
-    }
-  };
-
-  const dc = pc.createDataChannel("oai-events");
-  rtDc = dc;
-
-  await new Promise((resolve, reject) => {
-    const to = setTimeout(() => reject(new Error("Live AI timed out while connecting.")), 15000);
-    dc.addEventListener("open", () => { clearTimeout(to); resolve(); }, { once: true });
-    dc.addEventListener("error", () => { clearTimeout(to); reject(new Error("Live AI could not open its control channel.")); }, { once: true });
-    dc.addEventListener("message", (ev) => {
-      try {
-        const event = JSON.parse(ev.data);
-        chrome.runtime.sendMessage({ action: "offscreenRtEvent", event }, () => { void chrome.runtime.lastError; });
-      } catch (_) {}
+  try {
+    rtMic = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-  });
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+    const pc = new RTCPeerConnection();
+    rtPc = pc;
+    rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
 
-  const res = await fetch(`${RT_API_BASE}/openai-realtime-call`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/sdp",
-      apikey: RT_ANON_KEY,
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: offer.sdp || "",
-  });
+    // Remote audio plays from offscreen (extension-global) so it's heard on any tab.
+    rtRemoteAudio = new Audio();
+    rtRemoteAudio.autoplay = true;
+    document.body.appendChild(rtRemoteAudio);
+    pc.ontrack = (ev) => {
+      rtRemoteAudio.srcObject = ev.streams[0] || new MediaStream([ev.track]);
+      rtRemoteAudio.play().catch(() => {});
+    };
 
-  if (!res.ok) {
-    let msg = `Live AI failed (${res.status})`;
-    try { const t = await res.text(); const j = JSON.parse(t); msg = j.details || j.error || t || msg; } catch {}
-    throw new Error(msg);
+    pc.onconnectionstatechange = () => {
+      if (pc !== rtPc) return;
+      const s = pc.connectionState;
+      if (s === "failed" || s === "disconnected") {
+        chrome.runtime.sendMessage({ action: "offscreenRtDisconnected", reason: s }, () => { void chrome.runtime.lastError; });
+      }
+    };
+
+    const dc = pc.createDataChannel("oai-events");
+    rtDc = dc;
+
+    const dataChannelOpen = new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error("Live AI timed out while connecting.")), 15000);
+      dc.addEventListener("open", () => { clearTimeout(to); resolve(); }, { once: true });
+      dc.addEventListener("error", () => { clearTimeout(to); reject(new Error("Live AI could not open its control channel.")); }, { once: true });
+      dc.addEventListener("message", (ev) => {
+        try {
+          const event = JSON.parse(ev.data);
+          chrome.runtime.sendMessage({ action: "offscreenRtEvent", event }, () => { void chrome.runtime.lastError; });
+        } catch (_) {}
+      });
+    });
+    dataChannelOpen.catch(() => {});
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const res = await fetch(`${RT_API_BASE}/openai-realtime-call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        apikey: RT_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: offer.sdp || "",
+    });
+
+    if (!res.ok) {
+      let msg = `Live AI failed (${res.status})`;
+      try { const t = await res.text(); const j = JSON.parse(t); msg = j.details || j.error || t || msg; } catch {}
+      throw new Error(msg);
+    }
+
+    const answerSdp = await res.text();
+    await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+    await dataChannelOpen;
+
+    // Send the full session.update event (system prompt + turn_detection + modalities).
+    // This MUST include create_response:false or the model auto-responds to everything.
+    if (bootInstructions) {
+      rtSendEvent(bootInstructions); // caller passes the full session.update event object
+    }
+
+    return {
+      sessionId: res.headers.get("x-braino-realtime-session-id") || null,
+      limitMs: Number(res.headers.get("x-braino-realtime-limit-ms") || "0"),
+      allocatedMs: Number(res.headers.get("x-braino-realtime-allocated-ms") || "0"),
+    };
+  } catch (error) {
+    stopRealtimeSession();
+    throw error;
   }
-
-  const answerSdp = await res.text();
-  await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
-
-  // Send the full session.update event (system prompt + turn_detection + modalities).
-  // This MUST include create_response:false or the model auto-responds to everything.
-  if (bootInstructions) {
-    rtSendEvent(bootInstructions); // caller passes the full session.update event object
-  }
-
-  return {
-    sessionId: res.headers.get("x-braino-realtime-session-id") || null,
-    limitMs: Number(res.headers.get("x-braino-realtime-limit-ms") || "0"),
-    allocatedMs: Number(res.headers.get("x-braino-realtime-allocated-ms") || "0"),
-  };
 }
 
 function rtSendEvent(event) {
@@ -97,11 +105,15 @@ function rtSendEvent(event) {
 }
 
 function stopRealtimeSession() {
-  try { rtDc?.close(); } catch (_) {}
-  try { rtPc?.close(); } catch (_) {}
-  rtMic?.getTracks().forEach((t) => t.stop());
-  if (rtRemoteAudio) { try { rtRemoteAudio.pause(); } catch {} rtRemoteAudio.srcObject = null; rtRemoteAudio.remove(); }
+  const dc = rtDc;
+  const pc = rtPc;
+  const mic = rtMic;
+  const remoteAudio = rtRemoteAudio;
   rtPc = null; rtDc = null; rtMic = null; rtRemoteAudio = null;
+  try { dc?.close(); } catch (_) {}
+  try { pc?.close(); } catch (_) {}
+  mic?.getTracks().forEach((t) => t.stop());
+  if (remoteAudio) { try { remoteAudio.pause(); } catch {} remoteAudio.srcObject = null; remoteAudio.remove(); }
 }
 
 // ===== SPEECH RECOGNITION =====
