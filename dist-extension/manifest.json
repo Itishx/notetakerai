@@ -35,7 +35,7 @@
         "mac": "Command+I"
       },
       "description": "Open Braino"
-    },
+    }
   },
   "background": {
     "service_worker": "background.js"
