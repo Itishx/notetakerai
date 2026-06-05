@@ -2360,6 +2360,9 @@ if (__sbContextOk()) {
       // Background tells this tab the offscreen session is active and it's now the
       // active tab — enter headphone mode UI state so Braino is visibly listening here.
       if (!__sbOwnsInlineUi()) return;
+      // Ensure brain is visible even if not previously docked.
+      const b = document.getElementById("__sb_brain_btn__");
+      if (b && b.style.display === "none") { b.style.display = ""; __sbBrainVisible = true; }
       if (!__sbHeadphoneMode) {
         __sbHeadphoneMode = true;
         __sbVoiceOnlyMode = true;
@@ -2370,7 +2373,9 @@ if (__sbContextOk()) {
         document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
         __sbSetVoiceStatusBadge("realtime", "Live AI");
         __sbSetHpBrainState("listening");
-        void __sbSyncRealtimeVoiceInstructions(); // update session with this page's context
+        __sbSyncIdleState();
+        if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
+        void __sbSyncRealtimeVoiceInstructions();
       } else {
         // Already in headphone mode — just refresh the session instructions for new page.
         void __sbSyncRealtimeVoiceInstructions();
@@ -3651,15 +3656,21 @@ function __sbBuildBrainUI() {
   // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
   __sbStorageGet(["sbBrainDocked", "sbRtSessionActive"]).then(({ sbBrainDocked, sbRtSessionActive }) => {
-    if (sbBrainDocked && __sbOwnsInlineUi()) {
+    if (!__sbOwnsInlineUi()) return;
+    // Show brain if docked OR if a voice session is running (voice takes over, so show it either way).
+    if (sbBrainDocked || sbRtSessionActive) {
       const b = document.getElementById("__sb_brain_btn__");
       if (b) b.style.display = "";
       __sbBrainVisible = true;
-      __sbSyncIdleState();
+      if (sbBrainDocked && !sbRtSessionActive) __sbSyncIdleState();
+      // Also ensure sbBrainDocked is persisted so the next tab picks up the brain too.
+      if (!sbBrainDocked && sbRtSessionActive && __sbContextOk()) {
+        chrome.storage.local.set({ sbBrainDocked: true });
+      }
     }
     // If a global offscreen voice session is already running, enter headphone mode on this
     // fresh page immediately — no waiting for sbRtAttach (which races against script load).
-    if (sbRtSessionActive && __sbOwnsInlineUi() && !__sbHeadphoneMode) {
+    if (sbRtSessionActive && !__sbHeadphoneMode) {
       __sbHeadphoneMode = true;
       __sbVoiceOnlyMode = true;
       __sbUseOffscreenRt = true;
@@ -3669,6 +3680,7 @@ function __sbBuildBrainUI() {
       document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
       __sbSetVoiceStatusBadge("realtime", "Live AI");
       __sbSetHpBrainState("listening");
+      __sbSyncIdleState(); // removes sb-brain-idle now that hp-listening is set
       void __sbSyncRealtimeVoiceInstructions();
     }
   });

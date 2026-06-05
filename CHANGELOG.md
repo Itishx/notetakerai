@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v5.0.4 — Voice consciousness shifts to every new tab (airtight)
+- Brain is now shown AND glows blue on any tab that opens while voice is active — even if that tab was never docked before.
+- `sbBrainDocked` is written to storage on attach so all subsequent tabs inherit visibility automatically.
+- `sb-brain-idle` animation is cleanly removed when headphone mode activates (no animation conflict).
+
 ## v5.0.3 — Voice consciousness shifts to the new tab
 - **Root cause fixed**: when Braino opens a new tab (e.g. Spotify), the content script now reads `sbRtSessionActive` at startup and enters headphone mode immediately — no longer depends on a message arriving before the script is ready.
 - The old tab's Braino hands off cleanly; the new tab's Braino shows "Live AI" and picks up listening right where it left off.
