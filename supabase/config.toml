@@ -31,8 +31,10 @@ verify_jwt = false
 [functions.x-assistant]
 verify_jwt = true
 
-# ElevenLabs TTS — the function uses no per-user data, only a server-side API key. It was
-# defaulting to verify_jwt=true, so an expired session token returned 401 and the client
-# silently fell back to the robotic browser voice. Make it public so ElevenLabs always works.
+# TTS uses no per-user data, only a server-side provider API key. Keep these public so an
+# expired app session cannot create fake provider failures in voice mode.
+[functions.fish-audio-tts]
+verify_jwt = false
+
 [functions.elevenlabs-tts]
 verify_jwt = false

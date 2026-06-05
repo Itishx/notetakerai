@@ -105,7 +105,15 @@ serve(async (req) => {
       JSON.stringify({
         type: "realtime",
         model: realtimeModel,
+        output_modalities: ["text"],
         audio: {
+          input: {
+            turn_detection: {
+              type: "semantic_vad",
+              create_response: false,
+              interrupt_response: true,
+            },
+          },
           output: {
             voice: realtimeVoice,
           },

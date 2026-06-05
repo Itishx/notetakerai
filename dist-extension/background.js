@@ -2639,6 +2639,52 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   return null;
 }
 
+function bgBuildMediumFastPath(task) {
+  const raw = String(task || "").trim();
+  const t = raw.toLowerCase();
+  if (!/\bmedium(?:\.com)?\b/i.test(t)) return null;
+
+  const isPlainOpen = /^(?:open|go to|navigate to|visit)\s+(?:https?:\/\/)?(?:www\.)?medium\.com\/?\s*$/i.test(raw);
+  if (isPlainOpen) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  const wantsMediumSearch =
+    /\b(find|search|look for|pull up|bring up|read|show|get)\b/i.test(raw) ||
+    /\b(articles?|posts?|blogs?|stories?)\b/i.test(raw) ||
+    /\b(over there|on there|in there|there)\b/i.test(raw);
+
+  if (!wantsMediumSearch) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  let query = raw.toLowerCase();
+  query = query
+    .replace(/https?:\/\/(?:www\.)?medium\.com\/?/gi, " ")
+    .replace(/\b(?:www\.)?medium\.com\b/gi, " ")
+    .replace(/\bmedium\b/gi, " ")
+    .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
+    .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
+    .replace(/\b(?:please|me|some|a few|the|an?|for me)\b/gi, " ")
+    .replace(/\b(?:open|go to|navigate to|navigate|visit|find|search(?: for)?|look for|pull up|bring up|read|show|get)\b/gi, " ")
+    .replace(/\b(?:articles?|posts?|blogs?|stories?|results?)\b/gi, " ")
+    .replace(/\b(?:over there|on there|in there|there|on|in|at|about|around|regarding)\b/gi, " ")
+    .replace(/\band\b/gi, " ")
+    .replace(/[?!.,]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!query) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  return [{
+    type: "navigate",
+    url: `https://medium.com/search?q=${encodeURIComponent(query)}`,
+    description: `Search Medium for "${query}"`,
+  }];
+}
+
 function bgTryFastPath(task, history) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
@@ -2660,6 +2706,8 @@ function bgTryFastPath(task, history) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
   }
+  const mediumFastPath = bgBuildMediumFastPath(task);
+  if (mediumFastPath) return mediumFastPath;
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
     const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
@@ -3800,9 +3848,9 @@ chrome.windows.onRemoved.addListener((windowId) => {
 });
 
 async function ensureOffscreenForRealtime() {
-  // Realtime voice needs AUDIO_PLAYBACK so remote AI audio plays from the offscreen
-  // doc (extension-global, heard regardless of active tab). Close and recreate if the
-  // existing offscreen was opened without that reason.
+  // Realtime lives in the offscreen doc so the mic/session can follow tabs instantly.
+  // Any remote model audio is muted there; Braino's primary audible output is Fish Audio.
+  // Close and recreate if needed so the global realtime host is definitely available.
   const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
   if (contexts.length > 0) {
     const hasAudio = contexts[0].documentUrl && true; // can't inspect reasons, so just check recording isn't active
@@ -3812,7 +3860,7 @@ async function ensureOffscreenForRealtime() {
   await chrome.offscreen.createDocument({
     url: "offscreen.html",
     reasons: ["USER_MEDIA", "AUDIO_PLAYBACK"],
-    justification: "Realtime voice AI — mic input and AI audio output, global across all tabs",
+    justification: "Realtime voice AI — global mic input with muted remote track hosting across tabs",
   });
 }
 

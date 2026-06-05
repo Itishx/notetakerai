@@ -995,9 +995,11 @@ export default function Dashboard() {
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
-  const [voicePref, setVoicePref] = useState<"realtime" | "elevenlabs">(() => {
+  const [voicePref, setVoicePref] = useState<"realtime" | "elevenlabs" | "fish">(() => {
     const stored = localStorage.getItem("brainoVoicePref");
-    return stored === "elevenlabs" ? "elevenlabs" : "realtime";
+    if (stored === "elevenlabs") return "elevenlabs";
+    if (stored === "fish") return "fish";
+    return "realtime";
   });
   const [overallMemory, setOverallMemory] = useState("");
   const [overallMemoryDraft, setOverallMemoryDraft] = useState("");
@@ -4625,16 +4627,16 @@ export default function Dashboard() {
                     Voice & language
                   </h3>
                   <p className="mb-5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    Choose which voice Braino uses in live voice mode. The realtime AI voice is low-latency; the ElevenLabs voice is Braino's signature sound.
+                    Choose which voice Braino uses in live voice mode. Same realtime mechanism for all — only the speaking voice changes.
                   </p>
 
                   <div className="space-y-3">
-                    {(["realtime", "elevenlabs"] as const).map((option) => {
+                    {([
+                      { id: "realtime",   label: "Realtime AI",          desc: "OpenAI's native voice — ultra-low latency, fully interruptible" },
+                      { id: "fish",       label: "Jarvis (Fish Audio)",   desc: "Braino's signature AI voice — rich, natural, barge-in aware" },
+                      { id: "elevenlabs", label: "ElevenLabs",            desc: "Classic ElevenLabs voice — same realtime interruption mechanism" },
+                    ] as const).map(({ id: option, label, desc }) => {
                       const isSelected = voicePref === option;
-                      const label = option === "realtime" ? "Realtime AI" : "Braino (ElevenLabs)";
-                      const desc = option === "realtime"
-                        ? "OpenAI's native voice — lowest latency, interruption-aware"
-                        : "Braino's signature ElevenLabs voice — richer, more character";
                       return (
                         <button
                           key={option}
