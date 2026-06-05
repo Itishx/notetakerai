@@ -2337,12 +2337,15 @@ if (__sbContextOk()) {
       // Offscreen session is up — configure usage tracking and mark ready.
       __sbUseOffscreenRt = true;
       __sbRtSessionReady = true;
+      __sbResetRealtimeConnectFailures();
       __sbResetRealtimeUsageState();
       if (msg.sessionId) {
         __sbRtUsageSessionId = msg.sessionId;
         __sbRtUsageLimitMs = Number(msg.limitMs || 0);
       }
       if (msg.allocatedMs > 0) __sbScheduleRealtimeUsageCap(msg.allocatedMs);
+      if (__sbIsRecording) __sbStopRecording({ silent: true });
+      __sbStopSpeech();
       try { chrome.runtime.sendMessage({ action: "rtVoiceClaim" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
       document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
       __sbSetVoiceStatusBadge("realtime", "Live AI");
@@ -2357,17 +2360,19 @@ if (__sbContextOk()) {
       __sbUseOffscreenRt = false;
       const quotaError = /limit|cap|used .*today|7-minute|429/i.test(errorText);
       if (quotaError) {
-        if (__sbHeadphoneMode) void __sbFallbackToLegacyHeadphone(errorText);
+        if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure(errorText, { nonRetryable: true });
         return;
       }
-      if (__sbContextOk()) chrome.storage.local.set({ sbOffscreenRtBroken: true });
-      if (__sbHeadphoneMode && !__sbIsRealtimeVoiceReady()) void __sbStartRealtimeVoice();
+      if (/microphone|permission|notallowed|notreadable|getusermedia|device/i.test(errorText) && __sbContextOk()) {
+        chrome.storage.local.set({ sbOffscreenRtBroken: true });
+      }
+      if (__sbHeadphoneMode && !__sbIsRealtimeVoiceReady()) void __sbHandleRealtimeConnectFailure(errorText);
     }
     if (msg.action === "sbRtSessionEnded") {
-      // Offscreen session dropped — fall back to legacy voice if in headphone mode.
+      // Offscreen session dropped — retry realtime first; legacy only starts after 3 failures.
       __sbUseOffscreenRt = false;
       __sbRtSessionReady = false;
-      if (__sbHeadphoneMode) void __sbFallbackToLegacyHeadphone("Live AI disconnected. Switching to legacy voice.");
+      if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
     }
     if (msg.action === "sbRtAttach") {
       // Background says this tab is now focused and voice mode is on — take over presence.
@@ -7107,6 +7112,33 @@ let __sbRtUsageHeartbeatTimer = null;
 let __sbRtUsageDeadlineTimer = null;
 let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
+const __SB_RT_MAX_CONNECT_FAILURES = 3;
+let __sbRtConnectFailureCount = 0;
+let __sbRtRetryTimer = null;
+let __sbRtLocalConnectInFlight = false;
+let __sbRtLastFailureAt = 0;
+
+function __sbResetRealtimeConnectFailures() {
+  __sbRtConnectFailureCount = 0;
+  __sbRtLastFailureAt = 0;
+  if (__sbRtRetryTimer) {
+    clearTimeout(__sbRtRetryTimer);
+    __sbRtRetryTimer = null;
+  }
+}
+
+function __sbIsNonRetryableRealtimeFailure(message) {
+  const text = String(message || "").toLowerCase();
+  return (
+    text.includes("sign in") ||
+    text.includes("401") ||
+    text.includes("403") ||
+    text.includes("daily live voice limit") ||
+    text.includes("7-minute") ||
+    text.includes("already used") ||
+    text.includes("cap is up")
+  );
+}
 
 function __sbResetRealtimeUsageState() {
   if (__sbRtUsageHeartbeatTimer) {
@@ -7333,6 +7365,7 @@ async function __sbSyncRealtimeVoiceInstructions() {
 async function __sbFallbackToLegacyHeadphone(message = "Live AI is unavailable. Switching to legacy voice.") {
   if (!__sbHeadphoneMode) return false;
 
+  __sbResetRealtimeConnectFailures();
   __sbCleanupRealtimeVoice({ reason: "legacy_fallback" });
   __sbSetVoiceStatusBadge("legacy", "Legacy");
   __sbShowVoiceError(message);
@@ -7349,9 +7382,90 @@ async function __sbFallbackToLegacyHeadphone(message = "Live AI is unavailable. 
   return false;
 }
 
+function __sbScheduleRealtimeRetry(message, attemptNumber) {
+  if (!__sbHeadphoneMode) return;
+  if (__sbRtRetryTimer) clearTimeout(__sbRtRetryTimer);
+
+  const delayMs = Math.min(1800, 500 + attemptNumber * 350);
+  __sbSetVoiceStatusBadge("connecting", `Retrying Live AI ${attemptNumber}/${__SB_RT_MAX_CONNECT_FAILURES}`);
+  __sbShowVoiceError(`${message} Retrying Live AI (${attemptNumber}/${__SB_RT_MAX_CONNECT_FAILURES})…`);
+  __sbSetHpBrainState("connecting");
+
+  __sbRtRetryTimer = setTimeout(() => {
+    __sbRtRetryTimer = null;
+    if (!__sbHeadphoneMode || __sbRtControlReady()) return;
+    void __sbStartRealtimeConnectAttempt();
+  }, delayMs);
+}
+
+async function __sbHandleRealtimeConnectFailure(message = "Live AI failed.", options = {}) {
+  if (!__sbHeadphoneMode) return false;
+
+  const failureMessage = String(message || "Live AI failed.");
+  if (options.nonRetryable || __sbIsNonRetryableRealtimeFailure(failureMessage)) {
+    return await __sbFallbackToLegacyHeadphone(`${failureMessage} Switching to legacy voice.`);
+  }
+
+  const now = Date.now();
+  if (now - __sbRtLastFailureAt < 750 && __sbRtRetryTimer) {
+    return false;
+  }
+  __sbRtLastFailureAt = now;
+
+  __sbRtConnectFailureCount += 1;
+  const attemptNumber = __sbRtConnectFailureCount;
+
+  if (attemptNumber >= __SB_RT_MAX_CONNECT_FAILURES) {
+    return await __sbFallbackToLegacyHeadphone(`${failureMessage} Live AI failed after ${__SB_RT_MAX_CONNECT_FAILURES} attempts. Switching to legacy voice.`);
+  }
+
+  __sbCleanupRealtimeVoice({ reason: "realtime_retry" });
+  __sbHeadphoneMode = true;
+  __sbVoiceOnlyMode = true;
+  document.getElementById("__sb_rec_btn__")?.classList.add("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+  __sbScheduleRealtimeRetry(failureMessage, attemptNumber);
+  return false;
+}
+
+async function __sbStartRealtimeConnectAttempt() {
+  if (!__sbHeadphoneMode || __sbRtControlReady()) return true;
+
+  const stored = await __sbStorageGet(["authToken", "sbOffscreenRtBroken"]);
+  const authToken = stored.authToken || null;
+  if (!authToken) {
+    __sbSetVoiceStatusBadge("error", "Sign in first");
+    __sbSetHpBrainState("");
+    __sbShowSignIn();
+    return false;
+  }
+
+  __sbSetHpBrainState("connecting");
+  __sbSetVoiceStatusBadge("connecting", "Waking up…");
+
+  if (!stored.sbOffscreenRtBroken) {
+    const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
+    chrome.runtime.sendMessage(
+      { action: "startOffscreenRealtime", authToken, bootInstructions },
+      (res) => {
+        if (chrome.runtime.lastError || res?.error) {
+          void __sbHandleRealtimeConnectFailure(res?.error || chrome.runtime.lastError?.message || "Live AI transport failed.");
+        }
+      }
+    );
+    return true;
+  }
+
+  void __sbStartRealtimeVoice();
+  return true;
+}
+
 async function __sbStartRealtimeVoice() {
+  if (__sbRtLocalConnectInFlight || __sbRtControlReady()) return true;
+  __sbRtLocalConnectInFlight = true;
   const { authToken } = await __sbStorageGet(["authToken"]);
   if (!authToken) {
+    __sbRtLocalConnectInFlight = false;
     __sbSetVoiceStatusBadge("error", "Sign in first");
     __sbSetHpBrainState("");
     return;
@@ -7392,11 +7506,14 @@ async function __sbStartRealtimeVoice() {
       __sbRtRemoteAudio.play().catch(() => {});
     };
 
+    let handledConnectionFailure = false;
     peerConnection.onconnectionstatechange = () => {
       if (__sbHeadphoneMode) {
         const state = peerConnection.connectionState;
         if (state === "failed" || state === "closed" || state === "disconnected") {
-          void __sbFallbackToLegacyHeadphone("Live AI disconnected. Switching to legacy voice.");
+          if (handledConnectionFailure || peerConnection !== __sbRtPeerConnection) return;
+          handledConnectionFailure = true;
+          void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
         }
       }
     };
@@ -7476,7 +7593,11 @@ async function __sbStartRealtimeVoice() {
     document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
     __sbSetVoiceStatusBadge("realtime", "Live AI");
     __sbSetHpBrainState("listening");
+    __sbResetRealtimeConnectFailures();
+    if (__sbIsRecording) __sbStopRecording({ silent: true });
+    __sbStopSpeech();
     void __sbSyncRealtimeVoiceInstructions();
+    return true;
 
   } catch (err) {
     __sbClearRealtimeConnectHint();
@@ -7489,7 +7610,10 @@ async function __sbStartRealtimeVoice() {
       __sbShowSignIn();
       return;
     }
-    await __sbFallbackToLegacyHeadphone(`${message} Using legacy voice instead.`);
+    await __sbHandleRealtimeConnectFailure(message);
+    return false;
+  } finally {
+    __sbRtLocalConnectInFlight = false;
   }
 }
 
@@ -7578,10 +7702,14 @@ try {
           if (!__sbHeadphoneMode || !__sbUseOffscreenRt) __sbAttachVoiceVisual();
         }
       } else if (__sbUseOffscreenRt) {
-        // Global session dropped. Re-ensure presence on the focused tab.
+        // Global session dropped. Retry realtime first; do not start legacy until
+        // the retry budget is exhausted.
         __sbUseOffscreenRt = false;
-        __sbDetachVoiceVisual();
-        if (document.visibilityState === "visible") __sbEnsureVoicePresence();
+        if (document.visibilityState === "visible") {
+          void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
+        } else {
+          __sbDetachVoiceVisual();
+        }
       }
     }
   });
@@ -8200,8 +8328,7 @@ function __sbEnterHeadphoneMode(options = {}) {
         // sets __sbUseOffscreenRt), failure/denied → sbRtSessionFailed. So we do NOT flip
         // __sbUseOffscreenRt here (that race could mis-route events during a fallback).
         if (chrome.runtime.lastError) {
-          if (__sbContextOk()) chrome.storage.local.set({ sbOffscreenRtBroken: true });
-          void __sbStartRealtimeVoice();
+          void __sbHandleRealtimeConnectFailure(chrome.runtime.lastError.message || "Live AI transport failed.");
         }
       }
     );
