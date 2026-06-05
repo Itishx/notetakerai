@@ -1,5 +1,12 @@
 # Braino Changelog
 
+## v5.3.0 — Language lock, smarter volume, clean searches, same-tab mic
+- **No more random languages.** Root cause: the transcription model auto-detected language from audio and mis-detected on noise/music/accents, then the assistant mirrored the wrong language. Fixed by locking transcription to English (`language: "en"`) and instructing Braino to always reply in English.
+- **Volume "increase/decrease" works without a number.** Volume is now handled directly (no premium agent in the loop): "turn it up / louder / increase" = **+20%**, "lower / quieter / decrease" = **−20%**, plus exact %, mute, and max.
+- **Web look-ups search the real query, not your sentence.** "Find me some Medium articles on making good coffee" no longer types your whole polite sentence into the search bar — Braino extracts the actual query ("good coffee medium articles") and answers. Informational look-ups go to web search (an answer), not the typing automation.
+- **Tap Braino to stop him talking.** A guaranteed "stop" — clicking the mascot silences any ongoing speech, including spoken web answers.
+- **Mic permission opens in the same tab** as a small modal (not a separate window), and is now button-driven so the grant reliably sticks — which is what lets the instant offscreen voice-follow work. Falls back to a window on pages that block embedded frames.
+
 ## v5.2.0 — Instant, seamless voice follow (offscreen unlocked)
 - **Zero reconnect on tab switch.** The global offscreen voice session now works because we grant the microphone to the extension **once**, via a small one-time window the first time you turn on voice. After that the invisible offscreen session can hold the mic, so switching tabs is an instant hand-off — no "Waking up…", no gap.
 - **Grant once, works everywhere.** Because the permission is on the extension (not each website), you'll never get a per-site mic prompt while browsing.

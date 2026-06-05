@@ -2374,6 +2374,16 @@ if (__sbContextOk()) {
       if (!__sbOwnsInlineUi()) return;
       __sbReleaseVoicePresence();
     }
+    if (msg.action === "showMicPermission") {
+      // Background wants a one-time mic grant. Show it as a modal in THIS tab (same tab the
+      // user is on) via an extension-origin iframe, so the grant unlocks the offscreen doc.
+      if (!__sbOwnsInlineUi()) { sendResponse?.({ shown: false }); return; }
+      __sbShowMicPermissionModal().then((shown) => sendResponse?.({ shown }));
+      return true; // async response
+    }
+    if (msg.action === "hideMicPermission") {
+      __sbHideMicPermissionModal();
+    }
     // ────────────────────────────────────────────────────────────────────────
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
@@ -3668,6 +3678,14 @@ function __sbBuildBrainUI() {
     }
   });
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
+    // Tapping Braino always silences any ongoing speech first — a guaranteed "stop talking"
+    // affordance (covers browser-TTS answers that otherwise had no stop control in voice mode).
+    const speaking = __sbIsSpeaking || (typeof speechSynthesis !== "undefined" && speechSynthesis.speaking) || __sbHasActiveRealtimeResponse();
+    if (speaking) {
+      __sbStopSpeech();
+      if (__sbHeadphoneMode) { try { __sbInterruptRealtimeResponse(); } catch (_) {} __sbSetHpBrainState("listening"); }
+      return;
+    }
     if (__sbIsLectureRecording) {
       const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
       if (cardOpen) {
@@ -5891,13 +5909,37 @@ function __sbGetPageContext(maxChars = 12000) {
 }
 
 function __sbIsExplicitWebSearchRequest(text) {
-  // Explicit search commands
-  if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|search for\b)\b/i.test(text)) return true;
-  // Find/read an article/paper/info — generic look-ups with no specific app
-  if (/\b(find|pull up|bring up|read)\b.{0,20}\b(article|articles|paper|papers|story|post|info|information|page|website|link)\b/i.test(text)) return true;
+  // Explicit search commands ("web up" = common mis-hear of "look up")
+  if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|web up|google\b|search for\b)\b/i.test(text)) return true;
+  // Find/read articles/papers/info on a topic — informational look-ups (no specific app).
+  // These want an ANSWER, so they go through web search, never the typing automation agent.
+  if (/\b(find|pull up|bring up|read|whip up|get|give)\b.{0,30}\b(article|articles|paper|papers|story|stories|post|posts|info|information|page|website|link|links|blog|blogs)\b/i.test(text)) return true;
+  if (/\b(articles?|papers?|blogs?)\s+(on|about|regarding)\b/i.test(text)) return true;
   // Freshness signals — needs live data
   if (/\b(latest|current|today|right now|as of|this week|this month|this year|recent|news|price of|stock|weather|score|standings|live|just happened|breaking|update on|status of|is .{1,40} still|did .{1,30} happen|when did|who won|who is winning|what happened|trending)\b/i.test(text)) return true;
   return false;
+}
+
+// Strip conversational filler from a spoken request so it becomes a clean search query.
+// "I would like to read some articles on how to make good coffee. Can you please web up
+//  some articles on Medium for me?" → "how to make good coffee articles medium"
+function __sbExtractSearchQuery(text) {
+  let q = String(text || "").toLowerCase();
+  // Drop polite/command wrappers anywhere in the text.
+  const fillers = [
+    /\bi(?:'d| would| wanna| want to| would like to| need to| need)\b/g,
+    /\bcan you(?: please)?\b/g, /\bcould you(?: please)?\b/g, /\bwould you(?: please)?\b/g,
+    /\bplease\b/g, /\bfor me\b/g, /\bhelp me\b/g, /\bi'm looking for\b/g, /\blooking for\b/g,
+    /\b(?:web|look|pull|bring) up\b/g, /\bsearch(?: for| the web| online)?\b/g, /\bgoogle\b/g,
+    /\bfind(?: me)?\b/g, /\bget(?: me)?\b/g, /\bgive me\b/g, /\bshow me\b/g, /\bread(?: me)?\b/g,
+    /\bwhip up\b/g, /\btell me about\b/g, /\bsome\b/g, /\ba few\b/g,
+    /\b(?:an?|the)\b/g,
+  ];
+  for (const re of fillers) q = q.replace(re, " ");
+  q = q.replace(/[?!.,]+/g, " ").replace(/\s+/g, " ").trim();
+  // If we stripped everything, fall back to the original (minus trailing punctuation).
+  if (q.length < 2) return String(text || "").replace(/[?!.]+$/g, "").trim();
+  return q;
 }
 
 function __sbIsBrowserActionCommand(text) {
@@ -5907,8 +5949,52 @@ function __sbIsBrowserActionCommand(text) {
 function __sbIsVolumeCommand(text) {
   const t = String(text || "").toLowerCase();
   return /\bvolume\b/.test(t)
-    || /\b(louder|quieter|softer)\b/.test(t)
-    || /\bturn\s+(it|the\s+(music|sound|volume))\s+(up|down)\b/.test(t);
+    || /\b(louder|quieter|softer|loud)\b/.test(t)
+    || /\b(turn|crank|pump|bump)\s+(it|the\s+(music|sound|volume|song))?\s*(up|down)\b/.test(t)
+    || /\b(increase|decrease|raise|lower|boost|reduce)\b.*\b(volume|sound|music|it)\b/.test(t);
+}
+
+// Parse a volume command into an absolute percent or a relative step. "increase/louder/up"
+// with no number defaults to +20%; "decrease/lower/quieter/down" to -20%.
+function __sbParseVolumeCommand(text) {
+  const t = String(text || "").toLowerCase();
+  if (/\b(mute|silence|silent)\b/.test(t)) return { volumePercent: 0 };
+  if (/\b(full|max(imum)?)\s*(volume|vol)?\b/.test(t) || /\ball\s+the\s+way\s+up\b/.test(t)) return { volumePercent: 100 };
+  const exact = t.match(/(?:to|at)\s+(\d{1,3})\s*%?/) || t.match(/(\d{1,3})\s*%/) || t.match(/(\d{1,3})\s+percent/);
+  if (exact) return { volumePercent: Math.min(100, Math.max(0, parseInt(exact[1], 10))) };
+  const louder = /\b(louder|raise|increase|boost|higher|crank|pump|bump)\b/.test(t)
+    || /\b(turn|volume|sound|music|it)\b.*\bup\b/.test(t) || /\bup\b/.test(t);
+  const quieter = /\b(quieter|softer|lower|decrease|reduce|dimmer)\b/.test(t)
+    || /\b(turn|volume|sound|music|it)\b.*\bdown\b/.test(t) || /\bdown\b/.test(t);
+  if (quieter && !louder) return { volumeStep: -20 };
+  if (louder) return { volumeStep: +20 };
+  return null;
+}
+
+async function __sbHandleVolumeCommand(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null;
+  const parsed = __sbParseVolumeCommand(promptText);
+  if (!parsed) return false;
+  try {
+    const res = await new Promise((resolve) =>
+      chrome.runtime.sendMessage({ action: "adjustSpotifyVolume", ...parsed }, (r) => { void chrome.runtime.lastError; resolve(r || {}); })
+    );
+    let reply;
+    if (res?.ok) {
+      reply = res.muted ? "Muted." : `Volume set to ${res.volumePercent}%.`;
+    } else {
+      reply = res?.error || "I couldn't change the volume — make sure something's playing in Spotify.";
+    }
+    if (fromVoice) await __sbSpeakWithPreferredVoice(reply, voiceOutput);
+    else __sbShowBubble(reply, false, { tone: "status" });
+  } catch (_) {
+    if (fromVoice) await __sbSpeakWithPreferredVoice("I couldn't change the volume.", voiceOutput);
+  } finally {
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+  }
+  return true;
 }
 
 // Detect transcription hallucinations that gpt-4o-transcribe / Whisper emit on music,
@@ -6529,6 +6615,12 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  // Volume — handle directly (instant, no premium agent). "increase/louder" defaults to +20%.
+  if (__sbIsVolumeCommand(promptText)) {
+    const handled = await __sbHandleVolumeCommand(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    if (handled) return;
+  }
+
   // Cross-tab awareness & control (close before query — a close command also says "tabs").
   if (__sbIsCloseTabsCommand(promptText)) {
     await __sbHandleCloseTabs(promptText, { fromVoice, voiceOutput, voiceTurnToken });
@@ -6578,11 +6670,12 @@ async function __sbProcessPrompt(text, options = {}) {
 
   if (intent === "web") {
     const voiceOnly = fromVoice && __sbVoiceOnlyMode;
+    const searchQuery = __sbExtractSearchQuery(promptText); // clean query, not the raw sentence
     if (voiceOnly) {
       // Theatre: open a real Google search tab so it looks like Braino is browsing
       chrome.runtime.sendMessage({
         action: "openTab",
-        url: "https://www.google.com/search?q=" + encodeURIComponent(promptText),
+        url: "https://www.google.com/search?q=" + encodeURIComponent(searchQuery),
         active: true,
       }, () => { void chrome.runtime.lastError; });
     }
@@ -6595,7 +6688,7 @@ async function __sbProcessPrompt(text, options = {}) {
     __sbChatHistory.push({ role: "user", content: promptText });
 
     try {
-      const searchData = await __sbPerformWebSearch(promptText, {
+      const searchData = await __sbPerformWebSearch(searchQuery, {
         purpose: "answer",
         aiProvider,
         chatHistory: previousHistory,
@@ -7081,9 +7174,8 @@ function __sbClearRealtimeConnectHint() {
 
 function __sbBuildRealtimeTranscriptionPrompt() {
   return [
-    "Transcribe exactly what the user says.",
-    "Preserve the user's spoken language.",
-    "Do not translate the transcript into another language.",
+    "The user is speaking English. Transcribe in English only.",
+    "If audio is unclear, noisy, or contains music, output nothing rather than guessing in another language.",
     "Keep names, brands, URLs, and code tokens intact.",
   ].join(" ");
 }
@@ -7104,7 +7196,7 @@ function __sbBuildRealtimeBootInstructions() {
     "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
     "You can act in the browser: search the web, open tabs and websites, play music, and read the page. NEVER say 'I can't open that from here', 'I can't browse', or 'I cannot do that' — you can. When the user asks you to look something up, search for something, find an article, or open a site, treat it as an action you will carry out, not a limitation. Briefly acknowledge ('On it' / 'Pulling that up') — the system performs the action.",
     "If you only caught noise, music, or unclear audio — or you are not confident what the user said — ask them to repeat it. NEVER invent or guess a response when you didn't actually understand the words.",
-    "Reply in the same language the user is currently using. Do not switch languages because of accents, names, quoted text, code, noise, or a few foreign words. If the user's language is mixed or unclear, ask one short clarification instead of guessing.",
+    "ALWAYS speak and reply in English. Never switch to another language — not for accents, names, quoted text, code, background noise, music, or a few foreign-sounding words. If you ever find yourself about to answer in a non-English language, stop and answer in English instead.",
     "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
     "If interrupted, stop immediately and wait for the user.",
     ...pageLines,
@@ -7129,6 +7221,10 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
           },
           transcription: {
             model: "gpt-4o-transcribe",
+            // LOCK to English. Without this, the model auto-detects language from audio and
+            // mis-detects on noise/music/accents → foreign-language hallucinations that the
+            // assistant then mirrors. This is the root cause of "Braino speaks random languages".
+            language: "en",
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
@@ -7692,6 +7788,12 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
+  // Volume — handle directly (instant, no premium agent). "increase/louder" defaults to +20%.
+  if (__sbIsVolumeCommand(promptText)) {
+    const handled = await __sbHandleVolumeCommand(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    if (handled) return;
+  }
+
   // Cross-tab awareness & control (before delegate classification, which would mis-route).
   if (__sbIsCloseTabsCommand(promptText)) {
     await __sbHandleCloseTabs(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
@@ -7891,6 +7993,58 @@ function __sbToggleHeadphoneMode() {
   } else {
     __sbEnterHeadphoneMode();
   }
+}
+
+// ── One-time mic permission modal (same tab) ─────────────────────────────────
+// Hosts the extension-origin permission page in an iframe so getUserMedia there grants the
+// EXTENSION the microphone (which the invisible offscreen doc then inherits → global voice).
+function __sbShowMicPermissionModal() {
+  return new Promise((resolve) => {
+    try {
+      if (document.getElementById("__sb_mic_perm__")) { resolve(true); return; }
+      const overlay = document.createElement("div");
+      overlay.id = "__sb_mic_perm__";
+      overlay.style.cssText = [
+        "position:fixed", "inset:0", "z-index:2147483647",
+        "background:rgba(8,5,4,0.55)", "backdrop-filter:blur(3px)",
+        "display:flex", "align-items:center", "justify-content:center",
+      ].join(";");
+      const frame = document.createElement("iframe");
+      frame.src = chrome.runtime.getURL("mic-permission.html");
+      frame.allow = "microphone"; // delegate mic to the extension-origin iframe
+      frame.style.cssText = [
+        "width:380px", "height:300px", "border:0", "border-radius:18px",
+        "box-shadow:0 20px 60px rgba(0,0,0,0.5)", "background:#160b09",
+      ].join(";");
+      overlay.appendChild(frame);
+      (document.body || document.documentElement).appendChild(overlay);
+
+      // Wait for the iframe to confirm it rendered. If the page's CSP blocked the
+      // extension iframe, no "ready" arrives → remove the (blank) overlay and report
+      // not-shown so the background falls back to a popup window.
+      let settled = false;
+      const onMsg = (e) => {
+        if (e?.data?.__sbMicPerm === "ready") {
+          if (settled) return; settled = true;
+          window.removeEventListener("message", onMsg);
+          resolve(true);
+        }
+      };
+      window.addEventListener("message", onMsg);
+      setTimeout(() => {
+        if (settled) return; settled = true;
+        window.removeEventListener("message", onMsg);
+        __sbHideMicPermissionModal();
+        resolve(false);
+      }, 1300);
+    } catch (_) {
+      resolve(false);
+    }
+  });
+}
+
+function __sbHideMicPermissionModal() {
+  document.getElementById("__sb_mic_perm__")?.remove();
 }
 
 // ── Voice presence model ─────────────────────────────────────────────────────

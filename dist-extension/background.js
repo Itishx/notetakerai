@@ -422,6 +422,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     bgResolveMicPermission(!!message.granted);
     return false;
   }
+  if (message.action === "adjustSpotifyVolume") {
+    (async () => {
+      try {
+        const wantMute = message.volumePercent === 0;
+        // Prefer the open Spotify web-player tab (DOM slider); fall back to the Web API.
+        const spotifyTab = await bgFindSpotifyTab();
+        if (spotifyTab?.id != null) {
+          const res = await bgExecuteSiteAdapterAction(spotifyTab.id, {
+            type: "spotifySetVolume",
+            volumePercent: typeof message.volumePercent === "number" ? message.volumePercent : null,
+            volumeStep: message.volumeStep || 0,
+          });
+          if (res?.ok) { sendResponse({ ok: true, volumePercent: res.volumePercent, muted: wantMute && res.volumePercent === 0 }); return; }
+          sendResponse({ ok: false, error: "I couldn't change the volume — make sure a song is playing in Spotify." });
+          return;
+        }
+        // No web tab — use the Web API (real devices only).
+        let volumePercent = typeof message.volumePercent === "number" ? message.volumePercent : null;
+        if (volumePercent == null) {
+          const playerState = await bgFetchSpotifyPlayerState();
+          const current = typeof playerState?.volumePercent === "number" ? playerState.volumePercent : 50;
+          volumePercent = Math.min(100, Math.max(0, current + (message.volumeStep || 0)));
+        }
+        await bgCallSpotifyFunction("spotify-playback", { action: "volume", volumePercent });
+        sendResponse({ ok: true, volumePercent, muted: volumePercent === 0 });
+      } catch (e) {
+        sendResponse({ ok: false, error: "I couldn't reach Spotify to change the volume." });
+      }
+    })();
+    return true;
+  }
   if (message.action === "startOffscreenRealtime") {
     (async () => {
       try {
@@ -3674,19 +3705,41 @@ function bgResolveMicPermission(granted) {
     bgMicPermissionWindowId = null;
     chrome.windows.remove(id).catch(() => {});
   }
+  // Dismiss any in-page modal that was injected into a tab.
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+    const id = tabs?.[0]?.id;
+    if (id != null) chrome.tabs.sendMessage(id, { action: "hideMicPermission" }, () => { void chrome.runtime.lastError; });
+  });
 }
 
 async function ensureExtensionMicPermission() {
   const { sbMicPermission } = await chrome.storage.local.get(["sbMicPermission"]);
   if (sbMicPermission === "granted") return true;
 
-  // A helper window is already open — join its outcome instead of opening a second one.
-  if (bgMicPermissionWindowId != null) {
+  // Already prompting — join the existing outcome.
+  if (bgMicPermissionWaiters.length || bgMicPermissionWindowId != null) {
     return await new Promise((resolve) => bgMicPermissionWaiters.push(resolve));
   }
 
-  return await new Promise((resolve) => {
+  const result = new Promise((resolve) => {
     bgMicPermissionWaiters.push(resolve);
+    setTimeout(() => { if (bgMicPermissionWaiters.length) bgResolveMicPermission(false); }, 60000);
+  });
+
+  // Preferred: show an in-page modal (same tab the user is on) by asking the active tab's
+  // content script to inject the permission iframe. Falls back to a small window if the
+  // active tab can't host it (chrome://, web store, no content script).
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  let shownInPage = false;
+  if (activeTab?.id != null && /^https?:/i.test(activeTab.url || "")) {
+    shownInPage = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(activeTab.id, { action: "showMicPermission" }, (resp) => {
+        if (chrome.runtime.lastError) { resolve(false); return; }
+        resolve(!!resp?.shown);
+      });
+    });
+  }
+  if (!shownInPage) {
     chrome.windows.create(
       { url: chrome.runtime.getURL("mic-permission.html"), type: "popup", width: 420, height: 360, focused: true },
       (win) => {
@@ -3694,9 +3747,9 @@ async function ensureExtensionMicPermission() {
         bgMicPermissionWindowId = win.id;
       }
     );
-    // Safety: if the user never decides, stop waiting after 45s and fall back to migration.
-    setTimeout(() => { if (bgMicPermissionWaiters.length) bgResolveMicPermission(false); }, 45000);
-  });
+  }
+
+  return await result;
 }
 
 // If the helper window is closed/destroyed without a result, treat as not-granted.

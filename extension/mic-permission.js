@@ -1,49 +1,52 @@
 // Visible extension-origin page whose only job is to obtain the microphone permission
 // grant for the extension. Once granted here, the (invisible) offscreen document inherits
 // it — that's what lets the realtime voice session live globally and follow across tabs
-// with zero reconnect. The background opens this in a small window when needed.
+// with zero reconnect. Shown either as a same-tab modal iframe or a small popup window.
 
 const statusEl = document.getElementById("status");
 const btn = document.getElementById("grant");
-let done = false;
+let reported = false;
 
 function report(granted, error) {
-  if (done) return;
-  done = true;
+  if (reported) return;
+  reported = true;
   try {
     chrome.runtime.sendMessage({ action: "micPermissionResult", granted: !!granted, error: error || null }, () => { void chrome.runtime.lastError; });
   } catch (_) {}
-  // Give the user a beat to see the result, then close the helper window.
-  setTimeout(() => { try { window.close(); } catch (_) {} }, granted ? 450 : 1600);
+  // If we're a standalone popup window, close it. (As an iframe, the parent removes us.)
+  if (granted) {
+    setTimeout(() => { try { window.close(); } catch (_) {} }, 400);
+  }
 }
 
 async function requestMic() {
-  statusEl.textContent = "";
+  statusEl.textContent = "Waiting for your permission…";
   statusEl.className = "status";
+  btn.disabled = true;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // We only needed the permission — release the device immediately.
-    stream.getTracks().forEach((t) => t.stop());
+    stream.getTracks().forEach((t) => t.stop()); // only needed the grant
     statusEl.textContent = "Microphone enabled ✓";
     statusEl.className = "status ok";
     report(true);
   } catch (e) {
     const name = e?.name || "";
     statusEl.textContent = name === "NotAllowedError"
-      ? "Microphone blocked. You can still use voice — Braino will reconnect per tab."
-      : "Couldn't access the microphone.";
+      ? "Microphone blocked. Voice still works — Braino reconnects per tab."
+      : "Couldn't access the microphone. Tap to retry.";
     statusEl.className = "status err";
-    report(false, name || String(e));
+    btn.disabled = false; // let the user retry
+    // Only treat an explicit block as a final answer; transient errors keep the modal open.
+    if (name === "NotAllowedError") report(false, name);
   }
 }
 
+// Button click is a guaranteed user gesture → the prompt reliably appears.
 btn.addEventListener("click", requestMic);
 
-// Try automatically on load (this is a top-level user-opened window, so the prompt shows).
-// If the browser requires a gesture, the button is the fallback.
-window.addEventListener("DOMContentLoaded", () => {
-  requestMic().catch(() => {});
-});
+// Tell a hosting content script we actually rendered (so it knows the iframe wasn't
+// blocked by the page's CSP and can keep the modal up instead of falling back to a window).
+try { window.parent && window.parent !== window && window.parent.postMessage({ __sbMicPerm: "ready" }, "*"); } catch (_) {}
 
-// Safety: if the user closes the window without deciding, treat as not-granted.
-window.addEventListener("beforeunload", () => { report(false, "window-closed"); });
+// If the user dismisses without granting (popup window closed), report not-granted.
+window.addEventListener("beforeunload", () => { if (!reported) report(false, "dismissed"); });
