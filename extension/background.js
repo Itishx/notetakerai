@@ -856,6 +856,15 @@ const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 const BG_BRAINO_FAVORITE_SONG_URI = "spotify:track:6Hgh47WXVKtXN5zGOu0hjI";
 
+// Flat registry of what Braino can do — consulted before dispatching to the LLM agent loop.
+const BG_CAPABILITY_MANIFEST = {
+  spotify:  ["playSong", "setVolume", "playbackControl", "addSongToPlaylist", "playSongFromPlaylist"],
+  medium:   ["searchArticles"],
+  twitter:  ["readFeed", "generateAndPost", "postTweet"],
+  gmail:    ["search", "draftEmail", "sendEmail", "replyCurrentThread"],
+  drive:    ["createDoc", "organize", "search", "createFolder", "rename", "move", "delete"],
+};
+
 async function bgChatFetch(body) {
   const { authToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
   return fetch(`${BG_API_BASE}/chat-about-notes`, {
@@ -1292,8 +1301,8 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 
-function bgBrainUpdate(tabId, text, final = false) {
-  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final }, () => { void chrome.runtime.lastError; });
+function bgBrainUpdate(tabId, text, final = false, opts = {}) {
+  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final, speakHint: opts.speakHint || null }, () => { void chrome.runtime.lastError; });
 }
 
 async function bgSendInlineUiMessage(tabId, message) {
@@ -1401,7 +1410,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
       connectorHint,
       history,
       onProgress: async (description) => {
-        bgBrainUpdate(currentTabId, `→ ${description}`);
+        bgBrainUpdate(currentTabId, `→ ${description}`, false, { speakHint: description });
       },
       shouldStop: () => bgAgentShouldStop,
     });
@@ -1983,10 +1992,37 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     return { adapter: "google-drive", intent: "search", query: folderSearchMatch[1].trim(), folderOnly: true };
   }
 
-  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i)
-    || raw.match(/(?:find|search for|look for)\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
+  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+[“”]?(.+?)[“”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i)
+    || raw.match(/(?:find|search for|look for)\s+[“”]?(.+?)[“”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
   if (wantsGoogleDrive && fileSearchMatch) {
     return { adapter: "google-drive", intent: "search", query: fileSearchMatch[1].trim(), folderOnly: false };
+  }
+
+  // ── Medium ──────────────────────────────────────────────────────────────────
+  const wantsMedium = /\bmedium(?:\.com)?\b/i.test(text);
+  const wantsMediumSearch = wantsMedium && /\b(find|search|look for|show|whip up|pull up|articles?|posts?|content)\b/i.test(text);
+  if (wantsMediumSearch) {
+    const qMatch = raw.match(/(?:about|on|for|regarding|on how to|about how to)\s+(.+?)(?:\s+on\s+medium|\s+for\s+me|\s+please)?\.?$/i);
+    return { adapter: "medium", intent: "searchArticles", query: (qMatch?.[1] || "").trim() };
+  }
+
+  // ── Twitter / X ─────────────────────────────────────────────────────────────
+  // X feed reading (distinct from __sbIsXStatusRequest which handles follower/stats queries)
+  const wantsXFeedRead = /\b(twitter|my x|on x|x feed|timeline|feed|x\b)/i.test(text)
+    && /\b(how'?s?|what'?s?|show|check|look|what(?:'s|\s+is)\s+(?:on|going on|happening|up))\b/i.test(text)
+    && !/\b(followers?|following|stats?|analytics|count|mentions?|last tweet)\b/i.test(text);
+  if (wantsXFeedRead) return { adapter: "twitter", intent: "readFeed" };
+
+  // X post generation + posting
+  const wantsXWrite = /\b(tweet|post|publish|share|put\s+(?:it|this|that)\s+on)\b/i.test(text) && /\b(x\b|twitter)\b/i.test(text);
+  const wantsXGenerate = wantsXWrite && /\b(idea|ideas|article|articles|topic|topics|generate|think\s+of|come\s+up\s+with|write)\b/i.test(text);
+  if (wantsXGenerate) {
+    const topicMatch = raw.match(/(?:about|on|regarding)\s+(.+?)(?:\s+(?:and|then|for me|please))?\.?$/i);
+    return { adapter: "twitter", intent: "generateAndPost", topic: (topicMatch?.[1] || "").trim() || null };
+  }
+  if (wantsXWrite) {
+    const contentMatch = raw.match(/(?:post|tweet|share|publish)\s+(?:this|it|that|”(.+?)”)?/i);
+    return { adapter: "twitter", intent: "postTweet", content: (contentMatch?.[1] || "").trim() };
   }
 
   return null;
@@ -2636,7 +2672,159 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
     return `Deleted **${result?.name || parsed.itemName}** from Drive.`;
   }
 
+  // ── Medium: search articles ──────────────────────────────────────────────────
+  if (parsed.adapter === "medium" && parsed.intent === "searchArticles") {
+    const query = (parsed.query || "").trim();
+    if (!query) return "I couldn't tell what to search for on Medium — could you be more specific?";
+    onProgress?.(`Searching Medium for "${query}"…`);
+    await bgExecuteAgentAction(tabId, {
+      type: "navigate",
+      url: `https://medium.com/search?q=${encodeURIComponent(query)}&source=search_post&type=post`,
+      description: `Search Medium for "${query}"`,
+    });
+    await bgWaitForTabReady(tabId, 7000);
+    await bgDelay(2000);
+
+    const result = await bgExecuteSiteAdapterAction(tabId, {
+      type: "mediumReadSearchResults",
+      limit: 5,
+    });
+    const articles = result?.articles || [];
+    if (!articles.length) {
+      return `I searched Medium for "${query}" but couldn't read the results — Medium may have loaded differently. Try opening it directly.`;
+    }
+    const list = articles.map((a, i) => `${i + 1}. ${a.title}`).join(". ");
+    return `Here are the top articles on ${query}: ${list}`;
+  }
+
+  // ── Twitter / X: read feed ────────────────────────────────────────────────────
+  if (parsed.adapter === "twitter" && parsed.intent === "readFeed") {
+    onProgress?.("Opening your X feed…");
+    await bgExecuteAgentAction(tabId, {
+      type: "navigate",
+      url: "https://x.com/home",
+      description: "Open X home feed",
+    });
+    await bgWaitForTabReady(tabId, 7000);
+    await bgDelay(2500);
+
+    const result = await bgExecuteSiteAdapterAction(tabId, {
+      type: "xReadFeed",
+      limit: 5,
+    });
+    const posts = result?.posts || [];
+    if (!posts.length) {
+      return "Your X feed isn't loading right now — try opening X directly.";
+    }
+    const summary = posts
+      .map(p => `${p.author} says: ${p.text.slice(0, 80)}${p.text.length > 80 ? "…" : ""}`)
+      .join(". ");
+    return `Here's what's on your feed: ${summary}`;
+  }
+
+  // ── Twitter / X: generate ideas + post ────────────────────────────────────────
+  if (parsed.adapter === "twitter" && parsed.intent === "generateAndPost") {
+    onProgress?.("Generating post ideas…");
+    const persona = await bgLoadXPersona().catch(() => ({}));
+    const personaText = [
+      persona.bio ? `Bio: ${persona.bio}` : "",
+      persona.building ? `Building: ${persona.building}` : "",
+      persona.toneNotes ? `Tone: ${persona.toneNotes}` : "",
+    ].filter(Boolean).join("\n");
+
+    const topicHint = parsed.topic ? ` about "${parsed.topic}"` : "";
+    const resp = await bgChatFetch({
+      notes: "You generate tweet-length post ideas. Return ONLY a JSON array of exactly 3 strings, no markdown, no explanation.",
+      message: `${personaText ? `User persona:\n${personaText}\n\n` : ""}Generate 3 sharp, specific post ideas${topicHint}. Each under 200 characters, actionable and authentic to the user's voice.`,
+    });
+    let ideas = [];
+    try {
+      const data = await resp.json();
+      const reply = (data.reply || "").trim();
+      const jsonMatch = reply.match(/\[[\s\S]+?\]/);
+      if (jsonMatch) ideas = JSON.parse(jsonMatch[0]);
+    } catch (_) {}
+
+    if (!ideas.length) return "Couldn't generate post ideas right now — try again.";
+
+    // Post the first idea
+    const tweetText = ideas[0];
+    onProgress?.("Posting to X…");
+    await bgExecuteAgentAction(tabId, { type: "navigate", url: "https://x.com/compose/tweet", description: "Open X compose" });
+    await bgWaitForTabReady(tabId, 5000);
+    await bgDelay(1200);
+    await bgExecuteAgentAction(tabId, { type: "click", selector: "[data-testid='tweetTextarea_0']", targetText: "", description: "Focus tweet box" });
+    await bgDelay(300);
+    await bgExecuteAgentAction(tabId, { type: "type", selector: "[data-testid='tweetTextarea_0']", text: tweetText, description: "Type tweet" });
+    await bgDelay(500);
+    await bgExecuteAgentAction(tabId, { type: "click", selector: "[data-testid='tweetButtonInline'], [data-testid='tweetButton']", targetText: "Post", description: "Post tweet" });
+
+    const preview = tweetText.length > 60 ? `${tweetText.slice(0, 60)}…` : tweetText;
+    const ideaList = ideas.map((idea, i) => `${i + 1}. ${idea}`).join(" | ");
+    return `Posted: "${preview}". Here are all 3 ideas I came up with: ${ideaList}`;
+  }
+
+  // ── Twitter / X: post specific content ────────────────────────────────────────
+  if (parsed.adapter === "twitter" && parsed.intent === "postTweet" && parsed.content) {
+    onProgress?.("Posting to X…");
+    await bgExecuteAgentAction(tabId, { type: "navigate", url: "https://x.com/compose/tweet", description: "Open X compose" });
+    await bgWaitForTabReady(tabId, 5000);
+    await bgDelay(1200);
+    await bgExecuteAgentAction(tabId, { type: "click", selector: "[data-testid='tweetTextarea_0']", targetText: "", description: "Focus tweet box" });
+    await bgDelay(300);
+    await bgExecuteAgentAction(tabId, { type: "type", selector: "[data-testid='tweetTextarea_0']", text: parsed.content, description: "Type tweet" });
+    await bgDelay(500);
+    await bgExecuteAgentAction(tabId, { type: "click", selector: "[data-testid='tweetButtonInline'], [data-testid='tweetButton']", targetText: "Post", description: "Post tweet" });
+    return `Posted to X: "${parsed.content.slice(0, 80)}${parsed.content.length > 80 ? "…" : ""}"`;
+  }
+
   return null;
+}
+
+function bgBuildMediumFastPath(task) {
+  const raw = String(task || "").trim();
+  const t = raw.toLowerCase();
+  if (!/\bmedium(?:\.com)?\b/i.test(t)) return null;
+
+  const isPlainOpen = /^(?:open|go to|navigate to|visit)\s+(?:https?:\/\/)?(?:www\.)?medium\.com\/?\s*$/i.test(raw);
+  if (isPlainOpen) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  const wantsMediumSearch =
+    /\b(find|search|look for|pull up|bring up|read|show|get)\b/i.test(raw) ||
+    /\b(articles?|posts?|blogs?|stories?)\b/i.test(raw) ||
+    /\b(over there|on there|in there|there)\b/i.test(raw);
+
+  if (!wantsMediumSearch) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  let query = raw.toLowerCase();
+  query = query
+    .replace(/https?:\/\/(?:www\.)?medium\.com\/?/gi, " ")
+    .replace(/\b(?:www\.)?medium\.com\b/gi, " ")
+    .replace(/\bmedium\b/gi, " ")
+    .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
+    .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
+    .replace(/\b(?:please|me|some|a few|the|an?|for me)\b/gi, " ")
+    .replace(/\b(?:open|go to|navigate to|navigate|visit|find|search(?: for)?|look for|pull up|bring up|read|show|get)\b/gi, " ")
+    .replace(/\b(?:articles?|posts?|blogs?|stories?|results?)\b/gi, " ")
+    .replace(/\b(?:over there|on there|in there|there|on|in|at|about|around|regarding)\b/gi, " ")
+    .replace(/\band\b/gi, " ")
+    .replace(/[?!.,]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!query) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  return [{
+    type: "navigate",
+    url: `https://medium.com/search?q=${encodeURIComponent(query)}`,
+    description: `Search Medium for "${query}"`,
+  }];
 }
 
 function bgTryFastPath(task, history) {
@@ -2660,6 +2848,8 @@ function bgTryFastPath(task, history) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
   }
+  const mediumFastPath = bgBuildMediumFastPath(task);
+  if (mediumFastPath) return mediumFastPath;
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
     const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
@@ -3800,9 +3990,9 @@ chrome.windows.onRemoved.addListener((windowId) => {
 });
 
 async function ensureOffscreenForRealtime() {
-  // Realtime voice needs AUDIO_PLAYBACK so remote AI audio plays from the offscreen
-  // doc (extension-global, heard regardless of active tab). Close and recreate if the
-  // existing offscreen was opened without that reason.
+  // Realtime lives in the offscreen doc so the mic/session can follow tabs instantly.
+  // Any remote model audio is muted there; Braino's primary audible output is Fish Audio.
+  // Close and recreate if needed so the global realtime host is definitely available.
   const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
   if (contexts.length > 0) {
     const hasAudio = contexts[0].documentUrl && true; // can't inspect reasons, so just check recording isn't active
@@ -3812,7 +4002,7 @@ async function ensureOffscreenForRealtime() {
   await chrome.offscreen.createDocument({
     url: "offscreen.html",
     reasons: ["USER_MEDIA", "AUDIO_PLAYBACK"],
-    justification: "Realtime voice AI — mic input and AI audio output, global across all tabs",
+    justification: "Realtime voice AI — global mic input with muted remote track hosting across tabs",
   });
 }
 

@@ -1326,6 +1326,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse(await __sbSpotifyAddTrackToPlaylist(msg.songName || "", msg.playlistName || ""));
           return;
         }
+        if (msg.type === "mediumReadSearchResults") {
+          const selectors = [
+            "article h2", "article h3",
+            "[data-testid='post-preview'] h2",
+            "h2 a", "h3 a",
+          ];
+          const seen = new Set();
+          const articles = [];
+          for (const sel of selectors) {
+            for (const el of document.querySelectorAll(sel)) {
+              const title = el.innerText?.trim();
+              if (!title || seen.has(title)) continue;
+              seen.add(title);
+              const anchor = el.tagName === "A" ? el : (el.closest("a") || el.querySelector("a"));
+              articles.push({ title, url: anchor?.href || "" });
+              if (articles.length >= (msg.limit || 5)) break;
+            }
+            if (articles.length >= (msg.limit || 5)) break;
+          }
+          sendResponse({ articles });
+          return;
+        }
+        if (msg.type === "xReadFeed") {
+          const tweets = [...document.querySelectorAll('[data-testid="tweet"]')];
+          const posts = tweets.slice(0, msg.limit || 5).map(el => ({
+            author: el.querySelector('[data-testid="User-Name"]')?.innerText?.split("\n")[0] || "someone",
+            text: el.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "",
+          })).filter(p => p.text);
+          sendResponse({ posts });
+          return;
+        }
         if (msg.type === "googleDocsWriteArticle") {
           sendResponse(await __sbGoogleDocsWriteArticle(msg.title || "", msg.body || ""));
           return;
@@ -2314,6 +2345,10 @@ if (__sbContextOk()) {
       } else {
         if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { tone: "status" });
         __sbSetStopBtn(true);
+        // Speak milestone hints in voice mode without flooding the user
+        if (msg.speakHint && __sbHeadphoneMode && !__sbRtRelayingAppMessage) {
+          void __sbSpeakWithPreferredVoice(msg.speakHint, "realtime");
+        }
       }
     }
     if (msg.action === "sbSpotifyState") {
@@ -8032,6 +8067,118 @@ function __sbCompleteVoiceTurn(options = {}) {
   }
 }
 
+// ── Multi-intent voice chain ─────────────────────────────────────────────────
+
+let __sbChainAbortToken = 0;
+
+// Split one voice transcript into sequential task segments.
+// Returns string[] — length 1 = no split (zero overhead on common path).
+function __sbSplitAndCorrectTranscript(transcript) {
+  const raw = transcript.trim();
+
+  // Hard split: sentence terminals and em/en dashes (always a new clause)
+  // Soft split: transition/pivot phrases that introduce a new independent command
+  const HARD_SPLIT = /(?<=[?!])\s+|[—–]\s*/;
+  const SOFT_PIVOT = /[,.]?\s+(?=(?:okay|alright|right|now|also|while (?:we're|you're) at it|on top of that|while (?:we're|you're) at it)\b)/i;
+
+  let parts = [];
+  for (const hardPart of raw.split(HARD_SPLIT)) {
+    for (const softPart of hardPart.split(SOFT_PIVOT)) {
+      parts.push(softPart.trim());
+    }
+  }
+
+  const FILLER_ONLY = /^(?:okay|ok|alright|right|hmm|ah|oh|uh|um|sure|cool|great|nice|perfect|sounds good|that'?s?\s+too\s+loud)[.!,]?$/i;
+  parts = parts.filter(p => p.length > 4 && !FILLER_ONLY.test(p));
+
+  if (parts.length <= 1) return [raw];
+
+  return __sbApplyCorrectionOverrides(parts);
+}
+
+// Collapse "do X | no wait, do Y" correction pairs into just "do Y".
+function __sbApplyCorrectionOverrides(segments) {
+  const CORRECTION_PREFIX = /^(?:no[,.]?\s+|nope[,.]?\s+|wait[,.]?\s+|actually[,.]?\s+|scratch that[,.]?\s+|never mind[,.]?\s+|forget (?:that|it)[,.]?\s+|fuck that[,.]?\s+|no wait[,.]?\s+|no fuck that[,.]?\s+|too loud[,.]?\s*)/i;
+
+  const result = [];
+  let i = 0;
+  while (i < segments.length) {
+    const curr = segments[i];
+    const next = i + 1 < segments.length ? segments[i + 1] : null;
+
+    if (next && CORRECTION_PREFIX.test(next)) {
+      const corrected = next.replace(CORRECTION_PREFIX, "").trim();
+      // Volume-on-volume correction: skip curr, use corrected value
+      if (__sbIsVolumeCommand(curr) && (corrected.length === 0 || __sbIsVolumeCommand(corrected))) {
+        if (corrected.length > 0) result.push(corrected);
+        i += 2;
+        continue;
+      }
+      // Number-only correction of a volume command (e.g. "make it 50")
+      if (__sbIsVolumeCommand(curr) && /\b\d+\b/.test(corrected)) {
+        const numMatch = corrected.match(/\b(\d+)\b/);
+        if (numMatch) {
+          result.push(`set volume to ${numMatch[1]}%`);
+          i += 2;
+          continue;
+        }
+      }
+    }
+
+    result.push(curr);
+    i++;
+  }
+  return result.length ? result : segments;
+}
+
+// Sequential executor for a multi-intent segment array.
+async function __sbHandleMultiIntentChain(segments, turnToken) {
+  const myToken = ++__sbChainAbortToken;
+
+  for (let i = 0; i < segments.length; i++) {
+    if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
+
+    // Hold the pending-reply lock across the whole chain to block concurrent turns.
+    __sbVoicePendingReply = true;
+
+    if (i === 0) void __sbSpeakWithPreferredVoice("On it.", "realtime");
+
+    await __sbHandleInlineRealtimeTurn(segments[i], turnToken);
+
+    // If this segment launched an agent, wait for it to finish before the next.
+    if (__sbRtAwaitingDelegateResult) {
+      await __sbWaitForChainDelegate(myToken, turnToken);
+    }
+
+    if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
+
+    if (i < segments.length - 1) {
+      __sbVoicePendingReply = true;
+      await new Promise(r => setTimeout(r, 400));
+    }
+  }
+
+  __sbVoicePendingReply = false;
+  if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+}
+
+// Poll until the background agent signals completion or we time out / abort.
+function __sbWaitForChainDelegate(myToken, turnToken) {
+  return new Promise(resolve => {
+    const MAX_MS = 45000;
+    const started = Date.now();
+    const tick = () => {
+      if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken
+          || !__sbRtAwaitingDelegateResult || Date.now() - started > MAX_MS) {
+        resolve();
+      } else {
+        setTimeout(tick, 250);
+      }
+    };
+    setTimeout(tick, 250);
+  });
+}
+
 function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
   const finalTranscript = String(transcript || "").trim();
   if (!finalTranscript || typeof onReady !== "function") return;
@@ -8208,7 +8355,12 @@ function __sbHandleRtEvent(ev) {
 
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       const turnToken = ++__sbRtTurnToken;
-      void __sbHandleInlineRealtimeTurn(toProcess, turnToken);
+      const segments = __sbSplitAndCorrectTranscript(toProcess);
+      if (segments.length > 1) {
+        void __sbHandleMultiIntentChain(segments, turnToken);
+      } else {
+        void __sbHandleInlineRealtimeTurn(toProcess, turnToken);
+      }
     });
     return;
   }
