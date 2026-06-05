@@ -7385,24 +7385,22 @@ document.addEventListener("visibilitychange", () => {
       try { __sbStopRecording({ silent: true }); } catch (_) {}
     }
   } else {
-    // Tab became foreground. If a global RT session is active but we missed the
-    // sbRtAttach (timing race on page load), self-attach now.
-    if (!__sbHeadphoneMode && !__sbUseOffscreenRt) {
+    // Tab became foreground. If a global RT session is active but we missed sbRtAttach,
+    // self-attach now — instant, no new WebRTC.
+    if (!__sbHeadphoneMode) {
       __sbStorageGet(["sbRtSessionActive"]).then(({ sbRtSessionActive }) => {
-        if (sbRtSessionActive && __sbOwnsInlineUi()) {
-          if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-          // Trigger the attach logic inline
-          __sbHeadphoneMode = true;
-          __sbVoiceOnlyMode = true;
-          __sbUseOffscreenRt = true;
-          __sbRtSessionReady = true;
-          document.getElementById("__sb_rec_btn__")?.classList.add("active");
-          document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
-          document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
-          __sbSetVoiceStatusBadge("realtime", "Live AI");
-          __sbSetHpBrainState("listening");
-          void __sbSyncRealtimeVoiceInstructions();
-        }
+        if (!sbRtSessionActive || !__sbOwnsInlineUi()) return;
+        if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+        __sbHeadphoneMode = true;
+        __sbVoiceOnlyMode = true;
+        __sbUseOffscreenRt = true;
+        __sbRtSessionReady = true;
+        document.getElementById("__sb_rec_btn__")?.classList.add("active");
+        document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+        document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+        __sbSetVoiceStatusBadge("realtime", "Live AI");
+        __sbSetHpBrainState("listening");
+        void __sbSyncRealtimeVoiceInstructions();
       });
     }
   }
@@ -7822,23 +7820,33 @@ function __sbEnterHeadphoneMode() {
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
-  __sbSetHpBrainState("connecting");
-  __sbSetVoiceStatusBadge("connecting", "Waking up…");
-
-  // Load voice output preference then start the session via offscreen (global) with
-  // in-tab fallback so existing behavior is never broken.
-  __sbStorageGet(["brainoVoicePref", "authToken"]).then((stored) => {
+  // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
+  // Only start a fresh session if nothing is running yet.
+  __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken"]).then((stored) => {
     __sbVoiceOutputPref = stored.brainoVoicePref === "elevenlabs" ? "elevenlabs" : "realtime";
+
+    if (stored.sbRtSessionActive) {
+      // Session already live in offscreen — instant attach, no reconnect.
+      __sbUseOffscreenRt = true;
+      __sbRtSessionReady = true;
+      document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+      __sbSetVoiceStatusBadge("realtime", "Live AI");
+      __sbSetHpBrainState("listening");
+      void __sbSyncRealtimeVoiceInstructions(); // refresh page context for this tab
+      return;
+    }
+
+    // No existing session — connect now.
+    __sbSetHpBrainState("connecting");
+    __sbSetVoiceStatusBadge("connecting", "Waking up…");
+
     const authToken = stored.authToken || null;
     if (authToken) {
-      // Pass the full session.update event (not just the string) so offscreen gets
-      // turn_detection + create_response:false — without it the model hallucinates.
       const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
       chrome.runtime.sendMessage(
         { action: "startOffscreenRealtime", authToken, bootInstructions },
         (res) => {
           if (chrome.runtime.lastError || res?.error) {
-            // Offscreen failed — fall back to the original in-tab approach.
             void __sbStartRealtimeVoice();
           } else {
             __sbUseOffscreenRt = true;

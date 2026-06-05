@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v5.0.1 — Instant voice re-attach + simpler shortcut (Alt+V)
+- **Shortcut changed to `Alt+V`** (Option+V on Mac) — 2 keys instead of 3.
+- **Zero reconnect time** on tab switch: if a session is already running in offscreen, pressing Alt+V (or switching to any tab) attaches instantly — no WebRTC setup, no "Waking up…" delay.
+- The 2-second delay now only happens once (the very first time you start voice). All subsequent tab switches are instant.
+
 ## v5.0.0 — Voice mode shortcut + friendlier connection message
 - **`Cmd+Shift+Space`** (Mac) / **`Ctrl+Shift+Space`** (Windows/Linux) — instantly toggles hands-free voice mode from any tab. No more hunting for the headphone button.
 - Connection message changed from "Connecting…" to **"Waking up…"** and the slow-connect hint now says **"Hold up, give me a second…"** instead of the technical error text.

@@ -3644,20 +3644,18 @@ chrome.commands.onCommand.addListener((command) => {
 // tell the new tab to enter headphone mode UI so Braino is already listening there.
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   if (!bgRtSessionActive) return;
-  // Small delay so the content script has time to initialise on fresh tabs.
-  setTimeout(() => {
-    chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
-  }, 400);
+  // Existing tab — send immediately (content script is already loaded).
+  chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
 });
 
-// Also re-attach when a tab finishes loading (catches navigations within the same tab).
+// Re-attach when a tab finishes navigating — content script needs a moment to load.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!bgRtSessionActive || changeInfo.status !== "complete") return;
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs?.[0]?.id === tabId) {
       setTimeout(() => {
         chrome.tabs.sendMessage(tabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
-      }, 400);
+      }, 300);
     }
   });
 });
