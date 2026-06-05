@@ -4,6 +4,13 @@ let bgAgentShouldStop = false;
 let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
 let bgRtSessionActive = false; // offscreen realtime session is running
 
+// On install/update, clear the "offscreen is broken" flag so every client re-attempts the
+// global offscreen voice path once (now backed by a one-time mic-permission grant). If it
+// still can't work, the flag gets re-set and we quietly use the per-tab migration fallback.
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.storage.local.set({ sbOffscreenRtBroken: false });
+});
+
 function doCapture(windowId, sendResponse) {
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
     if (chrome.runtime.lastError) {
@@ -411,9 +418,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   // ── Offscreen realtime bridge ──────────────────────────────────────────────
+  if (message.action === "micPermissionResult") {
+    bgResolveMicPermission(!!message.granted);
+    return false;
+  }
   if (message.action === "startOffscreenRealtime") {
     (async () => {
       try {
+        // The offscreen document is invisible and cannot show a mic prompt. Make sure the
+        // extension already holds microphone permission (granted once via a visible helper
+        // window) — without it, offscreen getUserMedia fails and we'd fall back to per-tab
+        // sessions. With it, the session is global and follows across tabs instantly.
+        const micOk = await ensureExtensionMicPermission();
+        if (!micOk) {
+          chrome.storage.local.set({ sbRtSessionActive: false });
+          chrome.tabs.sendMessage(sender?.tab?.id || 0, { action: "sbRtSessionFailed", error: "Microphone not granted" }, () => { void chrome.runtime.lastError; });
+          sendResponse({ ok: true, micDenied: true });
+          return;
+        }
+
         await ensureOffscreenForRealtime();
         rtVoiceOwnerTabId = sender?.tab?.id ?? null;
         bgRtSessionActive = false; // set true ONLY when offscreen confirms ready (offscreenRtReady)
@@ -424,7 +447,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions },
           (res) => {
             if (chrome.runtime.lastError || res?.error) {
-              chrome.storage.local.set({ sbRtSessionActive: false });
+              // Offscreen failed even though permission was granted — maybe the OS-level
+              // grant was revoked. Forget it so we re-prompt next time, then fall back.
+              chrome.storage.local.set({ sbRtSessionActive: false, sbMicPermission: null });
               chrome.tabs.sendMessage(rtVoiceOwnerTabId || 0, { action: "sbRtSessionFailed", error: res?.error || "Offscreen start failed" }, () => { void chrome.runtime.lastError; });
             }
           }
@@ -3630,6 +3655,57 @@ async function ensureOffscreen() {
     });
   }
 }
+
+// ── Extension microphone permission ─────────────────────────────────────────
+// The offscreen document is invisible, so getUserMedia there can't show a prompt. We grant
+// mic permission ONCE via a small visible helper window (extension origin); the offscreen
+// doc then inherits it (same origin). Cached in storage so it never asks twice.
+let bgMicPermissionWindowId = null;
+let bgMicPermissionWaiters = [];
+
+function bgResolveMicPermission(granted) {
+  if (granted) chrome.storage.local.set({ sbMicPermission: "granted", sbOffscreenRtBroken: false });
+  else chrome.storage.local.set({ sbMicPermission: "denied" });
+  const waiters = bgMicPermissionWaiters;
+  bgMicPermissionWaiters = [];
+  for (const w of waiters) { try { w(granted); } catch (_) {} }
+  if (bgMicPermissionWindowId != null) {
+    const id = bgMicPermissionWindowId;
+    bgMicPermissionWindowId = null;
+    chrome.windows.remove(id).catch(() => {});
+  }
+}
+
+async function ensureExtensionMicPermission() {
+  const { sbMicPermission } = await chrome.storage.local.get(["sbMicPermission"]);
+  if (sbMicPermission === "granted") return true;
+
+  // A helper window is already open — join its outcome instead of opening a second one.
+  if (bgMicPermissionWindowId != null) {
+    return await new Promise((resolve) => bgMicPermissionWaiters.push(resolve));
+  }
+
+  return await new Promise((resolve) => {
+    bgMicPermissionWaiters.push(resolve);
+    chrome.windows.create(
+      { url: chrome.runtime.getURL("mic-permission.html"), type: "popup", width: 420, height: 360, focused: true },
+      (win) => {
+        if (chrome.runtime.lastError || !win) { bgResolveMicPermission(false); return; }
+        bgMicPermissionWindowId = win.id;
+      }
+    );
+    // Safety: if the user never decides, stop waiting after 45s and fall back to migration.
+    setTimeout(() => { if (bgMicPermissionWaiters.length) bgResolveMicPermission(false); }, 45000);
+  });
+}
+
+// If the helper window is closed/destroyed without a result, treat as not-granted.
+chrome.windows.onRemoved.addListener((windowId) => {
+  if (windowId === bgMicPermissionWindowId) {
+    bgMicPermissionWindowId = null;
+    if (bgMicPermissionWaiters.length) bgResolveMicPermission(false);
+  }
+});
 
 async function ensureOffscreenForRealtime() {
   // Realtime voice needs AUDIO_PLAYBACK so remote AI audio plays from the offscreen

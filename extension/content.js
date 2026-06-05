@@ -8010,12 +8010,13 @@ function __sbEnterHeadphoneMode(options = {}) {
     chrome.runtime.sendMessage(
       { action: "startOffscreenRealtime", authToken, bootInstructions },
       (res) => {
-        if (chrome.runtime.lastError || res?.error) {
-          // Remember offscreen is broken so future tab switches go in-tab immediately.
+        // Only the transport-level failure is handled here. Whether the offscreen session
+        // actually came up is signalled asynchronously: success → sbRtSessionReady (which
+        // sets __sbUseOffscreenRt), failure/denied → sbRtSessionFailed. So we do NOT flip
+        // __sbUseOffscreenRt here (that race could mis-route events during a fallback).
+        if (chrome.runtime.lastError) {
           if (__sbContextOk()) chrome.storage.local.set({ sbOffscreenRtBroken: true });
           void __sbStartRealtimeVoice();
-        } else {
-          __sbUseOffscreenRt = true;
         }
       }
     );

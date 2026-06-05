@@ -1,5 +1,11 @@
 # Braino Changelog
 
+## v5.2.0 — Instant, seamless voice follow (offscreen unlocked)
+- **Zero reconnect on tab switch.** The global offscreen voice session now works because we grant the microphone to the extension **once**, via a small one-time window the first time you turn on voice. After that the invisible offscreen session can hold the mic, so switching tabs is an instant hand-off — no "Waking up…", no gap.
+- **Grant once, works everywhere.** Because the permission is on the extension (not each website), you'll never get a per-site mic prompt while browsing.
+- If you decline the mic, nothing breaks — Braino quietly uses the per-tab migration fallback from v5.1.0 (a brief reconnect on each switch).
+- Robustness: if the OS later revokes mic access, Braino notices and re-asks instead of silently failing.
+
 ## v5.1.0 — Voice truly follows you across tabs + smarter delegate + noise-proof
 **The big root-cause fix.** Previous versions only followed across tabs when the *offscreen* global session started — but on most setups that session silently fails (a microphone can't be granted to an invisible offscreen document), so it fell back to an in-tab session bound to one tab. That's why the old tab kept talking and the new tab never lit up.
 
