@@ -40,7 +40,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.realtime-cost-log]
-verify_jwt = true
+verify_jwt = false
 
 [functions.realtime-costs-admin]
-verify_jwt = true
+verify_jwt = false
