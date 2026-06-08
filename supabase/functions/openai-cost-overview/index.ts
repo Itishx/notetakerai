@@ -59,7 +59,7 @@ serve(async (req) => {
 
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const openAiAdminKey = Deno.env.get("OPENAI_ADMIN_API_KEY") || Deno.env.get("OPENAI_API_KEY");
+    const openAiAdminKey = Deno.env.get("OPENAI_ADMIN_API_KEY");
     const projectIds = parseCsvList(Deno.env.get("OPENAI_COSTS_PROJECT_IDS"));
 
     if (!anonKey || !supabaseUrl) {
@@ -316,6 +316,7 @@ async function extractOpenAiError(response: Response) {
   const raw = await response.text();
   try {
     const parsed = JSON.parse(raw);
+    if (typeof parsed?.error === "string") return parsed.error;
     return parsed?.error?.message || parsed?.message || raw;
   } catch {
     return raw || `OpenAI request failed with status ${response.status}.`;

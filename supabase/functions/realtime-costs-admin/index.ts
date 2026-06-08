@@ -370,7 +370,7 @@ function formatTurn(row: RealtimeTurnLogRow) {
 }
 
 async function fetchOpenAiActualCosts(since: Date, until: Date) {
-  const apiKey = Deno.env.get("OPENAI_ADMIN_API_KEY") || Deno.env.get("OPENAI_API_KEY");
+  const apiKey = Deno.env.get("OPENAI_ADMIN_API_KEY");
   if (!apiKey) {
     return {
       available: false,
@@ -442,13 +442,16 @@ async function fetchOpenAiActualCosts(since: Date, until: Date) {
     };
   } catch (error) {
     console.error("realtime-costs-admin OpenAI costs error:", error);
+    const message = error instanceof Error ? error.message : "OpenAI cost lookup failed.";
     return {
       available: false,
       totalUsd: null,
       currency: "usd",
       dailyCosts: [],
       lineItems: [],
-      setupMessage: error instanceof Error ? error.message : "OpenAI cost lookup failed.",
+      setupMessage: isUsageScopeError(error)
+        ? "OpenAI actual-cost reconciliation needs OPENAI_ADMIN_API_KEY with the api.usage.read scope."
+        : message,
     };
   }
 }
@@ -508,6 +511,7 @@ async function extractOpenAiError(response: Response) {
   const raw = await response.text();
   try {
     const parsed = JSON.parse(raw);
+    if (typeof parsed?.error === "string") return parsed.error;
     return parsed?.error?.message || parsed?.message || raw;
   } catch {
     return raw || `OpenAI request failed with status ${response.status}.`;
