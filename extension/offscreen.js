@@ -23,9 +23,12 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
     rtPc = pc;
     rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
 
-    // Remote audio plays from offscreen (extension-global) so it's heard on any tab.
+    // Keep the remote track attached for WebRTC compatibility, but never play OpenAI audio.
+    // Braino's primary audible voice is Fish Audio from the content script.
     rtRemoteAudio = new Audio();
     rtRemoteAudio.autoplay = true;
+    rtRemoteAudio.muted = true;
+    rtRemoteAudio.volume = 0;
     document.body.appendChild(rtRemoteAudio);
     pc.ontrack = (ev) => {
       rtRemoteAudio.srcObject = ev.streams[0] || new MediaStream([ev.track]);
@@ -89,6 +92,8 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
       sessionId: res.headers.get("x-braino-realtime-session-id") || null,
       limitMs: Number(res.headers.get("x-braino-realtime-limit-ms") || "0"),
       allocatedMs: Number(res.headers.get("x-braino-realtime-allocated-ms") || "0"),
+      realtimeModel: res.headers.get("x-braino-realtime-model") || null,
+      transcriptionModel: res.headers.get("x-braino-realtime-transcription-model") || null,
     };
   } catch (error) {
     stopRealtimeSession();

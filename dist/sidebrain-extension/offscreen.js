@@ -1,5 +1,125 @@
 // Offscreen document for audio recording (MV3 requirement)
 // Also handles SpeechRecognition for voice mode (mic access works here, not in side panel)
+// Phase 2: hosts the realtime WebRTC session so voice follows across tabs.
+
+// ===== REALTIME VOICE SESSION (extension-global) =====
+const RT_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
+const RT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
+
+let rtPc = null;
+let rtDc = null;
+let rtMic = null;
+let rtRemoteAudio = null;
+
+async function startRealtimeSession({ authToken, bootInstructions }) {
+  stopRealtimeSession();
+
+  try {
+    rtMic = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+
+    const pc = new RTCPeerConnection();
+    rtPc = pc;
+    rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
+
+    // Keep the remote track attached for WebRTC compatibility, but never play OpenAI audio.
+    // Braino's primary audible voice is Fish Audio from the content script.
+    rtRemoteAudio = new Audio();
+    rtRemoteAudio.autoplay = true;
+    rtRemoteAudio.muted = true;
+    rtRemoteAudio.volume = 0;
+    document.body.appendChild(rtRemoteAudio);
+    pc.ontrack = (ev) => {
+      rtRemoteAudio.srcObject = ev.streams[0] || new MediaStream([ev.track]);
+      rtRemoteAudio.play().catch(() => {});
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc !== rtPc) return;
+      const s = pc.connectionState;
+      if (s === "failed" || s === "disconnected") {
+        chrome.runtime.sendMessage({ action: "offscreenRtDisconnected", reason: s }, () => { void chrome.runtime.lastError; });
+      }
+    };
+
+    const dc = pc.createDataChannel("oai-events");
+    rtDc = dc;
+
+    const dataChannelOpen = new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error("Live AI timed out while connecting.")), 15000);
+      dc.addEventListener("open", () => { clearTimeout(to); resolve(); }, { once: true });
+      dc.addEventListener("error", () => { clearTimeout(to); reject(new Error("Live AI could not open its control channel.")); }, { once: true });
+      dc.addEventListener("message", (ev) => {
+        try {
+          const event = JSON.parse(ev.data);
+          chrome.runtime.sendMessage({ action: "offscreenRtEvent", event }, () => { void chrome.runtime.lastError; });
+        } catch (_) {}
+      });
+    });
+    dataChannelOpen.catch(() => {});
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const res = await fetch(`${RT_API_BASE}/openai-realtime-call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        apikey: RT_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: offer.sdp || "",
+    });
+
+    if (!res.ok) {
+      let msg = `Live AI failed (${res.status})`;
+      try { const t = await res.text(); const j = JSON.parse(t); msg = j.details || j.error || t || msg; } catch {}
+      throw new Error(msg);
+    }
+
+    const answerSdp = await res.text();
+    await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+    await dataChannelOpen;
+
+    // Send the full session.update event (system prompt + turn_detection + modalities).
+    // This MUST include create_response:false or the model auto-responds to everything.
+    if (bootInstructions) {
+      rtSendEvent(bootInstructions); // caller passes the full session.update event object
+    }
+
+    return {
+      sessionId: res.headers.get("x-braino-realtime-session-id") || null,
+      limitMs: Number(res.headers.get("x-braino-realtime-limit-ms") || "0"),
+      allocatedMs: Number(res.headers.get("x-braino-realtime-allocated-ms") || "0"),
+      realtimeModel: res.headers.get("x-braino-realtime-model") || null,
+      transcriptionModel: res.headers.get("x-braino-realtime-transcription-model") || null,
+    };
+  } catch (error) {
+    stopRealtimeSession();
+    throw error;
+  }
+}
+
+function rtSendEvent(event) {
+  if (!rtDc || rtDc.readyState !== "open") return false;
+  const payload = { ...event };
+  if (!payload.event_id) payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  rtDc.send(JSON.stringify(payload));
+  return true;
+}
+
+function stopRealtimeSession() {
+  const dc = rtDc;
+  const pc = rtPc;
+  const mic = rtMic;
+  const remoteAudio = rtRemoteAudio;
+  rtPc = null; rtDc = null; rtMic = null; rtRemoteAudio = null;
+  try { dc?.close(); } catch (_) {}
+  try { pc?.close(); } catch (_) {}
+  mic?.getTracks().forEach((t) => t.stop());
+  if (remoteAudio) { try { remoteAudio.pause(); } catch {} remoteAudio.srcObject = null; remoteAudio.remove(); }
+}
 
 // ===== SPEECH RECOGNITION =====
 let recognition = null;
@@ -81,6 +201,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "startRealtimeSession") {
+    startRealtimeSession(message)
+      .then((info) => {
+        chrome.runtime.sendMessage({ action: "offscreenRtReady", ...info }, () => { void chrome.runtime.lastError; });
+        sendResponse({ ok: true });
+      })
+      .catch((e) => sendResponse({ error: e.message || "Realtime session failed" }));
+    return true;
+  }
+  if (message.action === "sendRtEvent") {
+    sendResponse({ ok: rtSendEvent(message.event) });
+    return false;
+  }
+  if (message.action === "stopRealtimeSession") {
+    stopRealtimeSession();
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.action === "setRtMicEnabled") {
+    rtMic?.getAudioTracks?.().forEach((t) => { t.enabled = !!message.enabled; });
+    sendResponse({ ok: true });
+    return false;
+  }
   if (message.action === "startCapture") {
     startCapture(message.streamId, message.withMic)
       .then(() => sendResponse({ success: true }))

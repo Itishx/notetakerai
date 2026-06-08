@@ -230,6 +230,137 @@ export type Database = {
         }
         Relationships: []
       }
+      realtime_voice_turn_logs: {
+        Row: {
+          assistant_messages: Json
+          completed_at: string | null
+          connector: string | null
+          cost_confidence: string
+          created_at: string
+          estimated_openai_realtime_cost_usd: number
+          estimated_total_cost_usd: number
+          estimated_transcription_cost_usd: number
+          estimated_tts_cost_usd: number
+          id: string
+          raw_client_payload: Json
+          raw_realtime_usage: Json
+          raw_transcription_usage: Json
+          raw_tts_usage: Json
+          realtime_cached_audio_tokens: number
+          realtime_cached_text_tokens: number
+          realtime_input_audio_tokens: number
+          realtime_input_text_tokens: number
+          realtime_model: string | null
+          realtime_output_audio_tokens: number
+          realtime_output_text_tokens: number
+          route_intent: string | null
+          route_mode: string | null
+          session_id: string | null
+          started_at: string
+          total_tokens: number
+          transcription_input_audio_tokens: number
+          transcription_input_text_tokens: number
+          transcription_model: string | null
+          transcription_output_text_tokens: number
+          turn_id: string
+          turn_index: number
+          updated_at: string
+          user_id: string
+          user_transcript: string | null
+          voice_id: string | null
+          voice_name: string | null
+          voice_provider: string | null
+        }
+        Insert: {
+          assistant_messages?: Json
+          completed_at?: string | null
+          connector?: string | null
+          cost_confidence?: string
+          created_at?: string
+          estimated_openai_realtime_cost_usd?: number
+          estimated_total_cost_usd?: number
+          estimated_transcription_cost_usd?: number
+          estimated_tts_cost_usd?: number
+          id?: string
+          raw_client_payload?: Json
+          raw_realtime_usage?: Json
+          raw_transcription_usage?: Json
+          raw_tts_usage?: Json
+          realtime_cached_audio_tokens?: number
+          realtime_cached_text_tokens?: number
+          realtime_input_audio_tokens?: number
+          realtime_input_text_tokens?: number
+          realtime_model?: string | null
+          realtime_output_audio_tokens?: number
+          realtime_output_text_tokens?: number
+          route_intent?: string | null
+          route_mode?: string | null
+          session_id?: string | null
+          started_at?: string
+          total_tokens?: number
+          transcription_input_audio_tokens?: number
+          transcription_input_text_tokens?: number
+          transcription_model?: string | null
+          transcription_output_text_tokens?: number
+          turn_id: string
+          turn_index?: number
+          updated_at?: string
+          user_id: string
+          user_transcript?: string | null
+          voice_id?: string | null
+          voice_name?: string | null
+          voice_provider?: string | null
+        }
+        Update: {
+          assistant_messages?: Json
+          completed_at?: string | null
+          connector?: string | null
+          cost_confidence?: string
+          created_at?: string
+          estimated_openai_realtime_cost_usd?: number
+          estimated_total_cost_usd?: number
+          estimated_transcription_cost_usd?: number
+          estimated_tts_cost_usd?: number
+          id?: string
+          raw_client_payload?: Json
+          raw_realtime_usage?: Json
+          raw_transcription_usage?: Json
+          raw_tts_usage?: Json
+          realtime_cached_audio_tokens?: number
+          realtime_cached_text_tokens?: number
+          realtime_input_audio_tokens?: number
+          realtime_input_text_tokens?: number
+          realtime_model?: string | null
+          realtime_output_audio_tokens?: number
+          realtime_output_text_tokens?: number
+          route_intent?: string | null
+          route_mode?: string | null
+          session_id?: string | null
+          started_at?: string
+          total_tokens?: number
+          transcription_input_audio_tokens?: number
+          transcription_input_text_tokens?: number
+          transcription_model?: string | null
+          transcription_output_text_tokens?: number
+          turn_id?: string
+          turn_index?: number
+          updated_at?: string
+          user_id?: string
+          user_transcript?: string | null
+          voice_id?: string | null
+          voice_name?: string | null
+          voice_provider?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "realtime_voice_turn_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "realtime_voice_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_reddit_posts: {
         Row: {
           agent_command_id: string | null

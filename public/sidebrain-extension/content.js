@@ -2277,10 +2277,12 @@ let __sbCurrentSpeechAudio = null;
 let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
 let __sbSpeechGeneration = 0;
-const __SB_TTS_PROVIDER = "fish-audio";
+const __SB_TTS_PROVIDER = "elevenlabs";
 const __SB_TTS_ENDPOINT = "elevenlabs-tts";
 const __SB_TTS_RETRY_MIN_MS = 5000;
 const __SB_TTS_RETRY_MAX_MS = 12000;
+const __SB_FISH_JARVIS_VOICE_ID = "c5cf851eb2664ffaa929d17b899aa0a3";
+const __SB_ELEVENLABS_VOICE_ID = "vBKc2FfBKJfcZNyEt1n6";
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
@@ -2335,11 +2337,14 @@ if (__sbContextOk()) {
                 await __sbSpeakWithPreferredVoice(finalText, "realtime");
               } finally {
                 __sbRtRelayingAppMessage = false;
+                __sbCompleteRealtimeCostTurn({ force: true });
                 if (__sbHeadphoneMode && !__sbVoicePendingReply) {
                   __sbSetHpBrainState("listening");
                 }
               }
             })();
+          } else {
+            __sbCompleteRealtimeCostTurn({ force: true });
           }
         }
       } else {
@@ -2382,6 +2387,8 @@ if (__sbContextOk()) {
         __sbRtUsageSessionId = msg.sessionId;
         __sbRtUsageLimitMs = Number(msg.limitMs || 0);
       }
+      if (msg.realtimeModel) __sbRtRealtimeModel = String(msg.realtimeModel);
+      if (msg.transcriptionModel) __sbRtTranscriptionModel = String(msg.transcriptionModel);
       if (msg.allocatedMs > 0) __sbScheduleRealtimeUsageCap(msg.allocatedMs);
       if (__sbIsRecording) __sbStopRecording({ silent: true });
       __sbStopSpeech();
@@ -3509,47 +3516,47 @@ function __sbBuildBrainUI() {
 
     /* ── Headphone Mode Brain Glows ── */
     @keyframes __sb_hp_listen__ {
-      0%,100% { filter: drop-shadow(0 0 20px rgba(210,40,40,0.75)) drop-shadow(0 0 7px rgba(210,40,40,0.5)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 44px rgba(220,40,40,1))    drop-shadow(0 0 16px rgba(220,40,40,0.7)); transform: scale(1.08); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.65)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(220,40,40,0.8))  drop-shadow(0 0 8px rgba(220,40,40,0.5)); }
     }
     @keyframes __sb_hp_captured__ {
-      0%,100% { filter: drop-shadow(0 0 24px rgba(255,195,0,0.9)) drop-shadow(0 0 10px rgba(255,170,0,0.6)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 52px rgba(255,215,0,1))   drop-shadow(0 0 22px rgba(255,185,0,0.8)); transform: scale(1.1); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(255,195,0,0.75)) drop-shadow(0 0 7px rgba(255,170,0,0.5)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(255,215,0,0.9))  drop-shadow(0 0 10px rgba(255,185,0,0.6)); }
     }
     @keyframes __sb_hp_speak__ {
-      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
-      50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
+      0%,100% { filter: drop-shadow(0 0 16px rgba(210,40,40,0.6))  drop-shadow(0 0 5px rgba(210,40,40,0.35)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 30px rgba(220,40,40,0.85)) drop-shadow(0 0 10px rgba(220,40,40,0.55)); transform: scale(1.04); }
     }
     @keyframes __sb_hp_connect__ {
-      0%,100% { filter: drop-shadow(0 0 16px rgba(234,179,8,0.55)) drop-shadow(0 0 6px rgba(251,191,36,0.35)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 30px rgba(234,179,8,0.85)) drop-shadow(0 0 12px rgba(251,191,36,0.55)); transform: scale(1.05); }
+      0%,100% { filter: drop-shadow(0 0 14px rgba(234,179,8,0.5))  drop-shadow(0 0 5px rgba(251,191,36,0.3)); }
+      50%      { filter: drop-shadow(0 0 22px rgba(234,179,8,0.75)) drop-shadow(0 0 8px rgba(251,191,36,0.45)); }
     }
     /* Blue halo for Live AI (realtime) mode */
     @keyframes __sb_hp_connect_rt__ {
-      0%,100% { filter: drop-shadow(0 0 18px rgba(56,189,248,0.65)) drop-shadow(0 0 7px rgba(59,130,246,0.38)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 34px rgba(56,189,248,0.95)) drop-shadow(0 0 14px rgba(59,130,246,0.62)); transform: scale(1.06); }
+      0%,100% { filter: drop-shadow(0 0 16px rgba(56,189,248,0.55)) drop-shadow(0 0 6px rgba(59,130,246,0.32)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(56,189,248,0.8))  drop-shadow(0 0 10px rgba(59,130,246,0.5)); }
     }
     @keyframes __sb_hp_listen_rt__ {
-      0%,100% { filter: drop-shadow(0 0 22px rgba(59,130,246,0.85)) drop-shadow(0 0 8px rgba(99,179,255,0.55)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 48px rgba(59,130,246,1))    drop-shadow(0 0 18px rgba(99,179,255,0.8)); transform: scale(1.09); }
+      0%,100% { filter: drop-shadow(0 0 20px rgba(59,130,246,0.75)) drop-shadow(0 0 7px rgba(99,179,255,0.45)); }
+      50%      { filter: drop-shadow(0 0 30px rgba(59,130,246,0.9))  drop-shadow(0 0 11px rgba(99,179,255,0.6)); }
     }
     @keyframes __sb_hp_speak_rt__ {
-      0%,100% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.8)) drop-shadow(0 0 8px rgba(139,92,246,0.5)); transform: scale(1.02); }
-      50%      { filter: drop-shadow(0 0 42px rgba(99,102,241,1))   drop-shadow(0 0 16px rgba(139,92,246,0.75)); transform: scale(1.07); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(99,102,241,0.7))  drop-shadow(0 0 7px rgba(139,92,246,0.42)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 32px rgba(99,102,241,0.9))  drop-shadow(0 0 12px rgba(139,92,246,0.65)); transform: scale(1.04); }
     }
     @keyframes __sb_hp_captured_rt__ {
-      0%,100% { filter: drop-shadow(0 0 26px rgba(34,211,238,0.85)) drop-shadow(0 0 10px rgba(34,211,238,0.55)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 54px rgba(34,211,238,1))    drop-shadow(0 0 22px rgba(34,211,238,0.8)); transform: scale(1.1); }
+      0%,100% { filter: drop-shadow(0 0 20px rgba(34,211,238,0.75)) drop-shadow(0 0 8px rgba(34,211,238,0.45)); }
+      50%      { filter: drop-shadow(0 0 30px rgba(34,211,238,0.9))  drop-shadow(0 0 12px rgba(34,211,238,0.6)); }
     }
-    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__ 1.1s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite; }
     /* Realtime overrides — blue halo wins */
-    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.1s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-listening { animation: __sb_hp_listen_rt__   1.4s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-captured  { animation: __sb_hp_captured_rt__ 0.5s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-speaking  { animation: __sb_hp_speak_rt__    0.85s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite; }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -5121,6 +5128,9 @@ function __sbToggleInput(open, options = {}) {
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       __sbSetGreetingPlaceholder();
+      // Sync voice/headphone button state with current runtime state
+      document.getElementById("__sb_rec_btn__")?.classList.toggle("active", __sbHeadphoneMode);
+      document.getElementById("__sb_card_voice_mode_btn__")?.classList.toggle("active", __sbHeadphoneMode);
       __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
         const model = aiProvider === "claude" ? "claude" : "lovable";
         document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
@@ -5519,7 +5529,14 @@ async function __sbSpeakText(text, options = {}) {
     }, speechToken);
     if (!resp) return false;
 
+    const ttsProvider = resp.headers.get("x-braino-tts-provider") || __SB_TTS_PROVIDER;
+    const ttsContentType = resp.headers.get("content-type") || "";
     const blob = await resp.blob();
+    __sbRecordRealtimeCostTts({
+      provider: ttsProvider,
+      bytes: blob.size,
+      contentType: blob.type || ttsContentType,
+    });
     if (speechToken !== __sbSpeechGeneration) return false;
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
@@ -5539,6 +5556,10 @@ async function __sbSpeakText(text, options = {}) {
     spoke = speechToken === __sbSpeechGeneration;
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
+    __sbRecordRealtimeCostTts({
+      provider: "browser",
+      error: ttsErr?.message || String(ttsErr || "TTS failed"),
+    });
     console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", ttsErr?.message || ttsErr);
     const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
     __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish credits" : "Browser voice");
@@ -6745,6 +6766,13 @@ async function __sbProcessPrompt(text, options = {}) {
     ? options.forceIntent
     : null;
   const intent = forceIntent || routing.intent;
+  if (fromVoice && voiceOutput === "realtime") {
+    __sbPatchRealtimeCostTurn({
+      routeIntent: intent,
+      routeMode: forcedMode,
+      connector: connectorHint,
+    });
+  }
 
   // "What's new / what's in you?" — Braino reads the changelog in first person, then flips the question back
   if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you|what'?s?\s+in\s+you|what\s+(can|do)\s+you\s+(do|have)|what\s+are\s+you\s+capable|what\s+are\s+your\s+(features?|abilities|capabilities)|tell\s+me\s+(about\s+yourself|what\s+you\s+can\s+do)/i.test(promptText)) {
@@ -7265,6 +7293,12 @@ let __sbRtUsageHeartbeatTimer = null;
 let __sbRtUsageDeadlineTimer = null;
 let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
+let __sbRtRealtimeModel = "gpt-realtime-2";
+let __sbRtTranscriptionModel = "gpt-4o-transcribe";
+let __sbRtCostTurn = null;
+let __sbRtLastCostTurn = null;
+let __sbRtCostTurnSeq = 0;
+let __sbRtCostKeepOpen = false;
 const __SB_RT_MAX_CONNECT_FAILURES = 3;
 let __sbRtConnectFailureCount = 0;
 let __sbRtRetryTimer = null;
@@ -7309,6 +7343,127 @@ function __sbResetRealtimeUsageState() {
   __sbRtUsageSessionId = null;
   __sbRtUsageAllocatedMs = 0;
   __sbRtUsageLimitMs = 0;
+}
+
+function __sbGetRealtimeCostVoiceInfo() {
+  if (__sbVoiceOutputPref === "fish") {
+    return { voiceProvider: "fish", voiceId: __SB_FISH_JARVIS_VOICE_ID, voiceName: "Jarvis" };
+  }
+  if (__sbVoiceOutputPref === "elevenlabs") {
+    return { voiceProvider: "elevenlabs", voiceId: __SB_ELEVENLABS_VOICE_ID, voiceName: "ElevenLabs Braino" };
+  }
+  return { voiceProvider: "openai_realtime", voiceId: __SB_REALTIME_VOICE, voiceName: `OpenAI ${__SB_REALTIME_VOICE}` };
+}
+
+function __sbBeginRealtimeCostTurn(transcript, turnToken, transcriptionUsage = {}) {
+  const text = String(transcript || "").trim();
+  if (!text) return null;
+  if (__sbRtCostTurn && !__sbRtCostTurn.completedAt) {
+    __sbCompleteRealtimeCostTurn({ force: true });
+  }
+
+  const now = new Date().toISOString();
+  const sessionId = __sbRtUsageSessionId || null;
+  const turnIndex = Number.isInteger(turnToken) ? turnToken : ++__sbRtCostTurnSeq;
+  __sbRtCostTurnSeq = Math.max(__sbRtCostTurnSeq, turnIndex);
+  __sbRtCostTurn = {
+    turnId: `${sessionId || "rt"}_${turnIndex}_${Date.now()}`,
+    sessionId,
+    turnIndex,
+    startedAt: now,
+    completedAt: null,
+    userTranscript: text,
+    assistantMessages: [],
+    routeIntent: null,
+    routeMode: null,
+    connector: null,
+    realtimeModel: __sbRtRealtimeModel || "unknown",
+    transcriptionModel: __sbRtTranscriptionModel || "gpt-4o-transcribe",
+    rawRealtimeUsage: {},
+    rawTranscriptionUsage: transcriptionUsage && typeof transcriptionUsage === "object" ? transcriptionUsage : {},
+    rawTtsUsage: { events: [] },
+  };
+  __sbRtLastCostTurn = __sbRtCostTurn;
+  return __sbRtCostTurn;
+}
+
+function __sbPatchRealtimeCostTurn(fields = {}) {
+  const turn = __sbRtCostTurn;
+  if (!turn || !fields || typeof fields !== "object") return;
+  Object.assign(turn, fields);
+}
+
+function __sbAppendRealtimeCostAssistantMessage(text) {
+  const turn = __sbRtCostTurn;
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!turn || !clean) return;
+  const last = turn.assistantMessages[turn.assistantMessages.length - 1];
+  if (last !== clean) turn.assistantMessages.push(clean);
+}
+
+function __sbRecordRealtimeCostUsage(usage) {
+  const turn = __sbRtCostTurn;
+  if (!turn || !usage || typeof usage !== "object") return;
+  turn.rawRealtimeUsage = usage;
+}
+
+function __sbRecordRealtimeCostTts(event = {}) {
+  const turn = __sbRtCostTurn;
+  if (!turn || !event || typeof event !== "object") return;
+  const events = Array.isArray(turn.rawTtsUsage?.events) ? turn.rawTtsUsage.events : [];
+  events.push({
+    at: new Date().toISOString(),
+    provider: String(event.provider || __sbGetRealtimeCostVoiceInfo().voiceProvider),
+    bytes: Number(event.bytes || 0) || 0,
+    contentType: String(event.contentType || ""),
+    error: event.error ? String(event.error).slice(0, 500) : "",
+  });
+  turn.rawTtsUsage = { events: events.slice(-20) };
+}
+
+function __sbCompleteRealtimeCostTurn(options = {}) {
+  const turn = __sbRtCostTurn;
+  if (!turn) return;
+  if (!options.force && (options.keepOpen || __sbRtCostKeepOpen || __sbRtAwaitingDelegateResult)) {
+    return;
+  }
+  if (!turn.completedAt) turn.completedAt = new Date().toISOString();
+  const payload = __sbBuildRealtimeCostPayload(turn);
+  if (!payload) return;
+  void __sbAuthedApiFetch("realtime-cost-log", {
+    method: "POST",
+  }, {
+    jsonBody: payload,
+    suppressSignIn: true,
+  }).catch(() => {});
+  __sbRtLastCostTurn = turn;
+  if (__sbRtCostTurn === turn) __sbRtCostTurn = null;
+}
+
+function __sbBuildRealtimeCostPayload(turn) {
+  if (!turn?.turnId) return null;
+  const voiceInfo = __sbGetRealtimeCostVoiceInfo();
+  return {
+    turnId: turn.turnId,
+    sessionId: turn.sessionId || __sbRtUsageSessionId || null,
+    turnIndex: turn.turnIndex || 0,
+    startedAt: turn.startedAt,
+    completedAt: turn.completedAt,
+    userTranscript: turn.userTranscript || "",
+    assistantMessages: Array.isArray(turn.assistantMessages) ? turn.assistantMessages : [],
+    routeIntent: turn.routeIntent || null,
+    routeMode: turn.routeMode || null,
+    connector: turn.connector || null,
+    realtimeModel: turn.realtimeModel || __sbRtRealtimeModel || "unknown",
+    transcriptionModel: turn.transcriptionModel || __sbRtTranscriptionModel || "gpt-4o-transcribe",
+    voiceProvider: voiceInfo.voiceProvider,
+    voiceId: voiceInfo.voiceId,
+    voiceName: voiceInfo.voiceName,
+    rawRealtimeUsage: turn.rawRealtimeUsage || {},
+    rawTranscriptionUsage: turn.rawTranscriptionUsage || {},
+    rawTtsUsage: turn.rawTtsUsage || {},
+    costConfidence: Object.keys(turn.rawRealtimeUsage || {}).length || Object.keys(turn.rawTranscriptionUsage || {}).length ? "mixed" : "unknown",
+  };
 }
 
 async function __sbHeartbeatRealtimeUsageSession() {
@@ -7726,6 +7881,8 @@ async function __sbStartRealtimeVoice() {
     __sbResetRealtimeUsageState();
     __sbRtUsageSessionId = res.headers.get("x-braino-realtime-session-id");
     __sbRtUsageLimitMs = Number(res.headers.get("x-braino-realtime-limit-ms") || "0") || 0;
+    __sbRtRealtimeModel = res.headers.get("x-braino-realtime-model") || __sbRtRealtimeModel;
+    __sbRtTranscriptionModel = res.headers.get("x-braino-realtime-transcription-model") || __sbRtTranscriptionModel;
     const allocatedMs = Number(res.headers.get("x-braino-realtime-allocated-ms") || "0") || 0;
     if (__sbRtUsageSessionId && allocatedMs > 0) {
       __sbScheduleRealtimeUsageCap(allocatedMs);
@@ -8037,6 +8194,7 @@ async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options =
   // TTS endpoint (that would be two voices). Only call __sbSpeakText when an external voice
   // (Fish Audio / ElevenLabs) is selected, OR when falling back from a failed relay.
   const useExternalTts = __sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs";
+  if (preferred === "realtime") __sbAppendRealtimeCostAssistantMessage(text);
 
   if (preferred === "realtime" && __sbRtControlReady() && !useExternalTts) {
     // Native realtime: send a relay event and let the model speak.
@@ -8063,6 +8221,9 @@ function __sbCompleteVoiceTurn(options = {}) {
     if (voiceOutput === "legacy" && options.resumeLegacyMic) {
       void __sbStartRecording();
     }
+  }
+  if (voiceOutput === "realtime") {
+    __sbCompleteRealtimeCostTurn({ keepOpen: __sbRtAwaitingDelegateResult });
   }
 }
 
@@ -8133,32 +8294,39 @@ function __sbApplyCorrectionOverrides(segments) {
 // Sequential executor for a multi-intent segment array.
 async function __sbHandleMultiIntentChain(segments, turnToken) {
   const myToken = ++__sbChainAbortToken;
+  __sbRtCostKeepOpen = true;
+  __sbPatchRealtimeCostTurn({ routeIntent: "multi" });
 
-  for (let i = 0; i < segments.length; i++) {
-    if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
+  try {
+    for (let i = 0; i < segments.length; i++) {
+      if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
 
-    // Hold the pending-reply lock across the whole chain to block concurrent turns.
-    __sbVoicePendingReply = true;
-
-    if (i === 0) void __sbSpeakWithPreferredVoice("On it.", "realtime");
-
-    await __sbHandleInlineRealtimeTurn(segments[i], turnToken);
-
-    // If this segment launched an agent, wait for it to finish before the next.
-    if (__sbRtAwaitingDelegateResult) {
-      await __sbWaitForChainDelegate(myToken, turnToken);
-    }
-
-    if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
-
-    if (i < segments.length - 1) {
+      // Hold the pending-reply lock across the whole chain to block concurrent turns.
       __sbVoicePendingReply = true;
-      await new Promise(r => setTimeout(r, 400));
-    }
-  }
 
-  __sbVoicePendingReply = false;
-  if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+      if (i === 0) void __sbSpeakWithPreferredVoice("On it.", "realtime");
+
+      await __sbHandleInlineRealtimeTurn(segments[i], turnToken);
+
+      // If this segment launched an agent, wait for it to finish before the next.
+      if (__sbRtAwaitingDelegateResult) {
+        await __sbWaitForChainDelegate(myToken, turnToken);
+      }
+
+      if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
+
+      if (i < segments.length - 1) {
+        __sbVoicePendingReply = true;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
+
+    __sbVoicePendingReply = false;
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+  } finally {
+    __sbRtCostKeepOpen = false;
+    __sbCompleteRealtimeCostTurn({ force: true });
+  }
 }
 
 // Poll until the background agent signals completion or we time out / abort.
@@ -8207,30 +8375,40 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
+  __sbPatchRealtimeCostTurn({
+    routeIntent: routing.intent,
+    routeMode: routing.forcedMode,
+    connector: routing.connectorHint,
+  });
 
   // X (Twitter) status — answer from the backend and speak it, BEFORE any delegate
   // classification (which would otherwise open X in a tab).
   if (__sbIsXLastTweetRequest(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "x_status" });
     await __sbHandleXLastTweet(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
   if (__sbIsXStatusRequest(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "x_status" });
     await __sbHandleXStatus(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
 
   // Volume — handle directly (instant, no premium agent). "increase/louder" defaults to +20%.
   if (__sbIsVolumeCommand(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "volume" });
     const handled = await __sbHandleVolumeCommand(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     if (handled) return;
   }
 
   // Cross-tab awareness & control (before delegate classification, which would mis-route).
   if (__sbIsCloseTabsCommand(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "tabs" });
     await __sbHandleCloseTabs(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
   if (__sbIsTabsQuery(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "tabs" });
     await __sbHandleTabsQuery(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
@@ -8246,6 +8424,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 
   const shouldForceDelegate = await __sbShouldForceVoiceDelegate(routing);
   if (shouldForceDelegate) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
@@ -8270,6 +8449,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 function __sbCleanupRealtimeVoice(options = {}) {
   const reason = String(options.reason || "client_cleanup");
   const usageSessionId = __sbRtUsageSessionId;
+  __sbCompleteRealtimeCostTurn({ force: true });
   if (__sbUseOffscreenRt) {
     __sbUseOffscreenRt = false;
     chrome.runtime.sendMessage({ action: "stopOffscreenRealtime" }, () => { void chrome.runtime.lastError; });
@@ -8337,6 +8517,7 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "conversation.item.input_audio_transcription.completed") {
     const transcript = String(ev.transcript || __sbRtUserTranscript || "").trim();
+    const transcriptionUsage = ev.usage || ev.item?.usage || ev.response?.usage || {};
     __sbRtUserTranscript = "";
     if (!transcript) return;
 
@@ -8354,6 +8535,7 @@ function __sbHandleRtEvent(ev) {
 
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       const turnToken = ++__sbRtTurnToken;
+      __sbBeginRealtimeCostTurn(toProcess, turnToken, transcriptionUsage);
       const segments = __sbSplitAndCorrectTranscript(toProcess);
       if (segments.length > 1) {
         void __sbHandleMultiIntentChain(segments, turnToken);
@@ -8378,6 +8560,9 @@ function __sbHandleRtEvent(ev) {
   if (ev.type === "response.done") {
     const finalText = String(ev.response ? __sbExtractRtResponseText(ev.response) : "").trim();
     const transcript = (__sbRtAssistantTranscript || finalText || "").trim();
+    const usage = ev.response?.usage || ev.usage || {};
+    if (transcript) __sbAppendRealtimeCostAssistantMessage(transcript);
+    if (usage && typeof usage === "object") __sbRecordRealtimeCostUsage(usage);
     __sbResetRealtimeResponseState();
     __sbResolveRtWaiter({
       status: "done",
@@ -8558,7 +8743,7 @@ function __sbEnterHeadphoneMode(options = {}) {
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
   __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
     const v = stored.brainoVoicePref;
-    __sbVoiceOutputPref = (v === "fish" || v === "elevenlabs") ? v : "realtime";
+    __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
 
     if (stored.sbRtSessionActive) {
       __sbUseOffscreenRt = true;

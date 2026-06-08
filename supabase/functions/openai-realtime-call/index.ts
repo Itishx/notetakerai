@@ -5,6 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Expose-Headers":
+    "X-Braino-Realtime-Session-Id, X-Braino-Realtime-Allocated-Ms, X-Braino-Realtime-Limit-Ms, X-Braino-Realtime-Used-Ms, X-Braino-Realtime-Reset-At, X-Braino-Realtime-Model, X-Braino-Realtime-Transcription-Model",
 };
 
 const DAILY_REALTIME_LIMIT_MS = 7 * 60 * 1000;
@@ -150,6 +152,8 @@ serve(async (req) => {
       "X-Braino-Realtime-Limit-Ms": String(DAILY_REALTIME_LIMIT_MS),
       "X-Braino-Realtime-Used-Ms": String(usedMs),
       "X-Braino-Realtime-Reset-At": resetAt.toISOString(),
+      "X-Braino-Realtime-Model": realtimeModel,
+      "X-Braino-Realtime-Transcription-Model": "gpt-4o-transcribe",
     };
 
     const locationHeader = openAiResponse.headers.get("Location");

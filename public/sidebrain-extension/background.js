@@ -4,7 +4,7 @@ let bgAgentShouldStop = false;
 let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
 let bgRtSessionActive = false; // offscreen realtime session is running
 let bgRtSessionStarting = false;
-let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0 };
+let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
 
 // On install/update, clear the "offscreen is broken" flag so every client re-attempts the
 // global offscreen voice path once (now backed by a one-time mic-permission grant). If it
@@ -528,6 +528,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sessionId: message.sessionId || null,
       limitMs: Number(message.limitMs || 0),
       allocatedMs: Number(message.allocatedMs || 0),
+      realtimeModel: message.realtimeModel || null,
+      transcriptionModel: message.transcriptionModel || null,
     };
     chrome.storage.local.set({ sbRtSessionActive: true }); // global session is genuinely live now
     bgVoiceVisualTabId = rtVoiceOwnerTabId; // the starting tab shows the presence first
@@ -549,7 +551,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!bgVoiceModeOn) return false;
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
-    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0 };
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
     bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });
     // Tell the active tab so it can fall back to legacy voice.
@@ -572,7 +574,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "stopOffscreenRealtime") {
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
-    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0 };
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
     rtVoiceOwnerTabId = null;
     bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });

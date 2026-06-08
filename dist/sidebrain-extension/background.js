@@ -1,6 +1,17 @@
 // Background service worker for Braino (MV3)
 let isRecording = false;
 let bgAgentShouldStop = false;
+let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
+let bgRtSessionActive = false; // offscreen realtime session is running
+let bgRtSessionStarting = false;
+let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+
+// On install/update, clear the "offscreen is broken" flag so every client re-attempts the
+// global offscreen voice path once (now backed by a one-time mic-permission grant). If it
+// still can't work, the flag gets re-set and we quietly use the per-tab migration fallback.
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.storage.local.set({ sbOffscreenRtBroken: false });
+});
 
 function doCapture(windowId, sendResponse) {
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
@@ -402,6 +413,248 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(() => sendResponse({ persona: null }));
     return true;
   }
+  if (message.action === "getXStatus") {
+    bgAuthedSupabaseFetch(`${BG_API_BASE}/x-status`, { method: "POST" })
+      .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: `x-status ${res.status}` }))
+      .catch((e) => sendResponse({ error: e.message || "Could not reach X." }));
+    return true;
+  }
+  // ── Offscreen realtime bridge ──────────────────────────────────────────────
+  if (message.action === "micPermissionResult") {
+    bgResolveMicPermission(!!message.granted);
+    return false;
+  }
+  if (message.action === "adjustSpotifyVolume") {
+    (async () => {
+      try {
+        const wantMute = message.volumePercent === 0;
+        // Prefer the open Spotify web-player tab (DOM slider); fall back to the Web API.
+        const spotifyTab = await bgFindSpotifyTab();
+        if (spotifyTab?.id != null) {
+          const res = await bgExecuteSiteAdapterAction(spotifyTab.id, {
+            type: "spotifySetVolume",
+            volumePercent: typeof message.volumePercent === "number" ? message.volumePercent : null,
+            volumeStep: message.volumeStep || 0,
+          });
+          if (res?.ok) { sendResponse({ ok: true, volumePercent: res.volumePercent, muted: wantMute && res.volumePercent === 0 }); return; }
+          sendResponse({ ok: false, error: "I couldn't change the volume — make sure a song is playing in Spotify." });
+          return;
+        }
+        // No web tab — use the Web API (real devices only).
+        let volumePercent = typeof message.volumePercent === "number" ? message.volumePercent : null;
+        if (volumePercent == null) {
+          const playerState = await bgFetchSpotifyPlayerState();
+          const current = typeof playerState?.volumePercent === "number" ? playerState.volumePercent : 50;
+          volumePercent = Math.min(100, Math.max(0, current + (message.volumeStep || 0)));
+        }
+        await bgCallSpotifyFunction("spotify-playback", { action: "volume", volumePercent });
+        sendResponse({ ok: true, volumePercent, muted: volumePercent === 0 });
+      } catch (e) {
+        sendResponse({ ok: false, error: "I couldn't reach Spotify to change the volume." });
+      }
+    })();
+    return true;
+  }
+  if (message.action === "startOffscreenRealtime") {
+    (async () => {
+      try {
+        bgVoiceModeOn = true;
+        const requesterTabId = sender?.tab?.id ?? null;
+        if (bgRtSessionActive) {
+          rtVoiceOwnerTabId = requesterTabId || rtVoiceOwnerTabId;
+          bgVoiceVisualTabId = requesterTabId || bgVoiceVisualTabId;
+          if (requesterTabId) {
+            chrome.tabs.sendMessage(requesterTabId, { action: "sbRtSessionReady", ...bgRtSessionInfo }, () => { void chrome.runtime.lastError; });
+          }
+          sendResponse({ ok: true, alreadyActive: true });
+          return;
+        }
+        if (bgRtSessionStarting) {
+          rtVoiceOwnerTabId = requesterTabId || rtVoiceOwnerTabId;
+          sendResponse({ ok: true, starting: true });
+          return;
+        }
+        bgRtSessionStarting = true;
+        // The offscreen document is invisible and cannot show a mic prompt. Make sure the
+        // extension already holds microphone permission (granted once via a visible helper
+        // window) — without it, offscreen getUserMedia fails and we'd fall back to per-tab
+        // sessions. With it, the session is global and follows across tabs instantly.
+        const micOk = await ensureExtensionMicPermission();
+        if (!micOk) {
+          bgRtSessionStarting = false;
+          chrome.storage.local.set({ sbRtSessionActive: false });
+          chrome.tabs.sendMessage(sender?.tab?.id || 0, { action: "sbRtSessionFailed", error: "Microphone not granted" }, () => { void chrome.runtime.lastError; });
+          sendResponse({ ok: true, micDenied: true });
+          return;
+        }
+
+        await ensureOffscreenForRealtime();
+        rtVoiceOwnerTabId = requesterTabId;
+        bgRtSessionActive = false; // set true ONLY when offscreen confirms ready (offscreenRtReady)
+        // NOTE: do NOT set sbRtSessionActive optimistically — that caused a true→false flip
+        // on fallback that thrashed the content-side presence listener. It's set in
+        // offscreenRtReady once the global session is genuinely live.
+        chrome.runtime.sendMessage(
+          { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions },
+          (res) => {
+            if (chrome.runtime.lastError || res?.error) {
+              bgRtSessionStarting = false;
+              // Offscreen failed even though permission was granted — maybe the OS-level
+              // grant was revoked. Only forget the permission on mic-looking failures;
+              // quota/API failures should not cause a pointless permission re-prompt.
+              const errText = String(res?.error || chrome.runtime.lastError?.message || "Offscreen start failed");
+              const storageUpdate = { sbRtSessionActive: false };
+              if (/microphone|permission|notallowed|notreadable|getusermedia|device/i.test(errText)) {
+                storageUpdate.sbMicPermission = null;
+              }
+              chrome.storage.local.set(storageUpdate);
+              chrome.tabs.sendMessage(rtVoiceOwnerTabId || requesterTabId || 0, { action: "sbRtSessionFailed", error: errText }, () => { void chrome.runtime.lastError; });
+            }
+          }
+        );
+        sendResponse({ ok: true });
+      } catch (e) {
+        bgRtSessionStarting = false;
+        chrome.storage.local.set({ sbRtSessionActive: false });
+        sendResponse({ error: e.message || "Failed to start offscreen realtime" });
+      }
+    })();
+    return true;
+  }
+  if (message.action === "offscreenRtReady") {
+    bgRtSessionStarting = false;
+    bgRtSessionActive = true;
+    bgRtSessionInfo = {
+      sessionId: message.sessionId || null,
+      limitMs: Number(message.limitMs || 0),
+      allocatedMs: Number(message.allocatedMs || 0),
+      realtimeModel: message.realtimeModel || null,
+      transcriptionModel: message.transcriptionModel || null,
+    };
+    chrome.storage.local.set({ sbRtSessionActive: true }); // global session is genuinely live now
+    bgVoiceVisualTabId = rtVoiceOwnerTabId; // the starting tab shows the presence first
+    // Forward session info to the owner tab so it can set up usage tracking.
+    if (rtVoiceOwnerTabId) {
+      chrome.tabs.sendMessage(rtVoiceOwnerTabId, { action: "sbRtSessionReady", ...bgRtSessionInfo }, () => { void chrome.runtime.lastError; });
+    }
+    return false;
+  }
+  if (message.action === "offscreenRtEvent") {
+    // Forward realtime events to the currently active tab (not necessarily the owner).
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      const tabId = tabs?.[0]?.id;
+      if (tabId) chrome.tabs.sendMessage(tabId, { action: "sbRtEvent", event: message.event }, () => { void chrome.runtime.lastError; });
+    });
+    return false;
+  }
+  if (message.action === "offscreenRtDisconnected") {
+    if (!bgVoiceModeOn) return false;
+    bgRtSessionStarting = false;
+    bgRtSessionActive = false;
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+    bgVoiceVisualTabId = null;
+    chrome.storage.local.set({ sbRtSessionActive: false });
+    // Tell the active tab so it can fall back to legacy voice.
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      const tabId = tabs?.[0]?.id;
+      if (tabId) chrome.tabs.sendMessage(tabId, { action: "sbRtSessionEnded", reason: message.reason }, () => { void chrome.runtime.lastError; });
+    });
+    return false;
+  }
+  if (message.action === "offscreenRtSend") {
+    chrome.runtime.sendMessage({ target: "offscreen", action: "sendRtEvent", event: message.event }, () => { void chrome.runtime.lastError; });
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.action === "offscreenRtMic") {
+    chrome.runtime.sendMessage({ target: "offscreen", action: "setRtMicEnabled", enabled: message.enabled }, () => { void chrome.runtime.lastError; });
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.action === "stopOffscreenRealtime") {
+    bgRtSessionStarting = false;
+    bgRtSessionActive = false;
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+    rtVoiceOwnerTabId = null;
+    bgVoiceVisualTabId = null;
+    chrome.storage.local.set({ sbRtSessionActive: false });
+    chrome.runtime.sendMessage({ target: "offscreen", action: "stopRealtimeSession" }, () => { void chrome.runtime.lastError; });
+    sendResponse({ ok: true });
+    return false;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+  if (message.action === "rtVoiceClaim") {
+    // One voice session at a time: record the owner and tell every other tab to stand down.
+    const ownerId = sender?.tab?.id ?? null;
+    rtVoiceOwnerTabId = ownerId;
+    bgVoiceVisualTabId = ownerId; // this tab now shows the presence
+    chrome.tabs.query({}, (tabs) => {
+      for (const t of tabs) {
+        if (t.id != null && t.id !== ownerId) {
+          chrome.tabs.sendMessage(t.id, { action: "rtVoiceYield" }, () => { void chrome.runtime.lastError; });
+        }
+      }
+    });
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (message.action === "rtVoiceRelease") {
+    if (rtVoiceOwnerTabId === (sender?.tab?.id ?? null)) rtVoiceOwnerTabId = null;
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.action === "getTabsOverview") {
+    (async () => {
+      try {
+        const tabs = await chrome.tabs.query({});
+        // Count only real web pages — exclude new-tab, chrome://, extension, devtools, etc.
+        const contentTabs = tabs.filter((t) => t.id != null && /^https?:\/\//i.test(t.url || ""));
+        const list = contentTabs.map((t) => ({
+          id: t.id,
+          title: t.title || "(untitled)",
+          host: bgHostOf(t.url),
+          active: !!t.active,
+          pinned: !!t.pinned,
+          audible: !!t.audible,
+        }));
+        const windowCount = new Set(contentTabs.map((t) => t.windowId)).size;
+        sendResponse({
+          count: list.length,
+          windowCount: Math.max(1, windowCount),
+          tabs: list,
+          activeTabId: sender?.tab?.id ?? null,
+        });
+      } catch (e) {
+        sendResponse({ error: e.message || "Could not read tabs." });
+      }
+    })();
+    return true;
+  }
+  if (message.action === "closeIrrelevantTabs") {
+    (async () => {
+      try {
+        const protectedId = sender?.tab?.id ?? null;
+        const tabs = await chrome.tabs.query({});
+        // Hard safety filter — protected tabs are removed before the LLM ever sees them.
+        const candidates = tabs.filter(
+          (t) => t.id != null && t.id !== protectedId && !t.active && !t.pinned && !t.audible,
+        );
+        if (!candidates.length) {
+          sendResponse({ closed: [], closedCount: 0, keptCount: tabs.length, reason: "nothing-to-close" });
+          return;
+        }
+        const picked = await bgPickIrrelevantTabs(String(message.instruction || ""), candidates);
+        const candidateIds = new Set(candidates.map((c) => c.id));
+        const safeIds = [...new Set(picked)].filter((id) => candidateIds.has(id));
+        const closedTitles = candidates.filter((c) => safeIds.includes(c.id)).map((c) => c.title || "(untitled)");
+        if (safeIds.length) await chrome.tabs.remove(safeIds);
+        sendResponse({ closed: closedTitles, closedCount: safeIds.length, keptCount: tabs.length - safeIds.length });
+      } catch (e) {
+        sendResponse({ error: e.message || "Could not close tabs." });
+      }
+    })();
+    return true;
+  }
   if (message.action === "runBrainAgent") {
     const task = message.task;
     const connector = message.connector;
@@ -605,6 +858,15 @@ const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 const BG_BRAINO_FAVORITE_SONG_URI = "spotify:track:6Hgh47WXVKtXN5zGOu0hjI";
 
+// Flat registry of what Braino can do — consulted before dispatching to the LLM agent loop.
+const BG_CAPABILITY_MANIFEST = {
+  spotify:  ["playSong", "setVolume", "playbackControl", "addSongToPlaylist", "playSongFromPlaylist"],
+  medium:   ["searchArticles"],
+  twitter:  ["readFeed", "generateAndPost", "postTweet"],
+  gmail:    ["search", "draftEmail", "sendEmail", "replyCurrentThread"],
+  drive:    ["createDoc", "organize", "search", "createFolder", "rename", "move", "delete"],
+};
+
 async function bgChatFetch(body) {
   const { authToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
   return fetch(`${BG_API_BASE}/chat-about-notes`, {
@@ -616,6 +878,44 @@ async function bgChatFetch(body) {
     },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
+}
+
+function bgHostOf(url) {
+  try { return new URL(url || "").hostname.replace(/^www\./, ""); } catch { return ""; }
+}
+
+// Ask the LLM which of the (already safety-filtered) candidate tabs to close.
+// Returns an array of tab IDs. Closes nothing if the response can't be parsed.
+async function bgPickIrrelevantTabs(instruction, candidates) {
+  const numbered = candidates
+    .map((t, i) => `${i}. ${String(t.title || "(untitled)").slice(0, 80)} — ${t.host || "?"}`)
+    .join("\n");
+  const prompt = [
+    "You help a user close irrelevant browser tabs.",
+    `User request: "${instruction || "close the tabs I don't need"}"`,
+    "",
+    "Closable tabs (already excludes the active, pinned, and audio-playing tabs):",
+    numbered,
+    "",
+    "Return ONLY a JSON array of the indices to close (e.g. [0,2,3]).",
+    "Keep tabs that look like active work; close clutter (duplicates, search-result pages, finished reading, ads, empty/new tabs).",
+    "If the user gave no specific criteria, be conservative. Never return every index unless the user explicitly asked to close all tabs.",
+  ].join("\n");
+
+  try {
+    const res = await bgChatFetch({ notes: "", chatHistory: [], message: prompt });
+    const data = await res.json().catch(() => ({}));
+    const raw = String(data?.reply || data?.response || "");
+    const match = raw.match(/\[[\s\S]*?\]/);
+    if (!match) return [];
+    const indices = JSON.parse(match[0]);
+    if (!Array.isArray(indices)) return [];
+    return indices
+      .map((n) => candidates[Number(n)]?.id)
+      .filter((id) => id != null);
+  } catch {
+    return [];
+  }
 }
 
 let bgXPersonaCache = null;
@@ -1003,8 +1303,8 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 
-function bgBrainUpdate(tabId, text, final = false) {
-  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final }, () => { void chrome.runtime.lastError; });
+function bgBrainUpdate(tabId, text, final = false, opts = {}) {
+  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final, speakHint: opts.speakHint || null }, () => { void chrome.runtime.lastError; });
 }
 
 async function bgSendInlineUiMessage(tabId, message) {
@@ -1112,7 +1412,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
       connectorHint,
       history,
       onProgress: async (description) => {
-        bgBrainUpdate(currentTabId, `→ ${description}`);
+        bgBrainUpdate(currentTabId, `→ ${description}`, false, { speakHint: description });
       },
       shouldStop: () => bgAgentShouldStop,
     });
@@ -1507,16 +1807,36 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     }
   }
 
-  if (onSpotify || mentionsSpotifyPlayback || isShortPlaybackCommand) {
+  // Volume — unambiguous media control; recognized regardless of current tab so it
+  // works in realtime voice (where the session tab isn't Spotify).
+  const hasVolumeWord = /\bvolume\b/i.test(raw);
+  const wantsLouder = /\b(louder|raise|increase|boost|higher)\b/i.test(raw)
+    || /\bturn\s+up\b/i.test(raw)
+    || /\bturn\s+(?:it|the\s+(?:music|sound|volume))\s+up\b/i.test(raw)
+    || /\b(full|max(imum)?)\s+(volume|vol)\b/i.test(raw)
+    || /\b(volume|vol)\s+(up|higher|full|max)\b/i.test(raw);
+  const wantsQuieter = /\b(quieter|softer|dimmer|lower|decrease|reduce)\b/i.test(raw)
+    || /\bturn\s+down\b/i.test(raw)
+    || /\bturn\s+(?:it|the\s+(?:music|sound|volume))\s+down\b/i.test(raw)
+    || /\b(mute|silence)\b/i.test(raw);
+  if (hasVolumeWord || wantsLouder || wantsQuieter) {
+    // Full / max → 100%. Mute / silence → 0%. Exact % → that value.
+    if (/\b(full|max(imum)?)\s*(volume|vol)?$|\b(volume|vol)\s+(full|max)\b/i.test(raw)) {
+      return { adapter: "spotify", intent: "setVolume", volumePercent: 100 };
+    }
+    if (/\b(mute|silence)\b/i.test(raw)) {
+      return { adapter: "spotify", intent: "setVolume", volumePercent: 0 };
+    }
     const exactVolume = raw.match(/(?:set|change|put|make)\s+(?:the\s+)?(?:spotify\s+)?volume\s+(?:to\s+)?(\d{1,3})\s*%?/i)
-      || raw.match(/volume\s+(?:to\s+|at\s+)?(\d{1,3})\s*%?/i);
+      || raw.match(/\bvolume\s+(?:to\s+|at\s+)?(\d{1,3})\s*%?/i)
+      || raw.match(/\b(\d{1,3})\s*%?\s+(?:volume|vol)\b/i);
     if (exactVolume) {
       return { adapter: "spotify", intent: "setVolume", volumePercent: Math.min(100, Math.max(0, parseInt(exactVolume[1], 10))) };
     }
-    if (/\b(lower|decrease|reduce|turn\s+down|quieter|softer|dimmer)\b/i.test(raw)) {
+    if (wantsQuieter) {
       return { adapter: "spotify", intent: "setVolume", volumeStep: -20 };
     }
-    if (/\b(raise|increase|turn\s+up|louder|higher|boost)\b/i.test(raw)) {
+    if (wantsLouder) {
       return { adapter: "spotify", intent: "setVolume", volumeStep: +20 };
     }
   }
@@ -1674,10 +1994,37 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     return { adapter: "google-drive", intent: "search", query: folderSearchMatch[1].trim(), folderOnly: true };
   }
 
-  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i)
-    || raw.match(/(?:find|search for|look for)\s+["“]?(.+?)["”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
+  const fileSearchMatch = raw.match(/(?:find|search for|look for)\s+(?:a\s+)?file\s+[“”]?(.+?)[“”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i)
+    || raw.match(/(?:find|search for|look for)\s+[“”]?(.+?)[“”]?(?:\s+(?:in|on)\s+(?:google\s+)?drive\b)?$/i);
   if (wantsGoogleDrive && fileSearchMatch) {
     return { adapter: "google-drive", intent: "search", query: fileSearchMatch[1].trim(), folderOnly: false };
+  }
+
+  // ── Medium ──────────────────────────────────────────────────────────────────
+  const wantsMedium = /\bmedium(?:\.com)?\b/i.test(text);
+  const wantsMediumSearch = wantsMedium && /\b(find|search|look for|show|whip up|pull up|articles?|posts?|content)\b/i.test(text);
+  if (wantsMediumSearch) {
+    const qMatch = raw.match(/(?:about|on|for|regarding|on how to|about how to)\s+(.+?)(?:\s+on\s+medium|\s+for\s+me|\s+please)?\.?$/i);
+    return { adapter: "medium", intent: "searchArticles", query: (qMatch?.[1] || "").trim() };
+  }
+
+  // ── Twitter / X ─────────────────────────────────────────────────────────────
+  // X feed reading (distinct from __sbIsXStatusRequest which handles follower/stats queries)
+  const wantsXFeedRead = /\b(twitter|my x|on x|x feed|timeline|feed|x\b)/i.test(text)
+    && /\b(how'?s?|what'?s?|show|check|look|what(?:'s|\s+is)\s+(?:on|going on|happening|up))\b/i.test(text)
+    && !/\b(followers?|following|stats?|analytics|count|mentions?|last tweet)\b/i.test(text);
+  if (wantsXFeedRead) return { adapter: "twitter", intent: "readFeed" };
+
+  // X post generation + posting
+  const wantsXWrite = /\b(tweet|post|publish|share|put\s+(?:it|this|that)\s+on)\b/i.test(text) && /\b(x\b|twitter)\b/i.test(text);
+  const wantsXGenerate = wantsXWrite && /\b(idea|ideas|article|articles|topic|topics|generate|think\s+of|come\s+up\s+with|write)\b/i.test(text);
+  if (wantsXGenerate) {
+    const topicMatch = raw.match(/(?:about|on|regarding)\s+(.+?)(?:\s+(?:and|then|for me|please))?\.?$/i);
+    return { adapter: "twitter", intent: "generateAndPost", topic: (topicMatch?.[1] || "").trim() || null };
+  }
+  if (wantsXWrite) {
+    const contentMatch = raw.match(/(?:post|tweet|share|publish)\s+(?:this|it|that|”(.+?)”)?/i);
+    return { adapter: "twitter", intent: "postTweet", content: (contentMatch?.[1] || "").trim() };
   }
 
   return null;
@@ -1687,6 +2034,18 @@ function bgLooksLikeBrowserTask(task) {
   const raw = String(task || "").trim();
   if (!raw) return false;
 
+  // 1) Generic web search / look-up — needs NO app target. This is the default agent
+  //    behavior: "look up X", "search for X", "find me an article on X", "google X",
+  //    "pull up X". These must delegate (search → open → offer summary), never be
+  //    answered conversationally with "I can't open that from here".
+  const searchLookup = /\b(look(?:ing)?\s+(?:this|that|it|them)?\s*up|look\s+up|search(?:\s+for|\s+the\s+web|\s+online)?|google|find\s+(?:me\s+)?(?:an?\s+)?(?:article|articles|paper|papers|info|information|something|page|website|result|link)|pull\s+up|bring\s+up|read\s+(?:me\s+)?(?:an?\s+)?(?:article|paper|story|post))\b/i.test(raw);
+  if (searchLookup) return true;
+
+  // 2) Questions that need live/fresh web data (no app target needed either).
+  const freshness = /\b(latest|current|today|right\s+now|as\s+of|this\s+week|this\s+month|this\s+year|recent|news|price\s+of|stock|weather|score|standings|live|just\s+happened|breaking|update\s+on|status\s+of|who\s+won|who\s+is\s+winning|what\s+happened|trending)\b/i.test(raw);
+  if (freshness) return true;
+
+  // 3) App/site actions — strong imperative + a known actionable target.
   const strongImperative = /^(?:open|go to|navigate to|visit|search|find|look up|pull up|bring up|take me to|show me|create|make|draft|compose|send|reply|play|pause|resume|continue|next|skip|previous|prev|book|buy|order|post|tweet|get directions|show directions|route|move|rename|delete|remove|archive|label|organize|organise)\b/i.test(raw);
   if (!strongImperative) return false;
 
@@ -1788,6 +2147,16 @@ async function bgRunAdapterStep({ history, description, type, run, onProgress, o
   return result;
 }
 
+// Find the Spotify web-player tab (prefer the one actually playing audio).
+async function bgFindSpotifyTab() {
+  try {
+    const tabs = await chrome.tabs.query({ url: ["*://open.spotify.com/*", "*://*.spotify.com/*"] });
+    return tabs.find((t) => t.audible) || tabs[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, onResult, shouldStop, connectorHint }) {
   const siteContext = await bgGetSiteAdapterContext(tabId);
   const parsed = bgParseAdapterTask(task, siteContext, connectorHint);
@@ -1850,6 +2219,28 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   }
 
   if (parsed.adapter === "spotify" && parsed.intent === "setVolume") {
+    // Prefer the Spotify web-player tab (the one Braino opens): the Web API can't set
+    // its volume, but we can set the media element directly. Fall back to the API for
+    // real devices (desktop/phone) only when no web tab is open.
+    const spotifyTab = await bgFindSpotifyTab();
+    if (spotifyTab?.id != null) {
+      const res = await bgRunAdapterStep({
+        history,
+        description: parsed.volumePercent != null ? `Set Spotify volume to ${parsed.volumePercent}%` : "Adjust Spotify volume",
+        type: "spotify_volume",
+        onProgress,
+        onResult,
+        run: () => bgExecuteSiteAdapterAction(spotifyTab.id, {
+          type: "spotifySetVolume",
+          volumePercent: typeof parsed.volumePercent === "number" ? parsed.volumePercent : null,
+          volumeStep: parsed.volumeStep || 0,
+        }),
+      });
+      if (res?.ok) return `Volume set to ${res.volumePercent}%.`;
+      return "I couldn't change the volume — make sure a song is actually playing in the Spotify tab.";
+    }
+
+    // No web player open — try the API (works only for active real devices).
     let volumePercent = typeof parsed.volumePercent === "number" ? parsed.volumePercent : null;
     if (volumePercent == null) {
       const playerState = await bgFetchSpotifyPlayerState();
@@ -2283,7 +2674,159 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
     return `Deleted **${result?.name || parsed.itemName}** from Drive.`;
   }
 
+  // ── Medium: search articles ──────────────────────────────────────────────────
+  if (parsed.adapter === "medium" && parsed.intent === "searchArticles") {
+    const query = (parsed.query || "").trim();
+    if (!query) return "I couldn't tell what to search for on Medium — could you be more specific?";
+    onProgress?.(`Searching Medium for "${query}"…`);
+    await bgExecuteAgentAction(tabId, {
+      type: "navigate",
+      url: `https://medium.com/search?q=${encodeURIComponent(query)}&source=search_post&type=post`,
+      description: `Search Medium for "${query}"`,
+    });
+    await bgWaitForTabReady(tabId, 7000);
+    await bgDelay(2000);
+
+    const result = await bgExecuteSiteAdapterAction(tabId, {
+      type: "mediumReadSearchResults",
+      limit: 5,
+    });
+    const articles = result?.articles || [];
+    if (!articles.length) {
+      return `I searched Medium for "${query}" but couldn't read the results — Medium may have loaded differently. Try opening it directly.`;
+    }
+    const list = articles.map((a, i) => `${i + 1}. ${a.title}`).join(". ");
+    return `Here are the top articles on ${query}: ${list}`;
+  }
+
+  // ── Twitter / X: read feed ────────────────────────────────────────────────────
+  if (parsed.adapter === "twitter" && parsed.intent === "readFeed") {
+    onProgress?.("Opening your X feed…");
+    await bgExecuteAgentAction(tabId, {
+      type: "navigate",
+      url: "https://x.com/home",
+      description: "Open X home feed",
+    });
+    await bgWaitForTabReady(tabId, 7000);
+    await bgDelay(2500);
+
+    const result = await bgExecuteSiteAdapterAction(tabId, {
+      type: "xReadFeed",
+      limit: 5,
+    });
+    const posts = result?.posts || [];
+    if (!posts.length) {
+      return "Your X feed isn't loading right now — try opening X directly.";
+    }
+    const summary = posts
+      .map(p => `${p.author} says: ${p.text.slice(0, 80)}${p.text.length > 80 ? "…" : ""}`)
+      .join(". ");
+    return `Here's what's on your feed: ${summary}`;
+  }
+
+  // ── Twitter / X: generate ideas + post ────────────────────────────────────────
+  if (parsed.adapter === "twitter" && parsed.intent === "generateAndPost") {
+    onProgress?.("Generating post ideas…");
+    const persona = await bgLoadXPersona().catch(() => ({}));
+    const personaText = [
+      persona.bio ? `Bio: ${persona.bio}` : "",
+      persona.building ? `Building: ${persona.building}` : "",
+      persona.toneNotes ? `Tone: ${persona.toneNotes}` : "",
+    ].filter(Boolean).join("\n");
+
+    const topicHint = parsed.topic ? ` about "${parsed.topic}"` : "";
+    const resp = await bgChatFetch({
+      notes: "You generate tweet-length post ideas. Return ONLY a JSON array of exactly 3 strings, no markdown, no explanation.",
+      message: `${personaText ? `User persona:\n${personaText}\n\n` : ""}Generate 3 sharp, specific post ideas${topicHint}. Each under 200 characters, actionable and authentic to the user's voice.`,
+    });
+    let ideas = [];
+    try {
+      const data = await resp.json();
+      const reply = (data.reply || "").trim();
+      const jsonMatch = reply.match(/\[[\s\S]+?\]/);
+      if (jsonMatch) ideas = JSON.parse(jsonMatch[0]);
+    } catch (_) {}
+
+    if (!ideas.length) return "Couldn't generate post ideas right now — try again.";
+
+    // Post the first idea
+    const tweetText = ideas[0];
+    onProgress?.("Posting to X…");
+    await bgExecuteAgentAction(tabId, { type: "navigate", url: "https://x.com/compose/tweet", description: "Open X compose" });
+    await bgWaitForTabReady(tabId, 5000);
+    await bgDelay(1200);
+    await bgExecuteAgentAction(tabId, { type: "click", selector: "[data-testid='tweetTextarea_0']", targetText: "", description: "Focus tweet box" });
+    await bgDelay(300);
+    await bgExecuteAgentAction(tabId, { type: "type", selector: "[data-testid='tweetTextarea_0']", text: tweetText, description: "Type tweet" });
+    await bgDelay(500);
+    await bgExecuteAgentAction(tabId, { type: "click", selector: "[data-testid='tweetButtonInline'], [data-testid='tweetButton']", targetText: "Post", description: "Post tweet" });
+
+    const preview = tweetText.length > 60 ? `${tweetText.slice(0, 60)}…` : tweetText;
+    const ideaList = ideas.map((idea, i) => `${i + 1}. ${idea}`).join(" | ");
+    return `Posted: "${preview}". Here are all 3 ideas I came up with: ${ideaList}`;
+  }
+
+  // ── Twitter / X: post specific content ────────────────────────────────────────
+  if (parsed.adapter === "twitter" && parsed.intent === "postTweet" && parsed.content) {
+    onProgress?.("Posting to X…");
+    await bgExecuteAgentAction(tabId, { type: "navigate", url: "https://x.com/compose/tweet", description: "Open X compose" });
+    await bgWaitForTabReady(tabId, 5000);
+    await bgDelay(1200);
+    await bgExecuteAgentAction(tabId, { type: "click", selector: "[data-testid='tweetTextarea_0']", targetText: "", description: "Focus tweet box" });
+    await bgDelay(300);
+    await bgExecuteAgentAction(tabId, { type: "type", selector: "[data-testid='tweetTextarea_0']", text: parsed.content, description: "Type tweet" });
+    await bgDelay(500);
+    await bgExecuteAgentAction(tabId, { type: "click", selector: "[data-testid='tweetButtonInline'], [data-testid='tweetButton']", targetText: "Post", description: "Post tweet" });
+    return `Posted to X: "${parsed.content.slice(0, 80)}${parsed.content.length > 80 ? "…" : ""}"`;
+  }
+
   return null;
+}
+
+function bgBuildMediumFastPath(task) {
+  const raw = String(task || "").trim();
+  const t = raw.toLowerCase();
+  if (!/\bmedium(?:\.com)?\b/i.test(t)) return null;
+
+  const isPlainOpen = /^(?:open|go to|navigate to|visit)\s+(?:https?:\/\/)?(?:www\.)?medium\.com\/?\s*$/i.test(raw);
+  if (isPlainOpen) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  const wantsMediumSearch =
+    /\b(find|search|look for|pull up|bring up|read|show|get)\b/i.test(raw) ||
+    /\b(articles?|posts?|blogs?|stories?)\b/i.test(raw) ||
+    /\b(over there|on there|in there|there)\b/i.test(raw);
+
+  if (!wantsMediumSearch) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  let query = raw.toLowerCase();
+  query = query
+    .replace(/https?:\/\/(?:www\.)?medium\.com\/?/gi, " ")
+    .replace(/\b(?:www\.)?medium\.com\b/gi, " ")
+    .replace(/\bmedium\b/gi, " ")
+    .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
+    .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
+    .replace(/\b(?:please|me|some|a few|the|an?|for me)\b/gi, " ")
+    .replace(/\b(?:open|go to|navigate to|navigate|visit|find|search(?: for)?|look for|pull up|bring up|read|show|get)\b/gi, " ")
+    .replace(/\b(?:articles?|posts?|blogs?|stories?|results?)\b/gi, " ")
+    .replace(/\b(?:over there|on there|in there|there|on|in|at|about|around|regarding)\b/gi, " ")
+    .replace(/\band\b/gi, " ")
+    .replace(/[?!.,]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!query) {
+    return [{ type: "navigate", url: "https://medium.com", description: "Open Medium" }];
+  }
+
+  return [{
+    type: "navigate",
+    url: `https://medium.com/search?q=${encodeURIComponent(query)}`,
+    description: `Search Medium for "${query}"`,
+  }];
 }
 
 function bgTryFastPath(task, history) {
@@ -2307,6 +2850,8 @@ function bgTryFastPath(task, history) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
   }
+  const mediumFastPath = bgBuildMediumFastPath(task);
+  if (mediumFastPath) return mediumFastPath;
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
     const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
@@ -3363,9 +3908,7 @@ function storeAuthData(data) {
 }
 
 async function ensureOffscreen() {
-  const contexts = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-  });
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
   if (contexts.length === 0) {
     await chrome.offscreen.createDocument({
       url: "offscreen.html",
@@ -3374,6 +3917,147 @@ async function ensureOffscreen() {
     });
   }
 }
+
+// ── Extension microphone permission ─────────────────────────────────────────
+// The offscreen document is invisible, so getUserMedia there can't show a prompt. We grant
+// mic permission ONCE via a small visible helper window (extension origin); the offscreen
+// doc then inherits it (same origin). Cached in storage so it never asks twice.
+let bgMicPermissionWindowId = null;
+let bgMicPermissionWaiters = [];
+
+function bgResolveMicPermission(granted) {
+  if (granted) chrome.storage.local.set({ sbMicPermission: "granted", sbOffscreenRtBroken: false });
+  else chrome.storage.local.set({ sbMicPermission: "denied" });
+  const waiters = bgMicPermissionWaiters;
+  bgMicPermissionWaiters = [];
+  for (const w of waiters) { try { w(granted); } catch (_) {} }
+  if (bgMicPermissionWindowId != null) {
+    const id = bgMicPermissionWindowId;
+    bgMicPermissionWindowId = null;
+    chrome.windows.remove(id).catch(() => {});
+  }
+  // Dismiss any in-page modal that was injected into a tab.
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+    const id = tabs?.[0]?.id;
+    if (id != null) chrome.tabs.sendMessage(id, { action: "hideMicPermission" }, () => { void chrome.runtime.lastError; });
+  });
+}
+
+async function ensureExtensionMicPermission() {
+  const { sbMicPermission } = await chrome.storage.local.get(["sbMicPermission"]);
+  if (sbMicPermission === "granted") return true;
+
+  // Already prompting — join the existing outcome.
+  if (bgMicPermissionWaiters.length || bgMicPermissionWindowId != null) {
+    return await new Promise((resolve) => bgMicPermissionWaiters.push(resolve));
+  }
+
+  const result = new Promise((resolve) => {
+    bgMicPermissionWaiters.push(resolve);
+    setTimeout(() => { if (bgMicPermissionWaiters.length) bgResolveMicPermission(false); }, 60000);
+  });
+
+  // Preferred: show an in-page modal (same tab the user is on) by asking the active tab's
+  // content script to inject the permission iframe. Falls back to a small window if the
+  // active tab can't host it (chrome://, web store, no content script).
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  let shownInPage = false;
+  if (activeTab?.id != null && /^https?:/i.test(activeTab.url || "")) {
+    shownInPage = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(activeTab.id, { action: "showMicPermission" }, (resp) => {
+        if (chrome.runtime.lastError) { resolve(false); return; }
+        resolve(!!resp?.shown);
+      });
+    });
+  }
+  if (!shownInPage) {
+    chrome.windows.create(
+      { url: chrome.runtime.getURL("mic-permission.html"), type: "popup", width: 420, height: 360, focused: true },
+      (win) => {
+        if (chrome.runtime.lastError || !win) { bgResolveMicPermission(false); return; }
+        bgMicPermissionWindowId = win.id;
+      }
+    );
+  }
+
+  return await result;
+}
+
+// If the helper window is closed/destroyed without a result, treat as not-granted.
+chrome.windows.onRemoved.addListener((windowId) => {
+  if (windowId === bgMicPermissionWindowId) {
+    bgMicPermissionWindowId = null;
+    if (bgMicPermissionWaiters.length) bgResolveMicPermission(false);
+  }
+});
+
+async function ensureOffscreenForRealtime() {
+  // Realtime lives in the offscreen doc so the mic/session can follow tabs instantly.
+  // Any remote model audio is muted there; Braino's primary audible output is Fish Audio.
+  // Close and recreate if needed so the global realtime host is definitely available.
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+  if (contexts.length > 0) {
+    const hasAudio = contexts[0].documentUrl && true; // can't inspect reasons, so just check recording isn't active
+    if (isRecording) return; // don't disrupt an active lecture recording — realtime will fallback in-tab
+    await chrome.offscreen.closeDocument().catch(() => {});
+  }
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: ["USER_MEDIA", "AUDIO_PLAYBACK"],
+    justification: "Realtime voice AI — global mic input with muted remote track hosting across tabs",
+  });
+}
+
+// Voice "presence" (blue globe) follows the focused tab: the tab losing focus drops it,
+// the tab gaining focus takes it over. Works for BOTH session types — a global offscreen
+// session (instant visual attach) and a migrating in-tab session (the new tab spins one up,
+// the old tab tears its down). Gated on voice mode being on (offscreen active OR the
+// persistent sbVoiceModeOn flag), not just the offscreen session.
+let bgVoiceVisualTabId = null;
+let bgVoiceModeOn = false;
+chrome.storage.local.get(["sbVoiceModeOn"], (r) => { bgVoiceModeOn = !!r?.sbVoiceModeOn; });
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && "sbVoiceModeOn" in changes) {
+    bgVoiceModeOn = !!changes.sbVoiceModeOn.newValue;
+    if (!bgVoiceModeOn) bgVoiceVisualTabId = null;
+  }
+});
+
+function bgVoiceFollowing() { return bgRtSessionActive || bgVoiceModeOn; }
+
+function bgHandoffVoicePresence(newTabId) {
+  if (!bgVoiceFollowing() || newTabId == null) return;
+  // Detach the previous presence tab (if different) so it goes back to idle / stops.
+  if (bgVoiceVisualTabId != null && bgVoiceVisualTabId !== newTabId) {
+    chrome.tabs.sendMessage(bgVoiceVisualTabId, { action: "sbRtDetach" }, () => { void chrome.runtime.lastError; });
+  }
+  bgVoiceVisualTabId = newTabId;
+  chrome.tabs.sendMessage(newTabId, { action: "sbRtAttach" }, () => { void chrome.runtime.lastError; });
+}
+
+// Tab switch within a window.
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  bgHandoffVoicePresence(tabId);
+});
+
+// Window switch (e.g. moving to another browser window) — hand off to that window's active tab.
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (!bgVoiceFollowing() || windowId === chrome.windows.WINDOW_ID_NONE) return;
+  chrome.tabs.query({ active: true, windowId }, (tabs) => {
+    const id = tabs?.[0]?.id;
+    if (id != null) bgHandoffVoicePresence(id);
+  });
+});
+
+// Re-attach when the focused tab finishes navigating (fresh content script). The startup
+// storage check in __sbBuildBrainUI is the primary path; this is belt-and-suspenders.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (!bgVoiceFollowing() || changeInfo.status !== "complete") return;
+  chrome.tabs.get(tabId, (tab) => {
+    if (chrome.runtime.lastError || !tab?.active) return;
+    setTimeout(() => bgHandoffVoicePresence(tabId), 300);
+  });
+});
 
 async function startRecording(tabId, existingStreamId, withMic) {
   let streamId;

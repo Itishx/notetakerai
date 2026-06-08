@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.elevenlabs-tts]
 verify_jwt = false
+
+[functions.realtime-cost-log]
+verify_jwt = true
+
+[functions.realtime-costs-admin]
+verify_jwt = true

@@ -36,6 +36,7 @@ import Changelog from "./pages/Changelog.tsx";
 import BrainoLive from "./pages/BrainoLive.tsx";
 import Playground from "./pages/Playground.tsx";
 import BuildYourBraino from "./pages/BuildYourBraino.tsx";
+import RealtimeCosts from "./pages/RealtimeCosts.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -85,6 +86,7 @@ const App = () => {
               <Route path="/live" element={<BrainoLive />} />
               <Route path="/playground" element={<Playground />} />
               <Route path="/build-braino" element={<BuildYourBraino />} />
+              <Route path="/realtime-costs" element={<RealtimeCosts />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

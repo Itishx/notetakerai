@@ -585,6 +585,53 @@ async function __sbSpotifyPlayFirstTrackResult(songName) {
   return { error: `No playable Spotify track result was found for "${songName}".` };
 }
 
+// Set the Spotify WEB PLAYER volume directly via its media element. The Spotify Web
+// API cannot control the web player's volume, so we do it in the DOM where Braino lives.
+function __sbSpotifySetVolume(volumePercent, volumeStep) {
+  // Drive Spotify's own volume slider via its data-testid — more reliable than
+  // querySelectorAll("audio") which misses their shadow-DOM / iframe audio nodes.
+  const slider = document.querySelector('[data-testid="volume-bar"] input[type="range"]')
+    || document.querySelector('[data-testid="volume-bar-slider"]')
+    || document.querySelector('.volume-bar input[type="range"]');
+
+  let current = 50;
+  if (slider) {
+    const sMin = parseFloat(slider.min || "0");
+    const sMax = parseFloat(slider.max || "1");
+    const raw = parseFloat(slider.value || "0");
+    current = Math.round(((raw - sMin) / Math.max(sMax - sMin, 0.001)) * 100);
+  }
+
+  let target;
+  if (typeof volumePercent === "number" && !Number.isNaN(volumePercent)) {
+    target = volumePercent;
+  } else {
+    target = current + (Number(volumeStep) || 0);
+  }
+  target = Math.min(100, Math.max(0, Math.round(target)));
+
+  if (slider) {
+    // Spotify's slider range is 0–1, not 0–100. Scale target into slider's actual range.
+    const sMin = parseFloat(slider.min || "0");
+    const sMax = parseFloat(slider.max || "1");
+    const scaledValue = sMin + (target / 100) * (sMax - sMin);
+    // React-controlled input: set nativeInputValueSetter then fire synthetic events.
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    if (nativeInputValueSetter) nativeInputValueSetter.call(slider, scaledValue);
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+    return { ok: true, volumePercent: target };
+  }
+
+  // Fallback: try HTML audio/video elements (works on some setups)
+  const media = [...document.querySelectorAll("audio, video")];
+  let applied = false;
+  media.forEach((el) => {
+    try { if (target > 0 && el.muted) el.muted = false; el.volume = target / 100; applied = true; } catch (_) {}
+  });
+  return { ok: applied, volumePercent: target };
+}
+
 async function __sbSpotifyAddTrackToPlaylist(songName, playlistName) {
   const scrollEl = __sbAdapterGetScrollContainer();
 
@@ -1264,12 +1311,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse(await __sbSpotifyPlayFirstTrackResult(msg.songName || ""));
           return;
         }
+        if (msg.type === "spotifySetVolume") {
+          sendResponse(__sbSpotifySetVolume(
+            typeof msg.volumePercent === "number" ? msg.volumePercent : null,
+            msg.volumeStep,
+          ));
+          return;
+        }
         if (msg.type === "spotifyPlayTrackFromCurrentPlaylist") {
           sendResponse(await __sbSpotifyPlayTrackFromCurrentPlaylist(msg.songName || ""));
           return;
         }
         if (msg.type === "spotifyAddTrackToPlaylist") {
           sendResponse(await __sbSpotifyAddTrackToPlaylist(msg.songName || "", msg.playlistName || ""));
+          return;
+        }
+        if (msg.type === "mediumReadSearchResults") {
+          const selectors = [
+            "article h2", "article h3",
+            "[data-testid='post-preview'] h2",
+            "h2 a", "h3 a",
+          ];
+          const seen = new Set();
+          const articles = [];
+          for (const sel of selectors) {
+            for (const el of document.querySelectorAll(sel)) {
+              const title = el.innerText?.trim();
+              if (!title || seen.has(title)) continue;
+              seen.add(title);
+              const anchor = el.tagName === "A" ? el : (el.closest("a") || el.querySelector("a"));
+              articles.push({ title, url: anchor?.href || "" });
+              if (articles.length >= (msg.limit || 5)) break;
+            }
+            if (articles.length >= (msg.limit || 5)) break;
+          }
+          sendResponse({ articles });
+          return;
+        }
+        if (msg.type === "xReadFeed") {
+          const tweets = [...document.querySelectorAll('[data-testid="tweet"]')];
+          const posts = tweets.slice(0, msg.limit || 5).map(el => ({
+            author: el.querySelector('[data-testid="User-Name"]')?.innerText?.split("\n")[0] || "someone",
+            text: el.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "",
+          })).filter(p => p.text);
+          sendResponse({ posts });
           return;
         }
         if (msg.type === "googleDocsWriteArticle") {
@@ -1714,7 +1799,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === "voiceTransportStatus") {
-    const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Connecting…" };
+    const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Waking up…" };
     __sbSetVoiceStatusBadge(msg.status, labelMap[msg.status] || msg.status);
     return true;
   }
@@ -2143,21 +2228,33 @@ new MutationObserver(() => {
   }
 }).observe(document.body || document.documentElement, { childList: true, subtree: false });
 
-const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+// Animated SVG — groups have IDs so CSS keyframes can drive idle behaviour.
+// sbb-arm-l / sbb-arm-r : arm pivot groups (rotate at shoulder origin)
+// sbb-pupil-l / sbb-pupil-r : pupil + highlight pairs (translate for gaze drift)
+// sbb-eye-l / sbb-eye-r : eye whites (scaleY for blink)
+const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g><g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g><g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
 
 // Pupils shifted up-left to look toward top-left (center of screen when brain is at bottom-right)
+// Pupils are now inside <g id="sbb-pupil-*"> wrappers — target the content inside.
 const __SB_BRAIN_SVG_LISTENING = __SB_BRAIN_SVG
-  .replace('<circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/>',
-           '<circle cx="36.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="37.2" cy="45.1" r="1.1" fill="white"/>')
-  .replace('<circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
-           '<circle cx="60.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="61.2" cy="45.1" r="1.1" fill="white"/>');
+  .replace('<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+           '<g id="sbb-pupil-l"><circle cx="36.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="37.2" cy="45.1" r="1.1" fill="white"/></g>')
+  .replace('<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+           '<g id="sbb-pupil-r"><circle cx="60.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="61.2" cy="45.1" r="1.1" fill="white"/></g>');
 
+// Eye whites + pupils are now in separate <g id> groups — replace each group's content.
 const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
-  .replace('<circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/>',
-    '<circle cx="38" cy="48" r="6.5" fill="white"/><path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/><circle cx="62" cy="48" r="6.5" fill="white"/><path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/>')
+  .replace('<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>')
+  .replace('<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><path d="M 31.5 48 Q 38 54 44.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/></g>')
+  .replace('<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>')
+  .replace('<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><path d="M 55.5 48 Q 62 54 68.5 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round"/></g>')
   .replace('<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
     '<ellipse cx="28" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/><ellipse cx="72" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/>')
   .replace('<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
@@ -2179,6 +2276,13 @@ let __sbIsSpeaking = false;
 let __sbCurrentSpeechAudio = null;
 let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
+let __sbSpeechGeneration = 0;
+const __SB_TTS_PROVIDER = "elevenlabs";
+const __SB_TTS_ENDPOINT = "elevenlabs-tts";
+const __SB_TTS_RETRY_MIN_MS = 5000;
+const __SB_TTS_RETRY_MAX_MS = 12000;
+const __SB_FISH_JARVIS_VOICE_ID = "c5cf851eb2664ffaa929d17b899aa0a3";
+const __SB_ELEVENLABS_VOICE_ID = "vBKc2FfBKJfcZNyEt1n6";
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
@@ -2202,7 +2306,7 @@ let __sbCursorFollowPosition = null;
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
   if (event.data?.type !== "sbSetVoicePref") return;
-  const pref = event.data.pref === "elevenlabs" ? "elevenlabs" : "realtime";
+  const pref = ["fish", "elevenlabs", "realtime"].includes(event.data.pref) ? event.data.pref : "elevenlabs";
   __sbVoiceOutputPref = pref;
   chrome.storage.local.set({ brainoVoicePref: pref });
 });
@@ -2220,7 +2324,8 @@ if (__sbContextOk()) {
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
-        __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino" });
+        // Voice mode speaks the result with no panel; chat mode shows it.
+        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino" });
         __sbSetStopBtn(false);
         if (__sbRtAwaitingDelegateResult) {
           const finalText = String(msg.text || "").trim();
@@ -2232,22 +2337,112 @@ if (__sbContextOk()) {
                 await __sbSpeakWithPreferredVoice(finalText, "realtime");
               } finally {
                 __sbRtRelayingAppMessage = false;
+                __sbCompleteRealtimeCostTurn({ force: true });
                 if (__sbHeadphoneMode && !__sbVoicePendingReply) {
                   __sbSetHpBrainState("listening");
                 }
               }
             })();
+          } else {
+            __sbCompleteRealtimeCostTurn({ force: true });
           }
         }
       } else {
-        __sbShowBubble(msg.text, false, { tone: "status" });
+        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { tone: "status" });
         __sbSetStopBtn(true);
+        // Speak milestone hints in voice mode without flooding the user
+        if (msg.speakHint && __sbHeadphoneMode && !__sbRtRelayingAppMessage) {
+          void __sbSpeakWithPreferredVoice(msg.speakHint, "realtime");
+        }
       }
     }
     if (msg.action === "sbSpotifyState") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-      __sbApplySpotifyState(msg.state || {}, { openCard: !!msg.openCard, focusSpotify: !!msg.focusSpotify });
+      // FIX 3: never auto-open the inline Spotify modal on an action. Spotify opens in a
+      // new tab and Braino confirms verbally; we only update internal state (mascot
+      // visual). The panel still re-renders if the user already has it open, and the
+      // manual Spotify-visual click stays unaffected.
+      __sbApplySpotifyState(msg.state || {}, { openCard: false, focusSpotify: false });
     }
+    if (msg.action === "rtVoiceYield") {
+      // Another tab took over voice — stand down here so only one runs. Crucially, do NOT
+      // clear the global sbVoiceModeOn flag (that would turn voice off everywhere); just
+      // release this tab's presence. __sbReleaseVoicePresence keeps the global session
+      // alive in offscreen mode and tears down only the in-tab session otherwise.
+      if (__sbHeadphoneMode) __sbReleaseVoicePresence();
+      else if (__sbIsRealtimeVoiceReady()) __sbCleanupRealtimeVoice({ reason: "yielded_to_other_tab" });
+    }
+    // ── Offscreen realtime events ──────────────────────────────────────────
+    if (msg.action === "sbRtEvent") {
+      // Realtime event forwarded from offscreen via background — process it here.
+      try { __sbHandleRtEvent(msg.event); } catch (_) {}
+    }
+    if (msg.action === "sbRtSessionReady") {
+      // Offscreen session is up — configure usage tracking and mark ready.
+      __sbUseOffscreenRt = true;
+      __sbRtSessionReady = true;
+      __sbResetRealtimeConnectFailures();
+      __sbResetRealtimeUsageState();
+      if (msg.sessionId) {
+        __sbRtUsageSessionId = msg.sessionId;
+        __sbRtUsageLimitMs = Number(msg.limitMs || 0);
+      }
+      if (msg.realtimeModel) __sbRtRealtimeModel = String(msg.realtimeModel);
+      if (msg.transcriptionModel) __sbRtTranscriptionModel = String(msg.transcriptionModel);
+      if (msg.allocatedMs > 0) __sbScheduleRealtimeUsageCap(msg.allocatedMs);
+      if (__sbIsRecording) __sbStopRecording({ silent: true });
+      __sbStopSpeech();
+      try { chrome.runtime.sendMessage({ action: "rtVoiceClaim" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+      document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+      __sbSetVoiceStatusBadge("realtime", "Live AI");
+      __sbSetHpBrainState("listening");
+      void __sbSyncRealtimeVoiceInstructions();
+    }
+    if (msg.action === "sbRtSessionFailed") {
+      // Offscreen start failed (e.g. mic permission can't be granted in an invisible
+      // offscreen doc). Remember that so future tab switches skip offscreen and go straight
+      // to the in-tab session, then start the in-tab session here now.
+      const errorText = String(msg.error || "Live AI could not start.");
+      __sbUseOffscreenRt = false;
+      const quotaError = /limit|cap|used .*today|7-minute|429/i.test(errorText);
+      if (quotaError) {
+        if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure(errorText, { nonRetryable: true });
+        return;
+      }
+      if (/microphone|permission|notallowed|notreadable|getusermedia|device/i.test(errorText) && __sbContextOk()) {
+        chrome.storage.local.set({ sbOffscreenRtBroken: true });
+      }
+      if (__sbHeadphoneMode && !__sbIsRealtimeVoiceReady()) void __sbHandleRealtimeConnectFailure(errorText);
+    }
+    if (msg.action === "sbRtSessionEnded") {
+      // Offscreen session dropped — retry realtime first; legacy only starts after 3 failures.
+      __sbUseOffscreenRt = false;
+      __sbRtSessionReady = false;
+      if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
+    }
+    if (msg.action === "sbRtAttach") {
+      // Background says this tab is now focused and voice mode is on — take over presence.
+      // (Belt-and-suspenders alongside startup check + visibilitychange.)
+      if (!__sbOwnsInlineUi()) return;
+      if (__sbHeadphoneMode) void __sbSyncRealtimeVoiceInstructions();
+      else __sbEnsureVoicePresence();
+    }
+    if (msg.action === "sbRtDetach") {
+      // This tab lost focus to another — hand voice off.
+      if (!__sbOwnsInlineUi()) return;
+      __sbReleaseVoicePresence();
+    }
+    if (msg.action === "showMicPermission") {
+      // Background wants a one-time mic grant. Show it as a modal in THIS tab (same tab the
+      // user is on) via an extension-origin iframe, so the grant unlocks the offscreen doc.
+      if (!__sbOwnsInlineUi()) { sendResponse?.({ shown: false }); return; }
+      __sbShowMicPermissionModal().then((shown) => sendResponse?.({ shown }));
+      return true; // async response
+    }
+    if (msg.action === "hideMicPermission") {
+      __sbHideMicPermissionModal();
+    }
+    // ────────────────────────────────────────────────────────────────────────
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
   });
@@ -2273,6 +2468,69 @@ function __sbBuildBrainUI() {
       flex-shrink: 0;
     }
     #__sb_brain_btn__:hover { transform: scale(1.1); filter: drop-shadow(0 4px 16px rgba(200,84,74,0.7)); }
+
+    /* ── Idle animations: float + arm swing + gaze drift + blink ── */
+    #__sb_brain_btn__.sb-brain-idle {
+      animation: __sb_idle_float__ 3.8s ease-in-out infinite;
+    }
+    @keyframes __sb_idle_float__ {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-5px); }
+    }
+    /* Arms: left leads, right follows half-cycle behind — matches home mascot idle math */
+    #__sb_brain_btn__.sb-brain-idle #sbb-arm-l,
+    #__sb_brain_btn__.sb-brain-idle #sbb-arm-l-fill {
+      animation: __sb_arm_l__ 3.4s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-idle #sbb-arm-r,
+    #__sb_brain_btn__.sb-brain-idle #sbb-arm-r-fill {
+      animation: __sb_arm_r__ 3.4s ease-in-out infinite;
+    }
+    @keyframes __sb_arm_l__ {
+      0%   { transform: rotate(0deg);   }
+      25%  { transform: rotate(11deg);  }
+      75%  { transform: rotate(-11deg); }
+      100% { transform: rotate(0deg);   }
+    }
+    @keyframes __sb_arm_r__ {
+      0%   { transform: rotate(0deg);   }
+      25%  { transform: rotate(-11deg); }
+      75%  { transform: rotate(11deg);  }
+      100% { transform: rotate(0deg);   }
+    }
+    /* Gaze drift: pupils scan left→right slowly, offset slightly between eyes */
+    #__sb_brain_btn__.sb-brain-idle #sbb-pupil-l {
+      animation: __sb_gaze__ 4.2s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-idle #sbb-pupil-r {
+      animation: __sb_gaze__ 4.2s ease-in-out 0.4s infinite;
+    }
+    @keyframes __sb_gaze__ {
+      0%   { transform: translate(0px, 0px);    }
+      30%  { transform: translate(-0.8px, 0.2px); }
+      65%  { transform: translate(0.8px, -0.2px); }
+      100% { transform: translate(0px, 0px);    }
+    }
+    /* Blink: eye whites scaleY collapse every ~4s, super quick */
+    #__sb_brain_btn__.sb-brain-idle #sbb-eye-l {
+      animation: __sb_blink__ 4s ease-in-out infinite;
+    }
+    #__sb_brain_btn__.sb-brain-idle #sbb-eye-r {
+      animation: __sb_blink__ 4s ease-in-out 0.06s infinite;
+    }
+    @keyframes __sb_blink__ {
+      0%, 88%, 100% { transform: scaleY(1); }
+      92%            { transform: scaleY(0.08); }
+    }
+
+    /* ── Spotify / music glow — green-cyan pulsing to indicate listening to music ── */
+    @keyframes __sb_brain_glow_music__ {
+      0%, 100% { filter: drop-shadow(0 2px 8px rgba(29,185,84,0.35)); }
+      45%      { filter: drop-shadow(0 0 20px rgba(29,215,96,0.9)) drop-shadow(0 0 38px rgba(0,230,150,0.45)); }
+    }
+    #__sb_brain_btn__.sb-brain-music {
+      animation: __sb_brain_glow_music__ 2.2s ease-in-out infinite;
+    }
     #__sb_brain_btn__.recording {
       animation: __sb_pulse__ 1s ease-in-out infinite;
     }
@@ -3258,47 +3516,47 @@ function __sbBuildBrainUI() {
 
     /* ── Headphone Mode Brain Glows ── */
     @keyframes __sb_hp_listen__ {
-      0%,100% { filter: drop-shadow(0 0 20px rgba(210,40,40,0.75)) drop-shadow(0 0 7px rgba(210,40,40,0.5)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 44px rgba(220,40,40,1))    drop-shadow(0 0 16px rgba(220,40,40,0.7)); transform: scale(1.08); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.65)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(220,40,40,0.8))  drop-shadow(0 0 8px rgba(220,40,40,0.5)); }
     }
     @keyframes __sb_hp_captured__ {
-      0%,100% { filter: drop-shadow(0 0 24px rgba(255,195,0,0.9)) drop-shadow(0 0 10px rgba(255,170,0,0.6)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 52px rgba(255,215,0,1))   drop-shadow(0 0 22px rgba(255,185,0,0.8)); transform: scale(1.1); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(255,195,0,0.75)) drop-shadow(0 0 7px rgba(255,170,0,0.5)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(255,215,0,0.9))  drop-shadow(0 0 10px rgba(255,185,0,0.6)); }
     }
     @keyframes __sb_hp_speak__ {
-      0%,100% { filter: drop-shadow(0 0 18px rgba(210,40,40,0.7)) drop-shadow(0 0 6px rgba(210,40,40,0.4)); transform: scale(1.02); }
-      50%      { filter: drop-shadow(0 0 38px rgba(220,40,40,0.95)) drop-shadow(0 0 14px rgba(220,40,40,0.6)); transform: scale(1.06); }
+      0%,100% { filter: drop-shadow(0 0 16px rgba(210,40,40,0.6))  drop-shadow(0 0 5px rgba(210,40,40,0.35)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 30px rgba(220,40,40,0.85)) drop-shadow(0 0 10px rgba(220,40,40,0.55)); transform: scale(1.04); }
     }
     @keyframes __sb_hp_connect__ {
-      0%,100% { filter: drop-shadow(0 0 16px rgba(234,179,8,0.55)) drop-shadow(0 0 6px rgba(251,191,36,0.35)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 30px rgba(234,179,8,0.85)) drop-shadow(0 0 12px rgba(251,191,36,0.55)); transform: scale(1.05); }
+      0%,100% { filter: drop-shadow(0 0 14px rgba(234,179,8,0.5))  drop-shadow(0 0 5px rgba(251,191,36,0.3)); }
+      50%      { filter: drop-shadow(0 0 22px rgba(234,179,8,0.75)) drop-shadow(0 0 8px rgba(251,191,36,0.45)); }
     }
     /* Blue halo for Live AI (realtime) mode */
     @keyframes __sb_hp_connect_rt__ {
-      0%,100% { filter: drop-shadow(0 0 18px rgba(56,189,248,0.65)) drop-shadow(0 0 7px rgba(59,130,246,0.38)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 34px rgba(56,189,248,0.95)) drop-shadow(0 0 14px rgba(59,130,246,0.62)); transform: scale(1.06); }
+      0%,100% { filter: drop-shadow(0 0 16px rgba(56,189,248,0.55)) drop-shadow(0 0 6px rgba(59,130,246,0.32)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(56,189,248,0.8))  drop-shadow(0 0 10px rgba(59,130,246,0.5)); }
     }
     @keyframes __sb_hp_listen_rt__ {
-      0%,100% { filter: drop-shadow(0 0 22px rgba(59,130,246,0.85)) drop-shadow(0 0 8px rgba(99,179,255,0.55)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 48px rgba(59,130,246,1))    drop-shadow(0 0 18px rgba(99,179,255,0.8)); transform: scale(1.09); }
+      0%,100% { filter: drop-shadow(0 0 20px rgba(59,130,246,0.75)) drop-shadow(0 0 7px rgba(99,179,255,0.45)); }
+      50%      { filter: drop-shadow(0 0 30px rgba(59,130,246,0.9))  drop-shadow(0 0 11px rgba(99,179,255,0.6)); }
     }
     @keyframes __sb_hp_speak_rt__ {
-      0%,100% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.8)) drop-shadow(0 0 8px rgba(139,92,246,0.5)); transform: scale(1.02); }
-      50%      { filter: drop-shadow(0 0 42px rgba(99,102,241,1))   drop-shadow(0 0 16px rgba(139,92,246,0.75)); transform: scale(1.07); }
+      0%,100% { filter: drop-shadow(0 0 18px rgba(99,102,241,0.7))  drop-shadow(0 0 7px rgba(139,92,246,0.42)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 32px rgba(99,102,241,0.9))  drop-shadow(0 0 12px rgba(139,92,246,0.65)); transform: scale(1.04); }
     }
     @keyframes __sb_hp_captured_rt__ {
-      0%,100% { filter: drop-shadow(0 0 26px rgba(34,211,238,0.85)) drop-shadow(0 0 10px rgba(34,211,238,0.55)); transform: scale(1); }
-      50%      { filter: drop-shadow(0 0 54px rgba(34,211,238,1))    drop-shadow(0 0 22px rgba(34,211,238,0.8)); transform: scale(1.1); }
+      0%,100% { filter: drop-shadow(0 0 20px rgba(34,211,238,0.75)) drop-shadow(0 0 8px rgba(34,211,238,0.45)); }
+      50%      { filter: drop-shadow(0 0 30px rgba(34,211,238,0.9))  drop-shadow(0 0 12px rgba(34,211,238,0.6)); }
     }
-    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__ 1.1s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-listening { animation: __sb_hp_listen__  1.4s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-captured  { animation: __sb_hp_captured__ 0.5s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-speaking  { animation: __sb_hp_speak__   0.85s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite; }
     /* Realtime overrides — blue halo wins */
-    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.1s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-listening { animation: __sb_hp_listen_rt__   1.4s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-captured  { animation: __sb_hp_captured_rt__ 0.5s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-speaking  { animation: __sb_hp_speak_rt__    0.85s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite; }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -3454,9 +3712,38 @@ function __sbBuildBrainUI() {
     document.head.appendChild(xFontFix);
   }
 
-  // Brain hidden by default
+  // Brain hidden by default — but if Braino is active (docked), show it on this tab too.
+  // This makes Braino persist across tabs: once invoked, it follows you to every tab
+  // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
+  __sbStorageGet(["sbBrainDocked", "sbVoiceModeOn"]).then(({ sbBrainDocked, sbVoiceModeOn }) => {
+    if (!__sbOwnsInlineUi()) return;
+    // Show brain if docked OR if voice mode is on (voice takes over, so show it either way).
+    if (sbBrainDocked || sbVoiceModeOn) {
+      const b = document.getElementById("__sb_brain_btn__");
+      if (b) b.style.display = "";
+      __sbBrainVisible = true;
+      if (sbBrainDocked && !sbVoiceModeOn) __sbSyncIdleState();
+      if (!sbBrainDocked && sbVoiceModeOn && __sbContextOk()) {
+        chrome.storage.local.set({ sbBrainDocked: true });
+      }
+    }
+    // If voice mode is on AND this is the visible tab, take over presence immediately —
+    // no waiting for sbRtAttach (which races against script load). This is THE primary
+    // path for freshly-opened tabs (e.g. Braino opening Spotify). Hidden tabs stay idle.
+    if (sbVoiceModeOn && document.visibilityState === "visible") {
+      __sbEnsureVoicePresence();
+    }
+  });
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
+    // Tapping Braino always silences any ongoing speech first — a guaranteed "stop talking"
+    // affordance (covers browser-TTS answers that otherwise had no stop control in voice mode).
+    const speaking = __sbIsSpeaking || (typeof speechSynthesis !== "undefined" && speechSynthesis.speaking) || __sbHasActiveRealtimeResponse();
+    if (speaking) {
+      __sbStopSpeech();
+      if (__sbHeadphoneMode) { try { __sbInterruptRealtimeResponse(); } catch (_) {} __sbSetHpBrainState("listening"); }
+      return;
+    }
     if (__sbIsLectureRecording) {
       const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
       if (cardOpen) {
@@ -3902,6 +4189,8 @@ function __sbOpenAnchoredBrain() {
   __sbBrainVisible = true;
   __sbSetCursorRideMode(false);
   __sbToggleInput(true, { skipPersist: true });
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
+  __sbSyncIdleState();
 }
 
 function __sbDetectPageTheme() {
@@ -3948,6 +4237,7 @@ function __sbCollapseCard() {
     document.getElementById("__sb_bar__")?.classList.add("open");
   }
   __sbScheduleCursorFollow();
+  __sbSyncIdleState(); // back to docked idle — resume animations
 }
 
 function __sbStartOrbit() {
@@ -4790,11 +5080,13 @@ function __sbToggleBrain() {
     const wrap = document.getElementById("__sb_card_wrap__");
     if (wrap) wrap.classList.remove("visible");
     __sbStopOrbit();
+    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: false });
   } else {
     __sbBrainVisible = true;
     if (btn) btn.style.display = "";
     __sbSetCursorRideMode(false);
     __sbToggleInput(true, { skipPersist: true });
+    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
   }
 }
 
@@ -4836,6 +5128,9 @@ function __sbToggleInput(open, options = {}) {
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       __sbSetGreetingPlaceholder();
+      // Sync voice/headphone button state with current runtime state
+      document.getElementById("__sb_rec_btn__")?.classList.toggle("active", __sbHeadphoneMode);
+      document.getElementById("__sb_card_voice_mode_btn__")?.classList.toggle("active", __sbHeadphoneMode);
       __sbStorageGet(["aiProvider"]).then(({ aiProvider }) => {
         const model = aiProvider === "claude" ? "claude" : "lovable";
         document.querySelectorAll("#__sb_model_dropdown__ .sb-dropdown-item").forEach(b =>
@@ -5067,6 +5362,7 @@ function __sbSyncSpeakButtons() {
 }
 
 function __sbStopSpeech() {
+  __sbSpeechGeneration += 1;
   if (__sbHasActiveRealtimeResponse()) {
     __sbVoicePendingReply = false;
     __sbInterruptRealtimeResponse();
@@ -5089,9 +5385,13 @@ function __sbStopSpeech() {
   __sbSyncSpeakButtons();
 }
 
-function __sbSpeakWithBrowser(text) {
+function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
   return new Promise((resolve) => {
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      resolve(false);
+      return;
+    }
+    if (speechToken !== __sbSpeechGeneration) {
       resolve(false);
       return;
     }
@@ -5104,11 +5404,13 @@ function __sbSpeakWithBrowser(text) {
     if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
 
     const finish = () => {
-      if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
-      __sbIsSpeaking = false;
-      __sbSetVoiceButtonState(__sbIsRecording);
-      __sbSyncSpeakButtons();
-      resolve(true);
+      if (speechToken === __sbSpeechGeneration) {
+        if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
+        __sbIsSpeaking = false;
+        __sbSetVoiceButtonState(__sbIsRecording);
+        __sbSyncSpeakButtons();
+      }
+      resolve(speechToken === __sbSpeechGeneration);
     };
 
     utterance.onend = finish;
@@ -5118,42 +5420,124 @@ function __sbSpeakWithBrowser(text) {
   });
 }
 
-async function __sbSpeakText(text) {
+function __sbIsRetryableVoiceTtsStatus(status) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function __sbIsVoiceTtsCreditStatus(status, errorKind = "") {
+  const kind = String(errorKind || "").toLowerCase();
+  return status === 402 || status === 429 || kind.includes("credit") || kind.includes("rate_limit");
+}
+
+async function __sbReadTtsError(resp) {
+  const status = resp?.status || 0;
+  const errorKind = resp?.headers?.get?.("x-braino-tts-error") || "";
+  let message = `${__SB_TTS_PROVIDER} TTS failed: ${status}`;
+  try {
+    const data = await resp.clone().json();
+    if (data?.error) message = String(data.error);
+  } catch (_) {
+    try {
+      const text = await resp.clone().text();
+      if (text) message = text.slice(0, 300);
+    } catch (_) {}
+  }
+  const error = new Error(message);
+  error.status = status;
+  error.errorKind = errorKind;
+  error.isCreditIssue = __sbIsVoiceTtsCreditStatus(status, errorKind);
+  error.retryable = __sbIsRetryableVoiceTtsStatus(status)
+    && !error.isCreditIssue
+    && !String(errorKind || "").toLowerCase().includes("api_key");
+  return error;
+}
+
+async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + __SB_TTS_RETRY_MAX_MS;
+  let attempt = 0;
+  let lastError = null;
+
+  while (Date.now() < deadlineAt) {
+    attempt += 1;
+    if (speechToken !== __sbSpeechGeneration) return null;
+
+    try {
+      const resp = await fetch(url, request);
+      if (speechToken !== __sbSpeechGeneration) return null;
+
+      if (resp.ok) {
+        const provider = (resp.headers.get("x-braino-tts-provider") || "").toLowerCase();
+        if (provider === __SB_TTS_PROVIDER) return resp;
+        const providerError = new Error(`Unexpected TTS provider: ${provider || "unknown"}`);
+        providerError.retryable = false;
+        lastError = providerError;
+        break;
+      }
+
+      const httpError = await __sbReadTtsError(resp);
+      lastError = httpError;
+      if (httpError.isCreditIssue || !httpError.retryable) break;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError.retryable = true;
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    const mustKeepTrying = elapsedMs < __SB_TTS_RETRY_MIN_MS;
+    if (!mustKeepTrying && !lastError?.retryable) break;
+    if (!mustKeepTrying && Date.now() >= deadlineAt) break;
+
+    const backoffMs = Math.min(2200, 500 + attempt * 450);
+    const remainingMs = Math.max(0, deadlineAt - Date.now());
+    await new Promise((resolve) => setTimeout(resolve, Math.min(backoffMs, remainingMs)));
+  }
+
+  throw lastError || new Error(`${__SB_TTS_PROVIDER} TTS failed.`);
+}
+
+async function __sbSpeakText(text, options = {}) {
   const clean = __sbStripMarkdownForSpeech(text);
   if (!clean) return false;
 
   __sbStopSpeech();
+  const speechToken = ++__sbSpeechGeneration;
   let spoke = false;
-  const shouldMuteRealtimeMic = Boolean(__sbHeadphoneMode && __sbRtMic);
+  // In headphone (realtime) mode we DON'T mute the mic while Fish Audio speaks — the whole
+  // point of the realtime mechanism is that the user can barge in. The browser's echo
+  // cancellation (echoCancellation:true on the mic) keeps Braino's own voice from
+  // self-triggering, and speech_started stops playback the instant the user talks. We only
+  // mute in legacy (non-headphone) recording, where there's no barge-in VAD.
+  const shouldMuteRealtimeMic = false;
 
   try {
     if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(false);
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
-    if (!ttsToken) {
-      return await __sbSpeakWithBrowser(clean);
-    }
+    if (speechToken !== __sbSpeechGeneration) return false;
 
-    const resp = await fetch(`${__SB_API}/elevenlabs-tts`, {
+    // fish-audio-tts is public (verify_jwt=false) and uses a server-side key, so it works
+    // with just the anon apikey — no user token required. Send the token when we have it.
+    const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
+    if (ttsToken) headers.Authorization = `Bearer ${ttsToken}`;
+
+    const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: __SB_ANON_KEY,
-        Authorization: `Bearer ${ttsToken}`,
-      },
+      headers,
       body: JSON.stringify({
         text: clean,
-        voiceId: "vBKc2FfBKJfcZNyEt1n6",
       }),
-    });
+    }, speechToken);
+    if (!resp) return false;
 
-    if (resp.status === 401 || resp.status === 403) {
-      spoke = await __sbSpeakWithBrowser(clean);
-      return spoke;
-    }
-
-    if (!resp.ok) throw new Error(`TTS failed: ${resp.status}`);
-
+    const ttsProvider = resp.headers.get("x-braino-tts-provider") || __SB_TTS_PROVIDER;
+    const ttsContentType = resp.headers.get("content-type") || "";
     const blob = await resp.blob();
+    __sbRecordRealtimeCostTts({
+      provider: ttsProvider,
+      bytes: blob.size,
+      contentType: blob.type || ttsContentType,
+    });
+    if (speechToken !== __sbSpeechGeneration) return false;
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
 
@@ -5169,25 +5553,43 @@ async function __sbSpeakText(text) {
       audio.onerror = reject;
       audio.play().catch(reject);
     });
-    spoke = true;
+    spoke = speechToken === __sbSpeechGeneration;
   } catch (ttsErr) {
-    console.warn("[Braino] ElevenLabs TTS failed, using browser voice:", ttsErr?.message || ttsErr);
-    spoke = await __sbSpeakWithBrowser(clean);
+    if (speechToken !== __sbSpeechGeneration) return false;
+    __sbRecordRealtimeCostTts({
+      provider: "browser",
+      error: ttsErr?.message || String(ttsErr || "TTS failed"),
+    });
+    console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", ttsErr?.message || ttsErr);
+    const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
+    __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish credits" : "Browser voice");
+    if (__sbHeadphoneMode || __sbVoiceOnlyMode) {
+      __sbShowVoiceError(isCreditIssue
+        ? "Fish Audio credits or rate limit are exhausted. Falling back to browser voice for now."
+        : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.");
+    } else {
+      __sbShowBubble(isCreditIssue
+        ? "Fish Audio credits or rate limit are exhausted. Using browser voice."
+        : "Fish Audio voice is unavailable. Using browser voice.", true, { tone: "status" });
+    }
+    spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
-    if (__sbCurrentSpeechAudio) {
-      try { __sbCurrentSpeechAudio.pause(); } catch {}
-      __sbCurrentSpeechAudio = null;
-    }
-    if (__sbCurrentSpeechUrl) {
-      URL.revokeObjectURL(__sbCurrentSpeechUrl);
-      __sbCurrentSpeechUrl = null;
-    }
-    __sbIsSpeaking = false;
-    __sbSetVoiceButtonState(__sbIsRecording);
-    __sbSyncSpeakButtons();
-    // After speaking ends in headphone mode, go back to listening
-    if (__sbHeadphoneMode && !__sbVoicePendingReply) {
-      __sbSetHpBrainState("listening");
+    if (speechToken === __sbSpeechGeneration) {
+      if (__sbCurrentSpeechAudio) {
+        try { __sbCurrentSpeechAudio.pause(); } catch {}
+        __sbCurrentSpeechAudio = null;
+      }
+      if (__sbCurrentSpeechUrl) {
+        URL.revokeObjectURL(__sbCurrentSpeechUrl);
+        __sbCurrentSpeechUrl = null;
+      }
+      __sbIsSpeaking = false;
+      __sbSetVoiceButtonState(__sbIsRecording);
+      __sbSyncSpeakButtons();
+      // After speaking ends in headphone mode, go back to listening
+      if (__sbHeadphoneMode && !__sbVoicePendingReply) {
+        __sbSetHpBrainState("listening");
+      }
     }
     if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(true);
   }
@@ -5262,12 +5664,30 @@ function __sbSpotifyIsPlaying() {
   return Boolean(__sbSpotifyUiState?.nowPlaying?.isPlaying);
 }
 
+function __sbSyncIdleState() {
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (!brain || !__sbBrainVisible) return;
+  // Idle animation runs when Braino is docked but not doing anything active.
+  // Removed by music/recording/headphone/speaking states below; re-added here.
+  const busy = brain.classList.contains("recording")
+    || brain.classList.contains("sb-brain-spotify")
+    || brain.classList.contains("sb-brain-music")
+    || brain.classList.contains("hp-connecting")
+    || brain.classList.contains("hp-listening")
+    || brain.classList.contains("hp-captured")
+    || brain.classList.contains("hp-speaking");
+  brain.classList.toggle("sb-brain-idle", !busy);
+}
+
 function __sbSyncSpotifyVisualState() {
   const brain = document.getElementById("__sb_brain_btn__");
   const bubble = document.getElementById("__sb_bubble__");
   const active = __sbSpotifyIsPlaying();
-  brain?.classList.toggle("sb-brain-spotify", active);
+  // Swap the orange Spotify class for a distinct music-glow class while playing.
+  brain?.classList.toggle("sb-brain-spotify", false); // retire the old orange glow
+  brain?.classList.toggle("sb-brain-music", active);
   bubble?.classList.toggle("sb-spotify-active", active);
+  __sbSyncIdleState();
   // Hide the floating bar while music is playing
   if (active) {
     const bar = document.getElementById("__sb_bar__");
@@ -5657,24 +6077,434 @@ function __sbGetPageContext(maxChars = 12000) {
 }
 
 function __sbIsExplicitWebSearchRequest(text) {
-  // Explicit search commands
-  if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|google\b|search for\b)\b/i.test(text)) return true;
+  // Explicit search commands ("web up" = common mis-hear of "look up")
+  if (/\b(search (the )?web|web search|search online|look (this|that|it) up|look up|web up|google\b|search for\b)\b/i.test(text)) return true;
+  // Find/read articles/papers/info on a topic — informational look-ups (no specific app).
+  // These want an ANSWER, so they go through web search, never the typing automation agent.
+  if (/\b(find|pull up|bring up|read|whip up|get|give)\b.{0,30}\b(article|articles|paper|papers|story|stories|post|posts|info|information|page|website|link|links|blog|blogs)\b/i.test(text)) return true;
+  if (/\b(articles?|papers?|blogs?)\s+(on|about|regarding)\b/i.test(text)) return true;
   // Freshness signals — needs live data
   if (/\b(latest|current|today|right now|as of|this week|this month|this year|recent|news|price of|stock|weather|score|standings|live|just happened|breaking|update on|status of|is .{1,40} still|did .{1,30} happen|when did|who won|who is winning|what happened|trending)\b/i.test(text)) return true;
   return false;
+}
+
+function __sbIsSiteScopedBrowseSearch(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+
+  const hasMedium = /\bmedium(?:\.com)?\b/.test(t);
+  if (hasMedium && /\b(open|go to|navigate|visit|find|search|look for|pull up|bring up|read|show|articles?|posts?|blogs?)\b/.test(t)) {
+    return true;
+  }
+
+  const hasExplicitDomain = /\b[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:\/\S*)?\b/i.test(t);
+  const hasKnownSite = /\b(youtube|spotify|reddit|amazon|netflix|linkedin|twitter|x\.com|maps|google maps)\b/.test(t);
+  if (!hasExplicitDomain && !hasKnownSite) return false;
+
+  const hasBrowseVerb = /\b(open|go to|navigate|visit|find|search|look for|pull up|bring up|read|show)\b/.test(t);
+  const hasScopedHint = /\b(there|over there|on there|in there|on that site|inside that site|articles?|posts?|blogs?|videos?|songs?|playlists?|results?)\b/.test(t);
+  return hasBrowseVerb && hasScopedHint;
+}
+
+function __sbShouldOpenVisibleGoogleSearch(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  if (/^google\s+.+/.test(t)) return true;
+  if (/\bsearch\s+.+\s+on\s+google\b/.test(t)) return true;
+  if (/\b(open|show|display|pull up|bring up)\b.{0,60}\bgoogle\b/.test(t)) return true;
+  if (/\bgoogle\b.{0,60}\b(search|results?|tab|page)\b/.test(t)) return true;
+  if (/\b(open|show|display|pull up|bring up)\b.{0,60}\bsearch results?\b/.test(t)) return true;
+  return false;
+}
+
+// Strip conversational filler from a spoken request so it becomes a clean search query.
+// "I would like to read some articles on how to make good coffee. Can you please web up
+//  some articles on Medium for me?" → "how to make good coffee articles medium"
+function __sbExtractSearchQuery(text) {
+  let q = String(text || "").toLowerCase();
+  // Drop polite/command wrappers anywhere in the text.
+  const fillers = [
+    /\bi(?:'d| would| wanna| want to| would like to| need to| need)\b/g,
+    /\bcan you(?: please)?\b/g, /\bcould you(?: please)?\b/g, /\bwould you(?: please)?\b/g,
+    /\bplease\b/g, /\bfor me\b/g, /\bhelp me\b/g, /\bi'm looking for\b/g, /\blooking for\b/g,
+    /\b(?:web|look|pull|bring) up\b/g, /\bsearch(?: for| the web| online)?\b/g, /\bgoogle\b/g,
+    /\bfind(?: me)?\b/g, /\bget(?: me)?\b/g, /\bgive me\b/g, /\bshow me\b/g, /\bread(?: me)?\b/g,
+    /\bwhip up\b/g, /\btell me about\b/g, /\bsome\b/g, /\ba few\b/g,
+    /\b(?:an?|the)\b/g,
+  ];
+  for (const re of fillers) q = q.replace(re, " ");
+  q = q.replace(/[?!.,]+/g, " ").replace(/\s+/g, " ").trim();
+  // If we stripped everything, fall back to the original (minus trailing punctuation).
+  if (q.length < 2) return String(text || "").replace(/[?!.]+$/g, "").trim();
+  return q;
 }
 
 function __sbIsBrowserActionCommand(text) {
   return /\b(open|go to|navigate to|visit|search for|play|pause|resume|continue|next|previous|prev|skip|stop|send|click|find|buy|order|type|compose|reply to|download|post on|scroll|refresh|close tab|new tab|book|fill in|fill out|submit|press)\b/i.test(text);
 }
 
+function __sbIsVolumeCommand(text) {
+  const t = String(text || "").toLowerCase();
+  return /\bvolume\b/.test(t)
+    || /\b(louder|quieter|softer|loud)\b/.test(t)
+    || /\b(turn|crank|pump|bump)\s+(it|the\s+(music|sound|volume|song))?\s*(up|down)\b/.test(t)
+    || /\b(increase|decrease|raise|lower|boost|reduce)\b.*\b(volume|sound|music|it)\b/.test(t);
+}
+
+// Parse a volume command into an absolute percent or a relative step. "increase/louder/up"
+// with no number defaults to +20%; "decrease/lower/quieter/down" to -20%.
+function __sbParseVolumeCommand(text) {
+  const t = String(text || "").toLowerCase();
+  if (/\b(mute|silence|silent)\b/.test(t)) return { volumePercent: 0 };
+  if (/\b(full|max(imum)?)\s*(volume|vol)?\b/.test(t) || /\ball\s+the\s+way\s+up\b/.test(t)) return { volumePercent: 100 };
+  const exact = t.match(/(?:to|at)\s+(\d{1,3})\s*%?/) || t.match(/(\d{1,3})\s*%/) || t.match(/(\d{1,3})\s+percent/);
+  if (exact) return { volumePercent: Math.min(100, Math.max(0, parseInt(exact[1], 10))) };
+  const louder = /\b(louder|raise|increase|boost|higher|crank|pump|bump)\b/.test(t)
+    || /\b(turn|volume|sound|music|it)\b.*\bup\b/.test(t) || /\bup\b/.test(t);
+  const quieter = /\b(quieter|softer|lower|decrease|reduce|dimmer)\b/.test(t)
+    || /\b(turn|volume|sound|music|it)\b.*\bdown\b/.test(t) || /\bdown\b/.test(t);
+  if (quieter && !louder) return { volumeStep: -20 };
+  if (louder) return { volumeStep: +20 };
+  return null;
+}
+
+async function __sbHandleVolumeCommand(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null;
+  const parsed = __sbParseVolumeCommand(promptText);
+  if (!parsed) return false;
+  try {
+    const res = await new Promise((resolve) =>
+      chrome.runtime.sendMessage({ action: "adjustSpotifyVolume", ...parsed }, (r) => { void chrome.runtime.lastError; resolve(r || {}); })
+    );
+    let reply;
+    if (res?.ok) {
+      reply = res.muted ? "Muted." : `Volume set to ${res.volumePercent}%.`;
+    } else {
+      reply = res?.error || "I couldn't change the volume — make sure something's playing in Spotify.";
+    }
+    if (fromVoice) await __sbSpeakWithPreferredVoice(reply, voiceOutput);
+    else __sbShowBubble(reply, false, { tone: "status" });
+  } catch (_) {
+    if (fromVoice) await __sbSpeakWithPreferredVoice("I couldn't change the volume.", voiceOutput);
+  } finally {
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+  }
+  return true;
+}
+
+// Detect transcription hallucinations that gpt-4o-transcribe / Whisper emit on music,
+// silence, or background noise — so we don't feed garbage to the model (→ gibberish replies).
+// Conservative: only filters non-speech symbols and the well-known phantom phrases, so real
+// short commands ("stop", "next", "louder", "yes") still pass through.
+function __sbIsJunkTranscript(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return true;
+  // No word characters at all (pure punctuation / music notes ♪ ♫ / dots).
+  if (!/[a-z0-9]/i.test(raw)) return true;
+  // Bracketed sound-effect captions: [music], (applause), [silence], *laughs*.
+  if (/^[\[\(\*].*[\]\)\*]$/.test(raw)) return true;
+  const norm = raw.toLowerCase().replace(/[^a-z\s]/g, "").replace(/\s+/g, " ").trim();
+  // Classic silence/music phantom outputs.
+  const phantoms = new Set([
+    "you", "thank you", "thank you so much", "thanks for watching",
+    "thanks for watching everyone", "please subscribe", "subscribe",
+    "bye", "bye bye", "okay", "music", "applause", "silence", "the end",
+  ]);
+  if (phantoms.has(norm)) return true;
+  return false;
+}
+
+function __sbIsCloseTabsCommand(text) {
+  const t = String(text || "").toLowerCase();
+  // "can you close some tabs" / "remove unused tabs" / "kill some tabs" / "too many tabs"
+  if (/\btabs?\b/.test(t)) {
+    if (/\b(close|shut|kill|remove|get\s+rid\s+of|clean\s*up|clear|declutter|trim|wipe|dump|fewer)\b/.test(t)) return true;
+    if (/\b(too\s+many|a\s+lot\s+of|so\s+many)\b/.test(t)) return true;
+    if (/\b(not\s+need(ed|ing)?|not\s+us(ing|ed)|unused|irrelevant|unnecessary|unimportant|useless)\b/.test(t)) return true;
+  }
+  return false;
+}
+
+function __sbIsTabsQuery(text) {
+  const t = String(text || "").toLowerCase();
+  if (!/\btabs?\b/.test(t)) return false;
+  return /\bhow\s+many\s+tabs?\b/.test(t)
+    || /\bwhat('?s| is| are)?\b.*\btabs?\b/.test(t)
+    || /\b(list|show|see|read|name|tell\s+me|go\s+through|run\s+through)\b.*\btabs?\b/.test(t)
+    || /\btabs?\b.*\b(out|open|list|are)\b/.test(t)
+    || /\b(across|all)\b.*\btabs?\b/.test(t)
+    || /\bmy\s+(other\s+)?tabs?\b/.test(t);
+}
+
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
+  // Volume is a Spotify delegate action — route to agent (works in chat & realtime voice).
+  if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
+  if (__sbIsSiteScopedBrowseSearch(t)) return "agent";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (__sbIsBrowserActionCommand(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
   return "chat";
+}
+
+/* === BRAINO X INTEGRATION MAP (as of this change) ===
+ * On-demand read endpoints:
+ *   - x-status             (Bearer JWT, POST) -> { connected, followers:{count,delta7d}, lastTweet, mentions[], totals }  (NEW)
+ *   - x-auto-public-stats  (service role, ?username=) -> totals, recent_posts[] (likes/rt/replies/text), recent_replies[]  — NO followers
+ *   - x-connection-status  (?userIdentifier=)         -> { connected, username, displayName }
+ * Buried read helpers (cron-only, exposed via x-status) in _shared/x-auto-sessions.ts:
+ *   - getAuthorizedXContext(supabase,userId) -> {accessToken,xUserId,username,displayName}; throws "No X account linked" if disconnected
+ *   - fetchAccountSnapshot(token,xUserId)    -> { followersCount, repliesReceived, totalViews }   (LIVE)
+ *   - fetchMentionsSince(token,xUserId,since,n) -> { mentions[], usersById, newestMentionId }      (LIVE)
+ * Write/automation: x-assistant (post/schedule/queue), x-auto-generate, x-auto-engage, dispatch-scheduled-x-posts.
+ * Delta baseline: x_follower_snapshots table (upserted daily by x-status); delta omitted until a 7-day baseline exists.
+ */
+
+function __sbIsXStatusRequest(text) {
+  const t = String(text || "").toLowerCase();
+  // Always-X signals (no "twitter"/"x" word needed)
+  if (/\bhow many followers?\b/.test(t) || /\bfollower count\b/.test(t)) return true;
+  if (/\bdid anyone mention me\b/.test(t)) return true;
+  if (/\b(tweet|post) performance\b/.test(t)) return true;
+  if (/\bhow\b.*\blast (tweet|post)\b/.test(t)) return true; // "how did my last tweet do"
+  if (/\b(any|got any|new|check (my|for))\b.*\bmentions?\b/.test(t)) return true;
+  // Does it reference the user's X / Twitter account?
+  const aboutX = /\btwitter\b/.test(t)
+    || /\bmy x\b/.test(t)
+    || /\bon x\b/.test(t)
+    || /\bx (account|profile|stats?|statistics|status|summary|numbers?)\b/.test(t)
+    || /\b(twitter|x) (stats?|statistics|status|summary|numbers?)\b/.test(t);
+  if (!aboutX) return false;
+  // X reference + a status/stat-ish word (loose phrasing: "how is my twitter looking", "twitter doing")
+  return /\b(how|hows|doing|look|looking|going|perform|performance|stat|stats|statistics|status|summary|update|check|number|numbers|grow|growing|growth|engagement|mention|mentions|followers?)\b/.test(t);
+}
+
+function __sbIsXLastTweetRequest(text) {
+  const t = String(text || "").toLowerCase();
+  return /\bwhat\s+(did|was|does)\b.*\blast\s+(tweet|post)\b/.test(t)
+    || /\bread\s+(me\s+)?my\s+last\s+(tweet|post)\b/.test(t)
+    || /\bmy\s+last\s+(tweet|post)\b.*\b(say|said|about|content|text)\b/.test(t);
+}
+
+function __sbXFirst12Words(text) {
+  const words = String(text || "").trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  if (words.length <= 12) return words.join(" ");
+  return words.slice(0, 12).join(" ") + "…";
+}
+
+// Build the spoken/displayed summary. Specific asks get a single sentence; a general
+// "stats" ask gets the 3-sentence combo. Sentences are omitted when data is missing.
+function __sbFormatXStatus(promptText, data) {
+  const t = String(promptText || "").toLowerCase();
+  const wantsFollowers = /\bfollowers?\b/.test(t);
+  const wantsMentions = /\bmention/.test(t);
+  const wantsLastTweet = /\blast\s+(tweet|post)\b/.test(t) || /\b(tweet|post)\s+performance\b/.test(t);
+  const general = !(wantsFollowers || wantsMentions || wantsLastTweet);
+
+  const followerSentence = () => {
+    const raw = data?.followers?.count;
+    if (raw == null) return "You're connected to X, but I couldn't pull your live follower count just now — try again in a moment.";
+    const count = Number(raw).toLocaleString();
+    const delta = data?.followers?.delta7d;
+    let s = `You have ${count} followers on X.`;
+    if (delta != null && delta !== 0) {
+      const sign = delta > 0 ? "+" : "";
+      s += ` You ${delta > 0 ? "gained" : "lost"} ${sign}${delta} in the last 7 days.`;
+    }
+    return s;
+  };
+
+  const mentionSentence = () => {
+    const mentions = Array.isArray(data?.mentions) ? data.mentions : [];
+    if (!mentions.length) return "You have no new mentions right now.";
+    const top = mentions[0];
+    return `You have ${mentions.length} new mention${mentions.length === 1 ? "" : "s"}. `
+      + `The most recent is from @${top.handle}: '${__sbXFirst12Words(top.text)}'.`;
+  };
+
+  const lastTweetSentence = () => {
+    const lt = data?.lastTweet;
+    if (!lt) return "";
+    return `Your last tweet got ${lt.likes} likes, ${lt.retweets} retweets, and ${lt.replies} replies.`;
+  };
+
+  if (general) {
+    return [followerSentence(), mentionSentence(), lastTweetSentence()].filter(Boolean).join(" ");
+  }
+  if (wantsFollowers) return followerSentence();
+  if (wantsMentions) return mentionSentence();
+  if (wantsLastTweet) return lastTweetSentence() || "You haven't posted anything through Braino yet.";
+  return followerSentence();
+}
+
+let __sbXLastStatus = null;
+
+async function __sbHandleXStatus(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  // Voice mode (voice-only) speaks with no UI; chat mode renders the reply and never speaks.
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (showUi) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    if (brainBtn) brainBtn.classList.add("recording");
+  }
+
+  try {
+    const data = await __sbRuntimeMessage({ action: "getXStatus" });
+
+    if (!data || data.error) {
+      const msg = "I couldn't reach X right now — try again in a moment.";
+      if (showUi) __sbShowBubble(msg, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(msg, voiceOutput);
+      return;
+    }
+
+    if (data.connected === false) {
+      const spoken = "Your X account isn't connected. Want me to open settings?";
+      const rich = `${spoken}\n\n[Open Braino settings](https://trybraino.com/dashboard)`;
+      __sbChatHistory.push({ role: "user", content: promptText });
+      __sbChatHistory.push({ role: "assistant", content: rich });
+      if (showUi) __sbShowBubble(rich, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(spoken, voiceOutput);
+      return;
+    }
+
+    __sbXLastStatus = data;
+    const formatted = __sbFormatXStatus(promptText, data);
+    console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
+    __sbChatHistory.push({ role: "user", content: promptText });
+    __sbChatHistory.push({ role: "assistant", content: formatted });
+    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
+  } finally {
+    if (brainBtn) brainBtn.classList.remove("recording");
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+async function __sbHandleXLastTweet(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (showUi) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    if (brainBtn) brainBtn.classList.add("recording");
+  }
+
+  try {
+    let data = __sbXLastStatus;
+    if (!data?.lastTweet) data = await __sbRuntimeMessage({ action: "getXStatus" }) || data;
+    if (data) __sbXLastStatus = data;
+
+    if (data && data.connected === false) {
+      const spoken = "Your X account isn't connected. Want me to open settings?";
+      const rich = `${spoken}\n\n[Open Braino settings](https://trybraino.com/dashboard)`;
+      if (showUi) __sbShowBubble(rich, false, { rich: true, kicker: "Braino" });
+      if (fromVoice) await __sbSpeakWithPreferredVoice(spoken, voiceOutput);
+      return;
+    }
+
+    const lt = data?.lastTweet;
+    const formatted = lt?.text
+      ? `Your last tweet said: '${lt.text}'`
+      : "You haven't posted anything through Braino yet.";
+    console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
+    __sbChatHistory.push({ role: "user", content: promptText });
+    __sbChatHistory.push({ role: "assistant", content: formatted });
+    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
+  } finally {
+    if (brainBtn) brainBtn.classList.remove("recording");
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+async function __sbHandleTabsQuery(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (showUi) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    if (brainBtn) brainBtn.classList.add("recording");
+  }
+  try {
+    const data = await __sbRuntimeMessage({ action: "getTabsOverview" });
+    let formatted;
+    if (!data || data.error) {
+      formatted = "I couldn't read your tabs just now — try again in a moment.";
+    } else {
+      const count = Number(data.count || 0);
+      const windowCount = Number(data.windowCount || 1);
+      const windowSuffix = windowCount > 1 ? ` across ${windowCount} windows` : "";
+      const wantsList = /\b(list|show|see|read|name|tell\s+me|go\s+through|run\s+through|what\s+tabs?|which\s+tabs?)\b/.test(promptText.toLowerCase());
+      if (count <= 1 && !wantsList) {
+        formatted = "You only have this tab open right now.";
+      } else if (!wantsList) {
+        formatted = `You have ${count} tab${count === 1 ? "" : "s"} open${windowSuffix}.`;
+      } else {
+        const titles = (data.tabs || [])
+          .map((t) => t.title)
+          .filter(Boolean)
+          .slice(0, 8);
+        formatted = titles.length
+          ? `You have ${count} tab${count === 1 ? "" : "s"} open${windowSuffix}: ${titles.join("; ")}.`
+          : `You have ${count} tab${count === 1 ? "" : "s"} open${windowSuffix}.`;
+      }
+    }
+    __sbChatHistory.push({ role: "user", content: promptText });
+    __sbChatHistory.push({ role: "assistant", content: formatted });
+    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
+  } finally {
+    if (brainBtn) brainBtn.classList.remove("recording");
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+async function __sbHandleCloseTabs(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (showUi) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, promptText);
+    __sbOpenCard({ rich: true });
+    if (brainBtn) brainBtn.classList.add("recording");
+  }
+  try {
+    // Immediate verbal ack, then close.
+    if (fromVoice) await __sbSpeakWithPreferredVoice("Closing, sir.", voiceOutput);
+    const data = await __sbRuntimeMessage({ action: "closeIrrelevantTabs", instruction: promptText });
+    let formatted;
+    if (!data || data.error) {
+      formatted = "I couldn't close any tabs just now — try again in a moment.";
+    } else if (!data.closedCount) {
+      formatted = "Nothing to close — everything looks in use.";
+    } else {
+      const names = (data.closed || []).slice(0, 5).join("; ");
+      formatted = `Closed ${data.closedCount} tab${data.closedCount === 1 ? "" : "s"}${names ? `: ${names}` : ""}. Kept your active, pinned, and playing tabs.`;
+    }
+    __sbChatHistory.push({ role: "user", content: promptText });
+    __sbChatHistory.push({ role: "assistant", content: formatted });
+    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
+  } finally {
+    if (brainBtn) brainBtn.classList.remove("recording");
+    __sbCompleteVoiceTurn(ctx);
+  }
 }
 
 function __sbFormatWebSearchResults(query, searchData) {
@@ -5936,6 +6766,13 @@ async function __sbProcessPrompt(text, options = {}) {
     ? options.forceIntent
     : null;
   const intent = forceIntent || routing.intent;
+  if (fromVoice && voiceOutput === "realtime") {
+    __sbPatchRealtimeCostTurn({
+      routeIntent: intent,
+      routeMode: forcedMode,
+      connector: connectorHint,
+    });
+  }
 
   // "What's new / what's in you?" — Braino reads the changelog in first person, then flips the question back
   if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you|what'?s?\s+in\s+you|what\s+(can|do)\s+you\s+(do|have)|what\s+are\s+you\s+capable|what\s+are\s+your\s+(features?|abilities|capabilities)|tell\s+me\s+(about\s+yourself|what\s+you\s+can\s+do)/i.test(promptText)) {
@@ -5943,7 +6780,7 @@ async function __sbProcessPrompt(text, options = {}) {
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
     __sbChatHistory.push({ role: "user", content: promptText });
-    const reply = "Quite a bit, actually — here's what's new:\n\n**Fly mode** — Press Cmd+S and I'll follow your cursor around the screen like a little satellite. Press it again and I dock back to the corner.\n\n**Voice mode sees the page** — I can now read whatever you're looking at the moment you activate live voice. Ask me to summarise an article, explain something on screen, or answer a question about the page — I've got it.\n\n**Spotify control** — Tell me to play a song and I'll open Spotify in a new tab and start it. You can also say \"lower the volume\" or \"raise the volume\" and I'll handle that too.\n\n**Voice browsing theatrics** — When you ask me something in voice mode that needs a web search, I'll open a real Google tab so you can see me working. The answer still comes from AI search and I speak it back to you.\n\n**Live voice daily cap** — Realtime voice sessions are now tracked server-side with a 7-minute daily limit so things stay fair and fast.\n\nWhat do you want to try first?";
+    const reply = "Quite a bit, actually — here's what's new:\n\n**Fly mode** — Press Cmd+S and I'll follow your cursor around the screen like a little satellite. Press it again and I dock back to the corner.\n\n**Voice mode sees the page** — I can now read whatever you're looking at the moment you activate live voice. Ask me to summarise an article, explain something on screen, or answer a question about the page — I've got it.\n\n**Spotify control** — Tell me to play a song and I'll open Spotify in a new tab and start it. You can also say \"lower the volume\" or \"raise the volume\" and I'll handle that too.\n\n**Voice web research** — When you ask me something that needs the web, I'll research in the background and speak the answer back. I only open a visible Google tab when you explicitly ask for Google or search results.\n\n**Live voice daily cap** — Realtime voice sessions are now tracked server-side with a 7-minute daily limit so things stay fair and fast.\n\nWhat do you want to try first?";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -5957,25 +6794,45 @@ async function __sbProcessPrompt(text, options = {}) {
 
   // Braino's favorite song easter egg
   if (/\bfavou?rite\b/i.test(promptText)) {
-    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-    __sbShowThinking(scroll, promptText);
-    __sbOpenCard({ rich: true });
     const result = await new Promise(resolve =>
       chrome.runtime.sendMessage({ action: "playBrainoFavoriteSong" }, r => resolve(r || {}))
     );
-    __sbChatHistory.push({ role: "user", content: promptText });
     const reply = result.ok
       ? "Playing my favorite song for you ♫"
       : result.error?.includes("device")
         ? "Open Spotify on your phone or desktop first, then ask me again ♫"
         : "Spotify isn't connected yet — [connect it here](https://trybraino.com/dashboard).";
+    __sbChatHistory.push({ role: "user", content: promptText });
     __sbChatHistory.push({ role: "assistant", content: reply });
-    __sbCardTurns.push({ prompt: promptText, answer: reply });
-    const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-    __sbRenderCardHistory(scrollEl);
-    __sbOpenCard({ rich: true });
+    __sbShowBubble(reply, true, { rich: true });
     if (fromVoice) await speakVoiceReply(reply);
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // X (Twitter) status — answered inline with real data + TTS, panel stays open.
+  if (__sbIsXLastTweetRequest(promptText)) {
+    await __sbHandleXLastTweet(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  if (__sbIsXStatusRequest(promptText)) {
+    await __sbHandleXStatus(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Volume — handle directly (instant, no premium agent). "increase/louder" defaults to +20%.
+  if (__sbIsVolumeCommand(promptText)) {
+    const handled = await __sbHandleVolumeCommand(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    if (handled) return;
+  }
+
+  // Cross-tab awareness & control (close before query — a close command also says "tabs").
+  if (__sbIsCloseTabsCommand(promptText)) {
+    await __sbHandleCloseTabs(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  if (__sbIsTabsQuery(promptText)) {
+    await __sbHandleTabsQuery(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 
@@ -6018,11 +6875,11 @@ async function __sbProcessPrompt(text, options = {}) {
 
   if (intent === "web") {
     const voiceOnly = fromVoice && __sbVoiceOnlyMode;
-    if (voiceOnly) {
-      // Theatre: open a real Google search tab so it looks like Braino is browsing
+    const searchQuery = __sbExtractSearchQuery(promptText); // clean query, not the raw sentence
+    if (voiceOnly && __sbShouldOpenVisibleGoogleSearch(promptText)) {
       chrome.runtime.sendMessage({
         action: "openTab",
-        url: "https://www.google.com/search?q=" + encodeURIComponent(promptText),
+        url: "https://www.google.com/search?q=" + encodeURIComponent(searchQuery),
         active: true,
       }, () => { void chrome.runtime.lastError; });
     }
@@ -6035,7 +6892,7 @@ async function __sbProcessPrompt(text, options = {}) {
     __sbChatHistory.push({ role: "user", content: promptText });
 
     try {
-      const searchData = await __sbPerformWebSearch(promptText, {
+      const searchData = await __sbPerformWebSearch(searchQuery, {
         purpose: "answer",
         aiProvider,
         chatHistory: previousHistory,
@@ -6415,9 +7272,11 @@ let __sbRtPeerConnection = null;
 let __sbRtDataChannel = null;
 let __sbRtMic = null;
 let __sbRtRemoteAudio = null;
+let __sbUseOffscreenRt = false; // true when realtime session lives in the offscreen doc
 const __SB_REALTIME_VOICE = "verse";
-let __sbVoiceOutputPref = "realtime"; // "realtime" | "elevenlabs"
+let __sbVoiceOutputPref = "elevenlabs"; // "realtime" | "fish" | "elevenlabs"
 let __sbRtUserTranscript = "";
+let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
 let __sbRtResponseWaiter = null;
 let __sbRtTurnToken = 0;
@@ -6434,6 +7293,39 @@ let __sbRtUsageHeartbeatTimer = null;
 let __sbRtUsageDeadlineTimer = null;
 let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
+let __sbRtRealtimeModel = "gpt-realtime-2";
+let __sbRtTranscriptionModel = "gpt-4o-transcribe";
+let __sbRtCostTurn = null;
+let __sbRtLastCostTurn = null;
+let __sbRtCostTurnSeq = 0;
+let __sbRtCostKeepOpen = false;
+const __SB_RT_MAX_CONNECT_FAILURES = 3;
+let __sbRtConnectFailureCount = 0;
+let __sbRtRetryTimer = null;
+let __sbRtLocalConnectInFlight = false;
+let __sbRtLastFailureAt = 0;
+
+function __sbResetRealtimeConnectFailures() {
+  __sbRtConnectFailureCount = 0;
+  __sbRtLastFailureAt = 0;
+  if (__sbRtRetryTimer) {
+    clearTimeout(__sbRtRetryTimer);
+    __sbRtRetryTimer = null;
+  }
+}
+
+function __sbIsNonRetryableRealtimeFailure(message) {
+  const text = String(message || "").toLowerCase();
+  return (
+    text.includes("sign in") ||
+    text.includes("401") ||
+    text.includes("403") ||
+    text.includes("daily live voice limit") ||
+    text.includes("7-minute") ||
+    text.includes("already used") ||
+    text.includes("cap is up")
+  );
+}
 
 function __sbResetRealtimeUsageState() {
   if (__sbRtUsageHeartbeatTimer) {
@@ -6451,6 +7343,127 @@ function __sbResetRealtimeUsageState() {
   __sbRtUsageSessionId = null;
   __sbRtUsageAllocatedMs = 0;
   __sbRtUsageLimitMs = 0;
+}
+
+function __sbGetRealtimeCostVoiceInfo() {
+  if (__sbVoiceOutputPref === "fish") {
+    return { voiceProvider: "fish", voiceId: __SB_FISH_JARVIS_VOICE_ID, voiceName: "Jarvis" };
+  }
+  if (__sbVoiceOutputPref === "elevenlabs") {
+    return { voiceProvider: "elevenlabs", voiceId: __SB_ELEVENLABS_VOICE_ID, voiceName: "ElevenLabs Braino" };
+  }
+  return { voiceProvider: "openai_realtime", voiceId: __SB_REALTIME_VOICE, voiceName: `OpenAI ${__SB_REALTIME_VOICE}` };
+}
+
+function __sbBeginRealtimeCostTurn(transcript, turnToken, transcriptionUsage = {}) {
+  const text = String(transcript || "").trim();
+  if (!text) return null;
+  if (__sbRtCostTurn && !__sbRtCostTurn.completedAt) {
+    __sbCompleteRealtimeCostTurn({ force: true });
+  }
+
+  const now = new Date().toISOString();
+  const sessionId = __sbRtUsageSessionId || null;
+  const turnIndex = Number.isInteger(turnToken) ? turnToken : ++__sbRtCostTurnSeq;
+  __sbRtCostTurnSeq = Math.max(__sbRtCostTurnSeq, turnIndex);
+  __sbRtCostTurn = {
+    turnId: `${sessionId || "rt"}_${turnIndex}_${Date.now()}`,
+    sessionId,
+    turnIndex,
+    startedAt: now,
+    completedAt: null,
+    userTranscript: text,
+    assistantMessages: [],
+    routeIntent: null,
+    routeMode: null,
+    connector: null,
+    realtimeModel: __sbRtRealtimeModel || "unknown",
+    transcriptionModel: __sbRtTranscriptionModel || "gpt-4o-transcribe",
+    rawRealtimeUsage: {},
+    rawTranscriptionUsage: transcriptionUsage && typeof transcriptionUsage === "object" ? transcriptionUsage : {},
+    rawTtsUsage: { events: [] },
+  };
+  __sbRtLastCostTurn = __sbRtCostTurn;
+  return __sbRtCostTurn;
+}
+
+function __sbPatchRealtimeCostTurn(fields = {}) {
+  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  if (!turn || !fields || typeof fields !== "object") return;
+  Object.assign(turn, fields);
+}
+
+function __sbAppendRealtimeCostAssistantMessage(text) {
+  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!turn || !clean) return;
+  const last = turn.assistantMessages[turn.assistantMessages.length - 1];
+  if (last !== clean) turn.assistantMessages.push(clean);
+}
+
+function __sbRecordRealtimeCostUsage(usage) {
+  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  if (!turn || !usage || typeof usage !== "object") return;
+  turn.rawRealtimeUsage = usage;
+}
+
+function __sbRecordRealtimeCostTts(event = {}) {
+  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  if (!turn || !event || typeof event !== "object") return;
+  const events = Array.isArray(turn.rawTtsUsage?.events) ? turn.rawTtsUsage.events : [];
+  events.push({
+    at: new Date().toISOString(),
+    provider: String(event.provider || __sbGetRealtimeCostVoiceInfo().voiceProvider),
+    bytes: Number(event.bytes || 0) || 0,
+    contentType: String(event.contentType || ""),
+    error: event.error ? String(event.error).slice(0, 500) : "",
+  });
+  turn.rawTtsUsage = { events: events.slice(-20) };
+}
+
+function __sbCompleteRealtimeCostTurn(options = {}) {
+  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  if (!turn) return;
+  if (!options.force && (options.keepOpen || __sbRtCostKeepOpen || __sbRtAwaitingDelegateResult)) {
+    return;
+  }
+  if (!turn.completedAt) turn.completedAt = new Date().toISOString();
+  const payload = __sbBuildRealtimeCostPayload(turn);
+  if (!payload) return;
+  void __sbAuthedApiFetch("realtime-cost-log", {
+    method: "POST",
+  }, {
+    jsonBody: payload,
+    suppressSignIn: true,
+  }).catch(() => {});
+  __sbRtLastCostTurn = turn;
+  if (__sbRtCostTurn === turn) __sbRtCostTurn = null;
+}
+
+function __sbBuildRealtimeCostPayload(turn) {
+  if (!turn?.turnId) return null;
+  const voiceInfo = __sbGetRealtimeCostVoiceInfo();
+  return {
+    turnId: turn.turnId,
+    sessionId: turn.sessionId || __sbRtUsageSessionId || null,
+    turnIndex: turn.turnIndex || 0,
+    startedAt: turn.startedAt,
+    completedAt: turn.completedAt,
+    userTranscript: turn.userTranscript || "",
+    assistantMessages: Array.isArray(turn.assistantMessages) ? turn.assistantMessages : [],
+    routeIntent: turn.routeIntent || null,
+    routeMode: turn.routeMode || null,
+    connector: turn.connector || null,
+    realtimeModel: turn.realtimeModel || __sbRtRealtimeModel || "unknown",
+    transcriptionModel: turn.transcriptionModel || __sbRtTranscriptionModel || "gpt-4o-transcribe",
+    voiceProvider: voiceInfo.voiceProvider,
+    voiceId: voiceInfo.voiceId,
+    voiceName: voiceInfo.voiceName,
+    rawRealtimeUsage: turn.rawRealtimeUsage || {},
+    rawTranscriptionUsage: turn.rawTranscriptionUsage || {},
+    rawTtsUsage: turn.rawTtsUsage || {},
+    costConfidence: Object.keys(turn.rawRealtimeUsage || {}).length || Object.keys(turn.rawTranscriptionUsage || {}).length ? "mixed" : "unknown",
+  };
 }
 
 async function __sbHeartbeatRealtimeUsageSession() {
@@ -6519,9 +7532,8 @@ function __sbClearRealtimeConnectHint() {
 
 function __sbBuildRealtimeTranscriptionPrompt() {
   return [
-    "Transcribe exactly what the user says.",
-    "Preserve the user's spoken language.",
-    "Do not translate the transcript into another language.",
+    "Transcribe exactly what the user says, in the language they are speaking.",
+    "If the audio is unclear, silent, or just music/noise, output nothing rather than guessing.",
     "Keep names, brands, URLs, and code tokens intact.",
   ].join(" ");
 }
@@ -6540,7 +7552,9 @@ function __sbBuildRealtimeBootInstructions() {
     "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
     "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. Voice is only the medium here. You are still Braino.",
     "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
-    "Reply in the same language the user is currently using. Do not switch languages because of accents, names, quoted text, code, noise, or a few foreign words. If the user's language is mixed or unclear, ask one short clarification instead of guessing.",
+    "You can act in the browser: search the web, open tabs and websites, play music, and read the page. NEVER say 'I can't open that from here', 'I can't browse', or 'I cannot do that' — you can. When the user asks you to look something up, search for something, find an article, or open a site, treat it as an action you will carry out, not a limitation. Briefly acknowledge ('On it' / 'Pulling that up') — the system performs the action.",
+    "If you only caught noise, music, or unclear audio — or you are not confident what the user said — ask them to repeat it. NEVER invent or guess a response when you didn't actually understand the words.",
+    "Reply in the SAME language the user is actually speaking — mirror them. But do not switch languages because of background noise, music, a stray name, quoted text, or a few foreign-sounding words; only switch when the user is clearly speaking that language in full sentences. When in doubt, stay in the language of the previous turn.",
     "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
     "If interrupted, stop immediately and wait for the user.",
     ...pageLines,
@@ -6548,13 +7562,16 @@ function __sbBuildRealtimeBootInstructions() {
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
-  const useElevenLabs = __sbVoiceOutputPref === "elevenlabs";
+  // When using an external TTS voice (Fish/ElevenLabs) the realtime model only needs to
+  // return TEXT — we generate the audio ourselves. In native realtime mode, the model
+  // produces audio directly.
+  const useExternalTts = __sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs";
   return {
     type: "session.update",
     session: {
       type: "realtime",
       instructions,
-      output_modalities: useElevenLabs ? ["text"] : ["audio"],
+      output_modalities: useExternalTts ? ["text"] : ["audio"],
       reasoning: {
         effort: "low",
       },
@@ -6565,11 +7582,16 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
           },
           transcription: {
             model: "gpt-4o-transcribe",
+            // No hard language lock — the user wants multilingual mirroring (speak any
+            // language, Braino mirrors it). Noise-induced language hallucinations are held
+            // back by __sbIsJunkTranscript + calmer VAD instead.
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
+            // "auto" eagerness is calmer than "high" — it waits for a clearer end-of-speech,
+            // so loud background music/noise is less likely to be chopped into false turns.
             type: "semantic_vad",
-            eagerness: "high",
+            eagerness: "auto",
             create_response: false,
             interrupt_response: true,
           },
@@ -6615,7 +7637,7 @@ async function __sbBuildRealtimeConfigPayload() {
 
 async function __sbSyncRealtimeVoiceInstructions() {
   try {
-    if (!__sbHeadphoneMode || !__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
+    if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
     const resp = await __sbAuthedApiFetch("openai-realtime-config", {
       method: "POST",
@@ -6635,7 +7657,7 @@ async function __sbSyncRealtimeVoiceInstructions() {
     const fingerprint = String(data?.fingerprint || "").trim();
     if (!instructions) return false;
     if (fingerprint && fingerprint === __sbRtInstructionsFingerprint) return true;
-    if (!__sbHeadphoneMode || !__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
+    if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
     const updated = __sbSendRealtimeSessionUpdate(instructions);
     if (updated && fingerprint) {
@@ -6654,6 +7676,7 @@ async function __sbSyncRealtimeVoiceInstructions() {
 async function __sbFallbackToLegacyHeadphone(message = "Live AI is unavailable. Switching to legacy voice.") {
   if (!__sbHeadphoneMode) return false;
 
+  __sbResetRealtimeConnectFailures();
   __sbCleanupRealtimeVoice({ reason: "legacy_fallback" });
   __sbSetVoiceStatusBadge("legacy", "Legacy");
   __sbShowVoiceError(message);
@@ -6670,9 +7693,90 @@ async function __sbFallbackToLegacyHeadphone(message = "Live AI is unavailable. 
   return false;
 }
 
+function __sbScheduleRealtimeRetry(message, attemptNumber) {
+  if (!__sbHeadphoneMode) return;
+  if (__sbRtRetryTimer) clearTimeout(__sbRtRetryTimer);
+
+  const delayMs = Math.min(1800, 500 + attemptNumber * 350);
+  __sbSetVoiceStatusBadge("connecting", `Retrying Live AI ${attemptNumber}/${__SB_RT_MAX_CONNECT_FAILURES}`);
+  __sbShowVoiceError(`${message} Retrying Live AI (${attemptNumber}/${__SB_RT_MAX_CONNECT_FAILURES})…`);
+  __sbSetHpBrainState("connecting");
+
+  __sbRtRetryTimer = setTimeout(() => {
+    __sbRtRetryTimer = null;
+    if (!__sbHeadphoneMode || __sbRtControlReady()) return;
+    void __sbStartRealtimeConnectAttempt();
+  }, delayMs);
+}
+
+async function __sbHandleRealtimeConnectFailure(message = "Live AI failed.", options = {}) {
+  if (!__sbHeadphoneMode) return false;
+
+  const failureMessage = String(message || "Live AI failed.");
+  if (options.nonRetryable || __sbIsNonRetryableRealtimeFailure(failureMessage)) {
+    return await __sbFallbackToLegacyHeadphone(`${failureMessage} Switching to legacy voice.`);
+  }
+
+  const now = Date.now();
+  if (now - __sbRtLastFailureAt < 750 && __sbRtRetryTimer) {
+    return false;
+  }
+  __sbRtLastFailureAt = now;
+
+  __sbRtConnectFailureCount += 1;
+  const attemptNumber = __sbRtConnectFailureCount;
+
+  if (attemptNumber >= __SB_RT_MAX_CONNECT_FAILURES) {
+    return await __sbFallbackToLegacyHeadphone(`${failureMessage} Live AI failed after ${__SB_RT_MAX_CONNECT_FAILURES} attempts. Switching to legacy voice.`);
+  }
+
+  __sbCleanupRealtimeVoice({ reason: "realtime_retry" });
+  __sbHeadphoneMode = true;
+  __sbVoiceOnlyMode = true;
+  document.getElementById("__sb_rec_btn__")?.classList.add("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+  __sbScheduleRealtimeRetry(failureMessage, attemptNumber);
+  return false;
+}
+
+async function __sbStartRealtimeConnectAttempt() {
+  if (!__sbHeadphoneMode || __sbRtControlReady()) return true;
+
+  const stored = await __sbStorageGet(["authToken", "sbOffscreenRtBroken"]);
+  const authToken = stored.authToken || null;
+  if (!authToken) {
+    __sbSetVoiceStatusBadge("error", "Sign in first");
+    __sbSetHpBrainState("");
+    __sbShowSignIn();
+    return false;
+  }
+
+  __sbSetHpBrainState("connecting");
+  __sbSetVoiceStatusBadge("connecting", "Waking up…");
+
+  if (!stored.sbOffscreenRtBroken) {
+    const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
+    chrome.runtime.sendMessage(
+      { action: "startOffscreenRealtime", authToken, bootInstructions },
+      (res) => {
+        if (chrome.runtime.lastError || res?.error) {
+          void __sbHandleRealtimeConnectFailure(res?.error || chrome.runtime.lastError?.message || "Live AI transport failed.");
+        }
+      }
+    );
+    return true;
+  }
+
+  void __sbStartRealtimeVoice();
+  return true;
+}
+
 async function __sbStartRealtimeVoice() {
+  if (__sbRtLocalConnectInFlight || __sbRtControlReady()) return true;
+  __sbRtLocalConnectInFlight = true;
   const { authToken } = await __sbStorageGet(["authToken"]);
   if (!authToken) {
+    __sbRtLocalConnectInFlight = false;
     __sbSetVoiceStatusBadge("error", "Sign in first");
     __sbSetHpBrainState("");
     return;
@@ -6684,7 +7788,7 @@ async function __sbStartRealtimeVoice() {
     __sbClearRealtimeConnectHint();
     __sbRtConnectHintTimer = setTimeout(() => {
       if (__sbHeadphoneMode && !__sbRtSessionReady) {
-        __sbShowVoiceError("Still connecting Live AI... give it a second.");
+        __sbShowVoiceError("Hold up, give me a second…");
       }
     }, 1500);
 
@@ -6702,10 +7806,9 @@ async function __sbStartRealtimeVoice() {
     __sbRtRemoteAudio = document.createElement("audio");
     __sbRtRemoteAudio.autoplay = true;
     __sbRtRemoteAudio.playsInline = true;
+    __sbRtRemoteAudio.muted = true;
+    __sbRtRemoteAudio.volume = 0;
     __sbRtRemoteAudio.style.display = "none";
-    __sbRtRemoteAudio.addEventListener("playing", () => {
-      if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
-    });
     document.body.appendChild(__sbRtRemoteAudio);
 
     peerConnection.ontrack = (event) => {
@@ -6713,11 +7816,14 @@ async function __sbStartRealtimeVoice() {
       __sbRtRemoteAudio.play().catch(() => {});
     };
 
+    let handledConnectionFailure = false;
     peerConnection.onconnectionstatechange = () => {
       if (__sbHeadphoneMode) {
         const state = peerConnection.connectionState;
         if (state === "failed" || state === "closed" || state === "disconnected") {
-          void __sbFallbackToLegacyHeadphone("Live AI disconnected. Switching to legacy voice.");
+          if (handledConnectionFailure || peerConnection !== __sbRtPeerConnection) return;
+          handledConnectionFailure = true;
+          void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
         }
       }
     };
@@ -6727,7 +7833,7 @@ async function __sbStartRealtimeVoice() {
       _dcReject = reject;
       const timeoutId = setTimeout(() => {
         reject(new Error("Live AI timed out while connecting."));
-      }, 10000);
+      }, 15000);
 
       __sbRtDataChannel = peerConnection.createDataChannel("oai-events");
       __sbRtDataChannel.addEventListener("open", () => {
@@ -6775,6 +7881,8 @@ async function __sbStartRealtimeVoice() {
     __sbResetRealtimeUsageState();
     __sbRtUsageSessionId = res.headers.get("x-braino-realtime-session-id");
     __sbRtUsageLimitMs = Number(res.headers.get("x-braino-realtime-limit-ms") || "0") || 0;
+    __sbRtRealtimeModel = res.headers.get("x-braino-realtime-model") || __sbRtRealtimeModel;
+    __sbRtTranscriptionModel = res.headers.get("x-braino-realtime-transcription-model") || __sbRtTranscriptionModel;
     const allocatedMs = Number(res.headers.get("x-braino-realtime-allocated-ms") || "0") || 0;
     if (__sbRtUsageSessionId && allocatedMs > 0) {
       __sbScheduleRealtimeUsageCap(allocatedMs);
@@ -6790,10 +7898,18 @@ async function __sbStartRealtimeVoice() {
 
     __sbClearRealtimeConnectHint();
     __sbRtSessionReady = true;
+    // Claim the single voice session — tells any other tab running voice to stand down,
+    // so only one Braino ever listens/speaks (no "two tabs talking"). Because mic + audio
+    // are global, this session keeps following the user across tab switches.
+    try { chrome.runtime.sendMessage({ action: "rtVoiceClaim" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
     document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
     __sbSetVoiceStatusBadge("realtime", "Live AI");
     __sbSetHpBrainState("listening");
+    __sbResetRealtimeConnectFailures();
+    if (__sbIsRecording) __sbStopRecording({ silent: true });
+    __sbStopSpeech();
     void __sbSyncRealtimeVoiceInstructions();
+    return true;
 
   } catch (err) {
     __sbClearRealtimeConnectHint();
@@ -6806,11 +7922,21 @@ async function __sbStartRealtimeVoice() {
       __sbShowSignIn();
       return;
     }
-    await __sbFallbackToLegacyHeadphone(`${message} Using legacy voice instead.`);
+    await __sbHandleRealtimeConnectFailure(message);
+    return false;
+  } finally {
+    __sbRtLocalConnectInFlight = false;
   }
 }
 
 function __sbSendRtEvent(event) {
+  if (__sbUseOffscreenRt) {
+    if (!__sbRtSessionReady) return false;
+    const payload = { ...event };
+    if (!payload.event_id) payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    chrome.runtime.sendMessage({ action: "offscreenRtSend", event: payload }, () => { void chrome.runtime.lastError; });
+    return true;
+  }
   if (!__sbRtDataChannel || __sbRtDataChannel.readyState !== "open") return false;
   const payload = { ...event };
   if (!payload.event_id) {
@@ -6821,13 +7947,106 @@ function __sbSendRtEvent(event) {
 }
 
 function __sbSetRealtimeMicEnabled(enabled) {
-  __sbRtMic?.getAudioTracks?.().forEach((track) => {
-    track.enabled = enabled;
-  });
+  if (__sbUseOffscreenRt) {
+    chrome.runtime.sendMessage({ action: "offscreenRtMic", enabled }, () => { void chrome.runtime.lastError; });
+    return;
+  }
+  __sbRtMic?.getAudioTracks?.().forEach((track) => { track.enabled = enabled; });
 }
+
+// The single realtime voice session keeps running across tab switches (mic + audio are
+// system-global), so Braino follows you from tab to tab and stays listening. Single-owner
+// enforcement (rtVoiceClaim/rtVoiceYield) prevents the old "two tabs talking" problem, so
+// we no longer mute a backgrounded voice tab. We only stop legacy (tab-local)
+// SpeechRecognition when hidden, since it can't follow and would double up.
+document.addEventListener("visibilitychange", () => {
+  if (!__sbOwnsInlineUi()) return;
+  if (document.hidden) {
+    // Lost focus — hand voice off to whatever tab the user moved to.
+    if (__sbHeadphoneMode) {
+      __sbReleaseVoicePresence();
+    } else if (!__sbUseOffscreenRt && __sbIsRecording) {
+      try { __sbStopRecording({ silent: true }); } catch (_) {}
+    }
+  } else {
+    // Became the foreground tab — take over voice presence (instant if a global session
+    // exists; otherwise start an in-tab session here).
+    __sbEnsureVoicePresence();
+  }
+});
+
+// Storage is the race-free backbone — every tab converges no matter which signal lands first.
+//  - sbVoiceModeOn → false : user turned voice off → every tab fully tears down.
+//  - sbRtSessionActive → true : a global offscreen session came up → the focused tab
+//    attaches to it instantly (and an in-tab session it may have started is redundant).
+//  - sbRtSessionActive → false : global session ended → the focused tab re-ensures
+//    presence (will start in-tab if voice mode is still on).
+try {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (!__sbOwnsInlineUi()) return;
+
+    if ("brainoVoicePref" in changes) {
+      const v = changes.brainoVoicePref.newValue;
+      __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
+    }
+
+    if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
+      // Voice fully off everywhere.
+      if (__sbHeadphoneMode) {
+        __sbCleanupRealtimeVoice({ reason: "voice_mode_off" });
+        __sbDetachVoiceVisual();
+        __sbStopSpeech();
+      }
+      return;
+    }
+
+    if ("sbRtSessionActive" in changes) {
+      const active = changes.sbRtSessionActive.newValue;
+      if (active) {
+        if (document.visibilityState === "visible") {
+          // A global session is now live. If we'd started an in-tab one, drop it and
+          // attach to the global one instead (single source of audio).
+          if (__sbHeadphoneMode && !__sbUseOffscreenRt) {
+            __sbCleanupRealtimeVoice({ reason: "superseded_by_offscreen" });
+          }
+          if (!__sbHeadphoneMode || !__sbUseOffscreenRt) __sbAttachVoiceVisual();
+        }
+      } else if (__sbUseOffscreenRt) {
+        // Global session dropped. Retry realtime first; do not start legacy until
+        // the retry budget is exhausted.
+        __sbUseOffscreenRt = false;
+        if (document.visibilityState === "visible") {
+          void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
+        } else {
+          __sbDetachVoiceVisual();
+        }
+      }
+    }
+  });
+} catch (_) {}
 
 function __sbIsRealtimeVoiceReady() {
   return Boolean(__sbRtSessionReady && __sbRtDataChannel && __sbRtDataChannel.readyState === "open");
+}
+
+// Readiness for sending control events / relays — accounts for offscreen mode, where the
+// data channel lives in the offscreen doc (so __sbRtDataChannel is null here but the
+// session is still ready and events route via background → offscreen).
+function __sbRtControlReady() {
+  if (__sbUseOffscreenRt) return Boolean(__sbRtSessionReady);
+  return __sbIsRealtimeVoiceReady();
+}
+
+async function __sbWaitForRealtimeControlReady(timeoutMs = 16000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (__sbRtControlReady()) return true;
+    if (__sbIsRecording) return false;
+    if (!__sbHeadphoneMode) return false;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  return __sbRtControlReady();
 }
 
 function __sbHasActiveRealtimeResponse() {
@@ -6888,7 +8107,7 @@ function __sbResetRealtimeResponseState() {
 }
 
 function __sbInterruptRealtimeResponse() {
-  if (__sbIsRealtimeVoiceReady() && __sbHasActiveRealtimeResponse()) {
+  if (__sbRtControlReady() && __sbHasActiveRealtimeResponse()) {
     __sbSendRtEvent({ type: "response.cancel" });
     __sbSendRtEvent({ type: "output_audio_buffer.clear" });
   }
@@ -6896,12 +8115,12 @@ function __sbInterruptRealtimeResponse() {
   __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
 }
 
-async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
+async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = false } = {}) {
   const promptText = String(text || "").trim();
   if (!promptText) {
     return { status: "error", text: "", errorMessage: "Nothing to say." };
   }
-  if (!__sbIsRealtimeVoiceReady()) {
+  if (!__sbRtControlReady()) {
     return { status: "error", text: "", errorMessage: "Live AI is not ready." };
   }
 
@@ -6913,7 +8132,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
   __sbRtRelayingAppMessage = relayMode;
   __sbRtHandlingConversationTurn = !relayMode;
 
-  const rtOutputModalities = __sbVoiceOutputPref === "elevenlabs" ? ["text"] : ["audio"];
+  const rtOutputModalities = (__sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs") ? ["text"] : ["audio"];
   const responsePromise = __sbCreateRtWaiter();
   const responseCreated = relayMode
     ? __sbSendRtEvent({
@@ -6927,7 +8146,9 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
               content: [
                 {
                   type: "input_text",
-                  text: `Relay this update to the user in one short natural spoken reply. Preserve the meaning and do not add new facts.\n\n${promptText}`,
+                  text: verbatim
+                    ? `Read this to the user out loud, exactly as written, word for word. Do not rephrase, summarize, or change any numbers. Say only this:\n\n${promptText}`
+                    : `Relay this update to the user in one short natural spoken reply. Preserve the meaning and do not add new facts.\n\n${promptText}`,
                 },
               ],
             },
@@ -6968,13 +8189,20 @@ async function __sbRequestRealtimeReply(text, { relayMode = false } = {}) {
   return await responsePromise;
 }
 
-async function __sbSpeakWithPreferredVoice(text, preferred = "legacy") {
-  if (preferred === "realtime" && __sbIsRealtimeVoiceReady() && __sbVoiceOutputPref !== "elevenlabs") {
-    const result = await __sbRequestRealtimeReply(text, { relayMode: true });
-    if (result.status === "done") return true;
-    if (result.status === "cancelled") return false;
+async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
+  // In native realtime mode the model speaks via WebRTC audio — we must NOT also call a
+  // TTS endpoint (that would be two voices). Only call __sbSpeakText when an external voice
+  // (Fish Audio / ElevenLabs) is selected, OR when falling back from a failed relay.
+  const useExternalTts = __sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs";
+  if (preferred === "realtime") __sbAppendRealtimeCostAssistantMessage(text);
+
+  if (preferred === "realtime" && __sbRtControlReady() && !useExternalTts) {
+    // Native realtime: send a relay event and let the model speak.
+    await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
+    return true;
   }
-  return await __sbSpeakText(text);
+  // External TTS voice (Fish / ElevenLabs) or non-realtime context.
+  return await __sbSpeakText(text, { verbatim: !!options.verbatim });
 }
 
 function __sbCompleteVoiceTurn(options = {}) {
@@ -6994,6 +8222,128 @@ function __sbCompleteVoiceTurn(options = {}) {
       void __sbStartRecording();
     }
   }
+  if (voiceOutput === "realtime") {
+    __sbCompleteRealtimeCostTurn({ keepOpen: __sbRtAwaitingDelegateResult });
+  }
+}
+
+// ── Multi-intent voice chain ─────────────────────────────────────────────────
+
+let __sbChainAbortToken = 0;
+
+// Split one voice transcript into sequential task segments.
+// Returns string[] — length 1 = no split (zero overhead on common path).
+function __sbSplitAndCorrectTranscript(transcript) {
+  const raw = transcript.trim();
+
+  // Hard split: sentence terminals and em/en dashes (always a new clause)
+  // Soft split: transition/pivot phrases that introduce a new independent command
+  const HARD_SPLIT = /(?<=[?!])\s+|[—–]\s*/;
+  const SOFT_PIVOT = /[,.]?\s+(?=(?:okay|alright|right|now|also|while (?:we're|you're) at it|on top of that|while (?:we're|you're) at it)\b)/i;
+
+  let parts = [];
+  for (const hardPart of raw.split(HARD_SPLIT)) {
+    for (const softPart of hardPart.split(SOFT_PIVOT)) {
+      parts.push(softPart.trim());
+    }
+  }
+
+  const FILLER_ONLY = /^(?:okay|ok|alright|right|hmm|ah|oh|uh|um|sure|cool|great|nice|perfect|sounds good|that'?s?\s+too\s+loud)[.!,]?$/i;
+  parts = parts.filter(p => p.length > 4 && !FILLER_ONLY.test(p));
+
+  if (parts.length <= 1) return [raw];
+
+  return __sbApplyCorrectionOverrides(parts);
+}
+
+// Collapse "do X | no wait, do Y" correction pairs into just "do Y".
+function __sbApplyCorrectionOverrides(segments) {
+  const CORRECTION_PREFIX = /^(?:no[,.]?\s+|nope[,.]?\s+|wait[,.]?\s+|actually[,.]?\s+|scratch that[,.]?\s+|never mind[,.]?\s+|forget (?:that|it)[,.]?\s+|fuck that[,.]?\s+|no wait[,.]?\s+|no fuck that[,.]?\s+|too loud[,.]?\s*)/i;
+
+  const result = [];
+  let i = 0;
+  while (i < segments.length) {
+    const curr = segments[i];
+    const next = i + 1 < segments.length ? segments[i + 1] : null;
+
+    if (next && CORRECTION_PREFIX.test(next)) {
+      const corrected = next.replace(CORRECTION_PREFIX, "").trim();
+      // Volume-on-volume correction: skip curr, use corrected value
+      if (__sbIsVolumeCommand(curr) && (corrected.length === 0 || __sbIsVolumeCommand(corrected))) {
+        if (corrected.length > 0) result.push(corrected);
+        i += 2;
+        continue;
+      }
+      // Number-only correction of a volume command (e.g. "make it 50")
+      if (__sbIsVolumeCommand(curr) && /\b\d+\b/.test(corrected)) {
+        const numMatch = corrected.match(/\b(\d+)\b/);
+        if (numMatch) {
+          result.push(`set volume to ${numMatch[1]}%`);
+          i += 2;
+          continue;
+        }
+      }
+    }
+
+    result.push(curr);
+    i++;
+  }
+  return result.length ? result : segments;
+}
+
+// Sequential executor for a multi-intent segment array.
+async function __sbHandleMultiIntentChain(segments, turnToken) {
+  const myToken = ++__sbChainAbortToken;
+  __sbRtCostKeepOpen = true;
+  __sbPatchRealtimeCostTurn({ routeIntent: "multi" });
+
+  try {
+    for (let i = 0; i < segments.length; i++) {
+      if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
+
+      // Hold the pending-reply lock across the whole chain to block concurrent turns.
+      __sbVoicePendingReply = true;
+
+      if (i === 0) void __sbSpeakWithPreferredVoice("On it.", "realtime");
+
+      await __sbHandleInlineRealtimeTurn(segments[i], turnToken);
+
+      // If this segment launched an agent, wait for it to finish before the next.
+      if (__sbRtAwaitingDelegateResult) {
+        await __sbWaitForChainDelegate(myToken, turnToken);
+      }
+
+      if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
+
+      if (i < segments.length - 1) {
+        __sbVoicePendingReply = true;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
+
+    __sbVoicePendingReply = false;
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+  } finally {
+    __sbRtCostKeepOpen = false;
+    __sbCompleteRealtimeCostTurn({ force: true });
+  }
+}
+
+// Poll until the background agent signals completion or we time out / abort.
+function __sbWaitForChainDelegate(myToken, turnToken) {
+  return new Promise(resolve => {
+    const MAX_MS = 45000;
+    const started = Date.now();
+    const tick = () => {
+      if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken
+          || !__sbRtAwaitingDelegateResult || Date.now() - started > MAX_MS) {
+        resolve();
+      } else {
+        setTimeout(tick, 250);
+      }
+    };
+    setTimeout(tick, 250);
+  });
 }
 
 function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
@@ -7025,6 +8375,43 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
+  __sbPatchRealtimeCostTurn({
+    routeIntent: routing.intent,
+    routeMode: routing.forcedMode,
+    connector: routing.connectorHint,
+  });
+
+  // X (Twitter) status — answer from the backend and speak it, BEFORE any delegate
+  // classification (which would otherwise open X in a tab).
+  if (__sbIsXLastTweetRequest(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "x_status" });
+    await __sbHandleXLastTweet(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbIsXStatusRequest(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "x_status" });
+    await __sbHandleXStatus(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
+  // Volume — handle directly (instant, no premium agent). "increase/louder" defaults to +20%.
+  if (__sbIsVolumeCommand(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "volume" });
+    const handled = await __sbHandleVolumeCommand(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    if (handled) return;
+  }
+
+  // Cross-tab awareness & control (before delegate classification, which would mis-route).
+  if (__sbIsCloseTabsCommand(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "tabs" });
+    await __sbHandleCloseTabs(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbIsTabsQuery(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "tabs" });
+    await __sbHandleTabsQuery(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
 
   if (["agent", "web", "record", "page"].includes(routing.intent)) {
     await __sbProcessPrompt(promptText, {
@@ -7037,6 +8424,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 
   const shouldForceDelegate = await __sbShouldForceVoiceDelegate(routing);
   if (shouldForceDelegate) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
@@ -7046,42 +8434,27 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
-  __sbRtHandlingConversationTurn = true;
-  __sbChatHistory.push({ role: "user", content: promptText });
-
-  // Refresh page context in session instructions synchronously before the model responds
-  __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
-
-  try {
-    const realtimeResult = await __sbRequestRealtimeReply(promptText);
-    if (realtimeResult.status === "cancelled") return;
-    if (realtimeResult.status === "error") {
-      throw new Error(realtimeResult.errorMessage || "Live AI failed.");
-    }
-
-    const reply = String(realtimeResult.text || "").trim();
-    if (reply) {
-      __sbChatHistory.push({ role: "assistant", content: reply });
-      __sbCardTurns.push({ prompt: promptText, answer: reply });
-      // ElevenLabs mode: OpenAI returns text only, so we speak it ourselves
-      if (__sbVoiceOutputPref === "elevenlabs") {
-        await __sbSpeakText(reply);
-      }
-    }
-  } catch (err) {
-    __sbShowVoiceError(err.message || "Live AI failed.");
-    if (!__sbHeadphoneMode) {
-      await __sbSpeakText("Something went wrong. Try again.");
-    }
-  } finally {
-    __sbRtHandlingConversationTurn = false;
-    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
-  }
+  // General conversation — route through the SAME smart text pipeline legacy voice uses
+  // (chat-about-notes, with the full page DOM context + user notes + selected text), then
+  // speak the answer in the realtime voice. The bare realtime model couldn't see the page
+  // properly and felt dumb; this gives realtime legacy's brain + realtime's voice.
+  await __sbProcessPrompt(promptText, {
+    fromVoice: true,
+    voiceOutput: "realtime",
+    voiceTurnToken: turnToken,
+    forceIntent: "chat",
+  });
 }
 
 function __sbCleanupRealtimeVoice(options = {}) {
   const reason = String(options.reason || "client_cleanup");
   const usageSessionId = __sbRtUsageSessionId;
+  __sbCompleteRealtimeCostTurn({ force: true });
+  if (__sbUseOffscreenRt) {
+    __sbUseOffscreenRt = false;
+    chrome.runtime.sendMessage({ action: "stopOffscreenRealtime" }, () => { void chrome.runtime.lastError; });
+  }
+  try { chrome.runtime.sendMessage({ action: "rtVoiceRelease" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
   __sbClearRealtimeConnectHint();
   __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
   __sbVoicePendingReply = false;
@@ -7119,10 +8492,15 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "input_audio_buffer.speech_started") {
+    // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
+    // This is the whole point of the realtime mechanism, and it must work the SAME for both
+    // voices: cancel the realtime model's audio and stop Fish/browser playback.
+    // Without this, provider audio keeps playing and feels "not realtime".
     if (__sbHasActiveRealtimeResponse()) {
       __sbVoicePendingReply = false;
       __sbInterruptRealtimeResponse();
     }
+    __sbStopSpeech(); // stop Fish Audio / browser TTS playback so the user can barge in
     __sbRtUserTranscript = "";
     if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
     return;
@@ -7139,12 +8517,31 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "conversation.item.input_audio_transcription.completed") {
     const transcript = String(ev.transcript || __sbRtUserTranscript || "").trim();
+    const transcriptionUsage = ev.usage || ev.item?.usage || ev.response?.usage || {};
     __sbRtUserTranscript = "";
     if (!transcript) return;
 
+    // Guard against transcription hallucinations on loud music / background noise / silence.
+    // The model would otherwise "hear" junk and answer with gibberish. Skip it; if it keeps
+    // happening, gently ask the user to repeat (rate-limited so we don't nag).
+    if (__sbIsJunkTranscript(transcript)) {
+      const now = Date.now();
+      if (now - __sbLastRepeatPromptAt > 8000 && !__sbHasActiveRealtimeResponse()) {
+        __sbLastRepeatPromptAt = now;
+        void __sbSpeakWithPreferredVoice("Sorry, I didn't catch that — could you say it again?", "realtime");
+      }
+      return;
+    }
+
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       const turnToken = ++__sbRtTurnToken;
-      void __sbHandleInlineRealtimeTurn(toProcess, turnToken);
+      __sbBeginRealtimeCostTurn(toProcess, turnToken, transcriptionUsage);
+      const segments = __sbSplitAndCorrectTranscript(toProcess);
+      if (segments.length > 1) {
+        void __sbHandleMultiIntentChain(segments, turnToken);
+      } else {
+        void __sbHandleInlineRealtimeTurn(toProcess, turnToken);
+      }
     });
     return;
   }
@@ -7163,6 +8560,9 @@ function __sbHandleRtEvent(ev) {
   if (ev.type === "response.done") {
     const finalText = String(ev.response ? __sbExtractRtResponseText(ev.response) : "").trim();
     const transcript = (__sbRtAssistantTranscript || finalText || "").trim();
+    const usage = ev.response?.usage || ev.usage || {};
+    if (transcript) __sbAppendRealtimeCostAssistantMessage(transcript);
+    if (usage && typeof usage === "object") __sbRecordRealtimeCostUsage(usage);
     __sbResetRealtimeResponseState();
     __sbResolveRtWaiter({
       status: "done",
@@ -7200,23 +8600,185 @@ function __sbToggleHeadphoneMode() {
   }
 }
 
-function __sbEnterHeadphoneMode() {
+// ── One-time mic permission modal (same tab) ─────────────────────────────────
+// Hosts the extension-origin permission page in an iframe so getUserMedia there grants the
+// EXTENSION the microphone (which the invisible offscreen doc then inherits → global voice).
+function __sbShowMicPermissionModal() {
+  return new Promise((resolve) => {
+    try {
+      if (document.getElementById("__sb_mic_perm__")) { resolve(true); return; }
+      const overlay = document.createElement("div");
+      overlay.id = "__sb_mic_perm__";
+      overlay.style.cssText = [
+        "position:fixed", "inset:0", "z-index:2147483647",
+        "background:rgba(8,5,4,0.55)", "backdrop-filter:blur(3px)",
+        "display:flex", "align-items:center", "justify-content:center",
+      ].join(";");
+      const frame = document.createElement("iframe");
+      frame.src = chrome.runtime.getURL("mic-permission.html");
+      frame.allow = "microphone"; // delegate mic to the extension-origin iframe
+      frame.style.cssText = [
+        "width:380px", "height:300px", "border:0", "border-radius:18px",
+        "box-shadow:0 20px 60px rgba(0,0,0,0.5)", "background:#160b09",
+      ].join(";");
+      overlay.appendChild(frame);
+      (document.body || document.documentElement).appendChild(overlay);
+
+      // Wait for the iframe to confirm it rendered. If the page's CSP blocked the
+      // extension iframe, no "ready" arrives → remove the (blank) overlay and report
+      // not-shown so the background falls back to a popup window.
+      let settled = false;
+      const onMsg = (e) => {
+        if (e?.data?.__sbMicPerm === "ready") {
+          if (settled) return; settled = true;
+          window.removeEventListener("message", onMsg);
+          resolve(true);
+        }
+      };
+      window.addEventListener("message", onMsg);
+      setTimeout(() => {
+        if (settled) return; settled = true;
+        window.removeEventListener("message", onMsg);
+        __sbHideMicPermissionModal();
+        resolve(false);
+      }, 1300);
+    } catch (_) {
+      resolve(false);
+    }
+  });
+}
+
+function __sbHideMicPermissionModal() {
+  document.getElementById("__sb_mic_perm__")?.remove();
+}
+
+// ── Voice presence model ─────────────────────────────────────────────────────
+// `sbVoiceModeOn` (storage) = "the user turned voice on; Braino should be live on
+// whatever tab is focused." Two ways the session can live:
+//   • GLOBAL offscreen session (sbRtSessionActive=true): truly follows; switching
+//     tabs is an instant visual attach with no reconnect.
+//   • IN-TAB session (offscreen unavailable): bound to one tab, so we MIGRATE it —
+//     tear down on the tab losing focus, start fresh on the tab gaining focus.
+// Either way, the focused tab shows the blue presence and the unfocused tab goes
+// back to idle. `__sbEnsureVoicePresence`/`__sbReleaseVoicePresence` are the single
+// entry points; they're driven by visibilitychange, startup, storage.onChanged,
+// and background attach/detach messages — so it converges no matter what races.
+
+// Called when THIS tab becomes the focused tab. Brings voice here.
+function __sbEnsureVoicePresence() {
+  if (!__sbOwnsInlineUi()) return;
+  if (__sbHeadphoneMode) return; // already present here
+  __sbStorageGet(["sbVoiceModeOn", "sbRtSessionActive"]).then(({ sbVoiceModeOn, sbRtSessionActive }) => {
+    if (!sbVoiceModeOn || !__sbOwnsInlineUi() || __sbHeadphoneMode) return;
+    if (document.visibilityState !== "visible") return; // only the focused tab takes over
+    if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+    if (sbRtSessionActive) {
+      __sbAttachVoiceVisual(); // global offscreen session — instant, no reconnect
+    } else {
+      __sbEnterHeadphoneMode({ keepFlag: true }); // start an in-tab session on this tab
+    }
+  });
+}
+
+// Called when THIS tab loses focus. Hands voice off to whatever tab the user moved to.
+function __sbReleaseVoicePresence() {
+  if (!__sbHeadphoneMode) return;
+  if (__sbUseOffscreenRt) {
+    __sbDetachVoiceVisual(); // global session keeps running; just drop the local halo
+  } else {
+    // In-tab session is bound to this tab and can't follow — tear it down so this tab
+    // stops listening/speaking. Keep sbVoiceModeOn so the next focused tab starts fresh.
+    __sbCleanupRealtimeVoice({ reason: "tab_blur_migrate" });
+    __sbDetachVoiceVisual();
+    __sbStopSpeech();
+  }
+}
+
+function __sbAttachVoiceVisual() {
+  if (!__sbOwnsInlineUi()) return;
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (brain && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
+  __sbUseOffscreenRt = true;
+  __sbRtSessionReady = true;
+  document.getElementById("__sb_rec_btn__")?.classList.add("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
+  document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+  __sbSetVoiceStatusBadge("realtime", "Live AI");
+  __sbSetHpBrainState("listening"); // blue halo
+  __sbSyncIdleState();              // strips sb-brain-idle now that hp-listening is on
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
+  void __sbSyncRealtimeVoiceInstructions(); // teach the session what page we're now on
+}
+
+// Visual-only teardown — does NOT stop any session. Resets local flags + halo to idle.
+function __sbDetachVoiceVisual() {
+  __sbHeadphoneMode = false;
+  __sbVoiceOnlyMode = false;
+  __sbRtSessionReady = false;
+  __sbVoicePendingReply = false;
+  __sbRtHandlingConversationTurn = false;
+  document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+  document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
+  __sbSetHpBrainState("");
+  __sbSetVoiceStatusBadge(null);
+  __sbSyncIdleState(); // back to the floating idle animation
+}
+
+function __sbEnterHeadphoneMode(options = {}) {
+  __sbHeadphoneMode = true;
+  __sbVoiceOnlyMode = true;
+  // Mark voice mode ON globally so every tab knows Braino should follow the user.
+  if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: true, sbBrainDocked: true });
 
   __sbToggleInput(false);
   __sbCollapseCard();
 
+  const brain = document.getElementById("__sb_brain_btn__");
+  if (brain && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
-  __sbSetHpBrainState("connecting");
-  __sbSetVoiceStatusBadge("connecting", "Connecting…");
+  // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
+  __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
+    const v = stored.brainoVoicePref;
+    __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
 
-  // Load voice output preference before starting the session
-  __sbStorageGet(["brainoVoicePref"]).then((stored) => {
-    __sbVoiceOutputPref = stored.brainoVoicePref === "elevenlabs" ? "elevenlabs" : "realtime";
-    void __sbStartRealtimeVoice();
+    if (stored.sbRtSessionActive) {
+      __sbUseOffscreenRt = true;
+      __sbRtSessionReady = true;
+      document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
+      __sbSetVoiceStatusBadge("realtime", "Live AI");
+      __sbSetHpBrainState("listening");
+      __sbSyncIdleState();
+      void __sbSyncRealtimeVoiceInstructions();
+      return;
+    }
+
+    __sbSetHpBrainState("connecting");
+    __sbSetVoiceStatusBadge("connecting", "Waking up…");
+
+    const authToken = stored.authToken || null;
+    if (!authToken) { void __sbStartRealtimeVoice(); return; }
+
+    // If offscreen mic proved unavailable before, skip it — go straight to the in-tab
+    // session (avoids re-closing/recreating the offscreen doc on every tab switch).
+    if (stored.sbOffscreenRtBroken) { void __sbStartRealtimeVoice(); return; }
+
+    const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
+    chrome.runtime.sendMessage(
+      { action: "startOffscreenRealtime", authToken, bootInstructions },
+      (res) => {
+        // Only the transport-level failure is handled here. Whether the offscreen session
+        // actually came up is signalled asynchronously: success → sbRtSessionReady (which
+        // sets __sbUseOffscreenRt), failure/denied → sbRtSessionFailed. So we do NOT flip
+        // __sbUseOffscreenRt here (that race could mis-route events during a fallback).
+        if (chrome.runtime.lastError) {
+          void __sbHandleRealtimeConnectFailure(chrome.runtime.lastError.message || "Live AI transport failed.");
+        }
+      }
+    );
   });
 }
 
@@ -7224,6 +8786,8 @@ function __sbExitHeadphoneMode() {
   __sbHeadphoneMode = false;
   __sbVoiceOnlyMode = false;
   __sbVoicePendingReply = false;
+  // User explicitly turned voice OFF — clear the global flag so no tab re-arms it.
+  if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: false });
 
   if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
   __sbLastFinalTranscript = null;
