@@ -8,6 +8,9 @@ const corsHeaders = {
 };
 
 const OPENAI_API_BASE = "https://api.openai.com/v1";
+const INTERNAL_ADMIN_EMAILS = new Set([
+  "itishpande21@gmail.com",
+]);
 
 type RealtimeTurnLogRow = {
   id: string;
@@ -111,8 +114,13 @@ serve(async (req) => {
 
     const requesterEmail = String(user.email || "").trim().toLowerCase();
     const adminEmails = parseCsvList(Deno.env.get("REALTIME_COSTS_ADMIN_EMAILS")).map((email) => email.toLowerCase());
-    if (!requesterEmail || !adminEmails.includes(requesterEmail)) {
-      return json({ error: "Admin access required." }, 403);
+    if (!requesterEmail || (!INTERNAL_ADMIN_EMAILS.has(requesterEmail) && !adminEmails.includes(requesterEmail))) {
+      return json({
+        error: "Admin access required.",
+        userMessage: requesterEmail
+          ? `Admin access required for ${requesterEmail}. Add this email to REALTIME_COSTS_ADMIN_EMAILS to view realtime costs.`
+          : "Admin access required. Your signed-in account has no email attached.",
+      }, 403);
     }
 
     const url = new URL(req.url);
