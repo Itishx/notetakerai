@@ -12,5 +12,6 @@ create table if not exists public.x_follower_snapshots (
 alter table public.x_follower_snapshots enable row level security;
 
 -- Writes happen via service role in the edge function; users may read their own.
+drop policy if exists "own snapshots" on public.x_follower_snapshots;
 create policy "own snapshots" on public.x_follower_snapshots
   for select using (auth.uid() = user_id);
