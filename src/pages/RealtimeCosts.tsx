@@ -173,10 +173,10 @@ export default function RealtimeCosts() {
     <Shell>
       <header className="rtc-hero">
         <div>
-          <p className="rtc-kicker">Braino admin</p>
-          <h1>Realtime costs</h1>
+          <p className="rtc-kicker"><span className="rtc-pip" /> Braino admin</p>
+          <h1>Realtime voice costs</h1>
           <p className="rtc-subtitle">
-            Every headphone-mode turn, transcript, Braino reply, token count, and estimated per-interaction cost in one place.
+            A plain-English receipt for headphone mode. See who talked to Braino, what was said, what Braino replied, and what each little voice turn cost.
           </p>
         </div>
         <div className="rtc-controls">
@@ -195,24 +195,66 @@ export default function RealtimeCosts() {
 
       {payload && (
         <>
+          <section className="rtc-guide" aria-label="How to read this page">
+            <GuideCard
+              number="01"
+              title="Pick the time window"
+              text="Use the date dropdown like a filter. Smaller windows are easier to debug; bigger windows show the full bill story."
+            />
+            <GuideCard
+              number="02"
+              title="Open a person"
+              text='Click "Show messages sent" to see every thing the user said, every thing Braino spoke back, and the cost of that one turn.'
+            />
+            <GuideCard
+              number="03"
+              title="Watch for red flags"
+              text='If "OpenAI voice out" is above zero while Jarvis/Fish is selected, OpenAI is speaking too. That is the expensive path.'
+            />
+          </section>
+
           <section className="rtc-cards">
-            <MetricCard label="Estimated total" value={formatUsd(payload.totals.estimatedTotalCostUsd)} hint={`${payload.totals.totalTurns} voice turns`} />
-            <MetricCard label="Actual OpenAI org cost" value={payload.totals.actualOpenAiCostUsd === null ? "Unavailable" : formatUsd(payload.totals.actualOpenAiCostUsd)} hint={payload.actualCosts.available ? "Usage API reconciliation" : payload.actualCosts.setupMessage || "No usage key"} />
-            <MetricCard label="Unreconciled delta" value={payload.totals.unreconciledDeltaUsd === null ? "Unavailable" : formatUsd(payload.totals.unreconciledDeltaUsd)} hint="Actual OpenAI minus logged OpenAI estimates" tone={payload.totals.unreconciledDeltaUsd !== null && payload.totals.unreconciledDeltaUsd > 0.5 ? "warn" : "normal"} />
-            <MetricCard label="Realtime minutes" value={`${payload.totals.totalRealtimeMinutes.toFixed(1)}m`} hint={`${payload.totals.totalSessions} sessions`} />
+            <MetricCard
+              label="Estimated total"
+              value={formatUsd(payload.totals.estimatedTotalCostUsd)}
+              hint={`${payload.totals.totalTurns} logged voice turns`}
+              explain="Our turn-by-turn receipt. This is Braino adding up each logged conversation."
+            />
+            <MetricCard
+              label="Actual OpenAI org cost"
+              value={payload.totals.actualOpenAiCostUsd === null ? "Unavailable" : formatUsd(payload.totals.actualOpenAiCostUsd)}
+              hint={payload.actualCosts.available ? "Read from OpenAI Usage API" : payload.actualCosts.setupMessage || "No usage key"}
+              explain="OpenAI's big receipt for the org/project. It can include other OpenAI calls too."
+            />
+            <MetricCard
+              label="Difference"
+              value={payload.totals.unreconciledDeltaUsd === null ? "Unavailable" : formatUsd(payload.totals.unreconciledDeltaUsd)}
+              hint="OpenAI receipt minus Braino logs"
+              explain="If this is large, some spend is not matched to a logged voice turn yet."
+              tone={payload.totals.unreconciledDeltaUsd !== null && payload.totals.unreconciledDeltaUsd > 0.5 ? "warn" : "normal"}
+            />
+            <MetricCard
+              label="Realtime minutes"
+              value={`${payload.totals.totalRealtimeMinutes.toFixed(1)}m`}
+              hint={`${payload.totals.totalSessions} voice sessions`}
+              explain="How long Braino kept the expensive live microphone connection open."
+            />
           </section>
 
           {payload.totals.audioOutputWarningCount > 0 && (
             <div className="rtc-warning">
-              OpenAI audio output tokens were logged in {payload.totals.audioOutputWarningCount} turn(s). If Jarvis/Fish voice is selected, those should be 0.
+              <strong>Red flag:</strong> OpenAI audio output tokens were logged in {payload.totals.audioOutputWarningCount} turn(s). If Jarvis/Fish voice is selected, those should be 0 because Fish/Jarvis should be the only speaker.
             </div>
           )}
 
           <section className="rtc-panel">
             <div className="rtc-panel-head">
               <div>
-                <p className="rtc-kicker">Users</p>
+                <p className="rtc-kicker"><span className="rtc-pip" /> Users</p>
                 <h2>Headphone-mode conversations</h2>
+                <p className="rtc-panel-copy">
+                  Think of each row as one person's voice bill. Open the row to see the tiny receipts underneath.
+                </p>
               </div>
               <p>{formatDateRange(payload.range.since, payload.range.until)}</p>
             </div>
@@ -224,16 +266,18 @@ export default function RealtimeCosts() {
                     <th>User</th>
                     <th>Sessions</th>
                     <th>Turns</th>
-                    <th>Minutes</th>
+                    <th>Voice time</th>
                     <th>Estimated cost</th>
-                    <th>Warnings</th>
+                    <th>Health</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedUsers.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="rtc-empty">No realtime voice turns logged for this range yet.</td>
+                      <td colSpan={7} className="rtc-empty">
+                        No voice turns logged for this range yet. Once someone uses headphone mode, their messages and costs will appear here.
+                      </td>
                     </tr>
                   )}
 
@@ -308,7 +352,7 @@ function Shell({ children }: { children: ReactNode }) {
 function StatusCard({ title, text, action }: { title: string; text: string; action?: ReactNode }) {
   return (
     <section className="rtc-status">
-      <p className="rtc-kicker">Realtime costs</p>
+      <p className="rtc-kicker"><span className="rtc-pip" /> Realtime costs</p>
       <h1>{title}</h1>
       <p>{text}</p>
       {action}
@@ -316,12 +360,23 @@ function StatusCard({ title, text, action }: { title: string; text: string; acti
   );
 }
 
-function MetricCard({ label, value, hint, tone = "normal" }: { label: string; value: string; hint: string; tone?: "normal" | "warn" }) {
+function GuideCard({ number, title, text }: { number: string; title: string; text: string }) {
+  return (
+    <article className="rtc-guide-card">
+      <span>{number}</span>
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </article>
+  );
+}
+
+function MetricCard({ label, value, hint, explain, tone = "normal" }: { label: string; value: string; hint: string; explain: string; tone?: "normal" | "warn" }) {
   return (
     <article className={`rtc-metric ${tone === "warn" ? "rtc-metric-warn" : ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
       <p>{hint}</p>
+      <small>{explain}</small>
     </article>
   );
 }
@@ -333,6 +388,7 @@ function TurnCard({ turn }: { turn: RealtimeCostTurn }) {
         <div>
           <strong>Turn {turn.turnIndex}</strong>
           <span>{formatDateTime(turn.startedAt)}</span>
+          <small>One user request plus Braino's replies.</small>
         </div>
         <div className="rtc-turn-cost">{formatUsd(turn.costs.totalUsd)}</div>
       </div>
@@ -353,19 +409,22 @@ function TurnCard({ turn }: { turn: RealtimeCostTurn }) {
       </div>
 
       <div className="rtc-turn-grid">
-        <InfoPill label="Route" value={[turn.routeIntent, turn.connector].filter(Boolean).join(" / ") || "unknown"} />
-        <InfoPill label="Realtime model" value={turn.realtimeModel || "unknown"} />
-        <InfoPill label="Transcription" value={turn.transcriptionModel || "unknown"} />
-        <InfoPill label="Voice" value={[turn.voiceName, turn.voiceProvider].filter(Boolean).join(" / ") || "unknown"} />
+        <InfoPill label="Where it went" value={[turn.routeIntent, turn.connector].filter(Boolean).join(" / ") || "unknown"} help="Chat, web, page, tabs, or Delegate." />
+        <InfoPill label="Realtime model" value={turn.realtimeModel || "unknown"} help="The live model listening to the mic." />
+        <InfoPill label="Speech-to-text" value={turn.transcriptionModel || "unknown"} help="The model that wrote down the user's words." />
+        <InfoPill label="Speaking voice" value={[turn.voiceName, turn.voiceProvider].filter(Boolean).join(" / ") || "unknown"} help="Who spoke the final audio reply." />
       </div>
 
+      <p className="rtc-token-note">
+        Kid version: tokens are tiny pieces of words or sound. More tokens means more money. The "OpenAI voice out" box should stay at 0 when Jarvis/Fish is speaking.
+      </p>
       <div className="rtc-token-grid">
-        <TokenBox label="RT input text" value={turn.tokens.realtimeInputText} />
-        <TokenBox label="RT input audio" value={turn.tokens.realtimeInputAudio} />
-        <TokenBox label="RT output text" value={turn.tokens.realtimeOutputText} />
-        <TokenBox label="RT output audio" value={turn.tokens.realtimeOutputAudio} danger={turn.tokens.realtimeOutputAudio > 0} />
-        <TokenBox label="Cached text/audio" value={`${formatTokens(turn.tokens.realtimeCachedText)} / ${formatTokens(turn.tokens.realtimeCachedAudio)}`} />
-        <TokenBox label="Transcribe audio" value={turn.tokens.transcriptionInputAudio} />
+        <TokenBox label="Text in" value={turn.tokens.realtimeInputText} help="Typed context sent to Realtime." />
+        <TokenBox label="Voice in" value={turn.tokens.realtimeInputAudio} help="Your microphone audio." />
+        <TokenBox label="Text out" value={turn.tokens.realtimeOutputText} help="Realtime text Braino produced." />
+        <TokenBox label="OpenAI voice out" value={turn.tokens.realtimeOutputAudio} help="Should be 0 with Jarvis/Fish." danger={turn.tokens.realtimeOutputAudio > 0} />
+        <TokenBox label="Saved tokens" value={`${formatTokens(turn.tokens.realtimeCachedText)} / ${formatTokens(turn.tokens.realtimeCachedAudio)}`} help="Discounted cached text/audio." />
+        <TokenBox label="Transcribe audio" value={turn.tokens.transcriptionInputAudio} help="Audio counted by speech-to-text." />
       </div>
 
       {turn.warnings.openAiAudioOutputTokens && (
@@ -375,10 +434,10 @@ function TurnCard({ turn }: { turn: RealtimeCostTurn }) {
       )}
 
       <div className="rtc-cost-breakdown">
-        <span>Realtime {formatUsd(turn.costs.realtimeUsd)}</span>
-        <span>Transcription {formatUsd(turn.costs.transcriptionUsd)}</span>
-        <span>TTS {formatUsd(turn.costs.ttsUsd)}</span>
-        <span>Confidence: {turn.costs.confidence}</span>
+        <span>Live mic meter: {formatUsd(turn.costs.realtimeUsd)}</span>
+        <span>Speech-to-text: {formatUsd(turn.costs.transcriptionUsd)}</span>
+        <span>Voice playback: {formatUsd(turn.costs.ttsUsd)}</span>
+        <span>Trust level: {explainConfidence(turn.costs.confidence)}</span>
       </div>
 
       <details className="rtc-raw">
@@ -389,20 +448,22 @@ function TurnCard({ turn }: { turn: RealtimeCostTurn }) {
   );
 }
 
-function InfoPill({ label, value }: { label: string; value: string }) {
+function InfoPill({ label, value, help }: { label: string; value: string; help: string }) {
   return (
     <div className="rtc-info-pill">
       <span>{label}</span>
       <strong>{value}</strong>
+      <small>{help}</small>
     </div>
   );
 }
 
-function TokenBox({ label, value, danger = false }: { label: string; value: number | string; danger?: boolean }) {
+function TokenBox({ label, value, help, danger = false }: { label: string; value: number | string; help: string; danger?: boolean }) {
   return (
     <div className={`rtc-token ${danger ? "rtc-token-danger" : ""}`}>
       <span>{label}</span>
       <strong>{typeof value === "number" ? formatTokens(value) : value}</strong>
+      <small>{help}</small>
     </div>
   );
 }
@@ -446,47 +507,75 @@ function initials(value: string) {
     .join("") || "B";
 }
 
+function explainConfidence(value: string) {
+  if (value === "token_exact") return "exact token receipt";
+  if (value === "mixed") return "partial receipt";
+  if (value === "duration_estimate") return "time-based guess";
+  return "unknown";
+}
+
 const styles = `
   .rtc-shell {
     min-height: 100vh;
-    padding: 48px;
-    color: #eef4ed;
+    padding: 34px 0 72px;
+    color: var(--sb-ink);
     background:
-      radial-gradient(circle at top left, rgba(105, 145, 114, 0.36), transparent 34rem),
-      radial-gradient(circle at 80% 10%, rgba(214, 149, 82, 0.22), transparent 30rem),
-      linear-gradient(135deg, #0b1110 0%, #111815 45%, #1b160f 100%);
-    font-family: "Satoshi", "Avenir Next", sans-serif;
+      radial-gradient(circle at 12% 0%, rgba(226, 125, 57, 0.16), transparent 32rem),
+      radial-gradient(circle at 85% 10%, rgba(240, 168, 107, 0.14), transparent 28rem),
+      linear-gradient(180deg, var(--sb-bg) 0%, var(--sb-bg-2) 100%);
+    font-family: Inter, system-ui, -apple-system, sans-serif;
   }
-  .rtc-hero, .rtc-panel-head {
+  .rtc-hero, .rtc-guide, .rtc-cards, .rtc-panel, .rtc-warning, .rtc-status {
+    width: calc(100% - 64px);
+    max-width: 1240px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .rtc-hero, .rtc-panel-head, .rtc-turn-head, .rtc-cost-breakdown {
     display: flex;
-    align-items: flex-start;
     justify-content: space-between;
+    align-items: flex-start;
     gap: 24px;
+    flex-wrap: wrap;
   }
   .rtc-hero {
-    max-width: 1240px;
-    margin: 0 auto 28px;
+    margin-bottom: 24px;
+    padding: 28px 0 18px;
   }
   .rtc-kicker {
     margin: 0 0 10px;
-    color: #e7b978;
-    font-size: 12px;
-    font-weight: 800;
+    color: var(--sb-ink-3);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
     letter-spacing: 0.16em;
     text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rtc-pip {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sb-accent);
+    box-shadow: 0 0 10px rgba(226, 125, 57, 0.55);
   }
   .rtc-hero h1, .rtc-status h1 {
     margin: 0;
-    font-family: "Fraunces", Georgia, serif;
-    font-size: clamp(42px, 6vw, 82px);
-    line-height: 0.9;
-    letter-spacing: -0.06em;
+    max-width: 780px;
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: clamp(50px, 7vw, 92px);
+    font-weight: 400;
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+    color: var(--sb-ink);
   }
   .rtc-subtitle, .rtc-status p {
     max-width: 720px;
-    color: rgba(238, 244, 237, 0.72);
-    font-size: 17px;
-    line-height: 1.7;
+    color: var(--sb-ink-2);
+    font-size: 18px;
+    line-height: 1.58;
   }
   .rtc-controls {
     display: flex;
@@ -495,85 +584,143 @@ const styles = `
     flex-wrap: wrap;
   }
   .rtc-controls select {
-    border: 1px solid rgba(238, 244, 237, 0.2);
+    border: 1px solid var(--sb-line);
     border-radius: 999px;
-    padding: 10px 14px;
-    color: #eef4ed;
-    background: rgba(255, 255, 255, 0.08);
+    padding: 12px 16px;
+    color: var(--sb-ink);
+    background: var(--sb-panel-2);
+    box-shadow: var(--sb-shadow-sm);
   }
   .rtc-pill, .rtc-link-button {
-    border: 1px solid rgba(238, 244, 237, 0.18);
+    border: 1px solid var(--sb-line);
     border-radius: 999px;
-    padding: 10px 14px;
-    color: #eef4ed;
-    background: rgba(255, 255, 255, 0.08);
+    padding: 12px 16px;
+    color: var(--sb-ink);
+    background: var(--sb-panel);
     text-decoration: none;
     cursor: pointer;
+    box-shadow: var(--sb-shadow-sm);
+    font-size: 14px;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .rtc-pill:hover, .rtc-link-button:hover {
+    transform: translateY(-1px);
+    background: var(--sb-panel-2);
   }
   .rtc-pill-hot {
     display: inline-flex;
     margin-top: 18px;
     border: 0;
-    background: #e7b978;
-    color: #1b160f;
+    background: var(--sb-ink);
+    color: var(--sb-panel-2);
     font-weight: 800;
   }
+  .rtc-guide {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .rtc-guide-card {
+    border: 1px solid var(--sb-line);
+    border-radius: var(--sb-r-xl);
+    padding: 20px;
+    background: color-mix(in srgb, var(--sb-panel-2) 86%, transparent);
+    box-shadow: var(--sb-shadow-sm);
+  }
+  .rtc-guide-card span {
+    display: block;
+    margin-bottom: 18px;
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: 34px;
+    color: var(--sb-accent-deep);
+  }
+  .rtc-guide-card strong {
+    display: block;
+    color: var(--sb-ink);
+    font-size: 16px;
+  }
+  .rtc-guide-card p {
+    margin: 8px 0 0;
+    color: var(--sb-ink-2);
+    font-size: 14px;
+    line-height: 1.55;
+  }
   .rtc-cards {
-    max-width: 1240px;
-    margin: 0 auto 18px;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
+    margin-bottom: 18px;
   }
-  .rtc-metric, .rtc-panel, .rtc-status {
-    border: 1px solid rgba(238, 244, 237, 0.13);
-    border-radius: 28px;
-    background: rgba(10, 16, 15, 0.72);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
-    backdrop-filter: blur(18px);
+  .rtc-metric, .rtc-panel, .rtc-status, .rtc-turn {
+    border: 1px solid var(--sb-line);
+    border-radius: var(--sb-r-xl);
+    background: color-mix(in srgb, var(--sb-panel) 92%, transparent);
+    box-shadow: var(--sb-shadow);
   }
   .rtc-metric {
     padding: 22px;
+    min-height: 190px;
   }
   .rtc-metric span, .rtc-token span, .rtc-info-pill span, .rtc-dialogue span {
-    color: rgba(238, 244, 237, 0.52);
+    color: var(--sb-ink-3);
+    font-family: "JetBrains Mono", monospace;
     font-size: 11px;
-    font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
   .rtc-metric strong {
     display: block;
     margin-top: 12px;
-    font-size: 30px;
-    letter-spacing: -0.04em;
+    color: var(--sb-ink);
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: 40px;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.02em;
   }
   .rtc-metric p {
     margin: 10px 0 0;
-    color: rgba(238, 244, 237, 0.58);
+    color: var(--sb-ink-2);
     font-size: 13px;
   }
+  .rtc-metric small {
+    display: block;
+    margin-top: 14px;
+    color: var(--sb-ink-3);
+    font-size: 13px;
+    line-height: 1.45;
+  }
   .rtc-metric-warn {
-    border-color: rgba(255, 107, 87, 0.45);
+    border-color: rgba(226, 125, 57, 0.55);
+    background: linear-gradient(180deg, var(--sb-panel), var(--sb-accent-soft));
   }
   .rtc-panel {
-    max-width: 1240px;
-    margin: 18px auto 0;
+    margin-top: 18px;
     overflow: hidden;
   }
   .rtc-panel-head {
     padding: 24px 26px;
-    border-bottom: 1px solid rgba(238, 244, 237, 0.1);
+    border-bottom: 1px solid var(--sb-line-2);
   }
   .rtc-panel-head h2 {
     margin: 0;
-    font-family: "Fraunces", Georgia, serif;
-    font-size: 30px;
-    letter-spacing: -0.04em;
+    font-family: "Instrument Serif", Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(30px, 4vw, 48px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--sb-ink);
   }
   .rtc-panel-head > p {
-    color: rgba(238, 244, 237, 0.56);
+    color: var(--sb-ink-3);
     font-size: 13px;
+  }
+  .rtc-panel-copy {
+    max-width: 620px;
+    margin: 12px 0 0;
+    color: var(--sb-ink-2);
+    line-height: 1.55;
   }
   .rtc-table-wrap {
     overflow-x: auto;
@@ -585,12 +732,13 @@ const styles = `
   }
   .rtc-table th, .rtc-table td {
     padding: 18px 22px;
-    border-bottom: 1px solid rgba(238, 244, 237, 0.08);
+    border-bottom: 1px solid var(--sb-line-2);
     text-align: left;
     vertical-align: top;
   }
   .rtc-table th {
-    color: rgba(238, 244, 237, 0.46);
+    color: var(--sb-ink-3);
+    font-family: "JetBrains Mono", monospace;
     font-size: 11px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -606,8 +754,8 @@ const styles = `
     border-radius: 16px;
     display: grid;
     place-items: center;
-    color: #17201b;
-    background: linear-gradient(135deg, #e7b978, #a7c8a4);
+    color: var(--sb-on-ink);
+    background: radial-gradient(circle at 35% 35%, #FFD9A8 0%, var(--sb-accent-2) 45%, var(--sb-accent-deep) 100%);
     font-weight: 900;
   }
   .rtc-user strong, .rtc-user span, .rtc-user small, .rtc-cost-sub {
@@ -615,35 +763,37 @@ const styles = `
   }
   .rtc-user span, .rtc-user small, .rtc-cost-sub {
     margin-top: 3px;
-    color: rgba(238, 244, 237, 0.55);
+    color: var(--sb-ink-3);
     font-size: 12px;
   }
   .rtc-badge {
     display: inline-flex;
-    border: 1px solid rgba(238, 244, 237, 0.13);
+    border: 1px solid var(--sb-line);
     border-radius: 999px;
     padding: 6px 9px;
-    color: rgba(238, 244, 237, 0.7);
+    color: var(--sb-ink-2);
+    background: var(--sb-panel-2);
     font-size: 12px;
   }
   .rtc-badge-danger, .rtc-warning {
-    border-color: rgba(255, 107, 87, 0.45);
-    color: #ffd3cd;
-    background: rgba(255, 107, 87, 0.12);
+    border-color: rgba(196, 96, 42, 0.35);
+    color: var(--sb-accent-deep);
+    background: var(--sb-accent-soft);
   }
   .rtc-warning {
-    max-width: 1240px;
-    margin: 16px auto;
-    border: 1px solid rgba(255, 107, 87, 0.35);
+    margin-top: 16px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(196, 96, 42, 0.28);
     border-radius: 18px;
     padding: 14px 16px;
+    line-height: 1.5;
   }
   .rtc-warning-compact {
     margin: 12px 0 0;
   }
   .rtc-detail-row td {
     padding: 0;
-    background: rgba(0, 0, 0, 0.12);
+    background: var(--sb-bg-2);
   }
   .rtc-turns {
     display: grid;
@@ -651,31 +801,29 @@ const styles = `
     padding: 20px;
   }
   .rtc-turn {
-    border: 1px solid rgba(238, 244, 237, 0.12);
-    border-radius: 24px;
     padding: 18px;
-    background: rgba(255, 255, 255, 0.045);
+    background: var(--sb-panel-2);
   }
   .rtc-turn-danger {
-    border-color: rgba(255, 107, 87, 0.4);
-  }
-  .rtc-turn-head, .rtc-cost-breakdown {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
+    border-color: rgba(196, 96, 42, 0.45);
   }
   .rtc-turn-head span {
     display: block;
     margin-top: 3px;
-    color: rgba(238, 244, 237, 0.5);
+    color: var(--sb-ink-3);
     font-size: 12px;
   }
+  .rtc-turn-head small {
+    display: block;
+    margin-top: 6px;
+    color: var(--sb-ink-3);
+    font-size: 13px;
+  }
   .rtc-turn-cost {
-    color: #e7b978;
-    font-size: 22px;
-    font-weight: 900;
+    color: var(--sb-accent-deep);
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: 34px;
+    line-height: 1;
   }
   .rtc-dialogue {
     display: grid;
@@ -684,14 +832,14 @@ const styles = `
     margin-top: 16px;
   }
   .rtc-dialogue > div, .rtc-info-pill, .rtc-token {
-    border: 1px solid rgba(238, 244, 237, 0.09);
+    border: 1px solid var(--sb-line-2);
     border-radius: 16px;
     padding: 13px;
-    background: rgba(0, 0, 0, 0.16);
+    background: color-mix(in srgb, var(--sb-bg) 55%, var(--sb-panel-2));
   }
   .rtc-dialogue p {
     margin: 8px 0 0;
-    color: rgba(238, 244, 237, 0.82);
+    color: var(--sb-ink-2);
     line-height: 1.55;
   }
   .rtc-turn-grid, .rtc-token-grid {
@@ -703,27 +851,51 @@ const styles = `
   .rtc-token-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
+  .rtc-token-note {
+    margin: 14px 0 0;
+    padding: 12px 14px;
+    border-radius: 16px;
+    color: var(--sb-ink-2);
+    background: var(--sb-accent-soft);
+    line-height: 1.5;
+    font-size: 14px;
+  }
   .rtc-info-pill strong, .rtc-token strong {
     display: block;
     margin-top: 7px;
+    color: var(--sb-ink);
     word-break: break-word;
   }
+  .rtc-info-pill small, .rtc-token small {
+    display: block;
+    margin-top: 7px;
+    color: var(--sb-ink-3);
+    font-size: 12px;
+    line-height: 1.35;
+  }
   .rtc-token-danger {
-    border-color: rgba(255, 107, 87, 0.45);
-    background: rgba(255, 107, 87, 0.1);
+    border-color: rgba(196, 96, 42, 0.45);
+    background: var(--sb-accent-soft);
   }
   .rtc-cost-breakdown {
     justify-content: flex-start;
     margin-top: 14px;
-    color: rgba(238, 244, 237, 0.58);
+    color: var(--sb-ink-2);
     font-size: 13px;
+  }
+  .rtc-cost-breakdown span {
+    display: inline-flex;
+    padding: 7px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--sb-line);
+    background: var(--sb-panel);
   }
   .rtc-raw {
     margin-top: 14px;
   }
   .rtc-raw summary {
     cursor: pointer;
-    color: #e7b978;
+    color: var(--sb-accent-deep);
     font-size: 13px;
   }
   .rtc-raw pre {
@@ -731,22 +903,26 @@ const styles = `
     overflow: auto;
     border-radius: 14px;
     padding: 14px;
-    color: #d8ead6;
-    background: #070a09;
+    color: var(--sb-panel-2);
+    background: var(--sb-ink);
     font-size: 12px;
   }
   .rtc-status {
-    max-width: 760px;
-    margin: 80px auto;
+    max-width: 840px;
+    margin-top: 80px;
     padding: 34px;
   }
   .rtc-empty {
-    color: rgba(238, 244, 237, 0.62);
+    color: var(--sb-ink-3);
     text-align: center;
+    line-height: 1.55;
   }
   @media (max-width: 900px) {
     .rtc-shell {
-      padding: 24px 14px;
+      padding-top: 18px;
+    }
+    .rtc-hero, .rtc-guide, .rtc-cards, .rtc-panel, .rtc-warning, .rtc-status {
+      width: calc(100% - 28px);
     }
     .rtc-hero, .rtc-panel-head, .rtc-dialogue {
       display: block;
@@ -754,11 +930,14 @@ const styles = `
     .rtc-controls {
       margin-top: 20px;
     }
-    .rtc-cards, .rtc-turn-grid, .rtc-token-grid {
+    .rtc-guide, .rtc-cards, .rtc-turn-grid, .rtc-token-grid {
       grid-template-columns: 1fr;
     }
     .rtc-dialogue > div + div {
       margin-top: 12px;
+    }
+    .rtc-table {
+      min-width: 860px;
     }
   }
 `;
