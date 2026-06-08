@@ -1383,7 +1383,7 @@ async function bgSaveAgentTask(tabId, task, result) {
 
 async function bgRunBrainAgent(tabId, task, connectorHint) {
   let currentTabId = tabId;
-  const MAX_STEPS = 10;
+  const MAX_STEPS = bgIsLinkedInJobsTask(task) ? 18 : 10;
   const history = [];
 
   bgBrainUpdate(currentTabId, "Planning…");
@@ -1391,18 +1391,27 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
   // Fast path — no AI needed
   const fastActions = bgTryFastPath(task, []);
   if (fastActions) {
+    const shouldContinueAfterFastPath = fastActions.some(action => action.continueAfter);
     for (const action of fastActions) {
       bgBrainUpdate(currentTabId, `→ ${action.description}`);
+      let result = { success: true };
+      let snapshot = null;
       if (action.type === "navigate") {
         await new Promise(r => chrome.tabs.update(currentTabId, { url: action.url }, () => setTimeout(r, 2000)));
         await bgWaitForTabReady(currentTabId, 5000);
       } else {
-        await bgExecuteAgentAction(currentTabId, action);
+        result = await bgExecuteAgentAction(currentTabId, action);
+      }
+      if (shouldContinueAfterFastPath) {
+        snapshot = await bgGetPageSnapshot(currentTabId);
+        history.push({ ...action, result, snapshot });
       }
     }
-    bgBrainUpdate(currentTabId, "Done!");
-    bgSaveAgentTask(currentTabId, task, "Done.");
-    return;
+    if (!shouldContinueAfterFastPath) {
+      bgBrainUpdate(currentTabId, "Done!");
+      bgSaveAgentTask(currentTabId, task, "Done.");
+      return;
+    }
   }
 
   try {
@@ -2829,6 +2838,156 @@ function bgBuildMediumFastPath(task) {
   }];
 }
 
+function bgCleanLinkedInJobText(value) {
+  return String(value || "")
+    .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
+    .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
+    .replace(/\b(?:please|pls|for me|for|and|me|some|a few|the|an?|find|search|look for|look up|show|pull up|bring up|get|open|linkedin|linked in)\b/gi, " ")
+    .replace(/\b(?:jobs?|roles?|positions?|openings?|vacancies|hiring|career|careers)\b/gi, " ")
+    .replace(/[?!.,]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function bgNormalizeLinkedInLocation(value) {
+  const cleaned = bgCleanLinkedInJobText(value)
+    .replace(/\b(?:in|at|near|around|located in|location)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return "";
+  const lower = cleaned.toLowerCase();
+  const cityMap = {
+    hyd: "Hyderabad",
+    hyderabad: "Hyderabad",
+    bangalore: "Bengaluru",
+    bengaluru: "Bengaluru",
+    blr: "Bengaluru",
+    bombay: "Mumbai",
+    mumbai: "Mumbai",
+    pune: "Pune",
+    delhi: "Delhi",
+    ncr: "Delhi NCR",
+    gurgaon: "Gurugram",
+    gurugram: "Gurugram",
+    noida: "Noida",
+    chennai: "Chennai",
+  };
+  return cityMap[lower] || cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function bgParseLinkedInJobsTask(task) {
+  const raw = String(task || "").trim();
+  if (!raw) return null;
+
+  const wantsJobs = /\b(jobs?|roles?|positions?|openings?|vacancies|hiring|career|careers)\b/i.test(raw);
+  const wantsLinkedIn = /\b(linkedin|linked\s*in)\b/i.test(raw);
+  const wantsSearch = /\b(find|search|look for|look up|show|pull up|bring up|get|open)\b/i.test(raw);
+  if (!wantsJobs && !(wantsLinkedIn && wantsSearch)) return null;
+
+  const patterns = [
+    /(?:find|search|look for|look up|show|pull up|bring up|get|open)\s+(?:me\s+)?(.+?)\s+(?:jobs?|roles?|positions?|openings?|vacancies)\s+(?:in|at|near|around)\s+(.+?)(?:\s+(?:for me|please|pls))?$/i,
+    /(.+?)\s+(?:jobs?|roles?|positions?|openings?|vacancies)\s+(?:in|at|near|around)\s+(.+?)(?:\s+(?:for me|please|pls))?$/i,
+    /(?:jobs?|roles?|positions?|openings?|vacancies)\s+(?:for|as)\s+(.+?)\s+(?:in|at|near|around)\s+(.+?)(?:\s+(?:for me|please|pls))?$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+    const role = bgCleanLinkedInJobText(match[1]);
+    const location = bgNormalizeLinkedInLocation(match[2]);
+    if (role && location) return { role, location };
+  }
+
+  if (!wantsLinkedIn) return null;
+  const roleOnly = bgCleanLinkedInJobText(raw);
+  return roleOnly ? { role: roleOnly, location: "" } : null;
+}
+
+function bgBuildLinkedInJobsFastPath(task) {
+  const parsed = bgParseLinkedInJobsTask(task);
+  if (!parsed?.role) return null;
+
+  const params = new URLSearchParams();
+  params.set("keywords", parsed.role);
+  if (parsed.location) params.set("location", parsed.location);
+
+  return [{
+    type: "navigate",
+    url: `https://www.linkedin.com/jobs/search/?${params.toString()}`,
+    description: `Search LinkedIn Jobs for "${parsed.role}"${parsed.location ? ` in ${parsed.location}` : ""}`,
+    continueAfter: true,
+  }];
+}
+
+function bgIsLinkedInJobsTask(task) {
+  return Boolean(bgParseLinkedInJobsTask(task));
+}
+
+function bgGetLinkedInJobsSkillGuide(task, currentUrl) {
+  const parsed = bgParseLinkedInJobsTask(task);
+  const onLinkedInJobs = /linkedin\.com\/jobs/i.test(currentUrl || "");
+  if (!parsed && !onLinkedInJobs) return "";
+
+  const role = parsed?.role || "the requested role";
+  const location = parsed?.location || "the requested location";
+  const searchUrl = parsed?.role
+    ? `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(parsed.role)}${parsed.location ? `&location=${encodeURIComponent(parsed.location)}` : ""}`
+    : "https://www.linkedin.com/jobs/search/";
+
+  return `
+── SKILL: LINKEDIN JOBS RESEARCH ──
+Use this skill for LinkedIn job searches and job-fit recommendations.
+Target search: role="${role}", location="${location}"
+Start URL: ${searchUrl}
+
+GOAL:
+Return 3-5 relevant jobs with title, company, location, job link, short description, key requirements, and a fit recommendation. Do NOT apply, save, message recruiters, or click Easy Apply unless the user explicitly asks and confirms.
+
+FLOW:
+1. If not already on LinkedIn Jobs results for the requested role/location, navigate to the Start URL.
+2. wait 1500, then read the results list to verify LinkedIn loaded. If login wall appears, clarify that the user must log in to LinkedIn.
+3. If the user requested filters such as remote, hybrid, recent, internship, experience level, or easy apply, apply only those filters. Otherwise do not over-filter.
+4. Read visible job cards first. Prefer selectors:
+   - .jobs-search-results-list
+   - ul.jobs-search-results__list
+   - .scaffold-layout__list
+   - [data-job-id]
+   - .job-card-container
+   - .job-card-list__title
+   - .job-card-container__link
+5. Open one relevant job at a time by clicking the card/title. After each click, wait 900, verify the details pane or job page changed, then read the full job detail area with maxChars 3500.
+6. For job details, prefer selectors:
+   - .jobs-search__job-details--container
+   - .jobs-details
+   - .jobs-description
+   - .jobs-box__html-content
+   - [class*="jobs-description"]
+   - main
+7. If a "Show more" or "See more" button appears in the description, click it before reading.
+8. Remember each job before moving to the next. Capture link from current URL or the card href. If the details pane does not expose a unique link, include the visible card/job link from the page.
+9. Stop after 3-5 solid jobs or when results are exhausted.
+10. Final done message must be markdown:
+   ## LinkedIn jobs found
+   - **Title - Company** (Location)
+     Link: URL
+     Description: 1-2 sentence summary
+     Requirements: short bullets
+     Fit: Strong / Maybe / Weak, with honest reason
+
+FIT RULES:
+- Do not invent the user's resume or experience.
+- If no user profile/resume context is available, say "Based only on the job description, this looks..." and recommend what experience would make them a fit.
+- Prefer honesty over hype. Mention missing requirements clearly.
+
+LINKEDIN LOCATOR FALLBACKS:
+Search keyword input: [aria-label*="Search by title"], [aria-label*="Search jobs"], [placeholder*="Search jobs"], input[id*="jobs-search-box-keyword"]
+Location input: [aria-label*="City"], [aria-label*="location"], input[id*="jobs-search-box-location"]
+Filter buttons: targetText="Date posted", targetText="Experience level", targetText="Remote", targetText="Easy Apply"
+Job cards: [data-job-id], .job-card-container, .jobs-search-results__list-item, .job-card-list__title
+Details panel: .jobs-search__job-details--container, .jobs-details, .jobs-description, .jobs-box__html-content, main
+`;
+}
+
 function bgTryFastPath(task, history) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
@@ -2852,6 +3011,8 @@ function bgTryFastPath(task, history) {
   }
   const mediumFastPath = bgBuildMediumFastPath(task);
   if (mediumFastPath) return mediumFastPath;
+  const linkedInJobsFastPath = bgBuildLinkedInJobsFastPath(task);
+  if (linkedInJobsFastPath) return linkedInJobsFastPath;
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
     const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
@@ -2999,6 +3160,8 @@ For forms: click field → type → Tab to next field → submit.`;
 }
 
 async function bgCallAgentStep(task, pageInfo, history, currentStep = null) {
+  const isLinkedInJobsTask = bgIsLinkedInJobsTask(task);
+  const readTextLimit = isLinkedInJobsTask ? 2400 : 200;
   const historyText = history.length > 0
     ? history.map((h, i) => {
         if (h.type === "web_search") {
@@ -3009,7 +3172,7 @@ async function bgCallAgentStep(task, pageInfo, history, currentStep = null) {
         }
         const status = h.result?.success ? "✓ OK" : `✗ ${h.result?.error || "FAILED"}`;
         const snap = h.snapshot ? ` → page after: "${h.snapshot.title}" | ${h.snapshot.url}` : "";
-        const readVal = h.type === "read" && h.result?.text ? ` → content: "${h.result.text.slice(0, 200)}"` : "";
+        const readVal = h.type === "read" && h.result?.text ? ` → content: "${h.result.text.slice(0, readTextLimit)}"` : "";
         return `Step ${i + 1}: [${h.type}] ${h.description} → ${status}${snap}${readVal}`;
       }).join("\n")
     : "None yet.";
@@ -3043,7 +3206,7 @@ ACTIONS:
 {"type":"type","selector":"css","targetText":"fallback","text":"...","description":"..."}
 {"type":"pressKey","key":"Enter","description":"..."}
 {"type":"selectOption","selector":"css","value":"option text","description":"..."}
-{"type":"read","selector":"css","targetText":"fallback","description":"Read element to verify state"}
+{"type":"read","selector":"css","targetText":"fallback","maxChars":3500,"description":"Read element to verify state"}
 {"type":"scroll","direction":"down","amount":400,"description":"..."}
 {"type":"wait","ms":1500,"description":"..."}
 {"type":"downloadImage","selector":"css","targetText":"fallback alt text","format":"png","filename":"image.png","description":"Download image as PNG/JPEG/WebP"}
@@ -3160,6 +3323,7 @@ Paytm:          https://paytm.com/search?q=QUERY
 IRCTC trains:   https://www.irctc.co.in/nget/train-search  (no URL params — use form)
 
 ${bgGetPlatformGuide(currentUrl)}
+${bgGetLinkedInJobsSkillGuide(task, currentUrl)}
 
 ANSWER FORMATTING (for {"type":"answer"} responses):
 - Always use markdown in the message field — never return a flat comma-separated list

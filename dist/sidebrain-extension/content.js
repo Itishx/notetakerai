@@ -1675,6 +1675,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } else if (type === "read") {
         // Read element content so agent can verify state before acting
         let el = null;
+        const requestedMaxChars = Number(msg.maxChars || msg.maxLength || 0);
+        const maxChars = Number.isFinite(requestedMaxChars) && requestedMaxChars > 0
+          ? Math.min(Math.max(Math.floor(requestedMaxChars), 200), 8000)
+          : null;
         if (selector) { try { el = document.querySelector(selector); } catch (e) {} }
         if (!el && targetText) {
           const needle = targetText.toLowerCase();
@@ -1686,14 +1690,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (!el) {
           // Fall back to returning visible page text excerpt
-          sendResponse({ success: true, text: document.body?.innerText?.slice(0, 800) || "(empty)" });
+          sendResponse({ success: true, text: document.body?.innerText?.slice(0, maxChars || 800) || "(empty)" });
         } else {
           // For select elements, return all options
           if (el.tagName === "SELECT") {
             const opts = Array.from(el.options).map(o => o.text.trim()).join(", ");
             sendResponse({ success: true, text: `Options: ${opts} | Selected: ${el.options[el.selectedIndex]?.text}` });
           } else {
-            sendResponse({ success: true, text: (el.innerText || el.textContent || "").trim().slice(0, 500) });
+            sendResponse({ success: true, text: (el.innerText || el.textContent || "").trim().slice(0, maxChars || 500) });
           }
         }
 
