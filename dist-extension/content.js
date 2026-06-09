@@ -2285,7 +2285,6 @@ const __SB_TTS_PROVIDER = "elevenlabs";
 const __SB_TTS_ENDPOINT = "elevenlabs-tts";
 const __SB_TTS_RETRY_MIN_MS = 5000;
 const __SB_TTS_RETRY_MAX_MS = 12000;
-const __SB_FISH_JARVIS_VOICE_ID = "c5cf851eb2664ffaa929d17b899aa0a3";
 const __SB_ELEVENLABS_VOICE_ID = "PI9w0jWUtb68a6R6eQbl";
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
@@ -2311,7 +2310,7 @@ let __sbLastAgentTask = "";
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
   if (event.data?.type !== "sbSetVoicePref") return;
-  const pref = ["fish", "elevenlabs", "realtime"].includes(event.data.pref) ? event.data.pref : "elevenlabs";
+  const pref = __sbNormalizeVoiceOutputPref(event.data.pref);
   __sbVoiceOutputPref = pref;
   chrome.storage.local.set({ brainoVoicePref: pref });
 });
@@ -6093,7 +6092,7 @@ async function __sbSpeakText(text, options = {}) {
   __sbStopSpeech();
   const speechToken = ++__sbSpeechGeneration;
   let spoke = false;
-  // In headphone (realtime) mode we DON'T mute the mic while Fish Audio speaks — the whole
+  // In headphone (realtime) mode we DON'T mute the mic while ElevenLabs speaks — the whole
   // point of the realtime mechanism is that the user can barge in. The browser's echo
   // cancellation (echoCancellation:true on the mic) keeps Braino's own voice from
   // self-triggering, and speech_started stops playback the instant the user talks. We only
@@ -6105,7 +6104,7 @@ async function __sbSpeakText(text, options = {}) {
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
     if (speechToken !== __sbSpeechGeneration) return false;
 
-    // fish-audio-tts is public (verify_jwt=false) and uses a server-side key, so it works
+    // elevenlabs-tts uses a server-side key, so it works
     // with just the anon apikey — no user token required. Send the token when we have it.
     const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
     if (ttsToken) headers.Authorization = `Bearer ${ttsToken}`;
@@ -6150,17 +6149,17 @@ async function __sbSpeakText(text, options = {}) {
       provider: "browser",
       error: ttsErr?.message || String(ttsErr || "TTS failed"),
     });
-    console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", ttsErr?.message || ttsErr);
+    console.warn("[Braino] ElevenLabs TTS failed; falling back to browser voice:", ttsErr?.message || ttsErr);
     const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
-    __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish credits" : "Browser voice");
+    __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "ElevenLabs credits" : "Browser voice");
     if (__sbHeadphoneMode || __sbVoiceOnlyMode) {
       __sbShowVoiceError(isCreditIssue
-        ? "Fish Audio credits or rate limit are exhausted. Falling back to browser voice for now."
-        : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.");
+        ? "ElevenLabs credits or rate limit are exhausted. Falling back to browser voice for now."
+        : "ElevenLabs voice is unavailable after retrying. Falling back to browser voice for now.");
     } else {
       __sbShowBubble(isCreditIssue
-        ? "Fish Audio credits or rate limit are exhausted. Using browser voice."
-        : "Fish Audio voice is unavailable. Using browser voice.", true, { tone: "status" });
+        ? "ElevenLabs credits or rate limit are exhausted. Using browser voice."
+        : "ElevenLabs voice is unavailable. Using browser voice.", true, { tone: "status" });
     }
     spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
@@ -8328,7 +8327,7 @@ let __sbRtMic = null;
 let __sbRtRemoteAudio = null;
 let __sbUseOffscreenRt = false; // true when realtime session lives in the offscreen doc
 const __SB_REALTIME_VOICE = "verse";
-let __sbVoiceOutputPref = "elevenlabs"; // "realtime" | "fish" | "elevenlabs"
+let __sbVoiceOutputPref = "elevenlabs"; // "realtime" | "elevenlabs"
 let __sbRtUserTranscript = "";
 let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
@@ -8358,6 +8357,19 @@ let __sbRtConnectFailureCount = 0;
 let __sbRtRetryTimer = null;
 let __sbRtLocalConnectInFlight = false;
 let __sbRtLastFailureAt = 0;
+
+function __sbNormalizeVoiceOutputPref(value) {
+  return value === "realtime" ? "realtime" : "elevenlabs";
+}
+
+function __sbApplyStoredVoiceOutputPref(value) {
+  const pref = __sbNormalizeVoiceOutputPref(value);
+  __sbVoiceOutputPref = pref;
+  if (value && value !== pref && __sbContextOk()) {
+    chrome.storage.local.set({ brainoVoicePref: pref });
+  }
+  return pref;
+}
 
 function __sbResetRealtimeConnectFailures() {
   __sbRtConnectFailureCount = 0;
@@ -8400,9 +8412,6 @@ function __sbResetRealtimeUsageState() {
 }
 
 function __sbGetRealtimeCostVoiceInfo() {
-  if (__sbVoiceOutputPref === "fish") {
-    return { voiceProvider: "fish", voiceId: __SB_FISH_JARVIS_VOICE_ID, voiceName: "Jarvis" };
-  }
   if (__sbVoiceOutputPref === "elevenlabs") {
     return { voiceProvider: "elevenlabs", voiceId: __SB_ELEVENLABS_VOICE_ID, voiceName: "ElevenLabs Braino" };
   }
@@ -8616,10 +8625,10 @@ function __sbBuildRealtimeBootInstructions() {
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
-  // When using an external TTS voice (Fish/ElevenLabs) the realtime model only needs to
+  // When using ElevenLabs, the realtime model only needs to
   // return TEXT — we generate the audio ourselves. In native realtime mode, the model
   // produces audio directly.
-  const useExternalTts = __sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs";
+  const useExternalTts = __sbVoiceOutputPref === "elevenlabs";
   return {
     type: "session.update",
     session: {
@@ -9042,7 +9051,7 @@ try {
 
     if ("brainoVoicePref" in changes) {
       const v = changes.brainoVoicePref.newValue;
-      __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
+      __sbApplyStoredVoiceOutputPref(v);
     }
 
     if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
@@ -9186,7 +9195,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
   __sbRtRelayingAppMessage = relayMode;
   __sbRtHandlingConversationTurn = !relayMode;
 
-  const rtOutputModalities = (__sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs") ? ["text"] : ["audio"];
+  const rtOutputModalities = __sbVoiceOutputPref === "elevenlabs" ? ["text"] : ["audio"];
   const responsePromise = __sbCreateRtWaiter();
   const responseCreated = relayMode
     ? __sbSendRtEvent({
@@ -9245,9 +9254,9 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
   // In native realtime mode the model speaks via WebRTC audio — we must NOT also call a
-  // TTS endpoint (that would be two voices). Only call __sbSpeakText when an external voice
-  // (Fish Audio / ElevenLabs) is selected, OR when falling back from a failed relay.
-  const useExternalTts = __sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs";
+  // TTS endpoint (that would be two voices). Only call __sbSpeakText when ElevenLabs is
+  // selected, OR when falling back from a failed relay.
+  const useExternalTts = __sbVoiceOutputPref === "elevenlabs";
   if (preferred === "realtime") __sbAppendRealtimeCostAssistantMessage(text);
 
   if (preferred === "realtime" && __sbRtControlReady() && !useExternalTts) {
@@ -9255,7 +9264,7 @@ async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options =
     await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
     return true;
   }
-  // External TTS voice (Fish / ElevenLabs) or non-realtime context.
+  // External TTS voice (ElevenLabs) or non-realtime context.
   return await __sbSpeakText(text, { verbatim: !!options.verbatim });
 }
 
@@ -9548,13 +9557,13 @@ function __sbHandleRtEvent(ev) {
   if (ev.type === "input_audio_buffer.speech_started") {
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
-    // voices: cancel the realtime model's audio and stop Fish/browser playback.
+    // voices: cancel the realtime model's audio and stop ElevenLabs/browser playback.
     // Without this, provider audio keeps playing and feels "not realtime".
     if (__sbHasActiveRealtimeResponse()) {
       __sbVoicePendingReply = false;
       __sbInterruptRealtimeResponse();
     }
-    __sbStopSpeech(); // stop Fish Audio / browser TTS playback so the user can barge in
+    __sbStopSpeech(); // stop ElevenLabs / browser TTS playback so the user can barge in
     __sbRtUserTranscript = "";
     if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
     return;
@@ -9796,8 +9805,7 @@ function __sbEnterHeadphoneMode(options = {}) {
 
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
   __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
-    const v = stored.brainoVoicePref;
-    __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
+    __sbApplyStoredVoiceOutputPref(stored.brainoVoicePref);
 
     if (stored.sbRtSessionActive) {
       __sbUseOffscreenRt = true;

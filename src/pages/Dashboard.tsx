@@ -995,11 +995,9 @@ export default function Dashboard() {
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
-  const [voicePref, setVoicePref] = useState<"realtime" | "elevenlabs" | "fish">(() => {
+  const [voicePref, setVoicePref] = useState<"realtime" | "elevenlabs">(() => {
     const stored = localStorage.getItem("brainoVoicePref");
-    if (stored === "elevenlabs") return "elevenlabs";
-    if (stored === "fish") return "fish";
-    return "realtime";
+    return stored === "realtime" ? "realtime" : "elevenlabs";
   });
   const [overallMemory, setOverallMemory] = useState("");
   const [overallMemoryDraft, setOverallMemoryDraft] = useState("");
@@ -1069,6 +1067,11 @@ export default function Dashboard() {
       spotifyPollRef.current = null;
     }
   }
+
+  useEffect(() => {
+    localStorage.setItem("brainoVoicePref", voicePref);
+    window.postMessage({ type: "sbSetVoicePref", pref: voicePref }, "*");
+  }, [voicePref]);
 
   async function refreshGoogleDriveConnection(userId: string) {
     const { data } = await supabase
@@ -4632,9 +4635,8 @@ export default function Dashboard() {
 
                   <div className="space-y-3">
                     {([
-                      { id: "realtime",   label: "Realtime AI",          desc: "OpenAI's native voice — ultra-low latency, fully interruptible" },
-                      { id: "fish",       label: "Jarvis (Fish Audio)",   desc: "Braino's signature AI voice — rich, natural, barge-in aware" },
-                      { id: "elevenlabs", label: "ElevenLabs",            desc: "Classic ElevenLabs voice — same realtime interruption mechanism" },
+                      { id: "elevenlabs", label: "ElevenLabs",            desc: "Braino's default voice — Realtime listens, ElevenLabs speaks" },
+                      { id: "realtime",   label: "Realtime AI",          desc: "OpenAI's native voice — lowest latency, but uses OpenAI audio output" },
                     ] as const).map(({ id: option, label, desc }) => {
                       const isSelected = voicePref === option;
                       return (

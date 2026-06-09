@@ -24,7 +24,7 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
     rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
 
     // Keep the remote track attached for WebRTC compatibility, but never play OpenAI audio.
-    // Braino's primary audible voice is Fish Audio from the content script.
+    // Braino's primary audible voice is ElevenLabs from the content script.
     rtRemoteAudio = new Audio();
     rtRemoteAudio.autoplay = true;
     rtRemoteAudio.muted = true;
