@@ -2967,16 +2967,36 @@ function bgEncodeMapsPath(value) {
 }
 
 function bgCleanGoogleMapsQuery(value) {
-  let query = String(value || "").trim();
+  const raw = String(value || "").trim();
+  const mealIntent = /\b(?:eat|eating|food|dinner|lunch|breakfast|brunch)\b/i.test(raw);
+  let query = raw
+    .replace(/\bnear me\b/gi, "__NEAR_ME__")
+    .replace(/\baround me\b/gi, "__AROUND_ME__");
   query = query
+    .replace(/[?!.,;:]+/g, " ")
     .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
     .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
-    .replace(/\b(?:please|pls|for me|me|some|a few|the|an?)\b/gi, " ")
+    .replace(/\bon\s+(?:google\s+)?maps?\b/gi, " ")
+    .replace(/\bwhere\s+(?:should|can|could|do)\s+i(?:\s+go)?(?:\s+to)?\b/gi, " ")
+    .replace(/\bwhere\s+to\b/gi, " ")
+    .replace(/\bi\s+(?:should|can|could|want\s+to|wanna)\s+(?:eat|go)\b/gi, " ")
+    .replace(/\b(?:please|pls|for me|some|a few|the|an?)\b/gi, " ")
     .replace(/\b(?:open|show|display|pull up|bring up|find|search(?: for)?|look for|look up|get|give|recommend|suggest)\b/gi, " ")
     .replace(/\b(?:google\s+)?maps?\b/gi, " ")
+    .replace(/\b(?:eat|eating|food|places?)\b/gi, " ")
+    .replace(/\bon\b/gi, " ")
+    .replace(/__NEAR_ME__/g, "near me")
+    .replace(/__AROUND_ME__/g, "around me")
     .replace(/\s+/g, " ")
     .trim();
-  return query || String(value || "").trim();
+  if (mealIntent && !/\b(?:restaurants?|cafes?|coffee|bars?|pubs?)\b/i.test(query)) {
+    const mealKind = query.match(/\b(dinner|lunch|breakfast|brunch)\b/i)?.[1];
+    query = mealKind
+      ? query.replace(/\b(dinner|lunch|breakfast|brunch)\b/i, `${mealKind} restaurants`)
+      : `restaurants ${query}`;
+    query = query.replace(/\s+/g, " ").trim();
+  }
+  return query || raw;
 }
 
 function bgLooksLikeGoogleMapsPlaceTask(task) {
