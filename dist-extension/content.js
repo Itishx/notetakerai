@@ -2286,7 +2286,7 @@ const __SB_TTS_ENDPOINT = "elevenlabs-tts";
 const __SB_TTS_RETRY_MIN_MS = 5000;
 const __SB_TTS_RETRY_MAX_MS = 12000;
 const __SB_FISH_JARVIS_VOICE_ID = "c5cf851eb2664ffaa929d17b899aa0a3";
-const __SB_ELEVENLABS_VOICE_ID = "vBKc2FfBKJfcZNyEt1n6";
+const __SB_ELEVENLABS_VOICE_ID = "PI9w0jWUtb68a6R6eQbl";
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
@@ -2325,6 +2325,21 @@ if (__sbContextOk()) {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       __sbToggleBrain();
       sendResponse({ ok: true });
+    }
+    if (msg.action === "startXAutomation") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      if (!__sbIsOnX()) {
+        sendResponse({ ok: false, error: "This tab is not X." });
+        return false;
+      }
+      if (__sbXRunning) {
+        __sbShowBubble('X Automation is already running.', false, { tone: 'status', title: 'X Automation' });
+        sendResponse({ ok: true, alreadyRunning: true });
+        return false;
+      }
+      void __sbRunXAutomation({ startOnly: true });
+      sendResponse({ ok: true });
+      return false;
     }
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
@@ -3299,6 +3314,144 @@ function __sbBuildBrainUI() {
       margin: 0;
       line-height: 1.55;
     }
+    .sb-x-draft-card {
+      width: 100%;
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 22px;
+      border: 1px solid rgba(65,48,40,0.12);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(20,20,20,0.11), transparent 16rem),
+        linear-gradient(150deg, rgba(255,255,255,0.96), rgba(249,241,231,0.90));
+      box-shadow: 0 18px 40px rgba(27,23,19,0.10);
+      color: #17120E;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .sb-x-draft-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #17120E;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .sb-x-draft-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      background: #17120E;
+      box-shadow: 0 0 12px rgba(23,18,14,0.28);
+    }
+    .sb-x-draft-card h2 {
+      margin: 0;
+      color: #17120E;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+    .sb-x-draft-card p {
+      margin: 0;
+      color: rgba(27,23,19,0.66);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .sb-x-draft-editor {
+      width: 100%;
+      min-height: 128px;
+      border: 1px solid rgba(65,48,40,0.14);
+      border-radius: 17px;
+      padding: 13px 14px;
+      resize: vertical;
+      outline: none;
+      color: #17120E;
+      background: rgba(255,255,255,0.78);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 17px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .sb-x-draft-editor:focus {
+      border-color: rgba(201,84,74,0.38);
+      box-shadow: 0 0 0 3px rgba(201,84,74,0.10), inset 0 1px 0 rgba(255,255,255,0.65);
+    }
+    .sb-x-draft-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: rgba(27,23,19,0.56);
+      font-size: 11.5px;
+      line-height: 1.4;
+    }
+    .sb-x-draft-count.over { color: #B42318; font-weight: 800; }
+    .sb-x-draft-actions,
+    .sb-x-schedule-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .sb-x-draft-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 13px;
+      cursor: pointer;
+      color: #17120E;
+      background: rgba(65,48,40,0.08);
+      font-size: 12px;
+      font-weight: 850;
+      transition: transform 0.12s, background 0.12s, opacity 0.12s;
+    }
+    .sb-x-draft-btn:hover { transform: translateY(-1px); background: rgba(65,48,40,0.13); }
+    .sb-x-draft-btn.primary {
+      color: #fff;
+      background: #17120E;
+      box-shadow: 0 10px 22px rgba(23,18,14,0.18);
+    }
+    .sb-x-draft-btn.accent {
+      color: #fff;
+      background: #C9544A;
+      box-shadow: 0 10px 22px rgba(201,84,74,0.22);
+    }
+    .sb-x-draft-btn[disabled] {
+      opacity: 0.55;
+      cursor: wait;
+      transform: none;
+    }
+    .sb-x-schedule-panel {
+      display: none;
+      gap: 9px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(201,84,74,0.14);
+      background: rgba(255,232,217,0.58);
+    }
+    .sb-x-schedule-panel.visible { display: grid; }
+    .sb-x-schedule-input {
+      min-height: 38px;
+      border: 1px solid rgba(65,48,40,0.14);
+      border-radius: 12px;
+      padding: 0 11px;
+      color: #17120E;
+      background: rgba(255,255,255,0.82);
+      font-size: 13px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .sb-x-draft-status {
+      min-height: 18px;
+      color: rgba(27,23,19,0.62);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .sb-x-draft-status.error { color: #B42318; font-weight: 700; }
+    .sb-x-draft-status.success { color: #17663b; font-weight: 700; }
     .sb-card-stack.sb-card-stack-spotify {
       justify-content: flex-start;
       gap: 18px;
@@ -5148,18 +5301,22 @@ async function __sbXPostReply(article, replyText) {
   return true;
 }
 
-async function __sbRunXAutomation() {
+async function __sbRunXAutomation(options = {}) {
   if (!__sbIsOnX()) {
     __sbShowBubble('Navigate to X (twitter.com) first, then start the automation.', true, { tone: 'status', title: 'X Automation' });
-    return;
+    return { ok: false, error: "Navigate to X first." };
   }
   if (__sbXRunning) {
+    if (options.startOnly) {
+      __sbShowBubble('X Automation is already running.', false, { tone: 'status', title: 'X Automation' });
+      return { ok: true, alreadyRunning: true };
+    }
     __sbXStopReason = 'manual';
     __sbXRunning = false;
     const btn = document.getElementById('__sb_x_auto_btn__');
     if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
     __sbShowBubble('Automation stopped.', true, { tone: 'status', title: 'Stopped' });
-    return;
+    return { ok: true, stopped: true };
   }
 
   __sbXRunning = true;
@@ -5240,6 +5397,7 @@ async function __sbRunXAutomation() {
   });
   const label = __sbXStopReason === 'manual' ? 'Automation stopped' : 'Automation finished';
   __sbShowBubble(`${label} — replied to ${count} post${count !== 1 ? 's' : ''} in ${__sbXFormatRunMinutes(durationMs)}.`, true, { tone: 'status', title: 'Done' });
+  return { ok: true, repliedCount: count, durationMs };
 }
 // ===== END X AUTOMATION =====
 
@@ -6727,6 +6885,452 @@ function __sbXFirst12Words(text) {
   return words.slice(0, 12).join(" ") + "…";
 }
 
+let __sbXSkillState = { phase: "idle" };
+
+function __sbResetXSkillState() {
+  __sbXSkillState = { phase: "idle" };
+}
+
+function __sbSetXSkillState(next = {}) {
+  __sbXSkillState = {
+    phase: "idle",
+    ...next,
+    updatedAt: Date.now(),
+  };
+}
+
+function __sbIsXSkillAwaitingInput() {
+  return ["awaiting_create_confirm", "awaiting_post_brief", "draft_ready", "awaiting_schedule"].includes(__sbXSkillState?.phase);
+}
+
+function __sbGetXFollowerDelta(data) {
+  const raw = data?.followers?.delta7d;
+  if (raw == null || raw === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function __sbBuildXPostOffer(data) {
+  const delta = __sbGetXFollowerDelta(data);
+  if (delta > 0) {
+    return `You seem to have gained ${delta} follower${delta === 1 ? "" : "s"} in the last 7 days. Would you like me to create a post for you, sir?`;
+  }
+  if (delta < 0) {
+    const lost = Math.abs(delta);
+    return `You seem to have lost ${lost} follower${lost === 1 ? "" : "s"} in the last 7 days. Would you like me to create a post for you, sir?`;
+  }
+  return "Would you like me to create a post for you, sir?";
+}
+
+function __sbIsXSkillYes(text) {
+  const t = String(text || "").trim().toLowerCase();
+  return /^(yes|yeah|yep|ya|sure|ok|okay|do it|go ahead|please do|make it|create it|write it|yes sir)\b/.test(t);
+}
+
+function __sbIsXSkillNo(text) {
+  const t = String(text || "").trim().toLowerCase();
+  return /^(no|nope|nah|not now|later|leave it|cancel|stop|don't|do not)\b/.test(t);
+}
+
+function __sbIsXDraftPostNowCommand(text) {
+  const t = String(text || "").toLowerCase();
+  return /\b(post|publish|send)\b.*\b(now|it|this|x|twitter)\b/.test(t)
+    || /\b(post|publish|send)\s+it\b/.test(t);
+}
+
+function __sbIsXDraftScheduleCommand(text) {
+  return /\b(schedule|queue|post later|later)\b/i.test(String(text || ""));
+}
+
+function __sbIsXDraftEditCommand(text) {
+  return /\b(edit|change|modify|rewrite|revise|make it)\b/i.test(String(text || ""));
+}
+
+function __sbIsStartXAutomationCommand(text) {
+  const t = String(text || "").toLowerCase();
+  return /\b(start|run|launch|begin|turn on)\b.*\b(x|twitter)\b.*\b(auto|automation)\b/.test(t)
+    || /\b(start|run|launch|begin|turn on)\b.*\bx auto\b/.test(t)
+    || /\bx auto\b.*\b(start|run|launch|begin|turn on)\b/.test(t);
+}
+
+function __sbXLocalDateTimeValue(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    "-",
+    pad(date.getMonth() + 1),
+    "-",
+    pad(date.getDate()),
+    "T",
+    pad(date.getHours()),
+    ":",
+    pad(date.getMinutes()),
+  ].join("");
+}
+
+function __sbGetXBrowserContext() {
+  return {
+    browserTime: new Date().toISOString(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+  };
+}
+
+async function __sbDraftXPostFromBrief(brief) {
+  return await __sbRuntimeMessage({
+    action: "draftXPostFromBrief",
+    brief: String(brief || "").trim(),
+    ...__sbGetXBrowserContext(),
+  });
+}
+
+async function __sbPostXDraftNow(content) {
+  return await __sbRuntimeMessage({
+    action: "postXDraftNow",
+    content: String(content || "").trim(),
+    ...__sbGetXBrowserContext(),
+  });
+}
+
+async function __sbScheduleXDraft(content, scheduledAt) {
+  return await __sbRuntimeMessage({
+    action: "scheduleXDraft",
+    content: String(content || "").trim(),
+    scheduledAt: String(scheduledAt || "").trim(),
+    ...__sbGetXBrowserContext(),
+  });
+}
+
+function __sbBuildXDraftReviewHtml() {
+  const draft = String(__sbXSkillState?.draftText || "").trim();
+  const count = draft.length;
+  const defaultSchedule = __sbXLocalDateTimeValue(new Date(Date.now() + 60 * 60 * 1000));
+  const scheduleVisible = __sbXSkillState?.phase === "awaiting_schedule";
+  const status = String(__sbXSkillState?.statusText || "").trim();
+  const statusTone = String(__sbXSkillState?.statusTone || "").trim();
+  return `
+    <div class="sb-x-draft-card">
+      <div class="sb-x-draft-kicker">X draft ready</div>
+      <h2>Should I post it for you, sir?</h2>
+      <p>I wrote this in your saved X voice. You can edit it here before anything gets posted.</p>
+      <textarea class="sb-x-draft-editor" data-sb-x-draft-text spellcheck="true">${__sbEscapeHtml(draft)}</textarea>
+      <div class="sb-x-draft-meta">
+        <span>Nothing posts until you approve it.</span>
+        <strong class="sb-x-draft-count${count > 280 ? " over" : ""}" data-sb-x-draft-count>${count}/280</strong>
+      </div>
+      <div class="sb-x-draft-actions">
+        <button class="sb-x-draft-btn" type="button" data-sb-x-action="edit">Edit post</button>
+        <button class="sb-x-draft-btn primary" type="button" data-sb-x-action="post-now">Post now</button>
+        <button class="sb-x-draft-btn accent" type="button" data-sb-x-action="schedule">Schedule</button>
+      </div>
+      <div class="sb-x-schedule-panel${scheduleVisible ? " visible" : ""}" data-sb-x-schedule-panel>
+        <div class="sb-x-schedule-row">
+          <input class="sb-x-schedule-input" data-sb-x-schedule-input type="datetime-local" value="${__sbEscapeHtml(defaultSchedule)}">
+          <button class="sb-x-draft-btn accent" type="button" data-sb-x-action="confirm-schedule">Confirm schedule</button>
+        </div>
+        <p>Pick the exact local date and time for Braino to queue this on X.</p>
+      </div>
+      <div class="sb-x-draft-status ${__sbEscapeHtml(statusTone)}" data-sb-x-draft-status>${__sbEscapeHtml(status)}</div>
+    </div>
+  `;
+}
+
+function __sbRenderXDraftReviewCard(options = {}) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
+  scroll.innerHTML = `<div class="sb-card-stack">${historyHtml}${__sbBuildXDraftReviewHtml()}</div>`;
+  __sbOpenCard({ rich: true });
+  __sbBindXDraftReviewCard(options);
+  __sbScrollCardToLatest(scroll);
+  __sbSyncSpeakButtons();
+}
+
+function __sbSetXDraftStatus(text, tone = "") {
+  __sbXSkillState.statusText = String(text || "");
+  __sbXSkillState.statusTone = tone;
+  const el = document.querySelector("[data-sb-x-draft-status]");
+  if (!el) return;
+  el.textContent = __sbXSkillState.statusText;
+  el.classList.toggle("error", tone === "error");
+  el.classList.toggle("success", tone === "success");
+}
+
+function __sbSetXDraftBusy(isBusy) {
+  document.querySelectorAll("[data-sb-x-action]").forEach((btn) => {
+    btn.disabled = !!isBusy;
+  });
+}
+
+function __sbGetCurrentXDraftText() {
+  const editor = document.querySelector("[data-sb-x-draft-text]");
+  return String(editor?.value || __sbXSkillState?.draftText || "").trim();
+}
+
+function __sbValidateXDraftText(text) {
+  const content = String(text || "").trim();
+  if (!content) return "Write something first, then I can post it.";
+  if (content.length > 280) return `This is ${content.length} characters. X posts need to stay at 280 or less.`;
+  return "";
+}
+
+async function __sbMaybeSpeakXDraftResult(text) {
+  const shouldSpeak = __sbHeadphoneMode || __sbXSkillState?.source === "voice";
+  if (!shouldSpeak) return;
+  const voiceOutput = __sbXSkillState?.voiceOutput === "realtime" ? "realtime" : "legacy";
+  await __sbSpeakWithPreferredVoice(__sbStripMarkdownForSpeech(text), voiceOutput, { verbatim: true });
+}
+
+async function __sbHandleXDraftPostNowClick() {
+  const content = __sbGetCurrentXDraftText();
+  const error = __sbValidateXDraftText(content);
+  if (error) { __sbSetXDraftStatus(error, "error"); return; }
+
+  __sbSetXDraftBusy(true);
+  __sbSetXDraftStatus("Posting to X...");
+  const data = await __sbPostXDraftNow(content);
+  __sbSetXDraftBusy(false);
+
+  if (!data || data.error) {
+    const msg = data?.error || "I could not post that to X just now.";
+    __sbSetXDraftStatus(msg, "error");
+    await __sbMaybeSpeakXDraftResult(msg);
+    return;
+  }
+
+  const reply = data.reply || "Posted to X.";
+  __sbXSkillState.draftText = content;
+  __sbChatHistory.push({ role: "assistant", content: reply });
+  __sbSetXDraftStatus(reply, "success");
+  await __sbMaybeSpeakXDraftResult(reply);
+  __sbResetXSkillState();
+}
+
+async function __sbHandleXDraftScheduleClick() {
+  const content = __sbGetCurrentXDraftText();
+  const error = __sbValidateXDraftText(content);
+  if (error) { __sbSetXDraftStatus(error, "error"); return; }
+
+  const input = document.querySelector("[data-sb-x-schedule-input]");
+  const localValue = String(input?.value || "").trim();
+  const scheduledDate = localValue ? new Date(localValue) : null;
+  if (!scheduledDate || Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+    __sbSetXDraftStatus("Pick a future date and time first.", "error");
+    return;
+  }
+
+  __sbSetXDraftBusy(true);
+  __sbSetXDraftStatus("Scheduling on X...");
+  const data = await __sbScheduleXDraft(content, scheduledDate.toISOString());
+  __sbSetXDraftBusy(false);
+
+  if (!data || data.error) {
+    const msg = data?.error || "I could not schedule that X post just now.";
+    __sbSetXDraftStatus(msg, "error");
+    await __sbMaybeSpeakXDraftResult(msg);
+    return;
+  }
+
+  const reply = data.reply || "Queued for X.";
+  __sbXSkillState.draftText = content;
+  __sbChatHistory.push({ role: "assistant", content: reply });
+  __sbSetXDraftStatus(reply, "success");
+  await __sbMaybeSpeakXDraftResult(reply);
+  __sbResetXSkillState();
+}
+
+function __sbBindXDraftReviewCard(options = {}) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const editor = scroll.querySelector("[data-sb-x-draft-text]");
+  const countEl = scroll.querySelector("[data-sb-x-draft-count]");
+  const updateCount = () => {
+    const count = String(editor?.value || "").length;
+    if (countEl) {
+      countEl.textContent = `${count}/280`;
+      countEl.classList.toggle("over", count > 280);
+    }
+    __sbXSkillState.draftText = String(editor?.value || "");
+  };
+  editor?.addEventListener("input", updateCount);
+  updateCount();
+
+  scroll.querySelectorAll("[data-sb-x-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-sb-x-action");
+      if (action === "edit") {
+        editor?.focus();
+        __sbSetXDraftStatus("Editing is live. Change the text, then choose Post now or Schedule.");
+        return;
+      }
+      if (action === "schedule") {
+        __sbXSkillState.phase = "awaiting_schedule";
+        __sbXSkillState.scheduleVisible = true;
+        __sbRenderXDraftReviewCard();
+        return;
+      }
+      if (action === "post-now") {
+        void __sbHandleXDraftPostNowClick();
+        return;
+      }
+      if (action === "confirm-schedule") {
+        void __sbHandleXDraftScheduleClick();
+      }
+    });
+  });
+
+  if (options.focusEditor) editor?.focus();
+}
+
+async function __sbReplyToXSkill(promptText, reply, ctx = {}, options = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode || options.forceUi;
+  if (promptText) __sbChatHistory.push({ role: "user", content: promptText });
+  if (reply) __sbChatHistory.push({ role: "assistant", content: reply });
+  if (showUi && reply) __sbShowBubble(reply, false, { rich: true, kicker: "Braino" });
+  if (fromVoice && reply) await __sbSpeakWithPreferredVoice(reply, voiceOutput, { verbatim: true });
+  __sbCompleteVoiceTurn(ctx);
+}
+
+async function __sbHandleXSkillFollowup(promptText, ctx = {}) {
+  if (!__sbIsXSkillAwaitingInput()) return false;
+  const phase = __sbXSkillState.phase;
+
+  if (phase === "awaiting_create_confirm") {
+    if (__sbIsXSkillYes(promptText)) {
+      __sbSetXSkillState({
+        ...__sbXSkillState,
+        phase: "awaiting_post_brief",
+        source: ctx.fromVoice ? "voice" : "text",
+        voiceOutput: ctx.voiceOutput === "realtime" ? "realtime" : "legacy",
+      });
+      await __sbReplyToXSkill(promptText, "What would you like to post about, sir? Just speak your mind, I'll write something for you.", ctx);
+      return true;
+    }
+
+    if (__sbIsXSkillNo(promptText)) {
+      __sbResetXSkillState();
+      await __sbReplyToXSkill(promptText, "Sure sir, let me know when you want anything for X.", ctx);
+      return true;
+    }
+
+    await __sbReplyToXSkill(promptText, "Just say yes if you want me to create a post, or no if not.", ctx);
+    return true;
+  }
+
+  if (phase === "awaiting_post_brief") {
+    const brief = String(promptText || "").trim();
+    if (!brief) {
+      await __sbReplyToXSkill(promptText, "Tell me the idea in a sentence or two, sir, and I'll turn it into an X post.", ctx);
+      return true;
+    }
+
+    __sbSetXSkillState({
+      ...__sbXSkillState,
+      phase: "drafting_post",
+      brief,
+      source: ctx.fromVoice ? "voice" : (__sbXSkillState.source || "text"),
+      voiceOutput: ctx.voiceOutput === "realtime" ? "realtime" : (__sbXSkillState.voiceOutput || "legacy"),
+    });
+
+    const fromVoice = Boolean(ctx.fromVoice);
+    const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+    const showUi = !fromVoice || !__sbVoiceOnlyMode;
+    __sbChatHistory.push({ role: "user", content: brief });
+    if (showUi) __sbShowBubble("Writing that in your X voice now...", false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice("Writing that in your X voice now, sir.", voiceOutput, { verbatim: true });
+
+    const data = await __sbDraftXPostFromBrief(brief);
+    if (!data || data.error || !data.draftText) {
+      const msg = data?.error || "I could not draft that X post just now.";
+      __sbResetXSkillState();
+      await __sbReplyToXSkill("", msg, ctx, { forceUi: showUi });
+      return true;
+    }
+
+    const draftText = String(data.draftText || "").trim();
+    const assistantPrompt = "I've written a draft for you. Take a look - should I post it for you, sir?";
+    __sbSetXSkillState({
+      ...__sbXSkillState,
+      phase: "draft_ready",
+      draftText,
+      statusText: "",
+      statusTone: "",
+    });
+    __sbChatHistory.push({ role: "assistant", content: `${assistantPrompt}\n\n${draftText}` });
+    __sbCardTurns.push({ prompt: brief, answer: assistantPrompt });
+    __sbRenderXDraftReviewCard();
+    if (fromVoice) await __sbSpeakWithPreferredVoice(assistantPrompt, voiceOutput, { verbatim: true });
+    __sbCompleteVoiceTurn(ctx);
+    return true;
+  }
+
+  if (phase === "draft_ready" || phase === "awaiting_schedule") {
+    const fromVoice = Boolean(ctx.fromVoice);
+    const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+    if (__sbIsXDraftPostNowCommand(promptText)) {
+      __sbChatHistory.push({ role: "user", content: promptText });
+      __sbSetXDraftStatus("Posting it now...");
+      if (fromVoice) await __sbSpeakWithPreferredVoice("Posting it now, sir.", voiceOutput, { verbatim: true });
+      __sbCompleteVoiceTurn(ctx);
+      await __sbHandleXDraftPostNowClick();
+      return true;
+    }
+    if (__sbIsXDraftScheduleCommand(promptText)) {
+      __sbXSkillState.phase = "awaiting_schedule";
+      __sbXSkillState.scheduleVisible = true;
+      __sbRenderXDraftReviewCard();
+      __sbChatHistory.push({ role: "user", content: promptText });
+      __sbSetXDraftStatus("Choose the date and time in the card, and I'll schedule it.");
+      if (fromVoice) await __sbSpeakWithPreferredVoice("Choose the date and time in the card, and I'll schedule it.", voiceOutput, { verbatim: true });
+      __sbCompleteVoiceTurn(ctx);
+      return true;
+    }
+    if (__sbIsXDraftEditCommand(promptText)) {
+      __sbRenderXDraftReviewCard({ focusEditor: true });
+      __sbChatHistory.push({ role: "user", content: promptText });
+      __sbSetXDraftStatus("You can edit the draft in the card. I focused it for you.");
+      if (fromVoice) await __sbSpeakWithPreferredVoice("You can edit the draft in the card. I focused it for you.", voiceOutput, { verbatim: true });
+      __sbCompleteVoiceTurn(ctx);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function __sbHandleStartXAutomationCommand(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
+  const opening = __sbIsOnX()
+    ? "Starting X Auto, sir."
+    : "Opening X and starting X Auto, sir.";
+  __sbChatHistory.push({ role: "user", content: promptText });
+  if (showUi) __sbShowBubble(opening, false, { rich: true, kicker: "Braino" });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(opening, voiceOutput, { verbatim: true });
+
+  let result = null;
+  if (__sbIsOnX()) {
+    if (__sbXRunning) {
+      result = { ok: true, alreadyRunning: true };
+    } else {
+      void __sbRunXAutomation({ startOnly: true });
+      result = { ok: true };
+    }
+  } else {
+    result = await __sbRuntimeMessage({ action: "startXAutomationOnX" });
+  }
+
+  const finalReply = result?.ok
+    ? (result.alreadyRunning ? "X Auto is already running." : "X Auto has started.")
+    : (result?.error || "I opened X, but could not start X Auto yet.");
+  __sbChatHistory.push({ role: "assistant", content: finalReply });
+  if (showUi) __sbShowBubble(finalReply, false, { rich: true, kicker: "Braino" });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(finalReply, voiceOutput, { verbatim: true });
+  __sbCompleteVoiceTurn(ctx);
+}
+
 // Build the spoken/displayed summary. Specific asks get a single sentence; a general
 // "stats" ask gets the 3-sentence combo. Sentences are omitted when data is missing.
 function __sbFormatXStatus(promptText, data) {
@@ -6809,11 +7413,19 @@ async function __sbHandleXStatus(promptText, ctx = {}) {
 
     __sbXLastStatus = data;
     const formatted = __sbFormatXStatus(promptText, data);
-    console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
+    const offer = __sbBuildXPostOffer(data);
+    const combinedReply = `${formatted}\n\n${offer}`;
+    __sbSetXSkillState({
+      phase: "awaiting_create_confirm",
+      lastStatus: data,
+      followerDelta: __sbGetXFollowerDelta(data),
+      source: fromVoice ? "voice" : "text",
+      voiceOutput,
+    });
     __sbChatHistory.push({ role: "user", content: promptText });
-    __sbChatHistory.push({ role: "assistant", content: formatted });
-    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
-    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
+    __sbChatHistory.push({ role: "assistant", content: combinedReply });
+    if (showUi) __sbShowBubble(combinedReply, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(combinedReply, voiceOutput, { verbatim: true });
   } finally {
     if (brainBtn) brainBtn.classList.remove("recording");
     __sbCompleteVoiceTurn(ctx);
@@ -7206,6 +7818,11 @@ async function __sbProcessPrompt(text, options = {}) {
     });
   }
 
+  if (await __sbHandleXSkillFollowup(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "x_skill" });
+    return;
+  }
+
   // "What's new / what's in you?" — Braino reads the changelog in first person, then flips the question back
   if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you|what'?s?\s+in\s+you|what\s+(can|do)\s+you\s+(do|have)|what\s+are\s+you\s+capable|what\s+are\s+your\s+(features?|abilities|capabilities)|tell\s+me\s+(about\s+yourself|what\s+you\s+can\s+do)/i.test(promptText)) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -7243,6 +7860,10 @@ async function __sbProcessPrompt(text, options = {}) {
   }
 
   // X (Twitter) status — answered inline with real data + TTS, panel stays open.
+  if (__sbIsStartXAutomationCommand(promptText)) {
+    await __sbHandleStartXAutomationCommand(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
   if (__sbIsXLastTweetRequest(promptText)) {
     await __sbHandleXLastTweet(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     return;

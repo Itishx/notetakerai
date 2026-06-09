@@ -419,6 +419,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message || "Could not reach X." }));
     return true;
   }
+  if (message.action === "draftXPostFromBrief") {
+    bgCallXAssistant({
+      action: "draft_post",
+      brief: String(message.brief || "").trim(),
+      browserTime: message.browserTime || new Date().toISOString(),
+      timeZone: message.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    })
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ error: e.message || "Could not draft X post." }));
+    return true;
+  }
+  if (message.action === "postXDraftNow") {
+    bgCallXAssistant({
+      action: "post_now",
+      content: String(message.content || "").trim(),
+      browserTime: message.browserTime || new Date().toISOString(),
+      timeZone: message.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    })
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ error: e.message || "Could not post to X." }));
+    return true;
+  }
+  if (message.action === "scheduleXDraft") {
+    bgCallXAssistant({
+      action: "schedule_post",
+      content: String(message.content || "").trim(),
+      scheduled_at: String(message.scheduledAt || message.scheduled_at || "").trim(),
+      browserTime: message.browserTime || new Date().toISOString(),
+      timeZone: message.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    })
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ error: e.message || "Could not schedule X post." }));
+    return true;
+  }
+  if (message.action === "startXAutomationOnX") {
+    bgStartXAutomationOnX()
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ ok: false, error: e.message || "Could not start X automation." }));
+    return true;
+  }
   // ── Offscreen realtime bridge ──────────────────────────────────────────────
   if (message.action === "micPermissionResult") {
     bgResolveMicPermission(!!message.granted);
@@ -1050,6 +1090,78 @@ async function bgAuthedSupabaseFetch(url, options = {}) {
   }
 
   return { res, token, userId: stored.authUserId || null };
+}
+
+async function bgCallXAssistant(body) {
+  const { res } = await bgAuthedSupabaseFetch(`${BG_API_BASE}/x-assistant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `x-assistant ${res.status}`);
+  return data;
+}
+
+async function bgFindXTab() {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] }, (tabs) => {
+      const active = (tabs || []).find((tab) => tab.active);
+      resolve(active || tabs?.[0] || null);
+    });
+  });
+}
+
+async function bgFocusTab(tab) {
+  if (!tab?.id) return null;
+  const updated = await new Promise((resolve) => {
+    chrome.tabs.update(tab.id, { active: true }, (nextTab) => {
+      resolve(chrome.runtime.lastError ? tab : (nextTab || tab));
+    });
+  });
+  if (updated?.windowId != null) {
+    await new Promise((resolve) => {
+      chrome.windows.update(updated.windowId, { focused: true }, () => resolve());
+    });
+  }
+  return updated;
+}
+
+async function bgOpenXHomeTab() {
+  const existing = await bgFindXTab();
+  if (existing?.id) {
+    const focused = await bgFocusTab(existing);
+    return new Promise((resolve) => {
+      chrome.tabs.update(existing.id, { url: "https://x.com/home", active: true }, (tab) => {
+        resolve(chrome.runtime.lastError ? focused : (tab || focused));
+      });
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.create({ url: "https://x.com/home", active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab?.id) {
+        reject(new Error(chrome.runtime.lastError?.message || "Could not open X."));
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
+async function bgStartXAutomationOnX() {
+  const tab = await bgOpenXHomeTab();
+  if (!tab?.id) return { ok: false, error: "Could not open X." };
+  chrome.storage.local.set({ activeTabId: tab.id });
+  await bgWaitForTabReady(tab.id, 10000);
+  await bgDelay(900);
+
+  const result = await bgSendInlineUiMessage(tab.id, { action: "startXAutomation" });
+  if (result?.ok) return result;
+  return {
+    ok: false,
+    error: result?.error || "X opened, but Braino could not start automation on that tab yet.",
+  };
 }
 
 async function bgRecordXAutomationRunStats({ repliedCount, durationMs, startedAt, finishedAt }) {

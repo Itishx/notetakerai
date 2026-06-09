@@ -11,7 +11,7 @@ const corsHeaders = {
 
 type XAction =
   | {
-      action: "post_now" | "schedule_post";
+      action: "draft_post" | "post_now" | "schedule_post";
       content?: string | null;
       brief?: string | null;
       scheduled_at?: string | null;
@@ -48,13 +48,15 @@ serve(async (req) => {
       return json({ error: "Sign in required." }, 401);
     }
 
-    const { message, browserTime, timeZone } = await req.json();
-    const task = String(message || "").trim();
-    if (!task) {
+    const body = await req.json();
+    const { message, browserTime, timeZone } = body || {};
+    const explicitAction = parseExplicitAction(body);
+    const task = String(message || body?.brief || body?.content || "").trim();
+    if (!task && !explicitAction) {
       return json({ error: "No X task provided." }, 400);
     }
 
-    const action = await routeXAction({
+    const action = explicitAction || await routeXAction({
       task,
       browserTime: typeof browserTime === "string" ? browserTime : null,
       timeZone: typeof timeZone === "string" ? timeZone : null,
@@ -150,6 +152,16 @@ serve(async (req) => {
       });
     }
 
+    if (action.action === "draft_post") {
+      return json({
+        handled: true,
+        ok: true,
+        draftText: content,
+        characterCount: content.length,
+        reply: "Draft ready.",
+      });
+    }
+
     if (action.action === "schedule_post") {
       if (!action.scheduled_at) {
         return json({
@@ -238,6 +250,7 @@ async function routeXAction(input: {
 Return ONLY valid JSON.
 
 Allowed actions:
+- {"action":"draft_post","brief":"topic or writing instruction for the post"}
 - {"action":"post_now","content":"exact post text"}
 - {"action":"post_now","brief":"topic or writing instruction for the post"}
 - {"action":"schedule_post","content":"exact post text","scheduled_at":"ISO_8601"}
@@ -249,6 +262,7 @@ Allowed actions:
 - {"action":"clarify","message":"brief question"}
 
 Rules:
+- Use draft_post when the user wants Braino to write or prepare a post but has not explicitly approved publishing yet.
 - Use post_now when the user wants Braino to publish on X immediately.
 - Use schedule_post when the user wants Braino to post later.
 - If the user provides the exact post text, put it in "content".
@@ -306,8 +320,33 @@ function tryFastPath(task: string): XAction | null {
   return null;
 }
 
+function parseExplicitAction(body: Record<string, unknown> | null): XAction | null {
+  if (!body || typeof body !== "object") return null;
+  const action = String(body.action || "").trim();
+  if (!["draft_post", "post_now", "schedule_post"].includes(action)) return null;
+
+  const content = typeof body.content === "string" ? body.content.trim() : "";
+  const brief = typeof body.brief === "string" ? body.brief.trim() : "";
+  const scheduledAt = typeof body.scheduled_at === "string" ? body.scheduled_at.trim() : "";
+
+  if (action === "schedule_post") {
+    return {
+      action,
+      content: content || null,
+      brief: brief || null,
+      scheduled_at: scheduledAt || null,
+    };
+  }
+
+  return {
+    action: action as "draft_post" | "post_now",
+    content: content || null,
+    brief: brief || null,
+  };
+}
+
 async function resolvePostContent(
-  action: Extract<XAction, { action: "post_now" | "schedule_post" }>,
+  action: Extract<XAction, { action: "draft_post" | "post_now" | "schedule_post" }>,
   userContext: string,
 ) {
   const direct = String(action.content || "").trim();

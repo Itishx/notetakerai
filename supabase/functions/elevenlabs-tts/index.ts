@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY") || "";
-const DEFAULT_VOICE_ID = Deno.env.get("ELEVENLABS_VOICE_ID") || "vBKc2FfBKJfcZNyEt1n6";
+const DEFAULT_VOICE_ID = Deno.env.get("ELEVENLABS_VOICE_ID") || "PI9w0jWUtb68a6R6eQbl";
 const DEFAULT_MODEL = "eleven_turbo_v2_5";
 
 function json(payload: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
