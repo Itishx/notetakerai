@@ -9,7 +9,7 @@ Scope: job discovery and fit analysis only. Never apply, save, message, or conne
 
 ## Output Goal
 
-3-4 strong/relevant jobs by default, up to 5 if the user asks or the results are easy to inspect. Each job needs: title, company, location, link, short description, key requirements, fit verdict (Strong / Maybe / Weak + reason), plus a final conclusion.
+3-5 relevant jobs. Inspect at least 3 jobs when LinkedIn shows 3+ relevant results. Do not stop after 1 job unless the user explicitly asks for one job or LinkedIn has fewer than 3 relevant results. Each job needs: title, company, location, link, short description, key requirements, fit verdict (Strong / Maybe / Weak + reason), plus a final conclusion.
 
 ## Workflow
 
@@ -22,7 +22,7 @@ Scope: job discovery and fit analysis only. Never apply, save, message, or conne
 7. If the description is truncated, click `Show more` / `See more`.
 8. Read job details with `maxChars: 3500` so the description and requirements are not cut off.
 9. Capture all required fields before moving to the next job. Capture link from card/title `href` first, current URL second.
-10. Stop at 3-4 good jobs for speed, or 5 if requested/easy. Do not keep crawling weak matches just to fill the list.
+10. Stop at 3-5 good jobs. Minimum 3 if available; target 5 when results are easy to inspect. Do not return done after only one job unless fewer than 3 relevant jobs exist.
 
 ## Locators
 

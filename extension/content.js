@@ -2306,6 +2306,7 @@ let __sbSpotifyRefreshTimer = null;
 let __sbCursorFollowRaf = 0;
 let __sbCursorFollowNeedsFrame = false;
 let __sbCursorFollowPosition = null;
+let __sbLastAgentTask = "";
 
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
@@ -2329,7 +2330,8 @@ if (__sbContextOk()) {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
         // Voice mode speaks the result with no panel; chat mode shows it.
-        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino" });
+        const agentPrompt = String(msg.task || __sbLastAgentTask || "").trim();
+        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
         __sbSetStopBtn(false);
         if (__sbRtAwaitingDelegateResult) {
           const finalText = String(msg.text || "").trim();
@@ -7461,6 +7463,7 @@ function __sbShowUpgrade(feature) {
 
 function __sbRunAgent(task, options = {}) {
   if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect Braino.", true); return; }
+  __sbLastAgentTask = String(task || "").trim();
   // Hand off to background — it runs the full agent loop and sends sbAgentUpdate messages back
   chrome.runtime.sendMessage({
     action: "runBrainAgent",

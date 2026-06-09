@@ -1302,9 +1302,17 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 }
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
+const bgAgentTaskByTab = new Map();
 
 function bgBrainUpdate(tabId, text, final = false, opts = {}) {
-  chrome.tabs.sendMessage(tabId, { action: "sbAgentUpdate", text, final, speakHint: opts.speakHint || null }, () => { void chrome.runtime.lastError; });
+  chrome.tabs.sendMessage(tabId, {
+    action: "sbAgentUpdate",
+    text,
+    final,
+    speakHint: opts.speakHint || null,
+    task: opts.task || bgAgentTaskByTab.get(tabId) || "",
+  }, () => { void chrome.runtime.lastError; });
+  if (final) setTimeout(() => bgAgentTaskByTab.delete(tabId), 5000);
 }
 
 async function bgSendInlineUiMessage(tabId, message) {
@@ -1385,6 +1393,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
   let currentTabId = tabId;
   const MAX_STEPS = bgIsLinkedInJobsTask(task) ? 18 : 10;
   const history = [];
+  bgAgentTaskByTab.set(currentTabId, task);
 
   bgBrainUpdate(currentTabId, "Planning…");
 
@@ -1482,6 +1491,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
       const latestActiveTabId = await bgGetActiveTabId();
       if (latestActiveTabId && latestActiveTabId !== currentTabId) {
         currentTabId = latestActiveTabId;
+        bgAgentTaskByTab.set(currentTabId, task);
         chrome.storage.local.set({ activeTabId: currentTabId });
         bgBrainUpdate(currentTabId, "Continuing in the new tab…");
       }
@@ -2941,7 +2951,7 @@ Target search: role="${role}", location="${location}"
 Start URL: ${searchUrl}
 
 GOAL:
-Return 3-4 strong/relevant jobs by default, up to 5 if the user asks or the results are easy to inspect. Include title, company, location, job link, short description, key requirements, fit recommendation, and a final conclusion. Do NOT apply, save, message recruiters, or click Easy Apply unless the user explicitly asks and confirms.
+Return 3-5 relevant jobs. Inspect at least 3 jobs when LinkedIn shows 3+ relevant results. Do not stop after 1 job unless the user explicitly asks for one job or LinkedIn has fewer than 3 relevant results. Include title, company, location, job link, short description, key requirements, fit recommendation, and a final conclusion. Do NOT apply, save, message recruiters, or click Easy Apply unless the user explicitly asks and confirms.
 
 FLOW:
 1. If not already on LinkedIn Jobs results for the requested role/location, navigate to the Start URL.
@@ -2965,7 +2975,7 @@ FLOW:
    - main
 7. If a "Show more" or "See more" button appears in the description, click it before reading.
 8. Remember each job before moving to the next. Capture link from current URL or the card href. If the details pane does not expose a unique link, include the visible card/job link from the page.
-9. Stop after 3-4 solid jobs for speed, or 5 if requested/easy. Do not keep crawling weak matches just to fill the list.
+9. Stop after 3-5 solid jobs. Minimum 3 if available; target 5 when results are easy to inspect. Do not return done after only one job unless fewer than 3 relevant jobs exist.
 10. Final done message must be markdown:
    ## Jobs I looked at for you in "${location}" for "${role}"
    - **Title - Company** (Location)
