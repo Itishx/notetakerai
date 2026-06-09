@@ -12,7 +12,7 @@ Use this skill for location lookup, distance/ETA checks, place recommendations, 
 - Look up a specific place, address, landmark, business, or area.
 - Recommend 3-5 places that match the user's need, location, timing, budget, rating, or vibe.
 - Calculate distance and travel time from an origin to one or more destinations.
-- Open Google Maps visibly in the browser and perform the search/directions flow in front of the user.
+- Open Google Maps visibly in the browser and perform the search/directions flow in front of the user before recommending.
 - Ping the selected place or route to the user's phone when a phone handoff channel exists.
 
 ## Google Maps APIs
@@ -33,6 +33,7 @@ Use this skill for location lookup, distance/ETA checks, place recommendations, 
 7. Return useful results after the visible Maps page/search has loaded.
 8. For phone handoff, send place name, address, Google Maps URL, distance/ETA, and one-line reason if a configured channel exists.
 9. If no phone handoff channel exists, be honest: say phone ping is not set up yet and provide the Maps URL instead. Never claim it was sent.
+10. Pick one best option and ask whether the user wants that option sent to their phone.
 
 ## Visible Google Maps Behavior
 
@@ -42,6 +43,7 @@ Use this skill for location lookup, distance/ETA checks, place recommendations, 
 - Use the live Maps page as the visible source of truth: let the user see the search/results/directions happen.
 - Use API data only to enrich ranking, distance, and details; do not hide the Maps action in the background.
 - If the user asks for a quick answer only, answer without opening Maps only when they clearly say "don't open Maps", "just tell me", or similar.
+- For recommendation requests, do not answer from memory. Open Maps first, inspect visible results, then recommend.
 
 ## Phone Handoff Rules
 
@@ -64,6 +66,8 @@ For recommendations:
    Maps: {url}
 
 Best pick: {one honest recommendation and why}
+
+Should I send {best pick} to your phone?
 ```
 
 For distance or directions:

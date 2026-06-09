@@ -6706,6 +6706,23 @@ function __sbShouldOpenVisibleGoogleSearch(text) {
   return false;
 }
 
+function __sbIsGoogleMapsPlaceTask(text) {
+  const t = String(text || "").toLowerCase().replace(/[?!.,]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/\b(?:google\s+)?maps?\b/.test(t)) {
+    return /\b(open|show|search|find|look up|recommend|suggest|directions?|route|near|nearby|around|in|to)\b/.test(t);
+  }
+  if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
+  if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
+
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  if (!wantsPlaceRecommendation) return false;
+
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  return placeCategory && locationHint;
+}
+
 // Strip conversational filler from a spoken request so it becomes a clean search query.
 // "I would like to read some articles on how to make good coffee. Can you please web up
 //  some articles on Medium for me?" → "how to make good coffee articles medium"
@@ -6833,6 +6850,7 @@ function __sbDetectIntent(text) {
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
   if (__sbIsSiteScopedBrowseSearch(t)) return "agent";
+  if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (__sbIsBrowserActionCommand(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";

@@ -2176,6 +2176,8 @@ function bgLooksLikeBrowserTask(task) {
   const freshness = /\b(latest|current|today|right\s+now|as\s+of|this\s+week|this\s+month|this\s+year|recent|news|price\s+of|stock|weather|score|standings|live|just\s+happened|breaking|update\s+on|status\s+of|who\s+won|who\s+is\s+winning|what\s+happened|trending)\b/i.test(raw);
   if (freshness) return true;
 
+  if (bgLooksLikeGoogleMapsPlaceTask(raw)) return true;
+
   // 3) App/site actions — strong imperative + a known actionable target.
   const strongImperative = /^(?:open|go to|navigate to|visit|search|find|look up|pull up|bring up|take me to|show me|create|make|draft|compose|send|reply|play|pause|resume|continue|next|skip|previous|prev|book|buy|order|post|tweet|get directions|show directions|route|move|rename|delete|remove|archive|label|organize|organise)\b/i.test(raw);
   if (!strongImperative) return false;
@@ -2960,6 +2962,80 @@ function bgBuildMediumFastPath(task) {
   }];
 }
 
+function bgEncodeMapsPath(value) {
+  return encodeURIComponent(String(value || "").trim()).replace(/%20/g, "+");
+}
+
+function bgCleanGoogleMapsQuery(value) {
+  let query = String(value || "").trim();
+  query = query
+    .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
+    .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
+    .replace(/\b(?:please|pls|for me|me|some|a few|the|an?)\b/gi, " ")
+    .replace(/\b(?:open|show|display|pull up|bring up|find|search(?: for)?|look for|look up|get|give|recommend|suggest)\b/gi, " ")
+    .replace(/\b(?:google\s+)?maps?\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return query || String(value || "").trim();
+}
+
+function bgLooksLikeGoogleMapsPlaceTask(task) {
+  const t = String(task || "").toLowerCase().replace(/[?!.,]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/\b(?:google\s+)?maps?\b/.test(t)) {
+    return /\b(open|show|search|find|look up|recommend|suggest|directions?|route|near|nearby|around|in|to)\b/.test(t);
+  }
+  if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
+  if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
+
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  if (!wantsPlaceRecommendation) return false;
+
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  return placeCategory && locationHint;
+}
+
+function bgBuildGoogleMapsFastPath(task) {
+  const raw = String(task || "").trim();
+  const t = raw.toLowerCase();
+  if (!bgLooksLikeGoogleMapsPlaceTask(raw)) return null;
+
+  const directionsMatch =
+    raw.match(/(?:directions?|route|navigate)\s+from\s+(.+?)\s+to\s+(.+?)(?:\s+(?:please|pls|for me))?$/i) ||
+    raw.match(/(?:directions?|route|navigate)\s+to\s+(.+?)\s+from\s+(.+?)(?:\s+(?:please|pls|for me))?$/i) ||
+    raw.match(/how\s+far\s+is\s+(.+?)\s+from\s+(.+?)(?:\s+(?:please|pls|for me))?$/i) ||
+    raw.match(/(?:distance|eta|travel\s+time)\s+(?:from\s+(.+?)\s+to\s+(.+?)|between\s+(.+?)\s+and\s+(.+?))(?:\s+(?:please|pls|for me))?$/i);
+
+  if (directionsMatch) {
+    const first = (directionsMatch[1] || directionsMatch[3] || "").trim();
+    const second = (directionsMatch[2] || directionsMatch[4] || "").trim();
+    const isToFrom = /\bto\b.+\bfrom\b/i.test(raw) && !/\bfrom\b.+\bto\b/i.test(raw);
+    const isHowFarFrom = /^how\s+far\s+is\b/i.test(raw);
+    const origin = (isToFrom || isHowFarFrom) ? second : first;
+    const destination = (isToFrom || isHowFarFrom) ? first : second;
+    return [{
+      type: "navigate",
+      url: `https://www.google.com/maps/dir/${bgEncodeMapsPath(origin)}/${bgEncodeMapsPath(destination)}`,
+      description: `Open Google Maps directions from "${origin}" to "${destination}"`,
+      continueAfter: true,
+    }];
+  }
+
+  let query = "";
+  const mapsSearchMatch = raw.match(/(?:search|find|look up|show|open)\s+(.+?)\s+on\s+(?:google\s+)?maps/i);
+  if (mapsSearchMatch) query = mapsSearchMatch[1].trim();
+  if (!query) query = bgCleanGoogleMapsQuery(raw);
+  if (!query) return null;
+
+  return [{
+    type: "navigate",
+    url: `https://www.google.com/maps/search/${bgEncodeMapsPath(query)}`,
+    description: `Search Google Maps for "${query}"`,
+    continueAfter: true,
+  }];
+}
+
 function bgCleanLinkedInJobText(value) {
   return String(value || "")
     .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
@@ -3111,6 +3187,38 @@ Details panel: .jobs-search__job-details--container, .jobs-details, .jobs-descri
 `;
 }
 
+function bgGetGoogleMapsSkillGuide(task, currentUrl) {
+  const onGoogleMaps = /google\.[^/]+\/maps/i.test(currentUrl || "");
+  if (!bgLooksLikeGoogleMapsPlaceTask(task) && !onGoogleMaps) return "";
+
+  return `
+── SKILL: GOOGLE MAPS PLACES ──
+Use this skill for place lookup, recommendations, distance/ETA, visible Google Maps searches, directions, and phone handoff.
+
+GOAL:
+The user wants to SEE Google Maps, not just a memory-based list. Open or use Google Maps visibly first, inspect visible results, then recommend. Do not answer restaurant/place recommendations from memory.
+
+FLOW:
+1. If not already on Google Maps results/directions for the task, navigate using:
+   - Search: https://www.google.com/maps/search/QUERY+with+spaces+as+plus
+   - Directions: https://www.google.com/maps/dir/ORIGIN/DESTINATION
+2. After navigation, wait 1200 and read the visible Maps page/results. Prefer reading main, [role="main"], [role="feed"], [aria-label*="Results"], or body text.
+3. Recommend only places/routes visible on the Maps page or clearly returned by the page. Do not invent ratings, hours, distance, or open status.
+4. For recommendation tasks, return 3-5 options when visible. Include name, area/address if visible, rating/open status if visible, and why it fits the user's constraints.
+5. Pick one best option and explain why in one sentence.
+6. End by asking: "Should I send {best pick} to your phone?"
+7. If the user explicitly asks to ping/send it and no phone channel is configured, say the handoff is not set up yet and provide the Google Maps URL. Never claim it was sent.
+
+FINAL MESSAGE FORMAT:
+## Places I found on Google Maps
+- **Name** — why it fits. Address/area/rating if visible.
+
+Best pick: **Name** — reason.
+
+Should I send **Name** to your phone?
+`;
+}
+
 function bgTryFastPath(task, history) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
@@ -3132,6 +3240,8 @@ function bgTryFastPath(task, history) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
   }
+  const googleMapsFastPath = bgBuildGoogleMapsFastPath(task);
+  if (googleMapsFastPath) return googleMapsFastPath;
   const mediumFastPath = bgBuildMediumFastPath(task);
   if (mediumFastPath) return mediumFastPath;
   const linkedInJobsFastPath = bgBuildLinkedInJobsFastPath(task);
@@ -3447,6 +3557,7 @@ IRCTC trains:   https://www.irctc.co.in/nget/train-search  (no URL params — us
 
 ${bgGetPlatformGuide(currentUrl)}
 ${bgGetLinkedInJobsSkillGuide(task, currentUrl)}
+${bgGetGoogleMapsSkillGuide(task, currentUrl)}
 
 ANSWER FORMATTING (for {"type":"answer"} responses):
 - Always use markdown in the message field — never return a flat comma-separated list
