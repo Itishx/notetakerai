@@ -1,98 +1,63 @@
 ---
 name: linkedin-jobs
-description: Use this skill when Braino needs to search LinkedIn Jobs for a role/location, inspect multiple job postings, return job links and descriptions, and recommend whether the user looks like a good fit. Trigger for requests like "search data analyst jobs in hyd", "find LinkedIn jobs for product analyst in Bengaluru", or "show remote frontend roles on LinkedIn".
+description: Use this skill when Braino needs to search LinkedIn Jobs for a role and location, read multiple postings, return links and descriptions, and give a fit recommendation. Trigger for: "search data analyst jobs in hyd", "find LinkedIn jobs for product analyst in Bengaluru", "show remote frontend roles on LinkedIn".
 ---
 
-# LinkedIn Jobs
+# LinkedIn Jobs Skill
 
-Use this skill for LinkedIn job discovery and fit analysis. Do not use it for general LinkedIn people search, messaging, posting, or recruiter outreach.
+Scope: job discovery and fit analysis only. Never apply, save, message, or connect unless the user explicitly asks and confirms.
 
-## Goal
+## Output Goal
 
-Return 3-5 relevant jobs with:
-
-- job title
-- company
-- location
-- job link
-- short description
-- key requirements
-- honest fit recommendation
-
-Never apply, save, message, connect, or click Easy Apply unless the user explicitly asks and confirms.
+3–5 jobs, each with: title, company, location, link, short description, key requirements, fit verdict (Strong / Maybe / Weak + reason).
 
 ## Workflow
 
-1. Parse the requested role and location. Normalize common city shortcuts, for example `hyd` -> `Hyderabad`, `blr` -> `Bengaluru`.
-2. Navigate directly to `https://www.linkedin.com/jobs/search/?keywords=ROLE&location=CITY`.
-3. Wait for LinkedIn to load. If a login wall appears, ask the user to log in.
-4. Apply only user-requested filters. Do not invent filters. Common filters: Remote, Date posted, Experience level, Job type, Easy Apply.
-5. Read the results list before clicking. Prefer job cards that clearly match the requested role/location.
-6. Open one job at a time. After every click, wait and verify the job details pane or page changed.
-7. If the description is collapsed, click `Show more` or `See more`.
-8. Read the job details with enough text for real fit analysis.
-9. Remember each job before moving to the next.
-10. Stop after 3-5 useful jobs, or sooner if LinkedIn has no more relevant results.
+1. Parse role + location. Expand shortcuts: `hyd` -> Hyderabad, `blr` -> Bengaluru.
+2. Go to `https://www.linkedin.com/jobs/search/?keywords=ROLE&location=CITY`; URL-encode role and city.
+3. If a login wall appears, stop and ask the user to log in.
+4. Apply only filters the user requested. Never invent filters.
+5. Scan the results list first. Click only cards that clearly match role + location.
+6. Open one job at a time; wait for the details pane to update before reading.
+7. If the description is truncated, click `Show more` / `See more`.
+8. Read job details with `maxChars: 3500` so the description and requirements are not cut off.
+9. Capture all required fields before moving to the next job. Capture link from card/title `href` first, current URL second.
+10. Stop at 5 jobs, or earlier if no more relevant results exist.
 
-## Browser Locators
+## Locators
 
-Search keyword input:
+**Search inputs**
+- `[aria-label*="Search by title"]`, `[aria-label*="Search jobs"]`, `input[id*="jobs-search-box-keyword"]`
 
-- `[aria-label*="Search by title"]`
-- `[aria-label*="Search jobs"]`
-- `[placeholder*="Search jobs"]`
-- `input[id*="jobs-search-box-keyword"]`
+**Location input**
+- `[aria-label*="City"]`, `[aria-label*="location"]`, `input[id*="jobs-search-box-location"]`
 
-Location input:
+**Filter buttons** (use `targetText`)
+- `Date posted`, `Experience level`, `Remote`, `Easy Apply`, `Job type`
 
-- `[aria-label*="City"]`
-- `[aria-label*="location"]`
-- `input[id*="jobs-search-box-location"]`
+**Job cards**
+- `[data-job-id]`, `.job-card-container`, `.jobs-search-results__list-item`, `.job-card-list__title`, `.job-card-container__link`
 
-Filter buttons:
+**Job details**
+- `.jobs-search__job-details--container`, `.jobs-details`, `.jobs-description`, `.jobs-box__html-content`, `[class*="jobs-description"]`, `main`
 
-- `targetText="Date posted"`
-- `targetText="Experience level"`
-- `targetText="Remote"`
-- `targetText="Easy Apply"`
-- `targetText="Job type"`
+## Fit Rules
 
-Job cards:
+- Never invent resume details, degree, or years of experience.
+- If no profile context exists, state fit is based on the job description alone.
+- **Strong** — requirements clearly match known user profile or target role.
+- **Maybe** — partial match; some requirements are missing or unclear.
+- **Weak** — major mismatch in experience, location, seniority, or stack.
+- Always name the single biggest missing requirement.
 
-- `[data-job-id]`
-- `.job-card-container`
-- `.jobs-search-results__list-item`
-- `.job-card-list__title`
-- `.job-card-container__link`
-
-Job details:
-
-- `.jobs-search__job-details--container`
-- `.jobs-details`
-- `.jobs-description`
-- `.jobs-box__html-content`
-- `[class*="jobs-description"]`
-- `main`
-
-## Fit Recommendation Rules
-
-- Do not invent the user's resume, degree, company history, or years of experience.
-- If no user profile/resume context is available, say the fit is based only on the job description.
-- A strong fit means the role requirements match what is known about the user or the requested target role.
-- A maybe fit means requirements are partly missing or unclear.
-- A weak fit means the role asks for major experience, location, seniority, or stack mismatches.
-- Always mention the biggest missing requirement honestly.
-
-## Final Answer Format
-
-Use markdown:
+## Output Format
 
 ```markdown
-## LinkedIn jobs found
+## LinkedIn Jobs Found
 
-- **Title - Company** (Location)
-  Link: URL
-  Description: short summary
-  Requirements: key requirements
-  Fit: Strong / Maybe / Weak - reason
+- **{Title} – {Company}** ({Location})
+  Link: {URL}
+  Description: {1–2 sentence summary}
+  Requirements: {comma-separated key requirements}
+  Fit: {Strong / Maybe / Weak} — {reason}
 ```
