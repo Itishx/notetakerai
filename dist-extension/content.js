@@ -3053,6 +3053,8 @@ function __sbBuildBrainUI() {
     .sb-card-header-btn:hover { background: var(--sb-btn-hover); }
     .sb-card-scroll {
       flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px;
+      user-select: text;
+      -webkit-user-select: text;
     }
     .sb-card-stack {
       min-height: 100%;
@@ -3079,8 +3081,14 @@ function __sbBuildBrainUI() {
       display: inline-block; background: var(--sb-q-bg); border: 1px solid var(--sb-q-border);
       border-radius: 14px; padding: 10px 14px; font-size: 13px; color: var(--sb-fg-2); line-height: 1.5;
       margin-bottom: 18px; max-width: 100%; word-break: break-word;
+      user-select: text;
+      -webkit-user-select: text;
     }
-    .sb-card-a { font-size: 14.5px; line-height: 1.75; color: var(--sb-fg); word-break: break-word; }
+    .sb-card-a {
+      font-size: 14.5px; line-height: 1.75; color: var(--sb-fg); word-break: break-word;
+      user-select: text;
+      -webkit-user-select: text;
+    }
     .sb-card-a h1, .sb-card-a h2, .sb-card-a h3 {
       font-family: Georgia, 'Times New Roman', serif; color: var(--sb-fg); margin: 0 0 10px; line-height: 1.25;
     }
@@ -3111,6 +3119,184 @@ function __sbBuildBrainUI() {
     }
     .sb-card-a hr { border: none; border-top: 1px solid var(--sb-hr); margin: 14px 0; }
     .sb-card-status { font-size: 13.5px; color: var(--sb-fg-2); line-height: 1.65; }
+    .sb-linkedin-card {
+      width: 100%;
+      display: grid;
+      gap: 12px;
+      color: #241D18;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .sb-linkedin-hero {
+      position: relative;
+      overflow: hidden;
+      padding: 18px;
+      border-radius: 22px;
+      border: 1px solid rgba(65,48,40,0.12);
+      background:
+        radial-gradient(circle at 8% 0%, rgba(10,102,194,0.18), transparent 15rem),
+        linear-gradient(150deg, rgba(255,255,255,0.96), rgba(249,241,231,0.90));
+      box-shadow: 0 18px 40px rgba(27,23,19,0.10);
+    }
+    .sb-linkedin-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 8px;
+      color: #0A66C2;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .sb-linkedin-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      background: #0A66C2;
+      box-shadow: 0 0 12px rgba(10,102,194,0.45);
+    }
+    .sb-linkedin-hero h2 {
+      margin: 0;
+      color: #17120E;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 23px;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+    }
+    .sb-linkedin-hero p {
+      margin: 10px 0 0;
+      color: rgba(27,23,19,0.70);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .sb-linkedin-list {
+      display: grid;
+      gap: 10px;
+    }
+    .sb-linkedin-job {
+      overflow: hidden;
+      border: 1px solid rgba(65,48,40,0.12);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.78);
+      box-shadow: 0 12px 28px rgba(27,23,19,0.08);
+    }
+    .sb-linkedin-job summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 15px;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .sb-linkedin-job summary::-webkit-details-marker { display: none; }
+    .sb-linkedin-job-title {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+    .sb-linkedin-job-title strong {
+      color: #17120E;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+    .sb-linkedin-job-title small {
+      color: rgba(27,23,19,0.58);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .sb-linkedin-fit {
+      align-self: flex-start;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 6px 9px;
+      color: #1F3B24;
+      background: #DFF4E3;
+      border: 1px solid rgba(31,59,36,0.12);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .sb-linkedin-fit.maybe, .sb-linkedin-fit.unknown {
+      color: #71430F;
+      background: #FFF0CC;
+      border-color: rgba(113,67,15,0.14);
+    }
+    .sb-linkedin-fit.weak {
+      color: #84261F;
+      background: #FFE1DE;
+      border-color: rgba(132,38,31,0.14);
+    }
+    .sb-linkedin-job-body {
+      padding: 0 15px 15px;
+      color: rgba(27,23,19,0.78);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .sb-linkedin-job-body p { margin: 0 0 10px; }
+    .sb-linkedin-reqs {
+      margin: 0 0 12px;
+      padding: 12px 12px 10px;
+      border-radius: 14px;
+      background: rgba(10,102,194,0.07);
+      border: 1px solid rgba(10,102,194,0.10);
+    }
+    .sb-linkedin-reqs span,
+    .sb-linkedin-fit-note span,
+    .sb-linkedin-conclusion span {
+      display: block;
+      margin-bottom: 6px;
+      color: rgba(27,23,19,0.54);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .sb-linkedin-reqs ul {
+      margin: 0 0 0 16px;
+      padding: 0;
+    }
+    .sb-linkedin-reqs li { margin: 0 0 4px; }
+    .sb-linkedin-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .sb-linkedin-apply {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 9px 13px;
+      color: #fff !important;
+      background: #0A66C2;
+      text-decoration: none !important;
+      font-size: 12px;
+      font-weight: 800;
+      box-shadow: 0 10px 22px rgba(10,102,194,0.24);
+    }
+    .sb-linkedin-fit-note {
+      padding: 12px;
+      border-radius: 14px;
+      color: rgba(27,23,19,0.78);
+      background: rgba(65,48,40,0.05);
+    }
+    .sb-linkedin-conclusion {
+      padding: 14px 15px;
+      border-radius: 18px;
+      border: 1px solid rgba(201,84,74,0.16);
+      background: linear-gradient(145deg, rgba(255,255,255,0.86), rgba(255,232,217,0.72));
+      color: rgba(27,23,19,0.78);
+      box-shadow: 0 12px 28px rgba(27,23,19,0.07);
+    }
+    .sb-linkedin-conclusion p {
+      margin: 0;
+      line-height: 1.55;
+    }
     .sb-card-stack.sb-card-stack-spotify {
       justify-content: flex-start;
       gap: 18px;
@@ -3829,9 +4015,14 @@ function __sbBuildBrainUI() {
   bubble.querySelector("[data-sb-copy]").addEventListener("click", async (ev) => {
     const btn = ev.currentTarget;
     try {
-      await navigator.clipboard.writeText(__sbLastBubbleRaw);
+      const selection = window.getSelection?.();
+      const selectedText = selection?.toString?.()?.trim?.() || "";
+      const anchorNode = selection?.anchorNode || null;
+      const selectionNode = anchorNode?.nodeType === Node.ELEMENT_NODE ? anchorNode : anchorNode?.parentElement;
+      const selectedInsideBraino = Boolean(selectedText && selectionNode && bubble.contains(selectionNode));
+      await navigator.clipboard.writeText(selectedInsideBraino ? selectedText : __sbLastBubbleRaw);
       const prev = btn.textContent;
-      btn.textContent = "Copied";
+      btn.textContent = selectedInsideBraino ? "Selection copied" : "Copied";
       setTimeout(() => { btn.textContent = prev || "Copy"; }, 1200);
     } catch {}
   });
@@ -5242,7 +5433,242 @@ function __sbFormatInlineMarkdown(value) {
   return html;
 }
 
-function __sbRenderMarkdown(md) {
+function __sbCleanLinkedInDisplayText(value) {
+  return String(value || "")
+    .replace(/^[-*]\s+/, "")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function __sbNormalizeLinkedInLocationLabel(value) {
+  const clean = String(value || "").replace(/\s+/g, " ").trim();
+  const lower = clean.toLowerCase();
+  if (lower === "hyd") return "Hyderabad";
+  if (lower === "blr") return "Bengaluru";
+  return clean;
+}
+
+function __sbExtractLinkedInSearchContext(promptText, resultText) {
+  const source = `${promptText || ""}\n${resultText || ""}`;
+  const quoted = source.match(/Jobs I looked at for you in ["“](.+?)["”]\s+for\s+["“](.+?)["”]/i);
+  if (quoted) {
+    return {
+      location: __sbNormalizeLinkedInLocationLabel(quoted[1]),
+      role: __sbCleanLinkedInDisplayText(quoted[2]),
+    };
+  }
+
+  const patterns = [
+    /(?:find|search|look for|look up|show|pull up|bring up|get|open)\s+(?:me\s+)?(.+?)\s+(?:jobs?|roles?|positions?|openings?)\s+(?:in|at|near|around)\s+(.+?)(?:\s+(?:for me|please|pls|on linkedin|linkedin))?$/i,
+    /(.+?)\s+(?:jobs?|roles?|positions?|openings?)\s+(?:in|at|near|around)\s+(.+?)(?:\s+(?:for me|please|pls|on linkedin|linkedin))?$/i,
+  ];
+  const firstLine = String(promptText || "").trim();
+  for (const pattern of patterns) {
+    const match = firstLine.match(pattern);
+    if (!match) continue;
+    return {
+      role: __sbCleanLinkedInDisplayText(match[1]).replace(/\b(?:linkedin|linked in|for|me|please|pls)\b/gi, "").replace(/\s+/g, " ").trim(),
+      location: __sbNormalizeLinkedInLocationLabel(
+        __sbCleanLinkedInDisplayText(match[2]).replace(/\b(?:for me|please|pls|on linkedin|linkedin)\b/gi, "").trim()
+      ),
+    };
+  }
+  return { role: "the role", location: "the location" };
+}
+
+function __sbIsLinkedInJobTitleLine(line, lookaheadText = "") {
+  const clean = __sbCleanLinkedInDisplayText(line);
+  if (!clean || /^#{1,6}\s/.test(clean) || /^LinkedIn Jobs Found$/i.test(clean)) return false;
+  if (/^(Link|Description|Requirements|Fit|Final conclusion|Conclusion):/i.test(clean)) return false;
+  if (!/\(.*?\)/.test(clean)) return false;
+  if (!/(?:\s[—–]\s|\s-\s)/.test(clean)) return false;
+  return /Link:\s*https?:\/\/(?:www\.)?linkedin\.com\/jobs/i.test(lookaheadText);
+}
+
+function __sbParseLinkedInTitle(line) {
+  const clean = __sbCleanLinkedInDisplayText(line);
+  const match = clean.match(/^(.*?)\s+[—–]\s+(.+?)\s*\((.*?)\)\s*$/)
+    || clean.match(/^(.*?)\s+-\s+(.+?)\s*\((.*?)\)\s*$/);
+  if (!match) return { title: clean, company: "Company not captured", location: "Location not captured" };
+  return {
+    title: __sbCleanLinkedInDisplayText(match[1]),
+    company: __sbCleanLinkedInDisplayText(match[2]),
+    location: __sbCleanLinkedInDisplayText(match[3]),
+  };
+}
+
+function __sbParseLinkedInJobBlock(block) {
+  const lines = block.map(__sbCleanLinkedInDisplayText).filter(Boolean);
+  if (!lines.length) return null;
+  const titleInfo = __sbParseLinkedInTitle(lines[0]);
+  let link = "";
+  let description = "";
+  let fit = "";
+  const requirements = [];
+  let mode = "";
+
+  for (const line of lines.slice(1)) {
+    const linkMatch = line.match(/^Link:\s*(https?:\/\/\S+)/i);
+    if (linkMatch) {
+      link = linkMatch[1];
+      mode = "";
+      continue;
+    }
+    const descriptionMatch = line.match(/^Description:\s*(.*)$/i);
+    if (descriptionMatch) {
+      description = descriptionMatch[1].trim();
+      mode = "description";
+      continue;
+    }
+    if (/^Requirements:\s*$/i.test(line)) {
+      mode = "requirements";
+      continue;
+    }
+    const requirementsMatch = line.match(/^Requirements:\s*(.*)$/i);
+    if (requirementsMatch) {
+      const inline = requirementsMatch[1].trim();
+      if (inline) requirements.push(...inline.split(/\s*,\s*/).filter(Boolean));
+      mode = "requirements";
+      continue;
+    }
+    const fitMatch = line.match(/^Fit:\s*(.*)$/i);
+    if (fitMatch) {
+      fit = fitMatch[1].trim();
+      mode = "fit";
+      continue;
+    }
+
+    if (mode === "requirements") requirements.push(line);
+    else if (mode === "description" && !description) description = line;
+    else if (mode === "description") description += ` ${line}`;
+    else if (mode === "fit") fit += ` ${line}`;
+  }
+
+  if (!link && !description && !fit) return null;
+  const verdict = (fit.match(/^(Strong|Maybe|Weak|Unknown)/i)?.[1] || "Maybe").toLowerCase();
+  const fitReason = fit.replace(/^(Strong|Maybe|Weak|Unknown)\s*[—–-]?\s*/i, "").trim() || fit || "Braino did not capture a fit reason.";
+  return {
+    ...titleInfo,
+    link,
+    description: description || "No description captured.",
+    requirements: requirements.length ? requirements.slice(0, 7) : ["Not visible in the captured excerpt."],
+    verdict,
+    fitReason,
+  };
+}
+
+function __sbParseLinkedInJobsResult(md) {
+  const text = String(md || "").replace(/\r/g, "").trim();
+  if (!/linkedin jobs found|linkedin\.com\/jobs\/view|jobs i looked at for you/i.test(text)) return null;
+  const rawLines = text.split("\n");
+  const blocks = [];
+  let conclusionLines = [];
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i].trim();
+    if (/^(?:Final conclusion|Conclusion|Braino(?:'s)? take):/i.test(__sbCleanLinkedInDisplayText(line))) {
+      conclusionLines = rawLines.slice(i).map(__sbCleanLinkedInDisplayText).filter(Boolean);
+      break;
+    }
+    const lookaheadText = rawLines.slice(i, Math.min(i + 8, rawLines.length)).join("\n");
+    if (!__sbIsLinkedInJobTitleLine(line, lookaheadText)) continue;
+    const block = [line];
+    let j = i + 1;
+    for (; j < rawLines.length; j++) {
+      const next = rawLines[j].trim();
+      const nextLookahead = rawLines.slice(j, Math.min(j + 8, rawLines.length)).join("\n");
+      if (__sbIsLinkedInJobTitleLine(next, nextLookahead)) break;
+      if (/^(?:Final conclusion|Conclusion|Braino(?:'s)? take):/i.test(__sbCleanLinkedInDisplayText(next))) break;
+      block.push(next);
+    }
+    const job = __sbParseLinkedInJobBlock(block);
+    if (job) blocks.push(job);
+    i = j - 1;
+  }
+
+  if (!blocks.length) return null;
+  return {
+    jobs: blocks.slice(0, 6),
+    conclusion: conclusionLines.join(" ").replace(/^(Final conclusion|Conclusion|Braino(?:'s)? take):\s*/i, "").trim(),
+  };
+}
+
+function __sbBuildLinkedInConclusion(jobs, explicitConclusion) {
+  if (explicitConclusion) return explicitConclusion;
+  const counts = jobs.reduce((acc, job) => {
+    acc[job.verdict] = (acc[job.verdict] || 0) + 1;
+    return acc;
+  }, {});
+  const maybe = counts.maybe || 0;
+  const strong = counts.strong || 0;
+  const weak = counts.weak || 0;
+  const unknown = counts.unknown || 0;
+  if (strong > 0) return `Braino's take: I found ${jobs.length} roles, with ${strong} strong fit${strong === 1 ? "" : "s"}. Start with the strong matches, then use the maybe roles as backups if the requirements line up with your actual experience.`;
+  if (maybe > weak) return `Braino's take: most of these look like maybe fits. They are worth opening, but the deciding factor is whether your SQL, BI, Python, and analytics experience matches the requirements.`;
+  if (weak > 0 && maybe === 0 && unknown === 0) return `Braino's take: these roles look senior or mismatched from the captured details. I would refine the search with fresher, junior, remote, or exact-skill filters before applying.`;
+  return `Braino's take: I found ${jobs.length} roles, but some details were incomplete. Open the most relevant ones first and verify the requirements before applying.`;
+}
+
+function __sbRenderLinkedInJobsCard(md, options = {}) {
+  const parsed = __sbParseLinkedInJobsResult(md);
+  if (!parsed) return "";
+  const context = __sbExtractLinkedInSearchContext(options.prompt || "", md);
+  const jobs = parsed.jobs;
+  const title = `Jobs I looked at for you in "${context.location || "the location"}" for "${context.role || "the role"}"`;
+  const subtitle = `${jobs.length} LinkedIn role${jobs.length === 1 ? "" : "s"} reviewed. Click a job to see the description, requirements, fit, and apply link.`;
+  const jobsHtml = jobs.map((job, index) => {
+    const verdictClass = ["strong", "maybe", "weak", "unknown"].includes(job.verdict) ? job.verdict : "maybe";
+    const verdictLabel = job.verdict ? job.verdict[0].toUpperCase() + job.verdict.slice(1) : "Maybe";
+    const reqs = job.requirements.map(req => `<li>${__sbEscapeHtml(req)}</li>`).join("");
+    const linkHtml = job.link
+      ? `<a class="sb-linkedin-apply" href="${__sbEscapeHtml(job.link)}" target="_blank" rel="noreferrer">Open job / apply</a>`
+      : "";
+    return `
+      <details class="sb-linkedin-job" ${index === 0 ? "open" : ""}>
+        <summary>
+          <div class="sb-linkedin-job-title">
+            <strong>${__sbEscapeHtml(job.title)}</strong>
+            <small>${__sbEscapeHtml(job.company)} · ${__sbEscapeHtml(job.location)}</small>
+          </div>
+          <span class="sb-linkedin-fit ${verdictClass}">${__sbEscapeHtml(verdictLabel)}</span>
+        </summary>
+        <div class="sb-linkedin-job-body">
+          <p>${__sbEscapeHtml(job.description)}</p>
+          <div class="sb-linkedin-reqs">
+            <span>Requirements Braino saw</span>
+            <ul>${reqs}</ul>
+          </div>
+          <div class="sb-linkedin-fit-note">
+            <span>Fit recommendation</span>
+            ${__sbEscapeHtml(job.fitReason)}
+          </div>
+          <div class="sb-linkedin-actions">${linkHtml}</div>
+        </div>
+      </details>
+    `;
+  }).join("");
+
+  return `
+    <div class="sb-linkedin-card">
+      <section class="sb-linkedin-hero">
+        <div class="sb-linkedin-kicker">LinkedIn jobs</div>
+        <h2>${__sbEscapeHtml(title)}</h2>
+        <p>${__sbEscapeHtml(subtitle)}</p>
+      </section>
+      <section class="sb-linkedin-list">${jobsHtml}</section>
+      <section class="sb-linkedin-conclusion">
+        <span>Final conclusion</span>
+        <p>${__sbEscapeHtml(__sbBuildLinkedInConclusion(jobs, parsed.conclusion))}</p>
+      </section>
+    </div>
+  `;
+}
+
+function __sbRenderMarkdown(md, options = {}) {
+  const linkedInJobsCard = __sbRenderLinkedInJobsCard(md, options);
+  if (linkedInJobsCard) return linkedInJobsCard;
+
   const codeBlocks = [];
   let text = String(md || "").replace(/\r/g, "");
   text = text.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_match, lang, code) => {
@@ -5946,7 +6372,7 @@ function __sbBuildCardTurnHtml(turn = {}, options = {}) {
     : String(turn.answer || "");
   const promptHtml = prompt ? `<div class="sb-card-q">${__sbEscapeHtml(prompt)}</div>` : "";
   const answerHtml = options.rich
-    ? `<div class="sb-card-a">${__sbRenderMarkdown(answer)}</div>`
+    ? `<div class="sb-card-a">${__sbRenderMarkdown(answer, { prompt })}</div>`
     : `<div class="sb-card-status">${__sbEscapeHtml(answer)}</div>`;
   return `<div class="sb-turn">${promptHtml}${answerHtml}</div>`;
 }

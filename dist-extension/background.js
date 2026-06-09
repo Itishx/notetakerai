@@ -2941,11 +2941,11 @@ Target search: role="${role}", location="${location}"
 Start URL: ${searchUrl}
 
 GOAL:
-Return 3-5 relevant jobs with title, company, location, job link, short description, key requirements, and a fit recommendation. Do NOT apply, save, message recruiters, or click Easy Apply unless the user explicitly asks and confirms.
+Return 3-4 strong/relevant jobs by default, up to 5 if the user asks or the results are easy to inspect. Include title, company, location, job link, short description, key requirements, fit recommendation, and a final conclusion. Do NOT apply, save, message recruiters, or click Easy Apply unless the user explicitly asks and confirms.
 
 FLOW:
 1. If not already on LinkedIn Jobs results for the requested role/location, navigate to the Start URL.
-2. wait 1500, then read the results list to verify LinkedIn loaded. If login wall appears, clarify that the user must log in to LinkedIn.
+2. wait 900, then read the results list to verify LinkedIn loaded. If login wall appears, clarify that the user must log in to LinkedIn.
 3. If the user requested filters such as remote, hybrid, recent, internship, experience level, or easy apply, apply only those filters. Otherwise do not over-filter.
 4. Read visible job cards first. Prefer selectors:
    - .jobs-search-results-list
@@ -2955,7 +2955,7 @@ FLOW:
    - .job-card-container
    - .job-card-list__title
    - .job-card-container__link
-5. Open one relevant job at a time by clicking the card/title. After each click, wait 900, verify the details pane or job page changed, then read the full job detail area with maxChars 3500.
+5. Open one relevant job at a time by clicking the card/title. After each click, wait 600, verify the details pane or job page changed, then read the full job detail area with maxChars 3500.
 6. For job details, prefer selectors:
    - .jobs-search__job-details--container
    - .jobs-details
@@ -2965,14 +2965,15 @@ FLOW:
    - main
 7. If a "Show more" or "See more" button appears in the description, click it before reading.
 8. Remember each job before moving to the next. Capture link from current URL or the card href. If the details pane does not expose a unique link, include the visible card/job link from the page.
-9. Stop after 3-5 solid jobs or when results are exhausted.
+9. Stop after 3-4 solid jobs for speed, or 5 if requested/easy. Do not keep crawling weak matches just to fill the list.
 10. Final done message must be markdown:
-   ## LinkedIn jobs found
+   ## Jobs I looked at for you in "${location}" for "${role}"
    - **Title - Company** (Location)
      Link: URL
      Description: 1-2 sentence summary
      Requirements: short bullets
      Fit: Strong / Maybe / Weak, with honest reason
+   Final conclusion: Braino's honest take on which jobs to open/apply to first and what skill gap matters most.
 
 FIT RULES:
 - Do not invent the user's resume or experience.

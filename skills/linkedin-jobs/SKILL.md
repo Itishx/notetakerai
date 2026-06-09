@@ -9,7 +9,7 @@ Scope: job discovery and fit analysis only. Never apply, save, message, or conne
 
 ## Output Goal
 
-3–5 jobs, each with: title, company, location, link, short description, key requirements, fit verdict (Strong / Maybe / Weak + reason).
+3-4 strong/relevant jobs by default, up to 5 if the user asks or the results are easy to inspect. Each job needs: title, company, location, link, short description, key requirements, fit verdict (Strong / Maybe / Weak + reason), plus a final conclusion.
 
 ## Workflow
 
@@ -18,11 +18,11 @@ Scope: job discovery and fit analysis only. Never apply, save, message, or conne
 3. If a login wall appears, stop and ask the user to log in.
 4. Apply only filters the user requested. Never invent filters.
 5. Scan the results list first. Click only cards that clearly match role + location.
-6. Open one job at a time; wait for the details pane to update before reading.
+6. Open one job at a time; wait briefly for the details pane to update before reading.
 7. If the description is truncated, click `Show more` / `See more`.
 8. Read job details with `maxChars: 3500` so the description and requirements are not cut off.
 9. Capture all required fields before moving to the next job. Capture link from card/title `href` first, current URL second.
-10. Stop at 5 jobs, or earlier if no more relevant results exist.
+10. Stop at 3-4 good jobs for speed, or 5 if requested/easy. Do not keep crawling weak matches just to fill the list.
 
 ## Locators
 
@@ -53,11 +53,13 @@ Scope: job discovery and fit analysis only. Never apply, save, message, or conne
 ## Output Format
 
 ```markdown
-## LinkedIn Jobs Found
+## Jobs I looked at for you in "{Location}" for "{Role}"
 
 - **{Title} – {Company}** ({Location})
   Link: {URL}
   Description: {1–2 sentence summary}
   Requirements: {comma-separated key requirements}
   Fit: {Strong / Maybe / Weak} — {reason}
+
+Final conclusion: {Braino's honest take on which jobs to open/apply to first and what skill gap matters most.}
 ```
