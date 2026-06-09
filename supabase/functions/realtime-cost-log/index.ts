@@ -119,7 +119,7 @@ serve(async (req) => {
     }
 
     const realtimeModel = cleanText(payload.realtimeModel, 80) || "unknown";
-    const transcriptionModel = cleanText(payload.transcriptionModel, 80) || "gpt-4o-transcribe";
+    const transcriptionModel = cleanText(payload.transcriptionModel, 80) || "gpt-4o-mini-transcribe";
     const realtimeUsage = asObject(payload.rawRealtimeUsage);
     const transcriptionUsage = asObject(payload.rawTranscriptionUsage);
     const realtimeEstimate = estimateUsageCost(realtimeModel, realtimeUsage, REALTIME_PRICES, "gpt-realtime-2");

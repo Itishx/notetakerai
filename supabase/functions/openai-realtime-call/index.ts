@@ -38,7 +38,7 @@ serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
-    const realtimeModel = Deno.env.get("OPENAI_REALTIME_MODEL") || "gpt-realtime-2";
+    const realtimeModel = Deno.env.get("OPENAI_REALTIME_MODEL") || "gpt-realtime-mini";
     const realtimeVoice = Deno.env.get("OPENAI_REALTIME_VOICE") || "marin";
 
     if (!anonKey || !supabaseUrl) {
@@ -153,7 +153,7 @@ serve(async (req) => {
       "X-Braino-Realtime-Used-Ms": String(usedMs),
       "X-Braino-Realtime-Reset-At": resetAt.toISOString(),
       "X-Braino-Realtime-Model": realtimeModel,
-      "X-Braino-Realtime-Transcription-Model": "gpt-4o-transcribe",
+      "X-Braino-Realtime-Transcription-Model": "gpt-4o-mini-transcribe",
     };
 
     const locationHeader = openAiResponse.headers.get("Location");

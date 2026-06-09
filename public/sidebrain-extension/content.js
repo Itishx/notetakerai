@@ -1121,6 +1121,14 @@ function __sbGetSiteAdapterContext() {
     };
   }
 
+  if (/calendar\.google\.com$/.test(host)) {
+    return {
+      site: "google-calendar",
+      url,
+      title: document.title,
+    };
+  }
+
   if (/mail\.google\.com$/.test(host)) {
     return {
       site: "gmail",
@@ -1138,6 +1146,7 @@ function __sbNormalizeConnectorName(value) {
   if (["spotify", "spot", "music"].includes(key)) return "spotify";
   if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
   if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
+  if (["calendar", "cal", "gcal", "google-calendar", "google_calendar", "googlecal"].includes(key)) return "google-calendar";
   return null;
 }
 
@@ -1145,6 +1154,7 @@ function __sbGetConnectorSiteSuggestion(siteContext) {
   const site = siteContext?.site || "generic";
   if (site === "spotify") return "spotify";
   if (site === "google-drive") return "google-drive";
+  if (site === "google-calendar") return "google-calendar";
   if (site === "gmail") return "gmail";
   return "auto";
 }
@@ -1158,6 +1168,8 @@ function __sbGetEffectiveConnector(siteContext) {
 function __sbInferConnectorFromPrompt(promptText) {
   const text = String(promptText || "").trim().toLowerCase();
   if (/\bgoogle drive\b|\bdrive\b/.test(text)) return "google-drive";
+  if (/\b(calendar|google calendar|gcal|schedule|reschedule|meeting|google meet)\b/.test(text) ||
+      /\b(?:book|set up|create|add|cancel|delete|forward|invite|join|open|start)\b.*\b(?:call|meet|event)\b/.test(text)) return "google-calendar";
   if (/\bgmail\b|\bemail\b|\bmail\b/.test(text)) return "gmail";
   if (/\bspotify\b/.test(text) || /^play\s+/i.test(promptText)) return "spotify";
   return "auto";
@@ -1168,11 +1180,13 @@ function __sbGetConnectorLabel(connector, options = {}) {
   const includeAutoHint = Boolean(options.includeAutoHint);
   if (key === "spotify") return "♪ Spotify";
   if (key === "google-drive") return "🗂 Drive";
+  if (key === "google-calendar") return "📅 Calendar";
   if (key === "gmail") return "✉ Gmail";
   if (includeAutoHint) {
     const suggestion = __sbGetConnectorSiteSuggestion(options.siteContext || __sbGetSiteAdapterContext());
     if (suggestion === "spotify") return "↗ Auto · Spotify";
     if (suggestion === "google-drive") return "↗ Auto · Drive";
+    if (suggestion === "google-calendar") return "↗ Auto · Calendar";
     if (suggestion === "gmail") return "↗ Auto · Gmail";
   }
   return "↗ Auto";
@@ -1209,6 +1223,9 @@ function __sbShouldConnectorForceAgent(connector, promptText, forcedMode, siteCo
   if (__sbIsBrowserActionCommand(text)) return true;
   if (key === "google-drive") {
     return /\b(create|make|find|search|look for|rename|move|delete|remove|trash|organize|organise|organhise|sort|clean|tidy|arrange|list|show|open|take)\b/.test(text);
+  }
+  if (key === "google-calendar") {
+    return /\b(schedule|book|set up|create|add|reschedule|move|postpone|cancel|delete|remove|forward|invite|show|list|open|join|start|calendar|meeting|meet|call|event)\b/.test(text);
   }
   if (key === "gmail") {
     return /\b(reply|draft|compose|send|archive|label|star|read|open|find|search|show|summarize|triage|email)\b/.test(text);
@@ -2337,6 +2354,18 @@ if (__sbContextOk()) {
         return false;
       }
       void __sbRunXAutomation({ startOnly: true });
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (msg.action === "startMeetingRecording") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      window.__sbForcedMode = "meeting";
+      if (__sbIsLectureRecording) {
+        __sbShowBubble("Meeting & Call mode is already recording.", false, { tone: "status", title: "Meeting & Call" });
+        sendResponse({ ok: true, alreadyRecording: true });
+        return false;
+      }
+      void __sbStartLectureRecording();
       sendResponse({ ok: true });
       return false;
     }
@@ -4022,6 +4051,7 @@ function __sbBuildBrainUI() {
     <div class="sb-dropdown-label">Connector</div>
     <button class="sb-dropdown-item selected" data-connector="auto"><span class="sb-di-icon">↗</span><span class="sb-di-label">Auto detect</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-connector="google-drive"><span class="sb-di-icon">🗂</span><span class="sb-di-label">Google Drive</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-connector="google-calendar"><span class="sb-di-icon">📅</span><span class="sb-di-label">Google Calendar</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-connector="gmail"><span class="sb-di-icon">✉</span><span class="sb-di-label">Gmail</span><span class="sb-di-check">✓</span></button>
   `;
   document.body.appendChild(connectorDd);
@@ -4249,6 +4279,7 @@ function __sbBuildBrainUI() {
     const normalized = String(filterText || "").trim().toLowerCase();
     const options = [
       { connector: "google-drive", icon: "🗂", label: "Google Drive", aliases: ["drive", "gdrive"] },
+      { connector: "google-calendar", icon: "📅", label: "Google Calendar", aliases: ["calendar", "cal", "gcal"] },
       { connector: "gmail", icon: "✉", label: "Gmail", aliases: ["gmail", "mail"] },
       { connector: "auto", icon: "↗", label: "Auto detect", aliases: ["auto"] },
     ].filter((option) => {
@@ -4275,7 +4306,7 @@ function __sbBuildBrainUI() {
     connectorSlashDd.querySelectorAll("[data-slash-connector]").forEach((item) => {
       item.addEventListener("click", () => {
         const connector = item.getAttribute("data-slash-connector");
-        const shortName = connector === "google-drive" ? "drive" : connector;
+        const shortName = connector === "google-drive" ? "drive" : connector === "google-calendar" ? "calendar" : connector;
         inputEl.value = connector === "auto" ? "" : `/${shortName} `;
         __sbApplyConnectorChoice(connector);
         connectorSlashDd.classList.remove("open");
@@ -8364,8 +8395,8 @@ let __sbRtUsageHeartbeatTimer = null;
 let __sbRtUsageDeadlineTimer = null;
 let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
-let __sbRtRealtimeModel = "gpt-realtime-2";
-let __sbRtTranscriptionModel = "gpt-4o-transcribe";
+let __sbRtRealtimeModel = "gpt-realtime-mini";
+let __sbRtTranscriptionModel = "gpt-4o-mini-transcribe";
 let __sbRtCostTurn = null;
 let __sbRtLastCostTurn = null;
 let __sbRtCostTurnSeq = 0;
@@ -8643,16 +8674,12 @@ function __sbBuildRealtimeBootInstructions() {
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
-  // When using ElevenLabs, the realtime model only needs to
-  // return TEXT — we generate the audio ourselves. In native realtime mode, the model
-  // produces audio directly.
-  const useExternalTts = __sbVoiceOutputPref === "elevenlabs";
   return {
     type: "session.update",
     session: {
       type: "realtime",
       instructions,
-      output_modalities: useExternalTts ? ["text"] : ["audio"],
+      output_modalities: ["text"],
       reasoning: {
         effort: "low",
       },
@@ -8662,7 +8689,7 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
             type: "near_field",
           },
           transcription: {
-            model: "gpt-4o-transcribe",
+            model: "gpt-4o-mini-transcribe",
             // No hard language lock — the user wants multilingual mirroring (speak any
             // language, Braino mirrors it). Noise-induced language hallucinations are held
             // back by __sbIsJunkTranscript + calmer VAD instead.
@@ -9213,7 +9240,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
   __sbRtRelayingAppMessage = relayMode;
   __sbRtHandlingConversationTurn = !relayMode;
 
-  const rtOutputModalities = __sbVoiceOutputPref === "elevenlabs" ? ["text"] : ["audio"];
+  const rtOutputModalities = ["text"];
   const responsePromise = __sbCreateRtWaiter();
   const responseCreated = relayMode
     ? __sbSendRtEvent({
