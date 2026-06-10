@@ -241,6 +241,34 @@ export default function RealtimeCosts() {
             />
           </section>
 
+          {payload.actualCosts.available && payload.actualCosts.lineItems.length > 0 && (
+            <section className="rtc-breakdown-panel">
+              <div className="rtc-breakdown-head">
+                <div>
+                  <p className="rtc-kicker"><span className="rtc-pip" /> By model</p>
+                  <h2>Where the money actually went</h2>
+                  <p className="rtc-panel-copy">
+                    Every OpenAI model that billed you this period — voice, chat, web search, X tools, all of it. This is what your realtime voice receipt was missing.
+                  </p>
+                </div>
+              </div>
+              <div className="rtc-breakdown-grid">
+                {payload.actualCosts.lineItems.map((item) => (
+                  <div key={item.lineItem} className="rtc-breakdown-item">
+                    <span className="rtc-breakdown-model">{item.lineItem}</span>
+                    <strong className="rtc-breakdown-cost">{formatUsd(item.costUsd)}</strong>
+                    <div className="rtc-breakdown-bar-wrap">
+                      <div
+                        className="rtc-breakdown-bar"
+                        style={{ width: `${Math.min(100, (item.costUsd / payload.actualCosts.lineItems[0].costUsd) * 100).toFixed(1)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {payload.totals.audioOutputWarningCount > 0 && (
             <div className="rtc-warning">
               <strong>Red flag:</strong> OpenAI audio output tokens were logged in {payload.totals.audioOutputWarningCount} turn(s). If ElevenLabs voice is selected, those should be 0 because ElevenLabs should be the only speaker.
@@ -906,6 +934,68 @@ const styles = `
     color: var(--sb-panel-2);
     background: var(--sb-ink);
     font-size: 12px;
+  }
+  .rtc-breakdown-panel {
+    width: calc(100% - 64px);
+    max-width: 1240px;
+    margin: 18px auto;
+    border: 1px solid var(--sb-line);
+    border-radius: var(--sb-r-xl);
+    background: color-mix(in srgb, var(--sb-panel) 92%, transparent);
+    box-shadow: var(--sb-shadow);
+    overflow: hidden;
+  }
+  .rtc-breakdown-head {
+    padding: 24px 26px;
+    border-bottom: 1px solid var(--sb-line-2);
+  }
+  .rtc-breakdown-head h2 {
+    margin: 0;
+    font-family: "Instrument Serif", Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(28px, 3.5vw, 42px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--sb-ink);
+  }
+  .rtc-breakdown-grid {
+    padding: 20px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .rtc-breakdown-item {
+    display: grid;
+    grid-template-columns: 260px 100px 1fr;
+    align-items: center;
+    gap: 16px;
+  }
+  .rtc-breakdown-model {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    color: var(--sb-ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rtc-breakdown-cost {
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--sb-ink);
+    text-align: right;
+  }
+  .rtc-breakdown-bar-wrap {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--sb-line-2);
+    overflow: hidden;
+  }
+  .rtc-breakdown-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--sb-accent-deep), var(--sb-accent-2));
+    transition: width 0.4s ease;
   }
   .rtc-status {
     max-width: 840px;
