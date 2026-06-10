@@ -8680,9 +8680,6 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
       type: "realtime",
       instructions,
       output_modalities: ["text"],
-      reasoning: {
-        effort: "low",
-      },
       audio: {
         input: {
           noise_reduction: {
