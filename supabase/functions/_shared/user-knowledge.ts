@@ -2,7 +2,9 @@ type UserKnowledgeOptions = {
   includeMemoryNotes?: boolean;
   includeXPersona?: boolean;
   includeXContentSource?: boolean;
+  includeContacts?: boolean;
   memoryNoteLimit?: number;
+  contactLimit?: number;
 };
 
 type XPersonaContext = {
@@ -17,6 +19,7 @@ export type UserKnowledge = {
   displayName: string;
   overallMemory: string;
   memoryNotes: string[];
+  contacts: string[];
   xPersona: XPersonaContext;
   combinedContext: string;
 };
@@ -29,9 +32,11 @@ export async function loadUserKnowledge(
   const includeMemoryNotes = options.includeMemoryNotes ?? true;
   const includeXPersona = options.includeXPersona ?? true;
   const includeXContentSource = options.includeXContentSource ?? false;
+  const includeContacts = options.includeContacts ?? true;
   const memoryNoteLimit = options.memoryNoteLimit ?? 12;
+  const contactLimit = options.contactLimit ?? 8;
 
-  const [profileContext, memoryResult, xPersonaResult] = await Promise.all([
+  const [profileContext, memoryResult, xPersonaResult, contactsResult] = await Promise.all([
     loadProfileContext(supabase, userId),
     includeMemoryNotes
       ? supabase
@@ -49,6 +54,14 @@ export async function loadUserKnowledge(
           .eq("user_id", userId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    includeContacts
+      ? supabase
+          .from("braino_contacts")
+          .select("name,nickname,email,phone")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: false })
+          .limit(contactLimit)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const memoryNotes = Array.isArray(memoryResult?.data)
@@ -69,10 +82,31 @@ export async function loadUserKnowledge(
       }
     : null;
 
+  const contacts = Array.isArray(contactsResult?.data)
+    ? uniqueStrings(
+        contactsResult.data
+          .map((contact: any) => {
+            const name = cleanText(contact?.name);
+            if (!name) return "";
+            const nickname = cleanText(contact?.nickname);
+            const email = cleanText(contact?.email);
+            const phone = cleanText(contact?.phone);
+            const bits = [
+              nickname ? `nickname: ${nickname}` : "",
+              email ? `email: ${email}` : "",
+              phone ? `phone: ${phone}` : "",
+            ].filter(Boolean);
+            return bits.length ? `${name} — ${bits.join("; ")}` : name;
+          })
+          .filter(Boolean),
+      )
+    : [];
+
   const combinedContext = buildUserKnowledgeContext({
     displayName: profileContext.displayName,
     overallMemory: profileContext.overallMemory,
     memoryNotes,
+    contacts,
     xPersona,
     includeXContentSource,
   });
@@ -81,6 +115,7 @@ export async function loadUserKnowledge(
     displayName: profileContext.displayName,
     overallMemory: profileContext.overallMemory,
     memoryNotes,
+    contacts,
     xPersona,
     combinedContext,
   };
@@ -90,6 +125,7 @@ export function buildUserKnowledgeContext(input: {
   displayName?: string | null;
   overallMemory?: string | null;
   memoryNotes?: string[];
+  contacts?: string[];
   xPersona?: XPersonaContext;
   includeXContentSource?: boolean;
 }) {
@@ -97,6 +133,7 @@ export function buildUserKnowledgeContext(input: {
   const displayName = cleanText(input.displayName);
   const overallMemory = cleanText(input.overallMemory);
   const memoryNotes = uniqueStrings((input.memoryNotes || []).map((note) => cleanText(note)).filter(Boolean) as string[]);
+  const contacts = uniqueStrings((input.contacts || []).map((contact) => cleanText(contact)).filter(Boolean) as string[]);
 
   if (displayName) {
     sections.push(`Name: ${displayName}`);
@@ -108,6 +145,10 @@ export function buildUserKnowledgeContext(input: {
 
   if (memoryNotes.length > 0) {
     sections.push(`Additional remembered facts:\n${memoryNotes.map((note) => `- ${note}`).join("\n")}`);
+  }
+
+  if (contacts.length > 0) {
+    sections.push(`Saved contacts:\n${contacts.map((contact) => `- ${contact}`).join("\n")}`);
   }
 
   const xLines = [

@@ -83,6 +83,66 @@ export type Database = {
         }
         Relationships: []
       }
+      google_calendar_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          google_email: string | null
+          google_user_id: string | null
+          id: string
+          last_sync_at: string | null
+          primary_calendar_id: string | null
+          refresh_token: string | null
+          scope: string | null
+          sync_token: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_identifier: string
+          watch_channel_id: string | null
+          watch_expires_at: string | null
+          watch_resource_id: string | null
+          watch_token: string | null
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          google_email?: string | null
+          google_user_id?: string | null
+          id?: string
+          last_sync_at?: string | null
+          primary_calendar_id?: string | null
+          refresh_token?: string | null
+          scope?: string | null
+          sync_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier: string
+          watch_channel_id?: string | null
+          watch_expires_at?: string | null
+          watch_resource_id?: string | null
+          watch_token?: string | null
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          google_email?: string | null
+          google_user_id?: string | null
+          id?: string
+          last_sync_at?: string | null
+          primary_calendar_id?: string | null
+          refresh_token?: string | null
+          scope?: string | null
+          sync_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier?: string
+          watch_channel_id?: string | null
+          watch_expires_at?: string | null
+          watch_resource_id?: string | null
+          watch_token?: string | null
+        }
+        Relationships: []
+      }
       notes: {
         Row: {
           created_at: string
@@ -189,6 +249,48 @@ export type Database = {
           is_premium?: boolean
           overall_memory?: string
           polar_customer_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      braino_contacts: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          name_key: string
+          nickname: string | null
+          nickname_key: string | null
+          phone: string | null
+          photo_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          name_key: string
+          nickname?: string | null
+          nickname_key?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          name_key?: string
+          nickname?: string | null
+          nickname_key?: string | null
+          phone?: string | null
+          photo_url?: string | null
           updated_at?: string
           user_id?: string
         }

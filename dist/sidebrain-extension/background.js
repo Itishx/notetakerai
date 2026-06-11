@@ -42,9 +42,396 @@ function bgRemoveStorage(keys) {
 const BG_INTERNAL_PREMIUM_EMAILS = new Set([
   "itishpande21@gmail.com",
 ]);
+const BG_CONTACT_CACHE_TTL_MS = 10 * 1000;
+const BG_CONTACT_PHOTO_BUCKET = "braino-contact-photos";
+let bgContactCache = { userId: null, loadedAt: 0, contacts: [] };
 
 function bgNormalizeEmail(email) {
   return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
+function bgNormalizePhone(phone) {
+  return typeof phone === "string" ? phone.trim() : "";
+}
+
+function bgLooksLikeEmailAddress(value) {
+  return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(String(value || "").trim());
+}
+
+function bgNormalizeContactName(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function bgStorageSafeSegment(value, fallback) {
+  const safe = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return safe || fallback;
+}
+
+function bgContactPhotoExtension(fileName, mimeType) {
+  const explicit = String(fileName || "").split(".").pop()?.trim().toLowerCase();
+  if (explicit) return explicit;
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/webp") return "webp";
+  if (mimeType === "image/gif") return "gif";
+  return "bin";
+}
+
+function bgEncodeStoragePath(path) {
+  return String(path || "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function bgGetManagedContactPhotoPath(url) {
+  const prefix = `${BG_SUPABASE_URL}/storage/v1/object/public/${BG_CONTACT_PHOTO_BUCKET}/`;
+  const trimmed = String(url || "").trim();
+  if (!trimmed || !trimmed.startsWith(prefix)) return null;
+  return decodeURIComponent(trimmed.slice(prefix.length));
+}
+
+function bgDataUrlToBytes(dataUrl) {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(String(dataUrl || "").trim());
+  if (!match) throw new Error("Invalid contact photo upload.");
+  const mimeType = match[1].toLowerCase();
+  if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mimeType)) {
+    throw new Error("Contact photos must be JPG, PNG, GIF, or WebP.");
+  }
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return { mimeType, bytes };
+}
+
+async function bgUploadBrainoContactPhoto(input, fallbackName) {
+  const photoDataUrl = typeof input?.photoDataUrl === "string"
+    ? input.photoDataUrl.trim()
+    : typeof input?.photo_data_url === "string"
+      ? input.photo_data_url.trim()
+      : "";
+  if (!photoDataUrl) return null;
+
+  const { bytes, mimeType } = bgDataUrlToBytes(photoDataUrl);
+  const stored = await new Promise((resolve) => chrome.storage.local.get(["authUserId"], resolve));
+  let userId = stored?.authUserId || null;
+  if (!userId) {
+    const { res } = await bgAuthedSupabaseFetch(`${BG_SUPABASE_URL}/auth/v1/user`);
+    const profile = await res.json().catch(() => ({}));
+    userId = typeof profile?.id === "string" ? profile.id : null;
+  }
+  if (!userId) throw new Error("Could not determine the signed-in user for photo upload.");
+
+  const fileName = typeof input?.photoFileName === "string" ? input.photoFileName : typeof input?.photo_file_name === "string" ? input.photo_file_name : "";
+  const ext = bgContactPhotoExtension(fileName, mimeType);
+  const base = bgStorageSafeSegment(fallbackName || fileName, "contact");
+  const unique = typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const path = `${userId}/${base}-${unique}.${ext}`;
+
+  const { res } = await bgAuthedSupabaseFetch(
+    `${BG_SUPABASE_URL}/storage/v1/object/${BG_CONTACT_PHOTO_BUCKET}/${bgEncodeStoragePath(path)}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": mimeType,
+        "x-upsert": "false",
+      },
+      body: bytes,
+    },
+  );
+
+  if (!res.ok) {
+    const payload = await res.text().catch(() => "");
+    throw new Error(payload || `Could not upload contact photo (${res.status}).`);
+  }
+
+  return {
+    path,
+    publicUrl: `${BG_SUPABASE_URL}/storage/v1/object/public/${BG_CONTACT_PHOTO_BUCKET}/${bgEncodeStoragePath(path)}`,
+  };
+}
+
+async function bgDeleteManagedContactPhoto(url) {
+  const path = bgGetManagedContactPhotoPath(url);
+  if (!path) return;
+  const { res } = await bgAuthedSupabaseFetch(
+    `${BG_SUPABASE_URL}/storage/v1/object/${BG_CONTACT_PHOTO_BUCKET}/${bgEncodeStoragePath(path)}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok && res.status !== 404) {
+    const payload = await res.text().catch(() => "");
+    console.warn("Could not delete managed contact photo:", payload || res.status);
+  }
+}
+
+function bgFormatContactLabel(contact, fallback = "") {
+  return String(contact?.name || fallback || contact?.email || "that contact").trim();
+}
+
+function bgBuildMissingContactMessage(name, actionLabel) {
+  const person = String(name || "that person").trim();
+  const action = String(actionLabel || "this").trim();
+  return `I don't know ${person} yet. Add their details in the Braino contact popup or settings and I’ll remember them for ${action}.`;
+}
+
+function bgDescribeContactMatches(matches) {
+  return matches
+    .slice(0, 3)
+    .map((contact) => {
+      const name = String(contact?.name || "").trim();
+      const nickname = String(contact?.nickname || "").trim();
+      if (!name) return "";
+      return nickname ? `${name} (nickname: ${nickname})` : name;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function bgGetContactSearchKeys(contact) {
+  return [
+    bgNormalizeContactName(contact?.name_key || contact?.name || ""),
+    bgNormalizeContactName(contact?.nickname_key || contact?.nickname || ""),
+  ].filter(Boolean);
+}
+
+function bgUniqueContacts(matches) {
+  const seen = new Set();
+  return matches.filter((contact) => {
+    const key = contact?.id || `${contact?.name_key || ""}:${contact?.nickname_key || ""}`;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function bgFindContactMatches(query, contacts) {
+  const nameKey = bgNormalizeContactName(query);
+  if (!nameKey) return [];
+
+  const exact = bgUniqueContacts(
+    contacts.filter((contact) => bgGetContactSearchKeys(contact).includes(nameKey))
+  );
+  if (exact.length) return exact;
+
+  const startsWith = bgUniqueContacts(
+    contacts.filter((contact) =>
+      bgGetContactSearchKeys(contact).some((key) => key.startsWith(nameKey))
+    )
+  );
+  if (startsWith.length) return startsWith;
+
+  const tokens = nameKey.split(" ").filter(Boolean);
+  if (!tokens.length) return [];
+
+  return bgUniqueContacts(
+    contacts.filter((contact) => {
+      const searchKeys = bgGetContactSearchKeys(contact);
+      return tokens.every((token) => searchKeys.some((key) => key.includes(token)));
+    })
+  );
+}
+
+async function bgFetchBrainoContacts(force = false) {
+  const now = Date.now();
+  if (!force && bgContactCache.userId && now - bgContactCache.loadedAt < BG_CONTACT_CACHE_TTL_MS) {
+    return bgContactCache.contacts;
+  }
+
+  const { res, userId } = await bgAuthedSupabaseFetch(
+    `${BG_SUPABASE_URL}/rest/v1/braino_contacts?select=id,name,name_key,nickname,nickname_key,email,phone,photo_url,created_at,updated_at&order=name.asc`,
+  );
+  const data = await res.json().catch(() => []);
+  if (!res.ok) {
+    throw new Error(data?.message || data?.error || `Could not load Braino contacts (${res.status}).`);
+  }
+
+  const contacts = Array.isArray(data)
+    ? data.map((contact) => ({
+        ...contact,
+        name: String(contact?.name || "").trim(),
+        name_key: bgNormalizeContactName(contact?.name_key || contact?.name || ""),
+        nickname: typeof contact?.nickname === "string" ? contact.nickname.trim() || null : null,
+        nickname_key: bgNormalizeContactName(contact?.nickname_key || contact?.nickname || "") || null,
+        email: bgNormalizeEmail(contact?.email) || null,
+        phone: bgNormalizePhone(contact?.phone) || null,
+        photo_url: typeof contact?.photo_url === "string" ? contact.photo_url.trim() || null : null,
+      }))
+    : [];
+
+  bgContactCache = { userId: userId || null, loadedAt: now, contacts };
+  return contacts;
+}
+
+async function bgUpsertBrainoContact(input) {
+  const contactId = typeof input?.id === "string" ? input.id.trim() : "";
+  const name = String(input?.name || "").trim();
+  const nameKey = bgNormalizeContactName(name);
+  const rawNickname = typeof input?.nickname === "string" ? input.nickname : "";
+  const nickname = rawNickname.trim() || null;
+  const nicknameKey = nickname ? bgNormalizeContactName(nickname) : null;
+  const email = bgNormalizeEmail(input?.email) || null;
+  const phone = bgNormalizePhone(input?.phone) || null;
+  const rawPhotoUrl = typeof input?.photoUrl === "string"
+    ? input.photoUrl
+    : typeof input?.photo_url === "string"
+      ? input.photo_url
+      : "";
+  let photoUrl = rawPhotoUrl.trim() || null;
+  let uploadedPhotoPath = null;
+  const previousContact = bgContactCache.contacts.find((contact) => {
+    if (contactId && contact.id === contactId) return true;
+    if (contact.name_key === nameKey) return true;
+    if (nicknameKey && contact.nickname_key === nicknameKey) return true;
+    return false;
+  }) || null;
+  const previousPhotoUrl = rawPhotoUrl.trim() || previousContact?.photo_url || "";
+
+  if (!name || !nameKey) throw new Error("Contact name required.");
+
+  const uploadedPhoto = await bgUploadBrainoContactPhoto(input, name);
+  if (uploadedPhoto?.publicUrl) {
+    uploadedPhotoPath = uploadedPhoto.path;
+    photoUrl = uploadedPhoto.publicUrl;
+  }
+
+  const { res, userId } = await bgAuthedSupabaseFetch(
+    `${BG_SUPABASE_URL}/rest/v1/braino_contacts?on_conflict=user_id,name_key&select=id,name,name_key,nickname,nickname_key,email,phone,photo_url,created_at,updated_at`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        name,
+        name_key: nameKey,
+        nickname,
+        nickname_key: nicknameKey,
+        email,
+        phone,
+        photo_url: photoUrl,
+      }),
+    },
+  );
+  const data = await res.json().catch(() => []);
+  if (!res.ok) {
+    if (uploadedPhotoPath) {
+      await bgDeleteManagedContactPhoto(`${BG_SUPABASE_URL}/storage/v1/object/public/${BG_CONTACT_PHOTO_BUCKET}/${bgEncodeStoragePath(uploadedPhotoPath)}`);
+    }
+    throw new Error(data?.message || data?.error || `Could not save contact (${res.status}).`);
+  }
+
+  const saved = Array.isArray(data) ? data[0] : data;
+  const normalizedSaved = {
+    ...saved,
+    name: String(saved?.name || name).trim(),
+    name_key: bgNormalizeContactName(saved?.name_key || nameKey),
+    nickname: typeof saved?.nickname === "string" ? saved.nickname.trim() || null : nickname,
+    nickname_key: bgNormalizeContactName(saved?.nickname_key || nicknameKey || "") || null,
+    email: bgNormalizeEmail(saved?.email) || null,
+    phone: bgNormalizePhone(saved?.phone) || null,
+    photo_url: typeof saved?.photo_url === "string" ? saved.photo_url.trim() || null : null,
+  };
+  if (previousPhotoUrl && previousPhotoUrl !== normalizedSaved.photo_url) {
+    await bgDeleteManagedContactPhoto(previousPhotoUrl);
+  }
+
+  const existing = bgContactCache.contacts.filter((contact) => {
+    if (contact.id === normalizedSaved.id) return false;
+    if (contact.name_key === normalizedSaved.name_key) return false;
+    if (normalizedSaved.nickname_key && contact.nickname_key === normalizedSaved.nickname_key) return false;
+    return true;
+  });
+  bgContactCache = {
+    userId: userId || bgContactCache.userId,
+    loadedAt: Date.now(),
+    contacts: [...existing, normalizedSaved].sort((left, right) => left.name.localeCompare(right.name)),
+  };
+
+  return normalizedSaved;
+}
+
+async function bgPromptForBrainoContact(tabId, payload) {
+  if (!tabId) return null;
+  return await new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, { action: "sbPromptForContact", payload }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, error: chrome.runtime.lastError.message || "Could not open the contact prompt." });
+        return;
+      }
+      resolve(response || { ok: false });
+    });
+  });
+}
+
+async function bgResolveBrainoContact(name, options = {}) {
+  const trimmedName = String(name || "").trim();
+  if (!trimmedName) {
+    return { ok: false, message: "I need the person's name first." };
+  }
+
+  const actionLabel = options.actionLabel || "that";
+  const contacts = await bgFetchBrainoContacts();
+  const matches = bgFindContactMatches(trimmedName, contacts);
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      message: `I found multiple contacts matching ${trimmedName}: ${bgDescribeContactMatches(matches)}. Use a fuller name or tidy the contact in settings.`,
+    };
+  }
+
+  const existing = matches[0] || null;
+  const needsEmail = options.requireEmail === true && !existing?.email;
+  const needsPhone = options.requirePhone === true && !existing?.phone;
+
+  if (existing && !needsEmail && !needsPhone) {
+    return { ok: true, contact: existing, created: false };
+  }
+
+  if (options.allowPrompt === false) {
+    return { ok: false, message: bgBuildMissingContactMessage(trimmedName, actionLabel) };
+  }
+
+  const prompt = await bgPromptForBrainoContact(options.tabId, {
+    title: existing ? `Finish ${existing.name}` : `Save ${trimmedName}`,
+    message: existing
+      ? `Braino found ${existing.name}, but it still needs ${needsEmail ? "an email address" : "a phone number"} for ${actionLabel}.`
+      : `Braino doesn't know ${trimmedName} yet. Add the details once and I’ll remember them for ${actionLabel}.`,
+    submitLabel: existing ? "Save contact" : "Save and continue",
+    contactId: existing?.id || "",
+    name: existing?.name || trimmedName,
+    nickname: existing?.nickname || "",
+    email: existing?.email || "",
+    phone: existing?.phone || "",
+    photoUrl: existing?.photo_url || "",
+    requireEmail: options.requireEmail === true,
+    requirePhone: options.requirePhone === true,
+  });
+
+  if (!prompt?.ok || !prompt?.contact) {
+    return { ok: false, message: bgBuildMissingContactMessage(trimmedName, actionLabel) };
+  }
+
+  const saved = await bgUpsertBrainoContact(prompt.contact);
+  if (options.requireEmail === true && !saved.email) {
+    return { ok: false, message: `I saved ${saved.name}, but I still need an email address for ${actionLabel}.` };
+  }
+  if (options.requirePhone === true && !saved.phone) {
+    return { ok: false, message: `I saved ${saved.name}, but I still need a phone number for ${actionLabel}.` };
+  }
+
+  return { ok: true, contact: saved, created: true };
 }
 
 function bgIsInternalPremiumEmail(email) {
@@ -417,6 +804,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     bgAuthedSupabaseFetch(`${BG_API_BASE}/x-status`, { method: "POST" })
       .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: `x-status ${res.status}` }))
       .catch((e) => sendResponse({ error: e.message || "Could not reach X." }));
+    return true;
+  }
+  if (message.action === "draftXPostFromBrief") {
+    bgCallXAssistant({
+      action: "draft_post",
+      brief: String(message.brief || "").trim(),
+      browserTime: message.browserTime || new Date().toISOString(),
+      timeZone: message.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    })
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ error: e.message || "Could not draft X post." }));
+    return true;
+  }
+  if (message.action === "postXDraftNow") {
+    bgCallXAssistant({
+      action: "post_now",
+      content: String(message.content || "").trim(),
+      browserTime: message.browserTime || new Date().toISOString(),
+      timeZone: message.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    })
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ error: e.message || "Could not post to X." }));
+    return true;
+  }
+  if (message.action === "scheduleXDraft") {
+    bgCallXAssistant({
+      action: "schedule_post",
+      content: String(message.content || "").trim(),
+      scheduled_at: String(message.scheduledAt || message.scheduled_at || "").trim(),
+      browserTime: message.browserTime || new Date().toISOString(),
+      timeZone: message.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    })
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ error: e.message || "Could not schedule X post." }));
+    return true;
+  }
+  if (message.action === "startXAutomationOnX") {
+    bgStartXAutomationOnX()
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ ok: false, error: e.message || "Could not start X automation." }));
     return true;
   }
   // ── Offscreen realtime bridge ──────────────────────────────────────────────
@@ -865,10 +1292,20 @@ const BG_CAPABILITY_MANIFEST = {
   twitter:  ["readFeed", "generateAndPost", "postTweet"],
   gmail:    ["search", "draftEmail", "sendEmail", "replyCurrentThread"],
   drive:    ["createDoc", "organize", "search", "createFolder", "rename", "move", "delete"],
+  calendar: ["createEvent", "rescheduleEvent", "cancelEvent", "forwardEvent", "listEvents", "openNextMeet", "watchEvents"],
 };
 
 async function bgChatFetch(body) {
   const { authToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
+  const enrichedBody = body && typeof body === "object" && !Array.isArray(body)
+    ? {
+        ...body,
+        clientTimeZone: body.clientTimeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+        clientUtcOffsetMinutes: Number.isFinite(Number(body.clientUtcOffsetMinutes))
+          ? Number(body.clientUtcOffsetMinutes)
+          : new Date().getTimezoneOffset(),
+      }
+    : body;
   return fetch(`${BG_API_BASE}/chat-about-notes`, {
     method: "POST",
     headers: {
@@ -876,7 +1313,7 @@ async function bgChatFetch(body) {
       apikey: BG_SUPABASE_ANON_KEY,
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
-    body: typeof body === "string" ? body : JSON.stringify(body),
+    body: typeof enrichedBody === "string" ? enrichedBody : JSON.stringify(enrichedBody),
   });
 }
 
@@ -1050,6 +1487,78 @@ async function bgAuthedSupabaseFetch(url, options = {}) {
   }
 
   return { res, token, userId: stored.authUserId || null };
+}
+
+async function bgCallXAssistant(body) {
+  const { res } = await bgAuthedSupabaseFetch(`${BG_API_BASE}/x-assistant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `x-assistant ${res.status}`);
+  return data;
+}
+
+async function bgFindXTab() {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] }, (tabs) => {
+      const active = (tabs || []).find((tab) => tab.active);
+      resolve(active || tabs?.[0] || null);
+    });
+  });
+}
+
+async function bgFocusTab(tab) {
+  if (!tab?.id) return null;
+  const updated = await new Promise((resolve) => {
+    chrome.tabs.update(tab.id, { active: true }, (nextTab) => {
+      resolve(chrome.runtime.lastError ? tab : (nextTab || tab));
+    });
+  });
+  if (updated?.windowId != null) {
+    await new Promise((resolve) => {
+      chrome.windows.update(updated.windowId, { focused: true }, () => resolve());
+    });
+  }
+  return updated;
+}
+
+async function bgOpenXHomeTab() {
+  const existing = await bgFindXTab();
+  if (existing?.id) {
+    const focused = await bgFocusTab(existing);
+    return new Promise((resolve) => {
+      chrome.tabs.update(existing.id, { url: "https://x.com/home", active: true }, (tab) => {
+        resolve(chrome.runtime.lastError ? focused : (tab || focused));
+      });
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.create({ url: "https://x.com/home", active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab?.id) {
+        reject(new Error(chrome.runtime.lastError?.message || "Could not open X."));
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
+async function bgStartXAutomationOnX() {
+  const tab = await bgOpenXHomeTab();
+  if (!tab?.id) return { ok: false, error: "Could not open X." };
+  chrome.storage.local.set({ activeTabId: tab.id });
+  await bgWaitForTabReady(tab.id, 10000);
+  await bgDelay(900);
+
+  const result = await bgSendInlineUiMessage(tab.id, { action: "startXAutomation" });
+  if (result?.ok) return result;
+  return {
+    ok: false,
+    error: result?.error || "X opened, but Braino could not start automation on that tab yet.",
+  };
 }
 
 async function bgRecordXAutomationRunStats({ repliedCount, durationMs, startedAt, finishedAt }) {
@@ -1597,6 +2106,62 @@ async function bgOpenGoogleDriveReconnect(userIdentifier) {
   }
 }
 
+async function bgCallCalendarFunction(functionName, payload) {
+  const stored = await new Promise((resolve) => chrome.storage.local.get(["authToken", "authUserId"], resolve));
+  let token = stored.authToken;
+  if (!token) token = await bgRefreshAuthToken();
+  if (!token || !stored.authUserId) throw new Error("Please sign in to Braino first.");
+  console.log("[Braino][Calendar][BG] Calling function:", functionName, payload);
+
+  const response = await fetch(`${BG_API_BASE}/${functionName}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: BG_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      userIdentifier: stored.authUserId,
+      ...payload,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  console.log("[Braino][Calendar][BG] Function response:", functionName, response.status, data);
+  if (!response.ok) {
+    if (/not connected|missing a refresh token|reconnect/i.test(String(data?.error || data?.details || ""))) {
+      await bgOpenGoogleCalendarReconnect(stored.authUserId);
+      throw new Error(`${data.error || "Google Calendar needs to be connected."} I opened the Calendar connection page. After approving it, run this again.`);
+    }
+    throw new Error([data?.error, data?.details].filter(Boolean).join(" — ") || `${functionName} failed (${response.status})`);
+  }
+  return data;
+}
+
+async function bgOpenGoogleCalendarReconnect(userIdentifier) {
+  if (!userIdentifier) return false;
+  try {
+    const stored = await new Promise((resolve) => chrome.storage.local.get(["authToken"], resolve));
+    const headers = {
+      "Content-Type": "application/json",
+      apikey: BG_SUPABASE_ANON_KEY,
+      ...(stored.authToken ? { Authorization: `Bearer ${stored.authToken}` } : {}),
+    };
+    const response = await fetch(`${BG_API_BASE}/google-calendar-oauth-start`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ userIdentifier }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.authUrl) return false;
+    await new Promise((resolve) => chrome.tabs.create({ url: data.authUrl }, resolve));
+    return true;
+  } catch (error) {
+    console.warn("[Braino][Calendar][BG] Could not open reconnect flow:", error);
+    return false;
+  }
+}
+
 async function bgCallSpotifyFunction(functionName, payload) {
   const stored = await new Promise((resolve) => chrome.storage.local.get(["authToken", "authUserId"], resolve));
   let token = stored.authToken;
@@ -1662,7 +2227,297 @@ function bgNormalizeConnectorHint(value) {
   if (["spotify", "spot", "music"].includes(key)) return "spotify";
   if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
   if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
+  if (["calendar", "cal", "gcal", "google-calendar", "google_calendar", "googlecal"].includes(key)) return "google-calendar";
   return null;
+}
+
+function bgCalendarTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+  } catch (_) {
+    return "Asia/Kolkata";
+  }
+}
+
+function bgCalendarStartOfLocalDay(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+}
+
+function bgParseCalendarTimeFragment(value) {
+  const text = String(value || "").trim().toLowerCase().replace(/\./g, "");
+  if (!text) return null;
+  if (/\bnoon\b/.test(text)) return { hour: 12, minute: 0 };
+  if (/\bmidnight\b/.test(text)) return { hour: 0, minute: 0 };
+
+  const match = text.match(/\b((?:[01]?\d|2[0-3])(?::([0-5]\d))?)\s*(am|pm)?\b/i);
+  if (!match) return null;
+  let hour = parseInt(match[1].split(":")[0], 10);
+  const minute = match[2] ? parseInt(match[2], 10) : 0;
+  const ampm = match[3] || "";
+  if (ampm === "pm" && hour < 12) hour += 12;
+  if (ampm === "am" && hour === 12) hour = 0;
+  if (!ampm && hour >= 1 && hour <= 7) hour += 12;
+  return { hour, minute };
+}
+
+function bgParseCalendarDateFragment(value) {
+  const text = String(value || "").trim().toLowerCase();
+  const now = new Date();
+  if (!text) return null;
+  if (/\btomorrow\b/.test(text)) {
+    const d = bgCalendarStartOfLocalDay(now);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }
+  if (/\btoday\b|\btonight\b/.test(text)) return bgCalendarStartOfLocalDay(now);
+
+  const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const weekdayIndex = weekdays.findIndex((day) => new RegExp(`\\b${day.slice(0, 3)}(?:${day.length > 3 ? day.slice(3) : ""})?\\b`, "i").test(text));
+  if (weekdayIndex >= 0) {
+    const d = bgCalendarStartOfLocalDay(now);
+    let delta = (weekdayIndex - d.getDay() + 7) % 7;
+    if (delta === 0 && !/\btoday\b/.test(text)) delta = 7;
+    d.setDate(d.getDate() + delta);
+    return d;
+  }
+
+  const months = {
+    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
+    may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, sept: 8,
+    september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11,
+  };
+  const monthNames = Object.keys(months).join("|");
+  const monthFirst = text.match(new RegExp(`\\b(${monthNames})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "i"));
+  if (monthFirst) {
+    const year = monthFirst[3] ? parseInt(monthFirst[3], 10) : now.getFullYear();
+    const d = new Date(year, months[monthFirst[1].toLowerCase()], parseInt(monthFirst[2], 10));
+    if (!monthFirst[3] && d < bgCalendarStartOfLocalDay(now)) d.setFullYear(d.getFullYear() + 1);
+    return d;
+  }
+  const dayFirst = text.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthNames})(?:,?\\s+(\\d{4}))?\\b`, "i"));
+  if (dayFirst) {
+    const year = dayFirst[3] ? parseInt(dayFirst[3], 10) : now.getFullYear();
+    const d = new Date(year, months[dayFirst[2].toLowerCase()], parseInt(dayFirst[1], 10));
+    if (!dayFirst[3] && d < bgCalendarStartOfLocalDay(now)) d.setFullYear(d.getFullYear() + 1);
+    return d;
+  }
+  const slash = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (slash) {
+    const yearRaw = slash[3] ? parseInt(slash[3], 10) : now.getFullYear();
+    const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+    const d = new Date(year, parseInt(slash[1], 10) - 1, parseInt(slash[2], 10));
+    if (!slash[3] && d < bgCalendarStartOfLocalDay(now)) d.setFullYear(d.getFullYear() + 1);
+    return d;
+  }
+  return null;
+}
+
+function bgExtractCalendarDateTime(raw, durationMinutes = 30) {
+  const text = String(raw || "").trim();
+  const timeMatch =
+    text.match(/\b(?:at|for|from|to)\s+((?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?:a\.?m\.?|p\.?m\.?)|(?:[01]?\d|2[0-3]):[0-5]\d|noon|midnight)\b/i) ||
+    text.match(/\b((?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?:a\.?m\.?|p\.?m\.?))\b/i);
+  const parsedTime = bgParseCalendarTimeFragment(timeMatch?.[1] || "");
+  if (!parsedTime) return null;
+
+  const afterTime = timeMatch ? text.slice((timeMatch.index || 0) + timeMatch[0].length) : "";
+  const beforeTime = timeMatch ? text.slice(0, timeMatch.index || 0) : text;
+  const explicitDate =
+    afterTime.match(/\b(?:on|for)\s+(.+)$/i)?.[1] ||
+    afterTime ||
+    beforeTime.match(/\b(?:on|for)\s+(.+?)\s*$/i)?.[1] ||
+    text;
+  const parsedDate = bgParseCalendarDateFragment(explicitDate) || bgParseCalendarDateFragment(text);
+  if (!parsedDate) return null;
+
+  const start = new Date(parsedDate);
+  start.setHours(parsedTime.hour, parsedTime.minute, 0, 0);
+  const end = new Date(start.getTime() + Math.max(15, durationMinutes) * 60 * 1000);
+  const timeZone = bgCalendarTimeZone();
+  return {
+    start: { dateTime: start.toISOString(), timeZone },
+    end: { dateTime: end.toISOString(), timeZone },
+    startDate: start,
+    endDate: end,
+    timeZone,
+  };
+}
+
+function bgExtractCalendarEmails(raw) {
+  const matches = String(raw || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+  return [...new Set(matches.map((email) => email.trim().toLowerCase()))];
+}
+
+function bgExtractCalendarPerson(raw) {
+  const match = String(raw || "").match(/\b(?:with|w\/?|w)\s+(.+?)(?=\s+(?:at|for|on|today|tomorrow|tonight|mon|tue|wed|thu|fri|sat|sun|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b|$)/i);
+  if (!match) return "";
+  return match[1]
+    .replace(/[,.!?]+$/g, "")
+    .replace(/\b(?:please|pls|sir)\b/gi, "")
+    .trim();
+}
+
+function bgCalendarSummaryFromTask(raw, kind, person) {
+  const about = String(raw || "").match(/\b(?:about|regarding|re)\s+(.+?)(?:\s+(?:at|for|on)\b|$)/i)?.[1]?.trim();
+  const base = kind === "call" ? "Call" : kind === "meet" ? "Meet" : kind === "event" ? "Event" : "Meeting";
+  if (person) return `${base} with ${person}`;
+  if (about) return `${base}: ${about}`;
+  return base;
+}
+
+function bgFormatCalendarWhen(event) {
+  const start = event?.start?.dateTime || event?.start?.date;
+  const end = event?.end?.dateTime || event?.end?.date;
+  if (!start) return "time not shown";
+  try {
+    const startText = new Date(start).toLocaleString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: event?.start?.date ? undefined : "numeric",
+      minute: event?.start?.date ? undefined : "2-digit",
+    });
+    if (!end || event?.start?.date) return startText;
+    const endText = new Date(end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return `${startText} - ${endText}`;
+  } catch (_) {
+    return String(start);
+  }
+}
+
+function bgFormatCalendarEventLine(event) {
+  const title = event?.summary || "Untitled event";
+  const when = bgFormatCalendarWhen(event);
+  const meet = event?.meetUrl ? ` · Meet: ${event.meetUrl}` : "";
+  return `- **${title}** — ${when}${meet}`;
+}
+
+function bgBuildCalendarListWindow(raw) {
+  const now = new Date();
+  const lower = String(raw || "").toLowerCase();
+  let start = new Date(now.getTime() - 5 * 60 * 1000);
+  let end = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  if (/\btoday\b/.test(lower)) {
+    start = bgCalendarStartOfLocalDay(now);
+    end = new Date(start);
+    end.setDate(end.getDate() + 1);
+  } else if (/\btomorrow\b/.test(lower)) {
+    start = bgCalendarStartOfLocalDay(now);
+    start.setDate(start.getDate() + 1);
+    end = new Date(start);
+    end.setDate(end.getDate() + 1);
+  }
+  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
+}
+
+function bgParseCalendarTask(task, siteContext, connectorHint) {
+  const raw = String(task || "").trim();
+  const text = raw.toLowerCase();
+  const currentSite = siteContext?.site || "generic";
+  const normalizedConnector = bgNormalizeConnectorHint(connectorHint) || "auto";
+  const wantsCalendar =
+    currentSite === "google-calendar" ||
+    normalizedConnector === "google-calendar" ||
+    /\b(calendar|google calendar|gcal|meeting|meet|call|event|schedule|reschedule|cancel|invite|forward)\b/i.test(text);
+  if (!wantsCalendar) return null;
+
+  if (/\b(?:join|open|start)\b.*\b(?:next|current|upcoming|now)\b.*\b(?:meet|meeting|call)\b/i.test(raw) ||
+      /\b(?:join|open|start)\s+(?:my\s+)?(?:meet|meeting|call)\b/i.test(raw)) {
+    return { adapter: "google-calendar", intent: "openNextMeet" };
+  }
+
+  if (/\b(?:what|show|list|tell)\b.*\b(?:calendar|meetings?|calls?|events?|schedule)\b/i.test(raw) ||
+      /\b(?:meetings?|calls?|events?)\s+(?:today|tomorrow|this week|coming up|upcoming)\b/i.test(raw)) {
+    const window = bgBuildCalendarListWindow(raw);
+    const query = raw.match(/\b(?:about|with|for)\s+(.+?)$/i)?.[1]?.trim() || "";
+    return { adapter: "google-calendar", intent: "listEvents", query, ...window };
+  }
+
+  const createCommand = /\b(?:schedule|book|set\s+up|create|add|make)\b/i.test(raw)
+    && /\b(?:call|meeting|meet|event)\b/i.test(raw);
+  if (createCommand) {
+    const kind = /\bcall\b/i.test(raw) ? "call" : /\bmeet\b/i.test(raw) ? "meet" : /\bevent\b/i.test(raw) ? "event" : "meeting";
+    const durationMinutes = kind === "event" ? 60 : 30;
+    const dateTime = bgExtractCalendarDateTime(raw, durationMinutes);
+    if (!dateTime) {
+      return { adapter: "google-calendar", intent: "needsDetails", missing: "time", message: "Tell me the date and time for this Calendar event." };
+    }
+    const person = bgExtractCalendarPerson(raw);
+    const emails = bgExtractCalendarEmails(raw);
+    return {
+      adapter: "google-calendar",
+      intent: "createEvent",
+      summary: bgCalendarSummaryFromTask(raw, kind, person),
+      attendees: emails,
+      attendeeName: person,
+      createMeet: true,
+      ...dateTime,
+    };
+  }
+
+  if (/\b(?:reschedule|move|postpone)\b/i.test(raw) && /\b(?:meeting|call|meet|event|calendar)\b/i.test(raw)) {
+    const dateTime = bgExtractCalendarDateTime(raw, 30);
+    if (!dateTime) {
+      return { adapter: "google-calendar", intent: "needsDetails", missing: "new_time", message: "Tell me the new date and time for this event." };
+    }
+    const query = raw
+      .replace(/\b(?:reschedule|move|postpone)\b/i, "")
+      .replace(/\b(?:to|for|at)\s+.*$/i, "")
+      .replace(/\b(?:my|the|calendar|event|meeting|call|meet)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return { adapter: "google-calendar", intent: "rescheduleEvent", query, ...dateTime };
+  }
+
+  if (/\b(?:cancel|delete|remove)\b/i.test(raw) && /\b(?:meeting|call|meet|event|calendar)\b/i.test(raw)) {
+    const query = raw
+      .replace(/\b(?:cancel|delete|remove)\b/i, "")
+      .replace(/\b(?:my|the|calendar|event|meeting|call|meet)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return { adapter: "google-calendar", intent: "cancelEvent", query };
+  }
+
+  const forwardEmails = bgExtractCalendarEmails(raw);
+  if (forwardEmails.length && /\b(?:forward|invite|add)\b/i.test(raw) && /\b(?:meeting|call|meet|event|calendar)\b/i.test(raw)) {
+    const query = raw
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, " ")
+      .replace(/\b(?:forward|invite|add|to|for|my|the|calendar|event|meeting|call|meet|attendees?)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return { adapter: "google-calendar", intent: "forwardEvent", query, attendees: forwardEmails };
+  }
+
+  return null;
+}
+
+async function bgFindCalendarEvent(parsed, fallbackQuery = "") {
+  const query = String(parsed?.query || fallbackQuery || "").trim();
+  const window = bgBuildCalendarListWindow(query || "upcoming");
+  const result = await bgCallCalendarFunction("google-calendar-action", {
+    action: "find_events",
+    query: query || undefined,
+    timeMin: window.timeMin,
+    timeMax: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    maxResults: 8,
+  });
+  const events = Array.isArray(result?.events) ? result.events : [];
+  if (!events.length) throw new Error(query ? `I couldn't find an upcoming Calendar event matching "${query}".` : "I couldn't find an upcoming Calendar event to use.");
+  return events[0];
+}
+
+async function bgOpenCalendarUrlInTab(tabId, url, description = "Open Google Calendar") {
+  if (!url) return null;
+  const result = await bgExecuteAgentAction(tabId, {
+    type: "navigate",
+    url,
+    description,
+  });
+  if (!result?.error) {
+    await bgWaitForTabReady(tabId, 8000);
+    await bgDelay(1000);
+  }
+  return result;
 }
 
 function bgFormatSpotifyDuration(ms) {
@@ -1779,6 +2634,8 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     currentSite === "google-drive" ||
     normalizedConnector === "google-drive" ||
     /\bgoogle drive\b|\bdrive\b/.test(text);
+  const calendarParsed = bgParseCalendarTask(raw, siteContext, normalizedConnector);
+  if (calendarParsed) return calendarParsed;
 
   if (
     wantsGoogleDrive &&
@@ -1913,6 +2770,20 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
+  const namedEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(.+?)\s+an?\s+email(?:\s+(?:about|subject)\s+(.+?))?(?:\s+(?:saying|that says|with message|body)\s+(.+))?$/i);
+  if (wantsGmail && namedEmailMatch) {
+    const recipient = namedEmailMatch[1].trim();
+    const subject = namedEmailMatch[2]?.trim() || "";
+    const body = namedEmailMatch[3]?.trim() || "";
+    return {
+      adapter: "gmail",
+      intent: /^send\b/i.test(raw.trim()) && body ? "sendEmail" : "draftEmail",
+      to: recipient,
+      subject,
+      body,
+    };
+  }
+
   const draftEmailMatch = raw.match(/(?:draft|compose|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message)\s+(.+)$/i);
   if (wantsGmail && draftEmailMatch) {
     return {
@@ -1921,6 +2792,17 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
       to: draftEmailMatch[1].trim(),
       subject: "",
       body: draftEmailMatch[2].trim(),
+    };
+  }
+
+  const simpleEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)$/i);
+  if (wantsGmail && simpleEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "draftEmail",
+      to: simpleEmailMatch[1].trim(),
+      subject: "",
+      body: "",
     };
   }
 
@@ -2064,8 +2946,10 @@ function bgLooksLikeBrowserTask(task) {
   const freshness = /\b(latest|current|today|right\s+now|as\s+of|this\s+week|this\s+month|this\s+year|recent|news|price\s+of|stock|weather|score|standings|live|just\s+happened|breaking|update\s+on|status\s+of|who\s+won|who\s+is\s+winning|what\s+happened|trending)\b/i.test(raw);
   if (freshness) return true;
 
+  if (bgLooksLikeGoogleMapsPlaceTask(raw)) return true;
+
   // 3) App/site actions — strong imperative + a known actionable target.
-  const strongImperative = /^(?:open|go to|navigate to|visit|search|find|look up|pull up|bring up|take me to|show me|create|make|draft|compose|send|reply|play|pause|resume|continue|next|skip|previous|prev|book|buy|order|post|tweet|get directions|show directions|route|move|rename|delete|remove|archive|label|organize|organise)\b/i.test(raw);
+  const strongImperative = /^(?:open|go to|navigate to|visit|search|find|look up|pull up|bring up|take me to|show me|create|make|draft|compose|send|reply|play|pause|resume|continue|next|skip|previous|prev|book|schedule|reschedule|cancel|forward|invite|join|buy|order|post|tweet|get directions|show directions|route|move|rename|delete|remove|archive|label|organize|organise)\b/i.test(raw);
   if (!strongImperative) return false;
 
   const actionableTarget = /\b(gmail|email|google drive|drive|spotify|youtube|netflix|google docs?|docs?\.new|google sheets?|sheets?\.new|google slides?|slides?\.new|maps?|directions?|calendar|flight|flights|hotel|hotels|restaurant|restaurants|whatsapp|x|twitter|linkedin|amazon|reddit)\b/i.test(raw);
@@ -2181,6 +3065,189 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   const parsed = bgParseAdapterTask(task, siteContext, connectorHint);
   console.log("[Braino][Adapter][BG] Parsed task:", { task, tabId, siteContext, connectorHint, parsed });
   if (!parsed) return null;
+
+  if (parsed.adapter === "google-calendar" && parsed.intent === "needsDetails") {
+    return parsed.message || "Tell me the missing Calendar details and I’ll handle it.";
+  }
+
+  if (parsed.adapter === "google-calendar" && parsed.intent === "createEvent") {
+    let inviteEmails = Array.isArray(parsed.attendees)
+      ? parsed.attendees.map((email) => bgNormalizeEmail(email)).filter(Boolean)
+      : [];
+    let inviteLabel = inviteEmails.length ? inviteEmails.join(", ") : "";
+    if (!inviteEmails.length && parsed.attendeeName) {
+      const resolvedContact = await bgResolveBrainoContact(parsed.attendeeName, {
+        tabId,
+        requireEmail: true,
+        actionLabel: "calendar invites",
+      });
+      if (!resolvedContact.ok) return resolvedContact.message || bgBuildMissingContactMessage(parsed.attendeeName, "calendar invites");
+      inviteEmails = resolvedContact.contact?.email ? [resolvedContact.contact.email] : [];
+      inviteLabel = bgFormatContactLabel(resolvedContact.contact, parsed.attendeeName);
+    }
+
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Create Calendar event "${parsed.summary}"`,
+      type: "googleCalendarCreateEvent",
+      onProgress,
+      onResult,
+      run: () => bgCallCalendarFunction("google-calendar-action", {
+        action: "create_event",
+        summary: parsed.summary,
+        start: parsed.start,
+        end: parsed.end,
+        attendees: inviteEmails,
+        createMeet: parsed.createMeet !== false,
+        description: "Created by Braino.",
+      }),
+    });
+
+    const event = result?.event;
+    if (event?.htmlLink) {
+      await bgRunAdapterStep({
+        history,
+        description: "Open the Google Calendar event",
+        type: "navigate",
+        onProgress,
+        onResult,
+        run: () => bgOpenCalendarUrlInTab(tabId, event.htmlLink, "Open the Google Calendar event"),
+      });
+    }
+
+    const attendeeNote = inviteEmails.length
+      ? `Invite sent to ${inviteLabel || "your contact"}.`
+      : parsed.attendeeName
+        ? `I created it, but I did not send an invite because I only heard "${parsed.attendeeName}", not an email address.`
+        : "No attendee email was provided, so it is on your calendar only.";
+    const meetLine = event?.meetUrl ? `\nMeet link: ${event.meetUrl}` : "";
+    return `Scheduled **${event?.summary || parsed.summary}** for **${bgFormatCalendarWhen(event)}**. ${attendeeNote}${meetLine}`;
+  }
+
+  if (parsed.adapter === "google-calendar" && parsed.intent === "listEvents") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: "Read upcoming Google Calendar events",
+      type: "googleCalendarListEvents",
+      onProgress,
+      onResult,
+      run: () => bgCallCalendarFunction("google-calendar-action", {
+        action: "list_events",
+        query: parsed.query || undefined,
+        timeMin: parsed.timeMin,
+        timeMax: parsed.timeMax,
+        maxResults: 8,
+      }),
+    });
+    const events = Array.isArray(result?.events) ? result.events : [];
+    if (!events.length) return "I checked your Google Calendar and did not find events in that window.";
+    return `Here’s what I found on your Google Calendar:\n${events.map(bgFormatCalendarEventLine).join("\n")}`;
+  }
+
+  if (parsed.adapter === "google-calendar" && parsed.intent === "rescheduleEvent") {
+    const event = await bgRunAdapterStep({
+      history,
+      description: parsed.query ? `Find Calendar event matching "${parsed.query}"` : "Find upcoming Calendar event",
+      type: "googleCalendarFindEvent",
+      onProgress,
+      onResult,
+      run: () => bgFindCalendarEvent(parsed),
+    });
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Reschedule "${event.summary}"`,
+      type: "googleCalendarRescheduleEvent",
+      onProgress,
+      onResult,
+      run: () => bgCallCalendarFunction("google-calendar-action", {
+        action: "reschedule_event",
+        eventId: event.id,
+        start: parsed.start,
+        end: parsed.end,
+      }),
+    });
+    const updated = result?.event;
+    if (updated?.htmlLink) {
+      await bgOpenCalendarUrlInTab(tabId, updated.htmlLink, "Open the rescheduled Calendar event");
+    }
+    return `Rescheduled **${updated?.summary || event.summary}** to **${bgFormatCalendarWhen(updated)}**.`;
+  }
+
+  if (parsed.adapter === "google-calendar" && parsed.intent === "cancelEvent") {
+    const event = await bgRunAdapterStep({
+      history,
+      description: parsed.query ? `Find Calendar event matching "${parsed.query}"` : "Find upcoming Calendar event",
+      type: "googleCalendarFindEvent",
+      onProgress,
+      onResult,
+      run: () => bgFindCalendarEvent(parsed),
+    });
+    await bgRunAdapterStep({
+      history,
+      description: `Cancel "${event.summary}"`,
+      type: "googleCalendarCancelEvent",
+      onProgress,
+      onResult,
+      run: () => bgCallCalendarFunction("google-calendar-action", {
+        action: "cancel_event",
+        eventId: event.id,
+      }),
+    });
+    return `Cancelled **${event.summary || "that Calendar event"}**.`;
+  }
+
+  if (parsed.adapter === "google-calendar" && parsed.intent === "forwardEvent") {
+    const event = await bgRunAdapterStep({
+      history,
+      description: parsed.query ? `Find Calendar event matching "${parsed.query}"` : "Find upcoming Calendar event",
+      type: "googleCalendarFindEvent",
+      onProgress,
+      onResult,
+      run: () => bgFindCalendarEvent(parsed),
+    });
+    const result = await bgRunAdapterStep({
+      history,
+      description: `Add attendees to "${event.summary}"`,
+      type: "googleCalendarForwardEvent",
+      onProgress,
+      onResult,
+      run: () => bgCallCalendarFunction("google-calendar-action", {
+        action: "forward_event",
+        eventId: event.id,
+        attendees: parsed.attendees,
+      }),
+    });
+    const updated = result?.event;
+    return `Forwarded **${updated?.summary || event.summary}** to ${parsed.attendees.join(", ")}.`;
+  }
+
+  if (parsed.adapter === "google-calendar" && parsed.intent === "openNextMeet") {
+    const result = await bgRunAdapterStep({
+      history,
+      description: "Find next Google Meet on Calendar",
+      type: "googleCalendarOpenNextMeet",
+      onProgress,
+      onResult,
+      run: () => bgCallCalendarFunction("google-calendar-action", {
+        action: "open_next_meet",
+        timeMin: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        timeMax: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+        maxResults: 10,
+      }),
+    });
+    const event = result?.event;
+    if (!event?.meetUrl) return "I checked your Calendar but couldn’t find an upcoming event with a Google Meet link.";
+    await bgRunAdapterStep({
+      history,
+      description: `Open Google Meet for "${event.summary}"`,
+      type: "navigate",
+      onProgress,
+      onResult,
+      run: () => bgOpenCalendarUrlInTab(tabId, event.meetUrl, "Open Google Meet"),
+    });
+    await bgSendInlineUiMessage(tabId, { action: "startMeetingRecording" });
+    return `Opening **${event.summary || "your meeting"}** now. I’ll start Meeting & Call mode on the Meet tab if the page allows it.`;
+  }
 
   if (parsed.adapter === "spotify" && parsed.intent === "addSongToPlaylist") {
     await bgRunAdapterStep({
@@ -2464,15 +3531,28 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   }
 
   if (parsed.adapter === "gmail" && (parsed.intent === "draftEmail" || parsed.intent === "sendEmail")) {
+    let recipientEmail = String(parsed.to || "").trim();
+    let recipientLabel = recipientEmail;
+    if (!bgLooksLikeEmailAddress(recipientEmail)) {
+      const resolvedContact = await bgResolveBrainoContact(recipientEmail, {
+        tabId,
+        requireEmail: true,
+        actionLabel: "email",
+      });
+      if (!resolvedContact.ok) return resolvedContact.message || bgBuildMissingContactMessage(recipientEmail, "email");
+      recipientEmail = resolvedContact.contact?.email || "";
+      recipientLabel = bgFormatContactLabel(resolvedContact.contact, parsed.to);
+    }
+
     const composeUrl = bgBuildGmailComposeUrl({
-      to: parsed.to,
+      to: recipientEmail,
       subject: parsed.subject,
       body: parsed.body,
     });
 
     await bgRunAdapterStep({
       history,
-      description: `Open Gmail compose for ${parsed.to}`,
+      description: `Open Gmail compose for ${recipientLabel}`,
       type: "navigate",
       onProgress,
       onResult,
@@ -2480,7 +3560,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
         const result = await bgExecuteAgentAction(tabId, {
           type: "navigate",
           url: composeUrl,
-          description: `Open Gmail compose for ${parsed.to}`,
+          description: `Open Gmail compose for ${recipientLabel}`,
         });
         if (!result?.error) {
           await bgWaitForTabReady(tabId, 8000);
@@ -2498,7 +3578,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       onResult,
       run: () => bgExecuteSiteAdapterAction(tabId, {
         type: "gmailFillCompose",
-        to: parsed.to,
+        to: recipientEmail,
         subject: parsed.subject || "",
         body: parsed.body,
       }),
@@ -2516,10 +3596,13 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
           type: "gmailSendOpenCompose",
         }),
       });
-      return `Sent the email to **${parsed.to}**.`;
+      return `Sent the email to **${recipientLabel}**.`;
     }
 
-    return `Drafted an email to **${parsed.to}** in Gmail.`;
+    if (!parsed.subject && !parsed.body) {
+      return `Opened a Gmail draft to **${recipientLabel}**.`;
+    }
+    return `Drafted an email to **${recipientLabel}** in Gmail.`;
   }
 
   if (parsed.adapter === "gmail" && parsed.intent === "replyCurrentThread") {
@@ -2848,6 +3931,100 @@ function bgBuildMediumFastPath(task) {
   }];
 }
 
+function bgEncodeMapsPath(value) {
+  return encodeURIComponent(String(value || "").trim()).replace(/%20/g, "+");
+}
+
+function bgCleanGoogleMapsQuery(value) {
+  const raw = String(value || "").trim();
+  const mealIntent = /\b(?:eat|eating|food|dinner|lunch|breakfast|brunch)\b/i.test(raw);
+  let query = raw
+    .replace(/\bnear me\b/gi, "__NEAR_ME__")
+    .replace(/\baround me\b/gi, "__AROUND_ME__");
+  query = query
+    .replace(/[?!.,;:]+/g, " ")
+    .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
+    .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
+    .replace(/\bon\s+(?:google\s+)?maps?\b/gi, " ")
+    .replace(/\bwhere\s+(?:should|can|could|do)\s+i(?:\s+go)?(?:\s+to)?\b/gi, " ")
+    .replace(/\bwhere\s+to\b/gi, " ")
+    .replace(/\bi\s+(?:should|can|could|want\s+to|wanna)\s+(?:eat|go)\b/gi, " ")
+    .replace(/\b(?:please|pls|for me|some|a few|the|an?)\b/gi, " ")
+    .replace(/\b(?:open|show|display|pull up|bring up|find|search(?: for)?|look for|look up|get|give|recommend|suggest)\b/gi, " ")
+    .replace(/\b(?:google\s+)?maps?\b/gi, " ")
+    .replace(/\b(?:eat|eating|food|places?)\b/gi, " ")
+    .replace(/\bon\b/gi, " ")
+    .replace(/__NEAR_ME__/g, "near me")
+    .replace(/__AROUND_ME__/g, "around me")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (mealIntent && !/\b(?:restaurants?|cafes?|coffee|bars?|pubs?)\b/i.test(query)) {
+    const mealKind = query.match(/\b(dinner|lunch|breakfast|brunch)\b/i)?.[1];
+    query = mealKind
+      ? query.replace(/\b(dinner|lunch|breakfast|brunch)\b/i, `${mealKind} restaurants`)
+      : `restaurants ${query}`;
+    query = query.replace(/\s+/g, " ").trim();
+  }
+  return query || raw;
+}
+
+function bgLooksLikeGoogleMapsPlaceTask(task) {
+  const t = String(task || "").toLowerCase().replace(/[?!.,]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/\b(?:google\s+)?maps?\b/.test(t)) {
+    return /\b(open|show|search|find|look up|recommend|suggest|directions?|route|near|nearby|around|in|to)\b/.test(t);
+  }
+  if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
+  if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
+
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  if (!wantsPlaceRecommendation) return false;
+
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  return placeCategory && locationHint;
+}
+
+function bgBuildGoogleMapsFastPath(task) {
+  const raw = String(task || "").trim();
+  const t = raw.toLowerCase();
+  if (!bgLooksLikeGoogleMapsPlaceTask(raw)) return null;
+
+  const directionsMatch =
+    raw.match(/(?:directions?|route|navigate)\s+from\s+(.+?)\s+to\s+(.+?)(?:\s+(?:please|pls|for me))?$/i) ||
+    raw.match(/(?:directions?|route|navigate)\s+to\s+(.+?)\s+from\s+(.+?)(?:\s+(?:please|pls|for me))?$/i) ||
+    raw.match(/how\s+far\s+is\s+(.+?)\s+from\s+(.+?)(?:\s+(?:please|pls|for me))?$/i) ||
+    raw.match(/(?:distance|eta|travel\s+time)\s+(?:from\s+(.+?)\s+to\s+(.+?)|between\s+(.+?)\s+and\s+(.+?))(?:\s+(?:please|pls|for me))?$/i);
+
+  if (directionsMatch) {
+    const first = (directionsMatch[1] || directionsMatch[3] || "").trim();
+    const second = (directionsMatch[2] || directionsMatch[4] || "").trim();
+    const isToFrom = /\bto\b.+\bfrom\b/i.test(raw) && !/\bfrom\b.+\bto\b/i.test(raw);
+    const isHowFarFrom = /^how\s+far\s+is\b/i.test(raw);
+    const origin = (isToFrom || isHowFarFrom) ? second : first;
+    const destination = (isToFrom || isHowFarFrom) ? first : second;
+    return [{
+      type: "navigate",
+      url: `https://www.google.com/maps/dir/${bgEncodeMapsPath(origin)}/${bgEncodeMapsPath(destination)}`,
+      description: `Open Google Maps directions from "${origin}" to "${destination}"`,
+      continueAfter: true,
+    }];
+  }
+
+  let query = "";
+  const mapsSearchMatch = raw.match(/(?:search|find|look up|show|open)\s+(.+?)\s+on\s+(?:google\s+)?maps/i);
+  if (mapsSearchMatch) query = mapsSearchMatch[1].trim();
+  if (!query) query = bgCleanGoogleMapsQuery(raw);
+  if (!query) return null;
+
+  return [{
+    type: "navigate",
+    url: `https://www.google.com/maps/search/${bgEncodeMapsPath(query)}`,
+    description: `Search Google Maps for "${query}"`,
+    continueAfter: true,
+  }];
+}
+
 function bgCleanLinkedInJobText(value) {
   return String(value || "")
     .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
@@ -2999,6 +4176,38 @@ Details panel: .jobs-search__job-details--container, .jobs-details, .jobs-descri
 `;
 }
 
+function bgGetGoogleMapsSkillGuide(task, currentUrl) {
+  const onGoogleMaps = /google\.[^/]+\/maps/i.test(currentUrl || "");
+  if (!bgLooksLikeGoogleMapsPlaceTask(task) && !onGoogleMaps) return "";
+
+  return `
+── SKILL: GOOGLE MAPS PLACES ──
+Use this skill for place lookup, recommendations, distance/ETA, visible Google Maps searches, directions, and phone handoff.
+
+GOAL:
+The user wants to SEE Google Maps, not just a memory-based list. Open or use Google Maps visibly first, inspect visible results, then recommend. Do not answer restaurant/place recommendations from memory.
+
+FLOW:
+1. If not already on Google Maps results/directions for the task, navigate using:
+   - Search: https://www.google.com/maps/search/QUERY+with+spaces+as+plus
+   - Directions: https://www.google.com/maps/dir/ORIGIN/DESTINATION
+2. After navigation, wait 1200 and read the visible Maps page/results. Prefer reading main, [role="main"], [role="feed"], [aria-label*="Results"], or body text.
+3. Recommend only places/routes visible on the Maps page or clearly returned by the page. Do not invent ratings, hours, distance, or open status.
+4. For recommendation tasks, return 3-5 options when visible. Include name, area/address if visible, rating/open status if visible, and why it fits the user's constraints.
+5. Pick one best option and explain why in one sentence.
+6. End by asking: "Should I send {best pick} to your phone?"
+7. If the user explicitly asks to ping/send it and no phone channel is configured, say the handoff is not set up yet and provide the Google Maps URL. Never claim it was sent.
+
+FINAL MESSAGE FORMAT:
+## Places I found on Google Maps
+- **Name** — why it fits. Address/area/rating if visible.
+
+Best pick: **Name** — reason.
+
+Should I send **Name** to your phone?
+`;
+}
+
 function bgTryFastPath(task, history) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
@@ -3020,6 +4229,8 @@ function bgTryFastPath(task, history) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
   }
+  const googleMapsFastPath = bgBuildGoogleMapsFastPath(task);
+  if (googleMapsFastPath) return googleMapsFastPath;
   const mediumFastPath = bgBuildMediumFastPath(task);
   if (mediumFastPath) return mediumFastPath;
   const linkedInJobsFastPath = bgBuildLinkedInJobsFastPath(task);
@@ -3335,6 +4546,7 @@ IRCTC trains:   https://www.irctc.co.in/nget/train-search  (no URL params — us
 
 ${bgGetPlatformGuide(currentUrl)}
 ${bgGetLinkedInJobsSkillGuide(task, currentUrl)}
+${bgGetGoogleMapsSkillGuide(task, currentUrl)}
 
 ANSWER FORMATTING (for {"type":"answer"} responses):
 - Always use markdown in the message field — never return a flat comma-separated list
@@ -3992,15 +5204,76 @@ function forwardToSidePanel(cmd) {
   });
 }
 
+async function bgFindReminderTabId() {
+  const active = await bgGetActiveTabId();
+  return active || null;
+}
+
+async function bgAnnounceCalendarReminder(tabId, text, finalDelayMs = 8000) {
+  if (!tabId || !text) return;
+  bgBrainUpdate(tabId, text, false, { speakHint: text, task: "Google Calendar reminder" });
+  setTimeout(() => {
+    bgBrainUpdate(tabId, text, true, { task: "Google Calendar reminder" });
+  }, finalDelayMs);
+}
+
+async function bgOpenMeetForReminder(event) {
+  const meetUrl = event?.meetUrl;
+  if (!meetUrl) return null;
+  return new Promise((resolve) => {
+    chrome.tabs.create({ url: meetUrl, active: true }, async (tab) => {
+      if (chrome.runtime.lastError || !tab?.id) {
+        resolve(null);
+        return;
+      }
+      await bgWaitForTabReady(tab.id, 12000);
+      await bgDelay(1500);
+      await bgSendInlineUiMessage(tab.id, { action: "startMeetingRecording" });
+      resolve(tab);
+    });
+  });
+}
+
+async function bgCheckCalendarReminders() {
+  const stored = await new Promise((resolve) => chrome.storage.local.get(["authUserId"], resolve));
+  if (!stored.authUserId) return;
+  try {
+    const data = await bgCallCalendarFunction("google-calendar-reminders", { markDelivered: true });
+    const reminders = Array.isArray(data?.reminders) ? data.reminders : [];
+    if (!reminders.length) return;
+    const tabId = await bgFindReminderTabId();
+    for (const reminder of reminders) {
+      const event = reminder?.event || {};
+      const title = event.summary || "your meeting";
+      if (reminder.kind === "start_now") {
+        if (event.meetUrl) {
+          await bgAnnounceCalendarReminder(tabId, `${title} is starting now. I’m opening the Meet and starting Meeting & Call mode.`);
+          await bgOpenMeetForReminder(event);
+        } else {
+          await bgAnnounceCalendarReminder(tabId, `${title} is starting now, but I don’t see a Google Meet link on the event.`);
+        }
+      } else {
+        const minutes = Math.max(1, Number(reminder.minutesUntilStart) || 15);
+        await bgAnnounceCalendarReminder(tabId, `${title} starts in about ${minutes} minutes.`);
+      }
+    }
+  } catch (error) {
+    console.warn("[Braino][Calendar][BG] Reminder check skipped:", error);
+  }
+}
+
 // Set up alarm for polling every minute (MV3 minimum is 1 minute)
 chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 1 });
+chrome.alarms.create("calendarReminders", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "remoteAgentPoll") bgPollRemoteCommands();
+  if (alarm.name === "calendarReminders") bgCheckCalendarReminders();
 });
 // Delay startup connections — gives the service worker time to settle
 // and avoids flooding the Chrome error panel on a cold start with a flaky network
 setTimeout(() => {
   bgPollRemoteCommands();
+  bgCheckCalendarReminders();
   bgStartRealtime();
 }, 2000);
 
@@ -4168,7 +5441,7 @@ chrome.windows.onRemoved.addListener((windowId) => {
 
 async function ensureOffscreenForRealtime() {
   // Realtime lives in the offscreen doc so the mic/session can follow tabs instantly.
-  // Any remote model audio is muted there; Braino's primary audible output is Fish Audio.
+  // Any remote model audio is muted there; Braino's primary audible output is ElevenLabs.
   // Close and recreate if needed so the global realtime host is definitely available.
   const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
   if (contexts.length > 0) {

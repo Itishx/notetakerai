@@ -1,5 +1,35 @@
 # Braino Changelog
 
+## v5.14.0 — Contact photos upload directly now
+- **Contact photos are now real uploads, not pasted links.** In both the dashboard and Braino's inline contact prompt, you can upload a photo file directly instead of hunting for a URL.
+- **Manual email/password login is properly recoverable.** Braino now supports forgot-password and password-reset flows cleanly in both the main auth screen and the extension auth handoff.
+- **Google Calendar and realtime cost memory shipped together.** Calendar actions, reminders, and connection status are wired through the real backend, and Braino can answer realtime spend questions from live tracked session data.
+- **Extension package updated.** The download artifact now ships as version **5.14.0**.
+
+## v5.13.0 — Contacts now understand nicknames
+- **Braino can resolve nicknames as well as real names.** Save a nickname on any contact and commands like "send RD an email" or "schedule a call with rahul bhai" resolve to the right saved person.
+- **Confirmations still speak the real name back.** Even when you trigger an action via nickname, Braino responds using the contact's saved real name so you know exactly who it matched.
+- **Nickname memory is shared everywhere.** Saved nicknames now flow through the dashboard, inline contact popup, and Braino's shared user knowledge context.
+- **Extension package updated.** The download artifact now ships as version **5.13.0**.
+
+## v5.12.0 — Contacts power names for email and Calendar
+- **Braino now remembers people by name.** Save contacts once in Settings with name, email, phone, and photo, then say things like "schedule a call with Rahul" or "send Rahul an email" without spelling anything out.
+- **Unknown names now prompt inline.** If Braino hears a person it does not know yet, the extension opens the same transparent in-page popup so you can add the contact on the spot and continue the action.
+- **Contact memory is shared into Braino's context.** Saved contacts are merged into Braino's user knowledge so chat, live voice, and connector flows can reference the same people consistently.
+- **Extension package updated.** The download artifact now ships as version **5.12.0**.
+
+## v5.11.0 — Google Calendar is live end to end
+- **Google Calendar is now fully wired through Braino.** Connect your account from the dashboard, then ask Braino to schedule, reschedule, cancel, forward, list, and open upcoming meetings through the real Calendar API.
+- **OAuth flow hardened.** Calendar connect now requires an authenticated Braino user and uses signed short-lived OAuth state so another user cannot attach a calendar connection to the wrong account.
+- **Calendar watches self-arm.** On connect and on status refresh, Braino now renews Google Calendar watch channels when needed so reminders and Calendar-change awareness stay alive without manual cleanup.
+- **Dashboard + extension package updated.** The dashboard now shows live watch status, the skills/docs pages reflect Calendar as live, and the extension ships as version **5.11.0**.
+
+## v5.10.0 — Braino knows your realtime spend
+- **Braino can now answer spend questions exactly.** Ask "how much have I spent?", "what did this session cost?", or "how much today / in the last 7 days?" and Braino answers from your logged realtime voice turns instead of guessing.
+- **Receipts now include the useful bits.** Braino reports the current or most recent session total, today's total with the exact date, the last 7 days with the exact date range, your biggest cost driver, and the priciest recent session.
+- **Live voice quota removed.** Realtime session startup no longer blocks on a daily cap, and the old cap-era warning/fallback messaging has been stripped out.
+- **Extension packaging updated.** The download artifact now ships as extension version **5.10.0**.
+
 ## v5.4.0 — Realtime gets legacy's brain + ElevenLabs actually works
 - **Live AI is now as smart as legacy.** Root cause of "legacy was smarter": legacy voice routed conversation through the full `chat-about-notes` pipeline (your page's text + your notes), while Live AI used the bare realtime model that barely saw the page. Now **both** use the same smart, page-aware pipeline — Live AI just speaks the answer in its realtime voice.
 - **ElevenLabs voice actually works now.** The `elevenlabs-tts` function was requiring a login token it never even used, so an expired token silently dropped Braino to the robotic browser voice. Made it public — ElevenLabs is now used for legacy replies and for the ElevenLabs voice setting.
@@ -140,9 +170,9 @@
 - Page questions ("summarize this", "explain this") now route through the full text pipeline (with user notes + page context) instead of the bare realtime model.
 - Page context refreshes synchronously before each realtime chat turn.
 
-## v4.7.0 — Cursor-Follow Fly Mode + Realtime Voice Daily Cap
+## v4.7.0 — Cursor-Follow Fly Mode + Realtime Voice Tracking
 - New **fly mode** (Cmd+S): Braino's floating mascot follows your cursor with a smooth lerp animation. Stops when you hover the mascot, open a card, or enter headphone/lecture mode. Cmd+S toggles it on/off.
-- Realtime voice sessions now have a **7-minute daily cap** tracked server-side. The edge function gates the OpenAI call before it happens and returns usage info. Client enforces a soft local deadline timer.
+- Realtime voice sessions are tracked server-side so usage and costs stay visible end-to-end.
 
 ## v4.5.0 — Lecture Mode Rebuild
 - Rebuilt lecture mode recording UI in the floating card.

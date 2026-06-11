@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/Navbar";
@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import { supabase } from "@/integrations/supabase/client";
+
+type AuthView = "login" | "signup" | "forgot" | "recovery";
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -17,16 +19,63 @@ const GoogleIcon = () => (
   </svg>
 );
 
+const normalizeAuthError = (message: string) => {
+  if (message === "Invalid login credentials") {
+    return "That email and password do not match your Supabase account yet. Use Forgot password once to restore manual sign-in.";
+  }
+  return message;
+};
+
+const isRecoveryMode = () => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("mode") === "recovery" || window.location.hash.includes("type=recovery");
+};
+
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [view, setView] = useState<AuthView>(() => (isRecoveryMode() ? "recovery" : "login"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, resetPassword, updatePassword } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const enterRecoveryMode = () => {
+      setView("recovery");
+      setError("");
+      setSuccess("Choose a new password for your Braino account.");
+    };
+
+    if (isRecoveryMode()) {
+      enterRecoveryMode();
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        enterRecoveryMode();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const switchView = (nextView: AuthView) => {
+    setView(nextView);
+    setError("");
+    setSuccess("");
+    setPassword("");
+    setConfirmPassword("");
+    if (nextView !== "signup") {
+      setName("");
+    }
+    if (nextView !== "recovery") {
+      window.history.replaceState({}, document.title, "/auth");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,23 +83,94 @@ const Auth = () => {
     setSuccess("");
     setLoading(true);
 
-    if (isLogin) {
-      const { error } = await signIn(email, password);
-      if (error) {
-        setError(error.message);
-      } else {
+    try {
+      if (view === "login") {
+        const { error: signInError } = await signIn(email, password);
+        if (signInError) {
+          setError(normalizeAuthError(signInError.message));
+          return;
+        }
         navigate("/");
+        return;
       }
-    } else {
-      const { error } = await signUp(email, password, name);
-      if (error) {
-        setError(error.message);
-      } else {
+
+      if (view === "signup") {
+        const { error: signUpError } = await signUp(email, password, name);
+        if (signUpError) {
+          setError(signUpError.message);
+          return;
+        }
         setSuccess("Check your email to verify your account before signing in.");
+        return;
       }
+
+      if (view === "forgot") {
+        const { error: resetError } = await resetPassword(email);
+        if (resetError) {
+          setError(resetError.message);
+          return;
+        }
+        setSuccess("Password reset email sent. Open the link there and set your new password.");
+        return;
+      }
+
+      if (password.length < 6) {
+        setError("Your new password must be at least 6 characters.");
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setError("Your new passwords do not match.");
+        return;
+      }
+
+      const { error: updateError } = await updatePassword(password);
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+
+      setView("login");
+      setSuccess("Password updated. Manual email and password login is ready again.");
+      setPassword("");
+      setConfirmPassword("");
+      window.history.replaceState({}, document.title, "/auth");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
+
+  const title =
+    view === "login"
+      ? "Welcome back"
+      : view === "signup"
+        ? "Create your account"
+        : view === "forgot"
+          ? "Reset your password"
+          : "Choose a new password";
+
+  const subtitle =
+    view === "login"
+      ? "Sign in with email and password or continue with Google."
+      : view === "signup"
+        ? "Create a Braino account with email and password."
+        : view === "forgot"
+          ? "We will send you a reset link so manual sign-in works again."
+          : "Set the password you want to use for manual sign-in.";
+
+  const submitLabel =
+    view === "login"
+      ? "Sign In"
+      : view === "signup"
+        ? "Create Account"
+        : view === "forgot"
+          ? "Send Reset Link"
+          : "Update Password";
+
+  const showEmail = view !== "recovery";
+  const showPassword = view === "login" || view === "signup" || view === "recovery";
+  const showConfirmPassword = view === "recovery";
+  const showGoogle = view === "login" || view === "signup";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -59,13 +179,12 @@ const Auth = () => {
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <SideBrainLogo sizeClass="text-2xl" />
-            <p className="text-muted-foreground mt-2">
-              {isLogin ? "Welcome back" : "Create your account"}
-            </p>
+            <p className="text-muted-foreground mt-2">{title}</p>
+            <p className="text-sm text-muted-foreground/80 mt-1">{subtitle}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 border border-border/40 rounded-2xl p-6 bg-card/50">
-            {!isLogin && (
+            {view === "signup" && (
               <div>
                 <Label htmlFor="name">Name</Label>
                 <Input
@@ -78,77 +197,153 @@ const Auth = () => {
                 />
               </div>
             )}
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={6}
-                className="mt-1"
-              />
-            </div>
+
+            {showEmail && (
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  className="mt-1"
+                />
+              </div>
+            )}
+
+            {showPassword && (
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="password">{view === "recovery" ? "New password" : "Password"}</Label>
+                  {view === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => switchView("forgot")}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required={showPassword}
+                  minLength={6}
+                  className="mt-1"
+                />
+              </div>
+            )}
+
+            {showConfirmPassword && (
+              <div>
+                <Label htmlFor="confirm-password">Confirm new password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                  className="mt-1"
+                />
+              </div>
+            )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
             {success && <p className="text-sm text-primary">{success}</p>}
 
             <Button type="submit" className="w-full rounded-full" disabled={loading}>
-              {loading ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
+              {loading ? "Please wait..." : submitLabel}
             </Button>
 
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
+            {showGoogle && (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              disabled={loading}
-              onClick={async () => {
-                setError("");
-                const { error } = await supabase.auth.signInWithOAuth({
-                  provider: "google",
-                  options: {
-                    redirectTo: window.location.origin,
-                  },
-                });
-                if (error) {
-                  setError(error.message || "Google sign-in failed");
-                  return;
-                }
-              }}
-            >
-              <GoogleIcon />
-              Continue with Google
-            </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-full"
+                  disabled={loading}
+                  onClick={async () => {
+                    setError("");
+                    const { error: googleError } = await supabase.auth.signInWithOAuth({
+                      provider: "google",
+                      options: {
+                        redirectTo: window.location.origin,
+                      },
+                    });
+                    if (googleError) {
+                      setError(googleError.message || "Google sign-in failed");
+                    }
+                  }}
+                >
+                  <GoogleIcon />
+                  Continue with Google
+                </Button>
+              </>
+            )}
 
             <p className="text-center text-sm text-muted-foreground">
-              {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-              <button
-                type="button"
-                onClick={() => { setIsLogin(!isLogin); setError(""); setSuccess(""); }}
-                className="text-primary hover:underline"
-              >
-                {isLogin ? "Sign up" : "Sign in"}
-              </button>
+              {view === "login" && (
+                <>
+                  Don&apos;t have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => switchView("signup")}
+                    className="text-primary hover:underline"
+                  >
+                    Sign up
+                  </button>
+                </>
+              )}
+              {view === "signup" && (
+                <>
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => switchView("login")}
+                    className="text-primary hover:underline"
+                  >
+                    Sign in
+                  </button>
+                </>
+              )}
+              {view === "forgot" && (
+                <>
+                  Remembered it?{" "}
+                  <button
+                    type="button"
+                    onClick={() => switchView("login")}
+                    className="text-primary hover:underline"
+                  >
+                    Back to sign in
+                  </button>
+                </>
+              )}
+              {view === "recovery" && (
+                <>
+                  Need the normal sign-in screen?{" "}
+                  <button
+                    type="button"
+                    onClick={() => switchView("login")}
+                    className="text-primary hover:underline"
+                  >
+                    Back to sign in
+                  </button>
+                </>
+              )}
             </p>
           </form>
         </div>

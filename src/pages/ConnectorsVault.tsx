@@ -41,14 +41,15 @@ const sections: VaultSection[] = [
   {
     slug: "google-calendar",
     name: "Google Calendar",
-    badge: "Next",
-    note: "Best ambient-awareness connector for Braino after Drive.",
+    badge: "Live",
+    note: "Live in Braino for meeting actions, reminders, and Google Meet handoff.",
     fields: [
       { label: "Client ID", valueHint: "Reuse Google OAuth app or create a separate client" },
       { label: "Client secret", valueHint: "Stored only in backend secrets" },
       { label: "Scope set", valueHint: "calendar read/write scopes you choose" },
       { label: "Redirect URI", valueHint: "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1/google-calendar-oauth-callback" },
       { label: "Webhook callback", valueHint: "Calendar watch endpoint in Braino backend" },
+      { label: "Supabase secret names", valueHint: "GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET, GOOGLE_CALENDAR_REDIRECT_URI, GOOGLE_CALENDAR_PUSH_WEBHOOK_URL" },
     ],
   },
   {

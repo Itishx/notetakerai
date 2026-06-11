@@ -76,6 +76,36 @@ type GoogleDriveConn = {
   updated_at: string | null;
 } | null;
 
+type GoogleCalendarConn = {
+  google_email: string | null;
+  updated_at: string | null;
+  watch_expires_at: string | null;
+  last_sync_at: string | null;
+} | null;
+
+type BrainoContact = {
+  id: string;
+  user_id: string;
+  name: string;
+  name_key: string;
+  nickname: string | null;
+  nickname_key: string | null;
+  email: string | null;
+  phone: string | null;
+  photo_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BrainoContactDraft = {
+  id: string | null;
+  name: string;
+  nickname: string;
+  email: string;
+  phone: string;
+  photo_url: string;
+};
+
 type XConnection = {
   username: string | null;
   displayName: string | null;
@@ -216,6 +246,9 @@ type ActivityPoint = {
 
 const serifStyle = { fontFamily: "Instrument Serif, Georgia, serif" } as const;
 const monoStyle = { fontFamily: "JetBrains Mono, monospace" } as const;
+const BRAINO_CONTACT_PHOTO_BUCKET = "braino-contact-photos";
+const BRAINO_CONTACT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const BRAINO_CONTACT_PHOTO_PUBLIC_PREFIX = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${BRAINO_CONTACT_PHOTO_BUCKET}/`;
 
 function dashboardTabLabel(tab: DashboardTab) {
   if (tab === "tasks") return "Agent Tasks";
@@ -384,11 +417,13 @@ function buildCombinedKnowledgePreview({
   displayName,
   overallMemory,
   memoryNotes,
+  contacts,
   xPersona,
 }: {
   displayName: string;
   overallMemory: string;
   memoryNotes: Note[];
+  contacts: BrainoContact[];
   xPersona: XPersona;
 }) {
   const sections: string[] = [];
@@ -411,6 +446,27 @@ function buildCombinedKnowledgePreview({
 
   if (rememberedFacts.length > 0) {
     sections.push(`Additional remembered facts:\n${rememberedFacts.map((fact) => `- ${fact}`).join("\n")}`);
+  }
+
+  const rememberedContacts = Array.from(
+    new Set(
+      contacts
+        .map((contact) => {
+          const name = String(contact.name || "").trim();
+          if (!name) return "";
+          const bits = [
+            contact.nickname ? `nickname: ${contact.nickname}` : "",
+            contact.email ? `email: ${contact.email}` : "",
+            contact.phone ? `phone: ${contact.phone}` : "",
+          ].filter(Boolean);
+          return bits.length ? `${name} — ${bits.join("; ")}` : name;
+        })
+        .filter(Boolean),
+    ),
+  );
+
+  if (rememberedContacts.length > 0) {
+    sections.push(`Saved contacts:\n${rememberedContacts.map((contact) => `- ${contact}`).join("\n")}`);
   }
 
   const xLines = [
@@ -967,6 +1023,54 @@ function MemoryAddForm({ userId, onAdded }: { userId: string; onAdded: (note: No
   );
 }
 
+function emptyContactDraft(): BrainoContactDraft {
+  return { id: null, name: "", nickname: "", email: "", phone: "", photo_url: "" };
+}
+
+function normalizeBrainoContactName(name: string) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function sortBrainoContacts(items: BrainoContact[]) {
+  return [...items].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function storageSafeSegment(value: string, fallback: string) {
+  const safe = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return safe || fallback;
+}
+
+function contactPhotoExtension(file: File) {
+  const explicit = file.name.split(".").pop()?.trim().toLowerCase();
+  if (explicit) return explicit;
+  if (file.type === "image/jpeg") return "jpg";
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  if (file.type === "image/gif") return "gif";
+  return "bin";
+}
+
+function createContactPhotoPath(userId: string, contactName: string, file: File) {
+  const base = storageSafeSegment(contactName || file.name.replace(/\.[^.]+$/, ""), "contact");
+  const ext = contactPhotoExtension(file);
+  const unique = typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${userId}/${base}-${unique}.${ext}`;
+}
+
+function getManagedContactPhotoPath(url: string | null | undefined) {
+  const trimmed = String(url || "").trim();
+  if (!trimmed || !trimmed.startsWith(BRAINO_CONTACT_PHOTO_PUBLIC_PREFIX)) return null;
+  return decodeURIComponent(trimmed.slice(BRAINO_CONTACT_PHOTO_PUBLIC_PREFIX.length));
+}
+
 export default function Dashboard() {
   const { user, profile, loading, signOut, session, isPremium } = useAuth();
   const navigate = useNavigate();
@@ -979,6 +1083,7 @@ export default function Dashboard() {
   const [commands, setCommands] = useState<Command[]>([]);
   const [notionConn, setNotionConn] = useState<NotionConn>(null);
   const [googleDriveConn, setGoogleDriveConn] = useState<GoogleDriveConn>(null);
+  const [googleCalendarConn, setGoogleCalendarConn] = useState<GoogleCalendarConn>(null);
   const [xConn, setXConn] = useState<XConnection>(null);
   const [spotifyConn, setSpotifyConn] = useState<SpotifyConn>(null);
   const [scheduledXPosts, setScheduledXPosts] = useState<ScheduledXPost[]>([]);
@@ -995,6 +1100,15 @@ export default function Dashboard() {
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
+  const [contacts, setContacts] = useState<BrainoContact[]>([]);
+  const [contactsDialogOpen, setContactsDialogOpen] = useState(false);
+  const [contactDraft, setContactDraft] = useState<BrainoContactDraft>(emptyContactDraft());
+  const [contactSaving, setContactSaving] = useState(false);
+  const [contactDeletingId, setContactDeletingId] = useState<string | null>(null);
+  const [contactPhotoFile, setContactPhotoFile] = useState<File | null>(null);
+  const [contactPhotoPreviewUrl, setContactPhotoPreviewUrl] = useState("");
+  const contactPhotoInputRef = useRef<HTMLInputElement>(null);
+  const contactPhotoObjectUrlRef = useRef<string | null>(null);
   const [voicePref, setVoicePref] = useState<"realtime" | "elevenlabs">(() => {
     const stored = localStorage.getItem("brainoVoicePref");
     return stored === "realtime" ? "realtime" : "elevenlabs";
@@ -1005,6 +1119,7 @@ export default function Dashboard() {
   const [overallMemorySaved, setOverallMemorySaved] = useState(false);
   const [overallMemoryError, setOverallMemoryError] = useState<string | null>(null);
   const [driveConnectLoading, setDriveConnectLoading] = useState(false);
+  const [calendarConnectLoading, setCalendarConnectLoading] = useState(false);
   const [xConnectLoading, setXConnectLoading] = useState(false);
   const [spotifyConnectLoading, setSpotifyConnectLoading] = useState(false);
   const [xPostDraft, setXPostDraft] = useState("");
@@ -1027,6 +1142,28 @@ export default function Dashboard() {
   const [xAutoPostingEnabled, setXAutoPostingEnabled] = useState(false);
   const [xAutoReplyEnabled, setXAutoReplyEnabled] = useState(false);
   const [xPostsPerDay, setXPostsPerDay] = useState(4);
+
+  const clearContactPhotoObjectUrl = () => {
+    if (contactPhotoObjectUrlRef.current) {
+      URL.revokeObjectURL(contactPhotoObjectUrlRef.current);
+      contactPhotoObjectUrlRef.current = null;
+    }
+  };
+
+  const resetContactComposer = (draft: BrainoContactDraft = emptyContactDraft()) => {
+    clearContactPhotoObjectUrl();
+    setContactPhotoFile(null);
+    setContactPhotoPreviewUrl(String(draft.photo_url || "").trim());
+    setContactDraft(draft);
+    if (contactPhotoInputRef.current) contactPhotoInputRef.current.value = "";
+  };
+
+  useEffect(() => () => {
+    if (contactPhotoObjectUrlRef.current) {
+      URL.revokeObjectURL(contactPhotoObjectUrlRef.current);
+      contactPhotoObjectUrlRef.current = null;
+    }
+  }, []);
   const [xAutoToggling, setXAutoToggling] = useState<"posting" | "reply" | null>(null);
   const [xNextPostAt, setXNextPostAt] = useState<string | null>(null);
   const [xAutoSessions, setXAutoSessions] = useState<XAutoSession[]>([]);
@@ -1044,6 +1181,7 @@ export default function Dashboard() {
   const xGenerateAbortRef = useRef<AbortController | null>(null);
   const xEngageAbortRef = useRef<AbortController | null>(null);
   const drivePollRef = useRef<number | null>(null);
+  const calendarPollRef = useRef<number | null>(null);
   const xPollRef = useRef<number | null>(null);
   const spotifyPollRef = useRef<number | null>(null);
 
@@ -1051,6 +1189,13 @@ export default function Dashboard() {
     if (drivePollRef.current !== null) {
       window.clearInterval(drivePollRef.current);
       drivePollRef.current = null;
+    }
+  }
+
+  function stopCalendarPolling() {
+    if (calendarPollRef.current !== null) {
+      window.clearInterval(calendarPollRef.current);
+      calendarPollRef.current = null;
     }
   }
 
@@ -1082,6 +1227,43 @@ export default function Dashboard() {
 
     setGoogleDriveConn((data as GoogleDriveConn) || null);
     return (data as GoogleDriveConn) || null;
+  }
+
+  async function refreshGoogleCalendarConnection(userId: string) {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-connection-status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ userIdentifier: userId }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Failed to load Google Calendar connection");
+    const connection = payload.connected
+      ? {
+          google_email: payload.connection?.google_email ?? null,
+          updated_at: payload.connection?.updated_at ?? null,
+          watch_expires_at: payload.connection?.watch_expires_at ?? null,
+          last_sync_at: payload.connection?.last_sync_at ?? null,
+        }
+      : null;
+    setGoogleCalendarConn(connection);
+    return connection;
+  }
+
+  async function refreshBrainoContacts(userId: string) {
+    const { data, error } = await supabase
+      .from("braino_contacts")
+      .select("id,user_id,name,name_key,nickname,nickname_key,email,phone,photo_url,created_at,updated_at")
+      .eq("user_id", userId)
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+    const rows = sortBrainoContacts((data as BrainoContact[] | null) || []);
+    setContacts(rows);
+    return rows;
   }
 
   async function refreshSpotifyConnection(userId: string) {
@@ -1214,7 +1396,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, driveRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, calendarRes, contactsRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -1237,6 +1419,8 @@ export default function Dashboard() {
           .select("google_email,updated_at")
           .eq("user_identifier", user.id)
           .maybeSingle(),
+        refreshGoogleCalendarConnection(user.id).catch(() => null),
+        refreshBrainoContacts(user.id).catch(() => []),
         supabase
           .from("spotify_connections")
           .select("display_name,spotify_email,product,updated_at")
@@ -1282,6 +1466,8 @@ export default function Dashboard() {
       if (commandsRes.data) setCommands(commandsRes.data as unknown as Command[]);
       setNotionConn(notionRes.data as NotionConn);
       setGoogleDriveConn((driveRes.data as GoogleDriveConn) || null);
+      setGoogleCalendarConn((calendarRes as GoogleCalendarConn) || null);
+      setContacts(sortBrainoContacts((contactsRes as BrainoContact[]) || []));
       setSpotifyConn((spotifyRes.data as SpotifyConn) || null);
       const loadedOverallMemory = String((profileMemoryRes.data as { overall_memory?: string } | null)?.overall_memory || "");
       setOverallMemory(loadedOverallMemory);
@@ -1358,6 +1544,7 @@ export default function Dashboard() {
 
   useEffect(() => () => {
     stopDrivePolling();
+    stopCalendarPolling();
     stopXPolling();
     stopSpotifyPolling();
   }, []);
@@ -1422,6 +1609,46 @@ export default function Dashboard() {
       console.error("google drive connect failed:", error);
       setDriveConnectLoading(false);
       window.alert(error instanceof Error ? error.message : "Failed to connect Google Drive");
+    }
+  }
+
+  async function handleConnectGoogleCalendar() {
+    if (!user) return;
+    setCalendarConnectLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-oauth-start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ userIdentifier: user.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.authUrl) {
+        throw new Error(payload.error || "Failed to start Google Calendar OAuth");
+      }
+
+      window.open(payload.authUrl, "_blank", "noopener,noreferrer");
+      stopCalendarPolling();
+      const startedAt = Date.now();
+      calendarPollRef.current = window.setInterval(async () => {
+        const connection = await refreshGoogleCalendarConnection(user.id);
+        if (connection) {
+          stopCalendarPolling();
+          setCalendarConnectLoading(false);
+          return;
+        }
+        if (Date.now() - startedAt > 2 * 60 * 1000) {
+          stopCalendarPolling();
+          setCalendarConnectLoading(false);
+        }
+      }, 2000);
+    } catch (error) {
+      console.error("google calendar connect failed:", error);
+      setCalendarConnectLoading(false);
+      window.alert(error instanceof Error ? error.message : "Failed to connect Google Calendar");
     }
   }
 
@@ -2098,9 +2325,10 @@ export default function Dashboard() {
         displayName,
         overallMemory,
         memoryNotes,
+        contacts,
         xPersona,
       }),
-    [displayName, memoryNotes, overallMemory, xPersona],
+    [contacts, displayName, memoryNotes, overallMemory, xPersona],
   );
   const xPersonaConfigured = useMemo(
     () =>
@@ -2188,6 +2416,193 @@ export default function Dashboard() {
     setSavingName(false);
     setNameSaved(true);
     window.setTimeout(() => setNameSaved(false), 2000);
+  };
+
+  const openNewContactDialog = (prefill?: Partial<BrainoContactDraft>) => {
+    resetContactComposer({
+      ...emptyContactDraft(),
+      ...prefill,
+      name: String(prefill?.name || "").trim(),
+      nickname: String(prefill?.nickname || "").trim(),
+      email: String(prefill?.email || "").trim(),
+      phone: String(prefill?.phone || "").trim(),
+      photo_url: String(prefill?.photo_url || "").trim(),
+    });
+    setContactsDialogOpen(true);
+  };
+
+  const openEditContactDialog = (contact: BrainoContact) => {
+    resetContactComposer({
+      id: contact.id,
+      name: contact.name || "",
+      nickname: contact.nickname || "",
+      email: contact.email || "",
+      phone: contact.phone || "",
+      photo_url: contact.photo_url || "",
+    });
+    setContactsDialogOpen(true);
+  };
+
+  const handleContactPhotoFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Unsupported file", description: "Upload an image file for the contact photo.", variant: "destructive" });
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > BRAINO_CONTACT_PHOTO_MAX_BYTES) {
+      toast({ title: "Photo too large", description: "Contact photos must stay under 5 MB.", variant: "destructive" });
+      event.target.value = "";
+      return;
+    }
+
+    clearContactPhotoObjectUrl();
+    const objectUrl = URL.createObjectURL(file);
+    contactPhotoObjectUrlRef.current = objectUrl;
+    setContactPhotoFile(file);
+    setContactPhotoPreviewUrl(objectUrl);
+  };
+
+  const handleRemoveContactPhoto = () => {
+    clearContactPhotoObjectUrl();
+    setContactPhotoFile(null);
+    setContactPhotoPreviewUrl("");
+    setContactDraft((prev) => ({ ...prev, photo_url: "" }));
+    if (contactPhotoInputRef.current) contactPhotoInputRef.current.value = "";
+  };
+
+  const handleSaveContact = async () => {
+    if (!user) return;
+
+    const name = contactDraft.name.trim();
+    const nickname = contactDraft.nickname.trim();
+    const email = contactDraft.email.trim().toLowerCase();
+    const phone = contactDraft.phone.trim();
+    const currentPhotoUrl = contactDraft.photo_url.trim();
+    const previousContact = contactDraft.id ? contacts.find((item) => item.id === contactDraft.id) || null : null;
+    const previousManagedPhotoPath = getManagedContactPhotoPath(previousContact?.photo_url);
+
+    if (!name) {
+      toast({ title: "Contact name missing", description: "Give Braino a name to remember.", variant: "destructive" });
+      return;
+    }
+    if (!email && !phone) {
+      toast({ title: "Add at least one detail", description: "Save an email or phone number so Braino can actually use this contact.", variant: "destructive" });
+      return;
+    }
+
+    let uploadedPhotoPath: string | null = null;
+    let photo_url = currentPhotoUrl;
+
+    const payload = {
+      user_id: user.id,
+      name,
+      name_key: normalizeBrainoContactName(name),
+      nickname: nickname || null,
+      nickname_key: nickname ? normalizeBrainoContactName(nickname) : null,
+      email: email || null,
+      phone: phone || null,
+      photo_url: photo_url || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    setContactSaving(true);
+
+    if (contactPhotoFile) {
+      try {
+        uploadedPhotoPath = createContactPhotoPath(user.id, name, contactPhotoFile);
+        const { error } = await supabase.storage
+          .from(BRAINO_CONTACT_PHOTO_BUCKET)
+          .upload(uploadedPhotoPath, contactPhotoFile, { contentType: contactPhotoFile.type });
+        if (error) throw error;
+        const { data: { publicUrl } } = supabase.storage
+          .from(BRAINO_CONTACT_PHOTO_BUCKET)
+          .getPublicUrl(uploadedPhotoPath);
+        photo_url = publicUrl;
+        payload.photo_url = publicUrl;
+      } catch (error) {
+        setContactSaving(false);
+        toast({
+          title: "Could not upload photo",
+          description: error instanceof Error ? error.message : "Please try another image.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    let response;
+    if (contactDraft.id) {
+      response = await supabase
+        .from("braino_contacts")
+        .update(payload)
+        .eq("id", contactDraft.id)
+        .eq("user_id", user.id)
+        .select("id,user_id,name,name_key,nickname,nickname_key,email,phone,photo_url,created_at,updated_at")
+        .single();
+    } else {
+      response = await supabase
+        .from("braino_contacts")
+        .insert(payload)
+        .select("id,user_id,name,name_key,nickname,nickname_key,email,phone,photo_url,created_at,updated_at")
+        .single();
+    }
+
+    setContactSaving(false);
+
+    if (response.error) {
+      if (uploadedPhotoPath) {
+        await supabase.storage.from(BRAINO_CONTACT_PHOTO_BUCKET).remove([uploadedPhotoPath]).catch(() => undefined);
+      }
+      toast({
+        title: "Could not save contact",
+        description: response.error.message || "Check whether this name or nickname already exists, then try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const savedContact = response.data as BrainoContact;
+    setContacts((prev) => {
+      const withoutCurrent = prev.filter((item) => item.id !== savedContact.id);
+      return sortBrainoContacts([...withoutCurrent, savedContact]);
+    });
+    const nextManagedPhotoPath = getManagedContactPhotoPath(savedContact.photo_url);
+    if (previousManagedPhotoPath && previousManagedPhotoPath !== nextManagedPhotoPath) {
+      await supabase.storage.from(BRAINO_CONTACT_PHOTO_BUCKET).remove([previousManagedPhotoPath]).catch(() => undefined);
+    }
+    setContactsDialogOpen(false);
+    resetContactComposer();
+    toast({
+      title: contactDraft.id ? "Contact updated" : "Contact saved",
+      description: `${savedContact.name} is now part of Braino's contact memory.`,
+    });
+  };
+
+  const handleDeleteContact = async (contact: BrainoContact) => {
+    if (!user) return;
+    setContactDeletingId(contact.id);
+    const managedPhotoPath = getManagedContactPhotoPath(contact.photo_url);
+    const { error } = await supabase
+      .from("braino_contacts")
+      .delete()
+      .eq("id", contact.id)
+      .eq("user_id", user.id);
+    setContactDeletingId(null);
+
+    if (error) {
+      toast({ title: "Could not delete contact", description: error.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+
+    if (managedPhotoPath) {
+      await supabase.storage.from(BRAINO_CONTACT_PHOTO_BUCKET).remove([managedPhotoPath]).catch(() => undefined);
+    }
+    setContacts((prev) => prev.filter((item) => item.id !== contact.id));
+    toast({ title: "Contact deleted", description: `${contact.name} is no longer in Braino's contact memory.` });
   };
 
   const handleSaveOverallMemory = async () => {
@@ -4684,6 +5099,89 @@ export default function Dashboard() {
                 </div>
 
                 <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6 xl:col-span-2">
+                  <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 style={serifStyle} className="mb-1 text-[26px] leading-none tracking-[-0.02em]">
+                        Braino contacts
+                      </h3>
+                      <p className="text-[13.5px] text-[var(--sb-ink-2)]">
+                        Save the people Braino should know by name or nickname. Calendar invites and Gmail drafts can resolve Rahul or RD to the right person without you spelling it out every time.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => openNewContactDialog()}
+                      variant="outline"
+                      className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Add contact
+                    </Button>
+                  </div>
+
+                  {contacts.length === 0 ? (
+                    <div className="rounded-[16px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-5 py-7 text-center">
+                      <div className="text-sm font-medium text-[var(--sb-ink)]">No contacts saved yet</div>
+                      <div className="mt-1 text-[13px] text-[var(--sb-ink-3)]">
+                        Start with the people you talk to most. Example: Rahul → rahul.2002.dey@gmail.com, nickname: RD
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {contacts.map((contact) => (
+                        <div key={contact.id} className="flex items-center justify-between gap-3 rounded-[16px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                          <div className="flex min-w-0 items-center gap-3">
+                            {contact.photo_url ? (
+                              <img
+                                src={contact.photo_url}
+                                alt={contact.name}
+                                className="h-11 w-11 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="grid h-11 w-11 place-items-center rounded-full bg-[linear-gradient(135deg,#6B4E32,#8C5A3D)] text-sm font-semibold text-white">
+                                {getInitials(contact.name)}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <div className="truncate text-sm font-medium text-[var(--sb-ink)]">{contact.name}</div>
+                                {contact.nickname ? (
+                                  <span style={monoStyle} className="rounded-full border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-2 py-0.5 text-[10px] text-[var(--sb-ink-3)]">
+                                    aka {contact.nickname}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div style={monoStyle} className="mt-1 truncate text-[11px] text-[var(--sb-ink-3)]">
+                                {[contact.email, contact.phone].filter(Boolean).join(" · ") || "Saved without email or phone"}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => openEditContactDialog(contact)}
+                              className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => handleDeleteContact(contact)}
+                              disabled={contactDeletingId === contact.id}
+                              className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                            >
+                              {contactDeletingId === contact.id ? "Deleting…" : "Delete"}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6 xl:col-span-2">
                   <h3 style={serifStyle} className="mb-1 text-[26px] leading-none tracking-[-0.02em]">
                     Connectors
                   </h3>
@@ -4752,6 +5250,28 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
                       <div>
                         <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
+                          <span className={cn("h-2 w-2 rounded-full", googleCalendarConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
+                          Google Calendar
+                        </div>
+                        <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
+                          {googleCalendarConn
+                            ? `${googleCalendarConn.google_email || "Calendar connected"}${googleCalendarConn.watch_expires_at ? ` · Watch live until ${formatDateTime(googleCalendarConn.watch_expires_at)}` : googleCalendarConn.last_sync_at ? ` · Synced ${formatDateTime(googleCalendarConn.last_sync_at)}` : ""}`
+                            : "Schedule, reschedule, cancel, forward, and open Meet calls"}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={handleConnectGoogleCalendar}
+                        disabled={calendarConnectLoading}
+                        className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                      >
+                        {calendarConnectLoading ? "Waiting…" : googleCalendarConn ? "Reconnect" : "Connect"}
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
                           <span className={cn("h-2 w-2 rounded-full", spotifyConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
                           Spotify
                         </div>
@@ -4773,7 +5293,6 @@ export default function Dashboard() {
 
                     {[
                       { name: "Slack", blurb: "Mentions, DMs, and team activity announcements", status: "Soon" },
-                      { name: "Google Calendar", blurb: "Meeting reminders and day awareness", status: "Soon" },
                       { name: "Gmail", blurb: "Inbox awareness once the heavier compliance path is ready", status: "Planned" },
                       { name: "Outlook / Microsoft Graph", blurb: "Enterprise mail and calendar support", status: "Planned" },
                       { name: "GitHub", blurb: "PR reviews, CI failures, and repo activity", status: "Planned" },
@@ -4970,6 +5489,9 @@ export default function Dashboard() {
                       </Badge>
                       <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-[10px] text-[var(--sb-ink-3)]">
                         {memoryNotes.length} memory fact{memoryNotes.length === 1 ? "" : "s"}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-[10px] text-[var(--sb-ink-3)]">
+                        {contacts.length} contact{contacts.length === 1 ? "" : "s"}
                       </Badge>
                       <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-[10px] text-[var(--sb-ink-3)]">
                         {xPersonaConfigured ? "X persona merged" : "No X persona yet"}
@@ -5185,6 +5707,149 @@ export default function Dashboard() {
           </div>
         </main>
       </div>
+
+      <Dialog open={contactsDialogOpen} onOpenChange={(open) => {
+        setContactsDialogOpen(open);
+        if (!open && !contactSaving) resetContactComposer();
+      }}>
+        <DialogContent className="max-w-lg border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-[var(--sb-ink)] sm:rounded-[24px]">
+          <DialogHeader>
+            <DialogTitle style={serifStyle} className="text-left text-3xl font-normal tracking-[-0.02em]">
+              {contactDraft.id ? "Edit contact" : "Add a Braino contact"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-4 pt-2">
+            <div className="grid gap-2">
+              <label className="text-[12px] font-medium text-[var(--sb-ink-2)]">Name</label>
+              <Input
+                value={contactDraft.name}
+                onChange={(event) => setContactDraft((prev) => ({ ...prev, name: event.target.value }))}
+                placeholder="Rahul"
+                className="h-11 rounded-xl border-[var(--sb-line)] bg-[var(--sb-panel)] text-sm"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-[12px] font-medium text-[var(--sb-ink-2)]">Nickname</label>
+              <Input
+                value={contactDraft.nickname}
+                onChange={(event) => setContactDraft((prev) => ({ ...prev, nickname: event.target.value }))}
+                placeholder="rahul bhai"
+                className="h-11 rounded-xl border-[var(--sb-line)] bg-[var(--sb-panel)] text-sm"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-[12px] font-medium text-[var(--sb-ink-2)]">Email</label>
+              <Input
+                value={contactDraft.email}
+                onChange={(event) => setContactDraft((prev) => ({ ...prev, email: event.target.value }))}
+                placeholder="rahul@example.com"
+                className="h-11 rounded-xl border-[var(--sb-line)] bg-[var(--sb-panel)] text-sm"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-[12px] font-medium text-[var(--sb-ink-2)]">Phone</label>
+              <Input
+                value={contactDraft.phone}
+                onChange={(event) => setContactDraft((prev) => ({ ...prev, phone: event.target.value }))}
+                placeholder="+91 98765 43210"
+                className="h-11 rounded-xl border-[var(--sb-line)] bg-[var(--sb-panel)] text-sm"
+              />
+            </div>
+
+            <div className="grid gap-3 rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+              <div className="flex items-center gap-4">
+                {contactPhotoPreviewUrl ? (
+                  <img
+                    src={contactPhotoPreviewUrl}
+                    alt={contactDraft.name || "Contact photo"}
+                    className="h-16 w-16 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="grid h-16 w-16 place-items-center rounded-full bg-[linear-gradient(135deg,#6B4E32,#8C5A3D)] text-lg font-semibold text-white">
+                    {getInitials(contactDraft.name || "B")}
+                  </div>
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] font-medium text-[var(--sb-ink-2)]">Photo</div>
+                  <div className="mt-1 text-[12px] leading-relaxed text-[var(--sb-ink-3)]">
+                    Upload a real image here. No photo link needed anymore.
+                  </div>
+                  <div style={monoStyle} className="mt-2 text-[10px] text-[var(--sb-ink-4)]">
+                    JPG, PNG, GIF, or WebP up to 5 MB
+                  </div>
+                </div>
+              </div>
+
+              <input
+                ref={contactPhotoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleContactPhotoFileSelect}
+                className="hidden"
+              />
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => contactPhotoInputRef.current?.click()}
+                  disabled={contactSaving}
+                  className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                >
+                  {contactPhotoPreviewUrl ? "Replace photo" : "Upload photo"}
+                </Button>
+                {contactPhotoPreviewUrl ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleRemoveContactPhoto}
+                    disabled={contactSaving}
+                    className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-3 py-1.5 text-[11px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                  >
+                    Remove photo
+                  </Button>
+                ) : null}
+                {contactPhotoFile ? (
+                  <span style={monoStyle} className="text-[10px] text-[var(--sb-ink-4)]">
+                    {contactPhotoFile.name}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div style={monoStyle} className="rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-3 text-[11px] text-[var(--sb-ink-3)]">
+              Braino uses this list when you say things like "schedule a call with Rahul", "send Rahul an email", or "message RD".
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setContactsDialogOpen(false);
+                  resetContactComposer();
+                }}
+                className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveContact}
+                disabled={contactSaving}
+                className="rounded-full bg-[var(--sb-ink)] text-xs text-[var(--sb-on-ink)] hover:opacity-90"
+              >
+                {contactSaving ? "Saving…" : contactDraft.id ? "Save contact" : "Add contact"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {selectedNote ? (
         <NoteModal

@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { buildBrainoSystemPrompt } from "../_shared/braino-prompt.ts";
+import {
+  formatRealtimeCostSummaryForBraino,
+  loadRealtimeCostSummaryForRequest,
+} from "../_shared/realtime-cost-summary.ts";
 import { loadUserKnowledge } from "../_shared/user-knowledge.ts";
 
 const corsHeaders = {
@@ -204,6 +208,26 @@ function detectDocIntent(message: string): { matched: boolean; topic: string } {
   return { matched: true, topic: topic || message };
 }
 
+function isRealtimeCostQuestion(message: string) {
+  const text = String(message || "").trim().toLowerCase();
+  if (!text) return false;
+
+  const spendSignal =
+    /\b(spend|spent|cost|costs|receipt|bill|billing|price|priced|usage)\b/.test(text) ||
+    /how much\b/.test(text);
+  if (!spendSignal) return false;
+
+  const realtimeSignal =
+    /\b(braino|realtime|live voice|voice mode|headphone mode|openai|session|today|7 days|seven days|last week|api)\b/.test(text);
+  if (!realtimeSignal) return false;
+
+  const documentIntent =
+    /\b(create|make|write|draft|generate|put together|compile)\b.*\b(doc|document|google doc)\b/.test(text);
+  if (documentIntent) return false;
+
+  return true;
+}
+
 async function createDocFromPrompt(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -237,7 +261,21 @@ serve(async (req) => {
   }
 
   try {
-    const { notes, chatHistory, message, imageBase64, existingImages, pageContext, aiProvider, movieContext, movieDiscoveryPrompt, userId, driveConnected } = await req.json();
+    const {
+      notes,
+      chatHistory,
+      message,
+      imageBase64,
+      existingImages,
+      pageContext,
+      aiProvider,
+      movieContext,
+      movieDiscoveryPrompt,
+      userId,
+      driveConnected,
+      clientTimeZone,
+      clientUtcOffsetMinutes,
+    } = await req.json();
     const requestAuthHeader = req.headers.get("Authorization");
 
     if (!message && !imageBase64) {
@@ -262,6 +300,23 @@ serve(async (req) => {
           });
         }
         // If doc creation failed, fall through to normal AI response
+      }
+    }
+
+    if (!imageBase64 && typeof message === "string" && isRealtimeCostQuestion(message)) {
+      const realtimeCostResult = await loadRealtimeCostSummaryForRequest(requestAuthHeader, {
+        requestedUserId: typeof userId === "string" ? userId : null,
+        clientTimeZone: typeof clientTimeZone === "string" ? clientTimeZone : null,
+        clientUtcOffsetMinutes: Number.isFinite(Number(clientUtcOffsetMinutes)) ? Number(clientUtcOffsetMinutes) : null,
+      });
+
+      if (realtimeCostResult?.summary) {
+        return new Response(JSON.stringify({
+          reply: formatRealtimeCostSummaryForBraino(realtimeCostResult.summary),
+          realtimeCostSummary: realtimeCostResult.summary,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 

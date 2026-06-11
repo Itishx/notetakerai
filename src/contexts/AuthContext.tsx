@@ -10,6 +10,8 @@ interface AuthContextType {
   isPremium: boolean;
   signUp: (email: string, password: string, name?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
+  resetPassword: (email: string) => Promise<{ error: any }>;
+  updatePassword: (password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -74,6 +76,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?mode=recovery`,
+    });
+    return { error };
+  };
+
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    return { error };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
@@ -83,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (typeof user?.email === "string" && INTERNAL_PREMIUM_EMAILS.has(user.email.toLowerCase()));
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, isPremium, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, loading, isPremium, signUp, signIn, resetPassword, updatePassword, signOut }}>
       {children}
     </AuthContext.Provider>
   );

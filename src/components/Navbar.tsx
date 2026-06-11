@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: "/use-cases", label: "Use Cases" },
   { href: "/automations", label: "Automations" },
   { href: "/integrations", label: "Integrations" },
+  { href: "/skills", label: "Skills" },
   { href: "/delegate", label: "Delegate" },
   { href: "/compare", label: "vs Claude" },
   { href: "/premium", label: "Pricing" },

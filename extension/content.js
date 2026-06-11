@@ -2453,7 +2453,7 @@ if (__sbContextOk()) {
       // to the in-tab session, then start the in-tab session here now.
       const errorText = String(msg.error || "Live AI could not start.");
       __sbUseOffscreenRt = false;
-      const quotaError = /limit|cap|used .*today|7-minute|429/i.test(errorText);
+      const quotaError = /limit|cap|used .*today|429/i.test(errorText);
       if (quotaError) {
         if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure(errorText, { nonRetryable: true });
         return;
@@ -2480,6 +2480,11 @@ if (__sbContextOk()) {
       // This tab lost focus to another — hand voice off.
       if (!__sbOwnsInlineUi()) return;
       __sbReleaseVoicePresence();
+    }
+    if (msg.action === "sbPromptForContact") {
+      if (!__sbOwnsInlineUi()) { sendResponse?.({ ok: false, error: "Braino UI is not active on this tab." }); return; }
+      __sbShowContactPromptModal(msg.payload || {}).then((result) => sendResponse?.(result || { ok: false }));
+      return true;
     }
     if (msg.action === "showMicPermission") {
       // Background wants a one-time mic grant. Show it as a modal in THIS tab (same tab the
@@ -7754,11 +7759,20 @@ async function __sbAuthedApiFetch(path, init = {}, options = {}) {
 }
 
 async function __sbFetchAssistantReply(body) {
+  const enrichedBody = body && typeof body === "object" && !Array.isArray(body)
+    ? {
+        ...body,
+        clientTimeZone: body.clientTimeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+        clientUtcOffsetMinutes: Number.isFinite(Number(body.clientUtcOffsetMinutes))
+          ? Number(body.clientUtcOffsetMinutes)
+          : new Date().getTimezoneOffset(),
+      }
+    : body;
   const resp = await __sbAuthedApiFetch("chat-about-notes", {
     method: "POST",
   }, {
     allowAnonymous: true,
-    jsonBody: body,
+    jsonBody: enrichedBody,
   });
   if (!resp) return { reply: null };
 
@@ -7877,7 +7891,7 @@ async function __sbProcessPrompt(text, options = {}) {
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
     __sbChatHistory.push({ role: "user", content: promptText });
-    const reply = "Quite a bit, actually — here's what's new:\n\n**Fly mode** — Press Cmd+S and I'll follow your cursor around the screen like a little satellite. Press it again and I dock back to the corner.\n\n**Voice mode sees the page** — I can now read whatever you're looking at the moment you activate live voice. Ask me to summarise an article, explain something on screen, or answer a question about the page — I've got it.\n\n**Spotify control** — Tell me to play a song and I'll open Spotify in a new tab and start it. You can also say \"lower the volume\" or \"raise the volume\" and I'll handle that too.\n\n**Voice web research** — When you ask me something that needs the web, I'll research in the background and speak the answer back. I only open a visible Google tab when you explicitly ask for Google or search results.\n\n**Live voice daily cap** — Realtime voice sessions are now tracked server-side with a 7-minute daily limit so things stay fair and fast.\n\nWhat do you want to try first?";
+    const reply = "Quite a bit, actually — here's what's new:\n\n**Fly mode** — Press Cmd+S and I'll follow your cursor around the screen like a little satellite. Press it again and I dock back to the corner.\n\n**Voice mode sees the page** — I can now read whatever you're looking at the moment you activate live voice. Ask me to summarise an article, explain something on screen, or answer a question about the page — I've got it.\n\n**Spotify control** — Tell me to play a song and I'll open Spotify in a new tab and start it. You can also say \"lower the volume\" or \"raise the volume\" and I'll handle that too.\n\n**Voice web research** — When you ask me something that needs the web, I'll research in the background and speak the answer back. I only open a visible Google tab when you explicitly ask for Google or search results.\n\nWhat do you want to try first?";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -8434,11 +8448,7 @@ function __sbIsNonRetryableRealtimeFailure(message) {
   return (
     text.includes("sign in") ||
     text.includes("401") ||
-    text.includes("403") ||
-    text.includes("daily live voice limit") ||
-    text.includes("7-minute") ||
-    text.includes("already used") ||
-    text.includes("cap is up")
+    text.includes("403")
   );
 }
 
@@ -8621,18 +8631,6 @@ function __sbScheduleRealtimeUsageCap(allocatedMs) {
   __sbRtUsageHeartbeatTimer = setInterval(() => {
     void __sbHeartbeatRealtimeUsageSession();
   }, 15000);
-
-  if (__sbRtUsageWarningTimer) clearTimeout(__sbRtUsageWarningTimer);
-  if (__sbRtUsageAllocatedMs > 60000) {
-    __sbRtUsageWarningTimer = setTimeout(() => {
-      __sbShowVoiceError("One minute of live voice left for today.");
-    }, __sbRtUsageAllocatedMs - 60000);
-  }
-
-  if (__sbRtUsageDeadlineTimer) clearTimeout(__sbRtUsageDeadlineTimer);
-  __sbRtUsageDeadlineTimer = setTimeout(() => {
-    void __sbFallbackToLegacyHeadphone("Today's 7-minute live voice cap is up. Switching to legacy voice.");
-  }, __sbRtUsageAllocatedMs);
 }
 
 function __sbClearRealtimeConnectHint() {
@@ -8974,12 +8972,14 @@ async function __sbStartRealtimeVoice() {
     }
     if (!res.ok) {
       if (_dcReject) _dcReject(new Error("cancelled"));
-      if (res.status === 429) throw new Error("Live AI is busy — too many requests. Try again in a moment.");
       const errorText = await res.text();
       let errorPayload = {};
       try {
         errorPayload = JSON.parse(errorText);
       } catch {}
+      if (res.status === 429) {
+        throw new Error(errorPayload.details || errorPayload.error || errorText || "Live AI is busy — too many requests. Try again in a moment.");
+      }
       throw new Error(errorPayload.details || errorPayload.error || errorText || `Live AI failed (${res.status})`);
     }
 
@@ -9755,6 +9755,389 @@ function __sbShowMicPermissionModal() {
 
 function __sbHideMicPermissionModal() {
   document.getElementById("__sb_mic_perm__")?.remove();
+}
+
+function __sbFormatContactPromptHtml(message) {
+  const safe = __sbEscapeHtml(String(message || "").trim() || "Add this contact once and Braino will remember them.");
+  return safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
+}
+
+function __sbShowContactPromptModal(payload = {}) {
+  return new Promise((resolve) => {
+    try {
+      document.getElementById("__sb_contact_prompt__")?.remove();
+
+      const overlay = document.createElement("div");
+      overlay.id = "__sb_contact_prompt__";
+      overlay.style.cssText = [
+        "position:fixed",
+        "inset:0",
+        "z-index:2147483647",
+        "background:rgba(8,5,4,0.52)",
+        "backdrop-filter:blur(4px)",
+        "display:flex",
+        "align-items:center",
+        "justify-content:center",
+        "padding:24px",
+      ].join(";");
+
+      const card = document.createElement("form");
+      card.style.cssText = [
+        "width:min(440px,92vw)",
+        "border-radius:24px",
+        "padding:22px",
+        "color:#1F1713",
+        "background:linear-gradient(180deg, rgba(251,247,241,0.95), rgba(246,236,223,0.92))",
+        "border:1px solid rgba(107,82,72,0.18)",
+        "box-shadow:0 24px 70px rgba(0,0,0,0.34)",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+      ].join(";");
+
+      const title = document.createElement("div");
+      title.textContent = String(payload.title || "Save contact");
+      title.style.cssText = "font-size:24px;font-weight:600;letter-spacing:-0.03em;color:#2C201B;";
+
+      const body = document.createElement("div");
+      body.innerHTML = __sbFormatContactPromptHtml(payload.message);
+      body.style.cssText = "margin-top:8px;font-size:13px;line-height:1.55;color:#6B5248;";
+
+      const grid = document.createElement("div");
+      grid.style.cssText = "display:grid;gap:12px;margin-top:18px;";
+
+      const buildField = (labelText, input) => {
+        const wrap = document.createElement("label");
+        wrap.style.cssText = "display:grid;gap:6px;";
+        const label = document.createElement("span");
+        label.textContent = labelText;
+        label.style.cssText = "font-size:12px;font-weight:600;color:#5D473F;";
+        wrap.appendChild(label);
+        wrap.appendChild(input);
+        return wrap;
+      };
+
+      const baseInputStyle = [
+        "width:100%",
+        "box-sizing:border-box",
+        "border-radius:14px",
+        "border:1px solid rgba(107,82,72,0.18)",
+        "background:rgba(255,255,255,0.72)",
+        "padding:12px 14px",
+        "font-size:14px",
+        "color:#241A16",
+        "outline:none",
+      ].join(";");
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = String(payload.name || "").trim();
+      nameInput.placeholder = "Rahul";
+      nameInput.style.cssText = baseInputStyle;
+
+      const nicknameInput = document.createElement("input");
+      nicknameInput.type = "text";
+      nicknameInput.value = String(payload.nickname || "").trim();
+      nicknameInput.placeholder = "rahul bhai";
+      nicknameInput.style.cssText = baseInputStyle;
+
+      const emailInput = document.createElement("input");
+      emailInput.type = "email";
+      emailInput.value = String(payload.email || "").trim();
+      emailInput.placeholder = "rahul@example.com";
+      emailInput.style.cssText = baseInputStyle;
+
+      const phoneInput = document.createElement("input");
+      phoneInput.type = "text";
+      phoneInput.value = String(payload.phone || "").trim();
+      phoneInput.placeholder = "+91 98765 43210";
+      phoneInput.style.cssText = baseInputStyle;
+
+      let currentPhotoUrl = String(payload.photoUrl || "").trim();
+      let photoDataUrl = "";
+      let photoFileName = "";
+
+      const photoWrap = document.createElement("div");
+      photoWrap.style.cssText = [
+        "display:grid",
+        "gap:12px",
+        "border:1px solid rgba(107,82,72,0.14)",
+        "background:rgba(255,255,255,0.58)",
+        "border-radius:18px",
+        "padding:14px",
+      ].join(";");
+
+      const photoTop = document.createElement("div");
+      photoTop.style.cssText = "display:flex;align-items:center;gap:14px;";
+
+      const photoPreview = document.createElement("div");
+      photoPreview.style.cssText = [
+        "width:58px",
+        "height:58px",
+        "border-radius:999px",
+        "overflow:hidden",
+        "flex-shrink:0",
+        "background:linear-gradient(135deg,#6B4E32,#8C5A3D)",
+        "display:grid",
+        "place-items:center",
+        "color:#FBF7F1",
+        "font-size:18px",
+        "font-weight:700",
+      ].join(";");
+
+      const photoImage = document.createElement("img");
+      photoImage.style.cssText = "width:100%;height:100%;object-fit:cover;display:none;";
+
+      const photoFallback = document.createElement("div");
+      photoFallback.style.cssText = "display:grid;place-items:center;width:100%;height:100%;";
+
+      photoPreview.appendChild(photoImage);
+      photoPreview.appendChild(photoFallback);
+
+      const photoMeta = document.createElement("div");
+      photoMeta.style.cssText = "min-width:0;display:grid;gap:4px;";
+
+      const photoMetaTitle = document.createElement("div");
+      photoMetaTitle.textContent = "Upload a real image";
+      photoMetaTitle.style.cssText = "font-size:13px;font-weight:600;color:#2C201B;";
+
+      const photoMetaText = document.createElement("div");
+      photoMetaText.textContent = "No photo link needed. JPG, PNG, GIF, or WebP up to 2 MB.";
+      photoMetaText.style.cssText = "font-size:11px;line-height:1.45;color:#7A6259;";
+
+      const photoMetaStatus = document.createElement("div");
+      photoMetaStatus.style.cssText = "font-size:10px;color:#8A7167;font-family:'SFMono-Regular',ui-monospace,monospace;";
+
+      photoMeta.appendChild(photoMetaTitle);
+      photoMeta.appendChild(photoMetaText);
+      photoMeta.appendChild(photoMetaStatus);
+      photoTop.appendChild(photoPreview);
+      photoTop.appendChild(photoMeta);
+
+      const photoPicker = document.createElement("input");
+      photoPicker.type = "file";
+      photoPicker.accept = "image/*";
+      photoPicker.style.display = "none";
+
+      const photoActions = document.createElement("div");
+      photoActions.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;";
+
+      const photoUploadBtn = document.createElement("button");
+      photoUploadBtn.type = "button";
+      photoUploadBtn.textContent = currentPhotoUrl ? "Replace photo" : "Upload photo";
+      photoUploadBtn.style.cssText = [
+        "border:1px solid rgba(107,82,72,0.18)",
+        "background:rgba(255,255,255,0.74)",
+        "color:#5D473F",
+        "border-radius:999px",
+        "padding:9px 13px",
+        "font-size:12px",
+        "font-weight:600",
+        "cursor:pointer",
+      ].join(";");
+
+      const photoClearBtn = document.createElement("button");
+      photoClearBtn.type = "button";
+      photoClearBtn.textContent = "Remove photo";
+      photoClearBtn.style.cssText = [
+        "border:1px solid rgba(107,82,72,0.18)",
+        "background:rgba(255,255,255,0.48)",
+        "color:#6B5248",
+        "border-radius:999px",
+        "padding:9px 13px",
+        "font-size:12px",
+        "font-weight:600",
+        "cursor:pointer",
+      ].join(";");
+
+      photoActions.appendChild(photoUploadBtn);
+      photoActions.appendChild(photoClearBtn);
+      photoWrap.appendChild(photoTop);
+      photoWrap.appendChild(photoPicker);
+      photoWrap.appendChild(photoActions);
+
+      const photoInitials = () => {
+        const source = String(nameInput.value || payload.name || "B").trim();
+        return source
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((part) => part.charAt(0).toUpperCase())
+          .join("") || "B";
+      };
+
+      const renderPhotoState = () => {
+        const previewSrc = photoDataUrl || currentPhotoUrl;
+        if (previewSrc) {
+          photoImage.src = previewSrc;
+          photoImage.style.display = "block";
+          photoFallback.style.display = "none";
+        } else {
+          photoImage.removeAttribute("src");
+          photoImage.style.display = "none";
+          photoFallback.style.display = "grid";
+          photoFallback.textContent = photoInitials();
+        }
+        photoUploadBtn.textContent = previewSrc ? "Replace photo" : "Upload photo";
+        photoClearBtn.style.display = previewSrc ? "inline-flex" : "none";
+        photoMetaStatus.textContent = photoFileName
+          ? photoFileName
+          : currentPhotoUrl
+            ? "Saved photo ready"
+            : "No photo saved yet";
+      };
+
+      photoUploadBtn.addEventListener("click", () => photoPicker.click());
+      photoClearBtn.addEventListener("click", () => {
+        photoDataUrl = "";
+        photoFileName = "";
+        currentPhotoUrl = "";
+        photoPicker.value = "";
+        renderPhotoState();
+      });
+      photoPicker.addEventListener("change", () => {
+        const file = photoPicker.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+          error.textContent = "Upload an image file for the contact photo.";
+          photoPicker.value = "";
+          return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+          error.textContent = "Keep contact photos under 2 MB in this popup.";
+          photoPicker.value = "";
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          photoDataUrl = String(reader.result || "");
+          photoFileName = file.name || "contact-photo";
+          error.textContent = "";
+          renderPhotoState();
+        };
+        reader.onerror = () => {
+          error.textContent = "Could not read that image. Try another one.";
+          photoPicker.value = "";
+        };
+        reader.readAsDataURL(file);
+      });
+      nameInput.addEventListener("input", renderPhotoState);
+
+      grid.appendChild(buildField("Name", nameInput));
+      grid.appendChild(buildField("Nickname", nicknameInput));
+      grid.appendChild(buildField(`Email${payload.requireEmail ? " *" : ""}`, emailInput));
+      grid.appendChild(buildField(`Phone${payload.requirePhone ? " *" : ""}`, phoneInput));
+      grid.appendChild(buildField("Photo", photoWrap));
+
+      const hint = document.createElement("div");
+      hint.textContent = "Nickname, phone, and photo are optional unless Braino explicitly asks for them.";
+      hint.style.cssText = "margin-top:10px;font-size:11px;color:#8A7167;";
+
+      const error = document.createElement("div");
+      error.style.cssText = "min-height:18px;margin-top:10px;font-size:12px;font-weight:600;color:#B14534;";
+
+      const actions = document.createElement("div");
+      actions.style.cssText = "display:flex;gap:10px;justify-content:flex-end;margin-top:16px;";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.style.cssText = [
+        "border:1px solid rgba(107,82,72,0.18)",
+        "background:rgba(255,255,255,0.65)",
+        "color:#6B5248",
+        "border-radius:999px",
+        "padding:10px 14px",
+        "font-size:13px",
+        "font-weight:600",
+        "cursor:pointer",
+      ].join(";");
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "submit";
+      saveBtn.textContent = String(payload.submitLabel || "Save contact");
+      saveBtn.style.cssText = [
+        "border:0",
+        "background:#2C201B",
+        "color:#FBF7F1",
+        "border-radius:999px",
+        "padding:10px 16px",
+        "font-size:13px",
+        "font-weight:600",
+        "cursor:pointer",
+        "box-shadow:0 10px 24px rgba(44,32,27,0.2)",
+      ].join(";");
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+
+      card.appendChild(title);
+      card.appendChild(body);
+      card.appendChild(grid);
+      card.appendChild(hint);
+      card.appendChild(error);
+      card.appendChild(actions);
+      overlay.appendChild(card);
+      (document.body || document.documentElement).appendChild(overlay);
+
+      const finish = (result) => {
+        overlay.remove();
+        resolve(result);
+      };
+
+      cancelBtn.addEventListener("click", () => finish({ ok: false, cancelled: true }));
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) finish({ ok: false, cancelled: true });
+      });
+
+      card.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const name = String(nameInput.value || "").trim();
+        const nickname = String(nicknameInput.value || "").trim();
+        const email = String(emailInput.value || "").trim();
+        const phone = String(phoneInput.value || "").trim();
+
+        if (!name) {
+          error.textContent = "Give this contact a name first.";
+          nameInput.focus();
+          return;
+        }
+        if (payload.requireEmail && !email) {
+          error.textContent = "I need an email address for this action.";
+          emailInput.focus();
+          return;
+        }
+        if (payload.requirePhone && !phone) {
+          error.textContent = "I need a phone number for this action.";
+          phoneInput.focus();
+          return;
+        }
+
+        finish({
+          ok: true,
+          saved: true,
+          contact: {
+            id: String(payload.contactId || "").trim(),
+            name,
+            nickname,
+            email,
+            phone,
+            photoUrl: currentPhotoUrl,
+            photoDataUrl,
+            photoFileName,
+          },
+        });
+      });
+
+      renderPhotoState();
+
+      window.setTimeout(() => {
+        if (emailInput.value) emailInput.select();
+        else if (nameInput.value) emailInput.focus();
+        else nameInput.focus();
+      }, 20);
+    } catch (_) {
+      resolve({ ok: false, cancelled: true });
+    }
+  });
 }
 
 // ── Voice presence model ─────────────────────────────────────────────────────

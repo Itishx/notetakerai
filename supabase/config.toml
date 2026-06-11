@@ -28,6 +28,12 @@ verify_jwt = false
 [functions.google-drive-oauth-callback]
 verify_jwt = false
 
+[functions.google-calendar-oauth-callback]
+verify_jwt = false
+
+[functions.google-calendar-push-webhook]
+verify_jwt = false
+
 [functions.x-assistant]
 verify_jwt = true
 

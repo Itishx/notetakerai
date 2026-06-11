@@ -1121,6 +1121,14 @@ function __sbGetSiteAdapterContext() {
     };
   }
 
+  if (/calendar\.google\.com$/.test(host)) {
+    return {
+      site: "google-calendar",
+      url,
+      title: document.title,
+    };
+  }
+
   if (/mail\.google\.com$/.test(host)) {
     return {
       site: "gmail",
@@ -1138,6 +1146,7 @@ function __sbNormalizeConnectorName(value) {
   if (["spotify", "spot", "music"].includes(key)) return "spotify";
   if (["drive", "gdrive", "google-drive", "google_drive"].includes(key)) return "google-drive";
   if (["gmail", "mail", "google-mail", "googlemail"].includes(key)) return "gmail";
+  if (["calendar", "cal", "gcal", "google-calendar", "google_calendar", "googlecal"].includes(key)) return "google-calendar";
   return null;
 }
 
@@ -1145,6 +1154,7 @@ function __sbGetConnectorSiteSuggestion(siteContext) {
   const site = siteContext?.site || "generic";
   if (site === "spotify") return "spotify";
   if (site === "google-drive") return "google-drive";
+  if (site === "google-calendar") return "google-calendar";
   if (site === "gmail") return "gmail";
   return "auto";
 }
@@ -1158,6 +1168,8 @@ function __sbGetEffectiveConnector(siteContext) {
 function __sbInferConnectorFromPrompt(promptText) {
   const text = String(promptText || "").trim().toLowerCase();
   if (/\bgoogle drive\b|\bdrive\b/.test(text)) return "google-drive";
+  if (/\b(calendar|google calendar|gcal|schedule|reschedule|meeting|google meet)\b/.test(text) ||
+      /\b(?:book|set up|create|add|cancel|delete|forward|invite|join|open|start)\b.*\b(?:call|meet|event)\b/.test(text)) return "google-calendar";
   if (/\bgmail\b|\bemail\b|\bmail\b/.test(text)) return "gmail";
   if (/\bspotify\b/.test(text) || /^play\s+/i.test(promptText)) return "spotify";
   return "auto";
@@ -1168,11 +1180,13 @@ function __sbGetConnectorLabel(connector, options = {}) {
   const includeAutoHint = Boolean(options.includeAutoHint);
   if (key === "spotify") return "♪ Spotify";
   if (key === "google-drive") return "🗂 Drive";
+  if (key === "google-calendar") return "📅 Calendar";
   if (key === "gmail") return "✉ Gmail";
   if (includeAutoHint) {
     const suggestion = __sbGetConnectorSiteSuggestion(options.siteContext || __sbGetSiteAdapterContext());
     if (suggestion === "spotify") return "↗ Auto · Spotify";
     if (suggestion === "google-drive") return "↗ Auto · Drive";
+    if (suggestion === "google-calendar") return "↗ Auto · Calendar";
     if (suggestion === "gmail") return "↗ Auto · Gmail";
   }
   return "↗ Auto";
@@ -1209,6 +1223,9 @@ function __sbShouldConnectorForceAgent(connector, promptText, forcedMode, siteCo
   if (__sbIsBrowserActionCommand(text)) return true;
   if (key === "google-drive") {
     return /\b(create|make|find|search|look for|rename|move|delete|remove|trash|organize|organise|organhise|sort|clean|tidy|arrange|list|show|open|take)\b/.test(text);
+  }
+  if (key === "google-calendar") {
+    return /\b(schedule|book|set up|create|add|reschedule|move|postpone|cancel|delete|remove|forward|invite|show|list|open|join|start|calendar|meeting|meet|call|event)\b/.test(text);
   }
   if (key === "gmail") {
     return /\b(reply|draft|compose|send|archive|label|star|read|open|find|search|show|summarize|triage|email)\b/.test(text);
@@ -2285,8 +2302,7 @@ const __SB_TTS_PROVIDER = "elevenlabs";
 const __SB_TTS_ENDPOINT = "elevenlabs-tts";
 const __SB_TTS_RETRY_MIN_MS = 5000;
 const __SB_TTS_RETRY_MAX_MS = 12000;
-const __SB_FISH_JARVIS_VOICE_ID = "c5cf851eb2664ffaa929d17b899aa0a3";
-const __SB_ELEVENLABS_VOICE_ID = "vBKc2FfBKJfcZNyEt1n6";
+const __SB_ELEVENLABS_VOICE_ID = "PI9w0jWUtb68a6R6eQbl";
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
@@ -2311,7 +2327,7 @@ let __sbLastAgentTask = "";
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
   if (event.data?.type !== "sbSetVoicePref") return;
-  const pref = ["fish", "elevenlabs", "realtime"].includes(event.data.pref) ? event.data.pref : "elevenlabs";
+  const pref = __sbNormalizeVoiceOutputPref(event.data.pref);
   __sbVoiceOutputPref = pref;
   chrome.storage.local.set({ brainoVoicePref: pref });
 });
@@ -2325,6 +2341,33 @@ if (__sbContextOk()) {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       __sbToggleBrain();
       sendResponse({ ok: true });
+    }
+    if (msg.action === "startXAutomation") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      if (!__sbIsOnX()) {
+        sendResponse({ ok: false, error: "This tab is not X." });
+        return false;
+      }
+      if (__sbXRunning) {
+        __sbShowBubble('X Automation is already running.', false, { tone: 'status', title: 'X Automation' });
+        sendResponse({ ok: true, alreadyRunning: true });
+        return false;
+      }
+      void __sbRunXAutomation({ startOnly: true });
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (msg.action === "startMeetingRecording") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      window.__sbForcedMode = "meeting";
+      if (__sbIsLectureRecording) {
+        __sbShowBubble("Meeting & Call mode is already recording.", false, { tone: "status", title: "Meeting & Call" });
+        sendResponse({ ok: true, alreadyRecording: true });
+        return false;
+      }
+      void __sbStartLectureRecording();
+      sendResponse({ ok: true });
+      return false;
     }
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
@@ -2410,7 +2453,7 @@ if (__sbContextOk()) {
       // to the in-tab session, then start the in-tab session here now.
       const errorText = String(msg.error || "Live AI could not start.");
       __sbUseOffscreenRt = false;
-      const quotaError = /limit|cap|used .*today|7-minute|429/i.test(errorText);
+      const quotaError = /limit|cap|used .*today|429/i.test(errorText);
       if (quotaError) {
         if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure(errorText, { nonRetryable: true });
         return;
@@ -2437,6 +2480,11 @@ if (__sbContextOk()) {
       // This tab lost focus to another — hand voice off.
       if (!__sbOwnsInlineUi()) return;
       __sbReleaseVoicePresence();
+    }
+    if (msg.action === "sbPromptForContact") {
+      if (!__sbOwnsInlineUi()) { sendResponse?.({ ok: false, error: "Braino UI is not active on this tab." }); return; }
+      __sbShowContactPromptModal(msg.payload || {}).then((result) => sendResponse?.(result || { ok: false }));
+      return true;
     }
     if (msg.action === "showMicPermission") {
       // Background wants a one-time mic grant. Show it as a modal in THIS tab (same tab the
@@ -3299,6 +3347,144 @@ function __sbBuildBrainUI() {
       margin: 0;
       line-height: 1.55;
     }
+    .sb-x-draft-card {
+      width: 100%;
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 22px;
+      border: 1px solid rgba(65,48,40,0.12);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(20,20,20,0.11), transparent 16rem),
+        linear-gradient(150deg, rgba(255,255,255,0.96), rgba(249,241,231,0.90));
+      box-shadow: 0 18px 40px rgba(27,23,19,0.10);
+      color: #17120E;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .sb-x-draft-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #17120E;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .sb-x-draft-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      background: #17120E;
+      box-shadow: 0 0 12px rgba(23,18,14,0.28);
+    }
+    .sb-x-draft-card h2 {
+      margin: 0;
+      color: #17120E;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+    .sb-x-draft-card p {
+      margin: 0;
+      color: rgba(27,23,19,0.66);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .sb-x-draft-editor {
+      width: 100%;
+      min-height: 128px;
+      border: 1px solid rgba(65,48,40,0.14);
+      border-radius: 17px;
+      padding: 13px 14px;
+      resize: vertical;
+      outline: none;
+      color: #17120E;
+      background: rgba(255,255,255,0.78);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 17px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .sb-x-draft-editor:focus {
+      border-color: rgba(201,84,74,0.38);
+      box-shadow: 0 0 0 3px rgba(201,84,74,0.10), inset 0 1px 0 rgba(255,255,255,0.65);
+    }
+    .sb-x-draft-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: rgba(27,23,19,0.56);
+      font-size: 11.5px;
+      line-height: 1.4;
+    }
+    .sb-x-draft-count.over { color: #B42318; font-weight: 800; }
+    .sb-x-draft-actions,
+    .sb-x-schedule-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .sb-x-draft-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 13px;
+      cursor: pointer;
+      color: #17120E;
+      background: rgba(65,48,40,0.08);
+      font-size: 12px;
+      font-weight: 850;
+      transition: transform 0.12s, background 0.12s, opacity 0.12s;
+    }
+    .sb-x-draft-btn:hover { transform: translateY(-1px); background: rgba(65,48,40,0.13); }
+    .sb-x-draft-btn.primary {
+      color: #fff;
+      background: #17120E;
+      box-shadow: 0 10px 22px rgba(23,18,14,0.18);
+    }
+    .sb-x-draft-btn.accent {
+      color: #fff;
+      background: #C9544A;
+      box-shadow: 0 10px 22px rgba(201,84,74,0.22);
+    }
+    .sb-x-draft-btn[disabled] {
+      opacity: 0.55;
+      cursor: wait;
+      transform: none;
+    }
+    .sb-x-schedule-panel {
+      display: none;
+      gap: 9px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(201,84,74,0.14);
+      background: rgba(255,232,217,0.58);
+    }
+    .sb-x-schedule-panel.visible { display: grid; }
+    .sb-x-schedule-input {
+      min-height: 38px;
+      border: 1px solid rgba(65,48,40,0.14);
+      border-radius: 12px;
+      padding: 0 11px;
+      color: #17120E;
+      background: rgba(255,255,255,0.82);
+      font-size: 13px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .sb-x-draft-status {
+      min-height: 18px;
+      color: rgba(27,23,19,0.62);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .sb-x-draft-status.error { color: #B42318; font-weight: 700; }
+    .sb-x-draft-status.success { color: #17663b; font-weight: 700; }
     .sb-card-stack.sb-card-stack-spotify {
       justify-content: flex-start;
       gap: 18px;
@@ -3870,6 +4056,7 @@ function __sbBuildBrainUI() {
     <div class="sb-dropdown-label">Connector</div>
     <button class="sb-dropdown-item selected" data-connector="auto"><span class="sb-di-icon">↗</span><span class="sb-di-label">Auto detect</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-connector="google-drive"><span class="sb-di-icon">🗂</span><span class="sb-di-label">Google Drive</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-connector="google-calendar"><span class="sb-di-icon">📅</span><span class="sb-di-label">Google Calendar</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-connector="gmail"><span class="sb-di-icon">✉</span><span class="sb-di-label">Gmail</span><span class="sb-di-check">✓</span></button>
   `;
   document.body.appendChild(connectorDd);
@@ -4097,6 +4284,7 @@ function __sbBuildBrainUI() {
     const normalized = String(filterText || "").trim().toLowerCase();
     const options = [
       { connector: "google-drive", icon: "🗂", label: "Google Drive", aliases: ["drive", "gdrive"] },
+      { connector: "google-calendar", icon: "📅", label: "Google Calendar", aliases: ["calendar", "cal", "gcal"] },
       { connector: "gmail", icon: "✉", label: "Gmail", aliases: ["gmail", "mail"] },
       { connector: "auto", icon: "↗", label: "Auto detect", aliases: ["auto"] },
     ].filter((option) => {
@@ -4123,7 +4311,7 @@ function __sbBuildBrainUI() {
     connectorSlashDd.querySelectorAll("[data-slash-connector]").forEach((item) => {
       item.addEventListener("click", () => {
         const connector = item.getAttribute("data-slash-connector");
-        const shortName = connector === "google-drive" ? "drive" : connector;
+        const shortName = connector === "google-drive" ? "drive" : connector === "google-calendar" ? "calendar" : connector;
         inputEl.value = connector === "auto" ? "" : `/${shortName} `;
         __sbApplyConnectorChoice(connector);
         connectorSlashDd.classList.remove("open");
@@ -5148,18 +5336,22 @@ async function __sbXPostReply(article, replyText) {
   return true;
 }
 
-async function __sbRunXAutomation() {
+async function __sbRunXAutomation(options = {}) {
   if (!__sbIsOnX()) {
     __sbShowBubble('Navigate to X (twitter.com) first, then start the automation.', true, { tone: 'status', title: 'X Automation' });
-    return;
+    return { ok: false, error: "Navigate to X first." };
   }
   if (__sbXRunning) {
+    if (options.startOnly) {
+      __sbShowBubble('X Automation is already running.', false, { tone: 'status', title: 'X Automation' });
+      return { ok: true, alreadyRunning: true };
+    }
     __sbXStopReason = 'manual';
     __sbXRunning = false;
     const btn = document.getElementById('__sb_x_auto_btn__');
     if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
     __sbShowBubble('Automation stopped.', true, { tone: 'status', title: 'Stopped' });
-    return;
+    return { ok: true, stopped: true };
   }
 
   __sbXRunning = true;
@@ -5240,6 +5432,7 @@ async function __sbRunXAutomation() {
   });
   const label = __sbXStopReason === 'manual' ? 'Automation stopped' : 'Automation finished';
   __sbShowBubble(`${label} — replied to ${count} post${count !== 1 ? 's' : ''} in ${__sbXFormatRunMinutes(durationMs)}.`, true, { tone: 'status', title: 'Done' });
+  return { ok: true, repliedCount: count, durationMs };
 }
 // ===== END X AUTOMATION =====
 
@@ -5935,7 +6128,7 @@ async function __sbSpeakText(text, options = {}) {
   __sbStopSpeech();
   const speechToken = ++__sbSpeechGeneration;
   let spoke = false;
-  // In headphone (realtime) mode we DON'T mute the mic while Fish Audio speaks — the whole
+  // In headphone (realtime) mode we DON'T mute the mic while ElevenLabs speaks — the whole
   // point of the realtime mechanism is that the user can barge in. The browser's echo
   // cancellation (echoCancellation:true on the mic) keeps Braino's own voice from
   // self-triggering, and speech_started stops playback the instant the user talks. We only
@@ -5947,7 +6140,7 @@ async function __sbSpeakText(text, options = {}) {
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
     if (speechToken !== __sbSpeechGeneration) return false;
 
-    // fish-audio-tts is public (verify_jwt=false) and uses a server-side key, so it works
+    // elevenlabs-tts uses a server-side key, so it works
     // with just the anon apikey — no user token required. Send the token when we have it.
     const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
     if (ttsToken) headers.Authorization = `Bearer ${ttsToken}`;
@@ -5992,17 +6185,17 @@ async function __sbSpeakText(text, options = {}) {
       provider: "browser",
       error: ttsErr?.message || String(ttsErr || "TTS failed"),
     });
-    console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", ttsErr?.message || ttsErr);
+    console.warn("[Braino] ElevenLabs TTS failed; falling back to browser voice:", ttsErr?.message || ttsErr);
     const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
-    __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish credits" : "Browser voice");
+    __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "ElevenLabs credits" : "Browser voice");
     if (__sbHeadphoneMode || __sbVoiceOnlyMode) {
       __sbShowVoiceError(isCreditIssue
-        ? "Fish Audio credits or rate limit are exhausted. Falling back to browser voice for now."
-        : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.");
+        ? "ElevenLabs credits or rate limit are exhausted. Falling back to browser voice for now."
+        : "ElevenLabs voice is unavailable after retrying. Falling back to browser voice for now.");
     } else {
       __sbShowBubble(isCreditIssue
-        ? "Fish Audio credits or rate limit are exhausted. Using browser voice."
-        : "Fish Audio voice is unavailable. Using browser voice.", true, { tone: "status" });
+        ? "ElevenLabs credits or rate limit are exhausted. Using browser voice."
+        : "ElevenLabs voice is unavailable. Using browser voice.", true, { tone: "status" });
     }
     spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
@@ -6549,6 +6742,23 @@ function __sbShouldOpenVisibleGoogleSearch(text) {
   return false;
 }
 
+function __sbIsGoogleMapsPlaceTask(text) {
+  const t = String(text || "").toLowerCase().replace(/[?!.,]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/\b(?:google\s+)?maps?\b/.test(t)) {
+    return /\b(open|show|search|find|look up|recommend|suggest|directions?|route|near|nearby|around|in|to)\b/.test(t);
+  }
+  if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
+  if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
+
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  if (!wantsPlaceRecommendation) return false;
+
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  return placeCategory && locationHint;
+}
+
 // Strip conversational filler from a spoken request so it becomes a clean search query.
 // "I would like to read some articles on how to make good coffee. Can you please web up
 //  some articles on Medium for me?" → "how to make good coffee articles medium"
@@ -6676,6 +6886,7 @@ function __sbDetectIntent(text) {
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
   if (__sbIsSiteScopedBrowseSearch(t)) return "agent";
+  if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (__sbIsBrowserActionCommand(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
@@ -6725,6 +6936,452 @@ function __sbXFirst12Words(text) {
   const words = String(text || "").trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
   if (words.length <= 12) return words.join(" ");
   return words.slice(0, 12).join(" ") + "…";
+}
+
+let __sbXSkillState = { phase: "idle" };
+
+function __sbResetXSkillState() {
+  __sbXSkillState = { phase: "idle" };
+}
+
+function __sbSetXSkillState(next = {}) {
+  __sbXSkillState = {
+    phase: "idle",
+    ...next,
+    updatedAt: Date.now(),
+  };
+}
+
+function __sbIsXSkillAwaitingInput() {
+  return ["awaiting_create_confirm", "awaiting_post_brief", "draft_ready", "awaiting_schedule"].includes(__sbXSkillState?.phase);
+}
+
+function __sbGetXFollowerDelta(data) {
+  const raw = data?.followers?.delta7d;
+  if (raw == null || raw === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function __sbBuildXPostOffer(data) {
+  const delta = __sbGetXFollowerDelta(data);
+  if (delta > 0) {
+    return `You seem to have gained ${delta} follower${delta === 1 ? "" : "s"} in the last 7 days. Would you like me to create a post for you, sir?`;
+  }
+  if (delta < 0) {
+    const lost = Math.abs(delta);
+    return `You seem to have lost ${lost} follower${lost === 1 ? "" : "s"} in the last 7 days. Would you like me to create a post for you, sir?`;
+  }
+  return "Would you like me to create a post for you, sir?";
+}
+
+function __sbIsXSkillYes(text) {
+  const t = String(text || "").trim().toLowerCase();
+  return /^(yes|yeah|yep|ya|sure|ok|okay|do it|go ahead|please do|make it|create it|write it|yes sir)\b/.test(t);
+}
+
+function __sbIsXSkillNo(text) {
+  const t = String(text || "").trim().toLowerCase();
+  return /^(no|nope|nah|not now|later|leave it|cancel|stop|don't|do not)\b/.test(t);
+}
+
+function __sbIsXDraftPostNowCommand(text) {
+  const t = String(text || "").toLowerCase();
+  return /\b(post|publish|send)\b.*\b(now|it|this|x|twitter)\b/.test(t)
+    || /\b(post|publish|send)\s+it\b/.test(t);
+}
+
+function __sbIsXDraftScheduleCommand(text) {
+  return /\b(schedule|queue|post later|later)\b/i.test(String(text || ""));
+}
+
+function __sbIsXDraftEditCommand(text) {
+  return /\b(edit|change|modify|rewrite|revise|make it)\b/i.test(String(text || ""));
+}
+
+function __sbIsStartXAutomationCommand(text) {
+  const t = String(text || "").toLowerCase();
+  return /\b(start|run|launch|begin|turn on)\b.*\b(x|twitter)\b.*\b(auto|automation)\b/.test(t)
+    || /\b(start|run|launch|begin|turn on)\b.*\bx auto\b/.test(t)
+    || /\bx auto\b.*\b(start|run|launch|begin|turn on)\b/.test(t);
+}
+
+function __sbXLocalDateTimeValue(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    "-",
+    pad(date.getMonth() + 1),
+    "-",
+    pad(date.getDate()),
+    "T",
+    pad(date.getHours()),
+    ":",
+    pad(date.getMinutes()),
+  ].join("");
+}
+
+function __sbGetXBrowserContext() {
+  return {
+    browserTime: new Date().toISOString(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+  };
+}
+
+async function __sbDraftXPostFromBrief(brief) {
+  return await __sbRuntimeMessage({
+    action: "draftXPostFromBrief",
+    brief: String(brief || "").trim(),
+    ...__sbGetXBrowserContext(),
+  });
+}
+
+async function __sbPostXDraftNow(content) {
+  return await __sbRuntimeMessage({
+    action: "postXDraftNow",
+    content: String(content || "").trim(),
+    ...__sbGetXBrowserContext(),
+  });
+}
+
+async function __sbScheduleXDraft(content, scheduledAt) {
+  return await __sbRuntimeMessage({
+    action: "scheduleXDraft",
+    content: String(content || "").trim(),
+    scheduledAt: String(scheduledAt || "").trim(),
+    ...__sbGetXBrowserContext(),
+  });
+}
+
+function __sbBuildXDraftReviewHtml() {
+  const draft = String(__sbXSkillState?.draftText || "").trim();
+  const count = draft.length;
+  const defaultSchedule = __sbXLocalDateTimeValue(new Date(Date.now() + 60 * 60 * 1000));
+  const scheduleVisible = __sbXSkillState?.phase === "awaiting_schedule";
+  const status = String(__sbXSkillState?.statusText || "").trim();
+  const statusTone = String(__sbXSkillState?.statusTone || "").trim();
+  return `
+    <div class="sb-x-draft-card">
+      <div class="sb-x-draft-kicker">X draft ready</div>
+      <h2>Should I post it for you, sir?</h2>
+      <p>I wrote this in your saved X voice. You can edit it here before anything gets posted.</p>
+      <textarea class="sb-x-draft-editor" data-sb-x-draft-text spellcheck="true">${__sbEscapeHtml(draft)}</textarea>
+      <div class="sb-x-draft-meta">
+        <span>Nothing posts until you approve it.</span>
+        <strong class="sb-x-draft-count${count > 280 ? " over" : ""}" data-sb-x-draft-count>${count}/280</strong>
+      </div>
+      <div class="sb-x-draft-actions">
+        <button class="sb-x-draft-btn" type="button" data-sb-x-action="edit">Edit post</button>
+        <button class="sb-x-draft-btn primary" type="button" data-sb-x-action="post-now">Post now</button>
+        <button class="sb-x-draft-btn accent" type="button" data-sb-x-action="schedule">Schedule</button>
+      </div>
+      <div class="sb-x-schedule-panel${scheduleVisible ? " visible" : ""}" data-sb-x-schedule-panel>
+        <div class="sb-x-schedule-row">
+          <input class="sb-x-schedule-input" data-sb-x-schedule-input type="datetime-local" value="${__sbEscapeHtml(defaultSchedule)}">
+          <button class="sb-x-draft-btn accent" type="button" data-sb-x-action="confirm-schedule">Confirm schedule</button>
+        </div>
+        <p>Pick the exact local date and time for Braino to queue this on X.</p>
+      </div>
+      <div class="sb-x-draft-status ${__sbEscapeHtml(statusTone)}" data-sb-x-draft-status>${__sbEscapeHtml(status)}</div>
+    </div>
+  `;
+}
+
+function __sbRenderXDraftReviewCard(options = {}) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
+  scroll.innerHTML = `<div class="sb-card-stack">${historyHtml}${__sbBuildXDraftReviewHtml()}</div>`;
+  __sbOpenCard({ rich: true });
+  __sbBindXDraftReviewCard(options);
+  __sbScrollCardToLatest(scroll);
+  __sbSyncSpeakButtons();
+}
+
+function __sbSetXDraftStatus(text, tone = "") {
+  __sbXSkillState.statusText = String(text || "");
+  __sbXSkillState.statusTone = tone;
+  const el = document.querySelector("[data-sb-x-draft-status]");
+  if (!el) return;
+  el.textContent = __sbXSkillState.statusText;
+  el.classList.toggle("error", tone === "error");
+  el.classList.toggle("success", tone === "success");
+}
+
+function __sbSetXDraftBusy(isBusy) {
+  document.querySelectorAll("[data-sb-x-action]").forEach((btn) => {
+    btn.disabled = !!isBusy;
+  });
+}
+
+function __sbGetCurrentXDraftText() {
+  const editor = document.querySelector("[data-sb-x-draft-text]");
+  return String(editor?.value || __sbXSkillState?.draftText || "").trim();
+}
+
+function __sbValidateXDraftText(text) {
+  const content = String(text || "").trim();
+  if (!content) return "Write something first, then I can post it.";
+  if (content.length > 280) return `This is ${content.length} characters. X posts need to stay at 280 or less.`;
+  return "";
+}
+
+async function __sbMaybeSpeakXDraftResult(text) {
+  const shouldSpeak = __sbHeadphoneMode || __sbXSkillState?.source === "voice";
+  if (!shouldSpeak) return;
+  const voiceOutput = __sbXSkillState?.voiceOutput === "realtime" ? "realtime" : "legacy";
+  await __sbSpeakWithPreferredVoice(__sbStripMarkdownForSpeech(text), voiceOutput, { verbatim: true });
+}
+
+async function __sbHandleXDraftPostNowClick() {
+  const content = __sbGetCurrentXDraftText();
+  const error = __sbValidateXDraftText(content);
+  if (error) { __sbSetXDraftStatus(error, "error"); return; }
+
+  __sbSetXDraftBusy(true);
+  __sbSetXDraftStatus("Posting to X...");
+  const data = await __sbPostXDraftNow(content);
+  __sbSetXDraftBusy(false);
+
+  if (!data || data.error) {
+    const msg = data?.error || "I could not post that to X just now.";
+    __sbSetXDraftStatus(msg, "error");
+    await __sbMaybeSpeakXDraftResult(msg);
+    return;
+  }
+
+  const reply = data.reply || "Posted to X.";
+  __sbXSkillState.draftText = content;
+  __sbChatHistory.push({ role: "assistant", content: reply });
+  __sbSetXDraftStatus(reply, "success");
+  await __sbMaybeSpeakXDraftResult(reply);
+  __sbResetXSkillState();
+}
+
+async function __sbHandleXDraftScheduleClick() {
+  const content = __sbGetCurrentXDraftText();
+  const error = __sbValidateXDraftText(content);
+  if (error) { __sbSetXDraftStatus(error, "error"); return; }
+
+  const input = document.querySelector("[data-sb-x-schedule-input]");
+  const localValue = String(input?.value || "").trim();
+  const scheduledDate = localValue ? new Date(localValue) : null;
+  if (!scheduledDate || Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+    __sbSetXDraftStatus("Pick a future date and time first.", "error");
+    return;
+  }
+
+  __sbSetXDraftBusy(true);
+  __sbSetXDraftStatus("Scheduling on X...");
+  const data = await __sbScheduleXDraft(content, scheduledDate.toISOString());
+  __sbSetXDraftBusy(false);
+
+  if (!data || data.error) {
+    const msg = data?.error || "I could not schedule that X post just now.";
+    __sbSetXDraftStatus(msg, "error");
+    await __sbMaybeSpeakXDraftResult(msg);
+    return;
+  }
+
+  const reply = data.reply || "Queued for X.";
+  __sbXSkillState.draftText = content;
+  __sbChatHistory.push({ role: "assistant", content: reply });
+  __sbSetXDraftStatus(reply, "success");
+  await __sbMaybeSpeakXDraftResult(reply);
+  __sbResetXSkillState();
+}
+
+function __sbBindXDraftReviewCard(options = {}) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const editor = scroll.querySelector("[data-sb-x-draft-text]");
+  const countEl = scroll.querySelector("[data-sb-x-draft-count]");
+  const updateCount = () => {
+    const count = String(editor?.value || "").length;
+    if (countEl) {
+      countEl.textContent = `${count}/280`;
+      countEl.classList.toggle("over", count > 280);
+    }
+    __sbXSkillState.draftText = String(editor?.value || "");
+  };
+  editor?.addEventListener("input", updateCount);
+  updateCount();
+
+  scroll.querySelectorAll("[data-sb-x-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-sb-x-action");
+      if (action === "edit") {
+        editor?.focus();
+        __sbSetXDraftStatus("Editing is live. Change the text, then choose Post now or Schedule.");
+        return;
+      }
+      if (action === "schedule") {
+        __sbXSkillState.phase = "awaiting_schedule";
+        __sbXSkillState.scheduleVisible = true;
+        __sbRenderXDraftReviewCard();
+        return;
+      }
+      if (action === "post-now") {
+        void __sbHandleXDraftPostNowClick();
+        return;
+      }
+      if (action === "confirm-schedule") {
+        void __sbHandleXDraftScheduleClick();
+      }
+    });
+  });
+
+  if (options.focusEditor) editor?.focus();
+}
+
+async function __sbReplyToXSkill(promptText, reply, ctx = {}, options = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode || options.forceUi;
+  if (promptText) __sbChatHistory.push({ role: "user", content: promptText });
+  if (reply) __sbChatHistory.push({ role: "assistant", content: reply });
+  if (showUi && reply) __sbShowBubble(reply, false, { rich: true, kicker: "Braino" });
+  if (fromVoice && reply) await __sbSpeakWithPreferredVoice(reply, voiceOutput, { verbatim: true });
+  __sbCompleteVoiceTurn(ctx);
+}
+
+async function __sbHandleXSkillFollowup(promptText, ctx = {}) {
+  if (!__sbIsXSkillAwaitingInput()) return false;
+  const phase = __sbXSkillState.phase;
+
+  if (phase === "awaiting_create_confirm") {
+    if (__sbIsXSkillYes(promptText)) {
+      __sbSetXSkillState({
+        ...__sbXSkillState,
+        phase: "awaiting_post_brief",
+        source: ctx.fromVoice ? "voice" : "text",
+        voiceOutput: ctx.voiceOutput === "realtime" ? "realtime" : "legacy",
+      });
+      await __sbReplyToXSkill(promptText, "What would you like to post about, sir? Just speak your mind, I'll write something for you.", ctx);
+      return true;
+    }
+
+    if (__sbIsXSkillNo(promptText)) {
+      __sbResetXSkillState();
+      await __sbReplyToXSkill(promptText, "Sure sir, let me know when you want anything for X.", ctx);
+      return true;
+    }
+
+    await __sbReplyToXSkill(promptText, "Just say yes if you want me to create a post, or no if not.", ctx);
+    return true;
+  }
+
+  if (phase === "awaiting_post_brief") {
+    const brief = String(promptText || "").trim();
+    if (!brief) {
+      await __sbReplyToXSkill(promptText, "Tell me the idea in a sentence or two, sir, and I'll turn it into an X post.", ctx);
+      return true;
+    }
+
+    __sbSetXSkillState({
+      ...__sbXSkillState,
+      phase: "drafting_post",
+      brief,
+      source: ctx.fromVoice ? "voice" : (__sbXSkillState.source || "text"),
+      voiceOutput: ctx.voiceOutput === "realtime" ? "realtime" : (__sbXSkillState.voiceOutput || "legacy"),
+    });
+
+    const fromVoice = Boolean(ctx.fromVoice);
+    const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+    const showUi = !fromVoice || !__sbVoiceOnlyMode;
+    __sbChatHistory.push({ role: "user", content: brief });
+    if (showUi) __sbShowBubble("Writing that in your X voice now...", false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice("Writing that in your X voice now, sir.", voiceOutput, { verbatim: true });
+
+    const data = await __sbDraftXPostFromBrief(brief);
+    if (!data || data.error || !data.draftText) {
+      const msg = data?.error || "I could not draft that X post just now.";
+      __sbResetXSkillState();
+      await __sbReplyToXSkill("", msg, ctx, { forceUi: showUi });
+      return true;
+    }
+
+    const draftText = String(data.draftText || "").trim();
+    const assistantPrompt = "I've written a draft for you. Take a look - should I post it for you, sir?";
+    __sbSetXSkillState({
+      ...__sbXSkillState,
+      phase: "draft_ready",
+      draftText,
+      statusText: "",
+      statusTone: "",
+    });
+    __sbChatHistory.push({ role: "assistant", content: `${assistantPrompt}\n\n${draftText}` });
+    __sbCardTurns.push({ prompt: brief, answer: assistantPrompt });
+    __sbRenderXDraftReviewCard();
+    if (fromVoice) await __sbSpeakWithPreferredVoice(assistantPrompt, voiceOutput, { verbatim: true });
+    __sbCompleteVoiceTurn(ctx);
+    return true;
+  }
+
+  if (phase === "draft_ready" || phase === "awaiting_schedule") {
+    const fromVoice = Boolean(ctx.fromVoice);
+    const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+    if (__sbIsXDraftPostNowCommand(promptText)) {
+      __sbChatHistory.push({ role: "user", content: promptText });
+      __sbSetXDraftStatus("Posting it now...");
+      if (fromVoice) await __sbSpeakWithPreferredVoice("Posting it now, sir.", voiceOutput, { verbatim: true });
+      __sbCompleteVoiceTurn(ctx);
+      await __sbHandleXDraftPostNowClick();
+      return true;
+    }
+    if (__sbIsXDraftScheduleCommand(promptText)) {
+      __sbXSkillState.phase = "awaiting_schedule";
+      __sbXSkillState.scheduleVisible = true;
+      __sbRenderXDraftReviewCard();
+      __sbChatHistory.push({ role: "user", content: promptText });
+      __sbSetXDraftStatus("Choose the date and time in the card, and I'll schedule it.");
+      if (fromVoice) await __sbSpeakWithPreferredVoice("Choose the date and time in the card, and I'll schedule it.", voiceOutput, { verbatim: true });
+      __sbCompleteVoiceTurn(ctx);
+      return true;
+    }
+    if (__sbIsXDraftEditCommand(promptText)) {
+      __sbRenderXDraftReviewCard({ focusEditor: true });
+      __sbChatHistory.push({ role: "user", content: promptText });
+      __sbSetXDraftStatus("You can edit the draft in the card. I focused it for you.");
+      if (fromVoice) await __sbSpeakWithPreferredVoice("You can edit the draft in the card. I focused it for you.", voiceOutput, { verbatim: true });
+      __sbCompleteVoiceTurn(ctx);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function __sbHandleStartXAutomationCommand(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const showUi = !fromVoice || !__sbVoiceOnlyMode;
+  const opening = __sbIsOnX()
+    ? "Starting X Auto, sir."
+    : "Opening X and starting X Auto, sir.";
+  __sbChatHistory.push({ role: "user", content: promptText });
+  if (showUi) __sbShowBubble(opening, false, { rich: true, kicker: "Braino" });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(opening, voiceOutput, { verbatim: true });
+
+  let result = null;
+  if (__sbIsOnX()) {
+    if (__sbXRunning) {
+      result = { ok: true, alreadyRunning: true };
+    } else {
+      void __sbRunXAutomation({ startOnly: true });
+      result = { ok: true };
+    }
+  } else {
+    result = await __sbRuntimeMessage({ action: "startXAutomationOnX" });
+  }
+
+  const finalReply = result?.ok
+    ? (result.alreadyRunning ? "X Auto is already running." : "X Auto has started.")
+    : (result?.error || "I opened X, but could not start X Auto yet.");
+  __sbChatHistory.push({ role: "assistant", content: finalReply });
+  if (showUi) __sbShowBubble(finalReply, false, { rich: true, kicker: "Braino" });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(finalReply, voiceOutput, { verbatim: true });
+  __sbCompleteVoiceTurn(ctx);
 }
 
 // Build the spoken/displayed summary. Specific asks get a single sentence; a general
@@ -6809,11 +7466,19 @@ async function __sbHandleXStatus(promptText, ctx = {}) {
 
     __sbXLastStatus = data;
     const formatted = __sbFormatXStatus(promptText, data);
-    console.log('[BRAINO-X-DEMO]', formatted); // TODO: remove before production release
+    const offer = __sbBuildXPostOffer(data);
+    const combinedReply = `${formatted}\n\n${offer}`;
+    __sbSetXSkillState({
+      phase: "awaiting_create_confirm",
+      lastStatus: data,
+      followerDelta: __sbGetXFollowerDelta(data),
+      source: fromVoice ? "voice" : "text",
+      voiceOutput,
+    });
     __sbChatHistory.push({ role: "user", content: promptText });
-    __sbChatHistory.push({ role: "assistant", content: formatted });
-    if (showUi) __sbShowBubble(formatted, false, { rich: true, kicker: "Braino" });
-    if (fromVoice) await __sbSpeakWithPreferredVoice(formatted, voiceOutput, { verbatim: true });
+    __sbChatHistory.push({ role: "assistant", content: combinedReply });
+    if (showUi) __sbShowBubble(combinedReply, false, { rich: true, kicker: "Braino" });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(combinedReply, voiceOutput, { verbatim: true });
   } finally {
     if (brainBtn) brainBtn.classList.remove("recording");
     __sbCompleteVoiceTurn(ctx);
@@ -7094,11 +7759,20 @@ async function __sbAuthedApiFetch(path, init = {}, options = {}) {
 }
 
 async function __sbFetchAssistantReply(body) {
+  const enrichedBody = body && typeof body === "object" && !Array.isArray(body)
+    ? {
+        ...body,
+        clientTimeZone: body.clientTimeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+        clientUtcOffsetMinutes: Number.isFinite(Number(body.clientUtcOffsetMinutes))
+          ? Number(body.clientUtcOffsetMinutes)
+          : new Date().getTimezoneOffset(),
+      }
+    : body;
   const resp = await __sbAuthedApiFetch("chat-about-notes", {
     method: "POST",
   }, {
     allowAnonymous: true,
-    jsonBody: body,
+    jsonBody: enrichedBody,
   });
   if (!resp) return { reply: null };
 
@@ -7206,13 +7880,18 @@ async function __sbProcessPrompt(text, options = {}) {
     });
   }
 
+  if (await __sbHandleXSkillFollowup(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "x_skill" });
+    return;
+  }
+
   // "What's new / what's in you?" — Braino reads the changelog in first person, then flips the question back
   if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you|what'?s?\s+in\s+you|what\s+(can|do)\s+you\s+(do|have)|what\s+are\s+you\s+capable|what\s+are\s+your\s+(features?|abilities|capabilities)|tell\s+me\s+(about\s+yourself|what\s+you\s+can\s+do)/i.test(promptText)) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
     __sbChatHistory.push({ role: "user", content: promptText });
-    const reply = "Quite a bit, actually — here's what's new:\n\n**Fly mode** — Press Cmd+S and I'll follow your cursor around the screen like a little satellite. Press it again and I dock back to the corner.\n\n**Voice mode sees the page** — I can now read whatever you're looking at the moment you activate live voice. Ask me to summarise an article, explain something on screen, or answer a question about the page — I've got it.\n\n**Spotify control** — Tell me to play a song and I'll open Spotify in a new tab and start it. You can also say \"lower the volume\" or \"raise the volume\" and I'll handle that too.\n\n**Voice web research** — When you ask me something that needs the web, I'll research in the background and speak the answer back. I only open a visible Google tab when you explicitly ask for Google or search results.\n\n**Live voice daily cap** — Realtime voice sessions are now tracked server-side with a 7-minute daily limit so things stay fair and fast.\n\nWhat do you want to try first?";
+    const reply = "Quite a bit, actually — here's what's new:\n\n**Fly mode** — Press Cmd+S and I'll follow your cursor around the screen like a little satellite. Press it again and I dock back to the corner.\n\n**Voice mode sees the page** — I can now read whatever you're looking at the moment you activate live voice. Ask me to summarise an article, explain something on screen, or answer a question about the page — I've got it.\n\n**Spotify control** — Tell me to play a song and I'll open Spotify in a new tab and start it. You can also say \"lower the volume\" or \"raise the volume\" and I'll handle that too.\n\n**Voice web research** — When you ask me something that needs the web, I'll research in the background and speak the answer back. I only open a visible Google tab when you explicitly ask for Google or search results.\n\nWhat do you want to try first?";
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -7243,6 +7922,10 @@ async function __sbProcessPrompt(text, options = {}) {
   }
 
   // X (Twitter) status — answered inline with real data + TTS, panel stays open.
+  if (__sbIsStartXAutomationCommand(promptText)) {
+    await __sbHandleStartXAutomationCommand(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
   if (__sbIsXLastTweetRequest(promptText)) {
     await __sbHandleXLastTweet(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     return;
@@ -7707,7 +8390,7 @@ let __sbRtMic = null;
 let __sbRtRemoteAudio = null;
 let __sbUseOffscreenRt = false; // true when realtime session lives in the offscreen doc
 const __SB_REALTIME_VOICE = "verse";
-let __sbVoiceOutputPref = "elevenlabs"; // "realtime" | "fish" | "elevenlabs"
+let __sbVoiceOutputPref = "elevenlabs"; // "realtime" | "elevenlabs"
 let __sbRtUserTranscript = "";
 let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
@@ -7726,8 +8409,8 @@ let __sbRtUsageHeartbeatTimer = null;
 let __sbRtUsageDeadlineTimer = null;
 let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
-let __sbRtRealtimeModel = "gpt-realtime-2";
-let __sbRtTranscriptionModel = "gpt-4o-transcribe";
+let __sbRtRealtimeModel = "gpt-realtime-mini";
+let __sbRtTranscriptionModel = "gpt-4o-mini-transcribe";
 let __sbRtCostTurn = null;
 let __sbRtLastCostTurn = null;
 let __sbRtCostTurnSeq = 0;
@@ -7737,6 +8420,19 @@ let __sbRtConnectFailureCount = 0;
 let __sbRtRetryTimer = null;
 let __sbRtLocalConnectInFlight = false;
 let __sbRtLastFailureAt = 0;
+
+function __sbNormalizeVoiceOutputPref(value) {
+  return value === "realtime" ? "realtime" : "elevenlabs";
+}
+
+function __sbApplyStoredVoiceOutputPref(value) {
+  const pref = __sbNormalizeVoiceOutputPref(value);
+  __sbVoiceOutputPref = pref;
+  if (value && value !== pref && __sbContextOk()) {
+    chrome.storage.local.set({ brainoVoicePref: pref });
+  }
+  return pref;
+}
 
 function __sbResetRealtimeConnectFailures() {
   __sbRtConnectFailureCount = 0;
@@ -7752,11 +8448,7 @@ function __sbIsNonRetryableRealtimeFailure(message) {
   return (
     text.includes("sign in") ||
     text.includes("401") ||
-    text.includes("403") ||
-    text.includes("daily live voice limit") ||
-    text.includes("7-minute") ||
-    text.includes("already used") ||
-    text.includes("cap is up")
+    text.includes("403")
   );
 }
 
@@ -7779,9 +8471,6 @@ function __sbResetRealtimeUsageState() {
 }
 
 function __sbGetRealtimeCostVoiceInfo() {
-  if (__sbVoiceOutputPref === "fish") {
-    return { voiceProvider: "fish", voiceId: __SB_FISH_JARVIS_VOICE_ID, voiceName: "Jarvis" };
-  }
   if (__sbVoiceOutputPref === "elevenlabs") {
     return { voiceProvider: "elevenlabs", voiceId: __SB_ELEVENLABS_VOICE_ID, voiceName: "ElevenLabs Braino" };
   }
@@ -7821,13 +8510,13 @@ function __sbBeginRealtimeCostTurn(transcript, turnToken, transcriptionUsage = {
 }
 
 function __sbPatchRealtimeCostTurn(fields = {}) {
-  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  const turn = __sbRtCostTurn;
   if (!turn || !fields || typeof fields !== "object") return;
   Object.assign(turn, fields);
 }
 
 function __sbAppendRealtimeCostAssistantMessage(text) {
-  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  const turn = __sbRtCostTurn;
   const clean = String(text || "").replace(/\s+/g, " ").trim();
   if (!turn || !clean) return;
   const last = turn.assistantMessages[turn.assistantMessages.length - 1];
@@ -7835,13 +8524,13 @@ function __sbAppendRealtimeCostAssistantMessage(text) {
 }
 
 function __sbRecordRealtimeCostUsage(usage) {
-  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  const turn = __sbRtCostTurn;
   if (!turn || !usage || typeof usage !== "object") return;
   turn.rawRealtimeUsage = usage;
 }
 
 function __sbRecordRealtimeCostTts(event = {}) {
-  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  const turn = __sbRtCostTurn;
   if (!turn || !event || typeof event !== "object") return;
   const events = Array.isArray(turn.rawTtsUsage?.events) ? turn.rawTtsUsage.events : [];
   events.push({
@@ -7855,7 +8544,7 @@ function __sbRecordRealtimeCostTts(event = {}) {
 }
 
 function __sbCompleteRealtimeCostTurn(options = {}) {
-  const turn = __sbRtCostTurn || __sbRtLastCostTurn;
+  const turn = __sbRtCostTurn;
   if (!turn) return;
   if (!options.force && (options.keepOpen || __sbRtCostKeepOpen || __sbRtAwaitingDelegateResult)) {
     return;
@@ -7942,18 +8631,6 @@ function __sbScheduleRealtimeUsageCap(allocatedMs) {
   __sbRtUsageHeartbeatTimer = setInterval(() => {
     void __sbHeartbeatRealtimeUsageSession();
   }, 15000);
-
-  if (__sbRtUsageWarningTimer) clearTimeout(__sbRtUsageWarningTimer);
-  if (__sbRtUsageAllocatedMs > 60000) {
-    __sbRtUsageWarningTimer = setTimeout(() => {
-      __sbShowVoiceError("One minute of live voice left for today.");
-    }, __sbRtUsageAllocatedMs - 60000);
-  }
-
-  if (__sbRtUsageDeadlineTimer) clearTimeout(__sbRtUsageDeadlineTimer);
-  __sbRtUsageDeadlineTimer = setTimeout(() => {
-    void __sbFallbackToLegacyHeadphone("Today's 7-minute live voice cap is up. Switching to legacy voice.");
-  }, __sbRtUsageAllocatedMs);
 }
 
 function __sbClearRealtimeConnectHint() {
@@ -7995,26 +8672,19 @@ function __sbBuildRealtimeBootInstructions() {
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
-  // When using an external TTS voice (Fish/ElevenLabs) the realtime model only needs to
-  // return TEXT — we generate the audio ourselves. In native realtime mode, the model
-  // produces audio directly.
-  const useExternalTts = __sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs";
   return {
     type: "session.update",
     session: {
       type: "realtime",
       instructions,
-      output_modalities: useExternalTts ? ["text"] : ["audio"],
-      reasoning: {
-        effort: "low",
-      },
+      output_modalities: ["text"],
       audio: {
         input: {
           noise_reduction: {
             type: "near_field",
           },
           transcription: {
-            model: "gpt-4o-transcribe",
+            model: "gpt-4o-mini-transcribe",
             // No hard language lock — the user wants multilingual mirroring (speak any
             // language, Braino mirrors it). Noise-induced language hallucinations are held
             // back by __sbIsJunkTranscript + calmer VAD instead.
@@ -8302,12 +8972,14 @@ async function __sbStartRealtimeVoice() {
     }
     if (!res.ok) {
       if (_dcReject) _dcReject(new Error("cancelled"));
-      if (res.status === 429) throw new Error("Live AI is busy — too many requests. Try again in a moment.");
       const errorText = await res.text();
       let errorPayload = {};
       try {
         errorPayload = JSON.parse(errorText);
       } catch {}
+      if (res.status === 429) {
+        throw new Error(errorPayload.details || errorPayload.error || errorText || "Live AI is busy — too many requests. Try again in a moment.");
+      }
       throw new Error(errorPayload.details || errorPayload.error || errorText || `Live AI failed (${res.status})`);
     }
 
@@ -8421,7 +9093,7 @@ try {
 
     if ("brainoVoicePref" in changes) {
       const v = changes.brainoVoicePref.newValue;
-      __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
+      __sbApplyStoredVoiceOutputPref(v);
     }
 
     if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
@@ -8565,7 +9237,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
   __sbRtRelayingAppMessage = relayMode;
   __sbRtHandlingConversationTurn = !relayMode;
 
-  const rtOutputModalities = (__sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs") ? ["text"] : ["audio"];
+  const rtOutputModalities = ["text"];
   const responsePromise = __sbCreateRtWaiter();
   const responseCreated = relayMode
     ? __sbSendRtEvent({
@@ -8624,9 +9296,9 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
   // In native realtime mode the model speaks via WebRTC audio — we must NOT also call a
-  // TTS endpoint (that would be two voices). Only call __sbSpeakText when an external voice
-  // (Fish Audio / ElevenLabs) is selected, OR when falling back from a failed relay.
-  const useExternalTts = __sbVoiceOutputPref === "fish" || __sbVoiceOutputPref === "elevenlabs";
+  // TTS endpoint (that would be two voices). Only call __sbSpeakText when ElevenLabs is
+  // selected, OR when falling back from a failed relay.
+  const useExternalTts = __sbVoiceOutputPref === "elevenlabs";
   if (preferred === "realtime") __sbAppendRealtimeCostAssistantMessage(text);
 
   if (preferred === "realtime" && __sbRtControlReady() && !useExternalTts) {
@@ -8634,7 +9306,7 @@ async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options =
     await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
     return true;
   }
-  // External TTS voice (Fish / ElevenLabs) or non-realtime context.
+  // External TTS voice (ElevenLabs) or non-realtime context.
   return await __sbSpeakText(text, { verbatim: !!options.verbatim });
 }
 
@@ -8927,13 +9599,13 @@ function __sbHandleRtEvent(ev) {
   if (ev.type === "input_audio_buffer.speech_started") {
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
-    // voices: cancel the realtime model's audio and stop Fish/browser playback.
+    // voices: cancel the realtime model's audio and stop ElevenLabs/browser playback.
     // Without this, provider audio keeps playing and feels "not realtime".
     if (__sbHasActiveRealtimeResponse()) {
       __sbVoicePendingReply = false;
       __sbInterruptRealtimeResponse();
     }
-    __sbStopSpeech(); // stop Fish Audio / browser TTS playback so the user can barge in
+    __sbStopSpeech(); // stop ElevenLabs / browser TTS playback so the user can barge in
     __sbRtUserTranscript = "";
     if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
     return;
@@ -9085,6 +9757,389 @@ function __sbHideMicPermissionModal() {
   document.getElementById("__sb_mic_perm__")?.remove();
 }
 
+function __sbFormatContactPromptHtml(message) {
+  const safe = __sbEscapeHtml(String(message || "").trim() || "Add this contact once and Braino will remember them.");
+  return safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
+}
+
+function __sbShowContactPromptModal(payload = {}) {
+  return new Promise((resolve) => {
+    try {
+      document.getElementById("__sb_contact_prompt__")?.remove();
+
+      const overlay = document.createElement("div");
+      overlay.id = "__sb_contact_prompt__";
+      overlay.style.cssText = [
+        "position:fixed",
+        "inset:0",
+        "z-index:2147483647",
+        "background:rgba(8,5,4,0.52)",
+        "backdrop-filter:blur(4px)",
+        "display:flex",
+        "align-items:center",
+        "justify-content:center",
+        "padding:24px",
+      ].join(";");
+
+      const card = document.createElement("form");
+      card.style.cssText = [
+        "width:min(440px,92vw)",
+        "border-radius:24px",
+        "padding:22px",
+        "color:#1F1713",
+        "background:linear-gradient(180deg, rgba(251,247,241,0.95), rgba(246,236,223,0.92))",
+        "border:1px solid rgba(107,82,72,0.18)",
+        "box-shadow:0 24px 70px rgba(0,0,0,0.34)",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+      ].join(";");
+
+      const title = document.createElement("div");
+      title.textContent = String(payload.title || "Save contact");
+      title.style.cssText = "font-size:24px;font-weight:600;letter-spacing:-0.03em;color:#2C201B;";
+
+      const body = document.createElement("div");
+      body.innerHTML = __sbFormatContactPromptHtml(payload.message);
+      body.style.cssText = "margin-top:8px;font-size:13px;line-height:1.55;color:#6B5248;";
+
+      const grid = document.createElement("div");
+      grid.style.cssText = "display:grid;gap:12px;margin-top:18px;";
+
+      const buildField = (labelText, input) => {
+        const wrap = document.createElement("label");
+        wrap.style.cssText = "display:grid;gap:6px;";
+        const label = document.createElement("span");
+        label.textContent = labelText;
+        label.style.cssText = "font-size:12px;font-weight:600;color:#5D473F;";
+        wrap.appendChild(label);
+        wrap.appendChild(input);
+        return wrap;
+      };
+
+      const baseInputStyle = [
+        "width:100%",
+        "box-sizing:border-box",
+        "border-radius:14px",
+        "border:1px solid rgba(107,82,72,0.18)",
+        "background:rgba(255,255,255,0.72)",
+        "padding:12px 14px",
+        "font-size:14px",
+        "color:#241A16",
+        "outline:none",
+      ].join(";");
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = String(payload.name || "").trim();
+      nameInput.placeholder = "Rahul";
+      nameInput.style.cssText = baseInputStyle;
+
+      const nicknameInput = document.createElement("input");
+      nicknameInput.type = "text";
+      nicknameInput.value = String(payload.nickname || "").trim();
+      nicknameInput.placeholder = "rahul bhai";
+      nicknameInput.style.cssText = baseInputStyle;
+
+      const emailInput = document.createElement("input");
+      emailInput.type = "email";
+      emailInput.value = String(payload.email || "").trim();
+      emailInput.placeholder = "rahul@example.com";
+      emailInput.style.cssText = baseInputStyle;
+
+      const phoneInput = document.createElement("input");
+      phoneInput.type = "text";
+      phoneInput.value = String(payload.phone || "").trim();
+      phoneInput.placeholder = "+91 98765 43210";
+      phoneInput.style.cssText = baseInputStyle;
+
+      let currentPhotoUrl = String(payload.photoUrl || "").trim();
+      let photoDataUrl = "";
+      let photoFileName = "";
+
+      const photoWrap = document.createElement("div");
+      photoWrap.style.cssText = [
+        "display:grid",
+        "gap:12px",
+        "border:1px solid rgba(107,82,72,0.14)",
+        "background:rgba(255,255,255,0.58)",
+        "border-radius:18px",
+        "padding:14px",
+      ].join(";");
+
+      const photoTop = document.createElement("div");
+      photoTop.style.cssText = "display:flex;align-items:center;gap:14px;";
+
+      const photoPreview = document.createElement("div");
+      photoPreview.style.cssText = [
+        "width:58px",
+        "height:58px",
+        "border-radius:999px",
+        "overflow:hidden",
+        "flex-shrink:0",
+        "background:linear-gradient(135deg,#6B4E32,#8C5A3D)",
+        "display:grid",
+        "place-items:center",
+        "color:#FBF7F1",
+        "font-size:18px",
+        "font-weight:700",
+      ].join(";");
+
+      const photoImage = document.createElement("img");
+      photoImage.style.cssText = "width:100%;height:100%;object-fit:cover;display:none;";
+
+      const photoFallback = document.createElement("div");
+      photoFallback.style.cssText = "display:grid;place-items:center;width:100%;height:100%;";
+
+      photoPreview.appendChild(photoImage);
+      photoPreview.appendChild(photoFallback);
+
+      const photoMeta = document.createElement("div");
+      photoMeta.style.cssText = "min-width:0;display:grid;gap:4px;";
+
+      const photoMetaTitle = document.createElement("div");
+      photoMetaTitle.textContent = "Upload a real image";
+      photoMetaTitle.style.cssText = "font-size:13px;font-weight:600;color:#2C201B;";
+
+      const photoMetaText = document.createElement("div");
+      photoMetaText.textContent = "No photo link needed. JPG, PNG, GIF, or WebP up to 2 MB.";
+      photoMetaText.style.cssText = "font-size:11px;line-height:1.45;color:#7A6259;";
+
+      const photoMetaStatus = document.createElement("div");
+      photoMetaStatus.style.cssText = "font-size:10px;color:#8A7167;font-family:'SFMono-Regular',ui-monospace,monospace;";
+
+      photoMeta.appendChild(photoMetaTitle);
+      photoMeta.appendChild(photoMetaText);
+      photoMeta.appendChild(photoMetaStatus);
+      photoTop.appendChild(photoPreview);
+      photoTop.appendChild(photoMeta);
+
+      const photoPicker = document.createElement("input");
+      photoPicker.type = "file";
+      photoPicker.accept = "image/*";
+      photoPicker.style.display = "none";
+
+      const photoActions = document.createElement("div");
+      photoActions.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;";
+
+      const photoUploadBtn = document.createElement("button");
+      photoUploadBtn.type = "button";
+      photoUploadBtn.textContent = currentPhotoUrl ? "Replace photo" : "Upload photo";
+      photoUploadBtn.style.cssText = [
+        "border:1px solid rgba(107,82,72,0.18)",
+        "background:rgba(255,255,255,0.74)",
+        "color:#5D473F",
+        "border-radius:999px",
+        "padding:9px 13px",
+        "font-size:12px",
+        "font-weight:600",
+        "cursor:pointer",
+      ].join(";");
+
+      const photoClearBtn = document.createElement("button");
+      photoClearBtn.type = "button";
+      photoClearBtn.textContent = "Remove photo";
+      photoClearBtn.style.cssText = [
+        "border:1px solid rgba(107,82,72,0.18)",
+        "background:rgba(255,255,255,0.48)",
+        "color:#6B5248",
+        "border-radius:999px",
+        "padding:9px 13px",
+        "font-size:12px",
+        "font-weight:600",
+        "cursor:pointer",
+      ].join(";");
+
+      photoActions.appendChild(photoUploadBtn);
+      photoActions.appendChild(photoClearBtn);
+      photoWrap.appendChild(photoTop);
+      photoWrap.appendChild(photoPicker);
+      photoWrap.appendChild(photoActions);
+
+      const photoInitials = () => {
+        const source = String(nameInput.value || payload.name || "B").trim();
+        return source
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((part) => part.charAt(0).toUpperCase())
+          .join("") || "B";
+      };
+
+      const renderPhotoState = () => {
+        const previewSrc = photoDataUrl || currentPhotoUrl;
+        if (previewSrc) {
+          photoImage.src = previewSrc;
+          photoImage.style.display = "block";
+          photoFallback.style.display = "none";
+        } else {
+          photoImage.removeAttribute("src");
+          photoImage.style.display = "none";
+          photoFallback.style.display = "grid";
+          photoFallback.textContent = photoInitials();
+        }
+        photoUploadBtn.textContent = previewSrc ? "Replace photo" : "Upload photo";
+        photoClearBtn.style.display = previewSrc ? "inline-flex" : "none";
+        photoMetaStatus.textContent = photoFileName
+          ? photoFileName
+          : currentPhotoUrl
+            ? "Saved photo ready"
+            : "No photo saved yet";
+      };
+
+      photoUploadBtn.addEventListener("click", () => photoPicker.click());
+      photoClearBtn.addEventListener("click", () => {
+        photoDataUrl = "";
+        photoFileName = "";
+        currentPhotoUrl = "";
+        photoPicker.value = "";
+        renderPhotoState();
+      });
+      photoPicker.addEventListener("change", () => {
+        const file = photoPicker.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+          error.textContent = "Upload an image file for the contact photo.";
+          photoPicker.value = "";
+          return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+          error.textContent = "Keep contact photos under 2 MB in this popup.";
+          photoPicker.value = "";
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          photoDataUrl = String(reader.result || "");
+          photoFileName = file.name || "contact-photo";
+          error.textContent = "";
+          renderPhotoState();
+        };
+        reader.onerror = () => {
+          error.textContent = "Could not read that image. Try another one.";
+          photoPicker.value = "";
+        };
+        reader.readAsDataURL(file);
+      });
+      nameInput.addEventListener("input", renderPhotoState);
+
+      grid.appendChild(buildField("Name", nameInput));
+      grid.appendChild(buildField("Nickname", nicknameInput));
+      grid.appendChild(buildField(`Email${payload.requireEmail ? " *" : ""}`, emailInput));
+      grid.appendChild(buildField(`Phone${payload.requirePhone ? " *" : ""}`, phoneInput));
+      grid.appendChild(buildField("Photo", photoWrap));
+
+      const hint = document.createElement("div");
+      hint.textContent = "Nickname, phone, and photo are optional unless Braino explicitly asks for them.";
+      hint.style.cssText = "margin-top:10px;font-size:11px;color:#8A7167;";
+
+      const error = document.createElement("div");
+      error.style.cssText = "min-height:18px;margin-top:10px;font-size:12px;font-weight:600;color:#B14534;";
+
+      const actions = document.createElement("div");
+      actions.style.cssText = "display:flex;gap:10px;justify-content:flex-end;margin-top:16px;";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.style.cssText = [
+        "border:1px solid rgba(107,82,72,0.18)",
+        "background:rgba(255,255,255,0.65)",
+        "color:#6B5248",
+        "border-radius:999px",
+        "padding:10px 14px",
+        "font-size:13px",
+        "font-weight:600",
+        "cursor:pointer",
+      ].join(";");
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "submit";
+      saveBtn.textContent = String(payload.submitLabel || "Save contact");
+      saveBtn.style.cssText = [
+        "border:0",
+        "background:#2C201B",
+        "color:#FBF7F1",
+        "border-radius:999px",
+        "padding:10px 16px",
+        "font-size:13px",
+        "font-weight:600",
+        "cursor:pointer",
+        "box-shadow:0 10px 24px rgba(44,32,27,0.2)",
+      ].join(";");
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+
+      card.appendChild(title);
+      card.appendChild(body);
+      card.appendChild(grid);
+      card.appendChild(hint);
+      card.appendChild(error);
+      card.appendChild(actions);
+      overlay.appendChild(card);
+      (document.body || document.documentElement).appendChild(overlay);
+
+      const finish = (result) => {
+        overlay.remove();
+        resolve(result);
+      };
+
+      cancelBtn.addEventListener("click", () => finish({ ok: false, cancelled: true }));
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) finish({ ok: false, cancelled: true });
+      });
+
+      card.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const name = String(nameInput.value || "").trim();
+        const nickname = String(nicknameInput.value || "").trim();
+        const email = String(emailInput.value || "").trim();
+        const phone = String(phoneInput.value || "").trim();
+
+        if (!name) {
+          error.textContent = "Give this contact a name first.";
+          nameInput.focus();
+          return;
+        }
+        if (payload.requireEmail && !email) {
+          error.textContent = "I need an email address for this action.";
+          emailInput.focus();
+          return;
+        }
+        if (payload.requirePhone && !phone) {
+          error.textContent = "I need a phone number for this action.";
+          phoneInput.focus();
+          return;
+        }
+
+        finish({
+          ok: true,
+          saved: true,
+          contact: {
+            id: String(payload.contactId || "").trim(),
+            name,
+            nickname,
+            email,
+            phone,
+            photoUrl: currentPhotoUrl,
+            photoDataUrl,
+            photoFileName,
+          },
+        });
+      });
+
+      renderPhotoState();
+
+      window.setTimeout(() => {
+        if (emailInput.value) emailInput.select();
+        else if (nameInput.value) emailInput.focus();
+        else nameInput.focus();
+      }, 20);
+    } catch (_) {
+      resolve({ ok: false, cancelled: true });
+    }
+  });
+}
+
 // ── Voice presence model ─────────────────────────────────────────────────────
 // `sbVoiceModeOn` (storage) = "the user turned voice on; Braino should be live on
 // whatever tab is focused." Two ways the session can live:
@@ -9175,8 +10230,7 @@ function __sbEnterHeadphoneMode(options = {}) {
 
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
   __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
-    const v = stored.brainoVoicePref;
-    __sbVoiceOutputPref = (v === "realtime") ? "realtime" : (v === "fish" ? "fish" : "elevenlabs");
+    __sbApplyStoredVoiceOutputPref(stored.brainoVoicePref);
 
     if (stored.sbRtSessionActive) {
       __sbUseOffscreenRt = true;
