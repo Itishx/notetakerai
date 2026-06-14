@@ -5,7 +5,7 @@ import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-interface Feature {
+export interface Feature {
   id: string;
   number?: string;
   parent?: string;
@@ -19,7 +19,7 @@ interface Feature {
 
 // ─── data ─────────────────────────────────────────────────────────────────────
 
-const CHAT: Feature = {
+export const CHAT: Feature = {
   id: "chat",
   number: "01",
   name: "Chat with Page",
@@ -37,7 +37,7 @@ const CHAT: Feature = {
   ],
 };
 
-const RECORD: Feature = {
+export const RECORD: Feature = {
   id: "record",
   number: "02",
   name: "Record & Capture",
@@ -55,7 +55,7 @@ const RECORD: Feature = {
   ],
 };
 
-const MEETINGS: Feature = {
+export const MEETINGS: Feature = {
   id: "meetings",
   parent: "record",
   name: "Meetings",
@@ -73,7 +73,7 @@ const MEETINGS: Feature = {
   ],
 };
 
-const DELEGATE: Feature = {
+export const DELEGATE: Feature = {
   id: "delegate",
   number: "03",
   name: "Delegate Tasks",
@@ -282,14 +282,205 @@ const wrap: React.CSSProperties = { maxWidth: 1160, margin: "0 auto", padding: "
 
 // ─── Accordion ────────────────────────────────────────────────────────────────
 
-const GRAPHICS: Record<string, () => JSX.Element> = {
+export const GRAPHICS: Record<string, () => JSX.Element> = {
   chat: ChatGraphic,
   record: RecordGraphic,
   meetings: MeetingsGraphic,
   delegate: DelegateGraphic,
 };
 
-function FeatureAccordion({
+/** Ordered list of all features, for grids / panels that want to map over them. */
+export const FEATURES: Feature[] = [CHAT, RECORD, MEETINGS, DELEGATE];
+
+/** Number / parent badge + name + tagline + chips. Reused by the accordion header
+ *  and by the draggable feature panel. */
+export function FeatureHeaderInfo({ feature, isOpen }: { feature: Feature; isOpen: boolean }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      {/* Number / parent badge */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        {feature.number && (
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            letterSpacing: "0.1em",
+            color: isOpen ? "var(--sb-accent)" : "var(--sb-ink-4)",
+            background: isOpen ? "var(--sb-accent-soft)" : "transparent",
+            padding: isOpen ? "3px 8px" : "0",
+            borderRadius: 4,
+            transition: "all .2s",
+          }}>
+            {feature.number}
+          </span>
+        )}
+        {feature.parent && (
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10,
+            letterSpacing: "0.08em",
+            color: "var(--sb-accent-deep)",
+            background: "var(--sb-accent-soft)",
+            padding: "3px 9px",
+            borderRadius: 4,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+          }}>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 9l7-7 7 7"/>
+              <path d="M19 9v10a1 1 0 01-1 1H6a1 1 0 01-1-1V9"/>
+            </svg>
+            Extends Record
+          </span>
+        )}
+      </div>
+
+      {/* Feature name */}
+      <div style={{
+        fontFamily: "'Instrument Serif', serif",
+        fontWeight: 400,
+        fontSize: "clamp(22px, 2.6vw, 34px)",
+        lineHeight: 1.08,
+        color: "var(--sb-ink)",
+        marginBottom: 6,
+      }}>
+        {feature.name}
+      </div>
+
+      {/* Tagline */}
+      <div style={{
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 11,
+        color: "var(--sb-ink-3)",
+        letterSpacing: "0.04em",
+        marginBottom: 18,
+      }}>
+        {feature.tagline}
+      </div>
+
+      {/* Chips */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+        {feature.chips.map(chip => (
+          <span
+            key={chip}
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11,
+              letterSpacing: "0.02em",
+              padding: "5px 12px",
+              borderRadius: 999,
+              background: isOpen ? "var(--sb-accent-soft)" : "var(--sb-bg-2)",
+              color: isOpen ? "var(--sb-accent-deep)" : "var(--sb-ink-3)",
+              border: "1px solid",
+              borderColor: isOpen ? "rgba(226,125,57,0.3)" : "var(--sb-line)",
+              transition: "all .2s",
+            }}
+          >
+            {chip}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Expanded feature body: big heading + description + graphic + use-case table.
+ *  Reused by the accordion and the draggable feature panel. */
+export function FeatureBody({ feature }: { feature: Feature }) {
+  const Graphic = GRAPHICS[feature.id];
+  return (
+    <div style={{ padding: "44px 40px 52px" }}>
+
+      {/* Top section: heading + graphic */}
+      <div style={{
+        display: "flex",
+        gap: 64,
+        alignItems: "flex-start",
+        flexWrap: "wrap",
+        marginBottom: 52,
+      }}>
+        {/* Left: big heading + description */}
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <h2 style={{
+            fontFamily: "'Instrument Serif', serif",
+            fontWeight: 400,
+            fontSize: "clamp(44px, 5.2vw, 72px)",
+            lineHeight: 1.02,
+            color: "var(--sb-ink)",
+            margin: "0 0 24px",
+            whiteSpace: "pre-line",
+            letterSpacing: "-0.02em",
+          }}>
+            {feature.heading}
+          </h2>
+          <p style={{
+            fontSize: 16.5,
+            lineHeight: 1.65,
+            color: "var(--sb-ink-2)",
+            margin: 0,
+            maxWidth: 460,
+          }}>
+            {feature.description}
+          </p>
+        </div>
+
+        {/* Right: graphic */}
+        <div style={{ flexShrink: 0, width: "min(380px, 100%)" }}>
+          {Graphic && <Graphic />}
+        </div>
+      </div>
+
+      {/* Section label */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 0 }}>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 10,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: "var(--sb-ink-3)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+        }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--sb-accent)", display: "inline-block" }}/>
+          What you can use it for
+        </span>
+      </div>
+
+      {/* Use-case table */}
+      <div style={{ marginTop: 16, border: "1px solid var(--sb-line-2)", borderRadius: 14, overflow: "hidden" }}>
+        {feature.useCases.map((uc, i) => (
+          <div
+            key={i}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "28px 1fr auto",
+              alignItems: "center",
+              gap: 16,
+              padding: "16px 24px",
+              borderBottom: i < feature.useCases.length - 1 ? "1px solid var(--sb-line-2)" : "none",
+              background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.012)",
+            }}
+          >
+            <span style={{ color: "var(--sb-accent)", fontSize: 16, fontWeight: 700, lineHeight: 1 }}>→</span>
+            <span style={{ fontSize: 14.5, color: "var(--sb-ink)", lineHeight: 1.45 }}>{uc.label}</span>
+            <span style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10.5,
+              color: "var(--sb-ink-3)",
+              letterSpacing: "0.03em",
+              whiteSpace: "nowrap",
+            }}>
+              {uc.who}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function FeatureAccordion({
   feature,
   isOpen,
   onToggle,
@@ -298,8 +489,6 @@ function FeatureAccordion({
   isOpen: boolean;
   onToggle: () => void;
 }) {
-  const Graphic = GRAPHICS[feature.id];
-
   return (
     <div
       style={{
@@ -333,91 +522,7 @@ function FeatureAccordion({
         }}
       >
         {/* Left content */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Number / parent badge */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            {feature.number && (
-              <span style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 11,
-                letterSpacing: "0.1em",
-                color: isOpen ? "var(--sb-accent)" : "var(--sb-ink-4)",
-                background: isOpen ? "var(--sb-accent-soft)" : "transparent",
-                padding: isOpen ? "3px 8px" : "0",
-                borderRadius: 4,
-                transition: "all .2s",
-              }}>
-                {feature.number}
-              </span>
-            )}
-            {feature.parent && (
-              <span style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10,
-                letterSpacing: "0.08em",
-                color: "var(--sb-accent-deep)",
-                background: "var(--sb-accent-soft)",
-                padding: "3px 9px",
-                borderRadius: 4,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-              }}>
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 9l7-7 7 7"/>
-                  <path d="M19 9v10a1 1 0 01-1 1H6a1 1 0 01-1-1V9"/>
-                </svg>
-                Extends Record
-              </span>
-            )}
-          </div>
-
-          {/* Feature name */}
-          <div style={{
-            fontFamily: "'Instrument Serif', serif",
-            fontWeight: 400,
-            fontSize: "clamp(22px, 2.6vw, 34px)",
-            lineHeight: 1.08,
-            color: "var(--sb-ink)",
-            marginBottom: 6,
-          }}>
-            {feature.name}
-          </div>
-
-          {/* Tagline */}
-          <div style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 11,
-            color: "var(--sb-ink-3)",
-            letterSpacing: "0.04em",
-            marginBottom: 18,
-          }}>
-            {feature.tagline}
-          </div>
-
-          {/* Chips */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-            {feature.chips.map(chip => (
-              <span
-                key={chip}
-                style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 11,
-                  letterSpacing: "0.02em",
-                  padding: "5px 12px",
-                  borderRadius: 999,
-                  background: isOpen ? "var(--sb-accent-soft)" : "var(--sb-bg-2)",
-                  color: isOpen ? "var(--sb-accent-deep)" : "var(--sb-ink-3)",
-                  border: "1px solid",
-                  borderColor: isOpen ? "rgba(226,125,57,0.3)" : "var(--sb-line)",
-                  transition: "all .2s",
-                }}
-              >
-                {chip}
-              </span>
-            ))}
-          </div>
-        </div>
+        <FeatureHeaderInfo feature={feature} isOpen={isOpen} />
 
         {/* Chevron */}
         <svg
@@ -446,122 +551,7 @@ function FeatureAccordion({
         {/* Inner divider */}
         <div style={{ borderTop: "1.5px solid var(--sb-line-2)", margin: "0 40px" }}/>
 
-        <div style={{ padding: "44px 40px 52px" }}>
-
-          {/* Top section: heading + graphic */}
-          <div style={{
-            display: "flex",
-            gap: 64,
-            alignItems: "flex-start",
-            flexWrap: "wrap",
-            marginBottom: 52,
-          }}>
-            {/* Left: big heading + description */}
-            <div style={{ flex: 1, minWidth: 280 }}>
-              <h2 style={{
-                fontFamily: "'Instrument Serif', serif",
-                fontWeight: 400,
-                fontSize: "clamp(44px, 5.2vw, 72px)",
-                lineHeight: 1.02,
-                color: "var(--sb-ink)",
-                margin: "0 0 24px",
-                whiteSpace: "pre-line",
-                letterSpacing: "-0.02em",
-              }}>
-                {feature.heading}
-              </h2>
-              <p style={{
-                fontSize: 16.5,
-                lineHeight: 1.65,
-                color: "var(--sb-ink-2)",
-                margin: 0,
-                maxWidth: 460,
-              }}>
-                {feature.description}
-              </p>
-            </div>
-
-            {/* Right: graphic */}
-            <div style={{ flexShrink: 0, width: "min(380px, 100%)" }}>
-              <Graphic />
-            </div>
-          </div>
-
-          {/* Section label */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 0,
-          }}>
-            <span style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 10,
-              letterSpacing: "0.16em",
-              textTransform: "uppercase",
-              color: "var(--sb-ink-3)",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-            }}>
-              <span style={{
-                width: 5, height: 5, borderRadius: "50%",
-                background: "var(--sb-accent)",
-                display: "inline-block",
-              }}/>
-              What you can use it for
-            </span>
-          </div>
-
-          {/* Use-case table */}
-          <div style={{
-            marginTop: 16,
-            border: "1px solid var(--sb-line-2)",
-            borderRadius: 14,
-            overflow: "hidden",
-          }}>
-            {feature.useCases.map((uc, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "28px 1fr auto",
-                  alignItems: "center",
-                  gap: 16,
-                  padding: "16px 24px",
-                  borderBottom: i < feature.useCases.length - 1 ? "1px solid var(--sb-line-2)" : "none",
-                  background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.012)",
-                }}
-              >
-                <span style={{
-                  color: "var(--sb-accent)",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  lineHeight: 1,
-                }}>
-                  →
-                </span>
-                <span style={{
-                  fontSize: 14.5,
-                  color: "var(--sb-ink)",
-                  lineHeight: 1.45,
-                }}>
-                  {uc.label}
-                </span>
-                <span style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 10.5,
-                  color: "var(--sb-ink-3)",
-                  letterSpacing: "0.03em",
-                  whiteSpace: "nowrap",
-                }}>
-                  {uc.who}
-                </span>
-              </div>
-            ))}
-          </div>
-
-        </div>
+        <FeatureBody feature={feature} />
       </div>
     </div>
   );
