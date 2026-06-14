@@ -2328,8 +2328,12 @@ let __sbMovieModeState = { frame: null, media: null, descriptor: "" };
 let __sbMovieModeSyncTimer = null;
 let __sbMovieModeScrollListener = null;
 let __sbMovieModeResizeListener = null;
-let __sbMovieModeFullscreenListener = null;
+let __sbMovieTranscriptEntries = [];
+let __sbMovieLastSubtitleText = "";
+let __sbMovieLastTitle = "";
+let __sbFullscreenUiListenerBound = false;
 const __SB_MOVIE_MODE_FRAME_RE = /\b(player|video|media|playback|stream|caption|subtitle|controls?|shaka|jw|vjs|html5|watch|cinema|theater|viewer)\b/i;
+const __SB_MOVIE_CONTEXT_HOST_RE = /\b(netflix|hotstar|jiohotstar|disneyplus|disney|primevideo|amazonvideo|hulu|max|hbomax|apple|zee5|sonyliv|youtube|mubi)\b/i;
 
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
@@ -2557,16 +2561,16 @@ function __sbBuildBrainUI() {
         inset 0 1px 0 rgba(255,255,255,0.1);
       opacity: 0;
       pointer-events: none;
-      transform: translate(-50%, -50%) scale(0.985);
+      transform: translate(-50%, -50%) scale(0.992);
       transition:
-        top 0.24s ease,
-        left 0.24s ease,
-        width 0.24s ease,
-        height 0.24s ease,
-        border-radius 0.24s ease,
-        opacity 0.22s ease,
-        transform 0.22s ease,
-        box-shadow 0.22s ease;
+        top 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
+        left 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
+        width 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
+        height 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
+        border-radius 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
+        opacity 0.26s ease,
+        transform 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
+        box-shadow 0.78s cubic-bezier(0.18, 0.86, 0.22, 1);
       z-index: 2147483645;
       will-change: top, left, width, height, opacity, transform;
     }
@@ -4006,6 +4010,26 @@ function __sbBuildBrainUI() {
     #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite; }
     #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite; }
     #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite; }
+    @keyframes __sb_hp_listen_movie_rt__ {
+      0%,100% { filter: drop-shadow(0 0 20px rgba(56,189,248,0.82)) drop-shadow(0 0 8px rgba(125,211,252,0.5)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 34px rgba(103,232,249,0.96)) drop-shadow(0 0 14px rgba(59,130,246,0.64)); transform: scale(1.035); }
+    }
+    @keyframes __sb_hp_speak_movie_rt__ {
+      0%,100% { filter: drop-shadow(0 0 18px rgba(34,211,238,0.78)) drop-shadow(0 0 8px rgba(99,102,241,0.45)); transform: scale(1); }
+      50%      { filter: drop-shadow(0 0 34px rgba(103,232,249,0.98)) drop-shadow(0 0 15px rgba(129,140,248,0.66)); transform: scale(1.05); }
+    }
+    @keyframes __sb_hp_capture_movie_rt__ {
+      0%,100% { filter: drop-shadow(0 0 20px rgba(45,212,191,0.8)) drop-shadow(0 0 8px rgba(34,211,238,0.42)); }
+      50%      { filter: drop-shadow(0 0 32px rgba(94,234,212,0.94)) drop-shadow(0 0 13px rgba(59,130,246,0.5)); }
+    }
+    @keyframes __sb_hp_connect_movie_rt__ {
+      0%,100% { filter: drop-shadow(0 0 16px rgba(125,211,252,0.6)) drop-shadow(0 0 7px rgba(56,189,248,0.32)); }
+      50%      { filter: drop-shadow(0 0 27px rgba(125,211,252,0.84)) drop-shadow(0 0 12px rgba(34,211,238,0.5)); }
+    }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite; }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -4150,6 +4174,17 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
   `;
   document.body.appendChild(modelDd);
+
+  __sbSyncFullscreenUiMount();
+  if (!__sbFullscreenUiListenerBound) {
+    __sbFullscreenUiListenerBound = true;
+    document.addEventListener("fullscreenchange", () => {
+      requestAnimationFrame(() => {
+        __sbSyncFullscreenUiMount();
+        if (__sbMovieModeActive) void __sbRefreshMovieMode({ allowRetarget: true });
+      });
+    });
+  }
 
   // On X/Twitter, lock the Braino bar to the system font — Twitter's global CSS
   // bleeds into injected DOM elements and makes the UI look wrong.
@@ -4559,6 +4594,52 @@ function __sbAnchorRootBottomRight() {
   root.style.top = "auto";
   root.style.right = "20px";
   root.style.bottom = "20px";
+}
+
+function __sbGetFullscreenUiHost() {
+  const fullscreenEl = document.fullscreenElement;
+  if (fullscreenEl && fullscreenEl instanceof Element) return fullscreenEl;
+  return document.body || document.documentElement;
+}
+
+function __sbSyncFullscreenUiMount() {
+  const host = __sbGetFullscreenUiHost();
+  if (!host) return;
+  const ids = [
+    "__sb_root__",
+    "__sb_movie_backdrop__",
+    "__sb_card_wrap__",
+    "__sb_voice_error_pill__",
+    "__sb_mode_dropdown__",
+    "__sb_connector_dropdown__",
+    "__sb_connector_slash_dropdown__",
+    "__sb_model_dropdown__",
+  ];
+
+  for (const id of ids) {
+    const node = document.getElementById(id);
+    if (!node || node.parentElement === host) continue;
+    try {
+      host.appendChild(node);
+    } catch (_) {
+      const fallback = document.body || document.documentElement;
+      if (fallback && node.parentElement !== fallback) {
+        try { fallback.appendChild(node); } catch (_) {}
+      }
+    }
+  }
+
+  if (document.fullscreenElement) {
+    __sbAnchorRootBottomRight();
+    return;
+  }
+
+  if (__sbCursorRideMode) {
+    __sbPositionRootNearCursor(true);
+    __sbScheduleCursorFollow();
+  } else {
+    __sbAnchorRootBottomRight();
+  }
 }
 
 function __sbPositionRootNearCursor(force = false) {
@@ -6519,6 +6600,250 @@ function __sbFindMovieModeTarget() {
   };
 }
 
+function __sbMovieModeActiveTarget() {
+  const frame = __sbMovieModeState?.frame;
+  const media = __sbMovieModeState?.media;
+  if (__sbMovieModeElementVisible(frame) && __sbMovieModeElementVisible(media)) {
+    return {
+      frame,
+      media,
+      descriptor: __sbMovieModeState?.descriptor || "",
+    };
+  }
+  return null;
+}
+
+function __sbFormatMovieTimestamp(seconds) {
+  const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const secs = String(safe % 60).padStart(2, "0");
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${secs}`;
+  return `${minutes}:${secs}`;
+}
+
+function __sbNormalizeMovieSubtitleLine(value) {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[♪♫]/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\-–—]\s*/, "")
+    .trim();
+}
+
+function __sbIsMovieSubtitleNoise(text) {
+  const normalized = __sbAdapterNormalizeText(text);
+  if (!normalized) return true;
+  if (normalized.length < 2 || normalized.length > 180) return true;
+  return /\b(audio(?:\s*&\s*subtitles?)?|more like this|skip intro|skip recap|next episode|episodes?|full hd|watchlist|play|pause|rewind|forward|continue watching|english|hindi|tam(?:il)?|telugu|malayalam|quality|subtitles?)\b/i.test(normalized);
+}
+
+function __sbExtractMovieSubtitleLinesFromTracks(mediaEl) {
+  if (!(mediaEl instanceof HTMLVideoElement) || !mediaEl.textTracks) return [];
+  const lines = [];
+  for (const track of Array.from(mediaEl.textTracks || [])) {
+    if (track.mode === "disabled") continue;
+    const activeCues = Array.from(track.activeCues || []);
+    for (const cue of activeCues) {
+      const cueText = typeof cue?.text === "string" ? cue.text : "";
+      for (const part of cueText.split(/\r?\n/)) {
+        const line = __sbNormalizeMovieSubtitleLine(part);
+        if (!line || __sbIsMovieSubtitleNoise(line)) continue;
+        lines.push(line);
+      }
+    }
+    if (lines.length) break;
+  }
+  return Array.from(new Set(lines));
+}
+
+function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
+  const selectors = [
+    '[class*="subtitle"]',
+    '[class*="Subtitle"]',
+    '[class*="caption"]',
+    '[class*="Caption"]',
+    '[data-testid*="subtitle"]',
+    '[data-testid*="caption"]',
+    '[aria-live="polite"]',
+    '[aria-live="assertive"]',
+    '[role="caption"]',
+  ].join(",");
+  const roots = [];
+  if (frame instanceof Element) roots.push(frame);
+  if (mediaEl instanceof Element && mediaEl !== frame) roots.push(mediaEl.parentElement || mediaEl);
+  roots.push(document);
+
+  const seenEls = new Set();
+  const lines = [];
+  const frameRect = frame?.getBoundingClientRect?.() || mediaEl?.getBoundingClientRect?.() || null;
+
+  for (const root of roots) {
+    const candidates = __sbAdapterDeepQueryAll(selectors, root);
+    for (const el of candidates) {
+      if (!(el instanceof Element) || seenEls.has(el)) continue;
+      seenEls.add(el);
+      if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__")) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.height < 10 || rect.height > 180) continue;
+      if (frameRect) {
+        const lowerBandTop = frameRect.top + (frameRect.height * 0.42);
+        if (rect.bottom < lowerBandTop || rect.top > frameRect.bottom + 20) continue;
+        if (rect.left < frameRect.left - 20 || rect.right > frameRect.right + 20) continue;
+      } else if (rect.top < window.innerHeight * 0.4) {
+        continue;
+      }
+      const rawText = String(el.innerText || el.textContent || "");
+      for (const part of rawText.split(/\r?\n/)) {
+        const line = __sbNormalizeMovieSubtitleLine(part);
+        if (!line || __sbIsMovieSubtitleNoise(line)) continue;
+        lines.push(line);
+      }
+    }
+    if (lines.length) break;
+  }
+
+  return Array.from(new Set(lines));
+}
+
+function __sbGuessMovieTitle(target) {
+  const metaTitle =
+    document.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
+    document.querySelector('meta[name="twitter:title"]')?.getAttribute("content") ||
+    "";
+  const frameHeading =
+    target?.frame?.querySelector?.("h1, h2, [data-testid*='title'], [class*='title']")?.textContent ||
+    "";
+  const titleCandidates = [
+    frameHeading,
+    metaTitle,
+    document.title,
+  ];
+
+  for (const candidate of titleCandidates) {
+    const cleaned = String(candidate || "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*[\-|•|:]\s*(Netflix|JioHotstar|Disney\+?\s*Hotstar|Disney\+|Prime Video|Amazon Prime Video|YouTube|Hotstar).*$/i, "")
+      .replace(/\s*\|\s*(Watch|Streaming).*/i, "")
+      .trim();
+    if (cleaned && cleaned.length > 1) return cleaned;
+  }
+  return "";
+}
+
+function __sbRememberMovieTranscript(lines, timestamp, title) {
+  const normalizedTitle = __sbAdapterNormalizeText(title || "");
+  if (normalizedTitle && normalizedTitle !== __sbMovieLastTitle) {
+    __sbMovieTranscriptEntries = [];
+    __sbMovieLastSubtitleText = "";
+    __sbMovieLastTitle = normalizedTitle;
+  }
+
+  const safeTimestamp = Number.isFinite(Number(timestamp)) ? Math.max(0, Math.round(Number(timestamp))) : null;
+  for (const rawLine of Array.isArray(lines) ? lines : []) {
+    const line = __sbNormalizeMovieSubtitleLine(rawLine);
+    if (!line || __sbIsMovieSubtitleNoise(line)) continue;
+    const lastEntry = __sbMovieTranscriptEntries[__sbMovieTranscriptEntries.length - 1];
+    if (line === __sbMovieLastSubtitleText) continue;
+    if (lastEntry && lastEntry.text === line && safeTimestamp != null && Math.abs((lastEntry.timestamp ?? safeTimestamp) - safeTimestamp) <= 8) continue;
+    __sbMovieTranscriptEntries.push({ text: line, timestamp: safeTimestamp });
+    __sbMovieLastSubtitleText = line;
+  }
+
+  if (__sbMovieTranscriptEntries.length > 18) {
+    __sbMovieTranscriptEntries = __sbMovieTranscriptEntries.slice(-18);
+  }
+}
+
+function __sbBuildMovieContext(options = {}) {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  const target = options.target || __sbMovieModeActiveTarget() || __sbFindMovieModeTarget();
+  const mediaEl = target?.media || null;
+  const frameEl = target?.frame || mediaEl || null;
+  if (!target && !__SB_MOVIE_CONTEXT_HOST_RE.test(host) && !__sbMovieTranscriptEntries.length) return null;
+
+  const title = __sbGuessMovieTitle(target);
+  let timestamp = 0;
+  let duration = null;
+  let isPaused = false;
+  if (mediaEl instanceof HTMLMediaElement) {
+    timestamp = Math.max(0, Math.floor(mediaEl.currentTime || 0));
+    duration = Number.isFinite(mediaEl.duration) ? Math.floor(mediaEl.duration) : null;
+    isPaused = Boolean(mediaEl.paused);
+  }
+
+  const subtitleLines = Array.from(new Set([
+    ...__sbExtractMovieSubtitleLinesFromTracks(mediaEl),
+    ...__sbExtractMovieSubtitleLinesFromDom(frameEl, mediaEl),
+  ]));
+
+  __sbRememberMovieTranscript(subtitleLines, timestamp, title);
+  const transcript = __sbMovieTranscriptEntries
+    .slice(-12)
+    .map((entry) => {
+      const prefix = entry.timestamp != null ? `[${__sbFormatMovieTimestamp(entry.timestamp)}] ` : "";
+      return `${prefix}${entry.text}`;
+    })
+    .join("\n");
+
+  if (!title && !subtitleLines.length && !transcript && !target) return null;
+
+  return {
+    title: title || document.title || "Current video",
+    site: host || "video",
+    descriptor: target?.descriptor || "",
+    timestamp,
+    duration,
+    isPaused,
+    currentSubtitle: subtitleLines.join(" "),
+    subtitleTranscript: transcript,
+  };
+}
+
+function __sbBuildMovieContextSummary(movieContext) {
+  if (!movieContext?.title) return "";
+  const lines = [
+    "MOVIE COMPANION MODE",
+    `Title: ${movieContext.title}`,
+    `Playback: ${movieContext.isPaused ? "paused" : "playing"}`,
+    `Timestamp: ${__sbFormatMovieTimestamp(movieContext.timestamp || 0)}${movieContext.duration ? ` / ${__sbFormatMovieTimestamp(movieContext.duration)}` : ""}`,
+  ];
+  if (movieContext.currentSubtitle) lines.push(`Visible subtitle: ${movieContext.currentSubtitle}`);
+  if (movieContext.subtitleTranscript) lines.push(`Recent subtitle transcript:\n${movieContext.subtitleTranscript}`);
+  return lines.join("\n");
+}
+
+function __sbIsMovieSceneQuestion(text) {
+  const normalized = String(text || "").toLowerCase();
+  if (!normalized) return false;
+  return /\b(what(?:'s|\s+is)\s+happening|what\s+just\s+happened|what\s+happened\s+here|who\s+is\s+(?:that|this|he|she|they)|who\s+are\s+they|what\s+did\s+(?:he|she|they)\s+say|what\s+does\s+that\s+mean|why\s+did\s+(?:he|she|they)|what\s+are\s+they\s+talking\s+about|explain\s+(?:this|that)\s+scene|summari[sz]e\s+(?:this|that)\s+scene|recap\s+(?:this|that)|what\s+am\s+i\s+watching)\b/i.test(normalized);
+}
+
+function __sbPrimeMovieBackdropForWrap() {
+  const backdrop = __sbEnsureMovieBackdrop();
+  if (!backdrop) return;
+  backdrop.style.left = `${window.innerWidth / 2}px`;
+  backdrop.style.top = `${window.innerHeight / 2}px`;
+  backdrop.style.width = `${Math.max(320, window.innerWidth - 36)}px`;
+  backdrop.style.height = `${Math.max(220, window.innerHeight - 36)}px`;
+  backdrop.style.borderRadius = "28px";
+  backdrop.classList.add("visible");
+}
+
+function __sbGetFullscreenMovieTarget() {
+  const fullscreenEl = document.fullscreenElement;
+  if (!(fullscreenEl instanceof Element)) return null;
+  const nestedVideo = fullscreenEl.matches("video")
+    ? fullscreenEl
+    : (__sbAdapterDeepQueryAll("video", fullscreenEl).find((el) => __sbMovieModeElementVisible(el)) || fullscreenEl.querySelector?.("video"));
+  return {
+    frame: fullscreenEl,
+    media: nestedVideo || fullscreenEl,
+    descriptor: __sbMovieModeDescriptor(nestedVideo || fullscreenEl),
+  };
+}
+
 function __sbClearMovieModeTarget(options = {}) {
   const previousFrame = __sbMovieModeState?.frame;
   const previousMedia = __sbMovieModeState?.media;
@@ -6554,13 +6879,23 @@ function __sbApplyMovieModeTarget(target, options = {}) {
   const right = Math.min(window.innerWidth - 8, rect.right + padX);
   const bottom = Math.min(window.innerHeight - 8, rect.bottom + padY);
   const backdrop = __sbEnsureMovieBackdrop();
-  if (backdrop) {
-    backdrop.style.left = `${left + ((right - left) / 2)}px`;
-    backdrop.style.top = `${top + ((bottom - top) / 2)}px`;
-    backdrop.style.width = `${Math.max(160, right - left)}px`;
-    backdrop.style.height = `${Math.max(96, bottom - top)}px`;
-    backdrop.style.borderRadius = `${Math.round(Math.min(30, Math.max(16, Math.min(right - left, bottom - top) * 0.06)))}px`;
-    backdrop.classList.add("visible");
+  if (backdrop && !options.suppressBackdrop) {
+    const applyBackdropRect = () => {
+      backdrop.style.left = `${left + ((right - left) / 2)}px`;
+      backdrop.style.top = `${top + ((bottom - top) / 2)}px`;
+      backdrop.style.width = `${Math.max(160, right - left)}px`;
+      backdrop.style.height = `${Math.max(96, bottom - top)}px`;
+      backdrop.style.borderRadius = `${Math.round(Math.min(30, Math.max(16, Math.min(right - left, bottom - top) * 0.06)))}px`;
+      backdrop.classList.add("visible");
+    };
+    if (options.animateWrap) {
+      __sbPrimeMovieBackdropForWrap();
+      requestAnimationFrame(() => requestAnimationFrame(applyBackdropRect));
+    } else {
+      applyBackdropRect();
+    }
+  } else if (backdrop && options.suppressBackdrop) {
+    backdrop.classList.remove("visible");
   }
 
   __sbMovieModeState = {
@@ -6568,12 +6903,17 @@ function __sbApplyMovieModeTarget(target, options = {}) {
     media: target.media,
     descriptor: target.descriptor || "",
   };
+  __sbBuildMovieContext({ target });
   return true;
 }
 
 function __sbSyncMovieModeVisualState() {
   const brain = document.getElementById("__sb_brain_btn__");
   brain?.classList.toggle("sb-brain-movie", __sbMovieModeActive);
+  if (brain && !brain.classList.contains("recording")) {
+    if (__sbMovieModeActive) brain.innerHTML = __SB_BRAIN_SVG_LISTENING;
+    else if (brain.innerHTML === __SB_BRAIN_SVG_LISTENING) brain.innerHTML = __SB_BRAIN_SVG;
+  }
   if (__sbMovieModeActive) {
     document.documentElement.classList.add("__sb_movie_mode_active__");
     document.body?.classList?.add("__sb_movie_mode_active__");
@@ -6586,14 +6926,24 @@ function __sbSyncMovieModeVisualState() {
 
 function __sbRefreshMovieMode(options = {}) {
   if (!__sbMovieModeActive) return { ok: false, active: false, error: "Movie Mode is off." };
-  if (document.fullscreenElement) {
-    __sbEnsureMovieBackdrop()?.classList.remove("visible");
-    return { ok: true, active: true, fullscreen: true };
-  }
+  __sbSyncFullscreenUiMount();
 
   const currentFrame = __sbMovieModeState?.frame;
   const currentMedia = __sbMovieModeState?.media;
   const currentValid = __sbMovieModeElementVisible(currentFrame) && __sbMovieModeElementVisible(currentMedia);
+
+  if (document.fullscreenElement) {
+    const target = currentValid && !options.allowRetarget
+      ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" }
+      : (currentValid ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" } : (__sbFindMovieModeTarget() || __sbGetFullscreenMovieTarget()));
+    if (target) {
+      __sbApplyMovieModeTarget(target, { suppressBackdrop: true });
+      __sbBuildMovieContext({ target });
+    }
+    __sbEnsureMovieBackdrop()?.classList.remove("visible");
+    return { ok: true, active: true, fullscreen: true };
+  }
+
   const target = currentValid && !options.allowRetarget
     ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" }
     : (currentValid ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" } : __sbFindMovieModeTarget());
@@ -6603,7 +6953,7 @@ function __sbRefreshMovieMode(options = {}) {
     return { ok: false, active: true, error: "No visible video player found on this page." };
   }
 
-  __sbApplyMovieModeTarget(target, { forceScroll: options.forceScroll });
+  __sbApplyMovieModeTarget(target, { forceScroll: options.forceScroll, animateWrap: options.animateWrap });
   return { ok: true, active: true, descriptor: target.descriptor || "" };
 }
 
@@ -6621,10 +6971,6 @@ function __sbStartMovieModeSync() {
     __sbMovieModeScrollListener = () => requestAnimationFrame(() => { void __sbRefreshMovieMode({ allowRetarget: false }); });
     window.addEventListener("scroll", __sbMovieModeScrollListener, true);
   }
-  if (!__sbMovieModeFullscreenListener) {
-    __sbMovieModeFullscreenListener = () => requestAnimationFrame(() => { void __sbRefreshMovieMode({ allowRetarget: true }); });
-    document.addEventListener("fullscreenchange", __sbMovieModeFullscreenListener);
-  }
 }
 
 function __sbStopMovieModeSync() {
@@ -6640,10 +6986,6 @@ function __sbStopMovieModeSync() {
     window.removeEventListener("scroll", __sbMovieModeScrollListener, true);
     __sbMovieModeScrollListener = null;
   }
-  if (__sbMovieModeFullscreenListener) {
-    document.removeEventListener("fullscreenchange", __sbMovieModeFullscreenListener);
-    __sbMovieModeFullscreenListener = null;
-  }
 }
 
 function __sbActivateMovieMode() {
@@ -6658,7 +7000,7 @@ function __sbActivateMovieMode() {
   __sbMovieModeActive = true;
   __sbSyncMovieModeVisualState();
   __sbStartMovieModeSync();
-  const result = __sbRefreshMovieMode({ allowRetarget: true, forceScroll: true });
+  const result = __sbRefreshMovieMode({ allowRetarget: true, forceScroll: true, animateWrap: true });
   if (!result.ok) {
     __sbDeactivateMovieMode({ silent: true });
     __sbShowBubble("Movie Mode couldn't find a visible video player on this page yet.", true, { tone: "status", title: "Movie Mode" });
@@ -7083,14 +7425,23 @@ function __sbGetSelectedText() {
 }
 
 function __sbGetPageContext(maxChars = 12000) {
-  const pageText = (document.body?.innerText || "").trim().slice(0, maxChars);
+  const rawPageText = (document.body?.innerText || "").trim();
   const selectedText = __sbGetSelectedText();
+  const movieContext = __sbBuildMovieContext();
+  const movieSummary = __sbBuildMovieContextSummary(movieContext);
+  let pageText = rawPageText.slice(0, maxChars);
+  if (movieSummary) {
+    const remainderBudget = Math.max(1200, Math.min(3200, maxChars - movieSummary.length - 120));
+    const lessImportant = rawPageText.slice(0, remainderBudget);
+    pageText = `${movieSummary}${lessImportant ? `\n\nLess important page chrome:\n${lessImportant}` : ""}`.slice(0, maxChars);
+  }
   return {
     url: location.href,
     title: document.title,
     text: pageText,
     selectedText,
     hoveredContext: __sbGetHoveredContext(),
+    movieContext,
   };
 }
 
@@ -7275,6 +7626,7 @@ function __sbIsTabsQuery(text) {
 
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
+  if (__sbIsMovieSceneQuestion(t) && __sbBuildMovieContext()) return "page";
   // Volume is a Spotify delegate action — route to agent (works in chat & realtime voice).
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
@@ -8233,6 +8585,7 @@ function __sbResolvePromptRouting(text) {
 async function __sbShouldForceVoiceDelegate(routing) {
   const promptText = String(routing?.promptText || "").trim();
   if (!promptText) return false;
+  if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
 
   const result = await __sbRuntimeMessage({
     action: "classifyBrainAgentTask",
@@ -8379,6 +8732,7 @@ async function __sbProcessPrompt(text, options = {}) {
   const pageContext = __sbGetPageContext();
   const hasPageText = Boolean(pageContext.text);
   const selectedText = pageContext.selectedText || undefined;
+  const movieContext = pageContext.movieContext || null;
   const previousHistory = __sbChatHistory.slice(-10);
 
   if (intent === "web") {
@@ -8469,6 +8823,7 @@ async function __sbProcessPrompt(text, options = {}) {
         hoveredContext: pageContext.hoveredContext || null,
       };
     }
+    if (movieContext) body.movieContext = movieContext;
     if (selectedText) body.selectedText = selectedText;
 
     const { reply } = await __sbFetchAssistantReply(body);
@@ -9041,6 +9396,30 @@ function __sbBuildRealtimeTranscriptionPrompt() {
   ].join(" ");
 }
 
+function __sbBuildRealtimeMovieBlock(movieContext) {
+  if (!movieContext?.title) return "";
+  return [
+    "---",
+    "MOVIE COMPANION MODE",
+    `You are watching "${movieContext.title}" together with the user right now.`,
+    `Timestamp: ${__sbFormatMovieTimestamp(movieContext.timestamp || 0)}. Playback: ${movieContext.isPaused ? "paused" : "playing"}.`,
+    "",
+    "Recent subtitle transcript:",
+    movieContext.subtitleTranscript || (movieContext.currentSubtitle ? movieContext.currentSubtitle : "(no captions available yet)"),
+    "",
+    "Rules:",
+    "- Treat scene questions as local movie questions, not web research.",
+    "- Never spoil future events unless the user explicitly asks for spoilers.",
+    "- Answer like a companion watching with them: concise, direct, warm.",
+  ].join("\n");
+}
+
+function __sbAugmentRealtimeInstructionsWithMovieContext(instructions, movieContext) {
+  const base = String(instructions || "").trim();
+  const movieBlock = __sbBuildRealtimeMovieBlock(movieContext);
+  return movieBlock ? `${base}\n\n${movieBlock}` : base;
+}
+
 function __sbBuildRealtimeBootInstructions() {
   const pageCtx = __sbGetPageContext(8000);
   const pageLines = [];
@@ -9051,7 +9430,7 @@ function __sbBuildRealtimeBootInstructions() {
     pageLines.push(`Page content:\n${pageCtx.text}`);
   }
 
-  return [
+  const instructions = [
     "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
     "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. Voice is only the medium here. You are still Braino.",
     "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
@@ -9062,6 +9441,7 @@ function __sbBuildRealtimeBootInstructions() {
     "If interrupted, stop immediately and wait for the user.",
     ...pageLines,
   ].filter(Boolean).join("\n\n");
+  return __sbAugmentRealtimeInstructionsWithMovieContext(instructions, pageCtx.movieContext || null);
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
@@ -9126,6 +9506,7 @@ async function __sbBuildRealtimeConfigPayload() {
       text: __sbTrimPromptContext(pageContext.text || "", 8000),
       hoveredContext: pageContext.hoveredContext || null,
     },
+    movieContext: pageContext.movieContext || null,
     languagePolicy: "mirror_user",
     voiceSurface: "floating_mascot",
   };
@@ -9149,15 +9530,19 @@ async function __sbSyncRealtimeVoiceInstructions() {
     }
 
     const data = await resp.json().catch(() => ({}));
-    const instructions = String(data?.instructions || "").trim();
+    const instructions = __sbAugmentRealtimeInstructionsWithMovieContext(
+      String(data?.instructions || "").trim(),
+      __sbGetPageContext(2500).movieContext || null,
+    );
     const fingerprint = String(data?.fingerprint || "").trim();
     if (!instructions) return false;
-    if (fingerprint && fingerprint === __sbRtInstructionsFingerprint) return true;
+    const localFingerprint = `${fingerprint || "local"}::${__sbBuildMovieContextSummary(__sbGetPageContext(2500).movieContext || null)}`;
+    if (localFingerprint && localFingerprint === __sbRtInstructionsFingerprint) return true;
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
     const updated = __sbSendRealtimeSessionUpdate(instructions);
-    if (updated && fingerprint) {
-      __sbRtInstructionsFingerprint = fingerprint;
+    if (updated) {
+      __sbRtInstructionsFingerprint = localFingerprint;
     }
     return updated;
   } catch (error) {
