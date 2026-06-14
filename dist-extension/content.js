@@ -2331,9 +2331,10 @@ let __sbMovieModeResizeListener = null;
 let __sbMovieTranscriptEntries = [];
 let __sbMovieLastSubtitleText = "";
 let __sbMovieLastTitle = "";
+let __sbPassiveMovieSyncTimer = null;
 let __sbFullscreenUiListenerBound = false;
 const __SB_MOVIE_MODE_FRAME_RE = /\b(player|video|media|playback|stream|caption|subtitle|controls?|shaka|jw|vjs|html5|watch|cinema|theater|viewer)\b/i;
-const __SB_MOVIE_CONTEXT_HOST_RE = /\b(netflix|hotstar|jiohotstar|disneyplus|disney|primevideo|amazonvideo|hulu|max|hbomax|apple|zee5|sonyliv|youtube|mubi)\b/i;
+const __SB_MOVIE_CONTEXT_HOST_RE = /\b(netflix|hotstar|jiohotstar|disneyplus|disney|primevideo|amazonvideo|amazon|hulu|max|hbomax|appletv|apple\.tv|tv\.apple|zee5|sonyliv|jiocinema|voot|aha|mxplayer|erosnow|altbalaji|youtube|mubi|peacock|paramount|fubo|crunchyroll|funimation|tubi)\b/i;
 
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
@@ -2563,20 +2564,31 @@ function __sbBuildBrainUI() {
       pointer-events: none;
       transform: translate(-50%, -50%) scale(0.992);
       transition:
-        top 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        left 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        width 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        height 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        border-radius 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        opacity 0.26s ease,
-        transform 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        box-shadow 0.78s cubic-bezier(0.18, 0.86, 0.22, 1);
+        top 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        left 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        width 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        height 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        border-radius 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        opacity 0.48s ease,
+        transform 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        box-shadow 1.55s cubic-bezier(0.16, 0.92, 0.24, 1);
       z-index: 2147483645;
       will-change: top, left, width, height, opacity, transform;
     }
     #__sb_movie_backdrop__.visible {
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
+    }
+    #__sb_movie_backdrop__.sb-movie-fullscreen {
+      box-shadow:
+        inset 0 0 0 3px rgba(118,214,255,0.18),
+        inset 0 0 60px rgba(84,160,255,0.08);
+      background:
+        radial-gradient(circle at 50% 5%, rgba(118,214,255,0.06), transparent 40%),
+        transparent;
+      border: 1.5px solid rgba(118,214,255,0.14);
+      border-radius: 0px !important;
+      pointer-events: none;
     }
     .__sb_movie_mode_focus__ {
       scroll-margin: 10vh;
@@ -4185,6 +4197,7 @@ function __sbBuildBrainUI() {
       });
     });
   }
+  __sbStartPassiveMovieSync();
 
   // On X/Twitter, lock the Braino bar to the system font — Twitter's global CSS
   // bleeds into injected DOM elements and makes the UI look wrong.
@@ -6644,6 +6657,7 @@ function __sbExtractMovieSubtitleLinesFromTracks(mediaEl) {
   const lines = [];
   for (const track of Array.from(mediaEl.textTracks || [])) {
     if (track.mode === "disabled") continue;
+    // Some OTTs (Netflix) use mode="hidden" and manage rendering themselves — still has activeCues
     const activeCues = Array.from(track.activeCues || []);
     for (const cue of activeCues) {
       const cueText = typeof cue?.text === "string" ? cue.text : "";
@@ -6660,6 +6674,7 @@ function __sbExtractMovieSubtitleLinesFromTracks(mediaEl) {
 
 function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
   const selectors = [
+    // Generic
     '[class*="subtitle"]',
     '[class*="Subtitle"]',
     '[class*="caption"]',
@@ -6669,6 +6684,22 @@ function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
     '[aria-live="polite"]',
     '[aria-live="assertive"]',
     '[role="caption"]',
+    // Netflix: player-timedtext (aria-live covers outer, but adding direct)
+    '[class*="player-timedtext"]',
+    // Amazon Prime Video: atvwebplayersdk timedtext
+    '[class*="atvwebplayersdk"]',
+    '[class*="timedtext"]',
+    // Hotstar / JioHotstar
+    '[class*="sub-text"]',
+    '[class*="SubText"]',
+    '[class*="sub_text"]',
+    // JioCinema
+    '[class*="jio-sub"]',
+    // Voot / MXPlayer / generic OTT fallbacks
+    '[class*="player-sub"]',
+    '[class*="playerSub"]',
+    '[class*="video-subtitle"]',
+    '[class*="videoSubtitle"]',
   ].join(",");
   const roots = [];
   if (frame instanceof Element) roots.push(frame);
@@ -6686,12 +6717,12 @@ function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
       seenEls.add(el);
       if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__")) continue;
       const rect = el.getBoundingClientRect();
-      if (rect.height < 10 || rect.height > 180) continue;
+      if (rect.height < 4 || rect.height > 240) continue;
       if (frameRect) {
-        const lowerBandTop = frameRect.top + (frameRect.height * 0.42);
-        if (rect.bottom < lowerBandTop || rect.top > frameRect.bottom + 20) continue;
-        if (rect.left < frameRect.left - 20 || rect.right > frameRect.right + 20) continue;
-      } else if (rect.top < window.innerHeight * 0.4) {
+        const lowerBandTop = frameRect.top + (frameRect.height * 0.35);
+        if (rect.bottom < lowerBandTop || rect.top > frameRect.bottom + 40) continue;
+        if (rect.left < frameRect.left - 40 || rect.right > frameRect.right + 40) continue;
+      } else if (rect.top < window.innerHeight * 0.35) {
         continue;
       }
       const rawText = String(el.innerText || el.textContent || "");
@@ -6721,11 +6752,13 @@ function __sbGuessMovieTitle(target) {
     document.title,
   ];
 
+  const OTT_SUFFIX_RE = /\s*[\-|•|:]\s*(Netflix|JioHotstar|Jio\s*Hotstar|Disney\+?\s*Hotstar|Disney\+|Prime\s*Video|Amazon\s*Prime(?:\s*Video)?|YouTube|Hotstar|Zee5|SonyLIV|Sony\s*LIV|JioCinema|Voot|MX\s*Player|Aha|Hulu|Max|HBO\s*Max|Apple\s*TV\+?|Peacock|Paramount\+?|Mubi|Crunchyroll|Tubi|Fubo).*$/i;
   for (const candidate of titleCandidates) {
     const cleaned = String(candidate || "")
       .replace(/\s+/g, " ")
-      .replace(/\s*[\-|•|:]\s*(Netflix|JioHotstar|Disney\+?\s*Hotstar|Disney\+|Prime Video|Amazon Prime Video|YouTube|Hotstar).*$/i, "")
-      .replace(/\s*\|\s*(Watch|Streaming).*/i, "")
+      .replace(OTT_SUFFIX_RE, "")
+      .replace(/\s*\|\s*(Watch|Streaming|Online|Stream|HD|Full\s*Movie|Official).*/i, "")
+      .replace(/\s*-\s*(Watch|Stream|Online|HD|Full\s*Movie).*/i, "")
       .trim();
     if (cleaned && cleaned.length > 1) return cleaned;
   }
@@ -6815,9 +6848,14 @@ function __sbBuildMovieContextSummary(movieContext) {
 }
 
 function __sbIsMovieSceneQuestion(text) {
-  const normalized = String(text || "").toLowerCase();
+  const normalized = String(text || "").toLowerCase().trim();
   if (!normalized) return false;
-  return /\b(what(?:'s|\s+is)\s+happening|what\s+just\s+happened|what\s+happened\s+here|who\s+is\s+(?:that|this|he|she|they)|who\s+are\s+they|what\s+did\s+(?:he|she|they)\s+say|what\s+does\s+that\s+mean|why\s+did\s+(?:he|she|they)|what\s+are\s+they\s+talking\s+about|explain\s+(?:this|that)\s+scene|summari[sz]e\s+(?:this|that)\s+scene|recap\s+(?:this|that)|what\s+am\s+i\s+watching)\b/i.test(normalized);
+  // English patterns
+  const engRE = /\b(what(?:'s|\s+is)\s+happening|what\s+just\s+happened|what\s+happened\s*(here|there|just\s+now)?|who\s+is\s+(?:that|this|he|she|they)|who\s+are\s+they|who\s+(?:is|was)\s+(?:that|this|he|she)|what\s+did\s+(?:he|she|they|that\s+guy|that\s+person)\s+say|what\s+does\s+that\s+mean|why\s+did\s+(?:he|she|they)|what\s+are\s+they\s+talking\s+about|what\s+(?:is|are)\s+they\s+doing|explain\s+(?:this|that)\s*(scene|moment|part)?|summari[sz]e\s+(?:this|that|the)\s*(scene|episode|part)?|recap\s+(?:this|that|the\s+episode)?|what\s+am\s+i\s+watching|what\s+is\s+going\s+on|who\s+killed|why\s+is\s+he|why\s+is\s+she|what\s+happened\s+to|who\s+(?:is|was)\s+that\s+character|tell\s+me\s+what(?:'s|\s+is)\s+happening)\b/i;
+  if (engRE.test(normalized)) return true;
+  // Hindi / Hinglish patterns (romanized)
+  const hinRE = /\b(kya\s+ho\s+(raha|hua)|kya\s+hua|kaun\s+hai|yeh\s+kaun|ye\s+kaun|kya\s+kar\s+raha|kya\s+chal\s+raha|isko\s+kaun|kyun\s+kiya|kyun\s+mar|explain\s+kar|bata\s+(de|do)|samjha|kya\s+bola|kya\s+keh|scene\s+kya\s+hai)\b/i;
+  return hinRE.test(normalized);
 }
 
 function __sbPrimeMovieBackdropForWrap() {
@@ -6853,7 +6891,9 @@ function __sbClearMovieModeTarget(options = {}) {
     __sbMovieModeState = { frame: null, media: null, descriptor: "" };
   }
   if (!options.keepBackdrop) {
-    __sbEnsureMovieBackdrop()?.classList.remove("visible");
+    const bd = __sbEnsureMovieBackdrop();
+    bd?.classList.remove("visible");
+    bd?.classList.remove("sb-movie-fullscreen");
   }
 }
 
@@ -6937,10 +6977,20 @@ function __sbRefreshMovieMode(options = {}) {
       ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" }
       : (currentValid ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" } : (__sbFindMovieModeTarget() || __sbGetFullscreenMovieTarget()));
     if (target) {
-      __sbApplyMovieModeTarget(target, { suppressBackdrop: true });
+      __sbApplyMovieModeTarget(target, { suppressBackdrop: true, animateWrap: options.animateWrap });
       __sbBuildMovieContext({ target });
     }
-    __sbEnsureMovieBackdrop()?.classList.remove("visible");
+    // In fullscreen the video fills the screen — show backdrop in fullscreen mode (no dim overlay)
+    const backdrop = __sbEnsureMovieBackdrop();
+    if (backdrop) {
+      backdrop.classList.add("sb-movie-fullscreen");
+      backdrop.style.left = "50%";
+      backdrop.style.top = "50%";
+      backdrop.style.width = `${window.innerWidth}px`;
+      backdrop.style.height = `${window.innerHeight}px`;
+      backdrop.style.borderRadius = "0px";
+      backdrop.classList.add("visible");
+    }
     return { ok: true, active: true, fullscreen: true };
   }
 
@@ -6953,6 +7003,8 @@ function __sbRefreshMovieMode(options = {}) {
     return { ok: false, active: true, error: "No visible video player found on this page." };
   }
 
+  // Remove fullscreen-mode class when we're back in normal windowed mode
+  __sbEnsureMovieBackdrop()?.classList.remove("sb-movie-fullscreen");
   __sbApplyMovieModeTarget(target, { forceScroll: options.forceScroll, animateWrap: options.animateWrap });
   return { ok: true, active: true, descriptor: target.descriptor || "" };
 }
@@ -6986,6 +7038,23 @@ function __sbStopMovieModeSync() {
     window.removeEventListener("scroll", __sbMovieModeScrollListener, true);
     __sbMovieModeScrollListener = null;
   }
+}
+
+function __sbStartPassiveMovieSync() {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  if (!__SB_MOVIE_CONTEXT_HOST_RE.test(host)) return;
+  if (__sbMovieModeActive || __sbPassiveMovieSyncTimer) return;
+  __sbPassiveMovieSyncTimer = setInterval(() => {
+    if (__sbMovieModeActive) {
+      clearInterval(__sbPassiveMovieSyncTimer);
+      __sbPassiveMovieSyncTimer = null;
+      return;
+    }
+    const target = __sbFindMovieModeTarget();
+    if (target?.media && !target.media.paused) {
+      __sbBuildMovieContext({ target });
+    }
+  }, 3000);
 }
 
 function __sbActivateMovieMode() {
@@ -7626,7 +7695,8 @@ function __sbIsTabsQuery(text) {
 
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
-  if (__sbIsMovieSceneQuestion(t) && __sbBuildMovieContext()) return "page";
+  const onOttSite = __SB_MOVIE_CONTEXT_HOST_RE.test(String(location.hostname || "").replace(/^www\./, ""));
+  if (__sbIsMovieSceneQuestion(t) && (onOttSite || __sbBuildMovieContext())) return "page";
   // Volume is a Spotify delegate action — route to agent (works in chat & realtime voice).
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
