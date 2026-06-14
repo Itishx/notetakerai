@@ -545,6 +545,37 @@ chrome.action.onClicked.addListener((tab) => {
   sendToggle(true, true);
 });
 
+function bgSendMessageToTabWithInject(tabId, message, sendResponse) {
+  chrome.tabs.sendMessage(tabId, message, (res) => {
+    if (!chrome.runtime.lastError) {
+      sendResponse?.(res || { ok: true });
+      return;
+    }
+
+    chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse?.({ ok: false, error: chrome.runtime.lastError.message });
+        return;
+      }
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tabId, message, (retryRes) => {
+          if (chrome.runtime.lastError) sendResponse?.({ ok: false, error: chrome.runtime.lastError.message });
+          else sendResponse?.(retryRes || { ok: true });
+        });
+      }, 180);
+    });
+  });
+}
+
+chrome.commands.onCommand.addListener((command) => {
+  if (command !== "toggle_movie_mode") return;
+  bgGetActiveTabId().then((tabId) => {
+    if (!tabId) return;
+    chrome.storage.local.set({ activeTabId: tabId });
+    bgSendMessageToTabWithInject(tabId, { action: "toggleMovieMode" });
+  }).catch(() => {});
+});
+
 // Auto-update activeTabId and sync popup state when user switches tabs
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   chrome.storage.local.set({ activeTabId: tabId });

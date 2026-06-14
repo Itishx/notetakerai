@@ -2323,6 +2323,13 @@ let __sbCursorFollowRaf = 0;
 let __sbCursorFollowNeedsFrame = false;
 let __sbCursorFollowPosition = null;
 let __sbLastAgentTask = "";
+let __sbMovieModeActive = false;
+let __sbMovieModeState = { frame: null, media: null, descriptor: "" };
+let __sbMovieModeSyncTimer = null;
+let __sbMovieModeScrollListener = null;
+let __sbMovieModeResizeListener = null;
+let __sbMovieModeFullscreenListener = null;
+const __SB_MOVIE_MODE_FRAME_RE = /\b(player|video|media|playback|stream|caption|subtitle|controls?|shaka|jw|vjs|html5|watch|cinema|theater|viewer)\b/i;
 
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
@@ -2341,6 +2348,12 @@ if (__sbContextOk()) {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       __sbToggleBrain();
       sendResponse({ ok: true });
+    }
+    if (msg.action === "toggleMovieMode") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      const result = __sbToggleMovieMode();
+      sendResponse({ ok: Boolean(result?.ok), active: Boolean(result?.active), error: result?.error || null });
+      return false;
     }
     if (msg.action === "startXAutomation") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
@@ -2522,6 +2535,51 @@ function __sbBuildBrainUI() {
       flex-shrink: 0;
     }
     #__sb_brain_btn__:hover { transform: scale(1.1); filter: drop-shadow(0 4px 16px rgba(200,84,74,0.7)); }
+    html.__sb_movie_mode_active__,
+    body.__sb_movie_mode_active__ {
+      overflow: hidden !important;
+      background: #05070b !important;
+    }
+    #__sb_movie_backdrop__ {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 240px;
+      height: 135px;
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 50% 10%, rgba(255,255,255,0.07), transparent 48%),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow:
+        0 0 0 9999px rgba(3, 5, 10, 0.78),
+        0 28px 100px rgba(0, 0, 0, 0.58),
+        inset 0 1px 0 rgba(255,255,255,0.1);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(0.985);
+      transition:
+        top 0.24s ease,
+        left 0.24s ease,
+        width 0.24s ease,
+        height 0.24s ease,
+        border-radius 0.24s ease,
+        opacity 0.22s ease,
+        transform 0.22s ease,
+        box-shadow 0.22s ease;
+      z-index: 2147483645;
+      will-change: top, left, width, height, opacity, transform;
+    }
+    #__sb_movie_backdrop__.visible {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .__sb_movie_mode_focus__ {
+      scroll-margin: 10vh;
+    }
+    .__sb_movie_mode_video__ {
+      filter: saturate(1.03) contrast(1.03) brightness(1.02);
+    }
 
     /* ── Idle animations: float + arm swing + gaze drift + blink ── */
     #__sb_brain_btn__.sb-brain-idle {
@@ -2584,6 +2642,19 @@ function __sbBuildBrainUI() {
     }
     #__sb_brain_btn__.sb-brain-music {
       animation: __sb_brain_glow_music__ 2.2s ease-in-out infinite;
+    }
+    @keyframes __sb_brain_glow_movie__ {
+      0%, 100% {
+        filter: drop-shadow(0 2px 10px rgba(118,214,255,0.34));
+        transform: scale(1);
+      }
+      50% {
+        filter: drop-shadow(0 0 24px rgba(118,214,255,0.9)) drop-shadow(0 0 52px rgba(84,160,255,0.4));
+        transform: scale(1.035);
+      }
+    }
+    #__sb_brain_btn__.sb-brain-movie {
+      animation: __sb_brain_glow_movie__ 2.4s ease-in-out infinite;
     }
     #__sb_brain_btn__.recording {
       animation: __sb_pulse__ 1s ease-in-out infinite;
@@ -3991,6 +4062,10 @@ function __sbBuildBrainUI() {
     __sbAnchorRootBottomRight();
   }
 
+  const movieBackdrop = document.createElement("div");
+  movieBackdrop.id = "__sb_movie_backdrop__";
+  document.body.appendChild(movieBackdrop);
+
   // ── Card wrapper ──
   const cardWrap = document.createElement("div");
   cardWrap.id = "__sb_card_wrap__";
@@ -4158,6 +4233,15 @@ function __sbBuildBrainUI() {
       } else {
         __sbOpenCursorRideMode();
       }
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "m") {
+      if (__sbHasExternalEditableFocus()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbToggleMovieMode();
       return;
     }
 
@@ -5464,6 +5548,7 @@ function __sbToggleBrain() {
   if (__sbBrainVisible) {
     __sbBrainVisible = false;
     __sbSetCursorRideMode(false);
+    if (__sbMovieModeActive) __sbDeactivateMovieMode({ silent: true });
     if (btn) btn.style.display = "none";
     __sbToggleInput(false, { skipPersist: true });
     if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
@@ -6289,6 +6374,313 @@ function __sbSpotifyIsPlaying() {
   return Boolean(__sbSpotifyUiState?.nowPlaying?.isPlaying);
 }
 
+function __sbEnsureMovieBackdrop() {
+  let backdrop = document.getElementById("__sb_movie_backdrop__");
+  if (!backdrop && document.body) {
+    backdrop = document.createElement("div");
+    backdrop.id = "__sb_movie_backdrop__";
+    document.body.appendChild(backdrop);
+  }
+  return backdrop;
+}
+
+function __sbMovieModeDescriptor(el) {
+  if (!el || !(el instanceof Element)) return "player";
+  const parts = [
+    el.getAttribute("aria-label"),
+    el.getAttribute("title"),
+    el.getAttribute("data-testid"),
+    el.id,
+    el.getAttribute("class"),
+    el.tagName?.toLowerCase(),
+  ].filter(Boolean);
+  return String(parts[0] || "player");
+}
+
+function __sbMovieModeElementVisible(el) {
+  if (!el || !(el instanceof Element)) return false;
+  if (el.closest("#__sb_root__, #__sb_card_wrap__")) return false;
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 180 || rect.height < 100) return false;
+  if (rect.bottom < 18 || rect.right < 18) return false;
+  if (rect.top > window.innerHeight - 18 || rect.left > window.innerWidth - 18) return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || "1") > 0.03;
+}
+
+function __sbMovieModeRectScore(rect) {
+  const area = rect.width * rect.height;
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = cx - window.innerWidth / 2;
+  const dy = cy - window.innerHeight / 2;
+  const distancePenalty = Math.sqrt((dx * dx) + (dy * dy)) * 120;
+  return area - distancePenalty;
+}
+
+function __sbFindMovieModeFrame(mediaEl) {
+  if (!mediaEl || !(mediaEl instanceof Element)) return null;
+  const mediaRect = mediaEl.getBoundingClientRect();
+  const mediaArea = Math.max(1, mediaRect.width * mediaRect.height);
+  let bestEl = mediaEl;
+  let bestScore = -Infinity;
+  let current = mediaEl;
+  let depth = 0;
+
+  while (current && current instanceof Element && current !== document.body && current !== document.documentElement && depth < 9) {
+    const rect = current.getBoundingClientRect();
+    if (rect.width >= mediaRect.width * 0.84 && rect.height >= mediaRect.height * 0.84) {
+      const containsMedia = rect.left <= mediaRect.left + 18
+        && rect.top <= mediaRect.top + 18
+        && rect.right >= mediaRect.right - 18
+        && rect.bottom >= mediaRect.bottom - 18;
+      if (containsMedia) {
+        const area = Math.max(1, rect.width * rect.height);
+        const ratio = area / mediaArea;
+        const attrs = [
+          current.id,
+          typeof current.className === "string" ? current.className : current.getAttribute("class"),
+          current.getAttribute("data-testid"),
+          current.getAttribute("aria-label"),
+          current.getAttribute("role"),
+        ].filter(Boolean).join(" ");
+        let score = 0;
+        if (__SB_MOVIE_MODE_FRAME_RE.test(attrs)) score += 140;
+        if (ratio >= 1 && ratio <= 3.8) score += 112 - (Math.abs(ratio - 1.8) * 26);
+        else if (ratio > 3.8 && ratio <= 6.5) score += 56 - ((ratio - 3.8) * 11);
+        else if (ratio > 6.5) score -= Math.min(140, (ratio - 6.5) * 14);
+        if (current.querySelector?.("track, [class*='caption'], [class*='subtitle'], [aria-label*='caption'], [aria-label*='subtitle']")) score += 18;
+        if (area > (window.innerWidth * window.innerHeight * 0.97)) score -= 110;
+        score += Math.max(0, 28 - (depth * 6));
+        if (score > bestScore) {
+          bestScore = score;
+          bestEl = current;
+        }
+      }
+    }
+    current = current.parentElement;
+    depth += 1;
+  }
+
+  return bestEl;
+}
+
+function __sbFindMovieModeTarget() {
+  const videoCandidates = __sbAdapterDeepQueryAll("video")
+    .filter((el) => __sbMovieModeElementVisible(el));
+
+  let bestVideo = null;
+  let bestVideoScore = -Infinity;
+  for (const video of videoCandidates) {
+    const rect = video.getBoundingClientRect();
+    let score = __sbMovieModeRectScore(rect);
+    if (!video.paused && !video.ended) score += rect.width * rect.height * 0.35;
+    if (video.readyState >= 2) score += rect.width * rect.height * 0.08;
+    if (video.currentSrc) score += 9000;
+    if (score > bestVideoScore) {
+      bestVideoScore = score;
+      bestVideo = video;
+    }
+  }
+
+  if (bestVideo) {
+    return {
+      frame: __sbFindMovieModeFrame(bestVideo) || bestVideo,
+      media: bestVideo,
+      descriptor: __sbMovieModeDescriptor(bestVideo),
+    };
+  }
+
+  const iframeCandidates = __sbAdapterDeepQueryAll("iframe")
+    .filter((el) => __sbMovieModeElementVisible(el))
+    .filter((el) => {
+      const allow = String(el.getAttribute("allow") || "").toLowerCase();
+      const src = String(el.getAttribute("src") || "").toLowerCase();
+      return /autoplay|fullscreen|encrypted-media/.test(allow)
+        || /youtube|vimeo|player|video|stream|hotstar|disney|jio/.test(src);
+    });
+
+  let bestFrame = null;
+  let bestFrameScore = -Infinity;
+  for (const frame of iframeCandidates) {
+    const rect = frame.getBoundingClientRect();
+    const score = __sbMovieModeRectScore(rect) + ((rect.width * rect.height) * 0.12);
+    if (score > bestFrameScore) {
+      bestFrameScore = score;
+      bestFrame = frame;
+    }
+  }
+
+  if (!bestFrame) return null;
+  return {
+    frame: __sbFindMovieModeFrame(bestFrame) || bestFrame,
+    media: bestFrame,
+    descriptor: __sbMovieModeDescriptor(bestFrame),
+  };
+}
+
+function __sbClearMovieModeTarget(options = {}) {
+  const previousFrame = __sbMovieModeState?.frame;
+  const previousMedia = __sbMovieModeState?.media;
+  previousFrame?.classList?.remove("__sb_movie_mode_focus__");
+  previousMedia?.classList?.remove("__sb_movie_mode_video__");
+  if (!options.keepState) {
+    __sbMovieModeState = { frame: null, media: null, descriptor: "" };
+  }
+  if (!options.keepBackdrop) {
+    __sbEnsureMovieBackdrop()?.classList.remove("visible");
+  }
+}
+
+function __sbApplyMovieModeTarget(target, options = {}) {
+  if (!target?.frame || !target?.media) return false;
+  const changed = target.frame !== __sbMovieModeState.frame || target.media !== __sbMovieModeState.media;
+  if (changed) __sbClearMovieModeTarget({ keepState: true, keepBackdrop: true });
+
+  if (changed || options.forceScroll) {
+    try {
+      target.frame.scrollIntoView({ behavior: options.forceScroll ? "smooth" : "auto", block: "center", inline: "center" });
+    } catch (_) {}
+  }
+
+  target.frame.classList.add("__sb_movie_mode_focus__");
+  target.media.classList.add("__sb_movie_mode_video__");
+
+  const rect = target.frame.getBoundingClientRect();
+  const padX = Math.min(28, Math.max(12, rect.width * 0.022));
+  const padY = Math.min(26, Math.max(12, rect.height * 0.04));
+  const left = Math.max(8, rect.left - padX);
+  const top = Math.max(8, rect.top - padY);
+  const right = Math.min(window.innerWidth - 8, rect.right + padX);
+  const bottom = Math.min(window.innerHeight - 8, rect.bottom + padY);
+  const backdrop = __sbEnsureMovieBackdrop();
+  if (backdrop) {
+    backdrop.style.left = `${left + ((right - left) / 2)}px`;
+    backdrop.style.top = `${top + ((bottom - top) / 2)}px`;
+    backdrop.style.width = `${Math.max(160, right - left)}px`;
+    backdrop.style.height = `${Math.max(96, bottom - top)}px`;
+    backdrop.style.borderRadius = `${Math.round(Math.min(30, Math.max(16, Math.min(right - left, bottom - top) * 0.06)))}px`;
+    backdrop.classList.add("visible");
+  }
+
+  __sbMovieModeState = {
+    frame: target.frame,
+    media: target.media,
+    descriptor: target.descriptor || "",
+  };
+  return true;
+}
+
+function __sbSyncMovieModeVisualState() {
+  const brain = document.getElementById("__sb_brain_btn__");
+  brain?.classList.toggle("sb-brain-movie", __sbMovieModeActive);
+  if (__sbMovieModeActive) {
+    document.documentElement.classList.add("__sb_movie_mode_active__");
+    document.body?.classList?.add("__sb_movie_mode_active__");
+  } else {
+    document.documentElement.classList.remove("__sb_movie_mode_active__");
+    document.body?.classList?.remove("__sb_movie_mode_active__");
+  }
+  __sbSyncIdleState();
+}
+
+function __sbRefreshMovieMode(options = {}) {
+  if (!__sbMovieModeActive) return { ok: false, active: false, error: "Movie Mode is off." };
+  if (document.fullscreenElement) {
+    __sbEnsureMovieBackdrop()?.classList.remove("visible");
+    return { ok: true, active: true, fullscreen: true };
+  }
+
+  const currentFrame = __sbMovieModeState?.frame;
+  const currentMedia = __sbMovieModeState?.media;
+  const currentValid = __sbMovieModeElementVisible(currentFrame) && __sbMovieModeElementVisible(currentMedia);
+  const target = currentValid && !options.allowRetarget
+    ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" }
+    : (currentValid ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" } : __sbFindMovieModeTarget());
+
+  if (!target) {
+    __sbClearMovieModeTarget({ keepBackdrop: false });
+    return { ok: false, active: true, error: "No visible video player found on this page." };
+  }
+
+  __sbApplyMovieModeTarget(target, { forceScroll: options.forceScroll });
+  return { ok: true, active: true, descriptor: target.descriptor || "" };
+}
+
+function __sbStartMovieModeSync() {
+  if (__sbMovieModeSyncTimer) clearInterval(__sbMovieModeSyncTimer);
+  __sbMovieModeSyncTimer = setInterval(() => {
+    void __sbRefreshMovieMode({ allowRetarget: true });
+  }, 1100);
+
+  if (!__sbMovieModeResizeListener) {
+    __sbMovieModeResizeListener = () => requestAnimationFrame(() => { void __sbRefreshMovieMode({ allowRetarget: true }); });
+    window.addEventListener("resize", __sbMovieModeResizeListener);
+  }
+  if (!__sbMovieModeScrollListener) {
+    __sbMovieModeScrollListener = () => requestAnimationFrame(() => { void __sbRefreshMovieMode({ allowRetarget: false }); });
+    window.addEventListener("scroll", __sbMovieModeScrollListener, true);
+  }
+  if (!__sbMovieModeFullscreenListener) {
+    __sbMovieModeFullscreenListener = () => requestAnimationFrame(() => { void __sbRefreshMovieMode({ allowRetarget: true }); });
+    document.addEventListener("fullscreenchange", __sbMovieModeFullscreenListener);
+  }
+}
+
+function __sbStopMovieModeSync() {
+  if (__sbMovieModeSyncTimer) {
+    clearInterval(__sbMovieModeSyncTimer);
+    __sbMovieModeSyncTimer = null;
+  }
+  if (__sbMovieModeResizeListener) {
+    window.removeEventListener("resize", __sbMovieModeResizeListener);
+    __sbMovieModeResizeListener = null;
+  }
+  if (__sbMovieModeScrollListener) {
+    window.removeEventListener("scroll", __sbMovieModeScrollListener, true);
+    __sbMovieModeScrollListener = null;
+  }
+  if (__sbMovieModeFullscreenListener) {
+    document.removeEventListener("fullscreenchange", __sbMovieModeFullscreenListener);
+    __sbMovieModeFullscreenListener = null;
+  }
+}
+
+function __sbActivateMovieMode() {
+  if (!__sbOwnsInlineUi()) return { ok: false, active: false, error: "Braino UI is not active on this tab." };
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (brainBtn) brainBtn.style.display = "";
+  __sbBrainVisible = true;
+  __sbToggleInput(false, { skipPersist: true });
+  __sbCollapseCard();
+  __sbMovieModeActive = true;
+  __sbSyncMovieModeVisualState();
+  __sbStartMovieModeSync();
+  const result = __sbRefreshMovieMode({ allowRetarget: true, forceScroll: true });
+  if (!result.ok) {
+    __sbDeactivateMovieMode({ silent: true });
+    __sbShowBubble("Movie Mode couldn't find a visible video player on this page yet.", true, { tone: "status", title: "Movie Mode" });
+    return { ok: false, active: false, error: result.error };
+  }
+  return { ok: true, active: true };
+}
+
+function __sbDeactivateMovieMode(options = {}) {
+  __sbMovieModeActive = false;
+  __sbStopMovieModeSync();
+  __sbClearMovieModeTarget({ keepBackdrop: false, keepState: false });
+  __sbSyncMovieModeVisualState();
+  if (!options.silent && __sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  return { ok: true, active: false };
+}
+
+function __sbToggleMovieMode() {
+  if (__sbMovieModeActive) return __sbDeactivateMovieMode({ silent: true });
+  return __sbActivateMovieMode();
+}
+
 function __sbSyncIdleState() {
   const brain = document.getElementById("__sb_brain_btn__");
   if (!brain || !__sbBrainVisible) return;
@@ -6297,6 +6689,7 @@ function __sbSyncIdleState() {
   const busy = brain.classList.contains("recording")
     || brain.classList.contains("sb-brain-spotify")
     || brain.classList.contains("sb-brain-music")
+    || brain.classList.contains("sb-brain-movie")
     || brain.classList.contains("hp-connecting")
     || brain.classList.contains("hp-listening")
     || brain.classList.contains("hp-captured")

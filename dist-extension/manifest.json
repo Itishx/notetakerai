@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Braino \u2014 AI Browser Companion",
-  "version": "5.14.0",
+  "version": "6.0.0",
   "description": "Your AI companion that lives in the browser \u2014 record audio, chat about any page, and sync notes to Notion",
   "permissions": [
     "activeTab",
@@ -35,6 +35,13 @@
         "mac": "Command+I"
       },
       "description": "Open Braino"
+    },
+    "toggle_movie_mode": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+M",
+        "mac": "Command+Shift+M"
+      },
+      "description": "Toggle Movie Mode"
     }
   },
   "background": {
