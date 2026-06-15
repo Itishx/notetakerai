@@ -1,14 +1,11 @@
 import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/Navbar";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const SHANKAR_EMAIL   = "shankar.braino@gmail.com"; // update with actual email
 const SHANKAR_NAME    = "Shankar";
 const SHANKAR_ROLE    = "Developer";
 const AGREEMENT_DATE  = "15th June 2026";
 const STORAGE_KEY     = "braino_signed_shankar";
-const ADMIN_EMAIL     = "itishpande21@gmail.com";
 // ─────────────────────────────────────────────────────────────────────────────
 
 type SignedRecord = { signedAt: string; signedName: string };
@@ -207,66 +204,6 @@ function SpecialMessage() {
           — Itish Pande, Founder · Braino
         </p>
       </div>
-    </div>
-  );
-}
-
-// ── Sign-in gate ──────────────────────────────────────────────────────────────
-function SignInGate() {
-  const { signIn } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    const { error } = await signIn(email, password);
-    if (error) setError(error.message);
-    setLoading(false);
-  };
-
-  return (
-    <div style={{ ...main, maxWidth: 420, paddingTop: 80 }}>
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
-        <BrainoMascot size={80} glow />
-      </div>
-      <p style={mono}>Braino · Team Agreement</p>
-      <h1 style={{ ...serif(36), margin: "14px 0 10px" }}>Hey Shankar.</h1>
-      <p style={{ ...body, marginBottom: 32 }}>
-        Sign in with your email to read and sign your agreement.
-      </p>
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <div>
-          <label style={labelStyle}>Email</label>
-          <input type="email" required value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} placeholder="your@email.com" />
-        </div>
-        <div>
-          <label style={labelStyle}>Password</label>
-          <input type="password" required value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} placeholder="••••••••" />
-        </div>
-        {error && <p style={{ fontSize: 13.5, color: "#e05c5c", margin: 0 }}>{error}</p>}
-        <button type="submit" disabled={loading} style={btn(loading)}>
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-// ── Access denied ─────────────────────────────────────────────────────────────
-function AccessDenied({ onSignOut }: { onSignOut: () => void }) {
-  return (
-    <div style={{ ...main, maxWidth: 420, paddingTop: 80 }}>
-      <p style={mono}>Braino · Team Agreement</p>
-      <h1 style={{ ...serif(36), margin: "14px 0 10px" }}>Access denied</h1>
-      <p style={{ ...body, marginBottom: 24 }}>
-        This page is for Shankar only. If you think this is a mistake, contact{" "}
-        <a href="mailto:talk2braino@gmail.com" style={{ color: "var(--sb-accent-deep)" }}>talk2braino@gmail.com</a>.
-      </p>
-      <button onClick={onSignOut} style={btn(false)}>Sign out</button>
     </div>
   );
 }
@@ -494,49 +431,13 @@ function AgreementView({ onSign }: { onSign: (name: string) => void }) {
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function Shankar() {
-  const { user, loading, signOut } = useAuth();
   const [signed, setSigned] = useState<SignedRecord | null>(() => getStoredSig());
-
-  const userEmail = user?.email?.toLowerCase() ?? null;
-  const isAdmin   = userEmail === ADMIN_EMAIL;
-  const isShankar = userEmail === SHANKAR_EMAIL;
 
   const handleSign = (name: string) => {
     const record: SignedRecord = { signedAt: new Date().toISOString(), signedName: name };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
     setSigned(record);
   };
-
-  if (loading) {
-    return (
-      <div style={wrap}>
-        <Navbar />
-        <div style={{ ...main, paddingTop: 100, color: "var(--sb-ink-3)", fontSize: 14 }}>Loading…</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div style={wrap}>
-        <Navbar />
-        <style>{`
-          @keyframes shkFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
-          @keyframes shkGlow  { 0%,100%{opacity:0.6} 50%{opacity:1} }
-        `}</style>
-        <SignInGate />
-      </div>
-    );
-  }
-
-  if (!isAdmin && !isShankar) {
-    return (
-      <div style={wrap}>
-        <Navbar />
-        <AccessDenied onSignOut={signOut} />
-      </div>
-    );
-  }
 
   return (
     <div style={wrap}>
