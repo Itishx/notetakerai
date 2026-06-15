@@ -45,7 +45,7 @@ const INTERNS: InternConfig[] = [
     id: "vaishnavi",
     name: "Vaishnavi",
     role: "Marketing Intern",
-    email: "vaishanvirajagopalan1106@gmail.com",
+    email: "vaishnavirajagopalan1106@gmail.com",
     storageKey: "braino_intern_signed_vaishnavi",
     agreementDate: "14th June 2026",
     initials: "V",
