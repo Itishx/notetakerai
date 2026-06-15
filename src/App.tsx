@@ -42,6 +42,7 @@ import BrainoChat from "./pages/BrainoChat.tsx";
 import ProfileGrid from "./pages/ProfileGrid.tsx";
 import BrainoLaunchShort from "./pages/BrainoLaunchShort.tsx";
 import Interns from "./pages/Interns.tsx";
+import Team from "./pages/Team.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -89,6 +90,7 @@ function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashD
         <Route path="/chat" element={<BrainoChat />} />
         <Route path="/launch-short" element={<BrainoLaunchShort />} />
         <Route path="/interns" element={<Interns />} />
+        <Route path="/team" element={<Team />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
