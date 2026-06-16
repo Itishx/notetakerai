@@ -22,6 +22,30 @@ type KnownSpeakerReference = {
   mimeType: string;
 };
 
+type MeetingActionItem = {
+  task: string;
+  owner: string;
+  dueDateText: string;
+  dueDateIso: string;
+  sourceQuote: string;
+};
+
+type MeetingFollowUp = {
+  summary: string;
+  attendeeName: string;
+  attendees: string[];
+  dateText: string;
+  dateIso: string;
+  timeText: string;
+  durationMinutes: number;
+  sourceQuote: string;
+};
+
+type MeetingArtifacts = {
+  actionItems: MeetingActionItem[];
+  followUps: MeetingFollowUp[];
+};
+
 class OpenAiRequestError extends Error {
   status: number;
 
@@ -40,9 +64,12 @@ serve(async (req) => {
     const body = await req.json();
     const mode: RecordingMode = body.mode === "meeting" ? "meeting" : "lecture";
     const existingNotes = typeof body.existingNotes === "string" ? body.existingNotes : "";
+    const existingTranscript = typeof body.existingTranscript === "string" ? body.existingTranscript.trim() : "";
     const existingImages = body.existingImages && typeof body.existingImages === "object" ? body.existingImages : {};
     const existingImageKeys = Object.keys(existingImages);
     const hasExistingNotes = existingNotes.trim().length > 0;
+    const clientNow = typeof body.clientNow === "string" && body.clientNow.trim() ? body.clientNow.trim() : new Date().toISOString();
+    const clientTimeZone = typeof body.clientTimeZone === "string" && body.clientTimeZone.trim() ? body.clientTimeZone.trim() : "UTC";
     const segments = normalizeAudioSegments(body);
     const knownSpeakerReferences = normalizeKnownSpeakerReferences(body.knownSpeakerReferences);
 
@@ -95,8 +122,9 @@ serve(async (req) => {
     const combinedTranscript = transcripts.length === 1
       ? transcripts[0]
       : transcripts.map((t, i) => `[Segment ${i + 1}]\n${t}`).join("\n\n");
+    const fullTranscript = [existingTranscript, combinedTranscript].filter(Boolean).join("\n\n").trim();
 
-    console.log("Combined transcript length:", combinedTranscript.length);
+    console.log("Combined transcript length:", fullTranscript.length);
 
     console.log("Generating notes...");
     const { system: notesSystemPrompt, user: notesUserPrompt } = buildNotesPrompts({
@@ -104,7 +132,7 @@ serve(async (req) => {
       hasExistingNotes,
       existingNotes,
       existingImageKeys,
-      transcript: combinedTranscript,
+      transcript: fullTranscript || combinedTranscript,
     });
 
     const notesRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -147,7 +175,22 @@ serve(async (req) => {
       notes = restoreExistingImages(notes, existingImages as Record<string, string>);
     }
 
-    return jsonResponse({ notes, transcript: combinedTranscript });
+    let meetingArtifacts: MeetingArtifacts | null = null;
+    if (mode === "meeting") {
+      try {
+        meetingArtifacts = await extractMeetingArtifacts({
+          transcript: fullTranscript || combinedTranscript,
+          notes,
+          openAiApiKey: OPENAI_API_KEY,
+          clientNow,
+          clientTimeZone,
+        });
+      } catch (artifactError) {
+        console.warn("Meeting artifact extraction failed:", artifactError);
+      }
+    }
+
+    return jsonResponse({ notes, transcript: fullTranscript || combinedTranscript, meetingArtifacts });
   } catch (e) {
     console.error("Function error:", e);
     return jsonResponse({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
@@ -361,8 +404,9 @@ CRITICAL RULE: The transcript is the source of truth. Only include information t
 Rules:
 - Keep accurate content already present in the existing notes unless the new transcript clearly revises it
 - Output clean Markdown
-- Prefer these sections when relevant: ## Summary, ## Key Discussion Points, ## Decisions, ## Action Items, ## Open Questions
+- Prefer these sections when relevant: ## Summary, ## Key Discussion Points, ## Decisions, ## Action Items, ## Follow-Ups, ## Open Questions
 - Only include action items that were explicitly mentioned
+- Only include follow-ups that were explicitly mentioned
 - Only include an owner when the transcript explicitly identifies one
 - Use speaker labels when they help clarify who said what
 - Keep the notes concise and skimmable
@@ -373,9 +417,10 @@ CRITICAL RULE: Only include information that was EXPLICITLY stated in the transc
 
 Rules:
 - Output clean Markdown
-- Prefer these sections when relevant: ## Summary, ## Key Discussion Points, ## Decisions, ## Action Items, ## Open Questions
+- Prefer these sections when relevant: ## Summary, ## Key Discussion Points, ## Decisions, ## Action Items, ## Follow-Ups, ## Open Questions
 - Use short bullet points
 - Only include action items that were explicitly mentioned
+- Only include follow-ups that were explicitly mentioned
 - Only include an owner when the transcript explicitly identifies one
 - Use speaker labels when they help clarify who said what
 - Keep the notes concise and skimmable
@@ -423,6 +468,145 @@ Rules:
     : `Convert this lecture transcript into well-structured study notes:\n\n${transcript}`;
 
   return { system, user };
+}
+
+async function extractMeetingArtifacts({
+  transcript,
+  notes,
+  openAiApiKey,
+  clientNow,
+  clientTimeZone,
+}: {
+  transcript: string;
+  notes: string;
+  openAiApiKey: string;
+  clientNow: string;
+  clientTimeZone: string;
+}): Promise<MeetingArtifacts> {
+  const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openAiApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: NOTES_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: `You extract explicit action items and scheduling follow-ups from meeting transcripts.
+
+Return JSON only with this exact shape:
+{
+  "actionItems": [
+    {
+      "task": "",
+      "owner": "",
+      "dueDateText": "",
+      "dueDateIso": "",
+      "sourceQuote": ""
+    }
+  ],
+  "followUps": [
+    {
+      "summary": "",
+      "attendeeName": "",
+      "attendees": [],
+      "dateText": "",
+      "dateIso": "",
+      "timeText": "",
+      "durationMinutes": 30,
+      "sourceQuote": ""
+    }
+  ]
+}
+
+Rules:
+- Only include action items that were explicitly stated.
+- Only include a followUp when the transcript explicitly suggests another meeting, call, catch-up, sync, check-in, or scheduling next step.
+- Resolve relative dates like "Friday" using this reference datetime and timezone: ${clientNow} (${clientTimeZone}).
+- If the transcript gives a day but not a time, set dateIso and leave timeText empty.
+- If the transcript gives a time, preserve it in timeText exactly as naturally as possible.
+- Use attendeeName only when the relevant person was explicitly named.
+- Keep sourceQuote short and verbatim.
+- Never invent owners, times, dates, emails, or extra follow-ups.
+- Return valid JSON only. No markdown fences.`,
+        },
+        {
+          role: "user",
+          content: `Meeting transcript:\n\n${transcript}\n\nMeeting notes:\n\n${notes}`,
+        },
+      ],
+    }),
+  });
+
+  if (!extractionRes.ok) {
+    const errorText = await extractionRes.text().catch(() => "");
+    throw new Error(errorText || `Meeting artifact extraction failed (${extractionRes.status})`);
+  }
+
+  const extractionData = await extractionRes.json();
+  const raw = extractionData.choices?.[0]?.message?.content || "{}";
+  return normalizeMeetingArtifacts(parseLooseJsonObject(raw));
+}
+
+function parseLooseJsonObject(raw: string) {
+  const text = String(raw || "").trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1]?.trim() || text;
+  return JSON.parse(candidate);
+}
+
+function normalizeMeetingArtifacts(payload: unknown): MeetingArtifacts {
+  const raw = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const actionItems = Array.isArray(raw.actionItems) ? raw.actionItems : [];
+  const followUps = Array.isArray(raw.followUps) ? raw.followUps : [];
+
+  return {
+    actionItems: actionItems
+      .map((item) => normalizeMeetingActionItem(item))
+      .filter((item): item is MeetingActionItem => Boolean(item))
+      .slice(0, 6),
+    followUps: followUps
+      .map((item) => normalizeMeetingFollowUp(item))
+      .filter((item): item is MeetingFollowUp => Boolean(item))
+      .slice(0, 4),
+  };
+}
+
+function normalizeMeetingActionItem(item: unknown): MeetingActionItem | null {
+  if (!item || typeof item !== "object") return null;
+  const raw = item as Record<string, unknown>;
+  const task = typeof raw.task === "string" ? raw.task.trim() : "";
+  if (!task) return null;
+  return {
+    task,
+    owner: typeof raw.owner === "string" ? raw.owner.trim() : "",
+    dueDateText: typeof raw.dueDateText === "string" ? raw.dueDateText.trim() : "",
+    dueDateIso: typeof raw.dueDateIso === "string" ? raw.dueDateIso.trim() : "",
+    sourceQuote: typeof raw.sourceQuote === "string" ? raw.sourceQuote.trim() : "",
+  };
+}
+
+function normalizeMeetingFollowUp(item: unknown): MeetingFollowUp | null {
+  if (!item || typeof item !== "object") return null;
+  const raw = item as Record<string, unknown>;
+  const summary = typeof raw.summary === "string" ? raw.summary.trim() : "";
+  const dateText = typeof raw.dateText === "string" ? raw.dateText.trim() : "";
+  const dateIso = typeof raw.dateIso === "string" ? raw.dateIso.trim() : "";
+  if (!summary || !dateText || !dateIso) return null;
+  return {
+    summary,
+    attendeeName: typeof raw.attendeeName === "string" ? raw.attendeeName.trim() : "",
+    attendees: Array.isArray(raw.attendees)
+      ? raw.attendees.map((value) => String(value || "").trim()).filter(Boolean)
+      : [],
+    dateText,
+    dateIso,
+    timeText: typeof raw.timeText === "string" ? raw.timeText.trim() : "",
+    durationMinutes: Number.isFinite(Number(raw.durationMinutes)) ? Math.max(15, Number(raw.durationMinutes)) : 30,
+    sourceQuote: typeof raw.sourceQuote === "string" ? raw.sourceQuote.trim() : "",
+  };
 }
 
 function restoreExistingImages(markdown: string, existingImages: Record<string, string>) {

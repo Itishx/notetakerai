@@ -15,8 +15,13 @@ const EXTENSION_FILES = [
   "icon128.png",
   "icon48.png",
   "manifest.json",
+  "mic-permission.html",
+  "mic-permission.js",
   "offscreen.html",
   "offscreen.js",
+  "popup.html",
+  "sidepanel.html",
+  "styles.css",
 ];
 
 const EXTENSION_DIRS = ["fonts"];
@@ -26,8 +31,10 @@ function ensureDir(dir) {
 }
 
 function copyFile(srcDir, destDir, file) {
+  const srcPath = path.join(srcDir, file);
+  if (!fs.existsSync(srcPath)) return;
   ensureDir(destDir);
-  fs.copyFileSync(path.join(srcDir, file), path.join(destDir, file));
+  fs.copyFileSync(srcPath, path.join(destDir, file));
 }
 
 function copyDirContents(srcDir, destDir) {

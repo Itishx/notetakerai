@@ -643,13 +643,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "getLectureSegment") {
-    bgGetAndTranscribeSegment(message.existingNotes || "", message.mode)
+    bgGetAndTranscribeSegment(message.existingNotes || "", message.mode, message.existingTranscript || "")
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+  if (message.action === "scheduleMeetingFollowUp") {
+    bgScheduleMeetingFollowUp(message.followUp || {}, sender?.tab?.id)
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
   if (message.action === "stopRecordingAndTranscribe") {
-    bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode)
+    bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode, message.existingTranscript || "")
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -5606,7 +5612,7 @@ async function bgGetAudioSegment() {
   });
 }
 
-async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", mode = "lecture", knownSpeakerReferences = [] }) {
+async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [] }) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
   if (!stored.authToken) return { error: "Not signed in", notes: existingNotes };
 
@@ -5623,8 +5629,11 @@ async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", mode = 
       body: JSON.stringify({
         audioSegments: [audioBase64],
         existingNotes,
+        existingTranscript,
         mode: bgNormalizeRecordingMode(mode),
         knownSpeakerReferences,
+        clientNow: new Date().toISOString(),
+        clientTimeZone: bgCalendarTimeZone(),
       }),
     });
     if (!res.ok) {
@@ -5643,35 +5652,111 @@ async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", mode = 
       return { error: errorMessage, notes: existingNotes };
     }
     const json = await res.json();
-    return { notes: json.notes || existingNotes, transcript: json.transcript || "" };
+    return {
+      notes: json.notes || existingNotes,
+      transcript: json.transcript || "",
+      meetingArtifacts: json.meetingArtifacts || null,
+    };
   } catch (e) {
     return { error: e.message || "Transcription failed", notes: existingNotes };
   }
 }
 
-async function bgGetAndTranscribeSegment(existingNotes, mode) {
+async function bgGetAndTranscribeSegment(existingNotes, mode, existingTranscript) {
   const segRes = await bgGetAudioSegment();
   return bgTranscribeAudioChunk({
     audioBase64: segRes?.audioBase64 || null,
     existingNotes,
+    existingTranscript,
     mode: mode || bgRecordingMode,
     knownSpeakerReferences: Array.isArray(segRes?.knownSpeakerReferences) ? segRes.knownSpeakerReferences : [],
   });
 }
 
-async function bgStopRecordingAndTranscribe(existingNotes, mode) {
+async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscript) {
   const activeMode = bgNormalizeRecordingMode(mode || bgRecordingMode);
   try {
     const stopRes = await stopRecording();
     return await bgTranscribeAudioChunk({
       audioBase64: stopRes?.audioBase64 || null,
       existingNotes,
+      existingTranscript,
       mode: activeMode,
       knownSpeakerReferences: Array.isArray(stopRes?.knownSpeakerReferences) ? stopRes.knownSpeakerReferences : [],
     });
   } finally {
     bgRecordingMode = "lecture";
   }
+}
+
+function bgBuildMeetingFollowUpDateTime(dateIso, timeText, durationMinutes = 30) {
+  const rawDate = String(dateIso || "").trim();
+  const dateOnlyMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const baseDate = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(rawDate);
+  if (Number.isNaN(baseDate.getTime())) {
+    throw new Error("I couldn't resolve the follow-up date from the meeting.");
+  }
+  const parsedTime = bgParseCalendarTimeFragment(timeText || "");
+  if (!parsedTime) {
+    throw new Error("Tell me the time for that follow-up first, for example 3pm.");
+  }
+  const start = new Date(baseDate);
+  start.setHours(parsedTime.hour, parsedTime.minute, 0, 0);
+  const end = new Date(start.getTime() + Math.max(15, Number(durationMinutes) || 30) * 60 * 1000);
+  const timeZone = bgCalendarTimeZone();
+  return {
+    start: { dateTime: start.toISOString(), timeZone },
+    end: { dateTime: end.toISOString(), timeZone },
+  };
+}
+
+async function bgScheduleMeetingFollowUp(followUp, tabId) {
+  const summary = String(followUp?.summary || "").trim() || "Follow-up call";
+  const attendeeName = String(followUp?.attendeeName || "").trim();
+  const timeText = String(followUp?.timeText || "").trim();
+  const dateIso = String(followUp?.dateIso || "").trim();
+  const durationMinutes = Number(followUp?.durationMinutes || 30);
+  const sourceQuote = String(followUp?.sourceQuote || "").trim();
+
+  const { start, end } = bgBuildMeetingFollowUpDateTime(dateIso, timeText, durationMinutes);
+
+  let attendees = Array.isArray(followUp?.attendees)
+    ? followUp.attendees.map((value) => bgNormalizeEmail(value)).filter(Boolean)
+    : [];
+
+  if (!attendees.length && attendeeName) {
+    const resolvedContact = await bgResolveBrainoContact(attendeeName, {
+      tabId,
+      requireEmail: true,
+      actionLabel: "calendar invites",
+    });
+    if (!resolvedContact.ok) {
+      return { error: resolvedContact.message || bgBuildMissingContactMessage(attendeeName, "calendar invites") };
+    }
+    if (resolvedContact.contact?.email) {
+      attendees = [resolvedContact.contact.email];
+    }
+  }
+
+  const description = [
+    "Created by Braino from a meeting follow-up.",
+    sourceQuote ? `Source quote: "${sourceQuote}"` : "",
+  ].filter(Boolean).join("\n\n");
+
+  const result = await bgCallCalendarFunction("google-calendar-action", {
+    action: "create_event",
+    summary,
+    description,
+    attendees,
+    start,
+    end,
+    createMeet: true,
+    sendUpdates: attendees.length ? "all" : "none",
+  });
+
+  return { ok: true, event: result?.event || null };
 }
 
 async function bgSyncToNotion(markdown, title) {

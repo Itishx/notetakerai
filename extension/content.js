@@ -2308,6 +2308,8 @@ let __sbLectureNotes = "";
 let __sbLectureInterval = null;
 let __sbLecSegmentCount = 0;
 let __sbLectureRecordingMode = "lecture";
+let __sbLectureTranscript = "";
+let __sbMeetingArtifacts = { actionItems: [], followUps: [] };
 let __sbSpotifyUiState = {
   active: false,
   source: "spotify",
@@ -3048,6 +3050,21 @@ function __sbBuildBrainUI() {
     .sb-lec-spinner { width:24px; height:24px; border:2px solid rgba(65,48,40,0.15); border-top-color:#E8786E; border-radius:50%; animation:sbLecSpin 0.8s linear infinite; }
     @keyframes sbLecSpin { to { transform: rotate(360deg); } }
     .sb-lec-loading-txt { font-size:12.5px; color:#A79B92; }
+    .sb-meeting-artifacts { display:grid; gap:12px; margin-top:16px; }
+    .sb-meeting-artifact-card { border:1px solid rgba(65,48,40,0.12); border-radius:16px; padding:12px; background:rgba(255,251,247,0.72); }
+    .sb-meeting-artifact-kicker { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:#A79B92; margin-bottom:7px; }
+    .sb-meeting-artifact-title { font-size:13px; font-weight:600; color:#1B1713; margin-bottom:6px; line-height:1.4; }
+    .sb-meeting-artifact-list { display:grid; gap:7px; margin:0; padding:0 0 0 16px; color:#413028; }
+    .sb-meeting-artifact-list li { margin:0; }
+    .sb-meeting-artifact-meta { font-size:11.5px; color:#8A7B73; line-height:1.45; }
+    .sb-meeting-followup-quote { margin-top:8px; padding-left:10px; border-left:3px solid rgba(232,120,110,0.28); color:#705C50; font-size:11.5px; line-height:1.5; }
+    .sb-meeting-followup-actions { display:flex; gap:8px; margin-top:10px; }
+    .sb-meeting-followup-btn { flex:1; padding:8px 6px; border-radius:12px; border:1px solid rgba(65,48,40,0.16); background:transparent; color:#413028; font-size:11.5px; font-weight:600; cursor:pointer; transition:background 0.15s, opacity 0.15s; }
+    .sb-meeting-followup-btn:hover { background:rgba(65,48,40,0.06); }
+    .sb-meeting-followup-btn.accent { background:#E8786E; border-color:#E8786E; color:white; }
+    .sb-meeting-followup-btn.accent:hover { background:#C9544A; border-color:#C9544A; }
+    .sb-meeting-followup-btn:disabled { opacity:0.5; cursor:default; }
+    .sb-meeting-followup-status { min-height:15px; margin-top:8px; font-size:11.5px; color:#8A7B73; line-height:1.45; }
 
     /* ── NEW UI: Thin bar + centered glass card ── */
     #__sb_bar__ {
@@ -9040,6 +9057,129 @@ function __sbShowLectureResultMessage(title, message) {
   `;
 }
 
+function __sbGetMeetingArtifacts() {
+  const actionItems = Array.isArray(__sbMeetingArtifacts?.actionItems) ? __sbMeetingArtifacts.actionItems : [];
+  const followUps = Array.isArray(__sbMeetingArtifacts?.followUps) ? __sbMeetingArtifacts.followUps : [];
+  return { actionItems, followUps };
+}
+
+function __sbRenderMeetingArtifactsHtml() {
+  if (__sbLectureRecordingMode !== "meeting") return "";
+  const { actionItems, followUps } = __sbGetMeetingArtifacts();
+  if (!actionItems.length && !followUps.length) return "";
+
+  const actionItemsHtml = actionItems.length
+    ? `
+      <section class="sb-meeting-artifact-card">
+        <div class="sb-meeting-artifact-kicker">Action items</div>
+        <div class="sb-meeting-artifact-title">Braino pulled out the concrete next steps from the meeting.</div>
+        <ul class="sb-meeting-artifact-list">
+          ${actionItems.slice(0, 5).map((item) => {
+            const task = __sbEscapeHtml(item?.task || "Follow-up");
+            const owner = __sbEscapeHtml(item?.owner || "");
+            const due = __sbEscapeHtml(item?.dueDateText || "");
+            const metaBits = [owner ? `Owner: ${owner}` : "", due ? `Due: ${due}` : ""].filter(Boolean).join(" · ");
+            return `<li><strong>${task}</strong>${metaBits ? `<div class="sb-meeting-artifact-meta">${metaBits}</div>` : ""}</li>`;
+          }).join("")}
+        </ul>
+      </section>
+    `
+    : "";
+
+  const followUpsHtml = followUps.length
+    ? followUps.map((item, index) => {
+      const summary = __sbEscapeHtml(item?.summary || "Follow-up call");
+      const attendee = __sbEscapeHtml(item?.attendeeName || "");
+      const rawDateText = String(item?.dateText || "").trim();
+      const rawTimeText = String(item?.timeText || "").trim();
+      const dateText = __sbEscapeHtml(rawDateText);
+      const timeText = __sbEscapeHtml(rawTimeText);
+      const quote = __sbEscapeHtml(item?.sourceQuote || "");
+      const meta = [attendee ? `With ${attendee}` : "", dateText, timeText].filter(Boolean).join(" · ");
+      const buttonLabel = rawTimeText ? `Schedule ${rawDateText}, ${rawTimeText}` : `Schedule ${rawDateText}`;
+      return `
+        <section class="sb-meeting-artifact-card" data-sb-followup-card="${index}">
+          <div class="sb-meeting-artifact-kicker">Calendar follow-up</div>
+          <div class="sb-meeting-artifact-title">${summary}</div>
+          ${meta ? `<div class="sb-meeting-artifact-meta">${meta}</div>` : ""}
+          ${quote ? `<div class="sb-meeting-followup-quote">"${quote}"</div>` : ""}
+          <div class="sb-meeting-artifact-meta">Should I put this on your calendar?</div>
+          <div class="sb-meeting-followup-actions">
+            <button class="sb-meeting-followup-btn accent" type="button" data-sb-followup-schedule="${index}">${__sbEscapeHtml(buttonLabel)}</button>
+            <button class="sb-meeting-followup-btn" type="button" data-sb-followup-dismiss="${index}">Not now</button>
+          </div>
+          <div class="sb-meeting-followup-status" data-sb-followup-status="${index}"></div>
+        </section>
+      `;
+    }).join("")
+    : "";
+
+  return `<div class="sb-meeting-artifacts">${actionItemsHtml}${followUpsHtml}</div>`;
+}
+
+async function __sbScheduleMeetingFollowUp(index) {
+  const { followUps } = __sbGetMeetingArtifacts();
+  const followUp = followUps[index];
+  if (!followUp) return;
+
+  const scheduleBtn = document.querySelector(`[data-sb-followup-schedule="${index}"]`);
+  const dismissBtn = document.querySelector(`[data-sb-followup-dismiss="${index}"]`);
+  const statusEl = document.querySelector(`[data-sb-followup-status="${index}"]`);
+  if (scheduleBtn) scheduleBtn.disabled = true;
+  if (dismissBtn) dismissBtn.disabled = true;
+  if (statusEl) statusEl.textContent = "Preparing calendar follow-up…";
+
+  let timeText = String(followUp?.timeText || "").trim();
+  if (!timeText) {
+    const dateLabel = String(followUp?.dateText || "that day").trim();
+    const promptLabel = String(followUp?.summary || "this follow-up").trim();
+    const entered = window.prompt(`What time should I schedule "${promptLabel}" for ${dateLabel}?`, "3pm");
+    timeText = String(entered || "").trim();
+    if (!timeText) {
+      if (statusEl) statusEl.textContent = "No time entered, so I left it unscheduled.";
+      if (scheduleBtn) scheduleBtn.disabled = false;
+      if (dismissBtn) dismissBtn.disabled = false;
+      return;
+    }
+    __sbMeetingArtifacts.followUps[index].timeText = timeText;
+  }
+
+  const res = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      action: "scheduleMeetingFollowUp",
+      followUp: { ...followUp, timeText },
+    }, (response) => resolve(response || {}));
+  });
+
+  if (res?.error) {
+    if (statusEl) statusEl.textContent = String(res.error);
+    if (scheduleBtn) scheduleBtn.disabled = false;
+    if (dismissBtn) dismissBtn.disabled = false;
+    return;
+  }
+
+  if (scheduleBtn) {
+    scheduleBtn.textContent = "Scheduled ✓";
+    scheduleBtn.disabled = true;
+  }
+  if (dismissBtn) dismissBtn.disabled = true;
+  if (statusEl) statusEl.textContent = "Added to Google Calendar.";
+}
+
+function __sbDismissMeetingFollowUp(index) {
+  const card = document.querySelector(`[data-sb-followup-card="${index}"]`);
+  if (card) card.remove();
+}
+
+function __sbBindMeetingArtifactsActions() {
+  document.querySelectorAll("[data-sb-followup-schedule]").forEach((button) => {
+    button.addEventListener("click", () => void __sbScheduleMeetingFollowUp(Number(button.getAttribute("data-sb-followup-schedule") || "-1")));
+  });
+  document.querySelectorAll("[data-sb-followup-dismiss]").forEach((button) => {
+    button.addEventListener("click", () => __sbDismissMeetingFollowUp(Number(button.getAttribute("data-sb-followup-dismiss") || "-1")));
+  });
+}
+
 function __sbShowLectureRecordingCard() {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
@@ -9077,7 +9217,9 @@ async function __sbStartLectureRecording() {
   if (__sbIsLectureRecording) return;
   __sbIsLectureRecording = true;
   __sbLectureNotes = "";
+  __sbLectureTranscript = "";
   __sbLecSegmentCount = 0;
+  __sbMeetingArtifacts = { actionItems: [], followUps: [] };
 
   const mode = window.__sbForcedMode === "meeting" ? "meeting" : "lecture";
   const withMic = (mode === "meeting");
@@ -9125,7 +9267,12 @@ async function __sbCaptureLectureSegment() {
 
   try {
     const res = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes, mode: __sbLectureRecordingMode }, (r) => resolve(r || {}));
+      chrome.runtime.sendMessage({
+        action: "getLectureSegment",
+        existingNotes: __sbLectureNotes,
+        existingTranscript: __sbLectureTranscript,
+        mode: __sbLectureRecordingMode,
+      }, (r) => resolve(r || {}));
     });
 
     if (res.error) {
@@ -9140,6 +9287,8 @@ async function __sbCaptureLectureSegment() {
     }
 
     __sbLectureNotes = res.notes || __sbLectureNotes;
+    __sbLectureTranscript = res.transcript || __sbLectureTranscript;
+    if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
     __sbLecSegmentCount++;
     if (statusEl) statusEl.textContent = `✓ Segment ${__sbLecSegmentCount} saved — still recording…`;
     if (segBtn) { segBtn.disabled = false; segBtn.textContent = "✂ Save Segment"; }
@@ -9168,7 +9317,12 @@ async function __sbStopLectureRecording() {
 
   const res = await new Promise((resolve) => {
     chrome.runtime.sendMessage(
-      { action: "stopRecordingAndTranscribe", existingNotes: __sbLectureNotes, mode: __sbLectureRecordingMode },
+      {
+        action: "stopRecordingAndTranscribe",
+        existingNotes: __sbLectureNotes,
+        existingTranscript: __sbLectureTranscript,
+        mode: __sbLectureRecordingMode,
+      },
       (r) => resolve(r || {}),
     );
   });
@@ -9179,6 +9333,8 @@ async function __sbStopLectureRecording() {
   }
 
   if (res.notes) __sbLectureNotes = res.notes;
+  if (res.transcript) __sbLectureTranscript = res.transcript;
+  if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
 
   if (__sbLectureNotes) {
     __sbShowLectureNotes(__sbLectureNotes, true);
@@ -9195,13 +9351,14 @@ function __sbShowLectureNotes(notes, isFinal) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbLastBubbleRaw = notes;
+  const meetingArtifactsHtml = isFinal ? __sbRenderMeetingArtifactsHtml() : "";
   const actionsHtml = isFinal ? `
     <div class="sb-lec-notes-actions">
       <button id="__sb_lec_copy_btn__" class="sb-lec-copy-btn">Copy</button>
       <button id="__sb_notion_sync_btn__" class="sb-notion-btn" style="flex:1.4">Sync to Notion</button>
     </div>
   ` : "";
-  scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}</div>${actionsHtml}`;
+  scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}${meetingArtifactsHtml}</div>${actionsHtml}`;
   __sbOpenCard({ rich: true });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (isFinal) {
@@ -9211,6 +9368,7 @@ function __sbShowLectureNotes(notes, isFinal) {
       const btn = document.getElementById("__sb_lec_copy_btn__");
       if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy"; }, 1800); }
     });
+    __sbBindMeetingArtifactsActions();
   }
 }
 
