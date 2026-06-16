@@ -379,8 +379,9 @@ async function startCapture(streamId, withMic) {
       };
       micRecorder.start(1000);
     } catch (e) {
-      console.warn("Mic access denied, recording tab audio only:", e.message);
-      // Fall back to tab-only
+      cleanupCaptureResources();
+      const message = e?.message || "Microphone access failed";
+      throw new Error(`Couldn't access your microphone for Meeting mode. ${message}`);
     }
   }
 

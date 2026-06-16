@@ -5559,6 +5559,13 @@ async function startRecording(tabId, existingStreamId, withMic, mode) {
     throw new Error("No tab ID or stream ID provided");
   }
 
+  if (withMic) {
+    const micOk = await ensureExtensionMicPermission();
+    if (!micOk) {
+      throw new Error("Microphone access is required for Meeting mode so Braino can capture your voice.");
+    }
+  }
+
   await ensureOffscreen();
 
   await new Promise((resolve, reject) => {
