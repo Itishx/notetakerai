@@ -1,5 +1,6 @@
 // Background service worker for Braino (MV3)
 let isRecording = false;
+let bgRecordingMode = "lecture";
 let bgAgentShouldStop = false;
 let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
 let bgRtSessionActive = false; // offscreen realtime session is running
@@ -21,6 +22,10 @@ function doCapture(windowId, sendResponse) {
       sendResponse({ dataUrl });
     }
   });
+}
+
+function bgNormalizeRecordingMode(value) {
+  return value === "meeting" ? "meeting" : "lecture";
 }
 
 function bgDelay(ms) {
@@ -626,7 +631,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "startRecording") {
     const tabId = message.tabId || sender?.tab?.id;
-    startRecording(tabId, message.streamId, message.withMic)
+    startRecording(tabId, message.streamId, message.withMic, message.mode)
       .then(() => sendResponse({ success: true }))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -638,7 +643,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "getLectureSegment") {
-    bgGetAndTranscribeSegment(message.existingNotes || "")
+    bgGetAndTranscribeSegment(message.existingNotes || "", message.mode)
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+  if (message.action === "stopRecordingAndTranscribe") {
+    bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode)
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -5538,7 +5549,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   });
 });
 
-async function startRecording(tabId, existingStreamId, withMic) {
+async function startRecording(tabId, existingStreamId, withMic, mode) {
   let streamId;
   if (existingStreamId) {
     streamId = existingStreamId;
@@ -5561,6 +5572,7 @@ async function startRecording(tabId, existingStreamId, withMic) {
   });
 
   isRecording = true;
+  bgRecordingMode = bgNormalizeRecordingMode(mode);
 }
 
 async function stopRecording() {
@@ -5569,6 +5581,7 @@ async function stopRecording() {
       { target: "offscreen", action: "stopCapture" },
       (res) => {
         isRecording = false;
+        bgRecordingMode = "lecture";
         if (res?.error) reject(new Error(res.error));
         else resolve(res);
       }
@@ -5586,12 +5599,11 @@ async function bgGetAudioSegment() {
   });
 }
 
-async function bgGetAndTranscribeSegment(existingNotes) {
+async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", mode = "lecture", knownSpeakerReferences = [] }) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
   if (!stored.authToken) return { error: "Not signed in", notes: existingNotes };
 
-  const segRes = await bgGetAudioSegment();
-  if (!segRes?.audioBase64) return { notes: existingNotes, empty: true };
+  if (!audioBase64) return { notes: existingNotes, empty: true };
 
   try {
     const res = await fetch(`${BG_API_BASE}/transcribe-and-notes`, {
@@ -5601,16 +5613,57 @@ async function bgGetAndTranscribeSegment(existingNotes) {
         Authorization: `Bearer ${stored.authToken}`,
         apikey: BG_SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({ audioSegments: [segRes.audioBase64], existingNotes }),
+      body: JSON.stringify({
+        audioSegments: [audioBase64],
+        existingNotes,
+        mode: bgNormalizeRecordingMode(mode),
+        knownSpeakerReferences,
+      }),
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      return { error: `Transcription failed (${res.status})`, notes: existingNotes };
+      let errorMessage = `Transcription failed (${res.status})`;
+      try {
+        const parsed = JSON.parse(txt);
+        errorMessage = parsed?.error || parsed?.details || errorMessage;
+      } catch (_) {
+        if (txt) errorMessage = txt;
+      }
+      const lowered = String(errorMessage || "").toLowerCase();
+      if (res.status === 400 && (lowered.includes("no speech detected") || lowered.includes("no audio data provided"))) {
+        return { notes: existingNotes, empty: true };
+      }
+      return { error: errorMessage, notes: existingNotes };
     }
     const json = await res.json();
-    return { notes: json.notes || existingNotes };
+    return { notes: json.notes || existingNotes, transcript: json.transcript || "" };
   } catch (e) {
     return { error: e.message || "Transcription failed", notes: existingNotes };
+  }
+}
+
+async function bgGetAndTranscribeSegment(existingNotes, mode) {
+  const segRes = await bgGetAudioSegment();
+  return bgTranscribeAudioChunk({
+    audioBase64: segRes?.audioBase64 || null,
+    existingNotes,
+    mode: mode || bgRecordingMode,
+    knownSpeakerReferences: Array.isArray(segRes?.knownSpeakerReferences) ? segRes.knownSpeakerReferences : [],
+  });
+}
+
+async function bgStopRecordingAndTranscribe(existingNotes, mode) {
+  const activeMode = bgNormalizeRecordingMode(mode || bgRecordingMode);
+  try {
+    const stopRes = await stopRecording();
+    return await bgTranscribeAudioChunk({
+      audioBase64: stopRes?.audioBase64 || null,
+      existingNotes,
+      mode: activeMode,
+      knownSpeakerReferences: Array.isArray(stopRes?.knownSpeakerReferences) ? stopRes.knownSpeakerReferences : [],
+    });
+  } finally {
+    bgRecordingMode = "lecture";
   }
 }
 

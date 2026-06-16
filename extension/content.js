@@ -2307,6 +2307,7 @@ let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
 let __sbLecSegmentCount = 0;
+let __sbLectureRecordingMode = "lecture";
 let __sbSpotifyUiState = {
   active: false,
   source: "spotify",
@@ -8998,6 +8999,17 @@ function __sbShowLectureReadyCard(mode) {
   document.getElementById("__sb_lec_start_btn__")?.addEventListener("click", () => void __sbStartLectureRecording());
 }
 
+function __sbShowLectureResultMessage(title, message) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  scroll.innerHTML = `
+    <div class="sb-lec-ready">
+      <div class="sb-lec-kicker">${__sbEscapeHtml(title)}</div>
+      <div class="sb-lec-ready-sub">${__sbEscapeHtml(message)}</div>
+    </div>
+  `;
+}
+
 function __sbShowLectureRecordingCard() {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
@@ -9037,12 +9049,13 @@ async function __sbStartLectureRecording() {
   __sbLectureNotes = "";
   __sbLecSegmentCount = 0;
 
-  const mode = window.__sbForcedMode || "page";
+  const mode = window.__sbForcedMode === "meeting" ? "meeting" : "lecture";
   const withMic = (mode === "meeting");
+  __sbLectureRecordingMode = mode;
 
   try {
     await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ action: "startRecording", withMic }, (res) => {
+      chrome.runtime.sendMessage({ action: "startRecording", withMic, mode }, (res) => {
         if (chrome.runtime.lastError || res?.error) reject(new Error(res?.error || chrome.runtime.lastError?.message || "Failed to start"));
         else resolve();
       });
@@ -9082,11 +9095,11 @@ async function __sbCaptureLectureSegment() {
 
   try {
     const res = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes }, (r) => resolve(r || {}));
+      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes, mode: __sbLectureRecordingMode }, (r) => resolve(r || {}));
     });
 
     if (res.error) {
-      if (statusEl) statusEl.textContent = "Capture failed — try again.";
+      if (statusEl) statusEl.textContent = `Capture failed — ${res.error}`;
       if (segBtn) { segBtn.disabled = false; segBtn.textContent = "✂ Save Segment"; }
       return;
     }
@@ -9123,26 +9136,29 @@ async function __sbStopLectureRecording() {
     `;
   }
 
-  // Get final segment and stop recording simultaneously
-  const [segRes] = await Promise.allSettled([
-    new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes }, (r) => resolve(r || {}));
-    }),
-    new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: "stopRecording" }, () => resolve());
-    }),
-  ]);
+  const res = await new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { action: "stopRecordingAndTranscribe", existingNotes: __sbLectureNotes, mode: __sbLectureRecordingMode },
+      (r) => resolve(r || {}),
+    );
+  });
 
-  const seg = segRes.status === "fulfilled" ? segRes.value : {};
-  if (seg.notes) __sbLectureNotes = seg.notes;
+  if (res.error) {
+    __sbShowLectureResultMessage("Recording stopped", res.error);
+    return;
+  }
+
+  if (res.notes) __sbLectureNotes = res.notes;
 
   if (__sbLectureNotes) {
     __sbShowLectureNotes(__sbLectureNotes, true);
-  } else {
-    if (scroll) {
-      scroll.innerHTML = `<div class="sb-lec-ready"><div class="sb-lec-kicker">Recording stopped</div><div class="sb-lec-ready-sub">No content was captured — try speaking louder or use ✂ Save Segment during the next session.</div></div>`;
-    }
+    return;
   }
+
+  __sbShowLectureResultMessage(
+    "Recording stopped",
+    "No content was captured — try speaking louder or use ✂ Save Segment during the next session.",
+  );
 }
 
 function __sbShowLectureNotes(notes, isFinal) {
@@ -9172,7 +9188,8 @@ async function __sbSyncNotesToNotion() {
   const btn = document.getElementById("__sb_notion_sync_btn__");
   if (btn) { btn.textContent = "Syncing…"; btn.disabled = true; }
 
-  const title = "Lecture Notes — " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const noteLabel = __sbLectureRecordingMode === "meeting" ? "Meeting Notes" : "Lecture Notes";
+  const title = `${noteLabel} — ` + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   try {
     const res = await new Promise((resolve) => {
