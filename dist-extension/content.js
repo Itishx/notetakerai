@@ -9183,9 +9183,12 @@ function __sbBindMeetingArtifactsActions() {
 function __sbShowLectureRecordingCard() {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
+  const isMeeting = __sbLectureRecordingMode === "meeting";
   const title = (document.title || "Untitled").slice(0, 50);
   const date = new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
   const bars = Array.from({ length: 12 }, () => `<div class="sb-lec-wave-bar"></div>`).join("");
+  const segmentButtonHtml = isMeeting ? "" : `<button id="__sb_lec_seg_btn__" class="sb-lec-seg-btn">✂ Save Segment</button>`;
+  const statusCopy = isMeeting ? "Listening to this tab and your mic…" : "Listening to this tab…";
   scroll.innerHTML = `
     <div class="sb-lec-rec">
       <div class="sb-lec-rec-header">
@@ -9196,9 +9199,9 @@ function __sbShowLectureRecordingCard() {
       <div class="sb-lec-date">${date}</div>
       <div class="sb-lec-waveform" id="__sb_lec_waveform__">${bars}</div>
       <div class="sb-lec-timer" id="__sb_lec_card_timer__">00:00</div>
-      <div class="sb-lec-status" id="__sb_lec_status__">Listening to this tab…</div>
+      <div class="sb-lec-status" id="__sb_lec_status__">${statusCopy}</div>
       <div class="sb-lec-btns">
-        <button id="__sb_lec_seg_btn__" class="sb-lec-seg-btn">✂ Save Segment</button>
+        ${segmentButtonHtml}
         <button id="__sb_lec_stop_btn__" class="sb-lec-stop-btn">⏹ Stop & Get Notes</button>
       </div>
     </div>
@@ -9257,6 +9260,7 @@ async function __sbStartLectureRecording() {
 }
 
 async function __sbCaptureLectureSegment() {
+  if (__sbLectureRecordingMode === "meeting") return;
   const segBtn = document.getElementById("__sb_lec_seg_btn__");
   const captureBtn = document.getElementById("__sb_capture_btn__");
   const statusEl = document.getElementById("__sb_lec_status__");
@@ -9343,7 +9347,9 @@ async function __sbStopLectureRecording() {
 
   __sbShowLectureResultMessage(
     "Recording stopped",
-    "No content was captured — try speaking louder or use ✂ Save Segment during the next session.",
+    __sbLectureRecordingMode === "meeting"
+      ? "No content was captured — try again and make sure the meeting audio and your mic are both audible."
+      : "No content was captured — try speaking louder or use ✂ Save Segment during the next session.",
   );
 }
 
