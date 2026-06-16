@@ -2307,6 +2307,7 @@ let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
 let __sbLecSegmentCount = 0;
+let __sbLectureRecordingMode = "lecture";
 let __sbSpotifyUiState = {
   active: false,
   source: "spotify",
@@ -2331,9 +2332,10 @@ let __sbMovieModeResizeListener = null;
 let __sbMovieTranscriptEntries = [];
 let __sbMovieLastSubtitleText = "";
 let __sbMovieLastTitle = "";
+let __sbPassiveMovieSyncTimer = null;
 let __sbFullscreenUiListenerBound = false;
 const __SB_MOVIE_MODE_FRAME_RE = /\b(player|video|media|playback|stream|caption|subtitle|controls?|shaka|jw|vjs|html5|watch|cinema|theater|viewer)\b/i;
-const __SB_MOVIE_CONTEXT_HOST_RE = /\b(netflix|hotstar|jiohotstar|disneyplus|disney|primevideo|amazonvideo|hulu|max|hbomax|apple|zee5|sonyliv|youtube|mubi)\b/i;
+const __SB_MOVIE_CONTEXT_HOST_RE = /\b(netflix|hotstar|jiohotstar|disneyplus|disney|primevideo|amazonvideo|amazon|hulu|max|hbomax|appletv|apple\.tv|tv\.apple|zee5|sonyliv|jiocinema|voot|aha|mxplayer|erosnow|altbalaji|youtube|mubi|peacock|paramount|fubo|crunchyroll|funimation|tubi)\b/i;
 
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
@@ -2563,20 +2565,31 @@ function __sbBuildBrainUI() {
       pointer-events: none;
       transform: translate(-50%, -50%) scale(0.992);
       transition:
-        top 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        left 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        width 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        height 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        border-radius 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        opacity 0.26s ease,
-        transform 0.78s cubic-bezier(0.18, 0.86, 0.22, 1),
-        box-shadow 0.78s cubic-bezier(0.18, 0.86, 0.22, 1);
+        top 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        left 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        width 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        height 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        border-radius 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        opacity 0.48s ease,
+        transform 1.55s cubic-bezier(0.16, 0.92, 0.24, 1),
+        box-shadow 1.55s cubic-bezier(0.16, 0.92, 0.24, 1);
       z-index: 2147483645;
       will-change: top, left, width, height, opacity, transform;
     }
     #__sb_movie_backdrop__.visible {
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
+    }
+    #__sb_movie_backdrop__.sb-movie-fullscreen {
+      box-shadow:
+        inset 0 0 0 3px rgba(118,214,255,0.18),
+        inset 0 0 60px rgba(84,160,255,0.08);
+      background:
+        radial-gradient(circle at 50% 5%, rgba(118,214,255,0.06), transparent 40%),
+        transparent;
+      border: 1.5px solid rgba(118,214,255,0.14);
+      border-radius: 0px !important;
+      pointer-events: none;
     }
     .__sb_movie_mode_focus__ {
       scroll-margin: 10vh;
@@ -2811,16 +2824,25 @@ function __sbBuildBrainUI() {
       min-width: 260px; min-height: 80px;
       display: flex; flex-direction: column;
       overflow: hidden; resize: both;
-      background: rgba(245, 240, 234, 0.52);
+      background: rgba(255, 240, 230, 0.07);
       border-radius: 18px;
+      isolation: isolate;
       color: #1B1713;
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      box-shadow: 0 20px 60px rgba(27,23,19,0.2), 0 4px 14px rgba(27,23,19,0.08),
-                  inset 0 1px 0 rgba(255,255,255,0.65);
-      backdrop-filter: blur(44px) saturate(200%) brightness(1.06);
-      -webkit-backdrop-filter: blur(44px) saturate(200%) brightness(1.06);
+      border: 1px solid rgba(255,255,255,0.55);
+      box-shadow: 0 20px 60px rgba(27,23,19,0.18), 0 4px 14px rgba(27,23,19,0.07),
+                  inset 2px 2px 1px rgba(255,255,255,0.65),
+                  inset -1px -1px 1px rgba(255,255,255,0.3);
+      backdrop-filter: blur(4px) saturate(160%) brightness(1.04);
+      -webkit-backdrop-filter: blur(4px) saturate(160%) brightness(1.04);
       opacity: 0; transition: opacity 0.2s;
       pointer-events: none;
+    }
+    #__sb_bubble__::before {
+      content: ""; position: absolute; inset: 0; border-radius: inherit;
+      backdrop-filter: blur(20px) saturate(200%);
+      -webkit-backdrop-filter: blur(20px) saturate(200%);
+      filter: url(#__sb_glass_filter__);
+      z-index: -1; pointer-events: none;
     }
     #__sb_bubble__.visible { opacity: 1; pointer-events: all; }
     #__sb_bubble__.sb-spotify-active {
@@ -2859,8 +2881,8 @@ function __sbBuildBrainUI() {
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
       padding: 10px 12px 10px 14px; flex-shrink: 0;
       cursor: grab; user-select: none;
-      background: linear-gradient(160deg, rgba(255,255,255,0.5) 0%, rgba(250,244,238,0.38) 100%);
-      border-bottom: 1px solid rgba(200,170,150,0.18);
+      background: rgba(255,255,255,0.1);
+      border-bottom: 1px solid rgba(255,255,255,0.18);
     }
     .sb-bubble-head:active { cursor: grabbing; }
     /* drag grip dots */
@@ -3030,15 +3052,25 @@ function __sbBuildBrainUI() {
     /* ── NEW UI: Thin bar + centered glass card ── */
     #__sb_bar__ {
       display: flex; align-items: center; gap: 6px;
-      background: rgba(255,251,247,0.96); border-radius: 100px;
+      background: rgba(255,251,247,0.12); border-radius: 100px;
+      position: relative; isolation: isolate;
       padding: 7px 7px 7px 18px;
-      border: 1px solid rgba(65,48,40,0.1);
-      box-shadow: 0 8px 28px rgba(27,23,19,0.13), 0 2px 8px rgba(27,23,19,0.07);
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 8px 28px rgba(27,23,19,0.15), 0 2px 8px rgba(27,23,19,0.08),
+                  inset 2px 2px 1px rgba(255,255,255,0.65),
+                  inset -1px -1px 1px rgba(255,255,255,0.3);
       width: 360px; max-width: calc(100vw - 90px);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
       pointer-events: none; opacity: 0;
       transform: scaleX(0.55) translateY(4px); transform-origin: right center;
       transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1);
+    }
+    #__sb_bar__::before {
+      content: ""; position: absolute; inset: 0; border-radius: inherit;
+      backdrop-filter: blur(16px) saturate(200%);
+      -webkit-backdrop-filter: blur(16px) saturate(200%);
+      filter: url(#__sb_glass_filter__);
+      z-index: -1; pointer-events: none;
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
     /* ── Wake-up state ── */
@@ -3134,7 +3166,7 @@ function __sbBuildBrainUI() {
     @keyframes __sb_orbit__ { from { offset-distance: 0%; } to { offset-distance: 100%; } }
     #__sb_bubble__ {
       --sb-fg: #ffffff; --sb-fg-2: rgba(255,255,255,0.85); --sb-fg-3: rgba(255,255,255,0.4);
-      --sb-bg: rgba(255,255,255,0.08); --sb-border: rgba(255,255,255,0.22);
+      --sb-bg: rgba(255,255,255,0.04); --sb-border: rgba(255,255,255,0.38);
       --sb-q-bg: rgba(255,255,255,0.12); --sb-q-border: rgba(255,255,255,0.2);
       --sb-footer-border: rgba(255,255,255,0.12); --sb-footer-bg: rgba(0,0,0,0.1);
       --sb-code-bg: rgba(255,255,255,0.12); --sb-code-fg: #FFD0CB;
@@ -3148,9 +3180,12 @@ function __sbBuildBrainUI() {
       display: flex; flex-direction: column; overflow: hidden;
       background: var(--sb-bg); border-radius: 24px;
       border: 1px solid var(--sb-border);
-      box-shadow: 0 40px 100px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.2);
-      backdrop-filter: blur(40px) saturate(180%);
-      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      box-shadow: 0 40px 100px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.18),
+                  inset 2px 2px 1px rgba(255,255,255,0.25),
+                  inset -1px -1px 1px rgba(255,255,255,0.15);
+      backdrop-filter: blur(4px) saturate(180%);
+      -webkit-backdrop-filter: blur(4px) saturate(180%);
+      isolation: isolate;
       color: var(--sb-fg); resize: none;
     }
     #__sb_bubble__.sb-light {
@@ -4079,6 +4114,14 @@ function __sbBuildBrainUI() {
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
   document.body.appendChild(root);
+
+  // ── Liquid glass SVG displacement filter ──
+  const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  __sbGlassSvg.id = "__sb_glass_svg__";
+  __sbGlassSvg.setAttribute("style", "display:none;position:fixed;pointer-events:none");
+  __sbGlassSvg.innerHTML = `<filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter>`;
+  document.body.appendChild(__sbGlassSvg);
+
   if (__sbCursorRideMode) {
     __sbPositionRootNearCursor(true);
     __sbScheduleCursorFollow();
@@ -4185,6 +4228,7 @@ function __sbBuildBrainUI() {
       });
     });
   }
+  __sbStartPassiveMovieSync();
 
   // On X/Twitter, lock the Braino bar to the system font — Twitter's global CSS
   // bleeds into injected DOM elements and makes the UI look wrong.
@@ -6644,6 +6688,7 @@ function __sbExtractMovieSubtitleLinesFromTracks(mediaEl) {
   const lines = [];
   for (const track of Array.from(mediaEl.textTracks || [])) {
     if (track.mode === "disabled") continue;
+    // Some OTTs (Netflix) use mode="hidden" and manage rendering themselves — still has activeCues
     const activeCues = Array.from(track.activeCues || []);
     for (const cue of activeCues) {
       const cueText = typeof cue?.text === "string" ? cue.text : "";
@@ -6660,6 +6705,7 @@ function __sbExtractMovieSubtitleLinesFromTracks(mediaEl) {
 
 function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
   const selectors = [
+    // Generic
     '[class*="subtitle"]',
     '[class*="Subtitle"]',
     '[class*="caption"]',
@@ -6669,6 +6715,22 @@ function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
     '[aria-live="polite"]',
     '[aria-live="assertive"]',
     '[role="caption"]',
+    // Netflix: player-timedtext (aria-live covers outer, but adding direct)
+    '[class*="player-timedtext"]',
+    // Amazon Prime Video: atvwebplayersdk timedtext
+    '[class*="atvwebplayersdk"]',
+    '[class*="timedtext"]',
+    // Hotstar / JioHotstar
+    '[class*="sub-text"]',
+    '[class*="SubText"]',
+    '[class*="sub_text"]',
+    // JioCinema
+    '[class*="jio-sub"]',
+    // Voot / MXPlayer / generic OTT fallbacks
+    '[class*="player-sub"]',
+    '[class*="playerSub"]',
+    '[class*="video-subtitle"]',
+    '[class*="videoSubtitle"]',
   ].join(",");
   const roots = [];
   if (frame instanceof Element) roots.push(frame);
@@ -6686,12 +6748,12 @@ function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
       seenEls.add(el);
       if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__")) continue;
       const rect = el.getBoundingClientRect();
-      if (rect.height < 10 || rect.height > 180) continue;
+      if (rect.height < 4 || rect.height > 240) continue;
       if (frameRect) {
-        const lowerBandTop = frameRect.top + (frameRect.height * 0.42);
-        if (rect.bottom < lowerBandTop || rect.top > frameRect.bottom + 20) continue;
-        if (rect.left < frameRect.left - 20 || rect.right > frameRect.right + 20) continue;
-      } else if (rect.top < window.innerHeight * 0.4) {
+        const lowerBandTop = frameRect.top + (frameRect.height * 0.35);
+        if (rect.bottom < lowerBandTop || rect.top > frameRect.bottom + 40) continue;
+        if (rect.left < frameRect.left - 40 || rect.right > frameRect.right + 40) continue;
+      } else if (rect.top < window.innerHeight * 0.35) {
         continue;
       }
       const rawText = String(el.innerText || el.textContent || "");
@@ -6721,11 +6783,13 @@ function __sbGuessMovieTitle(target) {
     document.title,
   ];
 
+  const OTT_SUFFIX_RE = /\s*[\-|•|:]\s*(Netflix|JioHotstar|Jio\s*Hotstar|Disney\+?\s*Hotstar|Disney\+|Prime\s*Video|Amazon\s*Prime(?:\s*Video)?|YouTube|Hotstar|Zee5|SonyLIV|Sony\s*LIV|JioCinema|Voot|MX\s*Player|Aha|Hulu|Max|HBO\s*Max|Apple\s*TV\+?|Peacock|Paramount\+?|Mubi|Crunchyroll|Tubi|Fubo).*$/i;
   for (const candidate of titleCandidates) {
     const cleaned = String(candidate || "")
       .replace(/\s+/g, " ")
-      .replace(/\s*[\-|•|:]\s*(Netflix|JioHotstar|Disney\+?\s*Hotstar|Disney\+|Prime Video|Amazon Prime Video|YouTube|Hotstar).*$/i, "")
-      .replace(/\s*\|\s*(Watch|Streaming).*/i, "")
+      .replace(OTT_SUFFIX_RE, "")
+      .replace(/\s*\|\s*(Watch|Streaming|Online|Stream|HD|Full\s*Movie|Official).*/i, "")
+      .replace(/\s*-\s*(Watch|Stream|Online|HD|Full\s*Movie).*/i, "")
       .trim();
     if (cleaned && cleaned.length > 1) return cleaned;
   }
@@ -6815,9 +6879,14 @@ function __sbBuildMovieContextSummary(movieContext) {
 }
 
 function __sbIsMovieSceneQuestion(text) {
-  const normalized = String(text || "").toLowerCase();
+  const normalized = String(text || "").toLowerCase().trim();
   if (!normalized) return false;
-  return /\b(what(?:'s|\s+is)\s+happening|what\s+just\s+happened|what\s+happened\s+here|who\s+is\s+(?:that|this|he|she|they)|who\s+are\s+they|what\s+did\s+(?:he|she|they)\s+say|what\s+does\s+that\s+mean|why\s+did\s+(?:he|she|they)|what\s+are\s+they\s+talking\s+about|explain\s+(?:this|that)\s+scene|summari[sz]e\s+(?:this|that)\s+scene|recap\s+(?:this|that)|what\s+am\s+i\s+watching)\b/i.test(normalized);
+  // English patterns
+  const engRE = /\b(what(?:'s|\s+is)\s+happening|what\s+just\s+happened|what\s+happened\s*(here|there|just\s+now)?|who\s+is\s+(?:that|this|he|she|they)|who\s+are\s+they|who\s+(?:is|was)\s+(?:that|this|he|she)|what\s+did\s+(?:he|she|they|that\s+guy|that\s+person)\s+say|what\s+does\s+that\s+mean|why\s+did\s+(?:he|she|they)|what\s+are\s+they\s+talking\s+about|what\s+(?:is|are)\s+they\s+doing|explain\s+(?:this|that)\s*(scene|moment|part)?|summari[sz]e\s+(?:this|that|the)\s*(scene|episode|part)?|recap\s+(?:this|that|the\s+episode)?|what\s+am\s+i\s+watching|what\s+is\s+going\s+on|who\s+killed|why\s+is\s+he|why\s+is\s+she|what\s+happened\s+to|who\s+(?:is|was)\s+that\s+character|tell\s+me\s+what(?:'s|\s+is)\s+happening)\b/i;
+  if (engRE.test(normalized)) return true;
+  // Hindi / Hinglish patterns (romanized)
+  const hinRE = /\b(kya\s+ho\s+(raha|hua)|kya\s+hua|kaun\s+hai|yeh\s+kaun|ye\s+kaun|kya\s+kar\s+raha|kya\s+chal\s+raha|isko\s+kaun|kyun\s+kiya|kyun\s+mar|explain\s+kar|bata\s+(de|do)|samjha|kya\s+bola|kya\s+keh|scene\s+kya\s+hai)\b/i;
+  return hinRE.test(normalized);
 }
 
 function __sbPrimeMovieBackdropForWrap() {
@@ -6853,7 +6922,9 @@ function __sbClearMovieModeTarget(options = {}) {
     __sbMovieModeState = { frame: null, media: null, descriptor: "" };
   }
   if (!options.keepBackdrop) {
-    __sbEnsureMovieBackdrop()?.classList.remove("visible");
+    const bd = __sbEnsureMovieBackdrop();
+    bd?.classList.remove("visible");
+    bd?.classList.remove("sb-movie-fullscreen");
   }
 }
 
@@ -6937,10 +7008,20 @@ function __sbRefreshMovieMode(options = {}) {
       ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" }
       : (currentValid ? { frame: currentFrame, media: currentMedia, descriptor: __sbMovieModeState?.descriptor || "" } : (__sbFindMovieModeTarget() || __sbGetFullscreenMovieTarget()));
     if (target) {
-      __sbApplyMovieModeTarget(target, { suppressBackdrop: true });
+      __sbApplyMovieModeTarget(target, { suppressBackdrop: true, animateWrap: options.animateWrap });
       __sbBuildMovieContext({ target });
     }
-    __sbEnsureMovieBackdrop()?.classList.remove("visible");
+    // In fullscreen the video fills the screen — show backdrop in fullscreen mode (no dim overlay)
+    const backdrop = __sbEnsureMovieBackdrop();
+    if (backdrop) {
+      backdrop.classList.add("sb-movie-fullscreen");
+      backdrop.style.left = "50%";
+      backdrop.style.top = "50%";
+      backdrop.style.width = `${window.innerWidth}px`;
+      backdrop.style.height = `${window.innerHeight}px`;
+      backdrop.style.borderRadius = "0px";
+      backdrop.classList.add("visible");
+    }
     return { ok: true, active: true, fullscreen: true };
   }
 
@@ -6953,6 +7034,8 @@ function __sbRefreshMovieMode(options = {}) {
     return { ok: false, active: true, error: "No visible video player found on this page." };
   }
 
+  // Remove fullscreen-mode class when we're back in normal windowed mode
+  __sbEnsureMovieBackdrop()?.classList.remove("sb-movie-fullscreen");
   __sbApplyMovieModeTarget(target, { forceScroll: options.forceScroll, animateWrap: options.animateWrap });
   return { ok: true, active: true, descriptor: target.descriptor || "" };
 }
@@ -6986,6 +7069,23 @@ function __sbStopMovieModeSync() {
     window.removeEventListener("scroll", __sbMovieModeScrollListener, true);
     __sbMovieModeScrollListener = null;
   }
+}
+
+function __sbStartPassiveMovieSync() {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  if (!__SB_MOVIE_CONTEXT_HOST_RE.test(host)) return;
+  if (__sbMovieModeActive || __sbPassiveMovieSyncTimer) return;
+  __sbPassiveMovieSyncTimer = setInterval(() => {
+    if (__sbMovieModeActive) {
+      clearInterval(__sbPassiveMovieSyncTimer);
+      __sbPassiveMovieSyncTimer = null;
+      return;
+    }
+    const target = __sbFindMovieModeTarget();
+    if (target?.media && !target.media.paused) {
+      __sbBuildMovieContext({ target });
+    }
+  }, 3000);
 }
 
 function __sbActivateMovieMode() {
@@ -7626,7 +7726,8 @@ function __sbIsTabsQuery(text) {
 
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
-  if (__sbIsMovieSceneQuestion(t) && __sbBuildMovieContext()) return "page";
+  const onOttSite = __SB_MOVIE_CONTEXT_HOST_RE.test(String(location.hostname || "").replace(/^www\./, ""));
+  if (__sbIsMovieSceneQuestion(t) && (onOttSite || __sbBuildMovieContext())) return "page";
   // Volume is a Spotify delegate action — route to agent (works in chat & realtime voice).
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
@@ -8928,6 +9029,17 @@ function __sbShowLectureReadyCard(mode) {
   document.getElementById("__sb_lec_start_btn__")?.addEventListener("click", () => void __sbStartLectureRecording());
 }
 
+function __sbShowLectureResultMessage(title, message) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  scroll.innerHTML = `
+    <div class="sb-lec-ready">
+      <div class="sb-lec-kicker">${__sbEscapeHtml(title)}</div>
+      <div class="sb-lec-ready-sub">${__sbEscapeHtml(message)}</div>
+    </div>
+  `;
+}
+
 function __sbShowLectureRecordingCard() {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
@@ -8967,12 +9079,13 @@ async function __sbStartLectureRecording() {
   __sbLectureNotes = "";
   __sbLecSegmentCount = 0;
 
-  const mode = window.__sbForcedMode || "page";
+  const mode = window.__sbForcedMode === "meeting" ? "meeting" : "lecture";
   const withMic = (mode === "meeting");
+  __sbLectureRecordingMode = mode;
 
   try {
     await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ action: "startRecording", withMic }, (res) => {
+      chrome.runtime.sendMessage({ action: "startRecording", withMic, mode }, (res) => {
         if (chrome.runtime.lastError || res?.error) reject(new Error(res?.error || chrome.runtime.lastError?.message || "Failed to start"));
         else resolve();
       });
@@ -9012,11 +9125,11 @@ async function __sbCaptureLectureSegment() {
 
   try {
     const res = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes }, (r) => resolve(r || {}));
+      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes, mode: __sbLectureRecordingMode }, (r) => resolve(r || {}));
     });
 
     if (res.error) {
-      if (statusEl) statusEl.textContent = "Capture failed — try again.";
+      if (statusEl) statusEl.textContent = `Capture failed — ${res.error}`;
       if (segBtn) { segBtn.disabled = false; segBtn.textContent = "✂ Save Segment"; }
       return;
     }
@@ -9053,26 +9166,29 @@ async function __sbStopLectureRecording() {
     `;
   }
 
-  // Get final segment and stop recording simultaneously
-  const [segRes] = await Promise.allSettled([
-    new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes }, (r) => resolve(r || {}));
-    }),
-    new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: "stopRecording" }, () => resolve());
-    }),
-  ]);
+  const res = await new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { action: "stopRecordingAndTranscribe", existingNotes: __sbLectureNotes, mode: __sbLectureRecordingMode },
+      (r) => resolve(r || {}),
+    );
+  });
 
-  const seg = segRes.status === "fulfilled" ? segRes.value : {};
-  if (seg.notes) __sbLectureNotes = seg.notes;
+  if (res.error) {
+    __sbShowLectureResultMessage("Recording stopped", res.error);
+    return;
+  }
+
+  if (res.notes) __sbLectureNotes = res.notes;
 
   if (__sbLectureNotes) {
     __sbShowLectureNotes(__sbLectureNotes, true);
-  } else {
-    if (scroll) {
-      scroll.innerHTML = `<div class="sb-lec-ready"><div class="sb-lec-kicker">Recording stopped</div><div class="sb-lec-ready-sub">No content was captured — try speaking louder or use ✂ Save Segment during the next session.</div></div>`;
-    }
+    return;
   }
+
+  __sbShowLectureResultMessage(
+    "Recording stopped",
+    "No content was captured — try speaking louder or use ✂ Save Segment during the next session.",
+  );
 }
 
 function __sbShowLectureNotes(notes, isFinal) {
@@ -9102,7 +9218,8 @@ async function __sbSyncNotesToNotion() {
   const btn = document.getElementById("__sb_notion_sync_btn__");
   if (btn) { btn.textContent = "Syncing…"; btn.disabled = true; }
 
-  const title = "Lecture Notes — " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const noteLabel = __sbLectureRecordingMode === "meeting" ? "Meeting Notes" : "Lecture Notes";
+  const title = `${noteLabel} — ` + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   try {
     const res = await new Promise((resolve) => {

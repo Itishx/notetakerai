@@ -2824,16 +2824,25 @@ function __sbBuildBrainUI() {
       min-width: 260px; min-height: 80px;
       display: flex; flex-direction: column;
       overflow: hidden; resize: both;
-      background: rgba(245, 240, 234, 0.52);
+      background: rgba(255, 240, 230, 0.07);
       border-radius: 18px;
+      isolation: isolate;
       color: #1B1713;
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      box-shadow: 0 20px 60px rgba(27,23,19,0.2), 0 4px 14px rgba(27,23,19,0.08),
-                  inset 0 1px 0 rgba(255,255,255,0.65);
-      backdrop-filter: blur(44px) saturate(200%) brightness(1.06);
-      -webkit-backdrop-filter: blur(44px) saturate(200%) brightness(1.06);
+      border: 1px solid rgba(255,255,255,0.55);
+      box-shadow: 0 20px 60px rgba(27,23,19,0.18), 0 4px 14px rgba(27,23,19,0.07),
+                  inset 2px 2px 1px rgba(255,255,255,0.65),
+                  inset -1px -1px 1px rgba(255,255,255,0.3);
+      backdrop-filter: blur(4px) saturate(160%) brightness(1.04);
+      -webkit-backdrop-filter: blur(4px) saturate(160%) brightness(1.04);
       opacity: 0; transition: opacity 0.2s;
       pointer-events: none;
+    }
+    #__sb_bubble__::before {
+      content: ""; position: absolute; inset: 0; border-radius: inherit;
+      backdrop-filter: blur(20px) saturate(200%);
+      -webkit-backdrop-filter: blur(20px) saturate(200%);
+      filter: url(#__sb_glass_filter__);
+      z-index: -1; pointer-events: none;
     }
     #__sb_bubble__.visible { opacity: 1; pointer-events: all; }
     #__sb_bubble__.sb-spotify-active {
@@ -2872,8 +2881,8 @@ function __sbBuildBrainUI() {
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
       padding: 10px 12px 10px 14px; flex-shrink: 0;
       cursor: grab; user-select: none;
-      background: linear-gradient(160deg, rgba(255,255,255,0.5) 0%, rgba(250,244,238,0.38) 100%);
-      border-bottom: 1px solid rgba(200,170,150,0.18);
+      background: rgba(255,255,255,0.1);
+      border-bottom: 1px solid rgba(255,255,255,0.18);
     }
     .sb-bubble-head:active { cursor: grabbing; }
     /* drag grip dots */
@@ -3043,15 +3052,25 @@ function __sbBuildBrainUI() {
     /* ── NEW UI: Thin bar + centered glass card ── */
     #__sb_bar__ {
       display: flex; align-items: center; gap: 6px;
-      background: rgba(255,251,247,0.96); border-radius: 100px;
+      background: rgba(255,251,247,0.12); border-radius: 100px;
+      position: relative; isolation: isolate;
       padding: 7px 7px 7px 18px;
-      border: 1px solid rgba(65,48,40,0.1);
-      box-shadow: 0 8px 28px rgba(27,23,19,0.13), 0 2px 8px rgba(27,23,19,0.07);
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 8px 28px rgba(27,23,19,0.15), 0 2px 8px rgba(27,23,19,0.08),
+                  inset 2px 2px 1px rgba(255,255,255,0.65),
+                  inset -1px -1px 1px rgba(255,255,255,0.3);
       width: 360px; max-width: calc(100vw - 90px);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
       pointer-events: none; opacity: 0;
       transform: scaleX(0.55) translateY(4px); transform-origin: right center;
       transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1);
+    }
+    #__sb_bar__::before {
+      content: ""; position: absolute; inset: 0; border-radius: inherit;
+      backdrop-filter: blur(16px) saturate(200%);
+      -webkit-backdrop-filter: blur(16px) saturate(200%);
+      filter: url(#__sb_glass_filter__);
+      z-index: -1; pointer-events: none;
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
     /* ── Wake-up state ── */
@@ -3147,7 +3166,7 @@ function __sbBuildBrainUI() {
     @keyframes __sb_orbit__ { from { offset-distance: 0%; } to { offset-distance: 100%; } }
     #__sb_bubble__ {
       --sb-fg: #ffffff; --sb-fg-2: rgba(255,255,255,0.85); --sb-fg-3: rgba(255,255,255,0.4);
-      --sb-bg: rgba(255,255,255,0.08); --sb-border: rgba(255,255,255,0.22);
+      --sb-bg: rgba(255,255,255,0.04); --sb-border: rgba(255,255,255,0.38);
       --sb-q-bg: rgba(255,255,255,0.12); --sb-q-border: rgba(255,255,255,0.2);
       --sb-footer-border: rgba(255,255,255,0.12); --sb-footer-bg: rgba(0,0,0,0.1);
       --sb-code-bg: rgba(255,255,255,0.12); --sb-code-fg: #FFD0CB;
@@ -3161,9 +3180,12 @@ function __sbBuildBrainUI() {
       display: flex; flex-direction: column; overflow: hidden;
       background: var(--sb-bg); border-radius: 24px;
       border: 1px solid var(--sb-border);
-      box-shadow: 0 40px 100px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.2);
-      backdrop-filter: blur(40px) saturate(180%);
-      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      box-shadow: 0 40px 100px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.18),
+                  inset 2px 2px 1px rgba(255,255,255,0.25),
+                  inset -1px -1px 1px rgba(255,255,255,0.15);
+      backdrop-filter: blur(4px) saturate(180%);
+      -webkit-backdrop-filter: blur(4px) saturate(180%);
+      isolation: isolate;
       color: var(--sb-fg); resize: none;
     }
     #__sb_bubble__.sb-light {
@@ -4092,6 +4114,14 @@ function __sbBuildBrainUI() {
     <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
   document.body.appendChild(root);
+
+  // ── Liquid glass SVG displacement filter ──
+  const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  __sbGlassSvg.id = "__sb_glass_svg__";
+  __sbGlassSvg.setAttribute("style", "display:none;position:fixed;pointer-events:none");
+  __sbGlassSvg.innerHTML = `<filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter>`;
+  document.body.appendChild(__sbGlassSvg);
+
   if (__sbCursorRideMode) {
     __sbPositionRootNearCursor(true);
     __sbScheduleCursorFollow();
