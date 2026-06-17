@@ -1078,9 +1078,60 @@ async function __sbGmailReplyToCurrentThread(body, options = {}) {
   return { success: true };
 }
 
+async function __sbYouTubeEnsurePlayback() {
+  const video = document.querySelector("video");
+  if (!video) return { error: "No YouTube video player was found." };
+  if (!video.paused && !video.ended) {
+    return { success: true, playing: true, alreadyPlaying: true };
+  }
+
+  const selectors = [
+    ".ytp-large-play-button",
+    ".ytp-play-button",
+    'button[aria-label*="Play"]',
+    '[title="Play (k)"]',
+  ];
+
+  let clicked = false;
+  for (const selector of selectors) {
+    const button = document.querySelector(selector);
+    if (!__sbAdapterIsVisible(button)) continue;
+    __sbAdapterClick(button);
+    clicked = true;
+    break;
+  }
+
+  if (clicked) {
+    await __sbAdapterWait(550);
+  }
+
+  if (video.paused) {
+    try {
+      await video.play();
+      await __sbAdapterWait(250);
+    } catch (_) {}
+  }
+
+  return {
+    success: true,
+    playing: !video.paused,
+    blocked: !!video.paused,
+  };
+}
+
 function __sbGetSiteAdapterContext() {
   const url = window.location.href;
   const host = window.location.hostname;
+
+  if (/youtube\.com$/.test(host)) {
+    const video = document.querySelector("video");
+    return {
+      site: "youtube",
+      url,
+      title: document.title,
+      isPlaying: Boolean(video && !video.paused && !video.ended),
+    };
+  }
 
   if (/spotify\.com$/.test(host)) {
     const visibleTracks = __sbSpotifyGetVisibleTrackEntries().slice(0, 12);
@@ -1171,7 +1222,7 @@ function __sbInferConnectorFromPrompt(promptText) {
   if (/\b(calendar|google calendar|gcal|schedule|reschedule|meeting|google meet)\b/.test(text) ||
       /\b(?:book|set up|create|add|cancel|delete|forward|invite|join|open|start)\b.*\b(?:call|meet|event)\b/.test(text)) return "google-calendar";
   if (/\bgmail\b|\bemail\b|\bmail\b/.test(text)) return "gmail";
-  if (/\bspotify\b/.test(text) || /^play\s+/i.test(promptText)) return "spotify";
+  if (/\bspotify\b/.test(text)) return "spotify";
   return "auto";
 }
 
@@ -1341,6 +1392,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "spotifyAddTrackToPlaylist") {
           sendResponse(await __sbSpotifyAddTrackToPlaylist(msg.songName || "", msg.playlistName || ""));
+          return;
+        }
+        if (msg.type === "youtubeEnsurePlayback") {
+          sendResponse(await __sbYouTubeEnsurePlayback());
           return;
         }
         if (msg.type === "mediumReadSearchResults") {
@@ -2333,6 +2388,7 @@ let __sbMovieModeScrollListener = null;
 let __sbMovieModeResizeListener = null;
 let __sbMovieTranscriptEntries = [];
 let __sbMovieLastSubtitleText = "";
+let __sbAgentPendingTurn = null;
 let __sbMovieLastTitle = "";
 let __sbPassiveMovieSyncTimer = null;
 let __sbFullscreenUiListenerBound = false;
@@ -2390,15 +2446,43 @@ if (__sbContextOk()) {
       sendResponse({ ok: true });
       return false;
     }
+    if (msg.action === "startLectureRecording") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      window.__sbForcedMode = "lecture";
+      if (__sbIsLectureRecording) {
+        __sbShowBubble("Lecture & Audio mode is already recording.", false, { tone: "status", title: "Lecture & Audio" });
+        sendResponse({ ok: true, alreadyRecording: true });
+        return false;
+      }
+      void __sbStartLectureRecording({ readyMessage: msg.readyMessage || "" });
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (msg.action === "showBrainoRecovery") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbShowBubble(msg.message || "I moved Braino to a normal tab so it can keep working.", false, {
+        tone: "status",
+        title: msg.title || "Braino moved here",
+      });
+      sendResponse({ ok: true });
+      return false;
+    }
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
         // Voice mode speaks the result with no panel; chat mode shows it.
-        const agentPrompt = String(msg.task || __sbLastAgentTask || "").trim();
-        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
+        const finalText = String(msg.text || "").trim();
+        const agentPrompt = String(msg.task || __sbAgentPendingTurn?.prompt || __sbLastAgentTask || "").trim();
+        if (agentPrompt && finalText) {
+          __sbFinalizeAgentPendingTurn(agentPrompt, finalText, {
+            render: !(msg.keepLectureCard && __sbIsLectureRecording),
+          });
+        } else {
+          __sbAgentPendingTurn = null;
+          if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
+        }
         __sbSetStopBtn(false);
         if (__sbRtAwaitingDelegateResult) {
-          const finalText = String(msg.text || "").trim();
           __sbRtAwaitingDelegateResult = false;
           if (finalText) {
             void (async () => {
@@ -2418,7 +2502,13 @@ if (__sbContextOk()) {
           }
         }
       } else {
-        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { tone: "status" });
+        if (!__sbVoiceOnlyMode) {
+          if (__sbAgentPendingTurn) {
+            __sbUpdateAgentPendingTurn(String(msg.text || "Working…").trim() || "Working…");
+          } else {
+            __sbShowBubble(msg.text, false, { tone: "status" });
+          }
+        }
         __sbSetStopBtn(true);
         // Speak milestone hints in voice mode without flooding the user
         if (msg.speakHint && __sbHeadphoneMode && !__sbRtRelayingAppMessage) {
@@ -7445,6 +7535,100 @@ function __sbRenderCardHistory(scroll, options = {}) {
   }
 }
 
+function __sbRenderConversationWithPending(scroll) {
+  if (!scroll) return;
+  if (__sbAgentPendingTurn?.prompt) {
+    __sbRenderCardHistory(scroll, {
+      pendingTurn: { prompt: __sbAgentPendingTurn.prompt },
+      pendingText: __sbAgentPendingTurn.status || "Delegating…",
+    });
+    return;
+  }
+  __sbRenderCardHistory(scroll);
+}
+
+function __sbGetRecentSharedChatHistory(limit = 10) {
+  return __sbChatHistory
+    .slice(-Math.max(1, limit))
+    .map((entry) => ({
+      role: entry?.role === "assistant" ? "assistant" : "user",
+      content: String(entry?.content || "").trim(),
+    }))
+    .filter((entry) => entry.content);
+}
+
+function __sbGetRecentSharedCardTurns(limit = 6) {
+  return __sbCardTurns
+    .slice(-Math.max(1, limit))
+    .map((turn) => ({
+      prompt: String(turn?.prompt || "").trim(),
+      answer: String(turn?.answer || "").trim(),
+    }))
+    .filter((turn) => turn.prompt || turn.answer);
+}
+
+function __sbBuildAgentHandoffPayload(task, options = {}) {
+  const chatHistory = __sbGetRecentSharedChatHistory(10);
+  const cardTurns = __sbGetRecentSharedCardTurns(6);
+  const lastUserPrompt = [...chatHistory].reverse().find((entry) => entry.role === "user")?.content || "";
+  const lastAssistantReply = [...chatHistory].reverse().find((entry) => entry.role === "assistant")?.content || "";
+  return {
+    task: String(task || "").trim(),
+    connector: __sbNormalizeConnectorName(options.connector) || "auto",
+    mode: window.__sbForcedMode || "page",
+    chatHistory,
+    cardTurns,
+    lastUserPrompt,
+    lastAssistantReply,
+  };
+}
+
+function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
+  const task = String(prompt || "").trim();
+  if (!task) return;
+  __sbAgentPendingTurn = {
+    prompt: task,
+    status: String(status || "Delegating…").trim() || "Delegating…",
+  };
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  __sbRenderConversationWithPending(scroll);
+  __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
+}
+
+function __sbUpdateAgentPendingTurn(status) {
+  if (!__sbAgentPendingTurn?.prompt) return;
+  __sbAgentPendingTurn.status = String(status || "Delegating…").trim() || "Delegating…";
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  __sbRenderConversationWithPending(scroll);
+  __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
+}
+
+function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
+  const task = String(prompt || "").trim();
+  const reply = String(answer || "").trim();
+  if (task) {
+    const lastUser = __sbChatHistory[__sbChatHistory.length - 1];
+    if (!lastUser || lastUser.role !== "user" || String(lastUser.content || "").trim() !== task) {
+      __sbChatHistory.push({ role: "user", content: task });
+    }
+  }
+  if (reply) {
+    __sbChatHistory.push({ role: "assistant", content: reply });
+    if (task) __sbCardTurns.push({ prompt: task, answer: reply });
+  }
+  __sbAgentPendingTurn = null;
+  if (options.render === false) return;
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  __sbRenderConversationWithPending(scroll);
+  __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
+}
+
 function __sbShowThinking(scroll, promptText = "", pendingText = "Thinking…") {
   if (!scroll) return;
   __sbThinkingEl = null;
@@ -8705,10 +8889,15 @@ async function __sbShouldForceVoiceDelegate(routing) {
   if (!promptText) return false;
   if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
 
+  const handoff = __sbBuildAgentHandoffPayload(promptText, { connector: routing?.connectorHint });
   const result = await __sbRuntimeMessage({
     action: "classifyBrainAgentTask",
     task: promptText,
     connector: routing?.connectorHint || "auto",
+    chatHistory: handoff.chatHistory,
+    cardTurns: handoff.cardTurns,
+    lastUserPrompt: handoff.lastUserPrompt,
+    lastAssistantReply: handoff.lastAssistantReply,
   });
 
   return result?.shouldDelegate === true;
@@ -8735,7 +8924,11 @@ async function __sbProcessPrompt(text, options = {}) {
   const forceIntent = ["agent", "web", "record", "page", "chat"].includes(options.forceIntent)
     ? options.forceIntent
     : null;
-  const intent = forceIntent || routing.intent;
+  let intent = forceIntent || routing.intent;
+  if (!forceIntent && forcedMode === "page" && intent === "chat") {
+    const shouldPromoteToAgent = await __sbShouldForceVoiceDelegate(routing);
+    if (shouldPromoteToAgent) intent = "agent";
+  }
   if (fromVoice && voiceOutput === "realtime") {
     __sbPatchRealtimeCostTurn({
       routeIntent: intent,
@@ -8837,7 +9030,6 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
       return;
     }
-    if (!fromVoice || !__sbVoiceOnlyMode) __sbShowBubble("Delegating…", false);
     if (voiceOutput === "realtime") __sbRtAwaitingDelegateResult = true;
     __sbRunAgent(promptText, { connector: connectorHint });
     if (fromVoice) {
@@ -9013,12 +9205,24 @@ function __sbShowUpgrade(feature) {
 function __sbRunAgent(task, options = {}) {
   if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect Braino.", true); return; }
   __sbLastAgentTask = String(task || "").trim();
+  if (!__sbLastAgentTask) return;
+  __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
+  if (!__sbVoiceOnlyMode) __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…");
+  const handoff = __sbBuildAgentHandoffPayload(__sbLastAgentTask, options);
   // Hand off to background — it runs the full agent loop and sends sbAgentUpdate messages back
   chrome.runtime.sendMessage({
     action: "runBrainAgent",
-    task,
-    connector: __sbNormalizeConnectorName(options.connector) || "auto",
-  }, () => { void chrome.runtime.lastError; });
+    task: __sbLastAgentTask,
+    connector: handoff.connector,
+    mode: handoff.mode,
+    chatHistory: handoff.chatHistory,
+    cardTurns: handoff.cardTurns,
+    lastUserPrompt: handoff.lastUserPrompt,
+    lastAssistantReply: handoff.lastAssistantReply,
+  }, () => {
+    if (!chrome.runtime.lastError) return;
+    __sbFinalizeAgentPendingTurn(__sbLastAgentTask, "I couldn't start delegate mode just now.");
+  });
 }
 
 function __sbShowLectureRecordingBar(show) {
@@ -9212,7 +9416,7 @@ function __sbShowLectureRecordingCard() {
   document.getElementById("__sb_lec_stop_btn__")?.addEventListener("click", () => void __sbStopLectureRecording());
 }
 
-async function __sbStartLectureRecording() {
+async function __sbStartLectureRecording(options = {}) {
   if (!__sbContextOk()) {
     __sbShowBubble("Reload this page to reconnect Braino.", true);
     return;
@@ -9245,6 +9449,10 @@ async function __sbStartLectureRecording() {
   if (brainBtn) { brainBtn.classList.add("recording"); brainBtn.innerHTML = __SB_BRAIN_SVG_LISTENING; }
   __sbShowLectureRecordingBar(false);
   __sbShowLectureRecordingCard();
+  if (options.readyMessage) {
+    const statusEl = document.getElementById("__sb_lec_status__");
+    if (statusEl) statusEl.textContent = String(options.readyMessage);
+  }
 
   let seconds = 0;
   __sbLectureInterval = setInterval(() => {

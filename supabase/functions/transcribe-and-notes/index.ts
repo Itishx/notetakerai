@@ -345,6 +345,109 @@ function looksLikeNoSpeechError(message: string) {
   );
 }
 
+function titleCaseSpeakerName(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => {
+      if (/^[A-Z0-9]+$/.test(token)) return token;
+      return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+function isGenericSpeakerLabel(label: string) {
+  return /^speaker(?:\s+\d+)?$/i.test(label);
+}
+
+function assignGenericSpeakerLabel(
+  key: string,
+  speakerIds: Map<string, string>,
+  counter: { value: number },
+) {
+  const normalizedKey = key || "__speaker__";
+  const existing = speakerIds.get(normalizedKey);
+  if (existing) return existing;
+  const label = `Speaker ${counter.value++}`;
+  speakerIds.set(normalizedKey, label);
+  return label;
+}
+
+function formatSpeakerLabel(
+  rawSpeaker: unknown,
+  speakerIds?: Map<string, string>,
+  counter?: { value: number },
+) {
+  const speaker = String(rawSpeaker || "").trim();
+  if (!speaker) return assignGenericSpeakerLabel("__speaker__", speakerIds ?? new Map(), counter ?? { value: 1 });
+
+  const lowered = speaker.toLowerCase();
+  if (lowered === "you") return "You";
+
+  const numericMatch = lowered.match(/^(?:speaker[_\s-]*|spk[_\s-]*|person\s+)?(\d+)$/i);
+  if (numericMatch) return `Speaker ${parseInt(numericMatch[1], 10)}`;
+
+  const letterMatch = lowered.match(/^(?:speaker[_\s-]*|spk[_\s-]*|person\s+)?([a-z])$/i);
+  if (letterMatch) return `Speaker ${letterMatch[1].toUpperCase().charCodeAt(0) - 64}`;
+
+  if (/^(?:speaker|spk|person)\b/i.test(lowered)) {
+    return assignGenericSpeakerLabel(lowered, speakerIds ?? new Map(), counter ?? { value: 1 });
+  }
+
+  return titleCaseSpeakerName(speaker);
+}
+
+function extractExplicitSpeakerName(text: string) {
+  const source = String(text || "").trim();
+  if (!source) return "";
+
+  const patterns = [
+    /\b(?:i am|i'm|my name is)\s+([a-z][a-z' -]{1,60})/i,
+    /\bthis is\s+([a-z][a-z' -]{1,60})(?:\s+(?:speaking|here))?/i,
+  ];
+  const disallowed = new Set(["amazing", "awesome", "cool", "fine", "great", "interesting", "nice", "ok", "okay", "what", "why", "how", "when", "where"]);
+
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    if (!match?.[1]) continue;
+    const candidate = match[1]
+      .replace(/\b(?:speaking|here)\b.*$/i, "")
+      .replace(/[.?!,]+.*$/, "")
+      .trim();
+    const words = candidate.split(/\s+/).filter(Boolean).slice(0, 3);
+    if (!words.length) continue;
+    if (words.some((word) => disallowed.has(word.toLowerCase()))) continue;
+    return titleCaseSpeakerName(words.join(" "));
+  }
+
+  return "";
+}
+
+function promoteExplicitSpeakerNames(entries: Array<{ speaker: string; text: string }>) {
+  const renameMap = new Map<string, string>();
+  const usedNames = new Set(
+    entries
+      .map((entry) => entry.speaker)
+      .filter((speaker) => speaker !== "You" && !isGenericSpeakerLabel(speaker))
+      .map((speaker) => speaker.toLowerCase()),
+  );
+
+  for (const entry of entries) {
+    if (!isGenericSpeakerLabel(entry.speaker)) continue;
+    const explicitName = extractExplicitSpeakerName(entry.text);
+    if (!explicitName) continue;
+    const normalizedName = explicitName.toLowerCase();
+    if (usedNames.has(normalizedName) && renameMap.get(entry.speaker)?.toLowerCase() !== normalizedName) continue;
+    renameMap.set(entry.speaker, explicitName);
+    usedNames.add(normalizedName);
+  }
+
+  return entries.map((entry) => ({
+    ...entry,
+    speaker: renameMap.get(entry.speaker) || entry.speaker,
+  }));
+}
+
 function formatTranscript(payload: Record<string, unknown>, mode: RecordingMode) {
   if (mode !== "meeting") {
     return typeof payload.text === "string" ? payload.text.trim() : "";
@@ -356,10 +459,12 @@ function formatTranscript(payload: Record<string, unknown>, mode: RecordingMode)
   }
 
   const merged: Array<{ speaker: string; text: string }> = [];
+  const speakerIds = new Map<string, string>();
+  const speakerCounter = { value: 1 };
   for (const segment of segments) {
     if (!segment || typeof segment !== "object") continue;
     const raw = segment as Record<string, unknown>;
-    const speaker = formatSpeakerLabel(raw.speaker);
+    const speaker = formatSpeakerLabel(raw.speaker, speakerIds, speakerCounter);
     const text = typeof raw.text === "string" ? raw.text.trim() : "";
     if (!text) continue;
     const previous = merged[merged.length - 1];
@@ -370,16 +475,8 @@ function formatTranscript(payload: Record<string, unknown>, mode: RecordingMode)
     }
   }
 
-  return merged.map((entry) => `${entry.speaker}: ${entry.text}`).join("\n");
-}
-
-function formatSpeakerLabel(rawSpeaker: unknown) {
-  const speaker = String(rawSpeaker || "").trim();
-  if (!speaker) return "Speaker";
-  if (speaker.toLowerCase() === "you") return "You";
-  if (/^speaker\b/i.test(speaker)) return speaker;
-  if (/^\d+$/.test(speaker)) return `Speaker ${speaker}`;
-  return speaker.charAt(0).toUpperCase() + speaker.slice(1);
+  const renamed = promoteExplicitSpeakerNames(merged);
+  return renamed.map((entry) => `${entry.speaker}: ${entry.text}`).join("\n");
 }
 
 function buildNotesPrompts({
@@ -404,10 +501,12 @@ CRITICAL RULE: The transcript is the source of truth. Only include information t
 Rules:
 - Keep accurate content already present in the existing notes unless the new transcript clearly revises it
 - Output clean Markdown
-- Prefer these sections when relevant: ## Summary, ## Key Discussion Points, ## Decisions, ## Action Items, ## Follow-Ups, ## Open Questions
+- Prefer this section order when relevant: ## Summary, ## Participants, ## Decisions, ## Action Items, ## Follow-Ups, ## Open Questions
+- Include ## Participants whenever any names or stable speaker labels are available
 - Only include action items that were explicitly mentioned
 - Only include follow-ups that were explicitly mentioned
-- Only include an owner when the transcript explicitly identifies one
+- Attribute action items and follow-ups to explicit names when stated; otherwise use You or Speaker N
+- Never label speakers as A, B, Person A, or Person B. Use explicit names, You, or Speaker N only.
 - Use speaker labels when they help clarify who said what
 - Keep the notes concise and skimmable
 - Short transcript = short notes. Never pad or stretch content.`
@@ -417,11 +516,13 @@ CRITICAL RULE: Only include information that was EXPLICITLY stated in the transc
 
 Rules:
 - Output clean Markdown
-- Prefer these sections when relevant: ## Summary, ## Key Discussion Points, ## Decisions, ## Action Items, ## Follow-Ups, ## Open Questions
+- Prefer this section order when relevant: ## Summary, ## Participants, ## Decisions, ## Action Items, ## Follow-Ups, ## Open Questions
+- Include ## Participants whenever any names or stable speaker labels are available
 - Use short bullet points
 - Only include action items that were explicitly mentioned
 - Only include follow-ups that were explicitly mentioned
-- Only include an owner when the transcript explicitly identifies one
+- Attribute action items and follow-ups to explicit names when stated; otherwise use You or Speaker N
+- Never label speakers as A, B, Person A, or Person B. Use explicit names, You, or Speaker N only.
 - Use speaker labels when they help clarify who said what
 - Keep the notes concise and skimmable
 - Short transcript = short notes. Never pad or stretch content.`;
@@ -527,7 +628,8 @@ Rules:
 - Resolve relative dates like "Friday" using this reference datetime and timezone: ${clientNow} (${clientTimeZone}).
 - If the transcript gives a day but not a time, set dateIso and leave timeText empty.
 - If the transcript gives a time, preserve it in timeText exactly as naturally as possible.
-- Use attendeeName only when the relevant person was explicitly named.
+- Use owner / attendeeName / attendees only when the relevant person was explicitly named or clearly identified as You or Speaker N in the transcript.
+- Never use A, B, Person A, or Person B. Use explicit names, You, or Speaker N only.
 - Keep sourceQuote short and verbatim.
 - Never invent owners, times, dates, emails, or extra follow-ups.
 - Return valid JSON only. No markdown fences.`,
