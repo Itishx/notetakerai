@@ -1078,9 +1078,60 @@ async function __sbGmailReplyToCurrentThread(body, options = {}) {
   return { success: true };
 }
 
+async function __sbYouTubeEnsurePlayback() {
+  const video = document.querySelector("video");
+  if (!video) return { error: "No YouTube video player was found." };
+  if (!video.paused && !video.ended) {
+    return { success: true, playing: true, alreadyPlaying: true };
+  }
+
+  const selectors = [
+    ".ytp-large-play-button",
+    ".ytp-play-button",
+    'button[aria-label*="Play"]',
+    '[title="Play (k)"]',
+  ];
+
+  let clicked = false;
+  for (const selector of selectors) {
+    const button = document.querySelector(selector);
+    if (!__sbAdapterIsVisible(button)) continue;
+    __sbAdapterClick(button);
+    clicked = true;
+    break;
+  }
+
+  if (clicked) {
+    await __sbAdapterWait(550);
+  }
+
+  if (video.paused) {
+    try {
+      await video.play();
+      await __sbAdapterWait(250);
+    } catch (_) {}
+  }
+
+  return {
+    success: true,
+    playing: !video.paused,
+    blocked: !!video.paused,
+  };
+}
+
 function __sbGetSiteAdapterContext() {
   const url = window.location.href;
   const host = window.location.hostname;
+
+  if (/youtube\.com$/.test(host)) {
+    const video = document.querySelector("video");
+    return {
+      site: "youtube",
+      url,
+      title: document.title,
+      isPlaying: Boolean(video && !video.paused && !video.ended),
+    };
+  }
 
   if (/spotify\.com$/.test(host)) {
     const visibleTracks = __sbSpotifyGetVisibleTrackEntries().slice(0, 12);
@@ -1171,7 +1222,7 @@ function __sbInferConnectorFromPrompt(promptText) {
   if (/\b(calendar|google calendar|gcal|schedule|reschedule|meeting|google meet)\b/.test(text) ||
       /\b(?:book|set up|create|add|cancel|delete|forward|invite|join|open|start)\b.*\b(?:call|meet|event)\b/.test(text)) return "google-calendar";
   if (/\bgmail\b|\bemail\b|\bmail\b/.test(text)) return "gmail";
-  if (/\bspotify\b/.test(text) || /^play\s+/i.test(promptText)) return "spotify";
+  if (/\bspotify\b/.test(text)) return "spotify";
   return "auto";
 }
 
@@ -1341,6 +1392,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "spotifyAddTrackToPlaylist") {
           sendResponse(await __sbSpotifyAddTrackToPlaylist(msg.songName || "", msg.playlistName || ""));
+          return;
+        }
+        if (msg.type === "youtubeEnsurePlayback") {
+          sendResponse(await __sbYouTubeEnsurePlayback());
           return;
         }
         if (msg.type === "mediumReadSearchResults") {
@@ -2281,6 +2336,171 @@ const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
   .replace('<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
     '<path d="M 46 62 Q 50 62 54 62" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>');
 
+// ── Emotion SVG variants ──────────────────────────────────────────────────────
+// All derived from __SB_BRAIN_SVG. Keep sbb-* IDs so idle CSS animations still work.
+
+const __SB_BRAIN_SVG_HAPPY = __SB_BRAIN_SVG
+  .replace(
+    '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="28" cy="58" rx="3.8" ry="2.3" fill="#E14A48" opacity="0.45"/><ellipse cx="72" cy="58" rx="3.8" ry="2.3" fill="#E14A48" opacity="0.45"/>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 42.5 60 Q 50 68 57.5 60" fill="none" stroke="#1B1713" stroke-width="2" stroke-linecap="round"/>'
+  );
+
+// Shared laugh-eyes mutation applied by __sbLaughBase
+function __sbLaughBase(svg) {
+  return svg
+    .replace(
+      '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+      '<g id="sbb-eye-l" style="transform-origin:38px 48px"><path d="M 32.5 49 Q 38 54.5 43.5 49" fill="none" stroke="#1B1713" stroke-width="2.4" stroke-linecap="round"/></g>'
+    )
+    .replace(
+      '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+      '<g id="sbb-eye-r" style="transform-origin:62px 48px"><path d="M 56.5 49 Q 62 54.5 67.5 49" fill="none" stroke="#1B1713" stroke-width="2.4" stroke-linecap="round"/></g>'
+    )
+    .replace(
+      '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+      '<g id="sbb-pupil-l"></g>'
+    )
+    .replace(
+      '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+      '<g id="sbb-pupil-r"></g>'
+    )
+    .replace(
+      '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+      '<ellipse cx="27" cy="57" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/><ellipse cx="73" cy="57" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/>'
+    )
+    .replace(
+      '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+      '<path d="M 42 59 Q 50 73.5 58 59 Q 50 62 42 59 Z" fill="#6E211A"/><path d="M 45.5 64.5 Q 50 70 54.5 64.5 Q 50 66.5 45.5 64.5 Z" fill="#E8786E"/><path d="M 43 60 Q 50 62.4 57 60" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round"/>'
+    );
+}
+
+const __SB_BRAIN_SVG_LAUGHING = __sbLaughBase(__SB_BRAIN_SVG);
+
+const __SB_BRAIN_SVG_TEARS = __sbLaughBase(__SB_BRAIN_SVG)
+  .replace('</svg>', '<path d="M 30 50.5 C 33 54.5 33 57 30 58 C 27 57 27 54.5 30 50.5 Z" fill="#DFF4FF"/><path d="M 70 50.5 C 73 54.5 73 57 70 58 C 67 57 67 54.5 70 50.5 Z" fill="#DFF4FF"/></svg>');
+
+const __SB_BRAIN_SVG_CELEBRATING = __sbLaughBase(__SB_BRAIN_SVG)
+  // Arms raised — outline layer
+  .replace(
+    '<g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>',
+    '<g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 10 42 16 28" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>'
+  )
+  .replace(
+    '<g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>',
+    '<g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 90 42 84 28" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>'
+  )
+  // Arms raised — fill layer
+  .replace(
+    '<g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g>',
+    '<g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 10 42 16 28" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="15" cy="26" r="5.5" fill="url(#sbb-fill)"/></g>'
+  )
+  .replace(
+    '<g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g>',
+    '<g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 90 42 84 28" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="85" cy="26" r="5.5" fill="url(#sbb-fill)"/></g>'
+  )
+  // Confetti dots
+  .replace('</svg>', '<circle cx="12" cy="22" r="2.5" fill="#FFD700" opacity="0.9"/><circle cx="88" cy="20" r="2" fill="#FF69B4" opacity="0.9"/><circle cx="6" cy="44" r="2" fill="#7EC8E3" opacity="0.9"/><circle cx="94" cy="42" r="2.2" fill="#90EE90" opacity="0.9"/><circle cx="20" cy="10" r="1.8" fill="#FF8C42" opacity="0.9"/><circle cx="80" cy="10" r="1.8" fill="#E14A48" opacity="0.9"/></svg>');
+
+const __SB_BRAIN_SVG_FOCUS = __SB_BRAIN_SVG
+  .replace(
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><ellipse cx="38" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><ellipse cx="62" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48.5" r="3" fill="#1B1713"/><circle cx="39" cy="47.5" r="0.8" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48.5" r="3" fill="#1B1713"/><circle cx="63" cy="47.5" r="0.8" fill="white"/></g>'
+  )
+  .replace(
+    '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="28" cy="58" rx="3" ry="1.7" fill="#E14A48" opacity="0.16"/><ellipse cx="72" cy="58" rx="3" ry="1.7" fill="#E14A48" opacity="0.16"/>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 45.5 62 Q 50 63.2 54.5 62" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/>'
+  )
+  .replace('</svg>', '<path d="M 31.5 45.6 Q 38 43.4 44.5 45.6" fill="none" stroke="url(#sbb-fill)" stroke-width="2.8" stroke-linecap="round"/><path d="M 55.5 45.6 Q 62 43.4 68.5 45.6" fill="none" stroke="url(#sbb-fill)" stroke-width="2.8" stroke-linecap="round"/></svg>');
+
+const __SB_BRAIN_SVG_SHOCKED = __SB_BRAIN_SVG
+  .replace(
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="47.4" r="7.8" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="47.4" r="7.8" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><circle cx="38" cy="47.6" r="2.5" fill="#1B1713"/><circle cx="39" cy="46.2" r="1" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><circle cx="62" cy="47.6" r="2.5" fill="#1B1713"/><circle cx="63" cy="46.2" r="1" fill="white"/></g>'
+  )
+  .replace(
+    '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="27" cy="58" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.22"/><ellipse cx="73" cy="58" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.22"/>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<ellipse cx="50" cy="63" rx="2.7" ry="3.4" fill="#6E211A"/>'
+  );
+
+const __SB_BRAIN_SVG_SCARED = __SB_BRAIN_SVG
+  .replace(
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><circle cx="39" cy="46.4" r="2.4" fill="#1B1713"/><circle cx="39.8" cy="45.4" r="0.9" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><circle cx="61" cy="46.4" r="2.4" fill="#1B1713"/><circle cx="61.8" cy="45.4" r="0.9" fill="white"/></g>'
+  )
+  .replace(
+    '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="27" cy="59" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.18"/><ellipse cx="73" cy="59" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.18"/>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 44 63 Q 47 60.5 50 62.6 Q 53 64.7 56 62.2" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>'
+  )
+  .replace('</svg>', '<path d="M 32 41.5 Q 37 40 43 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/><path d="M 68 41.5 Q 63 40 57 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/><path d="M 81 28 C 84 32 84 35 81 36 C 78 35 78 32 81 28 Z" fill="#CFEFFF"/></svg>');
+
+// Scholar: focus expression + mortarboard cap + square glasses
+const __SB_BRAIN_SVG_SCHOLAR = __SB_BRAIN_SVG
+  .replace(
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><ellipse cx="38" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><ellipse cx="62" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48.5" r="3" fill="#1B1713"/><circle cx="39" cy="47.5" r="0.8" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48.5" r="3" fill="#1B1713"/><circle cx="63" cy="47.5" r="0.8" fill="white"/></g>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 45.5 62 Q 50 63.2 54.5 62" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/>'
+  )
+  .replace('</svg>', `<rect x="31" y="42" width="14" height="12" rx="2.5" fill="none" stroke="#2A1F1A" stroke-width="1.8" opacity="0.88"/><rect x="55" y="42" width="14" height="12" rx="2.5" fill="none" stroke="#2A1F1A" stroke-width="1.8" opacity="0.88"/><path d="M 45 48 Q 50 46 55 48" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><path d="M 31 48 Q 27 47 24 51" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><path d="M 69 48 Q 73 47 76 51" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><ellipse cx="50" cy="5.5" rx="22" ry="5.5" fill="#1A1210"/><rect x="38.5" y="1.5" width="23" height="7" fill="#1A1210"/><ellipse cx="50" cy="2" rx="10" ry="3.2" fill="#2E2420"/><line x1="61" y1="2" x2="65" y2="14" stroke="#C9544A" stroke-width="1.6" stroke-linecap="round"/><circle cx="65.5" cy="15" r="2.2" fill="#C9544A"/></svg>`);
+
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
@@ -2308,6 +2528,8 @@ let __sbLectureNotes = "";
 let __sbLectureInterval = null;
 let __sbLecSegmentCount = 0;
 let __sbLectureRecordingMode = "lecture";
+let __sbLectureTranscript = "";
+let __sbMeetingArtifacts = { actionItems: [], followUps: [] };
 let __sbSpotifyUiState = {
   active: false,
   source: "spotify",
@@ -2331,6 +2553,7 @@ let __sbMovieModeScrollListener = null;
 let __sbMovieModeResizeListener = null;
 let __sbMovieTranscriptEntries = [];
 let __sbMovieLastSubtitleText = "";
+let __sbAgentPendingTurn = null;
 let __sbMovieLastTitle = "";
 let __sbPassiveMovieSyncTimer = null;
 let __sbFullscreenUiListenerBound = false;
@@ -2388,15 +2611,43 @@ if (__sbContextOk()) {
       sendResponse({ ok: true });
       return false;
     }
+    if (msg.action === "startLectureRecording") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      window.__sbForcedMode = "lecture";
+      if (__sbIsLectureRecording) {
+        __sbShowBubble("Lecture & Audio mode is already recording.", false, { tone: "status", title: "Lecture & Audio" });
+        sendResponse({ ok: true, alreadyRecording: true });
+        return false;
+      }
+      void __sbStartLectureRecording({ readyMessage: msg.readyMessage || "" });
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (msg.action === "showBrainoRecovery") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbShowBubble(msg.message || "I moved Braino to a normal tab so it can keep working.", false, {
+        tone: "status",
+        title: msg.title || "Braino moved here",
+      });
+      sendResponse({ ok: true });
+      return false;
+    }
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
         // Voice mode speaks the result with no panel; chat mode shows it.
-        const agentPrompt = String(msg.task || __sbLastAgentTask || "").trim();
-        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
+        const finalText = String(msg.text || "").trim();
+        const agentPrompt = String(msg.task || __sbAgentPendingTurn?.prompt || __sbLastAgentTask || "").trim();
+        if (agentPrompt && finalText) {
+          __sbFinalizeAgentPendingTurn(agentPrompt, finalText, {
+            render: !(msg.keepLectureCard && __sbIsLectureRecording),
+          });
+        } else {
+          __sbAgentPendingTurn = null;
+          if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
+        }
         __sbSetStopBtn(false);
         if (__sbRtAwaitingDelegateResult) {
-          const finalText = String(msg.text || "").trim();
           __sbRtAwaitingDelegateResult = false;
           if (finalText) {
             void (async () => {
@@ -2416,7 +2667,13 @@ if (__sbContextOk()) {
           }
         }
       } else {
-        if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { tone: "status" });
+        if (!__sbVoiceOnlyMode) {
+          if (__sbAgentPendingTurn) {
+            __sbUpdateAgentPendingTurn(String(msg.text || "Working…").trim() || "Working…");
+          } else {
+            __sbShowBubble(msg.text, false, { tone: "status" });
+          }
+        }
         __sbSetStopBtn(true);
         // Speak milestone hints in voice mode without flooding the user
         if (msg.speakHint && __sbHeadphoneMode && !__sbRtRelayingAppMessage) {
@@ -2474,6 +2731,7 @@ if (__sbContextOk()) {
       __sbUseOffscreenRt = false;
       const quotaError = /limit|cap|used .*today|429/i.test(errorText);
       if (quotaError) {
+        __sbPlayReaction('shocked', 3000);
         if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure(errorText, { nonRetryable: true });
         return;
       }
@@ -2701,6 +2959,40 @@ function __sbBuildBrainUI() {
     #__sb_brain_btn__.sb-brain-rejected {
       animation: __sb_brain_glow_rejected__ 0.85s ease-in-out infinite;
     }
+
+    /* ── Reaction popup that floats up above the brain button ── */
+    #__sb_reaction_pop__ {
+      position: absolute;
+      bottom: 100%;
+      right: 8px;
+      margin-bottom: 4px;
+      font-size: 20px;
+      line-height: 1;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(0px) scale(0.7);
+      animation: __sb_reaction_float__ 1.9s cubic-bezier(0.22,1,0.36,1) forwards;
+      z-index: 99999;
+      user-select: none;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.18));
+    }
+    @keyframes __sb_reaction_float__ {
+      0%   { opacity: 0;   transform: translateY(0px)   scale(0.7); }
+      12%  { opacity: 1;   transform: translateY(-6px)  scale(1.2); }
+      38%  { opacity: 1;   transform: translateY(-18px) scale(1.0); }
+      100% { opacity: 0;   transform: translateY(-44px) scale(0.85); }
+    }
+    /* Quick bounce when the brain swaps to an emotion SVG */
+    @keyframes __sb_emotion_bounce__ {
+      0%   { transform: scale(1)    rotate(0deg); }
+      22%  { transform: scale(1.2)  rotate(-4deg); }
+      52%  { transform: scale(0.93) rotate(2deg); }
+      100% { transform: scale(1)    rotate(0deg); }
+    }
+    #__sb_brain_btn__.sb-emotion-active {
+      animation: __sb_emotion_bounce__ 0.42s cubic-bezier(0.34,1.56,0.64,1) !important;
+    }
+
     @keyframes __sb_brain_glow_spotify__ {
       0%, 100% {
         filter: drop-shadow(0 2px 10px rgba(29,185,84,0.42));
@@ -3048,6 +3340,21 @@ function __sbBuildBrainUI() {
     .sb-lec-spinner { width:24px; height:24px; border:2px solid rgba(65,48,40,0.15); border-top-color:#E8786E; border-radius:50%; animation:sbLecSpin 0.8s linear infinite; }
     @keyframes sbLecSpin { to { transform: rotate(360deg); } }
     .sb-lec-loading-txt { font-size:12.5px; color:#A79B92; }
+    .sb-meeting-artifacts { display:grid; gap:12px; margin-top:16px; }
+    .sb-meeting-artifact-card { border:1px solid rgba(65,48,40,0.12); border-radius:16px; padding:12px; background:rgba(255,251,247,0.72); }
+    .sb-meeting-artifact-kicker { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:#A79B92; margin-bottom:7px; }
+    .sb-meeting-artifact-title { font-size:13px; font-weight:600; color:#1B1713; margin-bottom:6px; line-height:1.4; }
+    .sb-meeting-artifact-list { display:grid; gap:7px; margin:0; padding:0 0 0 16px; color:#413028; }
+    .sb-meeting-artifact-list li { margin:0; }
+    .sb-meeting-artifact-meta { font-size:11.5px; color:#8A7B73; line-height:1.45; }
+    .sb-meeting-followup-quote { margin-top:8px; padding-left:10px; border-left:3px solid rgba(232,120,110,0.28); color:#705C50; font-size:11.5px; line-height:1.5; }
+    .sb-meeting-followup-actions { display:flex; gap:8px; margin-top:10px; }
+    .sb-meeting-followup-btn { flex:1; padding:8px 6px; border-radius:12px; border:1px solid rgba(65,48,40,0.16); background:transparent; color:#413028; font-size:11.5px; font-weight:600; cursor:pointer; transition:background 0.15s, opacity 0.15s; }
+    .sb-meeting-followup-btn:hover { background:rgba(65,48,40,0.06); }
+    .sb-meeting-followup-btn.accent { background:#E8786E; border-color:#E8786E; color:white; }
+    .sb-meeting-followup-btn.accent:hover { background:#C9544A; border-color:#C9544A; }
+    .sb-meeting-followup-btn:disabled { opacity:0.5; cursor:default; }
+    .sb-meeting-followup-status { min-height:15px; margin-top:8px; font-size:11.5px; color:#8A7B73; line-height:1.45; }
 
     /* ── NEW UI: Thin bar + centered glass card ── */
     #__sb_bar__ {
@@ -5641,6 +5948,7 @@ async function __sbRunXAutomation(options = {}) {
   });
   const label = __sbXStopReason === 'manual' ? 'Automation stopped' : 'Automation finished';
   __sbShowBubble(`${label} — replied to ${count} post${count !== 1 ? 's' : ''} in ${__sbXFormatRunMinutes(durationMs)}.`, true, { tone: 'status', title: 'Done' });
+  if (__sbXStopReason !== 'manual' && count > 0) __sbPlayReaction('celebrating', 2800);
   return { ok: true, repliedCount: count, durationMs };
 }
 // ===== END X AUTOMATION =====
@@ -5780,6 +6088,7 @@ function __sbToggleInput(open, options = {}) {
           const wait = Math.max(0, minYellow - (Date.now() - tYellow));
           setTimeout(() => {
             if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.innerHTML = __SB_BRAIN_SVG; brainBtn.classList.add("sb-brain-authed"); }
+            __sbPlayReaction('happy', 1800);
             setTimeout(() => {
               if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
               __sbOpenBarReady();
@@ -5792,6 +6101,7 @@ function __sbToggleInput(open, options = {}) {
           resolved = true;
           chrome.storage.onChanged.removeListener(authWatcher);
           if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
+          __sbPlayReaction('scared', 2200);
           setTimeout(() => {
             if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
             bar.classList.add("open", "sb-signin");
@@ -7139,6 +7449,80 @@ function __sbSyncIdleState() {
   brain.classList.toggle("sb-brain-idle", !busy);
 }
 
+// ── Reaction system ───────────────────────────────────────────────────────────
+let __sbReactionTimer = null;
+
+const __SB_REACTION_SVGS = {
+  happy:        __SB_BRAIN_SVG_HAPPY,
+  laughing:     __SB_BRAIN_SVG_LAUGHING,
+  'tears-of-joy': __SB_BRAIN_SVG_TEARS,
+  celebrating:  __SB_BRAIN_SVG_CELEBRATING,
+  focus:        __SB_BRAIN_SVG_FOCUS,
+  shocked:      __SB_BRAIN_SVG_SHOCKED,
+  scared:       __SB_BRAIN_SVG_SCARED,
+  scholar:      __SB_BRAIN_SVG_SCHOLAR,
+  idle:         __SB_BRAIN_SVG,
+};
+
+const __SB_REACTION_EMOJIS = {
+  happy:          '😊',
+  laughing:       '😂',
+  'tears-of-joy': '🤣',
+  celebrating:    '🎉',
+  focus:          '🎯',
+  shocked:        '😱',
+  scared:         '😰',
+  scholar:        '🎓',
+};
+
+// Play an emotion on the brain mascot for durationMs, then revert.
+// Pass durationMs = 0 to keep the emotion indefinitely (caller must clear manually).
+function __sbPlayReaction(emotion, durationMs = 2600) {
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (!brainBtn || !__sbBrainVisible) return;
+
+  // Cancel any pending auto-revert from a previous reaction
+  if (__sbReactionTimer) { clearTimeout(__sbReactionTimer); __sbReactionTimer = null; }
+
+  // Swap the mascot SVG to the emotion variant
+  const svg = __SB_REACTION_SVGS[emotion];
+  if (svg) {
+    brainBtn.innerHTML = svg;
+    brainBtn.classList.remove("sb-brain-idle", "sb-emotion-active");
+    void brainBtn.offsetWidth; // force reflow so the animation restarts
+    brainBtn.classList.add("sb-emotion-active");
+    setTimeout(() => brainBtn.classList.remove("sb-emotion-active"), 450);
+  }
+
+  // Show a floating emoji popup above the button
+  const emoji = __SB_REACTION_EMOJIS[emotion];
+  if (emoji) {
+    document.getElementById("__sb_reaction_pop__")?.remove();
+    const pop = document.createElement("div");
+    pop.id = "__sb_reaction_pop__";
+    pop.textContent = emoji;
+    // Insert inside the bar so absolute positioning works
+    const bar = document.getElementById("__sb_bar__");
+    if (bar) {
+      bar.style.position = bar.style.position || "relative";
+      bar.appendChild(pop);
+    } else {
+      brainBtn.parentElement?.appendChild(pop);
+    }
+    pop.addEventListener("animationend", () => pop.remove(), { once: true });
+  }
+
+  // Revert to normal idle after durationMs (scholar/idle are persistent modes)
+  if (durationMs > 0 && emotion !== 'scholar' && emotion !== 'idle') {
+    __sbReactionTimer = setTimeout(() => {
+      __sbReactionTimer = null;
+      const btn = document.getElementById("__sb_brain_btn__");
+      if (btn && !__sbIsLectureRecording) btn.innerHTML = __SB_BRAIN_SVG;
+      __sbSyncIdleState();
+    }, durationMs);
+  }
+}
+
 function __sbSyncSpotifyVisualState() {
   const brain = document.getElementById("__sb_brain_btn__");
   const bubble = document.getElementById("__sb_bubble__");
@@ -7426,6 +7810,100 @@ function __sbRenderCardHistory(scroll, options = {}) {
     scroll.innerHTML = `<div class="sb-card-stack">${stackHtml}</div>`;
     __sbScrollCardToLatest(scroll);
   }
+}
+
+function __sbRenderConversationWithPending(scroll) {
+  if (!scroll) return;
+  if (__sbAgentPendingTurn?.prompt) {
+    __sbRenderCardHistory(scroll, {
+      pendingTurn: { prompt: __sbAgentPendingTurn.prompt },
+      pendingText: __sbAgentPendingTurn.status || "Delegating…",
+    });
+    return;
+  }
+  __sbRenderCardHistory(scroll);
+}
+
+function __sbGetRecentSharedChatHistory(limit = 10) {
+  return __sbChatHistory
+    .slice(-Math.max(1, limit))
+    .map((entry) => ({
+      role: entry?.role === "assistant" ? "assistant" : "user",
+      content: String(entry?.content || "").trim(),
+    }))
+    .filter((entry) => entry.content);
+}
+
+function __sbGetRecentSharedCardTurns(limit = 6) {
+  return __sbCardTurns
+    .slice(-Math.max(1, limit))
+    .map((turn) => ({
+      prompt: String(turn?.prompt || "").trim(),
+      answer: String(turn?.answer || "").trim(),
+    }))
+    .filter((turn) => turn.prompt || turn.answer);
+}
+
+function __sbBuildAgentHandoffPayload(task, options = {}) {
+  const chatHistory = __sbGetRecentSharedChatHistory(10);
+  const cardTurns = __sbGetRecentSharedCardTurns(6);
+  const lastUserPrompt = [...chatHistory].reverse().find((entry) => entry.role === "user")?.content || "";
+  const lastAssistantReply = [...chatHistory].reverse().find((entry) => entry.role === "assistant")?.content || "";
+  return {
+    task: String(task || "").trim(),
+    connector: __sbNormalizeConnectorName(options.connector) || "auto",
+    mode: window.__sbForcedMode || "page",
+    chatHistory,
+    cardTurns,
+    lastUserPrompt,
+    lastAssistantReply,
+  };
+}
+
+function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
+  const task = String(prompt || "").trim();
+  if (!task) return;
+  __sbAgentPendingTurn = {
+    prompt: task,
+    status: String(status || "Delegating…").trim() || "Delegating…",
+  };
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  __sbRenderConversationWithPending(scroll);
+  __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
+}
+
+function __sbUpdateAgentPendingTurn(status) {
+  if (!__sbAgentPendingTurn?.prompt) return;
+  __sbAgentPendingTurn.status = String(status || "Delegating…").trim() || "Delegating…";
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  __sbRenderConversationWithPending(scroll);
+  __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
+}
+
+function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
+  const task = String(prompt || "").trim();
+  const reply = String(answer || "").trim();
+  if (task) {
+    const lastUser = __sbChatHistory[__sbChatHistory.length - 1];
+    if (!lastUser || lastUser.role !== "user" || String(lastUser.content || "").trim() !== task) {
+      __sbChatHistory.push({ role: "user", content: task });
+    }
+  }
+  if (reply) {
+    __sbChatHistory.push({ role: "assistant", content: reply });
+    if (task) __sbCardTurns.push({ prompt: task, answer: reply });
+  }
+  __sbAgentPendingTurn = null;
+  if (options.render === false) return;
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  __sbRenderConversationWithPending(scroll);
+  __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
 }
 
 function __sbShowThinking(scroll, promptText = "", pendingText = "Thinking…") {
@@ -8688,10 +9166,15 @@ async function __sbShouldForceVoiceDelegate(routing) {
   if (!promptText) return false;
   if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
 
+  const handoff = __sbBuildAgentHandoffPayload(promptText, { connector: routing?.connectorHint });
   const result = await __sbRuntimeMessage({
     action: "classifyBrainAgentTask",
     task: promptText,
     connector: routing?.connectorHint || "auto",
+    chatHistory: handoff.chatHistory,
+    cardTurns: handoff.cardTurns,
+    lastUserPrompt: handoff.lastUserPrompt,
+    lastAssistantReply: handoff.lastAssistantReply,
   });
 
   return result?.shouldDelegate === true;
@@ -8718,7 +9201,11 @@ async function __sbProcessPrompt(text, options = {}) {
   const forceIntent = ["agent", "web", "record", "page", "chat"].includes(options.forceIntent)
     ? options.forceIntent
     : null;
-  const intent = forceIntent || routing.intent;
+  let intent = forceIntent || routing.intent;
+  if (!forceIntent && forcedMode === "page" && intent === "chat") {
+    const shouldPromoteToAgent = await __sbShouldForceVoiceDelegate(routing);
+    if (shouldPromoteToAgent) intent = "agent";
+  }
   if (fromVoice && voiceOutput === "realtime") {
     __sbPatchRealtimeCostTurn({
       routeIntent: intent,
@@ -8820,7 +9307,6 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
       return;
     }
-    if (!fromVoice || !__sbVoiceOnlyMode) __sbShowBubble("Delegating…", false);
     if (voiceOutput === "realtime") __sbRtAwaitingDelegateResult = true;
     __sbRunAgent(promptText, { connector: connectorHint });
     if (fromVoice) {
@@ -8996,12 +9482,24 @@ function __sbShowUpgrade(feature) {
 function __sbRunAgent(task, options = {}) {
   if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect Braino.", true); return; }
   __sbLastAgentTask = String(task || "").trim();
+  if (!__sbLastAgentTask) return;
+  __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
+  if (!__sbVoiceOnlyMode) __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…");
+  const handoff = __sbBuildAgentHandoffPayload(__sbLastAgentTask, options);
   // Hand off to background — it runs the full agent loop and sends sbAgentUpdate messages back
   chrome.runtime.sendMessage({
     action: "runBrainAgent",
-    task,
-    connector: __sbNormalizeConnectorName(options.connector) || "auto",
-  }, () => { void chrome.runtime.lastError; });
+    task: __sbLastAgentTask,
+    connector: handoff.connector,
+    mode: handoff.mode,
+    chatHistory: handoff.chatHistory,
+    cardTurns: handoff.cardTurns,
+    lastUserPrompt: handoff.lastUserPrompt,
+    lastAssistantReply: handoff.lastAssistantReply,
+  }, () => {
+    if (!chrome.runtime.lastError) return;
+    __sbFinalizeAgentPendingTurn(__sbLastAgentTask, "I couldn't start delegate mode just now.");
+  });
 }
 
 function __sbShowLectureRecordingBar(show) {
@@ -9040,12 +9538,138 @@ function __sbShowLectureResultMessage(title, message) {
   `;
 }
 
+function __sbGetMeetingArtifacts() {
+  const actionItems = Array.isArray(__sbMeetingArtifacts?.actionItems) ? __sbMeetingArtifacts.actionItems : [];
+  const followUps = Array.isArray(__sbMeetingArtifacts?.followUps) ? __sbMeetingArtifacts.followUps : [];
+  return { actionItems, followUps };
+}
+
+function __sbRenderMeetingArtifactsHtml() {
+  if (__sbLectureRecordingMode !== "meeting") return "";
+  const { actionItems, followUps } = __sbGetMeetingArtifacts();
+  if (!actionItems.length && !followUps.length) return "";
+
+  const actionItemsHtml = actionItems.length
+    ? `
+      <section class="sb-meeting-artifact-card">
+        <div class="sb-meeting-artifact-kicker">Action items</div>
+        <div class="sb-meeting-artifact-title">Braino pulled out the concrete next steps from the meeting.</div>
+        <ul class="sb-meeting-artifact-list">
+          ${actionItems.slice(0, 5).map((item) => {
+            const task = __sbEscapeHtml(item?.task || "Follow-up");
+            const owner = __sbEscapeHtml(item?.owner || "");
+            const due = __sbEscapeHtml(item?.dueDateText || "");
+            const metaBits = [owner ? `Owner: ${owner}` : "", due ? `Due: ${due}` : ""].filter(Boolean).join(" · ");
+            return `<li><strong>${task}</strong>${metaBits ? `<div class="sb-meeting-artifact-meta">${metaBits}</div>` : ""}</li>`;
+          }).join("")}
+        </ul>
+      </section>
+    `
+    : "";
+
+  const followUpsHtml = followUps.length
+    ? followUps.map((item, index) => {
+      const summary = __sbEscapeHtml(item?.summary || "Follow-up call");
+      const attendee = __sbEscapeHtml(item?.attendeeName || "");
+      const rawDateText = String(item?.dateText || "").trim();
+      const rawTimeText = String(item?.timeText || "").trim();
+      const dateText = __sbEscapeHtml(rawDateText);
+      const timeText = __sbEscapeHtml(rawTimeText);
+      const quote = __sbEscapeHtml(item?.sourceQuote || "");
+      const meta = [attendee ? `With ${attendee}` : "", dateText, timeText].filter(Boolean).join(" · ");
+      const buttonLabel = rawTimeText ? `Schedule ${rawDateText}, ${rawTimeText}` : `Schedule ${rawDateText}`;
+      return `
+        <section class="sb-meeting-artifact-card" data-sb-followup-card="${index}">
+          <div class="sb-meeting-artifact-kicker">Calendar follow-up</div>
+          <div class="sb-meeting-artifact-title">${summary}</div>
+          ${meta ? `<div class="sb-meeting-artifact-meta">${meta}</div>` : ""}
+          ${quote ? `<div class="sb-meeting-followup-quote">"${quote}"</div>` : ""}
+          <div class="sb-meeting-artifact-meta">Should I put this on your calendar?</div>
+          <div class="sb-meeting-followup-actions">
+            <button class="sb-meeting-followup-btn accent" type="button" data-sb-followup-schedule="${index}">${__sbEscapeHtml(buttonLabel)}</button>
+            <button class="sb-meeting-followup-btn" type="button" data-sb-followup-dismiss="${index}">Not now</button>
+          </div>
+          <div class="sb-meeting-followup-status" data-sb-followup-status="${index}"></div>
+        </section>
+      `;
+    }).join("")
+    : "";
+
+  return `<div class="sb-meeting-artifacts">${actionItemsHtml}${followUpsHtml}</div>`;
+}
+
+async function __sbScheduleMeetingFollowUp(index) {
+  const { followUps } = __sbGetMeetingArtifacts();
+  const followUp = followUps[index];
+  if (!followUp) return;
+
+  const scheduleBtn = document.querySelector(`[data-sb-followup-schedule="${index}"]`);
+  const dismissBtn = document.querySelector(`[data-sb-followup-dismiss="${index}"]`);
+  const statusEl = document.querySelector(`[data-sb-followup-status="${index}"]`);
+  if (scheduleBtn) scheduleBtn.disabled = true;
+  if (dismissBtn) dismissBtn.disabled = true;
+  if (statusEl) statusEl.textContent = "Preparing calendar follow-up…";
+
+  let timeText = String(followUp?.timeText || "").trim();
+  if (!timeText) {
+    const dateLabel = String(followUp?.dateText || "that day").trim();
+    const promptLabel = String(followUp?.summary || "this follow-up").trim();
+    const entered = window.prompt(`What time should I schedule "${promptLabel}" for ${dateLabel}?`, "3pm");
+    timeText = String(entered || "").trim();
+    if (!timeText) {
+      if (statusEl) statusEl.textContent = "No time entered, so I left it unscheduled.";
+      if (scheduleBtn) scheduleBtn.disabled = false;
+      if (dismissBtn) dismissBtn.disabled = false;
+      return;
+    }
+    __sbMeetingArtifacts.followUps[index].timeText = timeText;
+  }
+
+  const res = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      action: "scheduleMeetingFollowUp",
+      followUp: { ...followUp, timeText },
+    }, (response) => resolve(response || {}));
+  });
+
+  if (res?.error) {
+    if (statusEl) statusEl.textContent = String(res.error);
+    if (scheduleBtn) scheduleBtn.disabled = false;
+    if (dismissBtn) dismissBtn.disabled = false;
+    return;
+  }
+
+  if (scheduleBtn) {
+    scheduleBtn.textContent = "Scheduled ✓";
+    scheduleBtn.disabled = true;
+  }
+  if (dismissBtn) dismissBtn.disabled = true;
+  if (statusEl) statusEl.textContent = "Added to Google Calendar.";
+}
+
+function __sbDismissMeetingFollowUp(index) {
+  const card = document.querySelector(`[data-sb-followup-card="${index}"]`);
+  if (card) card.remove();
+}
+
+function __sbBindMeetingArtifactsActions() {
+  document.querySelectorAll("[data-sb-followup-schedule]").forEach((button) => {
+    button.addEventListener("click", () => void __sbScheduleMeetingFollowUp(Number(button.getAttribute("data-sb-followup-schedule") || "-1")));
+  });
+  document.querySelectorAll("[data-sb-followup-dismiss]").forEach((button) => {
+    button.addEventListener("click", () => __sbDismissMeetingFollowUp(Number(button.getAttribute("data-sb-followup-dismiss") || "-1")));
+  });
+}
+
 function __sbShowLectureRecordingCard() {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
+  const isMeeting = __sbLectureRecordingMode === "meeting";
   const title = (document.title || "Untitled").slice(0, 50);
   const date = new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
   const bars = Array.from({ length: 12 }, () => `<div class="sb-lec-wave-bar"></div>`).join("");
+  const segmentButtonHtml = isMeeting ? "" : `<button id="__sb_lec_seg_btn__" class="sb-lec-seg-btn">✂ Save Segment</button>`;
+  const statusCopy = isMeeting ? "Listening to this tab and your mic…" : "Listening to this tab…";
   scroll.innerHTML = `
     <div class="sb-lec-rec">
       <div class="sb-lec-rec-header">
@@ -9056,9 +9680,9 @@ function __sbShowLectureRecordingCard() {
       <div class="sb-lec-date">${date}</div>
       <div class="sb-lec-waveform" id="__sb_lec_waveform__">${bars}</div>
       <div class="sb-lec-timer" id="__sb_lec_card_timer__">00:00</div>
-      <div class="sb-lec-status" id="__sb_lec_status__">Listening to this tab…</div>
+      <div class="sb-lec-status" id="__sb_lec_status__">${statusCopy}</div>
       <div class="sb-lec-btns">
-        <button id="__sb_lec_seg_btn__" class="sb-lec-seg-btn">✂ Save Segment</button>
+        ${segmentButtonHtml}
         <button id="__sb_lec_stop_btn__" class="sb-lec-stop-btn">⏹ Stop & Get Notes</button>
       </div>
     </div>
@@ -9069,7 +9693,7 @@ function __sbShowLectureRecordingCard() {
   document.getElementById("__sb_lec_stop_btn__")?.addEventListener("click", () => void __sbStopLectureRecording());
 }
 
-async function __sbStartLectureRecording() {
+async function __sbStartLectureRecording(options = {}) {
   if (!__sbContextOk()) {
     __sbShowBubble("Reload this page to reconnect Braino.", true);
     return;
@@ -9077,7 +9701,9 @@ async function __sbStartLectureRecording() {
   if (__sbIsLectureRecording) return;
   __sbIsLectureRecording = true;
   __sbLectureNotes = "";
+  __sbLectureTranscript = "";
   __sbLecSegmentCount = 0;
+  __sbMeetingArtifacts = { actionItems: [], followUps: [] };
 
   const mode = window.__sbForcedMode === "meeting" ? "meeting" : "lecture";
   const withMic = (mode === "meeting");
@@ -9097,9 +9723,16 @@ async function __sbStartLectureRecording() {
   }
 
   const brainBtn = document.getElementById("__sb_brain_btn__");
-  if (brainBtn) { brainBtn.classList.add("recording"); brainBtn.innerHTML = __SB_BRAIN_SVG_LISTENING; }
+  if (brainBtn) {
+    brainBtn.classList.add("recording");
+    brainBtn.innerHTML = __sbLectureRecordingMode === "lecture" ? __SB_BRAIN_SVG_SCHOLAR : __SB_BRAIN_SVG_LISTENING;
+  }
   __sbShowLectureRecordingBar(false);
   __sbShowLectureRecordingCard();
+  if (options.readyMessage) {
+    const statusEl = document.getElementById("__sb_lec_status__");
+    if (statusEl) statusEl.textContent = String(options.readyMessage);
+  }
 
   let seconds = 0;
   __sbLectureInterval = setInterval(() => {
@@ -9115,6 +9748,7 @@ async function __sbStartLectureRecording() {
 }
 
 async function __sbCaptureLectureSegment() {
+  if (__sbLectureRecordingMode === "meeting") return;
   const segBtn = document.getElementById("__sb_lec_seg_btn__");
   const captureBtn = document.getElementById("__sb_capture_btn__");
   const statusEl = document.getElementById("__sb_lec_status__");
@@ -9125,7 +9759,12 @@ async function __sbCaptureLectureSegment() {
 
   try {
     const res = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: "getLectureSegment", existingNotes: __sbLectureNotes, mode: __sbLectureRecordingMode }, (r) => resolve(r || {}));
+      chrome.runtime.sendMessage({
+        action: "getLectureSegment",
+        existingNotes: __sbLectureNotes,
+        existingTranscript: __sbLectureTranscript,
+        mode: __sbLectureRecordingMode,
+      }, (r) => resolve(r || {}));
     });
 
     if (res.error) {
@@ -9140,6 +9779,8 @@ async function __sbCaptureLectureSegment() {
     }
 
     __sbLectureNotes = res.notes || __sbLectureNotes;
+    __sbLectureTranscript = res.transcript || __sbLectureTranscript;
+    if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
     __sbLecSegmentCount++;
     if (statusEl) statusEl.textContent = `✓ Segment ${__sbLecSegmentCount} saved — still recording…`;
     if (segBtn) { segBtn.disabled = false; segBtn.textContent = "✂ Save Segment"; }
@@ -9168,7 +9809,12 @@ async function __sbStopLectureRecording() {
 
   const res = await new Promise((resolve) => {
     chrome.runtime.sendMessage(
-      { action: "stopRecordingAndTranscribe", existingNotes: __sbLectureNotes, mode: __sbLectureRecordingMode },
+      {
+        action: "stopRecordingAndTranscribe",
+        existingNotes: __sbLectureNotes,
+        existingTranscript: __sbLectureTranscript,
+        mode: __sbLectureRecordingMode,
+      },
       (r) => resolve(r || {}),
     );
   });
@@ -9179,6 +9825,8 @@ async function __sbStopLectureRecording() {
   }
 
   if (res.notes) __sbLectureNotes = res.notes;
+  if (res.transcript) __sbLectureTranscript = res.transcript;
+  if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
 
   if (__sbLectureNotes) {
     __sbShowLectureNotes(__sbLectureNotes, true);
@@ -9187,7 +9835,9 @@ async function __sbStopLectureRecording() {
 
   __sbShowLectureResultMessage(
     "Recording stopped",
-    "No content was captured — try speaking louder or use ✂ Save Segment during the next session.",
+    __sbLectureRecordingMode === "meeting"
+      ? "No content was captured — try again and make sure the meeting audio and your mic are both audible."
+      : "No content was captured — try speaking louder or use ✂ Save Segment during the next session.",
   );
 }
 
@@ -9195,13 +9845,14 @@ function __sbShowLectureNotes(notes, isFinal) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbLastBubbleRaw = notes;
+  const meetingArtifactsHtml = isFinal ? __sbRenderMeetingArtifactsHtml() : "";
   const actionsHtml = isFinal ? `
     <div class="sb-lec-notes-actions">
       <button id="__sb_lec_copy_btn__" class="sb-lec-copy-btn">Copy</button>
       <button id="__sb_notion_sync_btn__" class="sb-notion-btn" style="flex:1.4">Sync to Notion</button>
     </div>
   ` : "";
-  scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}</div>${actionsHtml}`;
+  scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}${meetingArtifactsHtml}</div>${actionsHtml}`;
   __sbOpenCard({ rich: true });
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (isFinal) {
@@ -9211,6 +9862,7 @@ function __sbShowLectureNotes(notes, isFinal) {
       const btn = document.getElementById("__sb_lec_copy_btn__");
       if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy"; }, 1800); }
     });
+    __sbBindMeetingArtifactsActions();
   }
 }
 

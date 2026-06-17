@@ -2336,6 +2336,171 @@ const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
   .replace('<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
     '<path d="M 46 62 Q 50 62 54 62" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>');
 
+// ── Emotion SVG variants ──────────────────────────────────────────────────────
+// All derived from __SB_BRAIN_SVG. Keep sbb-* IDs so idle CSS animations still work.
+
+const __SB_BRAIN_SVG_HAPPY = __SB_BRAIN_SVG
+  .replace(
+    '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="28" cy="58" rx="3.8" ry="2.3" fill="#E14A48" opacity="0.45"/><ellipse cx="72" cy="58" rx="3.8" ry="2.3" fill="#E14A48" opacity="0.45"/>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 42.5 60 Q 50 68 57.5 60" fill="none" stroke="#1B1713" stroke-width="2" stroke-linecap="round"/>'
+  );
+
+// Shared laugh-eyes mutation applied by __sbLaughBase
+function __sbLaughBase(svg) {
+  return svg
+    .replace(
+      '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+      '<g id="sbb-eye-l" style="transform-origin:38px 48px"><path d="M 32.5 49 Q 38 54.5 43.5 49" fill="none" stroke="#1B1713" stroke-width="2.4" stroke-linecap="round"/></g>'
+    )
+    .replace(
+      '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+      '<g id="sbb-eye-r" style="transform-origin:62px 48px"><path d="M 56.5 49 Q 62 54.5 67.5 49" fill="none" stroke="#1B1713" stroke-width="2.4" stroke-linecap="round"/></g>'
+    )
+    .replace(
+      '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+      '<g id="sbb-pupil-l"></g>'
+    )
+    .replace(
+      '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+      '<g id="sbb-pupil-r"></g>'
+    )
+    .replace(
+      '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+      '<ellipse cx="27" cy="57" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/><ellipse cx="73" cy="57" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/>'
+    )
+    .replace(
+      '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+      '<path d="M 42 59 Q 50 73.5 58 59 Q 50 62 42 59 Z" fill="#6E211A"/><path d="M 45.5 64.5 Q 50 70 54.5 64.5 Q 50 66.5 45.5 64.5 Z" fill="#E8786E"/><path d="M 43 60 Q 50 62.4 57 60" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round"/>'
+    );
+}
+
+const __SB_BRAIN_SVG_LAUGHING = __sbLaughBase(__SB_BRAIN_SVG);
+
+const __SB_BRAIN_SVG_TEARS = __sbLaughBase(__SB_BRAIN_SVG)
+  .replace('</svg>', '<path d="M 30 50.5 C 33 54.5 33 57 30 58 C 27 57 27 54.5 30 50.5 Z" fill="#DFF4FF"/><path d="M 70 50.5 C 73 54.5 73 57 70 58 C 67 57 67 54.5 70 50.5 Z" fill="#DFF4FF"/></svg>');
+
+const __SB_BRAIN_SVG_CELEBRATING = __sbLaughBase(__SB_BRAIN_SVG)
+  // Arms raised — outline layer
+  .replace(
+    '<g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>',
+    '<g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 10 42 16 28" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>'
+  )
+  .replace(
+    '<g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>',
+    '<g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 90 42 84 28" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>'
+  )
+  // Arms raised — fill layer
+  .replace(
+    '<g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g>',
+    '<g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 10 42 16 28" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="15" cy="26" r="5.5" fill="url(#sbb-fill)"/></g>'
+  )
+  .replace(
+    '<g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g>',
+    '<g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 90 42 84 28" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="85" cy="26" r="5.5" fill="url(#sbb-fill)"/></g>'
+  )
+  // Confetti dots
+  .replace('</svg>', '<circle cx="12" cy="22" r="2.5" fill="#FFD700" opacity="0.9"/><circle cx="88" cy="20" r="2" fill="#FF69B4" opacity="0.9"/><circle cx="6" cy="44" r="2" fill="#7EC8E3" opacity="0.9"/><circle cx="94" cy="42" r="2.2" fill="#90EE90" opacity="0.9"/><circle cx="20" cy="10" r="1.8" fill="#FF8C42" opacity="0.9"/><circle cx="80" cy="10" r="1.8" fill="#E14A48" opacity="0.9"/></svg>');
+
+const __SB_BRAIN_SVG_FOCUS = __SB_BRAIN_SVG
+  .replace(
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><ellipse cx="38" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><ellipse cx="62" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48.5" r="3" fill="#1B1713"/><circle cx="39" cy="47.5" r="0.8" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48.5" r="3" fill="#1B1713"/><circle cx="63" cy="47.5" r="0.8" fill="white"/></g>'
+  )
+  .replace(
+    '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="28" cy="58" rx="3" ry="1.7" fill="#E14A48" opacity="0.16"/><ellipse cx="72" cy="58" rx="3" ry="1.7" fill="#E14A48" opacity="0.16"/>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 45.5 62 Q 50 63.2 54.5 62" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/>'
+  )
+  .replace('</svg>', '<path d="M 31.5 45.6 Q 38 43.4 44.5 45.6" fill="none" stroke="url(#sbb-fill)" stroke-width="2.8" stroke-linecap="round"/><path d="M 55.5 45.6 Q 62 43.4 68.5 45.6" fill="none" stroke="url(#sbb-fill)" stroke-width="2.8" stroke-linecap="round"/></svg>');
+
+const __SB_BRAIN_SVG_SHOCKED = __SB_BRAIN_SVG
+  .replace(
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="47.4" r="7.8" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="47.4" r="7.8" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><circle cx="38" cy="47.6" r="2.5" fill="#1B1713"/><circle cx="39" cy="46.2" r="1" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><circle cx="62" cy="47.6" r="2.5" fill="#1B1713"/><circle cx="63" cy="46.2" r="1" fill="white"/></g>'
+  )
+  .replace(
+    '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="27" cy="58" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.22"/><ellipse cx="73" cy="58" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.22"/>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<ellipse cx="50" cy="63" rx="2.7" ry="3.4" fill="#6E211A"/>'
+  );
+
+const __SB_BRAIN_SVG_SCARED = __SB_BRAIN_SVG
+  .replace(
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><circle cx="39" cy="46.4" r="2.4" fill="#1B1713"/><circle cx="39.8" cy="45.4" r="0.9" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><circle cx="61" cy="46.4" r="2.4" fill="#1B1713"/><circle cx="61.8" cy="45.4" r="0.9" fill="white"/></g>'
+  )
+  .replace(
+    '<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>',
+    '<ellipse cx="27" cy="59" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.18"/><ellipse cx="73" cy="59" rx="3.2" ry="1.8" fill="#E14A48" opacity="0.18"/>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 44 63 Q 47 60.5 50 62.6 Q 53 64.7 56 62.2" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>'
+  )
+  .replace('</svg>', '<path d="M 32 41.5 Q 37 40 43 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/><path d="M 68 41.5 Q 63 40 57 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/><path d="M 81 28 C 84 32 84 35 81 36 C 78 35 78 32 81 28 Z" fill="#CFEFFF"/></svg>');
+
+// Scholar: focus expression + mortarboard cap + square glasses
+const __SB_BRAIN_SVG_SCHOLAR = __SB_BRAIN_SVG
+  .replace(
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><ellipse cx="38" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
+    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><ellipse cx="62" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-l"><circle cx="38" cy="48.5" r="3" fill="#1B1713"/><circle cx="39" cy="47.5" r="0.8" fill="white"/></g>'
+  )
+  .replace(
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
+    '<g id="sbb-pupil-r"><circle cx="62" cy="48.5" r="3" fill="#1B1713"/><circle cx="63" cy="47.5" r="0.8" fill="white"/></g>'
+  )
+  .replace(
+    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
+    '<path d="M 45.5 62 Q 50 63.2 54.5 62" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/>'
+  )
+  .replace('</svg>', `<rect x="31" y="42" width="14" height="12" rx="2.5" fill="none" stroke="#2A1F1A" stroke-width="1.8" opacity="0.88"/><rect x="55" y="42" width="14" height="12" rx="2.5" fill="none" stroke="#2A1F1A" stroke-width="1.8" opacity="0.88"/><path d="M 45 48 Q 50 46 55 48" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><path d="M 31 48 Q 27 47 24 51" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><path d="M 69 48 Q 73 47 76 51" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><ellipse cx="50" cy="5.5" rx="22" ry="5.5" fill="#1A1210"/><rect x="38.5" y="1.5" width="23" height="7" fill="#1A1210"/><ellipse cx="50" cy="2" rx="10" ry="3.2" fill="#2E2420"/><line x1="61" y1="2" x2="65" y2="14" stroke="#C9544A" stroke-width="1.6" stroke-linecap="round"/><circle cx="65.5" cy="15" r="2.2" fill="#C9544A"/></svg>`);
+
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
@@ -2566,6 +2731,7 @@ if (__sbContextOk()) {
       __sbUseOffscreenRt = false;
       const quotaError = /limit|cap|used .*today|429/i.test(errorText);
       if (quotaError) {
+        __sbPlayReaction('shocked', 3000);
         if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure(errorText, { nonRetryable: true });
         return;
       }
@@ -2793,6 +2959,40 @@ function __sbBuildBrainUI() {
     #__sb_brain_btn__.sb-brain-rejected {
       animation: __sb_brain_glow_rejected__ 0.85s ease-in-out infinite;
     }
+
+    /* ── Reaction popup that floats up above the brain button ── */
+    #__sb_reaction_pop__ {
+      position: absolute;
+      bottom: 100%;
+      right: 8px;
+      margin-bottom: 4px;
+      font-size: 20px;
+      line-height: 1;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(0px) scale(0.7);
+      animation: __sb_reaction_float__ 1.9s cubic-bezier(0.22,1,0.36,1) forwards;
+      z-index: 99999;
+      user-select: none;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.18));
+    }
+    @keyframes __sb_reaction_float__ {
+      0%   { opacity: 0;   transform: translateY(0px)   scale(0.7); }
+      12%  { opacity: 1;   transform: translateY(-6px)  scale(1.2); }
+      38%  { opacity: 1;   transform: translateY(-18px) scale(1.0); }
+      100% { opacity: 0;   transform: translateY(-44px) scale(0.85); }
+    }
+    /* Quick bounce when the brain swaps to an emotion SVG */
+    @keyframes __sb_emotion_bounce__ {
+      0%   { transform: scale(1)    rotate(0deg); }
+      22%  { transform: scale(1.2)  rotate(-4deg); }
+      52%  { transform: scale(0.93) rotate(2deg); }
+      100% { transform: scale(1)    rotate(0deg); }
+    }
+    #__sb_brain_btn__.sb-emotion-active {
+      animation: __sb_emotion_bounce__ 0.42s cubic-bezier(0.34,1.56,0.64,1) !important;
+    }
+
     @keyframes __sb_brain_glow_spotify__ {
       0%, 100% {
         filter: drop-shadow(0 2px 10px rgba(29,185,84,0.42));
@@ -5748,6 +5948,7 @@ async function __sbRunXAutomation(options = {}) {
   });
   const label = __sbXStopReason === 'manual' ? 'Automation stopped' : 'Automation finished';
   __sbShowBubble(`${label} — replied to ${count} post${count !== 1 ? 's' : ''} in ${__sbXFormatRunMinutes(durationMs)}.`, true, { tone: 'status', title: 'Done' });
+  if (__sbXStopReason !== 'manual' && count > 0) __sbPlayReaction('celebrating', 2800);
   return { ok: true, repliedCount: count, durationMs };
 }
 // ===== END X AUTOMATION =====
@@ -5887,6 +6088,7 @@ function __sbToggleInput(open, options = {}) {
           const wait = Math.max(0, minYellow - (Date.now() - tYellow));
           setTimeout(() => {
             if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.innerHTML = __SB_BRAIN_SVG; brainBtn.classList.add("sb-brain-authed"); }
+            __sbPlayReaction('happy', 1800);
             setTimeout(() => {
               if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
               __sbOpenBarReady();
@@ -5899,6 +6101,7 @@ function __sbToggleInput(open, options = {}) {
           resolved = true;
           chrome.storage.onChanged.removeListener(authWatcher);
           if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
+          __sbPlayReaction('scared', 2200);
           setTimeout(() => {
             if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
             bar.classList.add("open", "sb-signin");
@@ -7244,6 +7447,80 @@ function __sbSyncIdleState() {
     || brain.classList.contains("hp-captured")
     || brain.classList.contains("hp-speaking");
   brain.classList.toggle("sb-brain-idle", !busy);
+}
+
+// ── Reaction system ───────────────────────────────────────────────────────────
+let __sbReactionTimer = null;
+
+const __SB_REACTION_SVGS = {
+  happy:        __SB_BRAIN_SVG_HAPPY,
+  laughing:     __SB_BRAIN_SVG_LAUGHING,
+  'tears-of-joy': __SB_BRAIN_SVG_TEARS,
+  celebrating:  __SB_BRAIN_SVG_CELEBRATING,
+  focus:        __SB_BRAIN_SVG_FOCUS,
+  shocked:      __SB_BRAIN_SVG_SHOCKED,
+  scared:       __SB_BRAIN_SVG_SCARED,
+  scholar:      __SB_BRAIN_SVG_SCHOLAR,
+  idle:         __SB_BRAIN_SVG,
+};
+
+const __SB_REACTION_EMOJIS = {
+  happy:          '😊',
+  laughing:       '😂',
+  'tears-of-joy': '🤣',
+  celebrating:    '🎉',
+  focus:          '🎯',
+  shocked:        '😱',
+  scared:         '😰',
+  scholar:        '🎓',
+};
+
+// Play an emotion on the brain mascot for durationMs, then revert.
+// Pass durationMs = 0 to keep the emotion indefinitely (caller must clear manually).
+function __sbPlayReaction(emotion, durationMs = 2600) {
+  const brainBtn = document.getElementById("__sb_brain_btn__");
+  if (!brainBtn || !__sbBrainVisible) return;
+
+  // Cancel any pending auto-revert from a previous reaction
+  if (__sbReactionTimer) { clearTimeout(__sbReactionTimer); __sbReactionTimer = null; }
+
+  // Swap the mascot SVG to the emotion variant
+  const svg = __SB_REACTION_SVGS[emotion];
+  if (svg) {
+    brainBtn.innerHTML = svg;
+    brainBtn.classList.remove("sb-brain-idle", "sb-emotion-active");
+    void brainBtn.offsetWidth; // force reflow so the animation restarts
+    brainBtn.classList.add("sb-emotion-active");
+    setTimeout(() => brainBtn.classList.remove("sb-emotion-active"), 450);
+  }
+
+  // Show a floating emoji popup above the button
+  const emoji = __SB_REACTION_EMOJIS[emotion];
+  if (emoji) {
+    document.getElementById("__sb_reaction_pop__")?.remove();
+    const pop = document.createElement("div");
+    pop.id = "__sb_reaction_pop__";
+    pop.textContent = emoji;
+    // Insert inside the bar so absolute positioning works
+    const bar = document.getElementById("__sb_bar__");
+    if (bar) {
+      bar.style.position = bar.style.position || "relative";
+      bar.appendChild(pop);
+    } else {
+      brainBtn.parentElement?.appendChild(pop);
+    }
+    pop.addEventListener("animationend", () => pop.remove(), { once: true });
+  }
+
+  // Revert to normal idle after durationMs (scholar/idle are persistent modes)
+  if (durationMs > 0 && emotion !== 'scholar' && emotion !== 'idle') {
+    __sbReactionTimer = setTimeout(() => {
+      __sbReactionTimer = null;
+      const btn = document.getElementById("__sb_brain_btn__");
+      if (btn && !__sbIsLectureRecording) btn.innerHTML = __SB_BRAIN_SVG;
+      __sbSyncIdleState();
+    }, durationMs);
+  }
 }
 
 function __sbSyncSpotifyVisualState() {
@@ -9446,7 +9723,10 @@ async function __sbStartLectureRecording(options = {}) {
   }
 
   const brainBtn = document.getElementById("__sb_brain_btn__");
-  if (brainBtn) { brainBtn.classList.add("recording"); brainBtn.innerHTML = __SB_BRAIN_SVG_LISTENING; }
+  if (brainBtn) {
+    brainBtn.classList.add("recording");
+    brainBtn.innerHTML = __sbLectureRecordingMode === "lecture" ? __SB_BRAIN_SVG_SCHOLAR : __SB_BRAIN_SVG_LISTENING;
+  }
   __sbShowLectureRecordingBar(false);
   __sbShowLectureRecordingCard();
   if (options.readyMessage) {

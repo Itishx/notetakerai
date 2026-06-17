@@ -1,5 +1,13 @@
 # Braino Changelog
 
+## v6.2.7 — Braino reacts now
+- **Eight emotion expressions on the mascot.** Braino can now show Happy, Laughing, Tears of Joy, Celebrating, Focus, Shocked, Scared, and Idle — each a distinct SVG face with the matching eyes, mouth, and effects.
+- **Animated reaction popups.** When an emotion fires, a matching emoji floats up above the mascot with a spring bounce, then fades out. No third-party libraries — pure CSS keyframes.
+- **Scholar mode during lecture recording.** Braino puts on a mortarboard cap and square academic glasses whenever a lecture recording session starts, then returns to normal when it stops.
+- **Reactions wired to real events.** Auth success triggers 😊 Happy, auth rejection triggers 😰 Scared, quota errors trigger 😱 Shocked, and a completed X automation triggers 🎉 Celebrating.
+- **Two new reaction SVGs shipped.** `braino-idle.svg` and `braino-celebrating.svg` added to the public reactions pack, completing all eight emotions.
+- **Extension package updated.** The download artifact now ships as version **6.2.7**.
+
 ## v5.14.0 — Contact photos upload directly now
 - **Contact photos are now real uploads, not pasted links.** In both the dashboard and Braino's inline contact prompt, you can upload a photo file directly instead of hunting for a URL.
 - **Manual email/password login is properly recoverable.** Braino now supports forgot-password and password-reset flows cleanly in both the main auth screen and the extension auth handoff.

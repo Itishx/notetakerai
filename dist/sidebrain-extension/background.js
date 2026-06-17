@@ -1,5 +1,6 @@
 // Background service worker for Braino (MV3)
 let isRecording = false;
+let bgRecordingMode = "lecture";
 let bgAgentShouldStop = false;
 let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
 let bgRtSessionActive = false; // offscreen realtime session is running
@@ -21,6 +22,10 @@ function doCapture(windowId, sendResponse) {
       sendResponse({ dataUrl });
     }
   });
+}
+
+function bgNormalizeRecordingMode(value) {
+  return value === "meeting" ? "meeting" : "lecture";
 }
 
 function bgDelay(ms) {
@@ -503,6 +508,399 @@ async function bgPerformRealWebSearch(query, options = {}) {
   }
 }
 
+function bgTrimAgentContextText(value, maxChars = 280) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars - 1)).trim()}…` : text;
+}
+
+function bgNormalizeSharedChatHistory(rawValue) {
+  if (!Array.isArray(rawValue)) return [];
+  return rawValue
+    .map((entry) => ({
+      role: entry?.role === "assistant" ? "assistant" : "user",
+      content: bgTrimAgentContextText(entry?.content || "", 360),
+    }))
+    .filter((entry) => entry.content);
+}
+
+function bgNormalizeSharedCardTurns(rawValue) {
+  if (!Array.isArray(rawValue)) return [];
+  return rawValue
+    .map((turn) => ({
+      prompt: bgTrimAgentContextText(turn?.prompt || "", 280),
+      answer: bgTrimAgentContextText(turn?.answer || "", 360),
+    }))
+    .filter((turn) => turn.prompt || turn.answer);
+}
+
+function bgBuildAgentConversationContext(rawValue = {}) {
+  const chatHistory = bgNormalizeSharedChatHistory(rawValue.chatHistory);
+  const cardTurns = bgNormalizeSharedCardTurns(rawValue.cardTurns);
+  const lastUserPrompt = bgTrimAgentContextText(
+    rawValue.lastUserPrompt
+      || [...chatHistory].reverse().find((entry) => entry.role === "user")?.content
+      || [...cardTurns].reverse().find((turn) => turn.prompt)?.prompt
+      || "",
+    360,
+  );
+  const lastAssistantReply = bgTrimAgentContextText(
+    rawValue.lastAssistantReply
+      || [...chatHistory].reverse().find((entry) => entry.role === "assistant")?.content
+      || [...cardTurns].reverse().find((turn) => turn.answer)?.answer
+      || "",
+    420,
+  );
+
+  return {
+    mode: String(rawValue.mode || "page").trim() || "page",
+    connectorHint: bgNormalizeConnectorHint(rawValue.connector || rawValue.connectorHint) || "auto",
+    chatHistory,
+    cardTurns,
+    lastUserPrompt,
+    lastAssistantReply,
+  };
+}
+
+function bgBuildAgentConversationText(sharedContext = {}) {
+  const context = bgBuildAgentConversationContext(sharedContext);
+  const lines = [
+    `Mode hint: ${context.mode}`,
+    `Connector hint: ${context.connectorHint}`,
+  ];
+
+  if (context.lastUserPrompt) lines.push(`Latest user prompt: ${context.lastUserPrompt}`);
+  if (context.lastAssistantReply) lines.push(`Latest assistant reply: ${context.lastAssistantReply}`);
+
+  if (context.chatHistory.length) {
+    lines.push("Recent shared chat turns:");
+    for (const entry of context.chatHistory.slice(-8)) {
+      lines.push(`- ${entry.role === "assistant" ? "Assistant" : "User"}: ${entry.content}`);
+    }
+  }
+
+  if (context.cardTurns.length) {
+    lines.push("Recent visible card turns:");
+    for (const turn of context.cardTurns.slice(-4)) {
+      if (turn.prompt) lines.push(`- Prompt: ${turn.prompt}`);
+      if (turn.answer) lines.push(`  Reply: ${turn.answer}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function bgGetConversationSnippets(sharedContext = {}) {
+  const context = bgBuildAgentConversationContext(sharedContext);
+  const seen = new Set();
+  const snippets = [];
+  const pushSnippet = (text, kind = "context") => {
+    const trimmed = bgTrimAgentContextText(text || "", 420);
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    snippets.push({ kind, text: trimmed });
+  };
+
+  pushSnippet(context.lastUserPrompt, "last-user");
+  pushSnippet(context.lastAssistantReply, "last-assistant");
+  [...context.chatHistory].reverse().forEach((entry) => pushSnippet(entry.content, entry.role === "assistant" ? "assistant" : "user"));
+  [...context.cardTurns].reverse().forEach((turn) => {
+    pushSnippet(turn.prompt, "card-prompt");
+    pushSnippet(turn.answer, "card-answer");
+  });
+
+  return snippets;
+}
+
+function bgIsAmbiguousContentFollowUp(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return false;
+  return (
+    /^(?:find|show|open|pick|get|play|watch|read)\s+(?:me\s+)?(?:the\s+)?(?:best|top)\s+(?:one|result|video|tutorial|article|course|guide)?\b/i.test(raw) ||
+    /^(?:best|top)\s+one$/i.test(raw) ||
+    /^(?:open|play|watch|read)\s+(?:it|that|the\s+best\s+one)\b/i.test(raw)
+  );
+}
+
+function bgTextSuggestsOpenableRecommendation(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return false;
+  const hasContentType = /\b(tutorial|video|course|lecture|lesson|walkthrough|demo|guide|article|blog(?:\s+post)?|paper)\b/i.test(raw);
+  const hasAction = /\b(show|open|find|search|look\s+up|pull\s+up|bring\s+up|watch|play|read|get|recommend|best|top)\b/i.test(raw);
+  return (hasContentType && hasAction) || bgIsAmbiguousContentFollowUp(raw);
+}
+
+function bgClassifyOpenableContentKind(text) {
+  const raw = String(text || "").toLowerCase();
+  if (!raw) return "";
+  if (/\bpaper\b/.test(raw)) return "paper";
+  if (/\barticle\b|\bblog(?:\s+post)?\b|\bpost\b/.test(raw)) return "article";
+  if (/\bguide\b/.test(raw)) return "guide";
+  if (/\bcourse\b|\bfull course\b/.test(raw)) return "course";
+  if (/\blecture\b/.test(raw)) return "lecture";
+  if (/\blesson\b/.test(raw)) return "lesson";
+  if (/\bwalkthrough\b|\bdemo\b/.test(raw)) return "walkthrough";
+  if (/\bvideo\b|\byoutube\b/.test(raw)) return "video";
+  if (/\btutorial\b/.test(raw)) return "tutorial";
+  return "";
+}
+
+function bgCleanOpenableTopic(value) {
+  let topic = String(value || "").trim();
+  if (!topic) return "";
+  topic = topic.replace(/^[“"'`]+|[”"'`]+$/g, "");
+  topic = topic.replace(/\b(?:please|for me|right now|thanks?|thank you)\b/gi, "");
+  topic = topic.replace(/\b(?:on|about|for)\s+youtube\b/gi, "");
+  topic = topic.replace(/\b(?:video|tutorial|course|lecture|lesson|walkthrough|demo|guide|article|blog(?:\s+post)?|paper)\b\s*$/i, "");
+  topic = topic.replace(/[.?!]+$/g, "").trim();
+  if (/^(?:it|that|this|one|best one|top one)$/i.test(topic)) return "";
+  return topic;
+}
+
+function bgExtractTopicFromContentRequest(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+
+  const patterns = [
+    /(?:best|top|good|great|recommended?)\s+(?:youtube\s+)?(?:tutorial|video|course|lecture|lesson|walkthrough|demo|guide|article|blog(?:\s+post)?|paper)\s+(?:on|about|for)\s+(.+)$/i,
+    /(?:show|open|find|search(?:\s+for)?|look\s+up|pull\s+up|bring\s+up|watch|play|read|get)\s+(?:me\s+)?(?:the\s+)?(?:best|top|good|great)?\s*(?:youtube\s+)?(?:tutorial|video|course|lecture|lesson|walkthrough|demo|guide|article|blog(?:\s+post)?|paper)?\s*(?:on|about|for)\s+(.+)$/i,
+    /(?:show|open|find|watch|play|read|get)\s+(?:me\s+)?(?:an?\s+)?(?:tutorial|video|course|lecture|lesson|walkthrough|demo|guide|article|blog(?:\s+post)?|paper)\s+(.+)$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    const topic = bgCleanOpenableTopic(match?.[1] || "");
+    if (topic) return topic;
+  }
+
+  if (!bgTextSuggestsOpenableRecommendation(raw)) return "";
+  const tailMatch = raw.match(/\b(?:tutorial|video|course|lecture|lesson|walkthrough|demo|guide|article|blog(?:\s+post)?|paper)\b[:\-]?\s+(.+)$/i);
+  return bgCleanOpenableTopic(tailMatch?.[1] || "");
+}
+
+function bgInferConversationDomain(task, sharedContext = {}) {
+  const current = String(task || "").trim();
+  const texts = [current, ...bgGetConversationSnippets(sharedContext).map((snippet) => snippet.text)];
+  for (const text of texts) {
+    if (/\b(tutorial|video|course|lecture|lesson|walkthrough|demo|youtube)\b/i.test(text)) return "youtube";
+    if (/\b(article|guide|blog|paper|read)\b/i.test(text)) return "web";
+    if (/\b(spotify|song|track|music|playlist)\b/i.test(text)) return "spotify";
+  }
+  return "generic";
+}
+
+function bgFindRecentOpenableSeed(sharedContext = {}) {
+  return bgGetConversationSnippets(sharedContext).find((snippet) => {
+    if (!bgTextSuggestsOpenableRecommendation(snippet.text)) return false;
+    return Boolean(bgExtractTopicFromContentRequest(snippet.text));
+  }) || null;
+}
+
+function bgParseOpenableContentTask(task, sharedContext = {}) {
+  const raw = String(task || "").trim();
+  if (!raw) return null;
+
+  const context = bgBuildAgentConversationContext(sharedContext);
+  const direct = bgTextSuggestsOpenableRecommendation(raw);
+  const followUp = bgIsAmbiguousContentFollowUp(raw);
+  const seed = direct ? { text: raw } : (followUp ? bgFindRecentOpenableSeed(context) : null);
+  if (!seed?.text) return null;
+
+  const topic = bgExtractTopicFromContentRequest(raw) || bgExtractTopicFromContentRequest(seed.text);
+  if (!topic) return null;
+
+  const combinedSignals = [raw, seed.text, context.lastAssistantReply].filter(Boolean).join("\n");
+  const contentKind = bgClassifyOpenableContentKind(combinedSignals) || "tutorial";
+  const domain = bgInferConversationDomain(raw, context);
+  const source = domain === "web" || ["article", "guide", "paper"].includes(contentKind) ? "web" : "youtube";
+  const youtubeQueryKind = contentKind === "course" ? "full course" : contentKind === "lecture" ? "lecture" : "tutorial";
+  const query = source === "youtube"
+    ? `${topic} ${youtubeQueryKind} site:youtube.com/watch`
+    : `${topic} ${contentKind === "paper" ? "paper" : "guide article"}`;
+
+  return {
+    topic,
+    contentKind,
+    source,
+    followUp,
+    query,
+    queryLabel: source === "youtube" ? "YouTube tutorial" : contentKind,
+  };
+}
+
+function bgOpenableTopicTokens(topic) {
+  const stopWords = new Set(["the", "and", "for", "with", "from", "into", "about", "best", "top", "guide", "video", "tutorial", "course", "lecture", "lesson", "article"]);
+  return String(topic || "")
+    .toLowerCase()
+    .split(/[^a-z0-9+#.]+/i)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !stopWords.has(token))
+    .slice(0, 8);
+}
+
+function bgIsYouTubeWatchUrl(url) {
+  return /(?:youtube\.com\/watch|youtu\.be\/)/i.test(String(url || ""));
+}
+
+function bgScoreOpenableSearchResult(result, options = {}) {
+  const title = String(result?.title || "").trim();
+  const url = String(result?.url || "").trim();
+  const snippet = [result?.snippet || "", ...(Array.isArray(result?.highlights) ? result.highlights : [])].join(" ").trim();
+  const titleLower = title.toLowerCase();
+  const urlLower = url.toLowerCase();
+  const snippetLower = snippet.toLowerCase();
+  const haystack = `${titleLower} ${snippetLower}`;
+  const tokens = bgOpenableTopicTokens(options.topic || "");
+  let score = Math.max(0, 12 - ((options.index || 0) * 2));
+
+  if (options.source === "youtube") {
+    if (/youtube\.com|youtu\.be/.test(urlLower)) score += 40;
+    if (bgIsYouTubeWatchUrl(urlLower)) score += 28;
+    if (/\/shorts\//.test(urlLower)) score -= 40;
+    if ((/\/playlist\b/.test(urlLower) || /[?&]list=/.test(urlLower)) && !/\b(course|tutorial|lesson)\b/.test(haystack)) score -= 10;
+    if (/\b(song|lyrics?|official video|official audio|music video|spotify)\b/.test(haystack)) score -= 35;
+    if (/\b(tutorial|course|lesson|walkthrough|guide|beginner|full|lecture|demo|explained)\b/.test(haystack)) score += 22;
+  } else {
+    if (/\b(article|guide|tutorial|walkthrough|documentation|explained|blog|paper)\b/.test(haystack)) score += 14;
+    if (/medium\.com|substack\.com|dev\.to|hashnode\.com|docs\.|documentation|blog/i.test(`${url} ${title}`)) score += 10;
+    if (/youtube\.com|spotify\.com/.test(urlLower)) score -= 18;
+  }
+
+  for (const token of tokens) {
+    if (titleLower.includes(token)) score += 8;
+    else if (urlLower.includes(token)) score += 6;
+    else if (snippetLower.includes(token)) score += 4;
+  }
+
+  return score;
+}
+
+function bgPickBestOpenableSearchResult(results, options = {}) {
+  const safeResults = Array.isArray(results) ? results.filter((result) => String(result?.url || "").trim()) : [];
+  if (!safeResults.length) return null;
+
+  const scored = safeResults
+    .map((result, index) => ({
+      result,
+      score: bgScoreOpenableSearchResult(result, { ...options, index }),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  if (options.source === "youtube") {
+    const bestWatch = scored.find((entry) => bgIsYouTubeWatchUrl(entry.result?.url || ""));
+    if (bestWatch) return bestWatch.result;
+  }
+
+  return scored[0]?.result || null;
+}
+
+function bgFormatCaptureError(rawError, mode = "lecture") {
+  const text = String(rawError || "").trim();
+  if (!text) {
+    return mode === "meeting"
+      ? "Open the meeting in a regular browser tab to record the tab audio and your mic."
+      : "Open the lecture in a regular browser tab to start recording.";
+  }
+  if (
+    /activeTab permission|Extension has not been invoked|Chrome pages cannot be captured|Cannot access contents of url|tab capture can only be started|Permission denied/i.test(text)
+  ) {
+    return mode === "meeting"
+      ? "Open the meeting in a regular browser tab so Braino can capture the meeting audio and your mic."
+      : "Open the lecture in a regular browser tab so Braino can capture its audio.";
+  }
+  return text;
+}
+
+async function bgTryHandleOpenableContentTask({ tabId, task, sharedContext, history, onProgress }) {
+  const parsed = bgParseOpenableContentTask(task, sharedContext);
+  if (!parsed) return null;
+
+  await onProgress?.(`Researching the best ${parsed.queryLabel} for ${parsed.topic}…`);
+  const searchData = await bgPerformRealWebSearch(parsed.query, {
+    purpose: "delegate",
+    chatHistory: bgBuildAgentConversationContext(sharedContext).chatHistory,
+    instructions: parsed.source === "youtube"
+      ? "Find the single strongest YouTube tutorial/watch-page match for this request. Prefer substantive tutorials, full walkthroughs, strong topical relevance, and avoid music, songs, shorts, playlists, or channel homepages."
+      : "Find the strongest article or guide for this request. Prefer high-signal explainers, guides, or documentation with clear topical relevance.",
+  });
+
+  if (searchData?.error) {
+    return { message: `I couldn't research that just now: ${searchData.error}`, keepLectureCard: false };
+  }
+
+  const picked = bgPickBestOpenableSearchResult(searchData.results, parsed);
+  if (!picked?.url) {
+    return { message: `I couldn't find a strong ${parsed.queryLabel} for ${parsed.topic}.`, keepLectureCard: false };
+  }
+
+  const resultsText = Array.isArray(searchData.results)
+    ? searchData.results
+      .slice(0, 5)
+      .map((result, index) => `[${index + 1}] ${result.title || "Untitled"}\n${result.url || ""}\n${result.snippet || ""}`)
+      .join("\n\n")
+    : "";
+  history.push({
+    type: "web_search",
+    query: parsed.query,
+    description: `Research the best ${parsed.queryLabel} for ${parsed.topic}`,
+    result: {
+      success: true,
+      text: resultsText || searchData.answer || "",
+    },
+  });
+
+  await onProgress?.(`Opening ${picked.title || "the best result"}…`);
+  const navigateResult = await bgExecuteAgentAction(tabId, {
+    type: "navigate",
+    url: picked.url,
+    description: `Open ${picked.title || picked.url}`,
+  });
+  history.push({
+    type: "navigate",
+    description: `Open ${picked.title || picked.url}`,
+    result: navigateResult,
+  });
+  if (navigateResult?.error) {
+    return { message: `I found a good result for ${parsed.topic}, but I couldn't open it.`, keepLectureCard: false };
+  }
+
+  await bgWaitForTabReady(tabId, 8000);
+
+  if (parsed.source !== "youtube") {
+    return {
+      message: `Opened the strongest ${parsed.queryLabel} I found for ${parsed.topic}: ${picked.title || picked.url}`,
+      keepLectureCard: false,
+    };
+  }
+
+  const activeTab = await bgGetTabById(tabId);
+  const landedUrl = String(activeTab?.url || picked.url || "").trim();
+  if (!bgIsYouTubeWatchUrl(landedUrl)) {
+    return {
+      message: `I found a YouTube result for ${parsed.topic}, but it didn't land on a playable watch page.`,
+      keepLectureCard: false,
+    };
+  }
+
+  const playback = await bgExecuteSiteAdapterAction(tabId, { type: "youtubeEnsurePlayback" });
+  const readyMessage = playback?.blocked
+    ? "Press play when you're ready — Braino is ready to capture this tutorial."
+    : "Playing now — Braino is capturing this tutorial.";
+  await bgSendInlineUiMessage(tabId, {
+    action: "startLectureRecording",
+    readyMessage,
+  });
+
+  return {
+    message: playback?.blocked
+      ? `Opened the best YouTube tutorial I found for ${parsed.topic}. Press play when you're ready — Lecture & Audio mode is already armed on this tab.`
+      : `Opened the best YouTube tutorial I found for ${parsed.topic} and started Lecture & Audio mode.`,
+    keepLectureCard: true,
+  };
+}
+
 // Toggle injected panel when extension icon is clicked.
 // For scriptable tabs this fires normally (no popup registered).
 // For restricted tabs the popup is pre-registered via bgSyncActionPopup so
@@ -594,41 +992,85 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getStreamId") {
-    // Get stream ID from the background, which has broader permissions
-    const targetTabId = message.tabId;
-    if (!targetTabId) {
-      // Use the currently active tab
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const tab = tabs?.[0];
-        if (!tab?.id) {
-          sendResponse({ error: "No active tab found" });
-          return;
-        }
-        chrome.storage.local.set({ activeTabId: tab.id });
-        chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (streamId) => {
-          if (chrome.runtime.lastError || !streamId) {
-            sendResponse({ error: chrome.runtime.lastError?.message || "Failed to get stream" });
-          } else {
-            sendResponse({ streamId });
-          }
+    (async () => {
+      const requestedTabId = message.tabId || sender?.tab?.id || null;
+      const recovery = await bgEnsureScriptableBrainoTab(requestedTabId, {
+        activate: true,
+        handoffMessage: "Chrome pages can't be recorded, so I moved Braino to a normal tab.",
+      });
+      if (!recovery.tabId) {
+        sendResponse({ error: bgFormatCaptureError("", bgNormalizeRecordingMode(message.mode)) });
+        return;
+      }
+      if (recovery.created && !requestedTabId) {
+        await bgMaybeShowRecoveryHandoff(
+          recovery.tabId,
+          "Open the lecture or meeting in this regular tab, then start recording.",
+          { title: "Braino moved here" },
+        );
+        sendResponse({
+          error: bgFormatCaptureError("", bgNormalizeRecordingMode(message.mode)),
+          tabId: recovery.tabId,
+          created: true,
+          moved: true,
         });
-      });
-    } else {
-      chrome.tabCapture.getMediaStreamId({ targetTabId: targetTabId }, (streamId) => {
+        return;
+      }
+      chrome.tabCapture.getMediaStreamId({ targetTabId: recovery.tabId }, (streamId) => {
         if (chrome.runtime.lastError || !streamId) {
-          sendResponse({ error: chrome.runtime.lastError?.message || "Failed to get stream" });
+          sendResponse({
+            error: bgFormatCaptureError(chrome.runtime.lastError?.message || "Failed to get stream", bgNormalizeRecordingMode(message.mode)),
+            tabId: recovery.tabId,
+          });
         } else {
-          sendResponse({ streamId });
+          sendResponse({ streamId, tabId: recovery.tabId, moved: recovery.moved, created: recovery.created });
         }
       });
-    }
+    })().catch((error) => {
+      sendResponse({ error: bgFormatCaptureError(error?.message || error, bgNormalizeRecordingMode(message.mode)) });
+    });
     return true;
   }
   if (message.action === "startRecording") {
-    const tabId = message.tabId || sender?.tab?.id;
-    startRecording(tabId, message.streamId, message.withMic)
-      .then(() => sendResponse({ success: true }))
-      .catch((e) => sendResponse({ error: e.message }));
+    (async () => {
+      const mode = bgNormalizeRecordingMode(message.mode);
+      let targetTabId = message.tabId || sender?.tab?.id || null;
+      let recovery = { tabId: targetTabId, moved: false, created: false };
+
+      if (!message.streamId) {
+        recovery = await bgEnsureScriptableBrainoTab(targetTabId, {
+          activate: true,
+          handoffMessage: "Chrome pages can't be recorded, so I moved Braino to a normal tab.",
+        });
+        if (!recovery.tabId) {
+          sendResponse({ error: bgFormatCaptureError("", mode) });
+          return;
+        }
+        if (recovery.created && !targetTabId) {
+          await bgMaybeShowRecoveryHandoff(
+            recovery.tabId,
+            "Open the lecture or meeting in this regular tab, then start recording.",
+            { title: "Braino moved here" },
+          );
+          sendResponse({
+            error: bgFormatCaptureError("", mode),
+            tabId: recovery.tabId,
+            created: true,
+            moved: true,
+          });
+          return;
+        }
+        targetTabId = recovery.tabId;
+      }
+
+      await startRecording(targetTabId, message.streamId, message.withMic, mode);
+      sendResponse({
+        success: true,
+        tabId: targetTabId,
+        moved: recovery.moved,
+        created: recovery.created,
+      });
+    })().catch((e) => sendResponse({ error: bgFormatCaptureError(e?.message || e, bgNormalizeRecordingMode(message.mode)) }));
     return true;
   }
   if (message.action === "stopRecording") {
@@ -638,7 +1080,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "getLectureSegment") {
-    bgGetAndTranscribeSegment(message.existingNotes || "")
+    bgGetAndTranscribeSegment(message.existingNotes || "", message.mode, message.existingTranscript || "")
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+  if (message.action === "scheduleMeetingFollowUp") {
+    bgScheduleMeetingFollowUp(message.followUp || {}, sender?.tab?.id)
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+  if (message.action === "stopRecordingAndTranscribe") {
+    bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode, message.existingTranscript || "")
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -656,38 +1110,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "startInlineVoiceListening" || message.action === "stopInlineVoiceListening") {
     const isStart = message.action === "startInlineVoiceListening";
     const forwardAction = isStart ? "startVoiceListening" : "stopVoiceListening";
-
-    const forwardToTab = (tabId) => {
-      if (!tabId) {
-        sendResponse({ error: "No active tab found" });
+    (async () => {
+      const preferredTabId = sender?.tab?.id || await bgGetActiveTabId();
+      const recovery = await bgEnsureScriptableBrainoTab(preferredTabId, {
+        activate: true,
+        handoffMessage: "Chrome pages can't host Braino, so I moved it to a normal tab.",
+      });
+      if (!recovery.tabId) {
+        sendResponse({ error: "Open a normal browser tab to use voice mode." });
         return;
       }
-      chrome.storage.local.set({ activeTabId: tabId });
       const payload = isStart
         ? { action: forwardAction, mode: "manual", source: "inline" }
         : { action: forwardAction, source: "inline" };
-      chrome.tabs.sendMessage(tabId, payload, (res) => {
-        if (chrome.runtime.lastError) {
-          sendResponse({ error: chrome.runtime.lastError.message });
-        } else {
-          sendResponse(res || { success: true });
-        }
-      });
-    };
-
-    if (sender?.tab?.id) {
-      forwardToTab(sender.tab.id);
-      return true;
-    }
-
-    chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
-      if (activeTabId) {
-        forwardToTab(activeTabId);
+      const response = await bgSendInlineUiMessage(recovery.tabId, payload);
+      if (!response && isStart) {
+        sendResponse({ error: "I couldn't start voice mode on that tab." });
         return;
       }
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        forwardToTab(tabs?.[0]?.id || null);
-      });
+      sendResponse(response || { success: true, tabId: recovery.tabId, moved: recovery.moved, created: recovery.created });
+    })().catch((error) => {
+      sendResponse({ error: error?.message || "Voice mode failed to start." });
     });
     return true;
   }
@@ -706,66 +1149,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message.action === "getPageContent") {
-    // First try stored activeTabId, then fallback to querying active tab
-    chrome.storage.local.get("activeTabId", (store) => {
-      let tabId = store.activeTabId;
-
-      function queryTab(tid) {
-        chrome.tabs.sendMessage(tid, { action: "extractPageContent" }, (res) => {
-          if (chrome.runtime.lastError) {
-            // Content script not injected yet — try to inject it programmatically
-            if (!chrome.scripting) {
-              sendResponse({ error: "Cannot inject on this page" });
-              return;
-            }
-            chrome.scripting.executeScript(
-              { target: { tabId: tid }, files: ["content.js"] },
-              () => {
-                if (chrome.runtime.lastError) {
-                  sendResponse({ error: chrome.runtime.lastError.message });
-                  return;
-                }
-                // Retry after injection
-                setTimeout(() => {
-                  chrome.tabs.sendMessage(tid, { action: "extractPageContent" }, (res2) => {
-                    if (chrome.runtime.lastError) {
-                      sendResponse({ error: chrome.runtime.lastError.message });
-                    } else {
-                      sendResponse(res2 || { error: "No response from content script" });
-                    }
-                  });
-                }, 100);
-              }
-            );
-          } else {
-            sendResponse(res || { error: "No response from content script" });
-          }
-        });
+    (async () => {
+      const preferredTabId = sender?.tab?.id || await bgGetActiveTabId();
+      const recovery = await bgEnsureScriptableBrainoTab(preferredTabId, {
+        activate: true,
+        handoffMessage: "Chrome pages can't be read, so I moved Braino to a normal tab.",
+      });
+      if (!recovery.tabId) {
+        sendResponse({ error: "Open a normal browser tab to use Chat with Page." });
+        return;
       }
-
-      function tryActiveTab() {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          const tab = tabs?.[0];
-          if (!tab?.id) { sendResponse({ error: "No active tab" }); return; }
-          // Update stored activeTabId for future use
-          chrome.storage.local.set({ activeTabId: tab.id });
-          queryTab(tab.id);
-        });
+      if (recovery.created && !preferredTabId) {
+        sendResponse({ error: "Open the page you want in this new tab, then ask again." });
+        return;
       }
-
-      if (tabId) {
-        // Verify the stored tab still exists
-        chrome.tabs.get(tabId, (tab) => {
-          if (chrome.runtime.lastError || !tab) {
-            // Tab no longer exists, fallback
-            tryActiveTab();
-          } else {
-            queryTab(tabId);
-          }
-        });
-      } else {
-        tryActiveTab();
+      const res = await bgSendInlineUiMessage(recovery.tabId, { action: "extractPageContent" });
+      if (res?.text) {
+        sendResponse(res);
+        return;
       }
+      sendResponse({ error: "I couldn't read that page." });
+    })().catch((error) => {
+      sendResponse({ error: error?.message || "I couldn't read that page." });
     });
     return true;
   }
@@ -1114,16 +1519,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "runBrainAgent") {
-    const task = message.task;
-    const connector = message.connector;
-    const senderTabId = sender?.tab?.id || null;
-    chrome.storage.local.get("activeTabId", ({ activeTabId }) => {
-      const tabId = senderTabId || activeTabId || message.senderTabId;
-      if (!tabId) { sendResponse({ ok: true }); return; }
-      chrome.storage.local.set({ activeTabId: tabId });
+    (async () => {
+      const task = String(message.task || "").trim();
+      const connector = message.connector;
+      const sharedContext = bgBuildAgentConversationContext({
+        ...message,
+        connector,
+      });
+      const senderTabId = sender?.tab?.id || null;
+      const preferredTabId = senderTabId || message.senderTabId || await bgGetActiveTabId();
+      const recovery = await bgEnsureScriptableBrainoTab(preferredTabId, {
+        activate: true,
+        handoffMessage: "Chrome pages can't host Braino, so I moved it to a normal tab to keep going.",
+      });
+      if (!recovery.tabId) {
+        sendResponse({ ok: false, error: "Open a normal browser tab to use Delegate mode." });
+        return;
+      }
       bgAgentShouldStop = false;
-      bgRunBrainAgent(tabId, task, connector);
-      sendResponse({ ok: true });
+      void bgRunBrainAgent(recovery.tabId, task, connector, sharedContext).catch((error) => {
+        bgBrainUpdate(recovery.tabId, "Agent error: " + (error?.message || error), true, { task });
+      });
+      sendResponse({ ok: true, tabId: recovery.tabId, moved: recovery.moved, created: recovery.created });
+    })().catch((error) => {
+      sendResponse({ ok: false, error: error?.message || "Delegate mode failed to start." });
     });
     return true;
   }
@@ -1232,21 +1651,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const activeTabId = senderTabId || await bgGetActiveTabId();
       const siteContext = activeTabId ? await bgGetSiteAdapterContext(activeTabId) : { site: "generic", url: "", title: "" };
       const connectorHint = message.connector;
-      const parsed = bgParseAdapterTask(task, siteContext, connectorHint);
+      const sharedContext = bgBuildAgentConversationContext({
+        ...message,
+        connector: connectorHint,
+      });
+      const openable = bgParseOpenableContentTask(task, sharedContext);
+      const parsed = openable ? null : bgParseAdapterTask(task, siteContext, connectorHint);
       const fastActions = bgTryFastPath(task, []);
-      const looksLikeBrowserTask = bgLooksLikeBrowserTask(task);
+      const looksLikeBrowserTask = Boolean(openable) || bgLooksLikeBrowserTask(task);
 
       sendResponse({
-        shouldDelegate: Boolean(parsed || fastActions || looksLikeBrowserTask),
-        matched: parsed
-          ? "adapter"
-          : fastActions
-            ? "fastpath"
-            : looksLikeBrowserTask
-              ? "browser-task"
-              : null,
+        shouldDelegate: Boolean(openable || parsed || fastActions || looksLikeBrowserTask),
+        matched: openable
+          ? "openable-content"
+          : parsed
+            ? "adapter"
+            : fastActions
+              ? "fastpath"
+              : looksLikeBrowserTask
+                ? "browser-task"
+                : null,
         adapter: parsed?.adapter || null,
-        intent: parsed?.intent || null,
+        intent: openable?.contentKind || parsed?.intent || null,
       });
     })();
     return true;
@@ -1717,6 +2143,92 @@ function bgFindScriptableTab(resolve) {
   });
 }
 
+async function bgGetTabById(tabId) {
+  if (!tabId) return null;
+  return await new Promise((resolve) => {
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        resolve(null);
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
+async function bgActivateTab(tabId) {
+  const tab = await bgGetTabById(tabId);
+  if (!tab?.id) return null;
+  await new Promise((resolve) => {
+    chrome.windows.update(tab.windowId, { focused: true }, () => resolve());
+  });
+  await new Promise((resolve) => {
+    chrome.tabs.update(tab.id, { active: true }, () => resolve());
+  });
+  chrome.storage.local.set({ activeTabId: tab.id });
+  return tab;
+}
+
+async function bgCreateScriptableTab(url = "https://www.google.com") {
+  return await new Promise((resolve) => {
+    chrome.tabs.create({ url, active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        resolve(null);
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
+async function bgMaybeShowRecoveryHandoff(tabId, message, options = {}) {
+  if (!tabId || !message) return;
+  await bgSendInlineUiMessage(tabId, {
+    action: "showBrainoRecovery",
+    title: options.title || "Braino moved here",
+    message,
+  });
+}
+
+async function bgEnsureScriptableBrainoTab(preferredTabId, options = {}) {
+  const activate = options.activate !== false;
+  const createIfMissing = options.createIfMissing !== false;
+  const handoffMessage = String(options.handoffMessage || "").trim();
+  const createUrl = String(options.createUrl || "https://www.google.com").trim() || "https://www.google.com";
+
+  const preferredTab = await bgGetTabById(preferredTabId);
+  if (preferredTab?.id && bgIsScriptableUrl(preferredTab.url || "")) {
+    if (activate) await bgActivateTab(preferredTab.id);
+    return { tabId: preferredTab.id, moved: false, created: false, tab: preferredTab };
+  }
+
+  const fallbackTabId = await bgGetActiveTabId();
+  if (fallbackTabId) {
+    const fallbackTab = activate ? await bgActivateTab(fallbackTabId) : await bgGetTabById(fallbackTabId);
+    if (fallbackTab?.id) {
+      if (handoffMessage) {
+        await bgMaybeShowRecoveryHandoff(fallbackTab.id, handoffMessage, options);
+      }
+      return { tabId: fallbackTab.id, moved: true, created: false, tab: fallbackTab };
+    }
+  }
+
+  if (!createIfMissing) {
+    return { tabId: null, moved: false, created: false, tab: null };
+  }
+
+  const createdTab = await bgCreateScriptableTab(createUrl);
+  if (!createdTab?.id) {
+    return { tabId: null, moved: false, created: false, tab: null };
+  }
+  await bgWaitForTabReady(createdTab.id, 8000);
+  chrome.storage.local.set({ activeTabId: createdTab.id });
+  if (handoffMessage) {
+    await bgMaybeShowRecoveryHandoff(createdTab.id, handoffMessage, options);
+  }
+  return { tabId: createdTab.id, moved: true, created: true, tab: createdTab };
+}
+
 async function bgGetAgentPageContext(tabId) {
   const empty = { url: "", title: "", bodyText: "", interactiveEls: [] };
   if (!tabId) return empty;
@@ -1845,13 +2357,14 @@ const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "press
 const bgAgentTaskByTab = new Map();
 
 function bgBrainUpdate(tabId, text, final = false, opts = {}) {
-  chrome.tabs.sendMessage(tabId, {
+  void bgSendInlineUiMessage(tabId, {
     action: "sbAgentUpdate",
     text,
     final,
     speakHint: opts.speakHint || null,
     task: opts.task || bgAgentTaskByTab.get(tabId) || "",
-  }, () => { void chrome.runtime.lastError; });
+    keepLectureCard: opts.keepLectureCard === true,
+  });
   if (final) setTimeout(() => bgAgentTaskByTab.delete(tabId), 5000);
 }
 
@@ -1929,20 +2442,24 @@ async function bgSaveAgentTask(tabId, task, result) {
   } catch (_) {}
 }
 
-async function bgRunBrainAgent(tabId, task, connectorHint) {
+async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
   let currentTabId = tabId;
   const MAX_STEPS = bgIsLinkedInJobsTask(task) ? 18 : 10;
   const history = [];
+  const conversationContext = bgBuildAgentConversationContext({
+    ...sharedContext,
+    connector: connectorHint,
+  });
   bgAgentTaskByTab.set(currentTabId, task);
 
-  bgBrainUpdate(currentTabId, "Planning…");
+  bgBrainUpdate(currentTabId, "Planning…", false, { task });
 
   // Fast path — no AI needed
   const fastActions = bgTryFastPath(task, []);
   if (fastActions) {
     const shouldContinueAfterFastPath = fastActions.some(action => action.continueAfter);
     for (const action of fastActions) {
-      bgBrainUpdate(currentTabId, `→ ${action.description}`);
+      bgBrainUpdate(currentTabId, `→ ${action.description}`, false, { task });
       let result = { success: true };
       let snapshot = null;
       if (action.type === "navigate") {
@@ -1957,10 +2474,33 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
       }
     }
     if (!shouldContinueAfterFastPath) {
-      bgBrainUpdate(currentTabId, "Done!");
+      bgBrainUpdate(currentTabId, "Done!", true, { task });
       bgSaveAgentTask(currentTabId, task, "Done.");
       return;
     }
+  }
+
+  try {
+    const openableResult = await bgTryHandleOpenableContentTask({
+      tabId: currentTabId,
+      task,
+      sharedContext: conversationContext,
+      history,
+      onProgress: async (description) => {
+        bgBrainUpdate(currentTabId, `→ ${description}`, false, { task, speakHint: description });
+      },
+    });
+    if (openableResult?.message) {
+      bgBrainUpdate(currentTabId, openableResult.message, true, {
+        task,
+        keepLectureCard: openableResult.keepLectureCard === true,
+      });
+      bgSaveAgentTask(currentTabId, task, openableResult.message);
+      return;
+    }
+  } catch (e) {
+    bgBrainUpdate(currentTabId, "Open task error: " + (e.message || e), true, { task });
+    return;
   }
 
   try {
@@ -1970,50 +2510,53 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
       connectorHint,
       history,
       onProgress: async (description) => {
-        bgBrainUpdate(currentTabId, `→ ${description}`, false, { speakHint: description });
+        bgBrainUpdate(currentTabId, `→ ${description}`, false, { task, speakHint: description });
       },
       shouldStop: () => bgAgentShouldStop,
     });
     if (adapterMessage) {
-      bgBrainUpdate(currentTabId, adapterMessage, true);
+      bgBrainUpdate(currentTabId, adapterMessage, true, { task });
       bgSaveAgentTask(currentTabId, task, adapterMessage);
       return;
     }
   } catch (e) {
-    bgBrainUpdate(currentTabId, "Adapter error: " + (e.message || e), true);
+    bgBrainUpdate(currentTabId, "Adapter error: " + (e.message || e), true, { task });
     return;
   }
 
   for (let step = 0; step < MAX_STEPS; step++) {
     if (bgAgentShouldStop) {
-      bgBrainUpdate(currentTabId, "Task stopped.", true);
+      bgBrainUpdate(currentTabId, "Task stopped.", true, { task });
       return;
     }
     const pageInfo = await bgGetAgentPageContext(currentTabId);
 
     let actions;
     try {
-      actions = await bgCallAgentStep(task, pageInfo, history);
+      actions = await bgCallAgentStep(task, pageInfo, history, null, conversationContext);
     } catch (e) {
-      bgBrainUpdate(currentTabId, "Agent error: " + (e.message || e));
+      bgBrainUpdate(currentTabId, "Agent error: " + (e.message || e), true, { task });
       return;
     }
 
     for (const action of actions) {
       if (action.type === "done" || action.type === "answer") {
-        bgBrainUpdate(currentTabId, action.message || "Done!", true);
+        bgBrainUpdate(currentTabId, action.message || "Done!", true, { task });
         bgSaveAgentTask(currentTabId, task, action.message || "Done.");
         return;
       }
       if (action.type === "clarify") {
-        bgBrainUpdate(currentTabId, action.message || "Need more info.", true);
+        bgBrainUpdate(currentTabId, action.message || "Need more info.", true, { task });
         bgSaveAgentTask(currentTabId, task, action.message || "Needs clarification.");
         return;
       }
 
       if (action.type === "web_search") {
-        bgBrainUpdate(currentTabId, `Searching: "${action.query}"…`);
-        const searchData = await bgPerformRealWebSearch(action.query, { purpose: "delegate" });
+        bgBrainUpdate(currentTabId, `Searching: "${action.query}"…`, false, { task });
+        const searchData = await bgPerformRealWebSearch(action.query, {
+          purpose: "delegate",
+          chatHistory: conversationContext.chatHistory,
+        });
         const resultsText = searchData.results
           ? searchData.results.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet}`).join("\n\n")
           : searchData.error || "No results.";
@@ -2024,7 +2567,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
         continue;
       }
 
-      bgBrainUpdate(currentTabId, `→ ${action.description || action.type}`);
+      bgBrainUpdate(currentTabId, `→ ${action.description || action.type}`, false, { task });
 
       const result = await bgExecuteAgentAction(currentTabId, action);
 
@@ -2033,7 +2576,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
         currentTabId = latestActiveTabId;
         bgAgentTaskByTab.set(currentTabId, task);
         chrome.storage.local.set({ activeTabId: currentTabId });
-        bgBrainUpdate(currentTabId, "Continuing in the new tab…");
+        bgBrainUpdate(currentTabId, "Continuing in the new tab…", false, { task });
       }
 
       let snapshot = null;
@@ -2046,13 +2589,13 @@ async function bgRunBrainAgent(tabId, task, connectorHint) {
       history.push({ ...action, result, snapshot });
 
       if (result?.error && !result.error.includes("No response")) {
-        bgBrainUpdate(currentTabId, `Step failed: ${result.error}`);
+        bgBrainUpdate(currentTabId, `Step failed: ${result.error}`, true, { task });
         return;
       }
     }
   }
 
-  bgBrainUpdate(currentTabId, "Reached max steps — task may need the full panel.");
+  bgBrainUpdate(currentTabId, "Reached max steps — task may need the full panel.", true, { task });
   bgSaveAgentTask(currentTabId, task, "Reached max steps.");
 }
 
@@ -2655,7 +3198,9 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   const text = raw.toLowerCase();
   const currentSite = siteContext?.site || "generic";
   const normalizedConnector = bgNormalizeConnectorHint(connectorHint) || "auto";
-  const onSpotify = currentSite === "spotify" || normalizedConnector === "spotify" || /\bspotify\b/.test(text) || /^play\s+/i.test(raw);
+  const explicitSpotifyMention = /\bspotify\b/.test(text);
+  const explicitMusicIntent = /\b(?:song|track|music|playlist|album)\b/i.test(raw);
+  const onSpotify = currentSite === "spotify" || normalizedConnector === "spotify" || explicitSpotifyMention;
   const wantsGoogleDoc = /\bgoogle docs?\b|\bgdocs?\b|\bgoogle doc\b|\bgdoc\b|\bdocs?\.new\b|\bdocs?\b/.test(text);
   const wantsGmail =
     currentSite === "gmail" ||
@@ -2698,8 +3243,9 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
 
   const isShortPlaybackCommand = /^(?:pause|resume|continue|stop|next|skip|previous|prev|back)\b/i.test(raw);
   const mentionsSpotifyPlayback = /\b(?:spotify|song|track|music|playlist)\b/i.test(raw);
+  const spotifyPlaybackContext = onSpotify || explicitMusicIntent || mentionsSpotifyPlayback;
 
-  if (onSpotify || mentionsSpotifyPlayback || isShortPlaybackCommand) {
+  if (spotifyPlaybackContext || (onSpotify && isShortPlaybackCommand)) {
     if (/^(?:pause|stop)\b/i.test(raw) || /\b(?:pause|stop)\b.*\b(?:spotify|song|track|music)\b/i.test(raw)) {
       return { adapter: "spotify", intent: "playbackControl", control: "pause" };
     }
@@ -2749,12 +3295,12 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   }
 
   const quotedDirectPlay = raw.match(/play\s+[“”](.+?)[“”](?:\s+(?:on|in)\s+spotify)?$/i);
-  if (quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
+  if ((onSpotify || explicitMusicIntent) && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
     return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
   }
 
   const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
-  if (directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
+  if ((onSpotify || explicitMusicIntent) && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
     return { adapter: "spotify", intent: "playSong", song: directPlay[1].trim() };
   }
 
@@ -2965,6 +3511,8 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
 function bgLooksLikeBrowserTask(task) {
   const raw = String(task || "").trim();
   if (!raw) return false;
+
+  if (bgTextSuggestsOpenableRecommendation(raw)) return true;
 
   // 1) Generic web search / look-up — needs NO app target. This is the default agent
   //    behavior: "look up X", "search for X", "find me an article on X", "google X",
@@ -4412,7 +4960,7 @@ Use sel= selectors from INTERACTIVE ELEMENTS when available.
 For forms: click field → type → Tab to next field → submit.`;
 }
 
-async function bgCallAgentStep(task, pageInfo, history, currentStep = null) {
+async function bgCallAgentStep(task, pageInfo, history, currentStep = null, sharedContext = null) {
   const isLinkedInJobsTask = bgIsLinkedInJobsTask(task);
   const readTextLimit = isLinkedInJobsTask ? 2400 : 200;
   const historyText = history.length > 0
@@ -4442,6 +4990,7 @@ async function bgCallAgentStep(task, pageInfo, history, currentStep = null) {
 
   const today = new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const currentUrl = pageInfo.url || "";
+  const chatContextText = bgBuildAgentConversationText(sharedContext || {});
 
   const agentSystemPrompt = `You are Braino Browser Agent. Automate a real Chrome browser by returning JSON actions.
 Respond ONLY with a JSON object or array. Zero prose. Zero explanation. Zero markdown fences.
@@ -4451,6 +5000,7 @@ MINDSET: You are a browser robot. Every task is solved by executing and verifyin
 - If the "page after" in history doesn't match your intent → you are on the wrong page. Recover.
 - Never assume a click worked. The history shows you the page title and URL after each action — read it.
 - If STEPS TAKEN SO FAR is empty → you have done NOTHING yet → start executing immediately.
+- Resolve ambiguous follow-ups like "find the best one" or "open it" using CHAT CONTEXT before planning.
 - Pure questions with no browser actions → {"type":"answer","message":"..."}
 
 ACTIONS:
@@ -4605,6 +5155,8 @@ ${pageInfo.bodyText?.substring(0, 4000) || "(empty — navigate first)"}
 
 INTERACTIVE ELEMENTS:
 ${elementsText}${selectsText}
+CHAT CONTEXT:
+${chatContextText || "None."}
 ${currentStep ? `\nCURRENT PLAN STEP ${currentStep.id}: ${currentStep.goal}\nSuccess signal: ${currentStep.successSignal || "(none)"}\nFocus on THIS step only. Return {"type":"done","message":"step ${currentStep.id} complete: [summary]"} once the goal is achieved.\n` : ""}
 STEPS TAKEN SO FAR:
 ${historyText}
@@ -5538,7 +6090,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   });
 });
 
-async function startRecording(tabId, existingStreamId, withMic) {
+async function startRecording(tabId, existingStreamId, withMic, mode) {
   let streamId;
   if (existingStreamId) {
     streamId = existingStreamId;
@@ -5546,6 +6098,13 @@ async function startRecording(tabId, existingStreamId, withMic) {
     streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
   } else {
     throw new Error("No tab ID or stream ID provided");
+  }
+
+  if (withMic) {
+    const micOk = await ensureExtensionMicPermission();
+    if (!micOk) {
+      throw new Error("Microphone access is required for Meeting mode so Braino can capture your voice.");
+    }
   }
 
   await ensureOffscreen();
@@ -5561,6 +6120,7 @@ async function startRecording(tabId, existingStreamId, withMic) {
   });
 
   isRecording = true;
+  bgRecordingMode = bgNormalizeRecordingMode(mode);
 }
 
 async function stopRecording() {
@@ -5569,6 +6129,7 @@ async function stopRecording() {
       { target: "offscreen", action: "stopCapture" },
       (res) => {
         isRecording = false;
+        bgRecordingMode = "lecture";
         if (res?.error) reject(new Error(res.error));
         else resolve(res);
       }
@@ -5586,12 +6147,11 @@ async function bgGetAudioSegment() {
   });
 }
 
-async function bgGetAndTranscribeSegment(existingNotes) {
+async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [] }) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
   if (!stored.authToken) return { error: "Not signed in", notes: existingNotes };
 
-  const segRes = await bgGetAudioSegment();
-  if (!segRes?.audioBase64) return { notes: existingNotes, empty: true };
+  if (!audioBase64) return { notes: existingNotes, empty: true };
 
   try {
     const res = await fetch(`${BG_API_BASE}/transcribe-and-notes`, {
@@ -5601,17 +6161,137 @@ async function bgGetAndTranscribeSegment(existingNotes) {
         Authorization: `Bearer ${stored.authToken}`,
         apikey: BG_SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({ audioSegments: [segRes.audioBase64], existingNotes }),
+      body: JSON.stringify({
+        audioSegments: [audioBase64],
+        existingNotes,
+        existingTranscript,
+        mode: bgNormalizeRecordingMode(mode),
+        knownSpeakerReferences,
+        clientNow: new Date().toISOString(),
+        clientTimeZone: bgCalendarTimeZone(),
+      }),
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      return { error: `Transcription failed (${res.status})`, notes: existingNotes };
+      let errorMessage = `Transcription failed (${res.status})`;
+      try {
+        const parsed = JSON.parse(txt);
+        errorMessage = parsed?.error || parsed?.details || errorMessage;
+      } catch (_) {
+        if (txt) errorMessage = txt;
+      }
+      const lowered = String(errorMessage || "").toLowerCase();
+      if (res.status === 400 && (lowered.includes("no speech detected") || lowered.includes("no audio data provided"))) {
+        return { notes: existingNotes, empty: true };
+      }
+      return { error: errorMessage, notes: existingNotes };
     }
     const json = await res.json();
-    return { notes: json.notes || existingNotes };
+    return {
+      notes: json.notes || existingNotes,
+      transcript: json.transcript || "",
+      meetingArtifacts: json.meetingArtifacts || null,
+    };
   } catch (e) {
     return { error: e.message || "Transcription failed", notes: existingNotes };
   }
+}
+
+async function bgGetAndTranscribeSegment(existingNotes, mode, existingTranscript) {
+  const segRes = await bgGetAudioSegment();
+  return bgTranscribeAudioChunk({
+    audioBase64: segRes?.audioBase64 || null,
+    existingNotes,
+    existingTranscript,
+    mode: mode || bgRecordingMode,
+    knownSpeakerReferences: Array.isArray(segRes?.knownSpeakerReferences) ? segRes.knownSpeakerReferences : [],
+  });
+}
+
+async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscript) {
+  const activeMode = bgNormalizeRecordingMode(mode || bgRecordingMode);
+  try {
+    const stopRes = await stopRecording();
+    return await bgTranscribeAudioChunk({
+      audioBase64: stopRes?.audioBase64 || null,
+      existingNotes,
+      existingTranscript,
+      mode: activeMode,
+      knownSpeakerReferences: Array.isArray(stopRes?.knownSpeakerReferences) ? stopRes.knownSpeakerReferences : [],
+    });
+  } finally {
+    bgRecordingMode = "lecture";
+  }
+}
+
+function bgBuildMeetingFollowUpDateTime(dateIso, timeText, durationMinutes = 30) {
+  const rawDate = String(dateIso || "").trim();
+  const dateOnlyMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const baseDate = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(rawDate);
+  if (Number.isNaN(baseDate.getTime())) {
+    throw new Error("I couldn't resolve the follow-up date from the meeting.");
+  }
+  const parsedTime = bgParseCalendarTimeFragment(timeText || "");
+  if (!parsedTime) {
+    throw new Error("Tell me the time for that follow-up first, for example 3pm.");
+  }
+  const start = new Date(baseDate);
+  start.setHours(parsedTime.hour, parsedTime.minute, 0, 0);
+  const end = new Date(start.getTime() + Math.max(15, Number(durationMinutes) || 30) * 60 * 1000);
+  const timeZone = bgCalendarTimeZone();
+  return {
+    start: { dateTime: start.toISOString(), timeZone },
+    end: { dateTime: end.toISOString(), timeZone },
+  };
+}
+
+async function bgScheduleMeetingFollowUp(followUp, tabId) {
+  const summary = String(followUp?.summary || "").trim() || "Follow-up call";
+  const attendeeName = String(followUp?.attendeeName || "").trim();
+  const timeText = String(followUp?.timeText || "").trim();
+  const dateIso = String(followUp?.dateIso || "").trim();
+  const durationMinutes = Number(followUp?.durationMinutes || 30);
+  const sourceQuote = String(followUp?.sourceQuote || "").trim();
+
+  const { start, end } = bgBuildMeetingFollowUpDateTime(dateIso, timeText, durationMinutes);
+
+  let attendees = Array.isArray(followUp?.attendees)
+    ? followUp.attendees.map((value) => bgNormalizeEmail(value)).filter(Boolean)
+    : [];
+
+  if (!attendees.length && attendeeName) {
+    const resolvedContact = await bgResolveBrainoContact(attendeeName, {
+      tabId,
+      requireEmail: true,
+      actionLabel: "calendar invites",
+    });
+    if (!resolvedContact.ok) {
+      return { error: resolvedContact.message || bgBuildMissingContactMessage(attendeeName, "calendar invites") };
+    }
+    if (resolvedContact.contact?.email) {
+      attendees = [resolvedContact.contact.email];
+    }
+  }
+
+  const description = [
+    "Created by Braino from a meeting follow-up.",
+    sourceQuote ? `Source quote: "${sourceQuote}"` : "",
+  ].filter(Boolean).join("\n\n");
+
+  const result = await bgCallCalendarFunction("google-calendar-action", {
+    action: "create_event",
+    summary,
+    description,
+    attendees,
+    start,
+    end,
+    createMeet: true,
+    sendUpdates: attendees.length ? "all" : "none",
+  });
+
+  return { ok: true, event: result?.event || null };
 }
 
 async function bgSyncToNotion(markdown, title) {
