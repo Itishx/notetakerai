@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
@@ -402,9 +402,8 @@ function AgreementView({ intern, onSign, onBack }: { intern: InternConfig; onSig
 }
 
 // ── Profile cards landing ─────────────────────────────────────────────────────
-function TeamLanding({ onSelect, userEmail }: { onSelect: (intern: InternConfig) => void; userEmail: string | null }) {
+function TeamLanding({ onSelect, userEmail, sigMap }: { onSelect: (intern: InternConfig) => void; userEmail: string | null; sigMap: Record<string, SignedRecord | null> }) {
   const isAdmin = userEmail === ADMIN_EMAIL;
-  const myIntern = INTERNS.find(i => i.email === userEmail);
 
   return (
     <div style={{ ...main, maxWidth: 900 }}>
@@ -419,7 +418,7 @@ function TeamLanding({ onSelect, userEmail }: { onSelect: (intern: InternConfig)
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 20 }}>
         {INTERNS.map(intern => {
           const isMine = intern.email === userEmail;
-          const sig = getStoredSig(intern.storageKey);
+          const sig = sigMap[intern.id] ?? null;
           const canAccess = isAdmin || isMine;
 
           return (
@@ -460,18 +459,24 @@ function TeamLanding({ onSelect, userEmail }: { onSelect: (intern: InternConfig)
                 </div>
               </div>
 
-              {/* Agreement status */}
-              {canAccess && (
+              {/* Agreement status — visible to everyone */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{
-                    width: 7, height: 7, borderRadius: "50%",
+                    width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
                     background: sig ? "#4ade80" : "#f59e0b",
+                    boxShadow: sig ? "0 0 6px #4ade8088" : "none",
                   }} />
-                  <span style={{ fontSize: 12, color: "var(--sb-ink-3)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em" }}>
+                  <span style={{ fontSize: 12, color: sig ? "#4ade80" : "var(--sb-ink-3)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", fontWeight: sig ? 600 : 400 }}>
                     {sig ? "Agreement signed" : "Pending signature"}
                   </span>
                 </div>
-              )}
+                {sig && (
+                  <div style={{ fontSize: 11, color: "var(--sb-ink-3)", fontFamily: "'JetBrains Mono', monospace", paddingLeft: 15 }}>
+                    {new Date(sig.signedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  </div>
+                )}
+              </div>
 
               {/* CTA */}
               {canAccess ? (
@@ -518,14 +523,29 @@ function TeamLanding({ onSelect, userEmail }: { onSelect: (intern: InternConfig)
 export default function Team() {
   const { user, loading, signOut } = useAuth();
   const [selected, setSelected] = useState<InternConfig | null>(null);
-  const [sigMap, setSigMap] = useState<Record<string, SignedRecord | null>>(() =>
-    Object.fromEntries(INTERNS.map(i => [i.id, getStoredSig(i.storageKey)]))
+  const [sigMap, setSigMap] = useState<Record<string, SignedRecord | null>>(
+    Object.fromEntries(INTERNS.map(i => [i.id, null]))
   );
   const [showSignIn, setShowSignIn] = useState(false);
 
   const userEmail = user?.email?.toLowerCase() ?? null;
   const isAdmin = userEmail === ADMIN_EMAIL;
-  const myIntern = INTERNS.find(i => i.email === userEmail);
+
+  // Fetch all signatures from Supabase whenever a user is present
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("team_signatures")
+      .select("intern_id, signed_name, signed_at")
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, SignedRecord | null> = Object.fromEntries(INTERNS.map(i => [i.id, null]));
+        for (const row of data) {
+          map[row.intern_id] = { signedAt: row.signed_at, signedName: row.signed_name };
+        }
+        setSigMap(map);
+      });
+  }, [user]);
 
   const handleSelect = (intern: InternConfig) => {
     if (!user) { setSelected(intern); setShowSignIn(true); return; }
@@ -534,8 +554,17 @@ export default function Team() {
     setShowSignIn(false);
   };
 
-  const handleSign = (intern: InternConfig, name: string) => {
-    const record: SignedRecord = { signedAt: new Date().toISOString(), signedName: name };
+  const handleSign = async (intern: InternConfig, name: string) => {
+    const now = new Date().toISOString();
+    const record: SignedRecord = { signedAt: now, signedName: name };
+    // Write to Supabase
+    await supabase.from("team_signatures").upsert({
+      intern_id: intern.id,
+      email: intern.email,
+      signed_name: name,
+      signed_at: now,
+    }, { onConflict: "intern_id,email" });
+    // Keep localStorage as fallback
     localStorage.setItem(intern.storageKey, JSON.stringify(record));
     setSigMap(prev => ({ ...prev, [intern.id]: record }));
   };
@@ -580,7 +609,7 @@ export default function Team() {
   return (
     <div style={wrap}>
       <Navbar />
-      <TeamLanding onSelect={handleSelect} userEmail={userEmail} />
+      <TeamLanding onSelect={handleSelect} userEmail={userEmail} sigMap={sigMap} />
     </div>
   );
 }
