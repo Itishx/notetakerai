@@ -34,8 +34,8 @@ const INTERNS: InternConfig[] = [
     id: "taksh",
     name: "Taksh",
     role: "Motion Graphic Designer Intern",
-    email: "taksh.braino@gmail.com", // update with actual email
-    storageKey: "braino_intern_signed_taksh",
+    email: "takshdayal@gmail.com",
+    storageKey: "braino_intern_signed_takshdayal@gmail.com",
     agreementDate: "14th June 2026",
     initials: "T",
     color: "#e2833b",
