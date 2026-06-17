@@ -9361,6 +9361,7 @@ function __sbShowLectureNotes(notes, isFinal) {
   const actionsHtml = isFinal ? `
     <div class="sb-lec-notes-actions">
       <button id="__sb_lec_copy_btn__" class="sb-lec-copy-btn">Copy</button>
+      <button id="__sb_lec_pdf_btn__" class="sb-lec-copy-btn">Download PDF</button>
       <button id="__sb_notion_sync_btn__" class="sb-notion-btn" style="flex:1.4">Sync to Notion</button>
     </div>
   ` : "";
@@ -9375,7 +9376,46 @@ function __sbShowLectureNotes(notes, isFinal) {
       if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy"; }, 1800); }
     });
     __sbBindMeetingArtifactsActions();
+    document.getElementById("__sb_lec_pdf_btn__")?.addEventListener("click", () => __sbDownloadNotePDF(notes));
   }
+}
+
+function __sbDownloadNotePDF(notes) {
+  const title = "Lecture Notes — " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const htmlContent = __sbRenderMarkdown(notes);
+  const doc = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 24px; color: #111; line-height: 1.6; }
+    h1 { font-size: 1.6em; font-weight: 700; margin: 1.2em 0 0.4em; }
+    h2 { font-size: 1.3em; font-weight: 600; margin: 1em 0 0.4em; }
+    h3 { font-size: 1.1em; font-weight: 600; margin: 0.8em 0 0.3em; }
+    p { margin: 0.5em 0; }
+    ul, ol { padding-left: 1.6em; margin: 0.5em 0; }
+    li { margin: 0.25em 0; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; font-family: 'Courier New', monospace; }
+    pre { background: #f3f4f6; padding: 12px 16px; border-radius: 6px; overflow-x: auto; font-size: 0.9em; }
+    pre code { background: none; padding: 0; }
+    blockquote { border-left: 3px solid #d1d5db; margin: 0.5em 0; padding: 4px 12px; color: #555; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 1.2em 0; }
+    strong { font-weight: 600; }
+    em { font-style: italic; }
+    .title { font-size: 0.85em; color: #888; margin-bottom: 2em; padding-bottom: 1em; border-bottom: 1px solid #e5e7eb; }
+    @media print { body { margin: 20px; } @page { margin: 1.5cm; } }
+  </style>
+</head>
+<body>
+  <p class="title">${title}</p>
+  ${htmlContent}
+  <script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`;
+  const blob = new Blob([doc], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
 }
 
 async function __sbSyncNotesToNotion() {
@@ -9392,7 +9432,30 @@ async function __sbSyncNotesToNotion() {
 
     if (res.error === "not_connected") {
       if (btn) { btn.textContent = "Connect Notion →"; btn.disabled = false; }
-      btn?.addEventListener("click", () => window.open("https://trybraino.com/notion-sync", "_blank"), { once: true });
+      btn?.addEventListener("click", async () => {
+        if (btn) { btn.textContent = "Opening Notion…"; btn.disabled = true; }
+        try {
+          const { authUserId } = await __sbStorageGet(["authUserId"]);
+          if (!authUserId) { __sbShowSignIn(); return; }
+          const oauthRes = await fetch(`${__SB_API}/notion-oauth-start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: __SB_ANON_KEY },
+            body: JSON.stringify({ userIdentifier: authUserId }),
+          });
+          const oauthData = await oauthRes.json();
+          if (oauthData.authUrl) {
+            window.open(oauthData.authUrl, "_blank");
+            if (btn) { btn.textContent = "Connect Notion →"; btn.disabled = false; }
+            btn?.addEventListener("click", __sbSyncNotesToNotion, { once: true });
+          } else {
+            if (btn) { btn.textContent = "Connect failed — retry?"; btn.disabled = false; }
+            btn?.addEventListener("click", __sbSyncNotesToNotion, { once: true });
+          }
+        } catch {
+          if (btn) { btn.textContent = "Connect failed — retry?"; btn.disabled = false; }
+          btn?.addEventListener("click", __sbSyncNotesToNotion, { once: true });
+        }
+      }, { once: true });
     } else if (res.error) {
       if (btn) { btn.textContent = "Sync failed — retry?"; btn.disabled = false; }
       btn?.addEventListener("click", __sbSyncNotesToNotion, { once: true });
