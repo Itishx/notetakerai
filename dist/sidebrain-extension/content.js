@@ -2784,18 +2784,30 @@ function __sbBuildBrainUI() {
   style.id = "__sb_styles__";
   style.textContent = `
     #__sb_root__ {
-      position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
-      display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      pointer-events: none;
+      position: fixed; bottom: 0; right: 0; z-index: 1;
+      width: 1px; height: 1px; pointer-events: none; overflow: visible;
     }
     #__sb_brain_btn__ {
-      width: 52px; height: 52px; cursor: pointer; pointer-events: all;
-      filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5));
-      transition: transform 0.15s, filter 0.15s;
-      flex-shrink: 0;
+      position: absolute;
+      bottom: 100%;
+      left: 12px;
+      width: 52px; height: 52px;
+      cursor: pointer; pointer-events: all;
+      filter: drop-shadow(0 2px 12px rgba(200,84,74,0.55));
+      transition: filter 0.15s;
+      z-index: 2;
+      animation: __sb_mascot_pace__ 16s ease-in-out infinite;
+      transform-origin: center bottom;
     }
-    #__sb_brain_btn__:hover { transform: scale(1.1); filter: drop-shadow(0 4px 16px rgba(200,84,74,0.7)); }
+    #__sb_brain_btn__:hover { filter: drop-shadow(0 4px 18px rgba(200,84,74,0.75)); transform: scale(1.1); }
+    @keyframes __sb_mascot_pace__ {
+      0%          { left: 12px; }
+      5%          { left: 12px; }
+      44%         { left: calc(100% - 64px); }
+      50%         { left: calc(100% - 64px); }
+      95%         { left: 12px; }
+      100%        { left: 12px; }
+    }
     html.__sb_movie_mode_active__,
     body.__sb_movie_mode_active__ {
       overflow: hidden !important;
@@ -3389,6 +3401,7 @@ function __sbBuildBrainUI() {
       display: flex; align-items: center; gap: 8px;
       background: rgba(255,251,247,0.12); border-radius: 100px;
       isolation: isolate;
+      overflow: visible;
       padding: 10px 10px 10px 28px;
       border: 1px solid rgba(255,255,255,0.5);
       box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
@@ -3502,7 +3515,7 @@ function __sbBuildBrainUI() {
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
       position: fixed; z-index: 2147483648; top: 50%; left: 50%;
-      transform: translate(-50%, -50%); width: min(580px, calc(100vw - 48px));
+      transform: translate(-50%, -50%); width: min(820px, calc(100vw - 32px));
       pointer-events: none; opacity: 0; transition: opacity 0.25s;
     }
     #__sb_card_wrap__.visible { opacity: 1; pointer-events: all; }
@@ -4445,214 +4458,18 @@ function __sbBuildBrainUI() {
       pointer-events: none;
     }
     #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
-
-    /* ── Braino OS Window ── */
-    #__sb_os_dim__ {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-      z-index: 2147483648; opacity: 0; pointer-events: none;
-      transition: opacity 0.3s ease;
-    }
-    #__sb_os_dim__.visible { opacity: 1; pointer-events: all; }
-    #__sb_os_window__ {
-      position: fixed; top: 6vh; left: 5vw;
-      width: 90vw; height: 88vh;
-      z-index: 2147483649;
-      display: flex; flex-direction: column;
-      background: rgba(30,22,16,0.88);
-      backdrop-filter: blur(48px) saturate(180%);
-      -webkit-backdrop-filter: blur(48px) saturate(180%);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 18px;
-      box-shadow:
-        0 40px 100px rgba(0,0,0,0.6),
-        0 8px 24px rgba(0,0,0,0.4),
-        inset 1px 1px 0 rgba(255,255,255,0.12);
-      opacity: 0; pointer-events: none;
-      transform: scale(0.97) translateY(10px);
-      transition: opacity 0.34s cubic-bezier(0.34,1.1,0.64,1), transform 0.34s cubic-bezier(0.34,1.1,0.64,1);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      overflow: hidden;
-      color: rgba(255,251,247,0.92);
-    }
-    #__sb_os_window__.open {
-      opacity: 1; pointer-events: all;
-      transform: scale(1) translateY(0);
-    }
-    /* Titlebar */
-    #__sb_os_titlebar__ {
-      display: flex; align-items: center;
-      height: 50px; padding: 0 18px; flex-shrink: 0;
-      background: rgba(255,255,255,0.04);
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      position: relative; -webkit-app-region: drag;
-    }
-    .sb-os-tl-wrap { display: flex; gap: 8px; align-items: center; -webkit-app-region: no-drag; }
-    .sb-os-tl {
-      width: 13px; height: 13px; border-radius: 50%; border: none; cursor: pointer;
-      transition: filter 0.15s; padding: 0; flex-shrink: 0; -webkit-app-region: no-drag;
-    }
-    .sb-os-tl:hover { filter: brightness(0.85); }
-    .sb-os-tl.red    { background: #FF5F57; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3); }
-    .sb-os-tl.yellow { background: #FEBC2E; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3); }
-    .sb-os-tl.green  { background: #28C840; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3); }
-    #__sb_os_title__ {
-      position: absolute; left: 50%; transform: translateX(-50%);
-      font-size: 13px; font-weight: 600; color: rgba(255,251,247,0.75);
-      white-space: nowrap; pointer-events: none; letter-spacing: -0.01em;
-    }
-    .sb-os-titlebar-right {
-      margin-left: auto; display: flex; align-items: center; gap: 14px; -webkit-app-region: no-drag;
-    }
-    #__sb_os_clock__ {
-      font-size: 12px; font-weight: 500; color: rgba(255,251,247,0.45);
-      font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
-    }
-    .sb-os-status {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 12px; font-weight: 500; color: rgba(255,251,247,0.5);
-    }
-    .sb-os-status-dot {
-      width: 7px; height: 7px; border-radius: 50%; background: #28C840;
-      box-shadow: 0 0 5px rgba(40,200,64,0.7);
-    }
-    /* Body */
-    #__sb_os_body__ { display: flex; flex: 1; overflow: hidden; }
-    /* Sidebar */
-    #__sb_os_sidebar__ {
-      width: 210px; flex-shrink: 0;
-      border-right: 1px solid rgba(255,255,255,0.08);
-      display: flex; flex-direction: column;
-      padding: 14px 0; overflow-y: auto;
-    }
-    .sb-os-sidebar-label {
-      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
-      text-transform: uppercase; color: rgba(255,251,247,0.3);
-      padding: 0 16px 8px; margin-top: 4px;
-    }
-    .sb-os-mode {
-      display: flex; align-items: center; gap: 10px;
-      padding: 9px 16px; cursor: pointer; border: none;
-      background: transparent; color: rgba(255,251,247,0.6);
-      font-size: 13px; font-weight: 500; text-align: left; width: 100%;
-      transition: background 0.1s, color 0.1s;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-    .sb-os-mode:hover { background: rgba(255,255,255,0.07); color: rgba(255,251,247,0.9); }
-    .sb-os-mode.active { background: rgba(232,120,110,0.18); color: #F4978F; font-weight: 600; }
-    .sb-os-mode-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
-    .sb-os-sidebar-divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 10px 0; }
-    .sb-os-recent-item {
-      padding: 7px 16px; cursor: pointer;
-      font-size: 12px; color: rgba(255,251,247,0.45); line-height: 1.4;
-      transition: background 0.1s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .sb-os-recent-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,251,247,0.85); }
-    .sb-os-recent-domain {
-      font-size: 10px; color: rgba(255,251,247,0.25); margin-bottom: 1px;
-      letter-spacing: 0.03em;
-    }
-    /* Main area */
-    #__sb_os_main__ { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .sb-os-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
-    .sb-os-panel.active { display: flex; }
-    /* Context chips */
-    .sb-os-chips {
-      display: flex; gap: 8px; flex-wrap: wrap;
-      padding: 14px 20px 0; flex-shrink: 0;
-    }
-    .sb-os-chip {
-      padding: 6px 14px; border-radius: 99px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.06); color: rgba(255,251,247,0.65);
-      font-size: 12px; font-weight: 500; cursor: pointer;
-      transition: background 0.12s, color 0.12s, border-color 0.12s;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-    .sb-os-chip:hover { background: rgba(232,120,110,0.18); color: #F4978F; border-color: rgba(232,120,110,0.3); }
-    /* Messages */
-    .sb-os-messages {
-      flex: 1; overflow-y: auto; padding: 16px 20px;
-      display: flex; flex-direction: column; gap: 14px; scroll-behavior: smooth;
-    }
-    .sb-os-messages::-webkit-scrollbar { width: 4px; }
-    .sb-os-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
-    .sb-os-msg {
-      display: flex; gap: 10px; max-width: 82%;
-      animation: __sb_os_msg_in__ 0.22s ease both;
-    }
-    @keyframes __sb_os_msg_in__ {
-      from { opacity: 0; transform: translateY(7px); }
-      to   { opacity: 1; transform: translateY(0);   }
-    }
-    .sb-os-msg.user { align-self: flex-end; flex-direction: row-reverse; }
-    .sb-os-msg-avatar {
-      width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center; font-size: 13px; margin-top: 3px;
-      background: rgba(255,255,255,0.1);
-    }
-    .sb-os-msg-bubble {
-      padding: 10px 14px; border-radius: 16px;
-      font-size: 14px; line-height: 1.65; color: rgba(255,251,247,0.9);
-    }
-    .sb-os-msg.ai  .sb-os-msg-bubble { background: rgba(255,255,255,0.08); border-bottom-left-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
-    .sb-os-msg.user .sb-os-msg-bubble { background: #E8786E; color: white; border-bottom-right-radius: 4px; }
-    .sb-os-thinking-wrap {
-      display: flex; gap: 5px; align-items: center; padding: 2px 0;
-    }
-    .sb-os-thinking-dot {
-      width: 7px; height: 7px; border-radius: 50%; background: rgba(255,251,247,0.35);
-      animation: __sb_os_think__ 1.2s ease-in-out infinite;
-    }
-    .sb-os-thinking-dot:nth-child(2) { animation-delay: 0.18s; }
-    .sb-os-thinking-dot:nth-child(3) { animation-delay: 0.36s; }
-    @keyframes __sb_os_think__ {
-      0%,80%,100% { transform: scale(0.65); opacity: 0.35; }
-      40%          { transform: scale(1);    opacity: 1;    }
-    }
-    /* Input row */
-    .sb-os-input-row {
-      display: flex; align-items: flex-end; gap: 10px;
-      padding: 14px 20px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      background: rgba(0,0,0,0.15); flex-shrink: 0;
-    }
-    #__sb_os_input__ {
-      flex: 1; background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;
-      padding: 10px 14px; color: rgba(255,251,247,0.92); font-size: 14px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      outline: none; resize: none; line-height: 1.5; max-height: 120px; overflow-y: auto;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    #__sb_os_input__::placeholder { color: rgba(255,251,247,0.35); }
-    #__sb_os_input__:focus { border-color: rgba(232,120,110,0.5); box-shadow: 0 0 0 3px rgba(232,120,110,0.12); }
-    #__sb_os_send__ {
-      width: 40px; height: 40px; border-radius: 10px; border: none;
-      background: #E8786E; color: white; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; transition: background 0.15s;
-    }
-    #__sb_os_send__:hover { background: #C9544A; }
-    /* Placeholder panels */
-    .sb-os-placeholder {
-      flex: 1; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 10px;
-    }
-    .sb-os-placeholder-icon { font-size: 44px; opacity: 0.35; }
-    .sb-os-placeholder-title { font-size: 15px; font-weight: 600; color: rgba(255,251,247,0.4); }
-    .sb-os-placeholder-sub { font-size: 13px; color: rgba(255,251,247,0.25); }
   `;
   document.head.appendChild(style);
 
   const root = document.createElement("div");
   root.id = "__sb_root__";
-  root.innerHTML = `<div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>`;
   document.body.appendChild(root);
 
   // Cinema dock bar — body-level so it can span full width independently
   const __sbDockBar = document.createElement("div");
   __sbDockBar.id = "__sb_bar__";
   __sbDockBar.innerHTML = `
+      <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
       <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
@@ -4890,9 +4707,9 @@ function __sbBuildBrainUI() {
     }
 
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "i") {
-      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__, #__sb_os_window__")) return;
+      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return;
       e.preventDefault();
-      __sbToggleOs();
+      __sbToggleBrain();
     }
   }, true);
 
@@ -9598,7 +9415,7 @@ async function __sbProcessPrompt(text, options = {}) {
       chrome.runtime.sendMessage({
         action: "openTab",
         url: "https://www.google.com/search?q=" + encodeURIComponent(searchQuery),
-        active: true,
+        active: false,
       }, () => { void chrome.runtime.lastError; });
     }
     if (!voiceOnly) {
@@ -12316,269 +12133,6 @@ function __sbHandleVoiceEvent(msg) {
   }
 }
 
-// ── Braino OS Window ─────────────────────────────────────────────────────────
-let __sbOsOpen = false;
-let __sbOsMode = "chat";
-let __sbOsChatHistory = [];
-let __sbOsGreeted = false;
-let __sbOsClockTimer = null;
-
-function __sbOsDomain() {
-  try { return new URL(location.href).hostname.replace(/^www\./, ""); } catch { return location.hostname || "this page"; }
-}
-
-function __sbOsPageText() {
-  try { return (document.body.innerText || "").slice(0, 6000); } catch { return ""; }
-}
-
-function __sbOsChips() {
-  const h = location.hostname;
-  if (h.includes("youtube.com")) return ["Summarize feed", "Get transcript", "Quiz me"];
-  if (h.includes("github.com"))  return ["Explain repo", "Review code", "Find bugs"];
-  if (document.querySelector("article, [class*='article'], [class*='post'], [itemprop='articleBody']"))
-    return ["Summarize", "Key points", "ELI5", "Translate"];
-  return ["Summarize", "Key points", "Ask anything"];
-}
-
-function __sbOsBuild() {
-  if (document.getElementById("__sb_os_window__")) return;
-
-  const dim = document.createElement("div");
-  dim.id = "__sb_os_dim__";
-  dim.addEventListener("click", __sbCloseOs);
-  // Attach to <html> to escape any body/ancestor CSS transform that breaks position:fixed
-  (document.documentElement || document.body).appendChild(dim);
-
-  const domain = __sbOsDomain();
-  const chips  = __sbOsChips();
-  const win    = document.createElement("div");
-  win.id = "__sb_os_window__";
-  win.innerHTML = `
-    <div id="__sb_os_titlebar__">
-      <div class="sb-os-tl-wrap">
-        <button class="sb-os-tl red"    id="__sb_os_close__" title="Close"></button>
-        <button class="sb-os-tl yellow" id="__sb_os_min__"   title="Minimise"></button>
-        <button class="sb-os-tl green"  title="Full screen"></button>
-      </div>
-      <div id="__sb_os_title__">Braino &middot; ${domain}</div>
-      <div class="sb-os-titlebar-right">
-        <span id="__sb_os_clock__"></span>
-        <span class="sb-os-status"><span class="sb-os-status-dot"></span>Braino online</span>
-      </div>
-    </div>
-    <div id="__sb_os_body__">
-      <div id="__sb_os_sidebar__">
-        <div class="sb-os-sidebar-label">Modes</div>
-        <button class="sb-os-mode active" data-mode="chat"><span class="sb-os-mode-icon">💬</span>Chat with page</button>
-        <button class="sb-os-mode" data-mode="compare"><span class="sb-os-mode-icon">⚖️</span>Compare tabs</button>
-        <button class="sb-os-mode" data-mode="search"><span class="sb-os-mode-icon">🔍</span>Web search</button>
-        <button class="sb-os-mode" data-mode="write"><span class="sb-os-mode-icon">✏️</span>Write / edit</button>
-        <button class="sb-os-mode" data-mode="video"><span class="sb-os-mode-icon">▶️</span>Video mode</button>
-        <hr class="sb-os-sidebar-divider">
-        <div class="sb-os-sidebar-label">Recent</div>
-        <div id="__sb_os_recent__"></div>
-      </div>
-      <div id="__sb_os_main__">
-        <div class="sb-os-panel active" data-panel="chat">
-          <div class="sb-os-chips">${chips.map(c => `<button class="sb-os-chip">${c}</button>`).join("")}</div>
-          <div class="sb-os-messages" id="__sb_os_msgs__"></div>
-          <div class="sb-os-input-row">
-            <textarea id="__sb_os_input__" rows="1" placeholder="Ask anything about this page…"></textarea>
-            <button id="__sb_os_send__"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
-          </div>
-        </div>
-        <div class="sb-os-panel" data-panel="compare"><div class="sb-os-placeholder"><div class="sb-os-placeholder-icon">⚖️</div><div class="sb-os-placeholder-title">Compare tabs</div><div class="sb-os-placeholder-sub">Coming soon</div></div></div>
-        <div class="sb-os-panel" data-panel="search"><div class="sb-os-placeholder"><div class="sb-os-placeholder-icon">🔍</div><div class="sb-os-placeholder-title">Web search</div><div class="sb-os-placeholder-sub">Coming soon</div></div></div>
-        <div class="sb-os-panel" data-panel="write"><div class="sb-os-placeholder"><div class="sb-os-placeholder-icon">✏️</div><div class="sb-os-placeholder-title">Write &amp; edit</div><div class="sb-os-placeholder-sub">Coming soon</div></div></div>
-        <div class="sb-os-panel" data-panel="video"><div class="sb-os-placeholder"><div class="sb-os-placeholder-icon">▶️</div><div class="sb-os-placeholder-title">Video mode</div><div class="sb-os-placeholder-sub">Coming soon</div></div></div>
-      </div>
-    </div>
-  `;
-  (document.documentElement || document.body).appendChild(win);
-
-  win.querySelector("#__sb_os_close__").addEventListener("click", __sbCloseOs);
-  win.querySelector("#__sb_os_min__").addEventListener("click", __sbCloseOs);
-
-  win.querySelectorAll(".sb-os-mode").forEach(btn =>
-    btn.addEventListener("click", () => { __sbOsSetMode(btn.dataset.mode); if (__sbContextOk()) chrome.storage.local.set({ sbOsLastMode: btn.dataset.mode }); })
-  );
-
-  win.querySelectorAll(".sb-os-chip").forEach(chip =>
-    chip.addEventListener("click", () => __sbOsSend(chip.textContent.trim()))
-  );
-
-  win.querySelector("#__sb_os_send__").addEventListener("click", __sbOsSubmitInput);
-
-  const inp = win.querySelector("#__sb_os_input__");
-  inp.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbOsSubmitInput(); }
-    if (e.key === "Escape") __sbCloseOs();
-  });
-  inp.addEventListener("input", () => { inp.style.height = "auto"; inp.style.height = Math.min(inp.scrollHeight, 120) + "px"; });
-}
-
-function __sbOsSubmitInput() {
-  const inp = document.getElementById("__sb_os_input__");
-  const text = inp ? inp.value.trim() : "";
-  if (!text) return;
-  inp.value = ""; inp.style.height = "auto";
-  __sbOsSend(text);
-}
-
-function __sbOsTick() {
-  const el = document.getElementById("__sb_os_clock__");
-  if (el) el.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function __sbOsSetMode(mode) {
-  __sbOsMode = mode;
-  document.querySelectorAll(".sb-os-mode").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
-  document.querySelectorAll(".sb-os-panel").forEach(p => p.classList.toggle("active", p.dataset.panel === mode));
-}
-
-function __sbOsAppend(role, html) {
-  const msgs = document.getElementById("__sb_os_msgs__");
-  if (!msgs) return;
-  const isAi = role !== "user";
-  const wrap = document.createElement("div");
-  wrap.className = "sb-os-msg " + (isAi ? "ai" : "user");
-  wrap.innerHTML = `<div class="sb-os-msg-avatar">${isAi ? "🧠" : "👤"}</div><div class="sb-os-msg-bubble">${html}</div>`;
-  msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-function __sbOsShowThink() {
-  const msgs = document.getElementById("__sb_os_msgs__");
-  if (!msgs) return;
-  const wrap = document.createElement("div");
-  wrap.className = "sb-os-msg ai"; wrap.id = "__sb_os_think__";
-  wrap.innerHTML = `<div class="sb-os-msg-avatar">🧠</div><div class="sb-os-msg-bubble"><div class="sb-os-thinking-wrap"><div class="sb-os-thinking-dot"></div><div class="sb-os-thinking-dot"></div><div class="sb-os-thinking-dot"></div></div></div>`;
-  msgs.appendChild(wrap); msgs.scrollTop = msgs.scrollHeight;
-}
-function __sbOsHideThink() { document.getElementById("__sb_os_think__")?.remove(); }
-
-function __sbOsEscape(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>"); }
-
-async function __sbOsSend(text) {
-  if (!text) return;
-  __sbOsChatHistory.push({ role: "user", content: text });
-  __sbOsAppend("user", __sbOsEscape(text));
-  __sbOsShowThink();
-  const domain = __sbOsDomain();
-  try {
-    const body = { message: text, chatHistory: __sbOsChatHistory.slice(-10) };
-    const pageText = __sbOsPageText();
-    if (pageText) body.pageContext = { url: location.href, title: document.title, text: pageText };
-    const { reply } = await __sbFetchAssistantReply(body);
-    __sbOsHideThink();
-    if (reply) {
-      __sbOsChatHistory.push({ role: "assistant", content: reply });
-      __sbOsAppend("ai", __sbOsEscape(reply));
-      __sbOsSaveRecent(text, reply, domain);
-    }
-  } catch {
-    __sbOsHideThink();
-    __sbOsAppend("ai", "Something went wrong — try again.");
-  }
-}
-
-async function __sbOsAutoGreet() {
-  if (__sbOsGreeted) return;
-  __sbOsGreeted = true;
-  const { authToken } = await __sbStorageGet(["authToken"]);
-  if (!authToken) {
-    __sbOsAppend("ai", `Hey! I'm Braino. <a href="#" id="__sb_os_signin_link__" style="color:#C9544A;font-weight:600;">Sign in</a> to start chatting with me about this page.`);
-    document.getElementById("__sb_os_signin_link__")?.addEventListener("click", e => {
-      e.preventDefault(); __sbCloseOs();
-      if (__sbContextOk()) chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
-    });
-    return;
-  }
-  const domain = __sbOsDomain();
-  const pageText = __sbOsPageText();
-  __sbOsShowThink();
-  try {
-    const body = {
-      message: `You are Braino, an AI browser companion. The user just opened your OS window while on ${domain}. Here is the page: ${pageText.slice(0,3000)}. Greet them warmly in 1-2 sentences, tell them what you see on the page, and ask what they'd like to do. Be casual and friendly.`,
-      chatHistory: [],
-    };
-    if (pageText) body.pageContext = { url: location.href, title: document.title, text: pageText };
-    const { reply } = await __sbFetchAssistantReply(body);
-    __sbOsHideThink();
-    if (reply) { __sbOsChatHistory.push({ role: "assistant", content: reply }); __sbOsAppend("ai", __sbOsEscape(reply)); }
-  } catch {
-    __sbOsHideThink();
-    __sbOsAppend("ai", `Hey! I'm Braino. I can see you're on ${domain} — what do you want to explore?`);
-  }
-}
-
-function __sbOsSaveRecent(query, response, domain) {
-  if (!__sbContextOk()) return;
-  chrome.storage.local.get(["sbRecentInteractions"], ({ sbRecentInteractions }) => {
-    const list = Array.isArray(sbRecentInteractions) ? sbRecentInteractions : [];
-    list.unshift({ query, response, domain, timestamp: Date.now() });
-    const trimmed = list.slice(0, 10);
-    chrome.storage.local.set({ sbRecentInteractions: trimmed });
-    __sbOsRenderRecent(trimmed.slice(0, 3));
-  });
-}
-
-function __sbOsRenderRecent(list) {
-  const el = document.getElementById("__sb_os_recent__");
-  if (!el) return;
-  if (!list || !list.length) { el.innerHTML = `<div class="sb-os-recent-item" style="opacity:0.4;cursor:default">No recent activity</div>`; return; }
-  el.innerHTML = list.map(i => `
-    <div class="sb-os-recent-item" data-q="${(i.query||"").replace(/"/g,"&quot;")}">
-      <div class="sb-os-recent-domain">${i.domain || ""}</div>
-      ${__sbOsEscape((i.query || "").slice(0, 38))}${(i.query||"").length > 38 ? "…" : ""}
-    </div>`).join("");
-  el.querySelectorAll(".sb-os-recent-item[data-q]").forEach(item =>
-    item.addEventListener("click", () => { const q = item.dataset.q; if (q) __sbOsSend(q); })
-  );
-}
-
-async function __sbOpenOs() {
-  if (!__sbOwnsInlineUi()) return;
-  // Rebuild brain UI if page navigation wiped it
-  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-  __sbOsBuild();
-
-  // Hide dock bar so it doesn't float on top of the OS window
-  const bar = document.getElementById("__sb_bar__");
-  if (bar) bar.classList.remove("open");
-
-  const { sbOsLastMode } = await __sbStorageGet(["sbOsLastMode"]);
-  if (sbOsLastMode) __sbOsSetMode(sbOsLastMode);
-
-  const { sbRecentInteractions } = await __sbStorageGet(["sbRecentInteractions"]);
-  __sbOsRenderRecent((sbRecentInteractions || []).slice(0, 3));
-
-  document.getElementById("__sb_os_dim__")?.classList.add("visible");
-  document.getElementById("__sb_os_window__")?.classList.add("open");
-  __sbOsOpen = true;
-
-  __sbOsTick();
-  __sbOsClockTimer = setInterval(__sbOsTick, 15000);
-
-  setTimeout(() => document.getElementById("__sb_os_input__")?.focus(), 300);
-  __sbOsAutoGreet();
-}
-
-function __sbCloseOs() {
-  document.getElementById("__sb_os_dim__")?.classList.remove("visible");
-  document.getElementById("__sb_os_window__")?.classList.remove("open");
-  __sbOsOpen = false;
-  if (__sbOsClockTimer) { clearInterval(__sbOsClockTimer); __sbOsClockTimer = null; }
-}
-
-function __sbToggleOs() {
-  if (__sbOsOpen) __sbCloseOs(); else __sbOpenOs();
-}
-
-// ── close on Escape ──
-document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && __sbOsOpen) { e.stopPropagation(); __sbCloseOs(); }
-}, true);
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => __sbBuildBrainUI(), { once: true });
