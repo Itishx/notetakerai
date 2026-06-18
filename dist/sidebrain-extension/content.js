@@ -2796,17 +2796,14 @@ function __sbBuildBrainUI() {
       filter: drop-shadow(0 2px 12px rgba(200,84,74,0.55));
       transition: filter 0.15s;
       z-index: 2;
-      animation: __sb_mascot_pace__ 16s ease-in-out infinite;
-      transform-origin: center bottom;
+      will-change: translate;
+      animation: __sb_mascot_pace__ 18s ease-in-out infinite;
     }
-    #__sb_brain_btn__:hover { filter: drop-shadow(0 4px 18px rgba(200,84,74,0.75)); transform: scale(1.1); }
+    #__sb_brain_btn__:hover { filter: drop-shadow(0 4px 18px rgba(200,84,74,0.75)); }
     @keyframes __sb_mascot_pace__ {
-      0%          { left: 12px; }
-      5%          { left: 12px; }
-      44%         { left: calc(100% - 64px); }
-      50%         { left: calc(100% - 64px); }
-      95%         { left: 12px; }
-      100%        { left: 12px; }
+      0%,5%    { translate: 0px 0px; }
+      45%,55%  { translate: min(calc(100vw - 130px), 1020px) 0px; }
+      100%     { translate: 0px 0px; }
     }
     html.__sb_movie_mode_active__,
     body.__sb_movie_mode_active__ {
@@ -2867,11 +2864,11 @@ function __sbBuildBrainUI() {
 
     /* ── Idle animations: float + arm swing + gaze drift + blink ── */
     #__sb_brain_btn__.sb-brain-idle {
-      animation: __sb_idle_float__ 3.8s ease-in-out infinite;
+      animation: __sb_idle_float__ 3.8s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite;
     }
     @keyframes __sb_idle_float__ {
       0%, 100% { transform: translateY(0px); }
-      50%       { transform: translateY(-5px); }
+      50%       { transform: translateY(-6px); }
     }
     /* Arms: left leads, right follows half-cycle behind — matches home mascot idle math */
     #__sb_brain_btn__.sb-brain-idle #sbb-arm-l,
@@ -4525,6 +4522,7 @@ function __sbBuildBrainUI() {
         <button class="sb-card-header-btn" type="button" data-sb-copy>Copy</button>
         <button class="sb-card-header-btn" id="__sb_stop_btn__" type="button" data-sb-stop style="display:none;background:#fee2e2;color:#C9544A;">⏹ Stop</button>
         <button class="sb-card-header-btn" id="__sb_theme_toggle_btn__" type="button" title="Toggle readable mode" style="padding:0 8px;font-size:13px;">◑</button>
+        <button class="sb-card-header-btn" id="__sb_newtab_btn__" type="button" title="Open current page in new tab" style="padding:0 8px;font-size:12px;">↗ New tab</button>
         <button class="sb-card-header-btn" type="button" data-sb-close>×</button>
       </div>
       <div class="sb-card-scroll"></div>
@@ -4733,6 +4731,9 @@ function __sbBuildBrainUI() {
   // Card header buttons (wired once, not per-show)
   const bubble = document.getElementById("__sb_bubble__");
   bubble.querySelector("[data-sb-close]").addEventListener("click", () => __sbCollapseCard());
+  document.getElementById("__sb_newtab_btn__").addEventListener("click", () => {
+    chrome.runtime.sendMessage({ action: "openTab", url: window.location.href, active: true }, () => { void chrome.runtime.lastError; });
+  });
   document.getElementById("__sb_stop_btn__").addEventListener("click", () => {
     if (__sbXRunning) {
       __sbXRunning = false;
