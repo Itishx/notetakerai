@@ -3377,6 +3377,25 @@ function __sbBuildBrainUI() {
       z-index: -1; pointer-events: none;
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
+    /* ── Light-page inversion: dark glass pill so content is always visible ── */
+    #__sb_bar__.sb-light {
+      background: rgba(26, 18, 12, 0.72);
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.26), 0 2px 8px rgba(0,0,0,0.13),
+                  inset 1.5px 1.5px 0 rgba(255,255,255,0.16),
+                  inset -1px -1px 0 rgba(255,255,255,0.08);
+    }
+    #__sb_bar__.sb-light #__sb_input__ { color: #F5EDE8; }
+    #__sb_bar__.sb-light #__sb_input__::placeholder { color: rgba(245,237,232,0.42); }
+    #__sb_bar__.sb-light #__sb_mode_btn__ { color: rgba(245,237,232,0.8); background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.14); }
+    #__sb_bar__.sb-light #__sb_mode_btn__:hover { background: rgba(255,255,255,0.15); }
+    #__sb_bar__.sb-light .sb-bar-icon-btn { color: rgba(245,237,232,0.75); }
+    #__sb_bar__.sb-light .sb-bar-icon-btn:hover { background: rgba(255,255,255,0.1); color: #F5EDE8; }
+    #__sb_bar__.sb-light .sb-bar-icon-btn.active { background: rgba(201,84,74,0.32); color: #FFB3AE; }
+    #__sb_bar__.sb-light #__sb_x_auto_btn__.running { background: rgba(255,230,50,0.18); color: #FFD966; }
+    #__sb_bar__.sb-light #__sb_wakeup_label__,
+    #__sb_bar__.sb-light #__sb_signin_cta_hint__ { color: rgba(245,237,232,0.52); }
+    #__sb_bar__.sb-light #__sb_wakeup_track__ { background: rgba(255,255,255,0.14); }
     /* ── Wake-up state ── */
     #__sb_wakeup__ {
       display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
@@ -3492,17 +3511,21 @@ function __sbBuildBrainUI() {
       isolation: isolate;
       color: var(--sb-fg); resize: none;
     }
+    /* sb-light = page background is light → use dark glass so the UI is always visible */
     #__sb_bubble__.sb-light {
-      --sb-fg: #1a1a1a; --sb-fg-2: rgba(0,0,0,0.8); --sb-fg-3: rgba(0,0,0,0.35);
-      --sb-bg: rgba(255,255,255,0.82); --sb-border: rgba(0,0,0,0.1);
-      --sb-q-bg: rgba(0,0,0,0.05); --sb-q-border: rgba(0,0,0,0.1);
-      --sb-footer-border: rgba(0,0,0,0.08); --sb-footer-bg: rgba(0,0,0,0.03);
-      --sb-code-bg: rgba(0,0,0,0.06); --sb-code-fg: #b44b42;
-      --sb-pre-bg: rgba(0,0,0,0.06); --sb-pre-fg: #1a1a1a;
-      --sb-bq-border: rgba(201,84,74,0.4); --sb-bq-fg: rgba(0,0,0,0.6);
-      --sb-hr: rgba(0,0,0,0.1); --sb-link: #C9544A;
-      --sb-btn-fg: rgba(60,40,30,0.8); --sb-btn-bg: rgba(0,0,0,0.07);
-      --sb-btn-hover: rgba(0,0,0,0.13); --sb-rec-border: rgba(0,0,0,0.1);
+      --sb-fg: #F5EDE8; --sb-fg-2: rgba(245,237,232,0.85); --sb-fg-3: rgba(245,237,232,0.4);
+      --sb-bg: rgba(26, 18, 12, 0.80); --sb-border: rgba(255,255,255,0.14);
+      --sb-q-bg: rgba(255,255,255,0.1); --sb-q-border: rgba(255,255,255,0.16);
+      --sb-footer-border: rgba(255,255,255,0.1); --sb-footer-bg: rgba(0,0,0,0.15);
+      --sb-code-bg: rgba(255,255,255,0.1); --sb-code-fg: #FFD0CB;
+      --sb-pre-bg: rgba(0,0,0,0.4); --sb-pre-fg: #F5EDE8;
+      --sb-bq-border: rgba(255,160,150,0.45); --sb-bq-fg: rgba(245,237,232,0.7);
+      --sb-hr: rgba(255,255,255,0.12); --sb-link: #FFB3AE;
+      --sb-btn-fg: rgba(245,237,232,0.75); --sb-btn-bg: rgba(255,255,255,0.12);
+      --sb-btn-hover: rgba(255,255,255,0.22); --sb-rec-border: rgba(255,255,255,0.16);
+      box-shadow: 0 40px 100px rgba(0,0,0,0.32), 0 8px 24px rgba(0,0,0,0.16),
+                  inset 1.5px 1.5px 0 rgba(255,255,255,0.18),
+                  inset -1px -1px 0 rgba(255,255,255,0.1);
     }
     .sb-card-header {
       display: flex; align-items: center; justify-content: flex-end; gap: 5px;
@@ -3536,7 +3559,7 @@ function __sbBuildBrainUI() {
       padding-top: 18px;
       border-top: 1px solid rgba(255,255,255,0.08);
     }
-    #__sb_bubble__.sb-light .sb-turn + .sb-turn { border-top-color: rgba(0,0,0,0.08); }
+    #__sb_bubble__.sb-light .sb-turn + .sb-turn { border-top-color: rgba(255,255,255,0.1); }
     .sb-card-scroll::-webkit-scrollbar { width: 4px; }
     .sb-card-scroll::-webkit-scrollbar-track { background: transparent; }
     .sb-card-scroll::-webkit-scrollbar-thumb { background: rgba(180,140,120,0.3); border-radius: 99px; }
@@ -5104,6 +5127,11 @@ function __sbDetectPageTheme() {
   return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 > 0.55 ? "light" : "dark";
 }
 
+function __sbApplyBarTheme(bar) {
+  if (!bar) return;
+  bar.classList.toggle("sb-light", __sbDetectPageTheme() === "light");
+}
+
 function __sbOpenCard(options = {}) {
   if (!__sbOwnsInlineUi()) return;
   const wrap = document.getElementById("__sb_card_wrap__");
@@ -5132,7 +5160,9 @@ function __sbCollapseCard() {
   __sbStopOrbit();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (__sbBrainVisible && __sbInputOpen) {
-    document.getElementById("__sb_bar__")?.classList.add("open");
+    const bar = document.getElementById("__sb_bar__");
+    bar?.classList.add("open");
+    __sbApplyBarTheme(bar);
   }
   __sbScheduleCursorFollow();
   __sbSyncIdleState(); // back to docked idle — resume animations
@@ -6030,6 +6060,7 @@ function __sbToggleInput(open, options = {}) {
     const __sbOpenBarReady = () => {
       bar.classList.remove("sb-signin", "sb-waking");
       bar.classList.add("open");
+      __sbApplyBarTheme(bar);
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       __sbSetGreetingPlaceholder();
@@ -6050,6 +6081,7 @@ function __sbToggleInput(open, options = {}) {
         chrome.storage.local.get("authToken", ({ authToken }) => {
           if (!authToken) {
             bar.classList.add("open", "sb-signin");
+            __sbApplyBarTheme(bar);
             __sbSetupBarSignIn();
             return;
           }
@@ -6102,6 +6134,7 @@ function __sbToggleInput(open, options = {}) {
           setTimeout(() => {
             if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
             bar.classList.add("open", "sb-signin");
+            __sbApplyBarTheme(bar);
             if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
             __sbSetupBarSignIn();
           }, 700);
