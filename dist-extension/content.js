@@ -2796,13 +2796,12 @@ function __sbBuildBrainUI() {
       filter: drop-shadow(0 2px 12px rgba(200,84,74,0.55));
       transition: filter 0.15s;
       z-index: 2;
-      will-change: translate;
-      animation: __sb_mascot_pace__ 18s ease-in-out infinite;
+      animation: __sb_mascot_pace__ 32s ease-in-out infinite;
     }
     #__sb_brain_btn__:hover { filter: drop-shadow(0 4px 18px rgba(200,84,74,0.75)); }
     @keyframes __sb_mascot_pace__ {
-      0%,5%    { translate: 0px 0px; }
-      45%,55%  { translate: min(calc(100vw - 130px), 1020px) 0px; }
+      0%,10%   { translate: 0px 0px; }
+      40%,60%  { translate: min(calc(100vw - 130px), 1020px) 0px; }
       100%     { translate: 0px 0px; }
     }
     html.__sb_movie_mode_active__,
@@ -2864,7 +2863,7 @@ function __sbBuildBrainUI() {
 
     /* ── Idle animations: float + arm swing + gaze drift + blink ── */
     #__sb_brain_btn__.sb-brain-idle {
-      animation: __sb_idle_float__ 3.8s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite;
+      animation: __sb_idle_float__ 3.8s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite;
     }
     @keyframes __sb_idle_float__ {
       0%, 100% { transform: translateY(0px); }
@@ -2952,17 +2951,20 @@ function __sbBuildBrainUI() {
       0%, 100% { filter: drop-shadow(0 2px 12px rgba(40,180,70,0.4)); }
       50% { filter: drop-shadow(0 0 32px rgba(80,230,110,1)) drop-shadow(0 0 60px rgba(40,180,70,0.7)); }
     }
-    #__sb_brain_btn__.sb-brain-auth {
+    #__sb_brain_btn__.sb-brain-auth,
+    #__sb_cin_brain__.sb-brain-auth {
       animation: __sb_brain_glow_auth__ 0.85s ease-in-out infinite;
     }
-    #__sb_brain_btn__.sb-brain-authed {
+    #__sb_brain_btn__.sb-brain-authed,
+    #__sb_cin_brain__.sb-brain-authed {
       animation: __sb_brain_glow_authed__ 0.85s ease-in-out infinite;
     }
     @keyframes __sb_brain_glow_rejected__ {
       0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,40,40,0.4)); }
       50% { filter: drop-shadow(0 0 30px rgba(255,80,80,1)) drop-shadow(0 0 55px rgba(200,40,40,0.65)); }
     }
-    #__sb_brain_btn__.sb-brain-rejected {
+    #__sb_brain_btn__.sb-brain-rejected,
+    #__sb_cin_brain__.sb-brain-rejected {
       animation: __sb_brain_glow_rejected__ 0.85s ease-in-out infinite;
     }
 
@@ -4411,15 +4413,15 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 20px rgba(34,211,238,0.75)) drop-shadow(0 0 8px rgba(34,211,238,0.45)); }
       50%      { filter: drop-shadow(0 0 30px rgba(34,211,238,0.9))  drop-shadow(0 0 12px rgba(34,211,238,0.6)); }
     }
-    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     /* Realtime overrides — blue halo wins */
-    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     @keyframes __sb_hp_listen_movie_rt__ {
       0%,100% { filter: drop-shadow(0 0 20px rgba(56,189,248,0.82)) drop-shadow(0 0 8px rgba(125,211,252,0.5)); transform: scale(1); }
       50%      { filter: drop-shadow(0 0 34px rgba(103,232,249,0.96)) drop-shadow(0 0 14px rgba(59,130,246,0.64)); transform: scale(1.035); }
@@ -4436,10 +4438,10 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 16px rgba(125,211,252,0.6)) drop-shadow(0 0 7px rgba(56,189,248,0.32)); }
       50%      { filter: drop-shadow(0 0 27px rgba(125,211,252,0.84)) drop-shadow(0 0 12px rgba(34,211,238,0.5)); }
     }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     /* Bar glow when listening */
     @keyframes __sb_bar_glow__ {
       0%,100% { box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
@@ -4485,6 +4487,15 @@ function __sbBuildBrainUI() {
   root.id = "__sb_root__";
   (document.documentElement||document.body).appendChild(root);
 
+  // ── Brain gradient defs at document root — MUST be first in DOM so url(#sbb-fill) etc.
+  // resolve from here rather than from inside composited/filtered elements (Chrome bug where
+  // translate animation + filter on same element breaks SVG url() paint server lookup).
+  const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  __sbGlassSvg.id = "__sb_glass_svg__";
+  __sbGlassSvg.setAttribute("style", "display:none;position:fixed;pointer-events:none;width:0;height:0");
+  __sbGlassSvg.innerHTML = `<defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient><filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter></defs>`;
+  (document.documentElement||document.body).appendChild(__sbGlassSvg);
+
   // Cinema dock bar — body-level so it can span full width independently
   const __sbDockBar = document.createElement("div");
   __sbDockBar.id = "__sb_bar__";
@@ -4516,12 +4527,7 @@ function __sbBuildBrainUI() {
   `;
   (document.documentElement||document.body).appendChild(__sbDockBar);
 
-  // ── Liquid glass SVG displacement filter ──
-  const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  __sbGlassSvg.id = "__sb_glass_svg__";
-  __sbGlassSvg.setAttribute("style", "display:none;position:fixed;pointer-events:none");
-  __sbGlassSvg.innerHTML = `<filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter>`;
-  (document.documentElement||document.body).appendChild(__sbGlassSvg);
+  // ── Glass SVG (with brain gradients + displacement filter) appended before bar — see above ──
 
   if (__sbCursorRideMode) {
     __sbPositionRootNearCursor(true);
@@ -6173,46 +6179,60 @@ function __sbToggleInput(open, options = {}) {
         return;
       }
 
-      // First-ever open: cinematic wakeup
+      // First-ever open: cinematic wakeup — brain appears at screen center, descends to bar
       chrome.storage.local.set({ sbHasAwoken: true });
 
-      // Phase 1 (0–1200ms): show brain centered at bottom middle, bar transparent
-      bar.classList.add("open", "sb-cinematic");
-      if (brainBtn) {
-        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
-        brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
-        brainBtn.style.animation = "none"; // freeze walk while sleeping; glow restored at phase 2
-        brainBtn.style.translate = "0 0";
-      }
+      // Create independent fixed-position brain at screen center (avoids bar transform context)
+      const cinBrain = document.createElement("div");
+      cinBrain.id = "__sb_cin_brain__";
+      cinBrain.innerHTML = __SB_BRAIN_SVG_SLEEPING;
+      cinBrain.style.cssText = "position:fixed;width:52px;height:52px;top:calc(50vh - 26px);left:calc(50vw - 26px);z-index:2147483646;filter:drop-shadow(0 2px 18px rgba(200,84,74,0.6));pointer-events:none;";
+      (document.documentElement||document.body).appendChild(cinBrain);
 
-      // Phase 2 (1200ms): yellow glow + open silent auth tab in background
+      // Phase 2 (800ms): awaken, start auth, begin slow descent to bar position
       setTimeout(() => {
-        if (brainBtn) {
-          brainBtn.style.animation = ""; // restore so auth glow animation can fire
-          brainBtn.style.translate = "";
-          brainBtn.classList.add("sb-brain-auth");
-        }
-        const tYellow = Date.now();
-        const minYellow = 800;
+        cinBrain.innerHTML = __SB_BRAIN_SVG;
+        cinBrain.classList.add("sb-brain-auth");
+        requestAnimationFrame(() => {
+          cinBrain.style.transition = "top 2.8s cubic-bezier(0.25,0.46,0.45,0.94)";
+          requestAnimationFrame(() => {
+            // target: above bar (barHeight≈52px + brainHeight≈52px + gap≈12px from bottom)
+            cinBrain.style.top = "calc(100vh - 116px)";
+          });
+        });
+
+        const tAuth = Date.now();
+        const minAuth = 1200;
 
         chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
 
         let resolved = false;
+
+        const finishCinematic = (authed) => {
+          cinBrain.remove();
+          if (brainBtn) {
+            brainBtn.innerHTML = __SB_BRAIN_SVG;
+            brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
+          }
+          if (authed) {
+            __sbOpenBarReady();
+          } else {
+            bar.classList.add("open", "sb-signin");
+            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+            __sbSetupBarSignIn();
+          }
+        };
 
         const goGreen = () => {
           if (resolved) return;
           resolved = true;
           clearTimeout(fallbackTimer);
           chrome.storage.onChanged.removeListener(authWatcher);
-          const wait = Math.max(0, minYellow - (Date.now() - tYellow));
+          const wait = Math.max(0, minAuth - (Date.now() - tAuth));
           setTimeout(() => {
-            if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.innerHTML = __SB_BRAIN_SVG; brainBtn.classList.add("sb-brain-authed"); }
-            __sbPlayReaction('happy', 1800);
-            setTimeout(() => {
-              if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
-              bar.classList.remove("sb-cinematic");
-              __sbOpenBarReady();
-            }, 1100);
+            cinBrain.classList.remove("sb-brain-auth");
+            cinBrain.classList.add("sb-brain-authed");
+            setTimeout(() => finishCinematic(true), 900);
           }, wait);
         };
 
@@ -6220,15 +6240,9 @@ function __sbToggleInput(open, options = {}) {
           if (resolved) return;
           resolved = true;
           chrome.storage.onChanged.removeListener(authWatcher);
-          if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
-          __sbPlayReaction('scared', 2200);
-          setTimeout(() => {
-            if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
-            bar.classList.remove("sb-cinematic");
-            bar.classList.add("open", "sb-signin");
-                  if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-            __sbSetupBarSignIn();
-          }, 700);
+          cinBrain.classList.remove("sb-brain-auth");
+          cinBrain.classList.add("sb-brain-rejected");
+          setTimeout(() => finishCinematic(false), 700);
         };
 
         const authWatcher = (changes, area) => {
@@ -6237,7 +6251,7 @@ function __sbToggleInput(open, options = {}) {
         chrome.storage.onChanged.addListener(authWatcher);
 
         const fallbackTimer = setTimeout(goRed, 6000);
-      }, 1200);
+      }, 800);
     });
   } else {
     __sbInputOpen = false;
