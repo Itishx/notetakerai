@@ -2498,111 +2498,151 @@ const __SB_BRAIN_SVG_SCHOLAR = __SB_BRAIN_SVG
     '</svg>'
   );
 
-// ── Walking brain (v2 design: legs + shoes + gloves, from braino-char.jsx) ──
-const __SB_WALK_BODY = "M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 68 80.5 60 79.5 50 79 C 40 79.5 32 80.5 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z";
-const __SB_LEG_SHOE = `<path d="M 45 74 L 42.5 87" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/><path d="M 45 74 L 42.5 87" fill="none" stroke="url(#sbb-wfill)" stroke-width="5.5" stroke-linecap="round"/><path d="M 47.5 89 C 47.5 87 44.5 86.4 42 87.4 C 36 89.2 29.6 90.6 25.2 94.2 C 22.2 96.7 21.8 99.4 25 100.8 C 27 101.6 31 101.6 35 101.6 L 45.6 101.6 C 47.1 101.6 47.8 100.6 47.5 99.1 Z" fill="white" stroke="rgba(176,86,78,.42)" stroke-width="0.9" stroke-linejoin="round"/><path d="M 23 98.6 Q 21.2 101.2 25.6 101.5 L 45.6 101.5 Q 47.8 101.3 47.4 98.9 Q 34.5 100.1 23 98.6 Z" fill="#F6E2DC" stroke="rgba(176,86,78,.42)" stroke-width="0.8" stroke-linejoin="round"/><g fill="none" stroke="#C9544A" stroke-width="0.85" stroke-linecap="round" opacity="0.7"><path d="M 29.5 90 Q 36 88.5 43 89.2"/><path d="M 32 92.7 Q 37.5 91.7 43 92.2" opacity="0.6"/></g><ellipse cx="30" cy="92.4" rx="3" ry="1.4" fill="#fff" opacity="0.6" transform="rotate(-12 30 92.4)"/>`;
-// viewBox -8 -34 116 142 matches braino-char.jsx legs viewBox; width=52 height=64 (proportional)
-const __SB_BRAIN_SVG_WALKING = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="52" height="64" overflow="visible" style="display:block"><defs><linearGradient id="sbb-wfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><radialGradient id="sbb-wglow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g id="__sb_walk_outer__"><g id="__sb_leg_l__">${__SB_LEG_SHOE}</g><g id="__sb_leg_r__"><g transform="translate(100,0) scale(-1,1)">${__SB_LEG_SHOE}</g></g><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="${__SB_WALK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-wfill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><g fill="white"><circle cx="5" cy="-1.4" r="3"/><circle cx="0" cy="0.6" r="7"/></g><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-wfill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><g fill="white"><circle cx="-5" cy="-1.4" r="3"/><circle cx="0" cy="0.6" r="7"/></g><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g><path d="${__SB_WALK_BODY}" fill="url(#sbb-wfill)"/><path d="${__SB_WALK_BODY}" fill="url(#sbb-wglow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="__sb_weye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="__sb_weye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sb_wmouth__"><path id="__sb_wmouth_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sb_wmouth_talk__" style="display:none"><ellipse id="__sb_wtalk_e__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sb_wtalk_inner__" cx="50" cy="62.5" rx="2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`;
-
-// ── Walk loop ──────────────────────────────────────────────────────────────────
-let __sbWalkLoopRaf = null;
-let __sbWalkLoopStart = null;
-let __sbWalkLoopLast = null;
+// ── Walker lane — Braino walks above the bar (exact design from braino-char.jsx) ──
+const __SBWK_SHOE = `<path d="M 45 74 L 42.5 87" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/><path d="M 45 74 L 42.5 87" fill="none" stroke="url(#sbb-fill)" stroke-width="5.5" stroke-linecap="round"/><path d="M 47.5 89 C 47.5 87 44.5 86.4 42 87.4 C 36 89.2 29.6 90.6 25.2 94.2 C 22.2 96.7 21.8 99.4 25 100.8 C 27 101.6 31 101.6 35 101.6 L 45.6 101.6 C 47.1 101.6 47.8 100.6 47.5 99.1 Z" fill="white" stroke="rgba(176,86,78,.42)" stroke-width="0.9" stroke-linejoin="round"/><path d="M 23 98.6 Q 21.2 101.2 25.6 101.5 L 45.6 101.5 Q 47.8 101.3 47.4 98.9 Q 34.5 100.1 23 98.6 Z" fill="#F6E2DC" stroke="rgba(176,86,78,.42)" stroke-width="0.8" stroke-linejoin="round"/><g fill="none" stroke="#C9544A" stroke-width="0.85" stroke-linecap="round" opacity="0.7"><path d="M 29.5 90 Q 36 88.5 43 89.2"/><path d="M 32 92.7 Q 37.5 91.7 43 92.2" opacity="0.6"/></g><ellipse cx="30" cy="92.4" rx="3" ry="1.4" fill="#fff" opacity="0.6" transform="rotate(-12 30 92.4)"/>`;
+const __SBWK_BODY = "M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 68 80.5 60 79.5 50 79 C 40 79.5 32 80.5 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z";
+// Uses url(#sbb-fill) + url(#sbb-glow) from __sbGlassSvg — no inline defs needed, avoids Chrome filter bug
+const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="150" height="184" overflow="visible" style="display:block"><g id="__sbwk_root__"><g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`;
+// ── Walk lane state ────────────────────────────────────────────────────────────
+let __sbWkRaf = null;
+let __sbWkStart = null;
+let __sbWkLast = null;
 let __sbWalkTalking = false;
-let __sbWalkLastTransX = 0;
-let __sbWalkFaceDir = 1;
+let __sbWkPosX = 24;
+let __sbWkDirX = 1;
+let __sbWkWalking = true;
+let __sbWkWaving = false;
+let __sbWkBusy = false;
+let __sbWkAutoTimer = null;
 
 function __sbStartWalkLoop() {
-  const btn = document.getElementById("__sb_brain_btn__");
-  if (!btn) return;
-  if (__sbWalkLoopRaf) cancelAnimationFrame(__sbWalkLoopRaf);
-  btn.innerHTML = __SB_BRAIN_SVG_WALKING;
-  btn.style.height = "64px";
-  __sbWalkLoopStart = __sbWalkLoopLast = performance.now();
-  __sbWalkFaceDir = 1; __sbWalkLastTransX = 0;
-  __sbWalkLoopRaf = requestAnimationFrame(__sbWalkLoopTick);
+  let lane = document.getElementById("__sb_walk_lane__");
+  if (!lane) {
+    lane = document.createElement("div");
+    lane.id = "__sb_walk_lane__";
+    const walker = document.createElement("div");
+    walker.id = "__sbwk_walker__";
+    const flip = document.createElement("div");
+    flip.id = "__sbwk_flip__";
+    flip.innerHTML = __SBWK_SVG;
+    const shadow = document.createElement("div");
+    shadow.id = "__sbwk_shadow__";
+    walker.appendChild(flip);
+    walker.appendChild(shadow);
+    walker.addEventListener("click", () => {
+      if (__sbWkBusy) return;
+      __sbWkBusy = true; __sbWkWalking = false; __sbWkWaving = true;
+      setTimeout(() => { __sbWkWaving = false; }, 1600);
+      setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; }, 2400);
+    });
+    lane.appendChild(walker);
+    (document.documentElement || document.body).appendChild(lane);
+  }
+  lane.style.display = "block";
+  __sbWkStart = __sbWkLast = performance.now();
+  __sbWkPosX = 24; __sbWkDirX = 1;
+  __sbWkWalking = true; __sbWkWaving = false; __sbWkBusy = false; __sbWalkTalking = false;
+  clearTimeout(__sbWkAutoTimer); __sbWkScheduleAuto();
+  if (!__sbWkRaf) __sbWkRaf = requestAnimationFrame(__sbWkTick);
 }
 
 function __sbStopWalkLoop() {
-  if (__sbWalkLoopRaf) { cancelAnimationFrame(__sbWalkLoopRaf); __sbWalkLoopRaf = null; }
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
   __sbWalkTalking = false;
-  const btn = document.getElementById("__sb_brain_btn__");
-  if (btn) btn.style.height = "";
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (lane) lane.style.display = "none";
 }
 
 function __sbRestoreWalkBrain() {
   if (!__sbInputOpen) return;
-  const btn = document.getElementById("__sb_brain_btn__");
-  if (!btn) return;
-  btn.innerHTML = __SB_BRAIN_SVG_WALKING;
-  btn.style.height = "64px";
-  if (!__sbWalkLoopRaf) {
-    if (!__sbWalkLoopStart) __sbWalkLoopStart = performance.now();
-    __sbWalkLoopLast = performance.now();
-    __sbWalkLoopRaf = requestAnimationFrame(__sbWalkLoopTick);
-  }
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (lane && lane.style.display !== "none") return;
+  __sbStartWalkLoop();
 }
 
-function __sbWalkLoopTick(now) {
-  const btn = document.getElementById("__sb_brain_btn__");
-  if (!btn) { __sbWalkLoopRaf = null; return; }
-  const outer = btn.querySelector("#__sb_walk_outer__");
-  if (!outer) { __sbWalkLoopRaf = null; return; } // SVG replaced — auto-stop
+function __sbWkScheduleAuto() {
+  clearTimeout(__sbWkAutoTimer);
+  __sbWkAutoTimer = setTimeout(() => {
+    if (!__sbWkBusy) {
+      __sbWkBusy = true; __sbWkWalking = false; __sbWkWaving = true;
+      setTimeout(() => { __sbWkWaving = false; }, 1600);
+      setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; __sbWkScheduleAuto(); }, 2400);
+    } else { __sbWkScheduleAuto(); }
+  }, 3800 + Math.random() * 2600);
+}
 
-  const dt = Math.min(0.05, (now - __sbWalkLoopLast) / 1000);
-  __sbWalkLoopLast = now;
-  const t = (now - __sbWalkLoopStart) / 1000;
+function __sbWkTick(now) {
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (!lane || lane.style.display === "none") { __sbWkRaf = null; return; }
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) { __sbWkRaf = null; return; }
 
-  // Detect horizontal walk direction from CSS-animated translate property
-  const tsStr = window.getComputedStyle(btn).getPropertyValue('translate');
-  const curX = (tsStr && tsStr !== 'none') ? (parseFloat(tsStr) || 0) : 0;
-  if (Math.abs(curX - __sbWalkLastTransX) > 0.5) {
-    __sbWalkFaceDir = curX > __sbWalkLastTransX ? 1 : -1;
-    __sbWalkLastTransX = curX;
+  const dt = Math.min(0.05, (now - __sbWkLast) / 1000);
+  __sbWkLast = now;
+  const t = (now - __sbWkStart) / 1000;
+
+  // Horizontal stroll (74px/s matching design, ping-pong within lane)
+  if (__sbWkWalking) {
+    const laneW = lane.clientWidth;
+    const maxX = Math.max(28, laneW - 150 - 6);
+    let x = __sbWkPosX + __sbWkDirX * 74 * dt;
+    if (x >= maxX) { x = maxX; __sbWkDirX = -1; }
+    else if (x <= 6) { x = 6; __sbWkDirX = 1; }
+    __sbWkPosX = x;
   }
+  walker.style.transform = `translateX(${__sbWkPosX}px)`;
 
-  // Walk cycle (matches braino-char.jsx: phase s = t * 7.6)
-  const s = t * 7.6;
+  const flip = document.getElementById("__sbwk_flip__");
+  if (flip) flip.style.transform = `scaleX(${__sbWkDirX})`;
+
+  // Walk cycle — t * 4.5 for a relaxed stroll (design reference is 7.6)
+  const s = t * 4.5;
   const Lp = Math.sin(s), Rp = Math.sin(s + Math.PI);
-  const leftLift   = Math.max(0, Lp) * 5;
-  const rightLift  = Math.max(0, Rp) * 5;
-  const leftSwing  = Math.max(0, Lp) * 8;
-  const rightSwing = Math.max(0, Rp) * 8;
-  const waddle  = Math.sin(s) * 3.4;
-  const walkBob = -Math.abs(Math.sin(s)) * 2 - 0.4;
+  const ll = __sbWkWalking ? Math.max(0, Lp) * 5 : 0;
+  const rl = __sbWkWalking ? Math.max(0, Rp) * 5 : 0;
+  const ls = __sbWkWalking ? Math.max(0, Lp) * 8 : 0;
+  const rs = __sbWkWalking ? Math.max(0, Rp) * 8 : 0;
+  const waddle  = __sbWkWalking ? Math.sin(s) * 3.4 : 0;
+  const walkBob = __sbWkWalking ? (-Math.abs(Math.sin(s)) * 2 - 0.4) : 0;
 
-  // Idle breathing + bob
   const breath = 1 + 0.014 * Math.sin(t * 1.7);
   const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
 
-  // Auto blink every ~3.4s
   const bp = t % 3.4;
-  const autoBlink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
-  const eyeSy = Math.max(0.06, 1 - autoBlink);
+  const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
+  const eyeSy = Math.max(0.06, 1 - blink);
 
-  // Direction flip — applied first (outermost transform)
-  const flipTx = __sbWalkFaceDir === -1 ? "translate(100,0) scale(-1,1) " : "";
-  outer.setAttribute("transform",
-    `${flipTx}rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+  const rightAngle = __sbWkWaving ? (-28 + Math.sin(t * 11) * 16) : 0;
 
-  // Legs
-  const legL = outer.querySelector("#__sb_leg_l__");
-  const legR = outer.querySelector("#__sb_leg_r__");
-  if (legL) legL.setAttribute("transform", `translate(0 ${-leftLift}) rotate(${leftSwing} 44 74)`);
-  if (legR) legR.setAttribute("transform", `translate(0 ${-rightLift}) rotate(${rightSwing} 56 74)`);
+  const root = walker.querySelector("#__sbwk_root__");
+  if (!root) { __sbWkRaf = null; return; }
 
-  // Blink (scale eye vertically around its centre)
-  const eyeL = outer.querySelector("#__sb_weye_l__");
-  const eyeR = outer.querySelector("#__sb_weye_r__");
+  root.setAttribute("transform",
+    `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+
+  const legL = root.querySelector("#__sbwk_ll__");
+  const legR = root.querySelector("#__sbwk_rl__");
+  if (legL) legL.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+  if (legR) legR.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+
+  const raTx = rightAngle ? `rotate(${rightAngle} 78 53)` : "";
+  const raBg = root.querySelector("#__sbwk_ra_bg__");
+  const raFg = root.querySelector("#__sbwk_ra__");
+  if (raBg) raBg.setAttribute("transform", raTx);
+  if (raFg) raFg.setAttribute("transform", raTx);
+
+  const eyeL = root.querySelector("#__sbwk_eye_l__");
+  const eyeR = root.querySelector("#__sbwk_eye_r__");
   if (eyeL) eyeL.setAttribute("transform", `translate(38,48) scale(1,${eyeSy}) translate(-38,-48)`);
   if (eyeR) eyeR.setAttribute("transform", `translate(62,48) scale(1,${eyeSy}) translate(-62,-48)`);
 
-  // Talking mouth (layered sines from braino-char.jsx TalkingMouth)
-  const mSmile = outer.querySelector("#__sb_wmouth_smile__");
-  const mTalk  = outer.querySelector("#__sb_wmouth_talk__");
-  const tE     = outer.querySelector("#__sb_wtalk_e__");
-  const tI     = outer.querySelector("#__sb_wtalk_inner__");
-  if (__sbWalkTalking) {
+  const mSmile = root.querySelector("#__sbwk_smile__");
+  const mTalk  = root.querySelector("#__sbwk_talk__");
+  const tE = root.querySelector("#__sbwk_te__");
+  const tI = root.querySelector("#__sbwk_ti__");
+  const talking = __sbWalkTalking || __sbWkWaving;
+  if (talking) {
     const o = Math.max(0, Math.min(1,
       (0.5 + 0.5 * Math.sin(t * 13.5)) *
       (0.55 + 0.45 * Math.sin(t * 7.7 + 1.3)) *
@@ -2611,7 +2651,7 @@ function __sbWalkLoopTick(now) {
     const ry = 1.4 + o * 4.2, rx = 4 - o * 0.5;
     if (mSmile) mSmile.setAttribute("display", "none");
     if (mTalk)  mTalk.setAttribute("display", "inline");
-    if (tE)     { tE.setAttribute("rx", rx); tE.setAttribute("ry", ry); }
+    if (tE) { tE.setAttribute("rx", String(rx)); tE.setAttribute("ry", String(ry)); }
     if (tI) {
       if (o > 0.25) {
         tI.setAttribute("display", "inline");
@@ -2625,7 +2665,7 @@ function __sbWalkLoopTick(now) {
     if (mTalk)  mTalk.setAttribute("display", "none");
   }
 
-  __sbWalkLoopRaf = requestAnimationFrame(__sbWalkLoopTick);
+  __sbWkRaf = requestAnimationFrame(__sbWkTick);
 }
 
 let __sbBrainVisible = false;
@@ -4594,6 +4634,28 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-cinematic #__sb_wakeup__ { display: none !important; }
     #__sb_bar__.sb-cinematic #__sb_brain_btn__ {
       left: 50%; transform: translateX(-50%);
+    }
+    /* Freeze brain btn in place while bar is open — walker lane handles motion above */
+    #__sb_bar__.open #__sb_brain_btn__ {
+      animation: none; translate: 0px 0px;
+    }
+
+    /* ── Walker lane — Braino above the bar ── */
+    #__sb_walk_lane__ {
+      position:fixed; bottom:84px; left:0; right:0; height:210px;
+      pointer-events:none; z-index:2147483641; overflow:visible;
+      display:none;
+    }
+    #__sbwk_walker__ {
+      position:absolute; bottom:0; width:150px;
+      pointer-events:auto; cursor:pointer;
+      filter:drop-shadow(0 4px 18px rgba(200,84,74,0.32));
+    }
+    #__sbwk_flip__ { transform-origin:center; display:block; }
+    #__sbwk_shadow__ {
+      position:absolute; left:50%; bottom:-6px; width:96px; height:14px;
+      transform:translateX(-50%); border-radius:50%;
+      background:radial-gradient(closest-side, rgba(120,60,40,.26), transparent 78%);
     }
 
     /* ── Voice Error Pill ── */
@@ -7565,7 +7627,7 @@ function __sbSyncMovieModeVisualState() {
   brain?.classList.toggle("sb-brain-movie", __sbMovieModeActive);
   if (brain && !brain.classList.contains("recording")) {
     if (__sbMovieModeActive) { __sbStopWalkLoop(); brain.innerHTML = __SB_BRAIN_SVG_LISTENING; }
-    else if (brain.querySelector && brain.querySelector("#__sb_walk_outer__") === null) __sbRestoreWalkBrain();
+    else __sbRestoreWalkBrain();
   }
   if (__sbMovieModeActive) {
     document.documentElement.classList.add("__sb_movie_mode_active__");
