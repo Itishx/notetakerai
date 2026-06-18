@@ -4461,7 +4461,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-cinematic #__sb_x_auto_btn__,
     #__sb_bar__.sb-cinematic #__sb_wakeup__ { display: none !important; }
     #__sb_bar__.sb-cinematic #__sb_brain_btn__ {
-      left: 50%; transform: translateX(-50%); animation: none;
+      left: 50%; transform: translateX(-50%);
     }
 
     /* ── Voice Error Pill ── */
@@ -5222,6 +5222,8 @@ function __sbOpenCard(options = {}) {
   const wrap = document.getElementById("__sb_card_wrap__");
   if (!wrap) return;
   __sbRefreshInlineOwner();
+  // In headphone mode: keep bar visible, suppress automated card opens (voice is the UI)
+  if (__sbHeadphoneMode && !options.forceOpen) return;
   // Hide the bar — card has its own follow-up input
   document.getElementById("__sb_bar__")?.classList.remove("open");
   const alreadyOpen = wrap.classList.contains("visible");
@@ -6179,11 +6181,17 @@ function __sbToggleInput(open, options = {}) {
       if (brainBtn) {
         brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
         brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
+        brainBtn.style.animation = "none"; // freeze walk while sleeping; glow restored at phase 2
+        brainBtn.style.translate = "0 0";
       }
 
       // Phase 2 (1200ms): yellow glow + open silent auth tab in background
       setTimeout(() => {
-        if (brainBtn) brainBtn.classList.add("sb-brain-auth");
+        if (brainBtn) {
+          brainBtn.style.animation = ""; // restore so auth glow animation can fire
+          brainBtn.style.translate = "";
+          brainBtn.classList.add("sb-brain-auth");
+        }
         const tYellow = Date.now();
         const minYellow = 800;
 
@@ -11909,7 +11917,6 @@ function __sbEnterHeadphoneMode(options = {}) {
   // Mark voice mode ON globally so every tab knows Braino should follow the user.
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: true, sbBrainDocked: true });
 
-  __sbToggleInput(false);
   __sbCollapseCard();
 
   const brain = document.getElementById("__sb_brain_btn__");
