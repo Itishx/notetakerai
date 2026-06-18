@@ -1,5 +1,11 @@
 # Braino Changelog
 
+## v6.2.8 — Floating UI adapts to light pages
+- **Auto dark-glass mode on light/white pages.** Braino detects the page background luminance every time the bar opens. On light pages both the pill bar and the response card flip to a dark warm glass theme so text, icons, and content are always legible.
+- **Liquid glass effect preserved.** The SVG displacement filter and backdrop-blur layers are untouched — the dark-glass variant maintains the same refraction look, just inverted.
+- **Scholar glasses corrected.** Round circular frames replace the old square ones, the mortarboard cap is removed, and Scholar's pupils now look toward the center of the screen (up-left) matching listening mode.
+- **Extension package updated.** The download artifact now ships as version **6.2.8**.
+
 ## v6.2.7 — Braino reacts now
 - **Eight emotion expressions on the mascot.** Braino can now show Happy, Laughing, Tears of Joy, Celebrating, Focus, Shocked, Scared, and Idle — each a distinct SVG face with the matching eyes, mouth, and effects.
 - **Animated reaction popups.** When an emotion fires, a matching emoji floats up above the mascot with a spring bounce, then fades out. No third-party libraries — pure CSS keyframes.
