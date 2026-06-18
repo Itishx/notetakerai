@@ -2477,29 +2477,26 @@ const __SB_BRAIN_SVG_SCARED = __SB_BRAIN_SVG
   )
   .replace('</svg>', '<path d="M 32 41.5 Q 37 40 43 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/><path d="M 68 41.5 Q 63 40 57 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/><path d="M 81 28 C 84 32 84 35 81 36 C 78 35 78 32 81 28 Z" fill="#CFEFFF"/></svg>');
 
-// Scholar: focus expression + mortarboard cap + square glasses
+// Scholar: round glasses, no cap, pupils looking toward center of screen (up-left)
 const __SB_BRAIN_SVG_SCHOLAR = __SB_BRAIN_SVG
-  .replace(
-    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
-    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><ellipse cx="38" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
-  )
-  .replace(
-    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
-    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><ellipse cx="62" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
-  )
+  // Pupils look toward center of screen — same shift as LISTENING
   .replace(
     '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
-    '<g id="sbb-pupil-l"><circle cx="38" cy="48.5" r="3" fill="#1B1713"/><circle cx="39" cy="47.5" r="0.8" fill="white"/></g>'
+    '<g id="sbb-pupil-l"><circle cx="36.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="37.2" cy="45.1" r="1.1" fill="white"/></g>'
   )
   .replace(
     '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
-    '<g id="sbb-pupil-r"><circle cx="62" cy="48.5" r="3" fill="#1B1713"/><circle cx="63" cy="47.5" r="0.8" fill="white"/></g>'
+    '<g id="sbb-pupil-r"><circle cx="60.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="61.2" cy="45.1" r="1.1" fill="white"/></g>'
   )
-  .replace(
-    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
-    '<path d="M 45.5 62 Q 50 63.2 54.5 62" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/>'
-  )
-  .replace('</svg>', `<rect x="31" y="42" width="14" height="12" rx="2.5" fill="none" stroke="#2A1F1A" stroke-width="1.8" opacity="0.88"/><rect x="55" y="42" width="14" height="12" rx="2.5" fill="none" stroke="#2A1F1A" stroke-width="1.8" opacity="0.88"/><path d="M 45 48 Q 50 46 55 48" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><path d="M 31 48 Q 27 47 24 51" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><path d="M 69 48 Q 73 47 76 51" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><ellipse cx="50" cy="5.5" rx="22" ry="5.5" fill="#1A1210"/><rect x="38.5" y="1.5" width="23" height="7" fill="#1A1210"/><ellipse cx="50" cy="2" rx="10" ry="3.2" fill="#2E2420"/><line x1="61" y1="2" x2="65" y2="14" stroke="#C9544A" stroke-width="1.6" stroke-linecap="round"/><circle cx="65.5" cy="15" r="2.2" fill="#C9544A"/></svg>`);
+  // Round glasses overlaid last so they sit on top of everything
+  .replace('</svg>',
+    '<circle cx="38" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.9"/>' +
+    '<circle cx="62" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.9"/>' +
+    '<path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.9"/>' +
+    '<path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.9"/>' +
+    '<path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.9"/>' +
+    '</svg>'
+  );
 
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
