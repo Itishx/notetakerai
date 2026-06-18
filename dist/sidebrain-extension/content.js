@@ -2299,7 +2299,7 @@ __sbRefreshInlineOwner();
 
 // Re-inject brain UI if SPA navigation (Pinterest, YouTube, etc.) removes the root
 new MutationObserver(() => {
-  if (!document.getElementById("__sb_root__") && __sbBrainVisible && __sbOwnsInlineUi()) {
+  if ((!document.getElementById("__sb_root__") || !document.getElementById("__sb_bar__")) && __sbBrainVisible && __sbOwnsInlineUi()) {
     __sbBuildBrainUI();
   }
 }).observe(document.body || document.documentElement, { childList: true, subtree: false });
@@ -2781,7 +2781,7 @@ if (__sbContextOk()) {
 
 function __sbBuildBrainUI() {
   if (!__sbOwnsInlineUi()) return;
-  if (document.getElementById("__sb_root__")) return;
+  if (document.getElementById("__sb_root__") && document.getElementById("__sb_bar__")) return;
 
   const style = document.createElement("style");
   style.id = "__sb_styles__";
@@ -2790,7 +2790,7 @@ function __sbBuildBrainUI() {
       position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
       display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      pointer-events: none;
+      pointer-events: none; width: 52px;
     }
     #__sb_brain_btn__ {
       width: 52px; height: 52px; cursor: pointer; pointer-events: all;
@@ -3356,20 +3356,22 @@ function __sbBuildBrainUI() {
     .sb-meeting-followup-btn:disabled { opacity:0.5; cursor:default; }
     .sb-meeting-followup-status { min-height:15px; margin-top:8px; font-size:11.5px; color:#8A7B73; line-height:1.45; }
 
-    /* ── NEW UI: Thin bar + centered glass card ── */
+    /* ── Cinema Dock: full-width centered bar at screen bottom ── */
     #__sb_bar__ {
-      display: flex; align-items: center; gap: 6px;
+      position: fixed; bottom: 20px; left: 50%;
+      transform: translateX(-50%) translateY(24px) scale(0.97);
+      display: flex; align-items: center; gap: 8px;
       background: rgba(255,251,247,0.12); border-radius: 100px;
-      position: relative; isolation: isolate;
-      padding: 7px 7px 7px 18px;
+      isolation: isolate;
+      padding: 10px 10px 10px 28px;
       border: 1px solid rgba(255,255,255,0.5);
-      box-shadow: 0 8px 28px rgba(27,23,19,0.15), 0 2px 8px rgba(27,23,19,0.08),
+      box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
                   inset -1px -1px 1px rgba(255,255,255,0.3);
-      width: 360px; max-width: calc(100vw - 90px);
+      width: min(860px, calc(100vw - 48px));
       backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
       pointer-events: none; opacity: 0;
-      transform: scaleX(0.55) translateY(4px); transform-origin: right center;
+      z-index: 2147483647;
       transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1);
     }
     #__sb_bar__::before {
@@ -3379,7 +3381,7 @@ function __sbBuildBrainUI() {
       filter: url(#__sb_glass_filter__);
       z-index: -1; pointer-events: none;
     }
-    #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
+    #__sb_bar__.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0) scale(1); }
     /* ── Wake-up state ── */
     #__sb_wakeup__ {
       display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
@@ -3436,12 +3438,12 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
-      font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #__sb_input__::placeholder { color: #A79B92; }
     .sb-bar-icon-btn {
-      width: 32px; height: 32px; border-radius: 50%; border: none;
+      width: 36px; height: 36px; border-radius: 50%; border: none;
       background: transparent; color: #6B5248; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
@@ -3449,7 +3451,7 @@ function __sbBuildBrainUI() {
     .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
     .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
     #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
-    #__sb_send_btn__ { background: #E8786E !important; color: white !important; }
+    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 40px !important; height: 40px !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
       position: fixed; z-index: 2147483648; top: 50%; left: 50%;
@@ -4393,7 +4395,14 @@ function __sbBuildBrainUI() {
   const root = document.createElement("div");
   root.id = "__sb_root__";
   root.innerHTML = `
-    <div id="__sb_bar__">
+    <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
+  `;
+  document.body.appendChild(root);
+
+  // ── Cinema dock bar — separate body-level element so it can span full width ──
+  const dockBar = document.createElement("div");
+  dockBar.id = "__sb_bar__";
+  dockBar.innerHTML = `
       <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
@@ -4417,10 +4426,8 @@ function __sbBuildBrainUI() {
         <span id="__sb_signin_cta_hint__">Sign in to start chatting</span>
         <button id="__sb_signin_btn_cta__">Sign in →</button>
       </div>
-    </div>
-    <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
-  document.body.appendChild(root);
+  document.body.appendChild(dockBar);
 
   // ── Liquid glass SVG displacement filter ──
   const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -4633,7 +4640,7 @@ function __sbBuildBrainUI() {
 
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "i") {
       // Only block if typing inside the extension's own inputs — not page inputs
-      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__")) return;
+      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return;
       e.preventDefault();
       if (__sbCursorRideMode) {
         __sbOpenAnchoredBrain();
@@ -5054,7 +5061,7 @@ function __sbSetCursorRideMode(enabled) {
 function __sbHasExternalEditableFocus() {
   const active = document.activeElement;
   if (!(active instanceof Element)) return false;
-  if (active.closest("#__sb_root__, #__sb_card_wrap__")) return false;
+  if (active.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return false;
   const tag = active.tagName.toLowerCase();
   return (
     tag === "input" ||
@@ -6834,7 +6841,7 @@ function __sbMovieModeDescriptor(el) {
 
 function __sbMovieModeElementVisible(el) {
   if (!el || !(el instanceof Element)) return false;
-  if (el.closest("#__sb_root__, #__sb_card_wrap__")) return false;
+  if (el.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return false;
   const rect = el.getBoundingClientRect();
   if (rect.width < 180 || rect.height < 100) return false;
   if (rect.bottom < 18 || rect.right < 18) return false;
@@ -7056,7 +7063,7 @@ function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
     for (const el of candidates) {
       if (!(el instanceof Element) || seenEls.has(el)) continue;
       seenEls.add(el);
-      if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__")) continue;
+      if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) continue;
       const rect = el.getBoundingClientRect();
       if (rect.height < 4 || rect.height > 240) continue;
       if (frameRect) {
