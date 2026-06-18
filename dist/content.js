@@ -4411,15 +4411,15 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 20px rgba(34,211,238,0.75)) drop-shadow(0 0 8px rgba(34,211,238,0.45)); }
       50%      { filter: drop-shadow(0 0 30px rgba(34,211,238,0.9))  drop-shadow(0 0 12px rgba(34,211,238,0.6)); }
     }
-    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite; }
-    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
     /* Realtime overrides — blue halo wins */
-    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
     @keyframes __sb_hp_listen_movie_rt__ {
       0%,100% { filter: drop-shadow(0 0 20px rgba(56,189,248,0.82)) drop-shadow(0 0 8px rgba(125,211,252,0.5)); transform: scale(1); }
       50%      { filter: drop-shadow(0 0 34px rgba(103,232,249,0.96)) drop-shadow(0 0 14px rgba(59,130,246,0.64)); transform: scale(1.035); }
@@ -4436,10 +4436,33 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 16px rgba(125,211,252,0.6)) drop-shadow(0 0 7px rgba(56,189,248,0.32)); }
       50%      { filter: drop-shadow(0 0 27px rgba(125,211,252,0.84)) drop-shadow(0 0 12px rgba(34,211,238,0.5)); }
     }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    /* Bar glow when listening */
+    @keyframes __sb_bar_glow__ {
+      0%,100% { box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
+                  inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3); }
+      50%     { box-shadow: 0 0 0 3px rgba(232,120,110,0.5), 0 0 44px rgba(232,120,110,0.32),
+                  0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65),
+                  inset -1px -1px 1px rgba(255,255,255,0.3); }
+    }
+    #__sb_bar__.hp-listening { animation: __sb_bar_glow__ 1.8s ease-in-out infinite; }
+    /* Cinematic wakeup state — brain centered, bar transparent */
+    #__sb_bar__.sb-cinematic {
+      background: transparent; border-color: transparent; box-shadow: none;
+    }
+    #__sb_bar__.sb-cinematic::before { display: none; }
+    #__sb_bar__.sb-cinematic #__sb_input__,
+    #__sb_bar__.sb-cinematic #__sb_mode_btn__,
+    #__sb_bar__.sb-cinematic #__sb_rec_btn__,
+    #__sb_bar__.sb-cinematic #__sb_send_btn__,
+    #__sb_bar__.sb-cinematic #__sb_x_auto_btn__,
+    #__sb_bar__.sb-cinematic #__sb_wakeup__ { display: none !important; }
+    #__sb_bar__.sb-cinematic #__sb_brain_btn__ {
+      left: 50%; transform: translateX(-50%); animation: none;
+    }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -6118,7 +6141,7 @@ function __sbToggleInput(open, options = {}) {
     const brainBtn = document.getElementById("__sb_brain_btn__");
 
     const __sbOpenBarReady = () => {
-      bar.classList.remove("sb-signin", "sb-waking");
+      bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
       bar.classList.add("open");
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
@@ -6151,7 +6174,8 @@ function __sbToggleInput(open, options = {}) {
       // First-ever open: cinematic wakeup
       chrome.storage.local.set({ sbHasAwoken: true });
 
-      // Phase 1 (0–1200ms): sleeping, silent
+      // Phase 1 (0–1200ms): show brain centered at bottom middle, bar transparent
+      bar.classList.add("open", "sb-cinematic");
       if (brainBtn) {
         brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
         brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
@@ -6178,6 +6202,7 @@ function __sbToggleInput(open, options = {}) {
             __sbPlayReaction('happy', 1800);
             setTimeout(() => {
               if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
+              bar.classList.remove("sb-cinematic");
               __sbOpenBarReady();
             }, 1100);
           }, wait);
@@ -6191,6 +6216,7 @@ function __sbToggleInput(open, options = {}) {
           __sbPlayReaction('scared', 2200);
           setTimeout(() => {
             if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
+            bar.classList.remove("sb-cinematic");
             bar.classList.add("open", "sb-signin");
                   if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
             __sbSetupBarSignIn();
@@ -6209,7 +6235,7 @@ function __sbToggleInput(open, options = {}) {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
     const bar = document.getElementById("__sb_bar__");
-    bar?.classList.remove("open", "sb-waking", "sb-signin");
+    bar?.classList.remove("open", "sb-waking", "sb-signin", "sb-cinematic");
     __sbScheduleCursorFollow();
   }
 }
@@ -11963,7 +11989,9 @@ function __sbSetHpBrainState(state) {
   const brain = document.getElementById("__sb_brain_btn__");
   if (!brain) return;
   brain.classList.remove("hp-connecting", "hp-listening", "hp-captured", "hp-speaking", "recording");
+  document.getElementById("__sb_bar__")?.classList.remove("hp-listening");
   if (state) brain.classList.add(`hp-${state}`);
+  if (state === "listening") document.getElementById("__sb_bar__")?.classList.add("hp-listening");
 }
 
 function __sbSetVoiceStatusBadge(state, label) {
