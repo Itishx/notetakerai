@@ -2784,18 +2784,27 @@ function __sbBuildBrainUI() {
   style.id = "__sb_styles__";
   style.textContent = `
     #__sb_root__ {
-      position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
-      display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      pointer-events: none;
+      position: fixed; bottom: 0; right: 0; z-index: 1;
+      width: 1px; height: 1px; pointer-events: none; overflow: visible;
     }
     #__sb_brain_btn__ {
-      width: 52px; height: 52px; cursor: pointer; pointer-events: all;
-      filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5));
-      transition: transform 0.15s, filter 0.15s;
-      flex-shrink: 0;
+      position: absolute;
+      bottom: 100%;
+      left: 12px;
+      width: 52px; height: 52px;
+      cursor: pointer; pointer-events: all;
+      filter: drop-shadow(0 2px 12px rgba(200,84,74,0.55));
+      transition: filter 0.15s;
+      z-index: 2;
+      will-change: translate;
+      animation: __sb_mascot_pace__ 18s ease-in-out infinite;
     }
-    #__sb_brain_btn__:hover { transform: scale(1.1); filter: drop-shadow(0 4px 16px rgba(200,84,74,0.7)); }
+    #__sb_brain_btn__:hover { filter: drop-shadow(0 4px 18px rgba(200,84,74,0.75)); }
+    @keyframes __sb_mascot_pace__ {
+      0%,5%    { translate: 0px 0px; }
+      45%,55%  { translate: min(calc(100vw - 130px), 1020px) 0px; }
+      100%     { translate: 0px 0px; }
+    }
     html.__sb_movie_mode_active__,
     body.__sb_movie_mode_active__ {
       overflow: hidden !important;
@@ -2855,11 +2864,11 @@ function __sbBuildBrainUI() {
 
     /* ── Idle animations: float + arm swing + gaze drift + blink ── */
     #__sb_brain_btn__.sb-brain-idle {
-      animation: __sb_idle_float__ 3.8s ease-in-out infinite;
+      animation: __sb_idle_float__ 3.8s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite;
     }
     @keyframes __sb_idle_float__ {
       0%, 100% { transform: translateY(0px); }
-      50%       { transform: translateY(-5px); }
+      50%       { transform: translateY(-6px); }
     }
     /* Arms: left leads, right follows half-cycle behind — matches home mascot idle math */
     #__sb_brain_btn__.sb-brain-idle #sbb-arm-l,
@@ -3382,20 +3391,23 @@ function __sbBuildBrainUI() {
     .sb-meeting-followup-btn:disabled { opacity:0.5; cursor:default; }
     .sb-meeting-followup-status { min-height:15px; margin-top:8px; font-size:11.5px; color:#8A7B73; line-height:1.45; }
 
-    /* ── NEW UI: Thin bar + centered glass card ── */
+    /* ── Cinema Dock: full-width centered dock bar ── */
     #__sb_bar__ {
-      display: flex; align-items: center; gap: 6px;
+      position: fixed; bottom: 20px; left: 50%;
+      transform: translateX(-50%) translateY(24px) scale(0.97);
+      display: flex; align-items: center; gap: 8px;
       background: rgba(255,251,247,0.12); border-radius: 100px;
-      position: relative; isolation: isolate;
-      padding: 7px 7px 7px 18px;
+      isolation: isolate;
+      overflow: visible;
+      padding: 10px 10px 10px 28px;
       border: 1px solid rgba(255,255,255,0.5);
-      box-shadow: 0 8px 28px rgba(27,23,19,0.15), 0 2px 8px rgba(27,23,19,0.08),
+      box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
                   inset -1px -1px 1px rgba(255,255,255,0.3);
-      width: 360px; max-width: calc(100vw - 90px);
+      width: calc(100vw - 48px); max-width: 1100px;
       backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
       pointer-events: none; opacity: 0;
-      transform: scaleX(0.55) translateY(4px); transform-origin: right center;
+      z-index: 2147483647;
       transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1),
                   background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
     }
@@ -3406,7 +3418,7 @@ function __sbBuildBrainUI() {
       filter: url(#__sb_glass_filter__);
       z-index: -1; pointer-events: none;
     }
-    #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
+    #__sb_bar__.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0) scale(1); }
     /* ── Readable mode: opaque warm cream, dark text — always legible ── */
     #__sb_bar__.sb-readable {
       background: rgba(255,251,247,0.96);
@@ -3483,12 +3495,12 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
-      font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #__sb_input__::placeholder { color: #A79B92; }
     .sb-bar-icon-btn {
-      width: 32px; height: 32px; border-radius: 50%; border: none;
+      width: 38px; height: 38px; border-radius: 50%; border: none;
       background: transparent; color: #6B5248; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
@@ -3496,11 +3508,11 @@ function __sbBuildBrainUI() {
     .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
     .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
     #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
-    #__sb_send_btn__ { background: #E8786E !important; color: white !important; }
+    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 42px !important; height: 42px !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
       position: fixed; z-index: 2147483648; top: 50%; left: 50%;
-      transform: translate(-50%, -50%); width: min(580px, calc(100vw - 48px));
+      transform: translate(-50%, -50%); width: min(820px, calc(100vw - 32px));
       pointer-events: none; opacity: 0; transition: opacity 0.25s;
     }
     #__sb_card_wrap__.visible { opacity: 1; pointer-events: all; }
@@ -4399,15 +4411,15 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 20px rgba(34,211,238,0.75)) drop-shadow(0 0 8px rgba(34,211,238,0.45)); }
       50%      { filter: drop-shadow(0 0 30px rgba(34,211,238,0.9))  drop-shadow(0 0 12px rgba(34,211,238,0.6)); }
     }
-    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite; }
-    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
     /* Realtime overrides — blue halo wins */
-    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
     @keyframes __sb_hp_listen_movie_rt__ {
       0%,100% { filter: drop-shadow(0 0 20px rgba(56,189,248,0.82)) drop-shadow(0 0 8px rgba(125,211,252,0.5)); transform: scale(1); }
       50%      { filter: drop-shadow(0 0 34px rgba(103,232,249,0.96)) drop-shadow(0 0 14px rgba(59,130,246,0.64)); transform: scale(1.035); }
@@ -4424,10 +4436,33 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 16px rgba(125,211,252,0.6)) drop-shadow(0 0 7px rgba(56,189,248,0.32)); }
       50%      { filter: drop-shadow(0 0 27px rgba(125,211,252,0.84)) drop-shadow(0 0 12px rgba(34,211,238,0.5)); }
     }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite, __sb_mascot_pace__ 18s ease-in-out infinite; }
+    /* Bar glow when listening */
+    @keyframes __sb_bar_glow__ {
+      0%,100% { box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
+                  inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3); }
+      50%     { box-shadow: 0 0 0 3px rgba(232,120,110,0.5), 0 0 44px rgba(232,120,110,0.32),
+                  0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65),
+                  inset -1px -1px 1px rgba(255,255,255,0.3); }
+    }
+    #__sb_bar__.hp-listening { animation: __sb_bar_glow__ 1.8s ease-in-out infinite; }
+    /* Cinematic wakeup state — brain centered, bar transparent */
+    #__sb_bar__.sb-cinematic {
+      background: transparent; border-color: transparent; box-shadow: none;
+    }
+    #__sb_bar__.sb-cinematic::before { display: none; }
+    #__sb_bar__.sb-cinematic #__sb_input__,
+    #__sb_bar__.sb-cinematic #__sb_mode_btn__,
+    #__sb_bar__.sb-cinematic #__sb_rec_btn__,
+    #__sb_bar__.sb-cinematic #__sb_send_btn__,
+    #__sb_bar__.sb-cinematic #__sb_x_auto_btn__,
+    #__sb_bar__.sb-cinematic #__sb_wakeup__ { display: none !important; }
+    #__sb_bar__.sb-cinematic #__sb_brain_btn__ {
+      left: 50%; transform: translateX(-50%); animation: none;
+    }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -4448,8 +4483,13 @@ function __sbBuildBrainUI() {
 
   const root = document.createElement("div");
   root.id = "__sb_root__";
-  root.innerHTML = `
-    <div id="__sb_bar__">
+  (document.documentElement||document.body).appendChild(root);
+
+  // Cinema dock bar — body-level so it can span full width independently
+  const __sbDockBar = document.createElement("div");
+  __sbDockBar.id = "__sb_bar__";
+  __sbDockBar.innerHTML = `
+      <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
       <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
@@ -4473,17 +4513,15 @@ function __sbBuildBrainUI() {
         <span id="__sb_signin_cta_hint__">Sign in to start chatting</span>
         <button id="__sb_signin_btn_cta__">Sign in →</button>
       </div>
-    </div>
-    <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
-  document.body.appendChild(root);
+  (document.documentElement||document.body).appendChild(__sbDockBar);
 
   // ── Liquid glass SVG displacement filter ──
   const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   __sbGlassSvg.id = "__sb_glass_svg__";
   __sbGlassSvg.setAttribute("style", "display:none;position:fixed;pointer-events:none");
   __sbGlassSvg.innerHTML = `<filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter>`;
-  document.body.appendChild(__sbGlassSvg);
+  (document.documentElement||document.body).appendChild(__sbGlassSvg);
 
   if (__sbCursorRideMode) {
     __sbPositionRootNearCursor(true);
@@ -4494,7 +4532,7 @@ function __sbBuildBrainUI() {
 
   const movieBackdrop = document.createElement("div");
   movieBackdrop.id = "__sb_movie_backdrop__";
-  document.body.appendChild(movieBackdrop);
+  (document.documentElement||document.body).appendChild(movieBackdrop);
 
   // ── Card wrapper ──
   const cardWrap = document.createElement("div");
@@ -4507,6 +4545,7 @@ function __sbBuildBrainUI() {
         <button class="sb-card-header-btn" type="button" data-sb-copy>Copy</button>
         <button class="sb-card-header-btn" id="__sb_stop_btn__" type="button" data-sb-stop style="display:none;background:#fee2e2;color:#C9544A;">⏹ Stop</button>
         <button class="sb-card-header-btn" id="__sb_theme_toggle_btn__" type="button" title="Toggle readable mode" style="padding:0 8px;font-size:13px;">◑</button>
+        <button class="sb-card-header-btn" id="__sb_newtab_btn__" type="button" title="Open current page in new tab" style="padding:0 8px;font-size:12px;">↗ New tab</button>
         <button class="sb-card-header-btn" type="button" data-sb-close>×</button>
       </div>
       <div class="sb-card-scroll"></div>
@@ -4534,12 +4573,12 @@ function __sbBuildBrainUI() {
       </div>
     </div>
   `;
-  document.body.appendChild(cardWrap);
+  (document.documentElement||document.body).appendChild(cardWrap);
 
   // ── Voice Error Pill ──
   const errPill = document.createElement("div");
   errPill.id = "__sb_voice_error_pill__";
-  document.body.appendChild(errPill);
+  (document.documentElement||document.body).appendChild(errPill);
 
   // ── Dropdowns (body-level to avoid stacking context issues) ──
   const modeDd = document.createElement("div");
@@ -4553,7 +4592,7 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(modeDd);
+  (document.documentElement||document.body).appendChild(modeDd);
 
   const connectorDd = document.createElement("div");
   connectorDd.id = "__sb_connector_dropdown__";
@@ -4565,12 +4604,12 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-connector="google-calendar"><span class="sb-di-icon">📅</span><span class="sb-di-label">Google Calendar</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-connector="gmail"><span class="sb-di-icon">✉</span><span class="sb-di-label">Gmail</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(connectorDd);
+  (document.documentElement||document.body).appendChild(connectorDd);
 
   const connectorSlashDd = document.createElement("div");
   connectorSlashDd.id = "__sb_connector_slash_dropdown__";
   connectorSlashDd.className = "sb-dropdown";
-  document.body.appendChild(connectorSlashDd);
+  (document.documentElement||document.body).appendChild(connectorSlashDd);
 
   const modelDd = document.createElement("div");
   modelDd.id = "__sb_model_dropdown__";
@@ -4580,7 +4619,7 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item selected" data-model="lovable"><span class="sb-di-icon">🧠</span><span class="sb-di-label">Braino AI</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(modelDd);
+  (document.documentElement||document.body).appendChild(modelDd);
 
   __sbSyncFullscreenUiMount();
   if (!__sbFullscreenUiListenerBound) {
@@ -4689,14 +4728,9 @@ function __sbBuildBrainUI() {
     }
 
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "i") {
-      // Only block if typing inside the extension's own inputs — not page inputs
-      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__")) return;
+      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return;
       e.preventDefault();
-      if (__sbCursorRideMode) {
-        __sbOpenAnchoredBrain();
-      } else {
-        __sbToggleBrain();
-      }
+      __sbToggleBrain();
     }
   }, true);
 
@@ -4720,6 +4754,9 @@ function __sbBuildBrainUI() {
   // Card header buttons (wired once, not per-show)
   const bubble = document.getElementById("__sb_bubble__");
   bubble.querySelector("[data-sb-close]").addEventListener("click", () => __sbCollapseCard());
+  document.getElementById("__sb_newtab_btn__").addEventListener("click", () => {
+    chrome.runtime.sendMessage({ action: "openTab", url: window.location.href, active: true }, () => { void chrome.runtime.lastError; });
+  });
   document.getElementById("__sb_stop_btn__").addEventListener("click", () => {
     if (__sbXRunning) {
       __sbXRunning = false;
@@ -5127,7 +5164,7 @@ function __sbSetCursorRideMode(enabled) {
 function __sbHasExternalEditableFocus() {
   const active = document.activeElement;
   if (!(active instanceof Element)) return false;
-  if (active.closest("#__sb_root__, #__sb_card_wrap__")) return false;
+  if (active.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return false;
   const tag = active.tagName.toLowerCase();
   return (
     tag === "input" ||
@@ -6104,7 +6141,7 @@ function __sbToggleInput(open, options = {}) {
     const brainBtn = document.getElementById("__sb_brain_btn__");
 
     const __sbOpenBarReady = () => {
-      bar.classList.remove("sb-signin", "sb-waking");
+      bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
       bar.classList.add("open");
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
@@ -6137,7 +6174,8 @@ function __sbToggleInput(open, options = {}) {
       // First-ever open: cinematic wakeup
       chrome.storage.local.set({ sbHasAwoken: true });
 
-      // Phase 1 (0–1200ms): sleeping, silent
+      // Phase 1 (0–1200ms): show brain centered at bottom middle, bar transparent
+      bar.classList.add("open", "sb-cinematic");
       if (brainBtn) {
         brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
         brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
@@ -6164,6 +6202,7 @@ function __sbToggleInput(open, options = {}) {
             __sbPlayReaction('happy', 1800);
             setTimeout(() => {
               if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
+              bar.classList.remove("sb-cinematic");
               __sbOpenBarReady();
             }, 1100);
           }, wait);
@@ -6177,6 +6216,7 @@ function __sbToggleInput(open, options = {}) {
           __sbPlayReaction('scared', 2200);
           setTimeout(() => {
             if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
+            bar.classList.remove("sb-cinematic");
             bar.classList.add("open", "sb-signin");
                   if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
             __sbSetupBarSignIn();
@@ -6195,7 +6235,7 @@ function __sbToggleInput(open, options = {}) {
     __sbInputOpen = false;
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
     const bar = document.getElementById("__sb_bar__");
-    bar?.classList.remove("open", "sb-waking", "sb-signin");
+    bar?.classList.remove("open", "sb-waking", "sb-signin", "sb-cinematic");
     __sbScheduleCursorFollow();
   }
 }
@@ -6907,7 +6947,7 @@ function __sbMovieModeDescriptor(el) {
 
 function __sbMovieModeElementVisible(el) {
   if (!el || !(el instanceof Element)) return false;
-  if (el.closest("#__sb_root__, #__sb_card_wrap__")) return false;
+  if (el.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return false;
   const rect = el.getBoundingClientRect();
   if (rect.width < 180 || rect.height < 100) return false;
   if (rect.bottom < 18 || rect.right < 18) return false;
@@ -7129,7 +7169,7 @@ function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
     for (const el of candidates) {
       if (!(el instanceof Element) || seenEls.has(el)) continue;
       seenEls.add(el);
-      if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__")) continue;
+      if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) continue;
       const rect = el.getBoundingClientRect();
       if (rect.height < 4 || rect.height > 240) continue;
       if (frameRect) {
@@ -9402,7 +9442,7 @@ async function __sbProcessPrompt(text, options = {}) {
       chrome.runtime.sendMessage({
         action: "openTab",
         url: "https://www.google.com/search?q=" + encodeURIComponent(searchQuery),
-        active: true,
+        active: false,
       }, () => { void chrome.runtime.lastError; });
     }
     if (!voiceOnly) {
@@ -11949,7 +11989,9 @@ function __sbSetHpBrainState(state) {
   const brain = document.getElementById("__sb_brain_btn__");
   if (!brain) return;
   brain.classList.remove("hp-connecting", "hp-listening", "hp-captured", "hp-speaking", "recording");
+  document.getElementById("__sb_bar__")?.classList.remove("hp-listening");
   if (state) brain.classList.add(`hp-${state}`);
+  if (state === "listening") document.getElementById("__sb_bar__")?.classList.add("hp-listening");
 }
 
 function __sbSetVoiceStatusBadge(state, label) {
@@ -12119,6 +12161,7 @@ function __sbHandleVoiceEvent(msg) {
     }
   }
 }
+
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => __sbBuildBrainUI(), { once: true });
