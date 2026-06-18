@@ -2498,6 +2498,136 @@ const __SB_BRAIN_SVG_SCHOLAR = __SB_BRAIN_SVG
     '</svg>'
   );
 
+// ── Walking brain (v2 design: legs + shoes + gloves, from braino-char.jsx) ──
+const __SB_WALK_BODY = "M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 68 80.5 60 79.5 50 79 C 40 79.5 32 80.5 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z";
+const __SB_LEG_SHOE = `<path d="M 45 74 L 42.5 87" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/><path d="M 45 74 L 42.5 87" fill="none" stroke="url(#sbb-fill)" stroke-width="5.5" stroke-linecap="round"/><path d="M 47.5 89 C 47.5 87 44.5 86.4 42 87.4 C 36 89.2 29.6 90.6 25.2 94.2 C 22.2 96.7 21.8 99.4 25 100.8 C 27 101.6 31 101.6 35 101.6 L 45.6 101.6 C 47.1 101.6 47.8 100.6 47.5 99.1 Z" fill="white" stroke="rgba(176,86,78,.42)" stroke-width="0.9" stroke-linejoin="round"/><path d="M 23 98.6 Q 21.2 101.2 25.6 101.5 L 45.6 101.5 Q 47.8 101.3 47.4 98.9 Q 34.5 100.1 23 98.6 Z" fill="#F6E2DC" stroke="rgba(176,86,78,.42)" stroke-width="0.8" stroke-linejoin="round"/><g fill="none" stroke="#C9544A" stroke-width="0.85" stroke-linecap="round" opacity="0.7"><path d="M 29.5 90 Q 36 88.5 43 89.2"/><path d="M 32 92.7 Q 37.5 91.7 43 92.2" opacity="0.6"/></g><ellipse cx="30" cy="92.4" rx="3" ry="1.4" fill="#fff" opacity="0.6" transform="rotate(-12 30 92.4)"/>`;
+// viewBox -8 -34 116 142 matches braino-char.jsx legs viewBox; width=52 height=64 (proportional)
+const __SB_BRAIN_SVG_WALKING = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="52" height="64" overflow="visible" style="display:block"><g id="__sb_walk_outer__"><g id="__sb_leg_l__">${__SB_LEG_SHOE}</g><g id="__sb_leg_r__"><g transform="translate(100,0) scale(-1,1)">${__SB_LEG_SHOE}</g></g><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><path d="${__SB_WALK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><g fill="white"><circle cx="5" cy="-1.4" r="3"/><circle cx="0" cy="0.6" r="7"/></g><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><g fill="white"><circle cx="-5" cy="-1.4" r="3"/><circle cx="0" cy="0.6" r="7"/></g><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g><path d="${__SB_WALK_BODY}" fill="url(#sbb-fill)"/><path d="${__SB_WALK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="__sb_weye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="__sb_weye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sb_wmouth__"><path id="__sb_wmouth_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sb_wmouth_talk__" style="display:none"><ellipse id="__sb_wtalk_e__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sb_wtalk_inner__" cx="50" cy="62.5" rx="2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`;
+
+// ── Walk loop ──────────────────────────────────────────────────────────────────
+let __sbWalkLoopRaf = null;
+let __sbWalkLoopStart = null;
+let __sbWalkLoopLast = null;
+let __sbWalkTalking = false;
+let __sbWalkLastTransX = 0;
+let __sbWalkFaceDir = 1;
+
+function __sbStartWalkLoop() {
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (!btn) return;
+  if (__sbWalkLoopRaf) cancelAnimationFrame(__sbWalkLoopRaf);
+  btn.innerHTML = __SB_BRAIN_SVG_WALKING;
+  btn.style.height = "64px";
+  __sbWalkLoopStart = __sbWalkLoopLast = performance.now();
+  __sbWalkFaceDir = 1; __sbWalkLastTransX = 0;
+  __sbWalkLoopRaf = requestAnimationFrame(__sbWalkLoopTick);
+}
+
+function __sbStopWalkLoop() {
+  if (__sbWalkLoopRaf) { cancelAnimationFrame(__sbWalkLoopRaf); __sbWalkLoopRaf = null; }
+  __sbWalkTalking = false;
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.height = "";
+}
+
+function __sbRestoreWalkBrain() {
+  if (!__sbInputOpen) return;
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (!btn) return;
+  btn.innerHTML = __SB_BRAIN_SVG_WALKING;
+  btn.style.height = "64px";
+  if (!__sbWalkLoopRaf) {
+    if (!__sbWalkLoopStart) __sbWalkLoopStart = performance.now();
+    __sbWalkLoopLast = performance.now();
+    __sbWalkLoopRaf = requestAnimationFrame(__sbWalkLoopTick);
+  }
+}
+
+function __sbWalkLoopTick(now) {
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (!btn) { __sbWalkLoopRaf = null; return; }
+  const outer = btn.querySelector("#__sb_walk_outer__");
+  if (!outer) { __sbWalkLoopRaf = null; return; } // SVG replaced — auto-stop
+
+  const dt = Math.min(0.05, (now - __sbWalkLoopLast) / 1000);
+  __sbWalkLoopLast = now;
+  const t = (now - __sbWalkLoopStart) / 1000;
+
+  // Detect horizontal walk direction from CSS-animated translate property
+  const tsStr = window.getComputedStyle(btn).getPropertyValue('translate');
+  const curX = (tsStr && tsStr !== 'none') ? (parseFloat(tsStr) || 0) : 0;
+  if (Math.abs(curX - __sbWalkLastTransX) > 0.5) {
+    __sbWalkFaceDir = curX > __sbWalkLastTransX ? 1 : -1;
+    __sbWalkLastTransX = curX;
+  }
+
+  // Walk cycle (matches braino-char.jsx: phase s = t * 7.6)
+  const s = t * 7.6;
+  const Lp = Math.sin(s), Rp = Math.sin(s + Math.PI);
+  const leftLift   = Math.max(0, Lp) * 5;
+  const rightLift  = Math.max(0, Rp) * 5;
+  const leftSwing  = Math.max(0, Lp) * 8;
+  const rightSwing = Math.max(0, Rp) * 8;
+  const waddle  = Math.sin(s) * 3.4;
+  const walkBob = -Math.abs(Math.sin(s)) * 2 - 0.4;
+
+  // Idle breathing + bob
+  const breath = 1 + 0.014 * Math.sin(t * 1.7);
+  const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+
+  // Auto blink every ~3.4s
+  const bp = t % 3.4;
+  const autoBlink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
+  const eyeSy = Math.max(0.06, 1 - autoBlink);
+
+  // Direction flip — applied first (outermost transform)
+  const flipTx = __sbWalkFaceDir === -1 ? "translate(100,0) scale(-1,1) " : "";
+  outer.setAttribute("transform",
+    `${flipTx}rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+
+  // Legs
+  const legL = outer.querySelector("#__sb_leg_l__");
+  const legR = outer.querySelector("#__sb_leg_r__");
+  if (legL) legL.setAttribute("transform", `translate(0 ${-leftLift}) rotate(${leftSwing} 44 74)`);
+  if (legR) legR.setAttribute("transform", `translate(0 ${-rightLift}) rotate(${rightSwing} 56 74)`);
+
+  // Blink (scale eye vertically around its centre)
+  const eyeL = outer.querySelector("#__sb_weye_l__");
+  const eyeR = outer.querySelector("#__sb_weye_r__");
+  if (eyeL) eyeL.setAttribute("transform", `translate(38,48) scale(1,${eyeSy}) translate(-38,-48)`);
+  if (eyeR) eyeR.setAttribute("transform", `translate(62,48) scale(1,${eyeSy}) translate(-62,-48)`);
+
+  // Talking mouth (layered sines from braino-char.jsx TalkingMouth)
+  const mSmile = outer.querySelector("#__sb_wmouth_smile__");
+  const mTalk  = outer.querySelector("#__sb_wmouth_talk__");
+  const tE     = outer.querySelector("#__sb_wtalk_e__");
+  const tI     = outer.querySelector("#__sb_wtalk_inner__");
+  if (__sbWalkTalking) {
+    const o = Math.max(0, Math.min(1,
+      (0.5 + 0.5 * Math.sin(t * 13.5)) *
+      (0.55 + 0.45 * Math.sin(t * 7.7 + 1.3)) *
+      (0.7 + 0.3 * Math.sin(t * 23))
+    ));
+    const ry = 1.4 + o * 4.2, rx = 4 - o * 0.5;
+    if (mSmile) mSmile.setAttribute("display", "none");
+    if (mTalk)  mTalk.setAttribute("display", "inline");
+    if (tE)     { tE.setAttribute("rx", rx); tE.setAttribute("ry", ry); }
+    if (tI) {
+      if (o > 0.25) {
+        tI.setAttribute("display", "inline");
+        tI.setAttribute("cy", String(61.8 + ry * 0.4));
+        tI.setAttribute("rx", String(rx * 0.62));
+        tI.setAttribute("ry", String(ry * 0.5));
+      } else { tI.setAttribute("display", "none"); }
+    }
+  } else {
+    if (mSmile) mSmile.setAttribute("display", "inline");
+    if (mTalk)  mTalk.setAttribute("display", "none");
+  }
+
+  __sbWalkLoopRaf = requestAnimationFrame(__sbWalkLoopTick);
+}
+
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
@@ -6163,6 +6293,8 @@ function __sbToggleInput(open, options = {}) {
           b.classList.toggle("selected", b.dataset.model === model));
       });
       if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+      // Start walk cycle — legs + body animation from braino-char.jsx design
+      __sbStartWalkLoop();
     };
 
     chrome.storage.local.get("sbHasAwoken", ({ sbHasAwoken }) => {
@@ -6255,6 +6387,7 @@ function __sbToggleInput(open, options = {}) {
     });
   } else {
     __sbInputOpen = false;
+    __sbStopWalkLoop();
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
     const bar = document.getElementById("__sb_bar__");
     bar?.classList.remove("open", "sb-waking", "sb-signin", "sb-cinematic");
@@ -6679,6 +6812,7 @@ function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
     const utterance = new SpeechSynthesisUtterance(text);
     __sbCurrentUtterance = utterance;
     __sbIsSpeaking = true;
+    __sbWalkTalking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
     if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
@@ -6687,6 +6821,7 @@ function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
       if (speechToken === __sbSpeechGeneration) {
         if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
         __sbIsSpeaking = false;
+        __sbWalkTalking = false;
         __sbSetVoiceButtonState(__sbIsRecording);
         __sbSyncSpeakButtons();
       }
@@ -6824,6 +6959,7 @@ async function __sbSpeakText(text, options = {}) {
     __sbCurrentSpeechAudio = audio;
     __sbCurrentSpeechUrl = url;
     __sbIsSpeaking = true;
+    __sbWalkTalking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
     if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
@@ -6834,6 +6970,7 @@ async function __sbSpeakText(text, options = {}) {
       audio.play().catch(reject);
     });
     spoke = speechToken === __sbSpeechGeneration;
+    __sbWalkTalking = false;
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
     __sbRecordRealtimeCostTts({
@@ -7427,8 +7564,8 @@ function __sbSyncMovieModeVisualState() {
   const brain = document.getElementById("__sb_brain_btn__");
   brain?.classList.toggle("sb-brain-movie", __sbMovieModeActive);
   if (brain && !brain.classList.contains("recording")) {
-    if (__sbMovieModeActive) brain.innerHTML = __SB_BRAIN_SVG_LISTENING;
-    else if (brain.innerHTML === __SB_BRAIN_SVG_LISTENING) brain.innerHTML = __SB_BRAIN_SVG;
+    if (__sbMovieModeActive) { __sbStopWalkLoop(); brain.innerHTML = __SB_BRAIN_SVG_LISTENING; }
+    else if (brain.querySelector && brain.querySelector("#__sb_walk_outer__") === null) __sbRestoreWalkBrain();
   }
   if (__sbMovieModeActive) {
     document.documentElement.classList.add("__sb_movie_mode_active__");
@@ -7619,9 +7756,11 @@ function __sbPlayReaction(emotion, durationMs = 2600) {
   // Cancel any pending auto-revert from a previous reaction
   if (__sbReactionTimer) { clearTimeout(__sbReactionTimer); __sbReactionTimer = null; }
 
-  // Swap the mascot SVG to the emotion variant
+  // Swap the mascot SVG to the emotion variant (temporarily pauses walk loop)
   const svg = __SB_REACTION_SVGS[emotion];
   if (svg) {
+    __sbStopWalkLoop();
+    brainBtn.style.height = "";
     brainBtn.innerHTML = svg;
     brainBtn.classList.remove("sb-brain-idle", "sb-emotion-active");
     void brainBtn.offsetWidth; // force reflow so the animation restarts
@@ -7652,7 +7791,7 @@ function __sbPlayReaction(emotion, durationMs = 2600) {
     __sbReactionTimer = setTimeout(() => {
       __sbReactionTimer = null;
       const btn = document.getElementById("__sb_brain_btn__");
-      if (btn && !__sbIsLectureRecording) btn.innerHTML = __SB_BRAIN_SVG;
+      if (btn && !__sbIsLectureRecording) __sbRestoreWalkBrain();
       __sbSyncIdleState();
     }, durationMs);
   }
@@ -9888,6 +10027,7 @@ async function __sbStartLectureRecording(options = {}) {
 
   const brainBtn = document.getElementById("__sb_brain_btn__");
   if (brainBtn) {
+    __sbStopWalkLoop();
     brainBtn.classList.add("recording");
     brainBtn.innerHTML = __sbLectureRecordingMode === "lecture" ? __SB_BRAIN_SVG_SCHOLAR : __SB_BRAIN_SVG_LISTENING;
   }
@@ -9956,7 +10096,7 @@ async function __sbCaptureLectureSegment() {
 async function __sbStopLectureRecording() {
   if (__sbLectureInterval) { clearInterval(__sbLectureInterval); __sbLectureInterval = null; }
   const brainBtnStop = document.getElementById("__sb_brain_btn__");
-  if (brainBtnStop) { brainBtnStop.classList.remove("recording"); brainBtnStop.innerHTML = __SB_BRAIN_SVG; }
+  if (brainBtnStop) { brainBtnStop.classList.remove("recording"); __sbRestoreWalkBrain(); }
   __sbShowLectureRecordingBar(false);
   __sbIsLectureRecording = false;
 
