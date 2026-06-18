@@ -2299,7 +2299,7 @@ __sbRefreshInlineOwner();
 
 // Re-inject brain UI if SPA navigation (Pinterest, YouTube, etc.) removes the root
 new MutationObserver(() => {
-  if ((!document.getElementById("__sb_root__") || !document.getElementById("__sb_bar__")) && __sbBrainVisible && __sbOwnsInlineUi()) {
+  if (!document.getElementById("__sb_root__") && __sbBrainVisible && __sbOwnsInlineUi()) {
     __sbBuildBrainUI();
   }
 }).observe(document.body || document.documentElement, { childList: true, subtree: false });
@@ -2477,29 +2477,26 @@ const __SB_BRAIN_SVG_SCARED = __SB_BRAIN_SVG
   )
   .replace('</svg>', '<path d="M 32 41.5 Q 37 40 43 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/><path d="M 68 41.5 Q 63 40 57 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/><path d="M 81 28 C 84 32 84 35 81 36 C 78 35 78 32 81 28 Z" fill="#CFEFFF"/></svg>');
 
-// Scholar: focus expression + mortarboard cap + square glasses
+// Scholar: round glasses, no cap, pupils looking toward center of screen (up-left)
 const __SB_BRAIN_SVG_SCHOLAR = __SB_BRAIN_SVG
-  .replace(
-    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g>',
-    '<g id="sbb-eye-l" style="transform-origin:38px 48px"><ellipse cx="38" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
-  )
-  .replace(
-    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g>',
-    '<g id="sbb-eye-r" style="transform-origin:62px 48px"><ellipse cx="62" cy="48.5" rx="6.4" ry="3.7" fill="white"/></g>'
-  )
+  // Pupils look toward center of screen — same shift as LISTENING
   .replace(
     '<g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>',
-    '<g id="sbb-pupil-l"><circle cx="38" cy="48.5" r="3" fill="#1B1713"/><circle cx="39" cy="47.5" r="0.8" fill="white"/></g>'
+    '<g id="sbb-pupil-l"><circle cx="36.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="37.2" cy="45.1" r="1.1" fill="white"/></g>'
   )
   .replace(
     '<g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>',
-    '<g id="sbb-pupil-r"><circle cx="62" cy="48.5" r="3" fill="#1B1713"/><circle cx="63" cy="47.5" r="0.8" fill="white"/></g>'
+    '<g id="sbb-pupil-r"><circle cx="60.2" cy="46.5" r="3.2" fill="#1B1713"/><circle cx="61.2" cy="45.1" r="1.1" fill="white"/></g>'
   )
-  .replace(
-    '<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
-    '<path d="M 45.5 62 Q 50 63.2 54.5 62" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/>'
-  )
-  .replace('</svg>', `<rect x="31" y="42" width="14" height="12" rx="2.5" fill="none" stroke="#2A1F1A" stroke-width="1.8" opacity="0.88"/><rect x="55" y="42" width="14" height="12" rx="2.5" fill="none" stroke="#2A1F1A" stroke-width="1.8" opacity="0.88"/><path d="M 45 48 Q 50 46 55 48" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><path d="M 31 48 Q 27 47 24 51" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><path d="M 69 48 Q 73 47 76 51" fill="none" stroke="#2A1F1A" stroke-width="1.4" stroke-linecap="round" opacity="0.88"/><ellipse cx="50" cy="5.5" rx="22" ry="5.5" fill="#1A1210"/><rect x="38.5" y="1.5" width="23" height="7" fill="#1A1210"/><ellipse cx="50" cy="2" rx="10" ry="3.2" fill="#2E2420"/><line x1="61" y1="2" x2="65" y2="14" stroke="#C9544A" stroke-width="1.6" stroke-linecap="round"/><circle cx="65.5" cy="15" r="2.2" fill="#C9544A"/></svg>`);
+  // Round glasses overlaid last so they sit on top of everything
+  .replace('</svg>',
+    '<circle cx="38" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.9"/>' +
+    '<circle cx="62" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.9"/>' +
+    '<path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.9"/>' +
+    '<path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.9"/>' +
+    '<path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.9"/>' +
+    '</svg>'
+  );
 
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
@@ -2781,7 +2778,7 @@ if (__sbContextOk()) {
 
 function __sbBuildBrainUI() {
   if (!__sbOwnsInlineUi()) return;
-  if (document.getElementById("__sb_root__") && document.getElementById("__sb_bar__")) return;
+  if (document.getElementById("__sb_root__")) return;
 
   const style = document.createElement("style");
   style.id = "__sb_styles__";
@@ -2790,7 +2787,7 @@ function __sbBuildBrainUI() {
       position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
       display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      pointer-events: none; width: 52px;
+      pointer-events: none;
     }
     #__sb_brain_btn__ {
       width: 52px; height: 52px; cursor: pointer; pointer-events: all;
@@ -3296,12 +3293,41 @@ function __sbBuildBrainUI() {
     .sb-notion-btn:disabled { opacity: 0.55; cursor: default; }
 
     /* ── Lecture Mode UI ── */
-    .sb-lec-ready { display:flex; flex-direction:column; align-items:center; gap:14px; padding:22px 16px 18px; text-align:center; }
-    .sb-lec-kicker { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:#A79B92; }
-    .sb-lec-ready-title { font-size:17px; font-weight:600; color:#1B1713; line-height:1.3; }
-    .sb-lec-ready-sub { font-size:12.5px; color:#8A7B73; line-height:1.5; max-width:200px; }
-    .sb-lec-start-btn { width:100%; padding:12px; border:none; border-radius:20px; background:#E8786E; color:white; font-size:13.5px; font-weight:600; cursor:pointer; transition:background 0.15s; letter-spacing:0.01em; }
-    .sb-lec-start-btn:hover { background:#C9544A; }
+    /* .sb-lec-ready kept for __sbShowLectureResultMessage which still uses it */
+    .sb-lec-ready { display:flex; flex-direction:column; align-items:center; gap:12px; padding:22px 16px 18px; text-align:center; }
+    .sb-lec-kicker { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--sb-fg-3); }
+    .sb-lec-ready-title { font-size:17px; font-weight:600; color:var(--sb-fg); line-height:1.3; }
+    .sb-lec-ready-sub { font-size:12.5px; color:var(--sb-fg-2); line-height:1.5; max-width:220px; }
+
+    /* ── Ready-to-Record redesign — Braino Ready-to-Record.html Outcome variant ── */
+    .sb-ready-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; padding:18px 18px 14px; text-align:center; }
+    .sb-ready-mascot { position:relative; display:flex; align-items:center; justify-content:center; width:72px; height:72px; flex-shrink:0; margin-bottom:2px; }
+    .sb-ready-mascot-halo { position:absolute; inset:-20px; border-radius:50%; background:radial-gradient(circle, rgba(232,120,110,0.38) 0%, rgba(243,154,66,0.16) 45%, transparent 68%); filter:blur(5px); animation:sbReadyHalo 4.2s ease-in-out infinite; pointer-events:none; }
+    @keyframes sbReadyHalo { 0%,100%{transform:scale(1);opacity:0.85;} 50%{transform:scale(1.1);opacity:1;} }
+    .sb-ready-mascot-ring { position:absolute; border-radius:50%; border:1.5px solid rgba(232,120,110,0.45); opacity:0; }
+    .sb-ready-mascot-ring-1 { inset:4px; animation:sbReadyRipple 3.6s ease-out infinite; }
+    .sb-ready-mascot-ring-2 { inset:4px; animation:sbReadyRipple 3.6s ease-out infinite 1.8s; }
+    @keyframes sbReadyRipple { 0%{inset:18px;opacity:0.4;} 100%{inset:-28px;opacity:0;} }
+    .sb-ready-eyebrow { font-size:10px; font-weight:600; letter-spacing:0.17em; text-transform:uppercase; color:var(--sb-fg-3); display:inline-flex; align-items:center; gap:7px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace; }
+    .sb-ready-headline { font-size:28px; font-weight:400; line-height:1.05; letter-spacing:-0.01em; color:var(--sb-fg); margin:2px 0 0; font-family:'Instrument Serif',Georgia,serif; }
+    .sb-ready-copy { font-size:12.5px; line-height:1.55; color:var(--sb-fg-2); margin:0; max-width:28ch; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .sb-ready-preview { width:100%; border:1px solid var(--sb-q-border); border-radius:14px; background:var(--sb-q-bg); padding:11px 13px 13px; text-align:left; box-shadow:0 1px 0 rgba(255,255,255,0.1) inset; }
+    .sb-ready-preview-label { font-size:9.5px; font-weight:600; letter-spacing:0.13em; text-transform:uppercase; color:var(--sb-fg-3); display:flex; align-items:center; gap:6px; margin-bottom:9px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace; }
+    .sb-ready-preview-label::before { content:""; width:6px; height:6px; border-radius:50%; flex-shrink:0; background:#E8786E; animation:sbReadyPulse 1.8s ease-out infinite; }
+    @keyframes sbReadyPulse { 0%{box-shadow:0 0 0 0 rgba(232,120,110,0.55);} 70%{box-shadow:0 0 0 5px rgba(232,120,110,0);} 100%{box-shadow:0 0 0 0 rgba(232,120,110,0);} }
+    .sb-ready-chips { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
+    .sb-ready-chip { font-size:11px; font-weight:500; color:var(--sb-link); background:rgba(232,120,110,0.14); border:1px solid rgba(232,120,110,0.24); padding:4px 9px; border-radius:7px; white-space:nowrap; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .sb-ready-lines { display:flex; flex-direction:column; gap:7px; }
+    .sb-ready-line { height:5px; border-radius:3px; background:var(--sb-fg-3); opacity:0.45; }
+    .sb-ready-btn { width:100%; height:52px; border:none; cursor:pointer; border-radius:14px; overflow:hidden; position:relative; background:linear-gradient(168deg,#F09A91 0%,#E8786E 44%,#CF5A50 100%); box-shadow:0 1px 0 rgba(255,255,255,0.5) inset,0 -2px 5px rgba(140,47,40,0.28) inset,0 12px 28px -10px rgba(201,84,74,0.62),0 2px 8px -2px rgba(201,84,74,0.32); display:flex; align-items:center; justify-content:center; gap:9px; color:white; font-size:15.5px; font-weight:600; letter-spacing:-0.01em; text-shadow:0 1px 1px rgba(140,47,40,0.28); transition:transform 0.15s ease,filter 0.15s ease; flex-shrink:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .sb-ready-btn:hover { transform:translateY(-1px); filter:brightness(1.04); }
+    .sb-ready-btn:active { transform:translateY(0) scale(0.994); }
+    .sb-ready-btn-glow { position:absolute; inset:0; pointer-events:none; background:radial-gradient(70% 130% at 30% -20%,rgba(255,255,255,0.52),transparent 60%); opacity:0.55; }
+    .sb-ready-mascot svg { animation:sbReadyFloat 3.5s ease-in-out infinite; }
+    @keyframes sbReadyFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    .sb-ready-mascot #sbb-eye-l { animation:sbReadyBlink 4s ease-in-out infinite; }
+    .sb-ready-mascot #sbb-eye-r { animation:sbReadyBlink 4s ease-in-out infinite 0.06s; }
+    @keyframes sbReadyBlink { 0%,88%,100%{transform:scaleY(1)} 92%{transform:scaleY(0.08)} }
     .sb-lec-rec { display:flex; flex-direction:column; align-items:center; gap:10px; padding:20px 16px 14px; }
     .sb-lec-rec-header { display:flex; align-items:center; gap:6px; }
     .sb-lec-rec-dot { width:7px; height:7px; border-radius:50%; background:#E8786E; animation:sbLecPulse 1.4s ease-in-out infinite; flex-shrink:0; }
@@ -3356,7 +3382,7 @@ function __sbBuildBrainUI() {
     .sb-meeting-followup-btn:disabled { opacity:0.5; cursor:default; }
     .sb-meeting-followup-status { min-height:15px; margin-top:8px; font-size:11.5px; color:#8A7B73; line-height:1.45; }
 
-    /* ── Cinema Dock: full-width centered bar at screen bottom ── */
+    /* ── Cinema Dock: full-width centered dock bar ── */
     #__sb_bar__ {
       position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%) translateY(24px) scale(0.97);
@@ -3368,11 +3394,12 @@ function __sbBuildBrainUI() {
       box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
                   inset -1px -1px 1px rgba(255,255,255,0.3);
-      width: min(860px, calc(100vw - 48px));
+      width: calc(100vw - 48px); max-width: 1100px;
       backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
       pointer-events: none; opacity: 0;
       z-index: 2147483647;
-      transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1);
+      transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1),
+                  background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
     }
     #__sb_bar__::before {
       content: ""; position: absolute; inset: 0; border-radius: inherit;
@@ -3382,6 +3409,26 @@ function __sbBuildBrainUI() {
       z-index: -1; pointer-events: none;
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0) scale(1); }
+    /* ── Readable mode: opaque warm cream, dark text — always legible ── */
+    #__sb_bar__.sb-readable {
+      background: rgba(255,251,247,0.96);
+      border: 1px solid rgba(65,48,40,0.12);
+      box-shadow: 0 8px 28px rgba(27,23,19,0.14), 0 2px 8px rgba(27,23,19,0.07),
+                  inset 0 1px 0 rgba(255,255,255,0.9);
+      backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+    }
+    #__sb_bar__.sb-readable::before { backdrop-filter: none; -webkit-backdrop-filter: none; filter: none; }
+    #__sb_bar__.sb-readable #__sb_input__ { color: #1B1713; }
+    #__sb_bar__.sb-readable #__sb_input__::placeholder { color: #A79B92; }
+    #__sb_bar__.sb-readable #__sb_mode_btn__ { color: #413028; background: rgba(65,48,40,0.07); border-color: rgba(65,48,40,0.18); }
+    #__sb_bar__.sb-readable #__sb_mode_btn__:hover { background: rgba(65,48,40,0.12); }
+    #__sb_bar__.sb-readable .sb-bar-icon-btn { color: #6B5248; }
+    #__sb_bar__.sb-readable .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); color: #1B1713; }
+    #__sb_bar__.sb-readable .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_bar__.sb-readable #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
+    #__sb_bar__.sb-readable #__sb_wakeup_label__,
+    #__sb_bar__.sb-readable #__sb_signin_cta_hint__ { color: #A79B92; }
+    #__sb_bar__.sb-readable #__sb_wakeup_track__ { background: rgba(65,48,40,0.12); }
     /* ── Wake-up state ── */
     #__sb_wakeup__ {
       display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
@@ -3443,7 +3490,7 @@ function __sbBuildBrainUI() {
     }
     #__sb_input__::placeholder { color: #A79B92; }
     .sb-bar-icon-btn {
-      width: 36px; height: 36px; border-radius: 50%; border: none;
+      width: 38px; height: 38px; border-radius: 50%; border: none;
       background: transparent; color: #6B5248; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
@@ -3451,7 +3498,7 @@ function __sbBuildBrainUI() {
     .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
     .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
     #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
-    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 40px !important; height: 40px !important; }
+    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 42px !important; height: 42px !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
       position: fixed; z-index: 2147483648; top: 50%; left: 50%;
@@ -3496,19 +3543,28 @@ function __sbBuildBrainUI() {
       -webkit-backdrop-filter: blur(4px) saturate(180%);
       isolation: isolate;
       color: var(--sb-fg); resize: none;
+      transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease,
+                  color 0.35s ease, backdrop-filter 0.35s ease;
     }
-    #__sb_bubble__.sb-light {
-      --sb-fg: #1a1a1a; --sb-fg-2: rgba(0,0,0,0.8); --sb-fg-3: rgba(0,0,0,0.35);
-      --sb-bg: rgba(255,255,255,0.82); --sb-border: rgba(0,0,0,0.1);
-      --sb-q-bg: rgba(0,0,0,0.05); --sb-q-border: rgba(0,0,0,0.1);
-      --sb-footer-border: rgba(0,0,0,0.08); --sb-footer-bg: rgba(0,0,0,0.03);
-      --sb-code-bg: rgba(0,0,0,0.06); --sb-code-fg: #b44b42;
-      --sb-pre-bg: rgba(0,0,0,0.06); --sb-pre-fg: #1a1a1a;
-      --sb-bq-border: rgba(201,84,74,0.4); --sb-bq-fg: rgba(0,0,0,0.6);
-      --sb-hr: rgba(0,0,0,0.1); --sb-link: #C9544A;
-      --sb-btn-fg: rgba(60,40,30,0.8); --sb-btn-bg: rgba(0,0,0,0.07);
-      --sb-btn-hover: rgba(0,0,0,0.13); --sb-rec-border: rgba(0,0,0,0.1);
+    /* ── Readable mode: opaque warm cream, dark text — always legible on any bg ── */
+    #__sb_bubble__.sb-readable {
+      --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.8); --sb-fg-3: rgba(27,23,19,0.45);
+      --sb-bg: rgba(255,251,247,0.97); --sb-border: rgba(65,48,40,0.1);
+      --sb-q-bg: rgba(65,48,40,0.06); --sb-q-border: rgba(65,48,40,0.1);
+      --sb-footer-border: rgba(65,48,40,0.08); --sb-footer-bg: rgba(65,48,40,0.03);
+      --sb-code-bg: rgba(65,48,40,0.07); --sb-code-fg: #b44b42;
+      --sb-pre-bg: rgba(27,23,19,0.06); --sb-pre-fg: #1B1713;
+      --sb-bq-border: rgba(201,84,74,0.35); --sb-bq-fg: rgba(27,23,19,0.6);
+      --sb-hr: rgba(65,48,40,0.1); --sb-link: #C9544A;
+      --sb-btn-fg: rgba(65,48,40,0.75); --sb-btn-bg: rgba(65,48,40,0.07);
+      --sb-btn-hover: rgba(65,48,40,0.13); --sb-rec-border: rgba(65,48,40,0.1);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08),
+                  inset 0 1px 0 rgba(255,255,255,0.9);
     }
+    #__sb_bubble__.sb-readable .sb-turn + .sb-turn { border-top-color: rgba(65,48,40,0.08); }
+    #__sb_bubble__.sb-readable::before { backdrop-filter: none; -webkit-backdrop-filter: none; filter: none; }
     .sb-card-header {
       display: flex; align-items: center; justify-content: flex-end; gap: 5px;
       padding: 12px 14px 4px; flex-shrink: 0;
@@ -3541,7 +3597,7 @@ function __sbBuildBrainUI() {
       padding-top: 18px;
       border-top: 1px solid rgba(255,255,255,0.08);
     }
-    #__sb_bubble__.sb-light .sb-turn + .sb-turn { border-top-color: rgba(0,0,0,0.08); }
+    #__sb_bubble__ .sb-turn + .sb-turn { border-top-color: rgba(255,255,255,0.08); }
     .sb-card-scroll::-webkit-scrollbar { width: 4px; }
     .sb-card-scroll::-webkit-scrollbar-track { background: transparent; }
     .sb-card-scroll::-webkit-scrollbar-thumb { background: rgba(180,140,120,0.3); border-radius: 99px; }
@@ -4394,15 +4450,13 @@ function __sbBuildBrainUI() {
 
   const root = document.createElement("div");
   root.id = "__sb_root__";
-  root.innerHTML = `
-    <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
-  `;
+  root.innerHTML = `<div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>`;
   document.body.appendChild(root);
 
-  // ── Cinema dock bar — separate body-level element so it can span full width ──
-  const dockBar = document.createElement("div");
-  dockBar.id = "__sb_bar__";
-  dockBar.innerHTML = `
+  // Cinema dock bar — body-level so it can span full width independently
+  const __sbDockBar = document.createElement("div");
+  __sbDockBar.id = "__sb_bar__";
+  __sbDockBar.innerHTML = `
       <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
@@ -4427,7 +4481,7 @@ function __sbBuildBrainUI() {
         <button id="__sb_signin_btn_cta__">Sign in →</button>
       </div>
   `;
-  document.body.appendChild(dockBar);
+  document.body.appendChild(__sbDockBar);
 
   // ── Liquid glass SVG displacement filter ──
   const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -4457,6 +4511,7 @@ function __sbBuildBrainUI() {
         <button class="sb-card-header-btn" type="button" data-sb-speak>Speak</button>
         <button class="sb-card-header-btn" type="button" data-sb-copy>Copy</button>
         <button class="sb-card-header-btn" id="__sb_stop_btn__" type="button" data-sb-stop style="display:none;background:#fee2e2;color:#C9544A;">⏹ Stop</button>
+        <button class="sb-card-header-btn" id="__sb_theme_toggle_btn__" type="button" title="Toggle readable mode" style="padding:0 8px;font-size:13px;">◑</button>
         <button class="sb-card-header-btn" type="button" data-sb-close>×</button>
       </div>
       <div class="sb-card-scroll"></div>
@@ -4695,6 +4750,22 @@ function __sbBuildBrainUI() {
   bubble.querySelector("[data-sb-speak]").addEventListener("click", () => {
     if (__sbIsSpeaking) { __sbStopSpeech(); return; }
     void __sbSpeakText(__sbLastBubbleRaw);
+  });
+
+  // ── Theme toggle (glass ↔ readable) ──
+  const __sbThemeBtn = document.getElementById("__sb_theme_toggle_btn__");
+  const __sbApplyTheme = (mode) => {
+    const isReadable = mode === "readable";
+    bubble.classList.toggle("sb-readable", isReadable);
+    document.getElementById("__sb_bar__")?.classList.toggle("sb-readable", isReadable);
+    __sbThemeBtn.textContent = isReadable ? "◐" : "◑";
+    __sbThemeBtn.title = isReadable ? "Switch to glass mode" : "Switch to readable mode";
+  };
+  chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "glass"));
+  __sbThemeBtn.addEventListener("click", () => {
+    const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
+    __sbApplyTheme(next);
+    chrome.storage.local.set({ sbTheme: next });
   });
 
   // ── Dropdown helpers ──
@@ -5130,7 +5201,7 @@ function __sbOpenCard(options = {}) {
   if (options.rich) setTimeout(() => __sbStartOrbit(), 60);
   else __sbStopOrbit();
   const bubble = wrap.querySelector("#__sb_bubble__");
-  if (bubble) bubble.classList.toggle("sb-light", __sbDetectPageTheme() === "light");
+  // theme (glass/readable) is persisted separately via __sbThemeBtn init — no override here
   __sbInitCardDrag(wrap);
   __sbScheduleCursorFollow();
 }
@@ -6060,7 +6131,7 @@ function __sbToggleInput(open, options = {}) {
         chrome.storage.local.get("authToken", ({ authToken }) => {
           if (!authToken) {
             bar.classList.add("open", "sb-signin");
-            __sbSetupBarSignIn();
+                  __sbSetupBarSignIn();
             return;
           }
           __sbOpenBarReady();
@@ -6112,7 +6183,7 @@ function __sbToggleInput(open, options = {}) {
           setTimeout(() => {
             if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
             bar.classList.add("open", "sb-signin");
-            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+                  if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
             __sbSetupBarSignIn();
           }, 700);
         };
@@ -9519,14 +9590,43 @@ function __sbShowLectureReadyCard(mode) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   const isM = mode === "meeting";
-  const icon = isM ? "🤝" : "🎙";
-  const modeLabel = isM ? "Meeting & Call" : "Lecture & Audio";
+  const cfg = isM ? {
+    emoji: "🤝", eyebrow: "MEETING & CALL",
+    copy: "Braino listens to this tab and turns the whole conversation into structured notes.",
+    chips: ["Decisions", "Action items", "Attendees"],
+    metric: "live transcript · speaker labels",
+  } : {
+    emoji: "🎙️", eyebrow: "LECTURE & AUDIO",
+    copy: "Braino follows the lecture and captures it as clean, study-ready notes.",
+    chips: ["Key points", "Definitions", "Takeaways"],
+    metric: "live transcript · auto outline",
+  };
+  const brainSvg = (isM ? __SB_BRAIN_SVG_LISTENING : __SB_BRAIN_SVG_SCHOLAR).replace('width="52" height="52"', 'width="72" height="72"');
   scroll.innerHTML = `
-    <div class="sb-lec-ready">
-      <div class="sb-lec-kicker">${icon} ${modeLabel}</div>
-      <div class="sb-lec-ready-title">Ready to record</div>
-      <div class="sb-lec-ready-sub">Braino will listen to this tab and turn everything into structured notes.</div>
-      <button id="__sb_lec_start_btn__" class="sb-lec-start-btn">▶ Start Recording</button>
+    <div class="sb-ready-wrap">
+      <div class="sb-ready-mascot">
+        <span class="sb-ready-mascot-halo"></span>
+        <span class="sb-ready-mascot-ring sb-ready-mascot-ring-1"></span>
+        <span class="sb-ready-mascot-ring sb-ready-mascot-ring-2"></span>
+        ${brainSvg}
+      </div>
+      <div class="sb-ready-eyebrow"><span>${cfg.emoji}</span>${cfg.eyebrow}</div>
+      <h2 class="sb-ready-headline">Ready to record</h2>
+      <p class="sb-ready-copy">${cfg.copy}</p>
+      <div class="sb-ready-preview">
+        <div class="sb-ready-preview-label">${cfg.metric}</div>
+        <div class="sb-ready-chips">${cfg.chips.map(c => `<span class="sb-ready-chip">${c}</span>`).join("")}</div>
+        <div class="sb-ready-lines">
+          <span class="sb-ready-line" style="width:88%"></span>
+          <span class="sb-ready-line" style="width:71%"></span>
+          <span class="sb-ready-line" style="width:82%"></span>
+        </div>
+      </div>
+      <button id="__sb_lec_start_btn__" class="sb-ready-btn">
+        <span class="sb-ready-btn-glow"></span>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="flex-shrink:0"><path d="M8 5.5v13a1 1 0 0 0 1.54.84l10-6.5a1 1 0 0 0 0-1.68l-10-6.5A1 1 0 0 0 8 5.5Z"/></svg>
+        Start Recording
+      </button>
     </div>
   `;
   __sbOpenCard({ rich: false });
