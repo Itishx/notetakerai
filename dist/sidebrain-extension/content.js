@@ -4449,41 +4449,41 @@ function __sbBuildBrainUI() {
     /* ── Braino OS Window ── */
     #__sb_os_dim__ {
       position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-      z-index: 2147483645; opacity: 0; pointer-events: none;
+      z-index: 2147483648; opacity: 0; pointer-events: none;
       transition: opacity 0.3s ease;
     }
     #__sb_os_dim__.visible { opacity: 1; pointer-events: all; }
     #__sb_os_window__ {
-      position: fixed; top: 50%; left: 50%;
-      transform: translate(-50%, -50%) scale(0.96) translateY(12px);
+      position: fixed; top: 6vh; left: 5vw;
       width: 90vw; height: 88vh;
-      z-index: 2147483646;
+      z-index: 2147483649;
       display: flex; flex-direction: column;
-      background: rgba(255,251,247,0.14);
-      backdrop-filter: blur(48px) saturate(220%);
-      -webkit-backdrop-filter: blur(48px) saturate(220%);
-      border: 1px solid rgba(255,255,255,0.52);
+      background: rgba(30,22,16,0.88);
+      backdrop-filter: blur(48px) saturate(180%);
+      -webkit-backdrop-filter: blur(48px) saturate(180%);
+      border: 1px solid rgba(255,255,255,0.2);
       border-radius: 18px;
       box-shadow:
-        0 40px 100px rgba(27,23,19,0.28),
-        0 8px 24px rgba(27,23,19,0.14),
-        inset 2px 2px 1px rgba(255,255,255,0.68),
-        inset -1px -1px 1px rgba(255,255,255,0.28);
+        0 40px 100px rgba(0,0,0,0.6),
+        0 8px 24px rgba(0,0,0,0.4),
+        inset 1px 1px 0 rgba(255,255,255,0.12);
       opacity: 0; pointer-events: none;
+      transform: scale(0.97) translateY(10px);
       transition: opacity 0.34s cubic-bezier(0.34,1.1,0.64,1), transform 0.34s cubic-bezier(0.34,1.1,0.64,1);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       overflow: hidden;
+      color: rgba(255,251,247,0.92);
     }
     #__sb_os_window__.open {
       opacity: 1; pointer-events: all;
-      transform: translate(-50%, -50%) scale(1) translateY(0);
+      transform: scale(1) translateY(0);
     }
     /* Titlebar */
     #__sb_os_titlebar__ {
       display: flex; align-items: center;
       height: 50px; padding: 0 18px; flex-shrink: 0;
-      background: rgba(255,251,247,0.06);
-      border-bottom: 1px solid rgba(65,48,40,0.1);
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
       position: relative; -webkit-app-region: drag;
     }
     .sb-os-tl-wrap { display: flex; gap: 8px; align-items: center; -webkit-app-region: no-drag; }
@@ -4492,24 +4492,24 @@ function __sbBuildBrainUI() {
       transition: filter 0.15s; padding: 0; flex-shrink: 0; -webkit-app-region: no-drag;
     }
     .sb-os-tl:hover { filter: brightness(0.85); }
-    .sb-os-tl.red    { background: #FF5F57; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15); }
-    .sb-os-tl.yellow { background: #FEBC2E; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15); }
-    .sb-os-tl.green  { background: #28C840; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15); }
+    .sb-os-tl.red    { background: #FF5F57; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3); }
+    .sb-os-tl.yellow { background: #FEBC2E; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3); }
+    .sb-os-tl.green  { background: #28C840; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3); }
     #__sb_os_title__ {
       position: absolute; left: 50%; transform: translateX(-50%);
-      font-size: 13px; font-weight: 600; color: rgba(27,23,19,0.65);
+      font-size: 13px; font-weight: 600; color: rgba(255,251,247,0.75);
       white-space: nowrap; pointer-events: none; letter-spacing: -0.01em;
     }
     .sb-os-titlebar-right {
       margin-left: auto; display: flex; align-items: center; gap: 14px; -webkit-app-region: no-drag;
     }
     #__sb_os_clock__ {
-      font-size: 12px; font-weight: 500; color: rgba(27,23,19,0.45);
+      font-size: 12px; font-weight: 500; color: rgba(255,251,247,0.45);
       font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
     }
     .sb-os-status {
       display: flex; align-items: center; gap: 6px;
-      font-size: 12px; font-weight: 500; color: rgba(27,23,19,0.5);
+      font-size: 12px; font-weight: 500; color: rgba(255,251,247,0.5);
     }
     .sb-os-status-dot {
       width: 7px; height: 7px; border-radius: 50%; background: #28C840;
@@ -4520,35 +4520,35 @@ function __sbBuildBrainUI() {
     /* Sidebar */
     #__sb_os_sidebar__ {
       width: 210px; flex-shrink: 0;
-      border-right: 1px solid rgba(65,48,40,0.1);
+      border-right: 1px solid rgba(255,255,255,0.08);
       display: flex; flex-direction: column;
       padding: 14px 0; overflow-y: auto;
     }
     .sb-os-sidebar-label {
       font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
-      text-transform: uppercase; color: rgba(65,48,40,0.35);
+      text-transform: uppercase; color: rgba(255,251,247,0.3);
       padding: 0 16px 8px; margin-top: 4px;
     }
     .sb-os-mode {
       display: flex; align-items: center; gap: 10px;
       padding: 9px 16px; cursor: pointer; border: none;
-      background: transparent; color: rgba(65,48,40,0.65);
+      background: transparent; color: rgba(255,251,247,0.6);
       font-size: 13px; font-weight: 500; text-align: left; width: 100%;
       transition: background 0.1s, color 0.1s;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    .sb-os-mode:hover { background: rgba(65,48,40,0.06); color: #1B1713; }
-    .sb-os-mode.active { background: rgba(201,84,74,0.1); color: #C9544A; font-weight: 600; }
+    .sb-os-mode:hover { background: rgba(255,255,255,0.07); color: rgba(255,251,247,0.9); }
+    .sb-os-mode.active { background: rgba(232,120,110,0.18); color: #F4978F; font-weight: 600; }
     .sb-os-mode-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
-    .sb-os-sidebar-divider { border: none; border-top: 1px solid rgba(65,48,40,0.09); margin: 10px 0; }
+    .sb-os-sidebar-divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 10px 0; }
     .sb-os-recent-item {
       padding: 7px 16px; cursor: pointer;
-      font-size: 12px; color: rgba(65,48,40,0.5); line-height: 1.4;
+      font-size: 12px; color: rgba(255,251,247,0.45); line-height: 1.4;
       transition: background 0.1s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .sb-os-recent-item:hover { background: rgba(65,48,40,0.05); color: #1B1713; }
+    .sb-os-recent-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,251,247,0.85); }
     .sb-os-recent-domain {
-      font-size: 10px; color: rgba(65,48,40,0.3); margin-bottom: 1px;
+      font-size: 10px; color: rgba(255,251,247,0.25); margin-bottom: 1px;
       letter-spacing: 0.03em;
     }
     /* Main area */
@@ -4562,20 +4562,20 @@ function __sbBuildBrainUI() {
     }
     .sb-os-chip {
       padding: 6px 14px; border-radius: 99px;
-      border: 1px solid rgba(65,48,40,0.14);
-      background: rgba(65,48,40,0.05); color: rgba(65,48,40,0.7);
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06); color: rgba(255,251,247,0.65);
       font-size: 12px; font-weight: 500; cursor: pointer;
       transition: background 0.12s, color 0.12s, border-color 0.12s;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    .sb-os-chip:hover { background: rgba(201,84,74,0.1); color: #C9544A; border-color: rgba(201,84,74,0.25); }
+    .sb-os-chip:hover { background: rgba(232,120,110,0.18); color: #F4978F; border-color: rgba(232,120,110,0.3); }
     /* Messages */
     .sb-os-messages {
       flex: 1; overflow-y: auto; padding: 16px 20px;
       display: flex; flex-direction: column; gap: 14px; scroll-behavior: smooth;
     }
     .sb-os-messages::-webkit-scrollbar { width: 4px; }
-    .sb-os-messages::-webkit-scrollbar-thumb { background: rgba(65,48,40,0.15); border-radius: 99px; }
+    .sb-os-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
     .sb-os-msg {
       display: flex; gap: 10px; max-width: 82%;
       animation: __sb_os_msg_in__ 0.22s ease both;
@@ -4588,19 +4588,19 @@ function __sbBuildBrainUI() {
     .sb-os-msg-avatar {
       width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center; font-size: 13px; margin-top: 3px;
-      background: rgba(65,48,40,0.08);
+      background: rgba(255,255,255,0.1);
     }
     .sb-os-msg-bubble {
       padding: 10px 14px; border-radius: 16px;
-      font-size: 14px; line-height: 1.65; color: #1B1713;
+      font-size: 14px; line-height: 1.65; color: rgba(255,251,247,0.9);
     }
-    .sb-os-msg.ai  .sb-os-msg-bubble { background: rgba(255,251,247,0.72); border-bottom-left-radius: 4px; border: 1px solid rgba(65,48,40,0.09); }
+    .sb-os-msg.ai  .sb-os-msg-bubble { background: rgba(255,255,255,0.08); border-bottom-left-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
     .sb-os-msg.user .sb-os-msg-bubble { background: #E8786E; color: white; border-bottom-right-radius: 4px; }
     .sb-os-thinking-wrap {
       display: flex; gap: 5px; align-items: center; padding: 2px 0;
     }
     .sb-os-thinking-dot {
-      width: 7px; height: 7px; border-radius: 50%; background: rgba(65,48,40,0.35);
+      width: 7px; height: 7px; border-radius: 50%; background: rgba(255,251,247,0.35);
       animation: __sb_os_think__ 1.2s ease-in-out infinite;
     }
     .sb-os-thinking-dot:nth-child(2) { animation-delay: 0.18s; }
@@ -4613,19 +4613,19 @@ function __sbBuildBrainUI() {
     .sb-os-input-row {
       display: flex; align-items: flex-end; gap: 10px;
       padding: 14px 20px;
-      border-top: 1px solid rgba(65,48,40,0.09);
-      background: rgba(255,251,247,0.05); flex-shrink: 0;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.15); flex-shrink: 0;
     }
     #__sb_os_input__ {
-      flex: 1; background: rgba(255,251,247,0.7);
-      border: 1px solid rgba(65,48,40,0.14); border-radius: 12px;
-      padding: 10px 14px; color: #1B1713; font-size: 14px;
+      flex: 1; background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;
+      padding: 10px 14px; color: rgba(255,251,247,0.92); font-size: 14px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       outline: none; resize: none; line-height: 1.5; max-height: 120px; overflow-y: auto;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
-    #__sb_os_input__::placeholder { color: #A79B92; }
-    #__sb_os_input__:focus { border-color: rgba(201,84,74,0.4); box-shadow: 0 0 0 3px rgba(201,84,74,0.08); }
+    #__sb_os_input__::placeholder { color: rgba(255,251,247,0.35); }
+    #__sb_os_input__:focus { border-color: rgba(232,120,110,0.5); box-shadow: 0 0 0 3px rgba(232,120,110,0.12); }
     #__sb_os_send__ {
       width: 40px; height: 40px; border-radius: 10px; border: none;
       background: #E8786E; color: white; cursor: pointer;
@@ -4638,9 +4638,9 @@ function __sbBuildBrainUI() {
       flex: 1; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 10px;
     }
-    .sb-os-placeholder-icon { font-size: 44px; opacity: 0.3; }
-    .sb-os-placeholder-title { font-size: 15px; font-weight: 600; color: rgba(65,48,40,0.45); }
-    .sb-os-placeholder-sub { font-size: 13px; color: rgba(65,48,40,0.3); }
+    .sb-os-placeholder-icon { font-size: 44px; opacity: 0.35; }
+    .sb-os-placeholder-title { font-size: 15px; font-weight: 600; color: rgba(255,251,247,0.4); }
+    .sb-os-placeholder-sub { font-size: 13px; color: rgba(255,251,247,0.25); }
   `;
   document.head.appendChild(style);
 
@@ -12346,7 +12346,8 @@ function __sbOsBuild() {
   const dim = document.createElement("div");
   dim.id = "__sb_os_dim__";
   dim.addEventListener("click", __sbCloseOs);
-  document.body.appendChild(dim);
+  // Attach to <html> to escape any body/ancestor CSS transform that breaks position:fixed
+  (document.documentElement || document.body).appendChild(dim);
 
   const domain = __sbOsDomain();
   const chips  = __sbOsChips();
@@ -12393,7 +12394,7 @@ function __sbOsBuild() {
       </div>
     </div>
   `;
-  document.body.appendChild(win);
+  (document.documentElement || document.body).appendChild(win);
 
   win.querySelector("#__sb_os_close__").addEventListener("click", __sbCloseOs);
   win.querySelector("#__sb_os_min__").addEventListener("click", __sbCloseOs);
@@ -12538,8 +12539,13 @@ function __sbOsRenderRecent(list) {
 
 async function __sbOpenOs() {
   if (!__sbOwnsInlineUi()) return;
-  if (!document.getElementById("__sb_os_window__")) __sbBuildBrainUI();
+  // Rebuild brain UI if page navigation wiped it
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbOsBuild();
+
+  // Hide dock bar so it doesn't float on top of the OS window
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) bar.classList.remove("open");
 
   const { sbOsLastMode } = await __sbStorageGet(["sbOsLastMode"]);
   if (sbOsLastMode) __sbOsSetMode(sbOsLastMode);
