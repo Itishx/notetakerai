@@ -4463,7 +4463,7 @@ function __sbBuildBrainUI() {
 
   const root = document.createElement("div");
   root.id = "__sb_root__";
-  document.body.appendChild(root);
+  (document.documentElement||document.body).appendChild(root);
 
   // Cinema dock bar — body-level so it can span full width independently
   const __sbDockBar = document.createElement("div");
@@ -4494,14 +4494,14 @@ function __sbBuildBrainUI() {
         <button id="__sb_signin_btn_cta__">Sign in →</button>
       </div>
   `;
-  document.body.appendChild(__sbDockBar);
+  (document.documentElement||document.body).appendChild(__sbDockBar);
 
   // ── Liquid glass SVG displacement filter ──
   const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   __sbGlassSvg.id = "__sb_glass_svg__";
   __sbGlassSvg.setAttribute("style", "display:none;position:fixed;pointer-events:none");
   __sbGlassSvg.innerHTML = `<filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter>`;
-  document.body.appendChild(__sbGlassSvg);
+  (document.documentElement||document.body).appendChild(__sbGlassSvg);
 
   if (__sbCursorRideMode) {
     __sbPositionRootNearCursor(true);
@@ -4512,7 +4512,7 @@ function __sbBuildBrainUI() {
 
   const movieBackdrop = document.createElement("div");
   movieBackdrop.id = "__sb_movie_backdrop__";
-  document.body.appendChild(movieBackdrop);
+  (document.documentElement||document.body).appendChild(movieBackdrop);
 
   // ── Card wrapper ──
   const cardWrap = document.createElement("div");
@@ -4552,12 +4552,12 @@ function __sbBuildBrainUI() {
       </div>
     </div>
   `;
-  document.body.appendChild(cardWrap);
+  (document.documentElement||document.body).appendChild(cardWrap);
 
   // ── Voice Error Pill ──
   const errPill = document.createElement("div");
   errPill.id = "__sb_voice_error_pill__";
-  document.body.appendChild(errPill);
+  (document.documentElement||document.body).appendChild(errPill);
 
   // ── Dropdowns (body-level to avoid stacking context issues) ──
   const modeDd = document.createElement("div");
@@ -4571,7 +4571,7 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(modeDd);
+  (document.documentElement||document.body).appendChild(modeDd);
 
   const connectorDd = document.createElement("div");
   connectorDd.id = "__sb_connector_dropdown__";
@@ -4583,12 +4583,12 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-connector="google-calendar"><span class="sb-di-icon">📅</span><span class="sb-di-label">Google Calendar</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-connector="gmail"><span class="sb-di-icon">✉</span><span class="sb-di-label">Gmail</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(connectorDd);
+  (document.documentElement||document.body).appendChild(connectorDd);
 
   const connectorSlashDd = document.createElement("div");
   connectorSlashDd.id = "__sb_connector_slash_dropdown__";
   connectorSlashDd.className = "sb-dropdown";
-  document.body.appendChild(connectorSlashDd);
+  (document.documentElement||document.body).appendChild(connectorSlashDd);
 
   const modelDd = document.createElement("div");
   modelDd.id = "__sb_model_dropdown__";
@@ -4598,7 +4598,7 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item selected" data-model="lovable"><span class="sb-di-icon">🧠</span><span class="sb-di-label">Braino AI</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(modelDd);
+  (document.documentElement||document.body).appendChild(modelDd);
 
   __sbSyncFullscreenUiMount();
   if (!__sbFullscreenUiListenerBound) {
