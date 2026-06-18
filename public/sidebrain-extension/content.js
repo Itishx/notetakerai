@@ -3356,18 +3356,19 @@ function __sbBuildBrainUI() {
     /* ── NEW UI: Thin bar + centered glass card ── */
     #__sb_bar__ {
       display: flex; align-items: center; gap: 6px;
-      background: rgba(26, 18, 12, 0.76); border-radius: 100px;
+      background: rgba(255,251,247,0.12); border-radius: 100px;
       position: relative; isolation: isolate;
       padding: 7px 7px 7px 18px;
-      border: 1px solid rgba(255,255,255,0.18);
-      box-shadow: 0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.14),
-                  inset 1.5px 1.5px 0 rgba(255,255,255,0.16),
-                  inset -1px -1px 0 rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 8px 28px rgba(27,23,19,0.15), 0 2px 8px rgba(27,23,19,0.08),
+                  inset 2px 2px 1px rgba(255,255,255,0.65),
+                  inset -1px -1px 1px rgba(255,255,255,0.3);
       width: 360px; max-width: calc(100vw - 90px);
       backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
       pointer-events: none; opacity: 0;
       transform: scaleX(0.55) translateY(4px); transform-origin: right center;
-      transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1);
+      transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1),
+                  background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
     }
     #__sb_bar__::before {
       content: ""; position: absolute; inset: 0; border-radius: inherit;
@@ -3377,25 +3378,26 @@ function __sbBuildBrainUI() {
       z-index: -1; pointer-events: none;
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
-    /* ── Light-page inversion: dark glass pill so content is always visible ── */
-    #__sb_bar__.sb-light {
-      background: rgba(26, 18, 12, 0.72);
-      border: 1px solid rgba(255,255,255,0.14);
-      box-shadow: 0 8px 28px rgba(0,0,0,0.26), 0 2px 8px rgba(0,0,0,0.13),
-                  inset 1.5px 1.5px 0 rgba(255,255,255,0.16),
-                  inset -1px -1px 0 rgba(255,255,255,0.08);
+    /* ── Readable mode: opaque warm cream, dark text — always legible ── */
+    #__sb_bar__.sb-readable {
+      background: rgba(255,251,247,0.96);
+      border: 1px solid rgba(65,48,40,0.12);
+      box-shadow: 0 8px 28px rgba(27,23,19,0.14), 0 2px 8px rgba(27,23,19,0.07),
+                  inset 0 1px 0 rgba(255,255,255,0.9);
+      backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
     }
-    #__sb_bar__.sb-light #__sb_input__ { color: #F5EDE8; }
-    #__sb_bar__.sb-light #__sb_input__::placeholder { color: rgba(245,237,232,0.42); }
-    #__sb_bar__.sb-light #__sb_mode_btn__ { color: rgba(245,237,232,0.8); background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.14); }
-    #__sb_bar__.sb-light #__sb_mode_btn__:hover { background: rgba(255,255,255,0.15); }
-    #__sb_bar__.sb-light .sb-bar-icon-btn { color: rgba(245,237,232,0.75); }
-    #__sb_bar__.sb-light .sb-bar-icon-btn:hover { background: rgba(255,255,255,0.1); color: #F5EDE8; }
-    #__sb_bar__.sb-light .sb-bar-icon-btn.active { background: rgba(201,84,74,0.32); color: #FFB3AE; }
-    #__sb_bar__.sb-light #__sb_x_auto_btn__.running { background: rgba(255,230,50,0.18); color: #FFD966; }
-    #__sb_bar__.sb-light #__sb_wakeup_label__,
-    #__sb_bar__.sb-light #__sb_signin_cta_hint__ { color: rgba(245,237,232,0.52); }
-    #__sb_bar__.sb-light #__sb_wakeup_track__ { background: rgba(255,255,255,0.14); }
+    #__sb_bar__.sb-readable::before { backdrop-filter: none; -webkit-backdrop-filter: none; filter: none; }
+    #__sb_bar__.sb-readable #__sb_input__ { color: #1B1713; }
+    #__sb_bar__.sb-readable #__sb_input__::placeholder { color: #A79B92; }
+    #__sb_bar__.sb-readable #__sb_mode_btn__ { color: #413028; background: rgba(65,48,40,0.07); border-color: rgba(65,48,40,0.18); }
+    #__sb_bar__.sb-readable #__sb_mode_btn__:hover { background: rgba(65,48,40,0.12); }
+    #__sb_bar__.sb-readable .sb-bar-icon-btn { color: #6B5248; }
+    #__sb_bar__.sb-readable .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); color: #1B1713; }
+    #__sb_bar__.sb-readable .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_bar__.sb-readable #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
+    #__sb_bar__.sb-readable #__sb_wakeup_label__,
+    #__sb_bar__.sb-readable #__sb_signin_cta_hint__ { color: #A79B92; }
+    #__sb_bar__.sb-readable #__sb_wakeup_track__ { background: rgba(65,48,40,0.12); }
     /* ── Wake-up state ── */
     #__sb_wakeup__ {
       display: none; align-items: center; gap: 8px; flex: 1; min-width: 0;
@@ -3407,7 +3409,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-waking #__sb_send_btn__,
     #__sb_bar__.sb-waking #__sb_x_auto_btn__ { display: none !important; }
     #__sb_wakeup_track__ {
-      flex: 1; height: 2px; background: rgba(255,255,255,0.14); border-radius: 99px; overflow: hidden;
+      flex: 1; height: 2px; background: rgba(65,48,40,0.12); border-radius: 99px; overflow: hidden;
     }
     #__sb_wakeup_fill__ {
       height: 100%; width: 0%;
@@ -3415,7 +3417,7 @@ function __sbBuildBrainUI() {
       border-radius: 99px; transition: width 0.55s cubic-bezier(0.4,0,0.2,1);
     }
     #__sb_wakeup_label__ {
-      font-size: 11.5px; color: rgba(245,237,232,0.52); white-space: nowrap; flex-shrink: 0;
+      font-size: 11.5px; color: #A79B92; white-space: nowrap; flex-shrink: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     @keyframes __sb_wu_pulse__ {
@@ -3437,7 +3439,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin #__sb_x_auto_btn__,
     #__sb_bar__.sb-signin #__sb_wakeup__ { display: none !important; }
     #__sb_signin_cta_hint__ {
-      font-size: 12px; color: rgba(245,237,232,0.52); flex: 1; min-width: 0;
+      font-size: 12px; color: #A79B92; flex: 1; min-width: 0;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
@@ -3452,21 +3454,19 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
-      font-size: 14px; color: #F5EDE8; min-width: 0; padding: 0; line-height: 1.4;
+      font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    #__sb_input__::placeholder { color: rgba(245,237,232,0.42); }
-    #__sb_bar__ #__sb_mode_btn__ { color: rgba(245,237,232,0.8); background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.14); }
-    #__sb_bar__ #__sb_mode_btn__:hover { background: rgba(255,255,255,0.15); }
+    #__sb_input__::placeholder { color: #A79B92; }
     .sb-bar-icon-btn {
       width: 32px; height: 32px; border-radius: 50%; border: none;
-      background: transparent; color: rgba(245,237,232,0.75); cursor: pointer;
+      background: transparent; color: #6B5248; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
     }
-    .sb-bar-icon-btn:hover { background: rgba(255,255,255,0.1); color: #F5EDE8; }
-    .sb-bar-icon-btn.active { background: rgba(201,84,74,0.32); color: #FFB3AE; }
-    #__sb_x_auto_btn__.running { background: rgba(255,220,50,0.18); color: #FFD966; }
+    .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
+    .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
+    #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
     #__sb_send_btn__ { background: #E8786E !important; color: white !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
@@ -3491,7 +3491,7 @@ function __sbBuildBrainUI() {
     @keyframes __sb_orbit__ { from { offset-distance: 0%; } to { offset-distance: 100%; } }
     #__sb_bubble__ {
       --sb-fg: #ffffff; --sb-fg-2: rgba(255,255,255,0.85); --sb-fg-3: rgba(255,255,255,0.4);
-      --sb-bg: rgba(26, 18, 12, 0.78); --sb-border: rgba(255,255,255,0.18);
+      --sb-bg: rgba(255,255,255,0.04); --sb-border: rgba(255,255,255,0.38);
       --sb-q-bg: rgba(255,255,255,0.12); --sb-q-border: rgba(255,255,255,0.2);
       --sb-footer-border: rgba(255,255,255,0.12); --sb-footer-bg: rgba(0,0,0,0.1);
       --sb-code-bg: rgba(255,255,255,0.12); --sb-code-fg: #FFD0CB;
@@ -3512,23 +3512,28 @@ function __sbBuildBrainUI() {
       -webkit-backdrop-filter: blur(4px) saturate(180%);
       isolation: isolate;
       color: var(--sb-fg); resize: none;
+      transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease,
+                  color 0.35s ease, backdrop-filter 0.35s ease;
     }
-    /* sb-light = page background is light → use dark glass so the UI is always visible */
-    #__sb_bubble__.sb-light {
-      --sb-fg: #F5EDE8; --sb-fg-2: rgba(245,237,232,0.85); --sb-fg-3: rgba(245,237,232,0.4);
-      --sb-bg: rgba(26, 18, 12, 0.80); --sb-border: rgba(255,255,255,0.14);
-      --sb-q-bg: rgba(255,255,255,0.1); --sb-q-border: rgba(255,255,255,0.16);
-      --sb-footer-border: rgba(255,255,255,0.1); --sb-footer-bg: rgba(0,0,0,0.15);
-      --sb-code-bg: rgba(255,255,255,0.1); --sb-code-fg: #FFD0CB;
-      --sb-pre-bg: rgba(0,0,0,0.4); --sb-pre-fg: #F5EDE8;
-      --sb-bq-border: rgba(255,160,150,0.45); --sb-bq-fg: rgba(245,237,232,0.7);
-      --sb-hr: rgba(255,255,255,0.12); --sb-link: #FFB3AE;
-      --sb-btn-fg: rgba(245,237,232,0.75); --sb-btn-bg: rgba(255,255,255,0.12);
-      --sb-btn-hover: rgba(255,255,255,0.22); --sb-rec-border: rgba(255,255,255,0.16);
-      box-shadow: 0 40px 100px rgba(0,0,0,0.32), 0 8px 24px rgba(0,0,0,0.16),
-                  inset 1.5px 1.5px 0 rgba(255,255,255,0.18),
-                  inset -1px -1px 0 rgba(255,255,255,0.1);
+    /* ── Readable mode: opaque warm cream, dark text — always legible on any bg ── */
+    #__sb_bubble__.sb-readable {
+      --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.8); --sb-fg-3: rgba(27,23,19,0.45);
+      --sb-bg: rgba(255,251,247,0.97); --sb-border: rgba(65,48,40,0.1);
+      --sb-q-bg: rgba(65,48,40,0.06); --sb-q-border: rgba(65,48,40,0.1);
+      --sb-footer-border: rgba(65,48,40,0.08); --sb-footer-bg: rgba(65,48,40,0.03);
+      --sb-code-bg: rgba(65,48,40,0.07); --sb-code-fg: #b44b42;
+      --sb-pre-bg: rgba(27,23,19,0.06); --sb-pre-fg: #1B1713;
+      --sb-bq-border: rgba(201,84,74,0.35); --sb-bq-fg: rgba(27,23,19,0.6);
+      --sb-hr: rgba(65,48,40,0.1); --sb-link: #C9544A;
+      --sb-btn-fg: rgba(65,48,40,0.75); --sb-btn-bg: rgba(65,48,40,0.07);
+      --sb-btn-hover: rgba(65,48,40,0.13); --sb-rec-border: rgba(65,48,40,0.1);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08),
+                  inset 0 1px 0 rgba(255,255,255,0.9);
     }
+    #__sb_bubble__.sb-readable .sb-turn + .sb-turn { border-top-color: rgba(65,48,40,0.08); }
+    #__sb_bubble__.sb-readable::before { backdrop-filter: none; -webkit-backdrop-filter: none; filter: none; }
     .sb-card-header {
       display: flex; align-items: center; justify-content: flex-end; gap: 5px;
       padding: 12px 14px 4px; flex-shrink: 0;
@@ -3561,7 +3566,7 @@ function __sbBuildBrainUI() {
       padding-top: 18px;
       border-top: 1px solid rgba(255,255,255,0.08);
     }
-    #__sb_bubble__.sb-light .sb-turn + .sb-turn { border-top-color: rgba(255,255,255,0.1); }
+    #__sb_bubble__ .sb-turn + .sb-turn { border-top-color: rgba(255,255,255,0.08); }
     .sb-card-scroll::-webkit-scrollbar { width: 4px; }
     .sb-card-scroll::-webkit-scrollbar-track { background: transparent; }
     .sb-card-scroll::-webkit-scrollbar-thumb { background: rgba(180,140,120,0.3); border-radius: 99px; }
@@ -4472,6 +4477,7 @@ function __sbBuildBrainUI() {
         <button class="sb-card-header-btn" type="button" data-sb-speak>Speak</button>
         <button class="sb-card-header-btn" type="button" data-sb-copy>Copy</button>
         <button class="sb-card-header-btn" id="__sb_stop_btn__" type="button" data-sb-stop style="display:none;background:#fee2e2;color:#C9544A;">⏹ Stop</button>
+        <button class="sb-card-header-btn" id="__sb_theme_toggle_btn__" type="button" title="Toggle readable mode" style="padding:0 8px;font-size:13px;">◑</button>
         <button class="sb-card-header-btn" type="button" data-sb-close>×</button>
       </div>
       <div class="sb-card-scroll"></div>
@@ -4710,6 +4716,22 @@ function __sbBuildBrainUI() {
   bubble.querySelector("[data-sb-speak]").addEventListener("click", () => {
     if (__sbIsSpeaking) { __sbStopSpeech(); return; }
     void __sbSpeakText(__sbLastBubbleRaw);
+  });
+
+  // ── Theme toggle (glass ↔ readable) ──
+  const __sbThemeBtn = document.getElementById("__sb_theme_toggle_btn__");
+  const __sbApplyTheme = (mode) => {
+    const isReadable = mode === "readable";
+    bubble.classList.toggle("sb-readable", isReadable);
+    document.getElementById("__sb_bar__")?.classList.toggle("sb-readable", isReadable);
+    __sbThemeBtn.textContent = isReadable ? "◐" : "◑";
+    __sbThemeBtn.title = isReadable ? "Switch to glass mode" : "Switch to readable mode";
+  };
+  chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "glass"));
+  __sbThemeBtn.addEventListener("click", () => {
+    const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
+    __sbApplyTheme(next);
+    chrome.storage.local.set({ sbTheme: next });
   });
 
   // ── Dropdown helpers ──
@@ -5129,11 +5151,6 @@ function __sbDetectPageTheme() {
   return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 > 0.55 ? "light" : "dark";
 }
 
-function __sbApplyBarTheme(bar) {
-  if (!bar) return;
-  bar.classList.toggle("sb-light", __sbDetectPageTheme() === "light");
-}
-
 function __sbOpenCard(options = {}) {
   if (!__sbOwnsInlineUi()) return;
   const wrap = document.getElementById("__sb_card_wrap__");
@@ -5150,7 +5167,7 @@ function __sbOpenCard(options = {}) {
   if (options.rich) setTimeout(() => __sbStartOrbit(), 60);
   else __sbStopOrbit();
   const bubble = wrap.querySelector("#__sb_bubble__");
-  if (bubble) bubble.classList.toggle("sb-light", __sbDetectPageTheme() === "light");
+  // theme (glass/readable) is persisted separately via __sbThemeBtn init — no override here
   __sbInitCardDrag(wrap);
   __sbScheduleCursorFollow();
 }
@@ -5162,9 +5179,7 @@ function __sbCollapseCard() {
   __sbStopOrbit();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (__sbBrainVisible && __sbInputOpen) {
-    const bar = document.getElementById("__sb_bar__");
-    bar?.classList.add("open");
-    __sbApplyBarTheme(bar);
+    document.getElementById("__sb_bar__")?.classList.add("open");
   }
   __sbScheduleCursorFollow();
   __sbSyncIdleState(); // back to docked idle — resume animations
@@ -6062,7 +6077,6 @@ function __sbToggleInput(open, options = {}) {
     const __sbOpenBarReady = () => {
       bar.classList.remove("sb-signin", "sb-waking");
       bar.classList.add("open");
-      __sbApplyBarTheme(bar);
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       __sbSetGreetingPlaceholder();
@@ -6083,8 +6097,7 @@ function __sbToggleInput(open, options = {}) {
         chrome.storage.local.get("authToken", ({ authToken }) => {
           if (!authToken) {
             bar.classList.add("open", "sb-signin");
-            __sbApplyBarTheme(bar);
-            __sbSetupBarSignIn();
+                  __sbSetupBarSignIn();
             return;
           }
           __sbOpenBarReady();
@@ -6136,8 +6149,7 @@ function __sbToggleInput(open, options = {}) {
           setTimeout(() => {
             if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
             bar.classList.add("open", "sb-signin");
-            __sbApplyBarTheme(bar);
-            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+                  if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
             __sbSetupBarSignIn();
           }, 700);
         };
