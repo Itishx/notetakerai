@@ -3293,12 +3293,36 @@ function __sbBuildBrainUI() {
     .sb-notion-btn:disabled { opacity: 0.55; cursor: default; }
 
     /* ── Lecture Mode UI ── */
-    .sb-lec-ready { display:flex; flex-direction:column; align-items:center; gap:14px; padding:22px 16px 18px; text-align:center; }
-    .sb-lec-kicker { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:#A79B92; }
-    .sb-lec-ready-title { font-size:17px; font-weight:600; color:#1B1713; line-height:1.3; }
-    .sb-lec-ready-sub { font-size:12.5px; color:#8A7B73; line-height:1.5; max-width:200px; }
-    .sb-lec-start-btn { width:100%; padding:12px; border:none; border-radius:20px; background:#E8786E; color:white; font-size:13.5px; font-weight:600; cursor:pointer; transition:background 0.15s; letter-spacing:0.01em; }
-    .sb-lec-start-btn:hover { background:#C9544A; }
+    /* .sb-lec-ready kept for __sbShowLectureResultMessage which still uses it */
+    .sb-lec-ready { display:flex; flex-direction:column; align-items:center; gap:12px; padding:22px 16px 18px; text-align:center; }
+    .sb-lec-kicker { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--sb-fg-3); }
+    .sb-lec-ready-title { font-size:17px; font-weight:600; color:var(--sb-fg); line-height:1.3; }
+    .sb-lec-ready-sub { font-size:12.5px; color:var(--sb-fg-2); line-height:1.5; max-width:220px; }
+
+    /* ── Ready-to-Record redesign — Braino Ready-to-Record.html Outcome variant ── */
+    .sb-ready-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; padding:18px 18px 14px; text-align:center; }
+    .sb-ready-mascot { position:relative; display:flex; align-items:center; justify-content:center; width:72px; height:72px; flex-shrink:0; margin-bottom:2px; }
+    .sb-ready-mascot-halo { position:absolute; inset:-20px; border-radius:50%; background:radial-gradient(circle, rgba(232,120,110,0.38) 0%, rgba(243,154,66,0.16) 45%, transparent 68%); filter:blur(5px); animation:sbReadyHalo 4.2s ease-in-out infinite; pointer-events:none; }
+    @keyframes sbReadyHalo { 0%,100%{transform:scale(1);opacity:0.85;} 50%{transform:scale(1.1);opacity:1;} }
+    .sb-ready-mascot-ring { position:absolute; border-radius:50%; border:1.5px solid rgba(232,120,110,0.45); opacity:0; }
+    .sb-ready-mascot-ring-1 { inset:4px; animation:sbReadyRipple 3.6s ease-out infinite; }
+    .sb-ready-mascot-ring-2 { inset:4px; animation:sbReadyRipple 3.6s ease-out infinite 1.8s; }
+    @keyframes sbReadyRipple { 0%{inset:18px;opacity:0.4;} 100%{inset:-28px;opacity:0;} }
+    .sb-ready-eyebrow { font-size:10px; font-weight:600; letter-spacing:0.17em; text-transform:uppercase; color:var(--sb-fg-3); display:inline-flex; align-items:center; gap:7px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace; }
+    .sb-ready-headline { font-size:28px; font-weight:400; line-height:1.05; letter-spacing:-0.01em; color:var(--sb-fg); margin:2px 0 0; font-family:'Instrument Serif',Georgia,serif; }
+    .sb-ready-copy { font-size:12.5px; line-height:1.55; color:var(--sb-fg-2); margin:0; max-width:28ch; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .sb-ready-preview { width:100%; border:1px solid var(--sb-q-border); border-radius:14px; background:var(--sb-q-bg); padding:11px 13px 13px; text-align:left; box-shadow:0 1px 0 rgba(255,255,255,0.1) inset; }
+    .sb-ready-preview-label { font-size:9.5px; font-weight:600; letter-spacing:0.13em; text-transform:uppercase; color:var(--sb-fg-3); display:flex; align-items:center; gap:6px; margin-bottom:9px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace; }
+    .sb-ready-preview-label::before { content:""; width:6px; height:6px; border-radius:50%; flex-shrink:0; background:#E8786E; animation:sbReadyPulse 1.8s ease-out infinite; }
+    @keyframes sbReadyPulse { 0%{box-shadow:0 0 0 0 rgba(232,120,110,0.55);} 70%{box-shadow:0 0 0 5px rgba(232,120,110,0);} 100%{box-shadow:0 0 0 0 rgba(232,120,110,0);} }
+    .sb-ready-chips { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
+    .sb-ready-chip { font-size:11px; font-weight:500; color:var(--sb-link); background:rgba(232,120,110,0.14); border:1px solid rgba(232,120,110,0.24); padding:4px 9px; border-radius:7px; white-space:nowrap; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .sb-ready-lines { display:flex; flex-direction:column; gap:7px; }
+    .sb-ready-line { height:5px; border-radius:3px; background:var(--sb-fg-3); opacity:0.45; }
+    .sb-ready-btn { width:100%; height:52px; border:none; cursor:pointer; border-radius:14px; overflow:hidden; position:relative; background:linear-gradient(168deg,#F09A91 0%,#E8786E 44%,#CF5A50 100%); box-shadow:0 1px 0 rgba(255,255,255,0.5) inset,0 -2px 5px rgba(140,47,40,0.28) inset,0 12px 28px -10px rgba(201,84,74,0.62),0 2px 8px -2px rgba(201,84,74,0.32); display:flex; align-items:center; justify-content:center; gap:9px; color:white; font-size:15.5px; font-weight:600; letter-spacing:-0.01em; text-shadow:0 1px 1px rgba(140,47,40,0.28); transition:transform 0.15s ease,filter 0.15s ease; flex-shrink:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .sb-ready-btn:hover { transform:translateY(-1px); filter:brightness(1.04); }
+    .sb-ready-btn:active { transform:translateY(0) scale(0.994); }
+    .sb-ready-btn-glow { position:absolute; inset:0; pointer-events:none; background:radial-gradient(70% 130% at 30% -20%,rgba(255,255,255,0.52),transparent 60%); opacity:0.55; }
     .sb-lec-rec { display:flex; flex-direction:column; align-items:center; gap:10px; padding:20px 16px 14px; }
     .sb-lec-rec-header { display:flex; align-items:center; gap:6px; }
     .sb-lec-rec-dot { width:7px; height:7px; border-radius:50%; background:#E8786E; animation:sbLecPulse 1.4s ease-in-out infinite; flex-shrink:0; }
@@ -9556,14 +9580,43 @@ function __sbShowLectureReadyCard(mode) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   const isM = mode === "meeting";
-  const icon = isM ? "🤝" : "🎙";
-  const modeLabel = isM ? "Meeting & Call" : "Lecture & Audio";
+  const cfg = isM ? {
+    emoji: "🤝", eyebrow: "MEETING & CALL",
+    copy: "Braino listens to this tab and turns the whole conversation into structured notes.",
+    chips: ["Decisions", "Action items", "Attendees"],
+    metric: "live transcript · speaker labels",
+  } : {
+    emoji: "🎙️", eyebrow: "LECTURE & AUDIO",
+    copy: "Braino follows the lecture and captures it as clean, study-ready notes.",
+    chips: ["Key points", "Definitions", "Takeaways"],
+    metric: "live transcript · auto outline",
+  };
+  const brainSvg = __SB_BRAIN_SVG_LISTENING.replace('width="52" height="52"', 'width="72" height="72"');
   scroll.innerHTML = `
-    <div class="sb-lec-ready">
-      <div class="sb-lec-kicker">${icon} ${modeLabel}</div>
-      <div class="sb-lec-ready-title">Ready to record</div>
-      <div class="sb-lec-ready-sub">Braino will listen to this tab and turn everything into structured notes.</div>
-      <button id="__sb_lec_start_btn__" class="sb-lec-start-btn">▶ Start Recording</button>
+    <div class="sb-ready-wrap">
+      <div class="sb-ready-mascot">
+        <span class="sb-ready-mascot-halo"></span>
+        <span class="sb-ready-mascot-ring sb-ready-mascot-ring-1"></span>
+        <span class="sb-ready-mascot-ring sb-ready-mascot-ring-2"></span>
+        ${brainSvg}
+      </div>
+      <div class="sb-ready-eyebrow"><span>${cfg.emoji}</span>${cfg.eyebrow}</div>
+      <h2 class="sb-ready-headline">Ready to record</h2>
+      <p class="sb-ready-copy">${cfg.copy}</p>
+      <div class="sb-ready-preview">
+        <div class="sb-ready-preview-label">${cfg.metric}</div>
+        <div class="sb-ready-chips">${cfg.chips.map(c => `<span class="sb-ready-chip">${c}</span>`).join("")}</div>
+        <div class="sb-ready-lines">
+          <span class="sb-ready-line" style="width:88%"></span>
+          <span class="sb-ready-line" style="width:71%"></span>
+          <span class="sb-ready-line" style="width:82%"></span>
+        </div>
+      </div>
+      <button id="__sb_lec_start_btn__" class="sb-ready-btn">
+        <span class="sb-ready-btn-glow"></span>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="flex-shrink:0"><path d="M8 5.5v13a1 1 0 0 0 1.54.84l10-6.5a1 1 0 0 0 0-1.68l-10-6.5A1 1 0 0 0 8 5.5Z"/></svg>
+        Start Recording
+      </button>
     </div>
   `;
   __sbOpenCard({ rich: false });
