@@ -2502,7 +2502,7 @@ const __SB_BRAIN_SVG_SCHOLAR = __SB_BRAIN_SVG
 const __SBWK_SHOE = `<path d="M 45 74 L 42.5 87" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/><path d="M 45 74 L 42.5 87" fill="none" stroke="url(#sbb-fill)" stroke-width="5.5" stroke-linecap="round"/><path d="M 47.5 89 C 47.5 87 44.5 86.4 42 87.4 C 36 89.2 29.6 90.6 25.2 94.2 C 22.2 96.7 21.8 99.4 25 100.8 C 27 101.6 31 101.6 35 101.6 L 45.6 101.6 C 47.1 101.6 47.8 100.6 47.5 99.1 Z" fill="white" stroke="rgba(176,86,78,.42)" stroke-width="0.9" stroke-linejoin="round"/><path d="M 23 98.6 Q 21.2 101.2 25.6 101.5 L 45.6 101.5 Q 47.8 101.3 47.4 98.9 Q 34.5 100.1 23 98.6 Z" fill="#F6E2DC" stroke="rgba(176,86,78,.42)" stroke-width="0.8" stroke-linejoin="round"/><g fill="none" stroke="#C9544A" stroke-width="0.85" stroke-linecap="round" opacity="0.7"><path d="M 29.5 90 Q 36 88.5 43 89.2"/><path d="M 32 92.7 Q 37.5 91.7 43 92.2" opacity="0.6"/></g><ellipse cx="30" cy="92.4" rx="3" ry="1.4" fill="#fff" opacity="0.6" transform="rotate(-12 30 92.4)"/>`;
 const __SBWK_BODY = "M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 68 80.5 60 79.5 50 79 C 40 79.5 32 80.5 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z";
 // Uses url(#sbb-fill) + url(#sbb-glow) from __sbGlassSvg — no inline defs needed, avoids Chrome filter bug
-const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="150" height="184" overflow="visible" style="display:block"><g id="__sbwk_root__"><g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`;
+const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="64" height="78" overflow="visible" style="display:block"><g id="__sbwk_root__"><g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`;
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
 let __sbWkStart = null;
@@ -2585,7 +2585,7 @@ function __sbWkTick(now) {
   // Horizontal stroll (74px/s matching design, ping-pong within lane)
   if (__sbWkWalking) {
     const laneW = lane.clientWidth;
-    const maxX = Math.max(28, laneW - 150 - 6);
+    const maxX = Math.max(28, laneW - 64 - 6);
     let x = __sbWkPosX + __sbWkDirX * 74 * dt;
     if (x >= maxX) { x = maxX; __sbWkDirX = -1; }
     else if (x <= 6) { x = 6; __sbWkDirX = 1; }
@@ -2966,7 +2966,6 @@ function __sbBuildBrainUI() {
       filter: drop-shadow(0 2px 12px rgba(200,84,74,0.55));
       transition: filter 0.15s;
       z-index: 2;
-      animation: __sb_mascot_pace__ 32s ease-in-out infinite;
     }
     #__sb_brain_btn__:hover { filter: drop-shadow(0 4px 18px rgba(200,84,74,0.75)); }
     @keyframes __sb_mascot_pace__ {
@@ -4635,9 +4634,10 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-cinematic #__sb_brain_btn__ {
       left: 50%; transform: translateX(-50%);
     }
-    /* Freeze brain btn in place while bar is open — walker lane handles motion above */
+    /* When the bar is open the walker lane shows the mascot — hide the static
+       brain button so there is only ONE Braino on screen, never two. */
     #__sb_bar__.open #__sb_brain_btn__ {
-      animation: none; translate: 0px 0px;
+      animation: none; translate: 0px 0px; display: none;
     }
 
     /* ── Walker lane — Braino above the bar ── */
@@ -4646,14 +4646,16 @@ function __sbBuildBrainUI() {
       pointer-events:none; z-index:2147483641; overflow:visible;
       display:none;
     }
+    /* No filter here — element gets a JS transform, and filter+transform on the
+       same node breaks the SVG url(#sbb-fill) coral gradient (Chrome bug). Shadow
+       is handled by the dedicated #__sbwk_shadow__ div instead. */
     #__sbwk_walker__ {
-      position:absolute; bottom:0; width:150px;
+      position:absolute; bottom:0; width:64px;
       pointer-events:auto; cursor:pointer;
-      filter:drop-shadow(0 4px 18px rgba(200,84,74,0.32));
     }
     #__sbwk_flip__ { transform-origin:center; display:block; }
     #__sbwk_shadow__ {
-      position:absolute; left:50%; bottom:-6px; width:96px; height:14px;
+      position:absolute; left:50%; bottom:-4px; width:42px; height:8px;
       transform:translateX(-50%); border-radius:50%;
       background:radial-gradient(closest-side, rgba(120,60,40,.26), transparent 78%);
     }
@@ -6379,21 +6381,20 @@ function __sbToggleInput(open, options = {}) {
       // Create independent fixed-position brain at screen center (avoids bar transform context)
       const cinBrain = document.createElement("div");
       cinBrain.id = "__sb_cin_brain__";
-      cinBrain.innerHTML = __SB_BRAIN_SVG_SLEEPING;
+      // SVG lives in an inner wrapper so the animated glow filter on #__sb_cin_brain__
+      // never sits on the same node as the coral url(#sbb-fill) gradient (that combo
+      // renders the brain white). Outer = glow/motion, inner = the colored mascot.
+      cinBrain.innerHTML = `<div id="__sb_cin_inner__" style="width:100%;height:100%">${__SB_BRAIN_SVG_SLEEPING}</div>`;
       cinBrain.style.cssText = "position:fixed;width:52px;height:52px;top:calc(50vh - 26px);left:calc(50vw - 26px);z-index:2147483646;filter:drop-shadow(0 2px 18px rgba(200,84,74,0.6));pointer-events:none;";
       (document.documentElement||document.body).appendChild(cinBrain);
 
-      // Phase 2 (800ms): awaken, start auth, begin slow descent to bar position
+      // Phase 2 (800ms): awaken and authenticate IN THE CENTER of the screen.
+      // The brain stays put while it wakes + authenticates — it only descends
+      // AFTER it has woken/authed, and the pill only appears AFTER it lands.
       setTimeout(() => {
-        cinBrain.innerHTML = __SB_BRAIN_SVG;
+        const cinInner = cinBrain.querySelector("#__sb_cin_inner__");
+        if (cinInner) cinInner.innerHTML = __SB_BRAIN_SVG;
         cinBrain.classList.add("sb-brain-auth");
-        requestAnimationFrame(() => {
-          cinBrain.style.transition = "top 2.8s cubic-bezier(0.25,0.46,0.45,0.94)";
-          requestAnimationFrame(() => {
-            // target: above bar (barHeight≈52px + brainHeight≈52px + gap≈12px from bottom)
-            cinBrain.style.top = "calc(100vh - 116px)";
-          });
-        });
 
         const tAuth = Date.now();
         const minAuth = 1200;
@@ -6401,6 +6402,16 @@ function __sbToggleInput(open, options = {}) {
         chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
 
         let resolved = false;
+
+        // Step 3: glide down from center to just above the bar, THEN open the pill.
+        const descendThenOpen = (authed) => {
+          cinBrain.style.transition = "top 1.8s cubic-bezier(0.25,0.46,0.45,0.94)";
+          requestAnimationFrame(() => {
+            // target: above bar (barHeight≈52px + brainHeight≈52px + gap≈12px from bottom)
+            cinBrain.style.top = "calc(100vh - 116px)";
+          });
+          setTimeout(() => finishCinematic(authed), 1850);
+        };
 
         const finishCinematic = (authed) => {
           cinBrain.remove();
@@ -6424,9 +6435,10 @@ function __sbToggleInput(open, options = {}) {
           chrome.storage.onChanged.removeListener(authWatcher);
           const wait = Math.max(0, minAuth - (Date.now() - tAuth));
           setTimeout(() => {
+            // Flash the authed (green) glow in the CENTER, then descend + open.
             cinBrain.classList.remove("sb-brain-auth");
             cinBrain.classList.add("sb-brain-authed");
-            setTimeout(() => finishCinematic(true), 900);
+            setTimeout(() => descendThenOpen(true), 900);
           }, wait);
         };
 
@@ -6436,7 +6448,7 @@ function __sbToggleInput(open, options = {}) {
           chrome.storage.onChanged.removeListener(authWatcher);
           cinBrain.classList.remove("sb-brain-auth");
           cinBrain.classList.add("sb-brain-rejected");
-          setTimeout(() => finishCinematic(false), 700);
+          setTimeout(() => descendThenOpen(false), 700);
         };
 
         const authWatcher = (changes, area) => {
