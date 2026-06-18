@@ -3323,6 +3323,11 @@ function __sbBuildBrainUI() {
     .sb-ready-btn:hover { transform:translateY(-1px); filter:brightness(1.04); }
     .sb-ready-btn:active { transform:translateY(0) scale(0.994); }
     .sb-ready-btn-glow { position:absolute; inset:0; pointer-events:none; background:radial-gradient(70% 130% at 30% -20%,rgba(255,255,255,0.52),transparent 60%); opacity:0.55; }
+    .sb-ready-mascot svg { animation:sbReadyFloat 3.5s ease-in-out infinite; }
+    @keyframes sbReadyFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    .sb-ready-mascot #sbb-eye-l { animation:sbReadyBlink 4s ease-in-out infinite; }
+    .sb-ready-mascot #sbb-eye-r { animation:sbReadyBlink 4s ease-in-out infinite 0.06s; }
+    @keyframes sbReadyBlink { 0%,88%,100%{transform:scaleY(1)} 92%{transform:scaleY(0.08)} }
     .sb-lec-rec { display:flex; flex-direction:column; align-items:center; gap:10px; padding:20px 16px 14px; }
     .sb-lec-rec-header { display:flex; align-items:center; gap:6px; }
     .sb-lec-rec-dot { width:7px; height:7px; border-radius:50%; background:#E8786E; animation:sbLecPulse 1.4s ease-in-out infinite; flex-shrink:0; }
@@ -9591,7 +9596,7 @@ function __sbShowLectureReadyCard(mode) {
     chips: ["Key points", "Definitions", "Takeaways"],
     metric: "live transcript · auto outline",
   };
-  const brainSvg = __SB_BRAIN_SVG_LISTENING.replace('width="52" height="52"', 'width="72" height="72"');
+  const brainSvg = (isM ? __SB_BRAIN_SVG_LISTENING : __SB_BRAIN_SVG_SCHOLAR).replace('width="52" height="52"', 'width="72" height="72"');
   scroll.innerHTML = `
     <div class="sb-ready-wrap">
       <div class="sb-ready-mascot">
