@@ -3356,13 +3356,13 @@ function __sbBuildBrainUI() {
     /* ── NEW UI: Thin bar + centered glass card ── */
     #__sb_bar__ {
       display: flex; align-items: center; gap: 6px;
-      background: rgba(255,251,247,0.12); border-radius: 100px;
+      background: rgba(26, 18, 12, 0.76); border-radius: 100px;
       position: relative; isolation: isolate;
       padding: 7px 7px 7px 18px;
-      border: 1px solid rgba(255,255,255,0.5);
-      box-shadow: 0 8px 28px rgba(27,23,19,0.15), 0 2px 8px rgba(27,23,19,0.08),
-                  inset 2px 2px 1px rgba(255,255,255,0.65),
-                  inset -1px -1px 1px rgba(255,255,255,0.3);
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.14),
+                  inset 1.5px 1.5px 0 rgba(255,255,255,0.16),
+                  inset -1px -1px 0 rgba(255,255,255,0.08);
       width: 360px; max-width: calc(100vw - 90px);
       backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
       pointer-events: none; opacity: 0;
@@ -3407,7 +3407,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-waking #__sb_send_btn__,
     #__sb_bar__.sb-waking #__sb_x_auto_btn__ { display: none !important; }
     #__sb_wakeup_track__ {
-      flex: 1; height: 2px; background: rgba(65,48,40,0.12); border-radius: 99px; overflow: hidden;
+      flex: 1; height: 2px; background: rgba(255,255,255,0.14); border-radius: 99px; overflow: hidden;
     }
     #__sb_wakeup_fill__ {
       height: 100%; width: 0%;
@@ -3415,7 +3415,7 @@ function __sbBuildBrainUI() {
       border-radius: 99px; transition: width 0.55s cubic-bezier(0.4,0,0.2,1);
     }
     #__sb_wakeup_label__ {
-      font-size: 11.5px; color: #A79B92; white-space: nowrap; flex-shrink: 0;
+      font-size: 11.5px; color: rgba(245,237,232,0.52); white-space: nowrap; flex-shrink: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     @keyframes __sb_wu_pulse__ {
@@ -3437,7 +3437,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin #__sb_x_auto_btn__,
     #__sb_bar__.sb-signin #__sb_wakeup__ { display: none !important; }
     #__sb_signin_cta_hint__ {
-      font-size: 12px; color: #A79B92; flex: 1; min-width: 0;
+      font-size: 12px; color: rgba(245,237,232,0.52); flex: 1; min-width: 0;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
@@ -3452,19 +3452,21 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
-      font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      font-size: 14px; color: #F5EDE8; min-width: 0; padding: 0; line-height: 1.4;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    #__sb_input__::placeholder { color: #A79B92; }
+    #__sb_input__::placeholder { color: rgba(245,237,232,0.42); }
+    #__sb_bar__ #__sb_mode_btn__ { color: rgba(245,237,232,0.8); background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.14); }
+    #__sb_bar__ #__sb_mode_btn__:hover { background: rgba(255,255,255,0.15); }
     .sb-bar-icon-btn {
       width: 32px; height: 32px; border-radius: 50%; border: none;
-      background: transparent; color: #6B5248; cursor: pointer;
+      background: transparent; color: rgba(245,237,232,0.75); cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
     }
-    .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
-    .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
-    #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
+    .sb-bar-icon-btn:hover { background: rgba(255,255,255,0.1); color: #F5EDE8; }
+    .sb-bar-icon-btn.active { background: rgba(201,84,74,0.32); color: #FFB3AE; }
+    #__sb_x_auto_btn__.running { background: rgba(255,220,50,0.18); color: #FFD966; }
     #__sb_send_btn__ { background: #E8786E !important; color: white !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
@@ -3489,7 +3491,7 @@ function __sbBuildBrainUI() {
     @keyframes __sb_orbit__ { from { offset-distance: 0%; } to { offset-distance: 100%; } }
     #__sb_bubble__ {
       --sb-fg: #ffffff; --sb-fg-2: rgba(255,255,255,0.85); --sb-fg-3: rgba(255,255,255,0.4);
-      --sb-bg: rgba(255,255,255,0.04); --sb-border: rgba(255,255,255,0.38);
+      --sb-bg: rgba(26, 18, 12, 0.78); --sb-border: rgba(255,255,255,0.18);
       --sb-q-bg: rgba(255,255,255,0.12); --sb-q-border: rgba(255,255,255,0.2);
       --sb-footer-border: rgba(255,255,255,0.12); --sb-footer-bg: rgba(0,0,0,0.1);
       --sb-code-bg: rgba(255,255,255,0.12); --sb-code-fg: #FFD0CB;
