@@ -104,7 +104,7 @@ const rows: SkillRow[] = [
     status: "Needs refinement",
     canDo: [
       "Use OpenAI Realtime for listening, VAD, transcription, and routing.",
-      "Use ElevenLabs as the main spoken voice.",
+      "Use Fish Audio as the main spoken voice.",
       "Track session cost logs and realtime voice usage.",
     ],
     notes: "Architecture is better now, but still needs careful QA because voice bugs are very visible.",

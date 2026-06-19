@@ -1109,9 +1109,9 @@ export default function Dashboard() {
   const [contactPhotoPreviewUrl, setContactPhotoPreviewUrl] = useState("");
   const contactPhotoInputRef = useRef<HTMLInputElement>(null);
   const contactPhotoObjectUrlRef = useRef<string | null>(null);
-  const [voicePref, setVoicePref] = useState<"realtime" | "elevenlabs">(() => {
+  const [voicePref, setVoicePref] = useState<"realtime" | "fish">(() => {
     const stored = localStorage.getItem("brainoVoicePref");
-    return stored === "realtime" ? "realtime" : "elevenlabs";
+    return stored === "realtime" ? "realtime" : "fish"; // "elevenlabs" legacy → "fish"
   });
   const [overallMemory, setOverallMemory] = useState("");
   const [overallMemoryDraft, setOverallMemoryDraft] = useState("");
@@ -5050,7 +5050,7 @@ export default function Dashboard() {
 
                   <div className="space-y-3">
                     {([
-                      { id: "elevenlabs", label: "ElevenLabs",            desc: "Braino's default voice — Realtime listens, ElevenLabs speaks" },
+                      { id: "fish",       label: "Fish Audio",           desc: "Braino's default voice — Realtime listens, Fish Audio speaks" },
                       { id: "realtime",   label: "Realtime AI",          desc: "OpenAI's native voice — lowest latency, but uses OpenAI audio output" },
                     ] as const).map(({ id: option, label, desc }) => {
                       const isSelected = voicePref === option;

@@ -6728,7 +6728,7 @@ chrome.windows.onRemoved.addListener((windowId) => {
 
 async function ensureOffscreenForRealtime() {
   // Realtime lives in the offscreen doc so the mic/session can follow tabs instantly.
-  // Any remote model audio is muted there; Braino's primary audible output is ElevenLabs.
+  // Any remote model audio is muted there; Braino's primary audible output is Fish Audio.
   // Close and recreate if needed so the global realtime host is definitely available.
   const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
   if (contexts.length > 0) {
