@@ -5515,8 +5515,9 @@ function __sbBuildBrainUI() {
     }
   });
 
-  // ⌘I / Ctrl+I — toggle brain
+  // ⌘I / Ctrl+I — toggle brain. Double-tap Space — primary invoke (cycles the loop).
   let __sbLastCtrlTap = 0;
+  let __sbLastSpaceTap = 0;
   document.addEventListener("keydown", (e) => {
     // Double-tap Control → toggle headphone mode.
     if (e.key === "Control") {
@@ -5535,6 +5536,29 @@ function __sbBuildBrainUI() {
       return;
     }
     __sbLastCtrlTap = 0;   // any other key breaks the double-tap (Ctrl+key combos don't count)
+
+    // Double-tap Space → invoke / cycle Braino (OFF→PANEL plays the climb wake-up).
+    // Ignored while typing in ANY field (page or Braino's own bar) so it never eats text.
+    if (e.code === "Space") {
+      const ae = document.activeElement;
+      const typing = ae instanceof Element && (
+        ae.isContentEditable || ae.getAttribute("contenteditable") === "true" ||
+        ae.getAttribute("role") === "textbox" ||
+        /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)
+      );
+      if (typing || e.repeat || e.metaKey || e.ctrlKey || e.altKey) { __sbLastSpaceTap = 0; return; }
+      const now = Date.now();
+      if (now - __sbLastSpaceTap < 400) {
+        __sbLastSpaceTap = 0;
+        e.preventDefault(); e.stopPropagation();   // swallow the scroll on the invoking tap
+        if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+        __sbToggleBrain();
+      } else {
+        __sbLastSpaceTap = now;
+      }
+      return;
+    }
+    __sbLastSpaceTap = 0;
 
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
       if (__sbHasExternalEditableFocus()) return;
@@ -5558,7 +5582,9 @@ function __sbBuildBrainUI() {
     }
 
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "i") {
-      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return;
+      // Only bail when typing in a PAGE field — NOT when Braino's own bar is focused
+      // (that guard was blocking the cycle right after the panel opened).
+      if (__sbHasExternalEditableFocus()) return;
       e.preventDefault();
       __sbToggleBrain();
     }
