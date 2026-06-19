@@ -2342,7 +2342,7 @@ new MutationObserver(() => {
 // sbb-arm-l / sbb-arm-r : arm pivot groups (rotate at shoulder origin)
 // sbb-pupil-l / sbb-pupil-r : pupil + highlight pairs (translate for gaze drift)
 // sbb-eye-l / sbb-eye-r : eye whites (scaleY for blink)
-const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g><g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g><g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/><g id="sbb-talk" style="display:none;transform-box:view-box;transform-origin:50px 62px"><ellipse cx="50" cy="62" rx="4" ry="3" fill="#6E211A"/><ellipse cx="50" cy="63" rx="2.3" ry="1.3" fill="#E8786E"/></g></svg>`;
+const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g><g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g><g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/><g id="sbb-talk" style="display:none;transform-box:view-box;transform-origin:50px 62px"><ellipse cx="50" cy="62" rx="4" ry="3" fill="#6E211A"/><ellipse cx="50" cy="63" rx="2.3" ry="1.3" fill="#E8786E"/></g><g id="sbb-specs" style="display:none"><circle cx="38" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/><circle cx="62" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/><path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/><path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/><path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/></g></svg>`;
 
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
@@ -2583,7 +2583,17 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
   .replaceAll("url(#sbb-glow)", "url(#sbwk-glow)")
   .replaceAll("url(#sbb-dark)", "url(#sbwk-dark)")
   // Inject the reaction overlay on top of the face (after mouth-close, before root-close).
-  .replace("</g></g></g></svg>", "</g></g>" + __SBWK_REACT + "</g></svg>");
+  .replace("</g></g></g></svg>", "</g></g>" + __SBWK_REACT + "</g></svg>")
+  // Glasses overlay (hidden until Braino is asked to "wear specs") — same round-glasses
+  // shape as the scholar look; eye coords (38/62, 48) match the brain.
+  .replace("</g></svg>",
+    '<g id="__sbwk_specs__" display="none">' +
+    '<circle cx="38" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/>' +
+    '<circle cx="62" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/>' +
+    '<path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '<path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '<path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
 let __sbWkStart = null;
@@ -2614,6 +2624,23 @@ let __sbWkReactStart = 0;      // performance.now() when the reaction began
 let __sbWkClimbing = false;    // true while the wake-up climb owns the rig
 let __sbWkClimbRaf = null;
 let __sbWkResumeFromX = null;  // start X for the next walk loop (so a climb hands off smoothly)
+let __sbGlassesOn = false;     // Braino is wearing his specs
+
+// Put on / take off Braino's glasses (walker + docked brain).
+function __sbSetGlasses(on) {
+  __sbGlassesOn = !!on;
+  const specs = document.querySelector("#__sbwk_walker__ #__sbwk_specs__");
+  if (specs) specs.setAttribute("display", on ? "inline" : "none");
+  document.getElementById("__sb_brain_btn__")?.classList.toggle("sb-glasses", !!on);
+}
+
+// Detect "wear/put on your specs/glasses" (or take them off) from a prompt.
+function __sbGlassesIntent(text) {
+  const t = String(text || "").toLowerCase();
+  if (!/(glasses|spectacle|\bspecs?\b|scholar)/.test(t)) return null;
+  if (/(take off|takeoff|remove|lose the|without|take.*off|no more|put away)/.test(t)) return "off";
+  return "on";
+}
 
 // Trigger a single hand wave (used to acknowledge the user in headphone mode).
 function __sbWkTriggerWave() {
@@ -2802,6 +2829,7 @@ function __sbStartWalkLoop() {
   __sbWkDirX = 1;
   __sbWkWalking = true; __sbWkWaving = false; __sbWkBusy = false; __sbWalkTalking = false;
   __sbWkResetThrow();
+  if (__sbGlassesOn) __sbSetGlasses(true);   // keep specs on across walker rebuilds
   clearTimeout(__sbWkAutoTimer); __sbWkScheduleAuto();
   if (!__sbWkRaf) __sbWkRaf = requestAnimationFrame(__sbWkTick);
 }
@@ -2973,23 +3001,33 @@ function __sbWakeupClimb(finishAuthed, finishRejected) {
       if (e >= perchDur) { setArms(0, 0); if (!alreadyAuthed) startAuth(); next("auth"); }
     } else if (phase === "auth") {
       setEyes(lerp(1, 0.06, Math.min(1, e / 350)));          // eyes close (blink shut)
+      // The display name only lands in storage AFTER auth — re-read it on the way to hello
+      // so first-time logins greet by name instead of "hello there".
+      const goHello = () => {
+        __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
+          const fn = authDisplayName?.split(" ")[0]?.trim();
+          if (fn) firstName = fn;
+        });
+        next("hello");
+      };
       if (alreadyAuthed) {
         // Already logged in: no gold "authenticating" glow — just a green confirm flash.
         walker.classList.add("sbwk-authed");
-        if (e >= 700) next("hello");
+        if (e >= 700) goHello();
       } else {
         walker.classList.add("sbwk-auth");                   // gold pulse while handshaking
         if (authResolved !== null) {
           walker.classList.remove("sbwk-auth");
-          if (authResolved) { walker.classList.add("sbwk-authed"); next("hello"); }
+          if (authResolved) { walker.classList.add("sbwk-authed"); goHello(); }
           else { endClimb(finishRejected); return; }
         }
       }
     } else if (phase === "hello") {
       setEyes(lerp(0.06, 1, Math.min(1, e / 350)));          // eyes open
-      if (e > 200 && !said2) { said2 = true; __sbWkSay("hello, " + (firstName || "there")); }
+      // Wait briefly for the name to load (up to ~900ms) before greeting.
+      if (!said2 && (firstName || e > 900)) { said2 = true; __sbWkSay("hello, " + (firstName || "there")); }
       // Hand off so the normal stroll resumes from the CENTER (no jump to the edge).
-      if (e >= 1600) { __sbWkResumeFromX = climbX; endClimb(finishAuthed); return; }
+      if (e >= 1700) { __sbWkResumeFromX = climbX; endClimb(finishAuthed); return; }
     }
     __sbWkClimbRaf = requestAnimationFrame(step);
   };
@@ -3150,20 +3188,22 @@ function __sbWkTick(now) {
         (0.7 + 0.3 * Math.sin(t * 23))
       ));
       const ry = 1.4 + o * 4.2, rx = 4 - o * 0.5;
-      if (mSmile) mSmile.setAttribute("display", "none");
-      if (mTalk)  mTalk.setAttribute("display", "inline");
+      // Use style.display — the talk group carries an inline style="display:none" that
+      // would otherwise override the display ATTRIBUTE (that was the missing-mouth bug).
+      if (mSmile) mSmile.style.display = "none";
+      if (mTalk)  mTalk.style.display = "block";
       if (tE) { tE.setAttribute("rx", String(rx)); tE.setAttribute("ry", String(ry)); }
       if (tI) {
         if (o > 0.25) {
-          tI.setAttribute("display", "inline");
+          tI.style.display = "block";
           tI.setAttribute("cy", String(61.8 + ry * 0.4));
           tI.setAttribute("rx", String(rx * 0.62));
           tI.setAttribute("ry", String(ry * 0.5));
-        } else { tI.setAttribute("display", "none"); }
+        } else { tI.style.display = "none"; }
       }
     } else {
-      if (mSmile) mSmile.setAttribute("display", "inline");
-      if (mTalk)  mTalk.setAttribute("display", "none");
+      if (mSmile) mSmile.style.display = "";
+      if (mTalk)  mTalk.style.display = "none";
     }
   }
 
@@ -5170,6 +5210,8 @@ function __sbBuildBrainUI() {
     /* Talking mouth on the docked brain while it speaks in voice mode (the walker has its
        own; this covers the case where the docked mascot is the one on screen). */
     #__sb_brain_btn__.hp-speaking #sbb-talk { display: block !important; animation: __sb_brain_talk__ 0.26s ease-in-out infinite; }
+    /* Glasses on the docked brain when Braino is asked to "wear specs". */
+    #__sb_brain_btn__.sb-glasses #sbb-specs { display: block !important; }
     @keyframes __sb_brain_talk__ {
       0%, 100% { transform: scaleY(0.28); }
       50%      { transform: scaleY(1.05); }
@@ -10298,6 +10340,17 @@ async function __sbProcessPrompt(text, options = {}) {
     if (!fromVoice) return false;
     return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
   };
+
+  // Quick local intent: "wear/put on your specs" → toggle the glasses, no model call.
+  const __glassesIntent = __sbGlassesIntent(promptText);
+  if (__glassesIntent) {
+    __sbSetGlasses(__glassesIntent === "on");
+    const sayLine = __glassesIntent === "on" ? "How do I look?" : "Specs off — better?";
+    __sbStopSpeech();
+    if (fromVoice) { await speakVoiceReply(sayLine); }
+    else { __sbWkSay(__glassesIntent === "on" ? "How do I look? 🤓" : "Specs off"); }
+    return;
+  }
 
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
