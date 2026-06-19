@@ -3562,9 +3562,9 @@ function __sbBuildBrainUI() {
     #__sb_send_btn__:hover { background: #C9544A; }
     .sb-pill-dropdown-btn {
       display: inline-flex; align-items: center; gap: 4px;
-      border: none; background: rgba(65,48,40,0.07); border-radius: 8px;
+      border: none; background: rgba(255,251,247,0.55); border-radius: 8px;
       padding: 4px 8px 4px 9px; cursor: pointer; transition: background 0.15s;
-      font-size: 11px; font-weight: 600; color: #6B5248; white-space: nowrap;
+      font-size: 11px; font-weight: 600; color: #3A2D24; white-space: nowrap;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     .sb-pill-dropdown-btn:hover { background: rgba(65,48,40,0.12); }
@@ -3903,18 +3903,18 @@ function __sbBuildBrainUI() {
       position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%) translateY(24px) scale(0.97);
       display: flex; align-items: center; gap: 8px;
-      /* Frosted light glass: opaque enough that the dark text reads clearly on ANY
-         page (incl. dark sites), while still translucent + blurred = liquid glass. */
-      background: rgba(255,251,247,0.66); border-radius: 100px;
+      /* Stays transparent liquid glass — legibility comes from a light text halo
+         (see #__sb_input__ etc.) rather than an opaque backing. */
+      background: rgba(255,251,247,0.12); border-radius: 100px;
       isolation: isolate;
       overflow: visible;
       padding: 10px 10px 10px 28px;
-      border: 1px solid rgba(255,255,255,0.6);
+      border: 1px solid rgba(255,255,255,0.5);
       box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
                   inset -1px -1px 1px rgba(255,255,255,0.3);
       width: calc(100vw - 48px); max-width: 1100px;
-      backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%);
+      backdrop-filter: blur(6px) saturate(180%); -webkit-backdrop-filter: blur(6px) saturate(180%);
       pointer-events: none; opacity: 0;
       z-index: 2147483647;
       transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1),
@@ -4007,14 +4007,18 @@ function __sbBuildBrainUI() {
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
       font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      /* Light halo so the dark text stays legible on a transparent glass over dark pages. */
+      text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.7), 0 1px 1px rgba(255,255,255,0.8);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    #__sb_input__::placeholder { color: #6B5248; }
+    #__sb_input__::placeholder { color: #4A3D34; }
     .sb-bar-icon-btn {
       width: 38px; height: 38px; border-radius: 50%; border: none;
-      background: transparent; color: #6B5248; cursor: pointer;
+      background: transparent; color: #3A2D24; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
+      /* Light halo so the stroke icons stay visible on a transparent glass over dark pages. */
+      filter: drop-shadow(0 0 2px rgba(255,255,255,0.9)) drop-shadow(0 0 4px rgba(255,255,255,0.55));
     }
     .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
     .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
