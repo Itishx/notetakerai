@@ -2661,7 +2661,6 @@ const BG_DELEGATE_ACTIONS = new Set([
   "answer",
   "clarify",
 ]);
-const BG_DELEGATE_DESTRUCTIVE_RE = /\b(send|submit|apply|delete|remove|cancel|pay|purchase|buy|post|tweet|publish|schedule|invite)\b/i;
 
 function bgSafeJson(value) {
   try { return JSON.stringify(value); } catch (_) { return "null"; }
@@ -2892,7 +2891,8 @@ Rules:
 - Use the observation as ground truth. If the needed element is absent, scroll, wait, read, or clarify.
 - Every non-read/browser action needs an assertion that can be checked against the next observation.
 - Do not claim done until the task is complete in observed state.
-- Destructive operations such as Send, Submit, Apply, Delete, Cancel, Pay, Post, Publish, Schedule, and Invite require confirmation if Braino has not confirmed yet.
+- If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
+- For other high-risk final actions not clearly requested by the user, clarify before acting.
 - Today is ${bgDelegateTodayText()}.
 
 Useful URL shortcuts:
@@ -2980,16 +2980,6 @@ function bgDescribeDelegateAction(action, obs) {
   if (action.type === "scroll") return `Scroll ${action.direction}`;
   if (action.type === "wait") return `Wait ${action.ms || 1000}ms`;
   return action.type;
-}
-
-function bgDecisionNeedsConfirmation(decision, state, obs) {
-  if (state.confirmedDestructive) return false;
-  const action = decision?.action || {};
-  const el = obs?.elements?.find((item) => Number(item.index) === Number(action.index));
-  const text = `${state.goal || ""} ${state.subgoals?.map((goal) => goal.desc).join(" ") || ""} ${el?.name || ""} ${action.type || ""} ${action.key || ""}`;
-  if (!BG_DELEGATE_DESTRUCTIVE_RE.test(text)) return false;
-  if (action.type === "read" || action.type === "wait" || action.type === "scroll" || action.type === "navigate") return false;
-  return true;
 }
 
 async function bgExecuteDelegateAction(tabId, action, state) {
@@ -3220,13 +3210,6 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       onFinal?.(msg);
       return { ok: action.type === "answer", message: msg, state };
     }
-    if (bgDecisionNeedsConfirmation(decision, state, obs)) {
-      const el = obs.elements?.find((item) => Number(item.index) === Number(action.index));
-      const msg = `I'm ready to ${String(el?.name || action.type).trim()}, but that looks like a final/destructive action. Please confirm before I do it.`;
-      onFinal?.(msg);
-      return { ok: false, message: msg, state, needsConfirmation: true };
-    }
-
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
