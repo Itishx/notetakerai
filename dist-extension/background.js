@@ -2696,6 +2696,18 @@ function bgValidateDecision(rawDecision) {
   };
 }
 
+function bgDelegateClarifyDecision(message, thought = "The model response was not valid Delegate JSON.") {
+  return bgValidateDecision({
+    thought,
+    action: {
+      type: "clarify",
+      text: message || "I had trouble reading the next browser step. Please say the task again or give me one more detail to continue.",
+    },
+    expect: { assert: "none" },
+    done_confidence: 0,
+  });
+}
+
 async function bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError }) {
   const message = validationError
     ? `${userPrompt}\n\nYour previous JSON failed validation: ${validationError}\nReturn corrected strict JSON only.`
@@ -2880,8 +2892,22 @@ async function bgDecideNextAction({ task, state, observationText, skills, phase,
   try {
     return { decision: bgValidateDecision(bgExtractJsonObject(reply)), model };
   } catch (firstError) {
-    reply = await bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError: firstError.message || String(firstError) });
-    return { decision: bgValidateDecision(bgExtractJsonObject(reply)), model };
+    try {
+      reply = await bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError: firstError.message || String(firstError) });
+      return { decision: bgValidateDecision(bgExtractJsonObject(reply)), model };
+    } catch (secondError) {
+      console.warn("[Braino][Delegate] decision JSON fallback:", {
+        firstError: firstError?.message || String(firstError),
+        secondError: secondError?.message || String(secondError),
+        replyPreview: String(reply || "").slice(0, 240),
+      });
+      return {
+        decision: bgDelegateClarifyDecision(
+          "I hit a malformed model response while choosing the next browser step. Please retry the command; I will keep the page state and continue from the live DOM.",
+        ),
+        model,
+      };
+    }
   }
 }
 

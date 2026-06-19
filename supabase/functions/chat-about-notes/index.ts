@@ -119,7 +119,13 @@ async function callClaudeAi(config: AiConfig, messages: any[]) {
 
 function extractContent(provider: AiBackendProvider, data: any): string {
   if (provider === "claude") {
-    return data.content?.[0]?.text || "";
+    return Array.isArray(data.content)
+      ? data.content
+          .filter((part: any) => part?.type === "text" && typeof part.text === "string")
+          .map((part: any) => part.text)
+          .join("\n")
+          .trim()
+      : "";
   }
   return data.choices?.[0]?.message?.content || "";
 }
@@ -283,6 +289,7 @@ serve(async (req) => {
       pageContext,
       aiProvider,
       delegateModel,
+      delegatePurpose,
       movieContext,
       movieDiscoveryPrompt,
       userId,
@@ -300,7 +307,9 @@ serve(async (req) => {
     }
 
     // ── Google Docs intent: "create a doc about X" ────────────────────────────
-    if (!imageBase64 && message && driveConnected && userId) {
+    const isDelegateRequest = delegatePurpose === "delegate";
+
+    if (!isDelegateRequest && !imageBase64 && message && driveConnected && userId) {
       const intent = detectDocIntent(message);
       if (intent.matched && intent.topic) {
         const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -317,7 +326,7 @@ serve(async (req) => {
       }
     }
 
-    if (!imageBase64 && typeof message === "string" && isRealtimeCostQuestion(message)) {
+    if (!isDelegateRequest && !imageBase64 && typeof message === "string" && isRealtimeCostQuestion(message)) {
       const realtimeCostResult = await loadRealtimeCostSummaryForRequest(requestAuthHeader, {
         requestedUserId: typeof userId === "string" ? userId : null,
         clientTimeZone: typeof clientTimeZone === "string" ? clientTimeZone : null,
@@ -348,7 +357,9 @@ serve(async (req) => {
       resolvedUserId,
       typeof message === "string" ? message : "",
     );
-    const systemPrompt = hasImage
+    const systemPrompt = isDelegateRequest
+      ? String(notes || "You are Braino Delegate. Return strict JSON only.")
+      : hasImage
       ? `You are a helpful lecture notes assistant. The user has lecture notes and is sharing a diagram/image screenshot from the lecture.
 
 Your task: Analyze the image and integrate it into the existing notes at the most contextually appropriate location. Return the COMPLETE updated notes in markdown with the placeholder {{IMAGE_PLACEHOLDER}} inserted at the right spot where the NEW image should appear.
