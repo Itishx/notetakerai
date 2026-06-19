@@ -2564,11 +2564,117 @@ let __sbWkAutoTimer = null;
 let __sbWkEngaged = false;   // true while headphone mode has Braino's attention (stand still, no idle pacing)
 let __sbWkWaveTimer = null;
 
+// ── Throw / drag physics ────────────────────────────────────────────────────
+// Braino can be grabbed and flung anywhere on screen. While thrown the tick stops
+// driving his position; a physics loop tumbles him (legs flailing) until he settles,
+// then he glides back to the bar and resumes walking. He is not amused.
+let __sbWkThrowMode = false;   // physics/return owns the walker transform (tick hands off)
+let __sbWkThrown = false;      // currently airborne or returning
+let __sbWkThrowRaf = null;
+let __sbThrowTX = 0;           // lane-local translate (px) from the walking anchor
+let __sbThrowTY = 0;
+let __sbThrowRot = 0;          // tumble rotation (deg)
+let __sbWkSayTimer = null;
+
 // Trigger a single hand wave (used to acknowledge the user in headphone mode).
 function __sbWkTriggerWave() {
   __sbWkWaving = true;
   clearTimeout(__sbWkWaveTimer);
   __sbWkWaveTimer = setTimeout(() => { __sbWkWaving = false; }, 1700);
+}
+
+function __sbWkApplyThrowTransform() {
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) return;
+  walker.style.transform = `translate(${__sbThrowTX}px, ${__sbThrowTY}px) rotate(${__sbThrowRot}deg)`;
+  const say = walker.querySelector("#__sbwk_say__");
+  if (say) say.style.transform = `translateX(-50%) rotate(${-__sbThrowRot}deg)`; // keep speech upright
+}
+
+// Show a short speech bubble above Braino's head.
+function __sbWkSay(text) {
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) return;
+  let b = walker.querySelector("#__sbwk_say__");
+  if (!b) { b = document.createElement("div"); b.id = "__sbwk_say__"; walker.appendChild(b); }
+  b.textContent = text;
+  requestAnimationFrame(() => b.classList.add("show"));
+  clearTimeout(__sbWkSayTimer);
+  __sbWkSayTimer = setTimeout(() => b.classList.remove("show"), 1500);
+}
+
+// Launch Braino with a flick velocity (px/s). Gravity + wall bounces, then return.
+function __sbWkLaunch(vx, vy) {
+  const lane = document.getElementById("__sb_walk_lane__");
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!lane || !walker) return;
+  __sbWkThrown = true; __sbWkThrowMode = true; __sbWkWalking = false; __sbWkEngaged = false;
+  __sbWkSay("not cool 😒");
+
+  const laneRect = lane.getBoundingClientRect();
+  const W = window.innerWidth, H = window.innerHeight, ww = 64, wh = 78;
+  const minTX = -laneRect.left + 4;
+  const maxTX = (W - ww) - laneRect.left - 4;
+  const minTY = -(laneRect.bottom - wh) + 8;   // toward top of screen
+  const maxTY = (H - 6) - laneRect.bottom;      // toward bottom of screen (the "floor")
+
+  let velX = Math.max(-2800, Math.min(2800, vx));
+  let velY = Math.max(-2800, Math.min(2800, vy));
+  if (Math.abs(velX) < 140 && Math.abs(velY) < 140) velY = -760; // a limp drop still tosses up
+  const g = 2800, rest = 0.62;
+  let rotV = velX / 90;        // spin scales with horizontal speed
+  let last = performance.now(), start = last;
+
+  if (__sbWkThrowRaf) cancelAnimationFrame(__sbWkThrowRaf);
+  const step = (now) => {
+    const dt = Math.min(0.032, (now - last) / 1000); last = now;
+    velY += g * dt;
+    __sbThrowTX += velX * dt;
+    __sbThrowTY += velY * dt;
+    __sbThrowRot += rotV * dt;
+    if (__sbThrowTX < minTX) { __sbThrowTX = minTX; velX = -velX * rest; rotV = -rotV * rest; }
+    if (__sbThrowTX > maxTX) { __sbThrowTX = maxTX; velX = -velX * rest; rotV = -rotV * rest; }
+    if (__sbThrowTY < minTY) { __sbThrowTY = minTY; velY = -velY * rest; }
+    if (__sbThrowTY > maxTY) { __sbThrowTY = maxTY; velY = -velY * rest; velX *= 0.72; rotV *= 0.6; }
+    __sbWkApplyThrowTransform();
+    const elapsed = (now - start) / 1000;
+    const settled = Math.abs(velX) < 70 && Math.abs(velY) < 70 && (maxTY - __sbThrowTY) < 2;
+    if (elapsed < 2.4 && !settled) __sbWkThrowRaf = requestAnimationFrame(step);
+    else __sbWkReturnToBar();
+  };
+  __sbWkThrowRaf = requestAnimationFrame(step);
+}
+
+// Glide Braino back to the bar walking line, then hand control back to the walk loop.
+function __sbWkReturnToBar() {
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  const lane = document.getElementById("__sb_walk_lane__");
+  const laneW = lane ? lane.clientWidth : 320;
+  const fromX = __sbThrowTX, fromY = __sbThrowTY, fromR = __sbThrowRot;
+  const toX = Math.max(6, Math.min(__sbWkPosX, laneW - 70));
+  const dur = 620, start = performance.now();
+  const ease = (now) => {
+    const k = Math.min(1, (now - start) / dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    __sbThrowTX = fromX + (toX - fromX) * e;
+    __sbThrowTY = fromY + (0 - fromY) * e;
+    __sbThrowRot = fromR + (0 - fromR) * e;
+    __sbWkApplyThrowTransform();
+    if (k < 1) { __sbWkThrowRaf = requestAnimationFrame(ease); }
+    else {
+      __sbWkThrowRaf = null;
+      __sbWkPosX = toX; __sbThrowTX = toX; __sbThrowTY = 0; __sbThrowRot = 0;
+      __sbWkThrown = false; __sbWkThrowMode = false; __sbWkWalking = true;
+    }
+  };
+  __sbWkThrowRaf = requestAnimationFrame(ease);
+}
+
+// Reset any in-flight throw (called when the walker is torn down / restarted).
+function __sbWkResetThrow() {
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  __sbWkThrown = false; __sbWkThrowMode = false;
+  __sbThrowTX = 0; __sbThrowTY = 0; __sbThrowRot = 0;
 }
 
 function __sbStartWalkLoop() {
@@ -2585,12 +2691,50 @@ function __sbStartWalkLoop() {
     shadow.id = "__sbwk_shadow__";
     walker.appendChild(flip);
     walker.appendChild(shadow);
-    walker.addEventListener("click", () => {
-      if (__sbWkBusy) return;
-      __sbWkBusy = true; __sbWkWalking = false; __sbWkWaving = true;
-      setTimeout(() => { __sbWkWaving = false; }, 1600);
-      setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; }, 2400);
+
+    // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
+    let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
+    walker.addEventListener("pointerdown", (e) => {
+      if (__sbWkThrown) return;
+      dragging = true; dragMoved = false;
+      try { walker.setPointerCapture(e.pointerId); } catch (_) {}
+      __sbWkThrowMode = true;            // tick stops driving the transform
+      __sbThrowTX = __sbWkPosX; __sbThrowTY = 0; __sbThrowRot = 0;
+      lastPX = e.clientX; lastPY = e.clientY; lastPT = performance.now();
+      vX = 0; vY = 0;
+      walker.style.cursor = "grabbing";
+      e.preventDefault();
     });
+    walker.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const now = performance.now();
+      const dt = Math.max(0.001, (now - lastPT) / 1000);
+      const dx = e.clientX - lastPX, dy = e.clientY - lastPY;
+      if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
+      __sbThrowTX += dx; __sbThrowTY += dy;
+      vX = dx / dt; vY = dy / dt;        // px/s — used as launch velocity
+      lastPX = e.clientX; lastPY = e.clientY; lastPT = now;
+      __sbWkApplyThrowTransform();
+    });
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      walker.style.cursor = "grab";
+      try { walker.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (!dragMoved) {
+        // simple tap → wave hello
+        __sbWkThrowMode = false; __sbThrowTX = 0; __sbThrowTY = 0; __sbThrowRot = 0;
+        if (!__sbWkBusy) {
+          __sbWkBusy = true; __sbWkWalking = false; __sbWkTriggerWave();
+          setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; }, 2200);
+        }
+        return;
+      }
+      __sbWkLaunch(vX, vY);               // flung — tumble then return to the bar
+    };
+    walker.addEventListener("pointerup", endDrag);
+    walker.addEventListener("pointercancel", endDrag);
+
     lane.appendChild(walker);
     (document.documentElement || document.body).appendChild(lane);
   }
@@ -2598,6 +2742,7 @@ function __sbStartWalkLoop() {
   __sbWkStart = __sbWkLast = performance.now();
   __sbWkPosX = 24; __sbWkDirX = 1;
   __sbWkWalking = true; __sbWkWaving = false; __sbWkBusy = false; __sbWalkTalking = false;
+  __sbWkResetThrow();
   clearTimeout(__sbWkAutoTimer); __sbWkScheduleAuto();
   if (!__sbWkRaf) __sbWkRaf = requestAnimationFrame(__sbWkTick);
 }
@@ -2605,6 +2750,7 @@ function __sbStartWalkLoop() {
 function __sbStopWalkLoop() {
   if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
   clearTimeout(__sbWkAutoTimer);
+  __sbWkResetThrow();
   __sbWalkTalking = false;
   const lane = document.getElementById("__sb_walk_lane__");
   if (lane) lane.style.display = "none";
@@ -2650,7 +2796,8 @@ function __sbWkTick(now) {
     else if (x <= 6) { x = 6; __sbWkDirX = 1; }
     __sbWkPosX = x;
   }
-  walker.style.transform = `translateX(${__sbWkPosX}px)`;
+  // While thrown, the physics/return loop owns walker.style.transform — don't fight it.
+  if (!__sbWkThrowMode) walker.style.transform = `translateX(${__sbWkPosX}px)`;
 
   const flip = document.getElementById("__sbwk_flip__");
   // Face forward (right) while standing to listen; otherwise face walk direction.
@@ -2683,14 +2830,23 @@ function __sbWkTick(now) {
 
   const legL = root.querySelector("#__sbwk_ll__");
   const legR = root.querySelector("#__sbwk_rl__");
-  if (legL) legL.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
-  if (legR) legR.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
-
-  const raTx = rightAngle ? `rotate(${rightAngle} 78 53)` : "";
   const raBg = root.querySelector("#__sbwk_ra_bg__");
   const raFg = root.querySelector("#__sbwk_ra__");
-  if (raBg) raBg.setAttribute("transform", raTx);
-  if (raFg) raFg.setAttribute("transform", raTx);
+  if (__sbWkThrowMode) {
+    // Grabbed or airborne: legs and arms flail wildly.
+    const wob1 = Math.sin(now / 55) * 26, wob2 = Math.sin(now / 48 + 1.7) * 26;
+    const arm  = Math.sin(now / 44 + 0.6) * 34;
+    if (legL) legL.setAttribute("transform", `rotate(${wob1} 44 74)`);
+    if (legR) legR.setAttribute("transform", `rotate(${wob2} 56 74)`);
+    if (raBg) raBg.setAttribute("transform", `rotate(${arm} 78 53)`);
+    if (raFg) raFg.setAttribute("transform", `rotate(${arm} 78 53)`);
+  } else {
+    if (legL) legL.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+    if (legR) legR.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+    const raTx = rightAngle ? `rotate(${rightAngle} 78 53)` : "";
+    if (raBg) raBg.setAttribute("transform", raTx);
+    if (raFg) raFg.setAttribute("transform", raTx);
+  }
 
   const eyeL = root.querySelector("#__sbwk_eye_l__");
   const eyeR = root.querySelector("#__sbwk_eye_r__");
@@ -4749,7 +4905,26 @@ function __sbBuildBrainUI() {
        is handled by the dedicated #__sbwk_shadow__ div instead. */
     #__sbwk_walker__ {
       position:absolute; bottom:0; width:64px;
-      pointer-events:auto; cursor:pointer;
+      pointer-events:auto; cursor:grab;
+      touch-action:none; user-select:none; -webkit-user-select:none;
+      will-change:transform;
+    }
+    /* "not cool 😒" speech bubble shown when Braino is flung */
+    #__sbwk_say__ {
+      position:absolute; left:50%; bottom:calc(100% - 4px);
+      transform:translateX(-50%) translateY(4px) scale(0.9);
+      background:rgba(27,23,19,0.92); color:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:12px; font-weight:600; line-height:1.2;
+      padding:5px 10px; border-radius:12px; white-space:nowrap;
+      pointer-events:none; opacity:0; z-index:6;
+      transition:opacity .18s ease, transform .18s ease;
+      box-shadow:0 4px 14px rgba(27,23,19,0.28);
+    }
+    #__sbwk_say__.show { opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
+    #__sbwk_say__::after {
+      content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+      border:5px solid transparent; border-top-color:rgba(27,23,19,0.92);
     }
     #__sbwk_flip__ { transform-origin:center; display:block; }
     #__sbwk_shadow__ {
