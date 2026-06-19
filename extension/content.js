@@ -3139,9 +3139,10 @@ function __sbWkTick(now) {
     const mTalk  = root.querySelector("#__sbwk_talk__");
     const tE = root.querySelector("#__sbwk_te__");
     const tI = root.querySelector("#__sbwk_ti__");
-    // Mouth animates ONLY during real TTS speech in headphone mode — never on the
-    // idle wave (that was making Braino look like it talks every couple seconds).
-    const talking = __sbWalkTalking && __sbHeadphoneMode;
+    // Mouth animates whenever Braino is actually speaking (TTS sets __sbWalkTalking) —
+    // in voice mode or when reading an answer aloud. The idle wave no longer triggers it
+    // (that's decoupled), so no need to also gate on headphone mode.
+    const talking = __sbWalkTalking;
     if (talking) {
       const o = Math.max(0, Math.min(1,
         (0.5 + 0.5 * Math.sin(t * 13.5)) *
