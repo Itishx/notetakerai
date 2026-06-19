@@ -15,7 +15,7 @@ const corsHeaders = {
 
 // --- AI Provider helpers ---
 
-type AiProvider = "lovable" | "claude";
+type AiProvider = "lovable" | "claude" | "openai" | "gpt";
 type AiBackendProvider = "openai" | "claude";
 
 interface AiConfig {
@@ -30,11 +30,20 @@ const ALLOWED_DELEGATE_CLAUDE_MODELS = new Set([
   "claude-sonnet-4-6",
   "claude-sonnet-4-20250514",
 ]);
+const ALLOWED_DELEGATE_OPENAI_MODELS = new Set([
+  "gpt-5.4-mini",
+]);
 
 function resolveDelegateClaudeModel(delegateModel?: string | null) {
   const requested = typeof delegateModel === "string" ? delegateModel.trim() : "";
   if (requested && ALLOWED_DELEGATE_CLAUDE_MODELS.has(requested)) return requested;
   return "claude-sonnet-4-20250514";
+}
+
+function resolveDelegateOpenAIModel(delegateModel?: string | null) {
+  const requested = typeof delegateModel === "string" ? delegateModel.trim() : "";
+  if (requested && ALLOWED_DELEGATE_OPENAI_MODELS.has(requested)) return requested;
+  return "gpt-5.4-mini";
 }
 
 function resolveAiConfig(requestedProvider?: string, options: { delegateModel?: string | null } = {}): AiConfig {
@@ -48,12 +57,12 @@ function resolveAiConfig(requestedProvider?: string, options: { delegateModel?: 
       endpoint: "https://api.anthropic.com/v1/messages",
     };
   }
-  // Default: Lovable AI
+  // Default Braino GPT path, backed by our OpenAI key.
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) throw new Error("API key not configured");
   return {
     provider: "openai",
-    model: "gpt-5.4-mini",
+    model: resolveDelegateOpenAIModel(options.delegateModel),
     apiKey: key,
     endpoint: "https://api.openai.com/v1/chat/completions",
   };

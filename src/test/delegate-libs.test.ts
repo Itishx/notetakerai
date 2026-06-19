@@ -110,6 +110,8 @@ describe("Delegate extension libs", () => {
 
     expect((globalThis as any).BrainoModels.withinBudget({ maxSteps: 2, maxMs: 1000, maxLLMUsd: 0.5 }, { steps: 1, elapsedMs: 999, llmUsd: 0.1 })).toBe(true);
     expect((globalThis as any).BrainoModels.withinBudget({ maxSteps: 2, maxMs: 1000, maxLLMUsd: 0.5 }, { steps: 2, elapsedMs: 999, llmUsd: 0.1 })).toBe(false);
+    expect((globalThis as any).BrainoModels.MODELS.STEP).toMatch(/^gpt-/);
+    expect(JSON.stringify((globalThis as any).BrainoModels.MODELS)).not.toMatch(/claude/i);
     expect((globalThis as any).BrainoModels.pickModel("step", 2)).toBe((globalThis as any).BrainoModels.MODELS.STRATEGIST);
   });
 });

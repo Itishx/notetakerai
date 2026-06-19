@@ -2,8 +2,8 @@
   "use strict";
 
   const MODELS = {
-    STEP: "claude-haiku-4-5-20251001",
-    STRATEGIST: "claude-sonnet-4-6",
+    STEP: "gpt-5.4-mini",
+    STRATEGIST: "gpt-5.4-mini",
   };
 
   const MODEL_COST_ESTIMATES_USD = {

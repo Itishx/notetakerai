@@ -2715,7 +2715,7 @@ async function bgCallDelegateModel({ systemPrompt, userPrompt, model, validation
   const response = await bgChatFetch({
     notes: systemPrompt,
     message,
-    aiProvider: "claude",
+    aiProvider: "openai",
     delegateModel: model,
     delegatePurpose: "delegate",
   });
@@ -2793,7 +2793,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress) {
   };
   try {
     onProgress?.("Understanding the task...");
-    const model = BrainoModels?.pickModel?.("decompose", 0) || "claude-sonnet-4-6";
+    const model = BrainoModels?.pickModel?.("decompose", 0) || "gpt-5.4-mini";
     const prompt = [
       "Return strict JSON only.",
       "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting\"]}",
@@ -2878,7 +2878,7 @@ ${skillText}`;
 }
 
 async function bgDecideNextAction({ task, state, observationText, skills, phase, stuckCount, validationError }) {
-  const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "claude-haiku-4-5-20251001";
+  const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
   const systemPrompt = bgBuildDelegateSystemPrompt(skills);
   const userPrompt = [
     `TASK: ${task}`,
