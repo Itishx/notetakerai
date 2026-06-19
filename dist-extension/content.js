@@ -3187,6 +3187,7 @@ let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
 let __sbSpeechGeneration = 0;
 const __SB_TTS_PROVIDER = "fish-audio";
+const __SB_TTS_FALLBACK_PROVIDER = "openai-tts";
 const __SB_TTS_ENDPOINT = "fish-audio-tts";
 const __SB_TTS_RETRY_MIN_MS = 5000;
 const __SB_TTS_RETRY_MAX_MS = 12000;
@@ -7607,7 +7608,7 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
 
       if (resp.ok) {
         const provider = (resp.headers.get("x-braino-tts-provider") || "").toLowerCase();
-        if (provider === __SB_TTS_PROVIDER) return resp;
+        if (provider === __SB_TTS_PROVIDER || provider === __SB_TTS_FALLBACK_PROVIDER) return resp;
         const providerError = new Error(`Unexpected TTS provider: ${provider || "unknown"}`);
         providerError.retryable = false;
         lastError = providerError;

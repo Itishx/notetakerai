@@ -1,7 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Expose-Headers": "X-Braino-TTS-Provider, X-Braino-TTS-Error",
+  "Access-Control-Expose-Headers": "X-Braino-TTS-Provider, X-Braino-TTS-Error, X-Braino-TTS-Fallback",
 };
 
 const FISH_AUDIO_API_KEY = Deno.env.get("FISH_AUDIO_API_KEY");
@@ -11,6 +11,13 @@ const FISH_AUDIO_REFERENCE_ID =
   Deno.env.get("FISH_AUDIO_REFERENCE_ID") ||
   Deno.env.get("FISH_AUDIO_VOICE_ID") ||
   "88b183bfbdda44a09ad4474712b967f4";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+const OPENAI_TTS_MODEL = Deno.env.get("OPENAI_TTS_MODEL") || "gpt-4o-mini-tts";
+const OPENAI_TTS_VOICE = Deno.env.get("OPENAI_TTS_VOICE") || "marin";
+const OPENAI_TTS_INSTRUCTIONS =
+  Deno.env.get("OPENAI_TTS_INSTRUCTIONS") ||
+  "Sound warm, direct, lively, and conversational. Keep the pacing natural and not announcer-like.";
+const ENABLE_OPENAI_TTS_FALLBACK = Deno.env.get("ENABLE_OPENAI_TTS_FALLBACK") !== "false";
 
 function json(payload: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(payload), {
@@ -24,6 +31,58 @@ function normalizeFishErrorStatus(status: number) {
   if (status === 401) return "invalid_api_key";
   if (status >= 500) return "provider_unavailable";
   return "provider_error";
+}
+
+async function openAiTtsResponse(text: string, fallbackReason: string) {
+  if (!ENABLE_OPENAI_TTS_FALLBACK || !OPENAI_API_KEY) {
+    return null;
+  }
+
+  const body: Record<string, unknown> = {
+    model: OPENAI_TTS_MODEL,
+    input: text.slice(0, 4096),
+    voice: OPENAI_TTS_VOICE,
+    response_format: "mp3",
+  };
+
+  if (!/^tts-1(?:-hd)?$/i.test(OPENAI_TTS_MODEL) && OPENAI_TTS_INSTRUCTIONS) {
+    body.instructions = OPENAI_TTS_INSTRUCTIONS;
+  }
+
+  const openAiResponse = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!openAiResponse.ok) {
+    const errorText = await openAiResponse.text().catch(() => "");
+    console.error("OpenAI TTS fallback failed:", openAiResponse.status, errorText);
+    return json(
+      {
+        error: `OpenAI TTS fallback failed (${openAiResponse.status}).`,
+        details: errorText,
+        provider: "openai-tts",
+        fallbackReason,
+      },
+      openAiResponse.status,
+      { "X-Braino-TTS-Error": "fallback_failed" },
+    );
+  }
+
+  const audioBuffer = await openAiResponse.arrayBuffer();
+  return new Response(audioBuffer, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": openAiResponse.headers.get("Content-Type") || "audio/mpeg",
+      "Cache-Control": "no-cache",
+      "X-Braino-TTS-Provider": "openai-tts",
+      "X-Braino-TTS-Fallback": fallbackReason,
+    },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -44,8 +103,10 @@ Deno.serve(async (req) => {
     }
 
     if (!FISH_AUDIO_API_KEY) {
+      const fallback = await openAiTtsResponse(text, "missing_fish_api_key");
+      if (fallback) return fallback;
       return json(
-        { error: "Fish Audio API key not configured. Set FISH_AUDIO_API_KEY in Supabase secrets." },
+        { error: "Fish Audio API key not configured, and OpenAI TTS fallback is unavailable." },
         500,
         { "X-Braino-TTS-Error": "missing_api_key" },
       );
@@ -92,6 +153,8 @@ Deno.serve(async (req) => {
       const errorText = await fishResponse.text().catch(() => "");
       const errorKind = normalizeFishErrorStatus(fishResponse.status);
       console.error("Fish Audio TTS failed:", fishResponse.status, errorText);
+      const fallback = await openAiTtsResponse(text, errorKind);
+      if (fallback) return fallback;
       return json(
         {
           error: errorKind === "credits_or_rate_limit"
