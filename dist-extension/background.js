@@ -2982,6 +2982,27 @@ function bgDescribeDelegateAction(action, obs) {
   return action.type;
 }
 
+function bgCanonicalDelegateUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch (_) {
+    return raw.replace(/#.*$/, "").replace(/\/$/, "");
+  }
+}
+
+function bgIsRepeatedDelegateNavigate(action, state, obs) {
+  if (action?.type !== "navigate") return false;
+  const target = bgCanonicalDelegateUrl(action.url);
+  if (!target) return false;
+  const current = bgCanonicalDelegateUrl(obs?.url || "");
+  if (current && current === target) return true;
+  return state.history.slice(-5).some((item) => item?.ok && item?.action?.type === "navigate" && bgCanonicalDelegateUrl(item.action.url) === target);
+}
+
 async function bgExecuteDelegateAction(tabId, action, state) {
   if (action.type === "web_search") {
     const searchData = await bgPerformRealWebSearch(action.query, { purpose: "delegate" });
@@ -3113,7 +3134,7 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
   return { ok: true, message: "Done.", origin };
 }
 
-async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop }) {
+async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false }) {
   let currentTabId = tabId;
   const startedAt = Date.now();
   let llmUsd = 0;
@@ -3138,7 +3159,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   BrainoTaskState.setSubgoals(state, decomp.subgoals);
   await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
 
-  const fastActions = bgTryFastPath(task, []);
+  const fastActions = skipFastPath ? null : bgTryFastPath(task, []);
   if (fastActions?.length) {
     for (const fast of fastActions) {
       onProgress?.(fast.description || bgDescribeDelegateAction(fast, prevObs));
@@ -3210,6 +3231,14 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       onFinal?.(msg);
       return { ok: action.type === "answer", message: msg, state };
     }
+    if (bgIsRepeatedDelegateNavigate(action, state, obs)) {
+      const note = `Already at ${action.url}; skipped repeated navigation.`;
+      state.facts.push({ key: `navigation_skipped:${state.facts.length + 1}`, value: note, source: "runtime" });
+      BrainoTaskState.commitHistory(state, decision, { success: true, skipped: true, note }, { ok: false, reason: note });
+      onProgress?.("Already on that page; reading current state instead...");
+      prevObs = obs;
+      continue;
+    }
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
@@ -3245,21 +3274,88 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
 }
 
 async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
-  bgAgentTaskByTab.set(tabId, task);
+  let currentTabId = tabId;
+  const history = [];
+  const conversationContext = bgBuildAgentConversationContext({
+    ...sharedContext,
+    connector: connectorHint,
+  });
+  bgAgentTaskByTab.set(currentTabId, task);
   bgAgentShouldStop = false;
   let finalMessage = "Done.";
-  bgBrainUpdate(tabId, "Starting Delegate loop...", false, { task });
+
+  const onProgress = async (description) => {
+    bgBrainUpdate(currentTabId, `→ ${description}`, false, { task, speakHint: description });
+  };
+  const finish = async (message, ok = true, extra = {}) => {
+    finalMessage = message || finalMessage;
+    bgBrainUpdate(currentTabId, finalMessage, true, { task, keepLectureCard: extra.keepLectureCard === true });
+    bgSaveAgentTask(currentTabId, task, finalMessage);
+    return { ok, message: finalMessage, history, ...extra };
+  };
+
+  let skipDelegateFastPath = false;
+  const fastActions = bgTryFastPath(task, []);
+  if (fastActions?.length) {
+    const shouldContinueAfterFastPath = fastActions.some((action) => action.continueAfter);
+    for (const action of fastActions) {
+      await onProgress(action.description || bgDescribeDelegateAction(action));
+      let result = { success: true };
+      if (action.type === "navigate") {
+        await new Promise((resolve) => chrome.tabs.update(currentTabId, { url: action.url }, () => setTimeout(resolve, 500)));
+        await bgWaitForTabReady(currentTabId, 5000);
+      } else {
+        result = await bgExecuteDelegateAction(currentTabId, action, { facts: [] });
+      }
+      history.push({ action, result, ok: !result?.error, ts: Date.now(), thought: "Fast path" });
+      if (result?.error) return finish(`Step failed: ${result.error}`, false);
+    }
+    if (!shouldContinueAfterFastPath) return finish("Done.");
+    skipDelegateFastPath = true;
+  }
+
+  try {
+    const openableResult = await bgTryHandleOpenableContentTask({
+      tabId: currentTabId,
+      task,
+      sharedContext: conversationContext,
+      history,
+      onProgress,
+    });
+    if (openableResult?.message) {
+      return finish(openableResult.message, true, { keepLectureCard: openableResult.keepLectureCard === true });
+    }
+  } catch (error) {
+    return finish(`Open task error: ${error?.message || error}`, false);
+  }
+
+  try {
+    const adapterMessage = await bgTryHandleSiteAdapterTask({
+      tabId: currentTabId,
+      task,
+      connectorHint,
+      history,
+      onProgress,
+      shouldStop: () => bgAgentShouldStop,
+    });
+    if (adapterMessage) return finish(adapterMessage, true);
+  } catch (error) {
+    return finish(`Adapter error: ${error?.message || error}`, false);
+  }
+
+  bgBrainUpdate(currentTabId, "Reading the page...", false, { task });
   const result = await bgRunDelegateLoop({
-    tabId,
+    tabId: currentTabId,
     task,
     connectorHint,
-    sharedContext,
-    onProgress: (description) => bgBrainUpdate(tabId, `→ ${description}`, false, { task, speakHint: description }),
+    sharedContext: conversationContext,
+    skipFastPath: skipDelegateFastPath,
+    onProgress,
     onFinal: (message) => { finalMessage = message || finalMessage; },
     shouldStop: () => bgAgentShouldStop,
   });
-  bgBrainUpdate(tabId, finalMessage, true, { task });
-  bgSaveAgentTask(tabId, task, finalMessage);
+  bgBrainUpdate(currentTabId, finalMessage, true, { task });
+  bgSaveAgentTask(currentTabId, task, finalMessage);
   return result;
 }
 
@@ -3805,9 +3901,12 @@ async function bgFetchSpotifyPlayerState() {
 
 async function bgPlaySpotifyWithAutoOpen(uris) {
   const payload = { action: "play", uris };
-  // Always open Spotify in a new visible tab (theatrics — shows Braino controlling the browser)
+  // Reuse the web player when it already exists. Creating a new tab on every retry
+  // makes Delegate look broken and can register multiple devices.
   try {
-    await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: true }, r));
+    const existing = await bgFindSpotifyTab();
+    if (existing?.id != null) await new Promise(r => chrome.tabs.update(existing.id, { active: true }, r));
+    else await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: true }, r));
   } catch (_) {}
   // Try immediately; if no active device yet, poll until web player registers
   for (let i = 0; i < 5; i++) {
@@ -5463,6 +5562,9 @@ function bgTryFastPath(task, history) {
   if (/^(?:open|go to)\s+(?:google\s+)?calendar\b/i.test(task)) {
     return [{ type: "navigate", url: "https://calendar.google.com/calendar/u/0/r", description: "Open Google Calendar" }];
   }
+  if (/^(?:open|go to)\s+spotify\b/i.test(task)) {
+    return [{ type: "navigate", url: "https://open.spotify.com", description: "Open Spotify" }];
+  }
   if (/^(?:new|create|open)\s+(?:a\s+)?google doc\b|^(?:new|open)\s+docs\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://docs.new", description: "Open a new Google Doc" }];
   }
@@ -6214,6 +6316,22 @@ async function bgRunRemoteCommand(cmd, token) {
     const tabId = await bgGetActiveTabId();
     if (!tabId) {
       await finish("error", "Open a normal browser tab to use Delegate mode.");
+      return;
+    }
+    const history = [];
+    const adapterMessage = await bgTryHandleSiteAdapterTask({
+      tabId,
+      task: cmd.task,
+      history,
+      onProgress: async (description) => {
+        steps.push({ description: String(description || "Working"), ok: null });
+        bgUpdateRemoteCommand(cmd.id, token, { steps });
+      },
+      shouldStop: () => bgCheckStopped(cmd.id, token),
+    });
+    if (adapterMessage) {
+      steps.push({ description: adapterMessage, ok: true, final: true });
+      await finish("done", adapterMessage);
       return;
     }
     const result = await bgRunDelegateLoop({
