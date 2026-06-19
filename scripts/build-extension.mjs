@@ -11,7 +11,9 @@ const SRC = path.join(ROOT, "extension");
 const DIST = path.join(ROOT, "dist-extension");
 const ZIP_PATHS = [
   path.join(ROOT, "public", "braino-extension.zip"),
+  path.join(ROOT, "public", "braino-preview.zip"),
   path.join(ROOT, "dist", "braino-extension.zip"),
+  path.join(ROOT, "dist", "braino-preview.zip"),
   path.join(ROOT, "braino-extension.zip"),
   path.join(ROOT, "braino-dist-extension.zip"),
 ];
