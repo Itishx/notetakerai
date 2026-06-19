@@ -12,6 +12,8 @@ const DIST = path.join(ROOT, "dist-extension");
 const ZIP_PATHS = [
   path.join(ROOT, "public", "braino-extension.zip"),
   path.join(ROOT, "dist", "braino-extension.zip"),
+  path.join(ROOT, "braino-extension.zip"),
+  path.join(ROOT, "braino-dist-extension.zip"),
 ];
 
 // JS files to minify (simple whitespace removal, no obfuscation — Chrome flags obfuscated code as malware)
@@ -29,7 +31,7 @@ const COPY_FILES = [
   "icon48.png",
   "icon128.png",
 ];
-const COPY_DIRS = ["fonts"];
+const COPY_DIRS = ["fonts", "lib"];
 
 // ── Clean & recreate dist ──────────────────────────────────────────────────
 syncExtensionAssets();

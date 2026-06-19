@@ -24,22 +24,28 @@ Scope: job discovery and fit analysis only. Never apply, save, message, or conne
 9. Capture all required fields before moving to the next job. Capture link from card/title `href` first, current URL second.
 10. Stop at 3-5 good jobs. Minimum 3 if available; target 5 when results are easy to inspect. Do not return done after only one job unless fewer than 3 relevant jobs exist.
 
-## Locators
+## Subgoals And Assertions
 
-**Search inputs**
-- `[aria-label*="Search by title"]`, `[aria-label*="Search jobs"]`, `input[id*="jobs-search-box-keyword"]`
+Use the indexed element map for all targeting. Never write CSS selectors in actions.
 
-**Location input**
-- `[aria-label*="City"]`, `[aria-label*="location"]`, `input[id*="jobs-search-box-location"]`
+- Search results loaded.
+  Assertion: `{ "assert": "text_present", "value": "{Role}" }` or `{ "assert": "url_contains", "value": "linkedin.com/jobs" }`
+- Relevant job card opened.
+  Assertion: `{ "assert": "text_present", "value": "{Job title or company}" }`
+- Expanded description is visible when a `Show more` / `See more` control exists.
+  Assertion: `{ "assert": "element_gone", "match": { "name": "Show more" } }` when the control disappears, otherwise `{ "assert": "text_present", "value": "{requirement keyword}" }`
+- Job facts captured.
+  Assertion: `{ "assert": "none" }` after `read`; store title, company, location, link, requirements, and fit verdict in memory facts.
+- Final recommendation returned.
+  Assertion: `{ "assert": "none" }`
 
-**Filter buttons** (use `targetText`)
-- `Date posted`, `Experience level`, `Remote`, `Easy Apply`, `Job type`
+## Destructive Flags
 
-**Job cards**
-- `[data-job-id]`, `.job-card-container`, `.jobs-search-results__list-item`, `.job-card-list__title`, `.job-card-container__link`
+These require explicit confirmation and must not be executed during normal job discovery:
 
-**Job details**
-- `.jobs-search__job-details--container`, `.jobs-details`, `.jobs-description`, `.jobs-box__html-content`, `[class*="jobs-description"]`, `main`
+- `Apply`, `Easy Apply`, `Submit application`
+- `Message`, `Connect`, `Follow`
+- `Save job` unless the user explicitly asks to save
 
 ## Fit Rules
 

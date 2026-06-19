@@ -24,7 +24,7 @@ const EXTENSION_FILES = [
   "styles.css",
 ];
 
-const EXTENSION_DIRS = ["fonts"];
+const EXTENSION_DIRS = ["fonts", "lib"];
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });

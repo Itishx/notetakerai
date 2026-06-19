@@ -16,21 +16,34 @@ const corsHeaders = {
 // --- AI Provider helpers ---
 
 type AiProvider = "lovable" | "claude";
+type AiBackendProvider = "openai" | "claude";
 
 interface AiConfig {
-  provider: AiProvider;
+  provider: AiBackendProvider;
   model: string;
   apiKey: string;
   endpoint: string;
 }
 
-function resolveAiConfig(requestedProvider?: string): AiConfig {
+const ALLOWED_DELEGATE_CLAUDE_MODELS = new Set([
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-6",
+  "claude-sonnet-4-20250514",
+]);
+
+function resolveDelegateClaudeModel(delegateModel?: string | null) {
+  const requested = typeof delegateModel === "string" ? delegateModel.trim() : "";
+  if (requested && ALLOWED_DELEGATE_CLAUDE_MODELS.has(requested)) return requested;
+  return "claude-sonnet-4-20250514";
+}
+
+function resolveAiConfig(requestedProvider?: string, options: { delegateModel?: string | null } = {}): AiConfig {
   if (requestedProvider === "claude") {
     const key = Deno.env.get("ANTHROPIC_API_KEY");
     if (!key) throw new Error("Claude API key not configured");
     return {
       provider: "claude",
-      model: "claude-sonnet-4-20250514",
+      model: resolveDelegateClaudeModel(options.delegateModel),
       apiKey: key,
       endpoint: "https://api.anthropic.com/v1/messages",
     };
@@ -104,7 +117,7 @@ async function callClaudeAi(config: AiConfig, messages: any[]) {
   return res;
 }
 
-function extractContent(provider: AiProvider, data: any): string {
+function extractContent(provider: AiBackendProvider, data: any): string {
   if (provider === "claude") {
     return data.content?.[0]?.text || "";
   }
@@ -269,6 +282,7 @@ serve(async (req) => {
       existingImages,
       pageContext,
       aiProvider,
+      delegateModel,
       movieContext,
       movieDiscoveryPrompt,
       userId,
@@ -320,7 +334,9 @@ serve(async (req) => {
       }
     }
 
-    const config = resolveAiConfig(aiProvider);
+    const config = resolveAiConfig(aiProvider, {
+      delegateModel: typeof delegateModel === "string" ? delegateModel : null,
+    });
     const hasImage = !!imageBase64;
     const existingImageMap = existingImages && typeof existingImages === "object" ? existingImages : {};
     const existingImageKeys = Object.keys(existingImageMap);

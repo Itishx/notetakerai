@@ -278,7 +278,7 @@ export default function Delegate() {
         <div style={wrap}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40 }}>
             {[
-              { title: "DOM-first, not pixel-first.", body: "Reads the live structure of the page. No screenshots, no waiting for vision models to look at pixels. Every button and input comes back as structured text with selectors — the model acts immediately." },
+              { title: "DOM-first, not pixel-first.", body: "Reads the live structure of the page. No screenshots, no waiting for vision models to look at pixels. Every button and input comes back as an indexed element — the model acts against what is actually on screen." },
               { title: "About 1 second per step.", body: 'From "decide" to "click." A five-step task finishes in under fifteen seconds. Compare that to screenshot-based agents that spend 3–6s every step just waiting for a vision model.' },
               { title: "Always on the page you're on.", body: "You can watch it work, correct it mid-task, or let it go. Your call. Nothing happens behind your back — Delegate asks before submitting forms or sending messages." },
               { title: "Works on any site.", body: "Gmail, Amazon, LinkedIn, Google Docs, GitHub, your company's internal tools. If your browser can open it, Delegate can operate it." },

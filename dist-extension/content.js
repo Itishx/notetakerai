@@ -1310,6 +1310,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === "buildElementMap") {
+    const map = window.BrainoElementMap?.buildElementMap(document) || {
+      url: window.location.href,
+      title: document.title || "",
+      scroll: { x: window.scrollX || 0, y: window.scrollY || 0, maxX: 0, maxY: 0, atTop: true, atBottom: true },
+      elements: [],
+    };
+    const serialized = window.BrainoElementMap?.serializeElementMap
+      ? window.BrainoElementMap.serializeElementMap(map, { keywords: msg.keywords || "", cap: msg.cap || 120 })
+      : "";
+    sendResponse({ map, serialized });
+    return true;
+  }
+
   // ===== BROWSER AGENT: get rich page context =====
   if (msg.action === "getAgentPageContext") {
     const url = window.location.href;
@@ -1463,7 +1477,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ===== BROWSER AGENT: execute action on page =====
   if (msg.action === "agentAction") {
-    const { type, selector, targetText, targetTag, text, url, direction, amount } = msg;
+    const { type, selector, targetText, targetTag, text, url, direction, amount, index } = msg;
 
     // Pierces open shadow roots so we can find elements inside web components
     function deepQuery(sel, root) {
@@ -1582,9 +1596,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     }
 
+    function resolveIndexedElement() {
+      if (!Number.isInteger(Number(index))) return null;
+      return window.BrainoElementMap?.resolveElement(Number(index)) || null;
+    }
+
+    function dispatchSyntheticKey(target, key) {
+      const keyCode = key === "Enter" ? 13 : key === "Tab" ? 9 : key.charCodeAt(0);
+      target.dispatchEvent(new KeyboardEvent("keydown", { key, keyCode, bubbles: true, cancelable: true }));
+      target.dispatchEvent(new KeyboardEvent("keypress", { key, keyCode, bubbles: true, cancelable: true }));
+      target.dispatchEvent(new KeyboardEvent("keyup", { key, keyCode, bubbles: true, cancelable: true }));
+    }
+
     (async () => { try {
       if (type === "click") {
-        let el = null;
+        let el = resolveIndexedElement();
         // Try CSS selector first (with shadow DOM piercing)
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
@@ -1622,7 +1648,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ success: true });
 
       } else if (type === "type") {
-        let el = null;
+        let el = resolveIndexedElement();
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
           if (!el) el = deepQuery(selector);
@@ -1684,6 +1710,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }
           el.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        if (msg.submit === true) {
+          dispatchSyntheticKey(el, "Enter");
+          const form = el.closest?.("form");
+          if (form) form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        }
         sendResponse({ success: true });
 
       } else if (type === "pressEnter" || type === "pressKey") {
@@ -1719,7 +1750,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       } else if (type === "selectOption") {
         // For <select> dropdowns (e.g. Netflix season selector)
-        let el = null;
+        let el = resolveIndexedElement();
         if (selector) { try { el = document.querySelector(selector); } catch (e) {} }
         if (!el && msg.targetText) {
           el = Array.from(document.querySelectorAll("select")).find(s => {
@@ -1746,7 +1777,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       } else if (type === "read") {
         // Read element content so agent can verify state before acting
-        let el = null;
+        let el = resolveIndexedElement();
         const requestedMaxChars = Number(msg.maxChars || msg.maxLength || 0);
         const maxChars = Number.isFinite(requestedMaxChars) && requestedMaxChars > 0
           ? Math.min(Math.max(Math.floor(requestedMaxChars), 200), 8000)
@@ -1774,7 +1805,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
 
       } else if (type === "downloadImage") {
-        let img = null;
+        let img = resolveIndexedElement();
         if (selector) { try { img = document.querySelector(selector); } catch(e) {} }
         if (!img && targetText) {
           img = Array.from(document.querySelectorAll("img")).find(i =>
@@ -2885,6 +2916,12 @@ if (__sbContextOk()) {
           void __sbSpeakWithPreferredVoice(msg.speakHint, "realtime");
         }
       }
+    }
+    if (msg.action === "SB_SUBGOAL_UPDATE" || msg.type === "SB_SUBGOAL_UPDATE") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbUpdateAgentSubgoals(Array.isArray(msg.subgoals) ? msg.subgoals : []);
+      sendResponse?.({ ok: true });
+      return false;
     }
     if (msg.action === "sbSpotifyState") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
@@ -8218,6 +8255,19 @@ function __sbBuildCardTurnHtml(turn = {}, options = {}) {
   return `<div class="sb-turn">${promptHtml}${answerHtml}</div>`;
 }
 
+function __sbFormatAgentPendingBody() {
+  if (!__sbAgentPendingTurn?.prompt) return "Delegating...";
+  const status = String(__sbAgentPendingTurn.status || "Delegating...").trim() || "Delegating...";
+  const subgoals = Array.isArray(__sbAgentPendingTurn.subgoals) ? __sbAgentPendingTurn.subgoals : [];
+  if (!subgoals.length) return status;
+  const lines = subgoals.slice(0, 8).map((goal) => {
+    const state = String(goal?.status || "pending");
+    const marker = state === "done" ? "[x]" : state === "active" ? "[>]" : state === "failed" ? "[!]" : "[ ]";
+    return `${marker} ${String(goal?.desc || goal?.goal || "Step").trim()}`;
+  });
+  return `${status}\n\n${lines.join("\n")}`;
+}
+
 function __sbRenderCardHistory(scroll, options = {}) {
   if (!scroll) return;
   const historyHtml = __sbCardTurns
@@ -8225,7 +8275,7 @@ function __sbRenderCardHistory(scroll, options = {}) {
     .join("");
   const pendingHtml = options.pendingTurn
     ? __sbBuildCardTurnHtml(options.pendingTurn, {
-        rich: false,
+        rich: true,
         answerText: options.pendingText || "Thinking…",
       })
     : "";
@@ -8244,7 +8294,7 @@ function __sbRenderConversationWithPending(scroll) {
   if (__sbAgentPendingTurn?.prompt) {
     __sbRenderCardHistory(scroll, {
       pendingTurn: { prompt: __sbAgentPendingTurn.prompt },
-      pendingText: __sbAgentPendingTurn.status || "Delegating…",
+      pendingText: __sbFormatAgentPendingBody(),
     });
     return;
   }
@@ -8293,6 +8343,7 @@ function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
   __sbAgentPendingTurn = {
     prompt: task,
     status: String(status || "Delegating…").trim() || "Delegating…",
+    subgoals: [],
   };
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
@@ -8304,6 +8355,21 @@ function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
 function __sbUpdateAgentPendingTurn(status) {
   if (!__sbAgentPendingTurn?.prompt) return;
   __sbAgentPendingTurn.status = String(status || "Delegating…").trim() || "Delegating…";
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  __sbRenderConversationWithPending(scroll);
+  __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
+}
+
+function __sbUpdateAgentSubgoals(subgoals) {
+  if (!__sbAgentPendingTurn?.prompt) return;
+  __sbAgentPendingTurn.subgoals = Array.isArray(subgoals)
+    ? subgoals.map((goal) => ({
+        desc: String(goal?.desc || goal?.goal || "").trim(),
+        status: String(goal?.status || "pending").trim() || "pending",
+      })).filter((goal) => goal.desc)
+    : [];
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
@@ -8633,14 +8699,16 @@ function __sbDetectIntent(text) {
   const t = text.toLowerCase();
   const onOttSite = __SB_MOVIE_CONTEXT_HOST_RE.test(String(location.hostname || "").replace(/^www\./, ""));
   if (__sbIsMovieSceneQuestion(t) && (onOttSite || __sbBuildMovieContext())) return "page";
-  // Volume is a Spotify delegate action — route to agent (works in chat & realtime voice).
+  // Binary Delegate gate: only decide whether this needs browser control. The
+  // background planner handles app/skill classification from the live page.
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
-  if (__sbIsSiteScopedBrowseSearch(t)) return "agent";
-  if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
-  if (__sbIsBrowserActionCommand(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
+  if (__sbIsBrowserActionCommand(t) || __sbIsSiteScopedBrowseSearch(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
+  if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order)\b/.test(t)) return "agent";
+  if (/\b(gmail|email|calendar|maps?|directions?|linkedin|jobs?|x|twitter|spotify|youtube|amazon|reddit|whatsapp|google docs?|drive)\b/.test(t)
+    && /\b(open|find|search|send|compose|book|schedule|read|show|create|post|apply|route|directions?)\b/.test(t)) return "agent";
   return "chat";
 }
 
