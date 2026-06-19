@@ -150,6 +150,14 @@ const AFTER_MILESTONES = [
     title: 'Ask Braino About Your X',
     desc: 'Just ask "how\'s my Twitter looking?" Braino pulls your real follower count, recent mentions, and last-tweet engagement and answers on the spot. In voice mode he simply speaks it; in chat he replies inline — and stays open for follow-ups like "what did my last tweet say?"',
     tags: ['X Status', 'Delegate', 'Voice', 'Live Stats'],
+  },
+  {
+    date: 'June 20, 2026',
+    version: 'v6.3.37',
+    dot: '🎬',
+    title: 'Body, Cinema Mode, and Faster Voice Wakeup',
+    desc: 'Braino now knows his own latest upgrades: arms, legs, walking above the bar, waves, grab-and-fling physics, cinema companion mode with timestamp/caption context, and faster first-turn voice feedback when realtime has heard you but the smart route is still warming up.',
+    tags: ['Cinema Mode', 'Realtime Voice', 'Walker', 'Changelog Memory'],
     latest: true,
   },
 ];

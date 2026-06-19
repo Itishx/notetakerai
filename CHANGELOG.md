@@ -1,5 +1,13 @@
 # Braino Changelog
 
+## v6.3.37 — Braino knows his latest body, cinema mode, and voice wakeup
+- **Braino now knows what is new with himself.** The extension answer and shared backend prompt both include current product memory, so questions like "what's new with you?" mention the latest Braino changes instead of old Fly Mode-only copy.
+- **Arms, legs, walking, waving, and throw physics are now part of Braino's own story.** Braino can describe his walking lane, idle body animation, grab/fling behavior, and little comeback-to-the-bar routine.
+- **Cinema mode is first-class product memory.** Braino knows he can sit with you while you watch a movie, use the current timestamp/captions, answer scene questions, and avoid spoilers unless asked.
+- **Realtime first-turn feedback is faster.** When live voice has heard you but the first smart route is still cold-starting, Braino gives a tiny immediate acknowledgment instead of silently glowing blue for ages.
+- **Always-realtime listening stays intact.** Fish Audio can still be the speaking voice, but the realtime session remains the listening backbone.
+- **Extension package updated.** The download artifact now ships as version **6.3.37**.
+
 ## v6.2.8 — Floating UI adapts to light pages
 - **Auto dark-glass mode on light/white pages.** Braino detects the page background luminance every time the bar opens. On light pages both the pill bar and the response card flip to a dark warm glass theme so text, icons, and content are always legible.
 - **Liquid glass effect preserved.** The SVG displacement filter and backdrop-blur layers are untouched — the dark-glass variant maintains the same refraction look, just inverted.
