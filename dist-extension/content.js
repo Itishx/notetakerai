@@ -2935,7 +2935,7 @@ function __sbWakeupClimb(finishAuthed, finishRejected) {
   const step = (now) => {
     const e = now - pStart;
     if (phase === "pop") {
-      const k = easeOut(Math.min(1, e / 600));
+      const k = easeOut(Math.min(1, e / 1050));   // slower, gentler rise from below
       place(ENTRY_X, lerp(START_TY, FLOOR_TY, k)); setGaze(0, -0.4);
       if (k >= 1) next("walk");
     } else if (phase === "walk") {
@@ -5516,7 +5516,26 @@ function __sbBuildBrainUI() {
   });
 
   // ⌘I / Ctrl+I — toggle brain
+  let __sbLastCtrlTap = 0;
   document.addEventListener("keydown", (e) => {
+    // Double-tap Control → toggle headphone mode.
+    if (e.key === "Control") {
+      if (!e.repeat && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const now = Date.now();
+        if (now - __sbLastCtrlTap < 400) {
+          __sbLastCtrlTap = 0;
+          if (!__sbHasExternalEditableFocus()) {
+            if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+            __sbToggleHeadphoneMode();
+          }
+        } else {
+          __sbLastCtrlTap = now;
+        }
+      }
+      return;
+    }
+    __sbLastCtrlTap = 0;   // any other key breaks the double-tap (Ctrl+key combos don't count)
+
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
       if (__sbHasExternalEditableFocus()) return;
       e.preventDefault();
@@ -12757,7 +12776,9 @@ function __sbReleaseVoicePresence() {
 function __sbAttachVoiceVisual() {
   if (!__sbOwnsInlineUi()) return;
   const brain = document.getElementById("__sb_brain_btn__");
-  if (brain && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
+  // In PANEL the walker on the bar is the listening mascot — don't also pop the docked
+  // bottom-right brain (that was the duplicate "second Braino" in headphone mode).
+  if (brain && !__sbInputOpen && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
   __sbUseOffscreenRt = true;
@@ -12795,7 +12816,9 @@ function __sbEnterHeadphoneMode(options = {}) {
   __sbCollapseCard();
 
   const brain = document.getElementById("__sb_brain_btn__");
-  if (brain && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
+  // In PANEL the walker on the bar is the listening mascot — don't also pop the docked
+  // bottom-right brain (that was the duplicate "second Braino" in headphone mode).
+  if (brain && !__sbInputOpen && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
