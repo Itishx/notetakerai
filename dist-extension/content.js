@@ -4349,21 +4349,23 @@ function __sbBuildBrainUI() {
                   color 0.35s ease, backdrop-filter 0.35s ease;
     }
     /* ── Readable mode: opaque warm cream, dark text — always legible on any bg ── */
+    /* Glassmorphism alternate — translucent frosted panel (NOT opaque white) with dark,
+       readable text. You can still see the page through it. */
     #__sb_bubble__.sb-readable {
-      --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.8); --sb-fg-3: rgba(27,23,19,0.45);
-      --sb-bg: rgba(255,251,247,0.97); --sb-border: rgba(65,48,40,0.1);
-      --sb-q-bg: rgba(65,48,40,0.06); --sb-q-border: rgba(65,48,40,0.1);
-      --sb-footer-border: rgba(65,48,40,0.08); --sb-footer-bg: rgba(65,48,40,0.03);
-      --sb-code-bg: rgba(65,48,40,0.07); --sb-code-fg: #b44b42;
-      --sb-pre-bg: rgba(27,23,19,0.06); --sb-pre-fg: #1B1713;
-      --sb-bq-border: rgba(201,84,74,0.35); --sb-bq-fg: rgba(27,23,19,0.6);
-      --sb-hr: rgba(65,48,40,0.1); --sb-link: #C9544A;
-      --sb-btn-fg: rgba(65,48,40,0.75); --sb-btn-bg: rgba(65,48,40,0.07);
-      --sb-btn-hover: rgba(65,48,40,0.13); --sb-rec-border: rgba(65,48,40,0.1);
-      backdrop-filter: blur(20px) saturate(160%);
-      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.82); --sb-fg-3: rgba(27,23,19,0.5);
+      --sb-bg: rgba(255,251,247,0.5); --sb-border: rgba(255,255,255,0.55);
+      --sb-q-bg: rgba(65,48,40,0.08); --sb-q-border: rgba(65,48,40,0.12);
+      --sb-footer-border: rgba(65,48,40,0.1); --sb-footer-bg: rgba(65,48,40,0.04);
+      --sb-code-bg: rgba(65,48,40,0.1); --sb-code-fg: #b44b42;
+      --sb-pre-bg: rgba(27,23,19,0.08); --sb-pre-fg: #1B1713;
+      --sb-bq-border: rgba(201,84,74,0.4); --sb-bq-fg: rgba(27,23,19,0.65);
+      --sb-hr: rgba(65,48,40,0.12); --sb-link: #C9544A;
+      --sb-btn-fg: rgba(65,48,40,0.8); --sb-btn-bg: rgba(65,48,40,0.08);
+      --sb-btn-hover: rgba(65,48,40,0.15); --sb-rec-border: rgba(65,48,40,0.12);
+      backdrop-filter: blur(22px) saturate(170%);
+      -webkit-backdrop-filter: blur(22px) saturate(170%);
       box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08),
-                  inset 0 1px 0 rgba(255,255,255,0.9);
+                  inset 0 1px 0 rgba(255,255,255,0.55);
     }
     #__sb_bubble__.sb-readable .sb-turn + .sb-turn { border-top-color: rgba(65,48,40,0.08); }
     #__sb_bubble__.sb-readable::before { backdrop-filter: none; -webkit-backdrop-filter: none; filter: none; }
@@ -5741,10 +5743,11 @@ function __sbBuildBrainUI() {
     // (legibility there comes from the text halo), so we never force it opaque.
     bubble.classList.toggle("sb-readable", isReadable);
     __sbThemeBtn.textContent = isReadable ? "◐" : "◑";
-    __sbThemeBtn.title = isReadable ? "Switch to glass mode" : "Switch to readable mode";
+    __sbThemeBtn.title = isReadable ? "Switch to liquid glass" : "Switch to clear glass (readable)";
   };
-  // Default to readable so the floating answer card has black text (legible on any page).
-  chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "readable"));
+  // Default = liquid glass. The toggle switches to a translucent glassmorphism (still
+  // see-through, but readable) for when the liquid glass makes the page hard to read.
+  chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "glass"));
   __sbThemeBtn.addEventListener("click", () => {
     const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
     __sbApplyTheme(next);
