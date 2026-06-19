@@ -5646,12 +5646,14 @@ function __sbBuildBrainUI() {
   const __sbThemeBtn = document.getElementById("__sb_theme_toggle_btn__");
   const __sbApplyTheme = (mode) => {
     const isReadable = mode === "readable";
+    // Theme applies to the answer CARD only. The bottom bar stays transparent glass
+    // (legibility there comes from the text halo), so we never force it opaque.
     bubble.classList.toggle("sb-readable", isReadable);
-    document.getElementById("__sb_bar__")?.classList.toggle("sb-readable", isReadable);
     __sbThemeBtn.textContent = isReadable ? "◐" : "◑";
     __sbThemeBtn.title = isReadable ? "Switch to glass mode" : "Switch to readable mode";
   };
-  chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "glass"));
+  // Default to readable so the floating answer card has black text (legible on any page).
+  chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "readable"));
   __sbThemeBtn.addEventListener("click", () => {
     const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
     __sbApplyTheme(next);
@@ -10486,7 +10488,8 @@ async function __sbSendMessage() {
   if (!text) return;
   input.value = "";
   if (input.tagName === "TEXTAREA") input.style.height = "auto";
-  __sbPulseBar();           // bar glows on every send
+  input.placeholder = "Follow up…";   // bar is the follow-up input now
+  __sbPulseBar();                      // bar glows on every send
   await __sbProcessPrompt(text);
 }
 
