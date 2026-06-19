@@ -2613,6 +2613,7 @@ let __sbWkReaction = null;     // "scared" | "celebrate" | "tears" while thrown,
 let __sbWkReactStart = 0;      // performance.now() when the reaction began
 let __sbWkClimbing = false;    // true while the wake-up climb owns the rig
 let __sbWkClimbRaf = null;
+let __sbWkResumeFromX = null;  // start X for the next walk loop (so a climb hands off smoothly)
 
 // Trigger a single hand wave (used to acknowledge the user in headphone mode).
 function __sbWkTriggerWave() {
@@ -2795,7 +2796,10 @@ function __sbStartWalkLoop() {
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
   __sbWkStart = __sbWkLast = performance.now();
-  __sbWkPosX = 24; __sbWkDirX = 1;
+  // Resume from the climb's perch point (center) when handed off, else default left.
+  __sbWkPosX = (__sbWkResumeFromX != null ? __sbWkResumeFromX : 24);
+  __sbWkResumeFromX = null;
+  __sbWkDirX = 1;
   __sbWkWalking = true; __sbWkWaving = false; __sbWkBusy = false; __sbWalkTalking = false;
   __sbWkResetThrow();
   clearTimeout(__sbWkAutoTimer); __sbWkScheduleAuto();
@@ -2896,22 +2900,21 @@ function __sbWakeupClimb(finishAuthed, finishRejected) {
   place(ENTRY_X, START_TY); setArms(0, 0); setLegs(0, 0); setEyes(1); setGaze(0, -0.55);
 
   let firstName = "";
-  __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
+  let alreadyAuthed = false;   // known well before the perch phase (fetched at start)
+  __sbStorageGet(["authDisplayName", "authToken"]).then(({ authDisplayName, authToken }) => {
     firstName = authDisplayName?.split(" ")[0]?.trim() || "";
+    alreadyAuthed = !!authToken;
   });
 
-  // ── auth handshake (only opens a tab if we don't already have a token) ──
+  // ── auth handshake (only runs when we DON'T already have a token) ──
   let authResolved = null;   // true | false
   let watcher = null, fallbackTimer = null, authBegun = false;
   const startAuth = () => {
     if (authBegun) return; authBegun = true;
-    __sbStorageGet(["authToken"]).then(({ authToken }) => {
-      if (authToken) { setTimeout(() => { if (authResolved === null) authResolved = true; }, 1000); return; }
-      chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
-      watcher = (changes, area) => { if (area === "local" && changes.authToken?.newValue && authResolved === null) authResolved = true; };
-      try { chrome.storage.onChanged.addListener(watcher); } catch (_) {}
-      fallbackTimer = setTimeout(() => { if (authResolved === null) authResolved = false; }, 6000);
-    });
+    chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
+    watcher = (changes, area) => { if (area === "local" && changes.authToken?.newValue && authResolved === null) authResolved = true; };
+    try { chrome.storage.onChanged.addListener(watcher); } catch (_) {}
+    fallbackTimer = setTimeout(() => { if (authResolved === null) authResolved = false; }, 6000);
   };
   const cleanupAuth = () => {
     if (watcher) { try { chrome.storage.onChanged.removeListener(watcher); } catch (_) {} watcher = null; }
@@ -2963,20 +2966,30 @@ function __sbWakeupClimb(finishAuthed, finishRejected) {
       place(climbX, 0);
       setArms(0, -28 + Math.sin(e / 45) * 18);               // wave
       setGaze(0, 0);
-      if (e > 300 && !said1) { said1 = true; __sbWkSay("allow me to authenticate you"); }
-      if (e >= 1700) { setArms(0, 0); next("auth"); startAuth(); }
+      // Only ask to authenticate the FIRST time (no token yet). Already logged in →
+      // skip the line and just blink + glow green on the way to "hello".
+      if (!alreadyAuthed && e > 300 && !said1) { said1 = true; __sbWkSay("allow me to authenticate you"); }
+      const perchDur = alreadyAuthed ? 850 : 1700;
+      if (e >= perchDur) { setArms(0, 0); if (!alreadyAuthed) startAuth(); next("auth"); }
     } else if (phase === "auth") {
-      setEyes(lerp(1, 0.06, Math.min(1, e / 350)));          // eyes close
-      walker.classList.add("sbwk-auth");
-      if (authResolved !== null) {
-        walker.classList.remove("sbwk-auth");
-        if (authResolved) { walker.classList.add("sbwk-authed"); next("hello"); }
-        else { endClimb(finishRejected); return; }
+      setEyes(lerp(1, 0.06, Math.min(1, e / 350)));          // eyes close (blink shut)
+      if (alreadyAuthed) {
+        // Already logged in: no gold "authenticating" glow — just a green confirm flash.
+        walker.classList.add("sbwk-authed");
+        if (e >= 700) next("hello");
+      } else {
+        walker.classList.add("sbwk-auth");                   // gold pulse while handshaking
+        if (authResolved !== null) {
+          walker.classList.remove("sbwk-auth");
+          if (authResolved) { walker.classList.add("sbwk-authed"); next("hello"); }
+          else { endClimb(finishRejected); return; }
+        }
       }
     } else if (phase === "hello") {
       setEyes(lerp(0.06, 1, Math.min(1, e / 350)));          // eyes open
       if (e > 200 && !said2) { said2 = true; __sbWkSay("hello, " + (firstName || "there")); }
-      if (e >= 1600) { endClimb(finishAuthed); return; }
+      // Hand off so the normal stroll resumes from the CENTER (no jump to the edge).
+      if (e >= 1600) { __sbWkResumeFromX = climbX; endClimb(finishAuthed); return; }
     }
     __sbWkClimbRaf = requestAnimationFrame(step);
   };
@@ -4078,7 +4091,9 @@ function __sbBuildBrainUI() {
       width: calc(100vw - 48px); max-width: 1100px;
       backdrop-filter: blur(6px) saturate(180%); -webkit-backdrop-filter: blur(6px) saturate(180%);
       pointer-events: none; opacity: 0;
-      z-index: 2147483647;
+      /* Below the walker lane so the climbing/strolling Braino renders in FRONT of the
+         glass (behind it, the bar's backdrop-blur made the climber a blurred ghost). */
+      z-index: 2147483645;
       transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1),
                   background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
     }
@@ -5181,7 +5196,7 @@ function __sbBuildBrainUI() {
     #__sb_walk_lane__ {
       position:fixed; bottom:78px; left:50%; transform:translateX(-50%);
       width:calc(100vw - 48px); max-width:1100px; height:96px;
-      pointer-events:none; z-index:2147483641; overflow:visible;
+      pointer-events:none; z-index:2147483646; overflow:visible;
       display:none;
     }
     /* No filter here — element gets a JS transform, and filter+transform on the
