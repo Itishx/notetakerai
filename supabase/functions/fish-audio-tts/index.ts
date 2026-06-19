@@ -6,10 +6,11 @@ const corsHeaders = {
 
 const FISH_AUDIO_API_KEY = Deno.env.get("FISH_AUDIO_API_KEY");
 const FISH_AUDIO_MODEL = Deno.env.get("FISH_AUDIO_MODEL") || "s2-pro";
+// Braino's voice. Override via FISH_AUDIO_REFERENCE_ID secret; otherwise this default is used.
 const FISH_AUDIO_REFERENCE_ID =
   Deno.env.get("FISH_AUDIO_REFERENCE_ID") ||
   Deno.env.get("FISH_AUDIO_VOICE_ID") ||
-  "";
+  "88b183bfbdda44a09ad4474712b967f4";
 
 function json(payload: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(payload), {
