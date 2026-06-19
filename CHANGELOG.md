@@ -1,5 +1,11 @@
 # Braino Changelog
 
+## v6.3.39 — Realtime actions launch fast again
+- **Realtime voice no longer waits on a spoken progress ack before starting Delegate.** Browser actions like Spotify/open/send now launch the agent immediately and only speak the final result.
+- **Progress updates are visual-only during realtime.** This prevents Braino from saying "Searching..." into its own live mic and accidentally creating a self-trigger loop.
+- **Fish/OpenAI TTS has a hard timeout and shorter retry window.** A slow voice endpoint can no longer stall the first spoken turn for tens of seconds.
+- **Extension package updated.** The download artifact now ships as version **6.3.39**.
+
 ## v6.3.38 — Stop realtime from hearing Braino's own quick ack
 - **Removed the spoken browser quick-ack in realtime voice.** The "One sec" fallback could be picked up by the realtime mic as if the user said it, causing a self-triggering loop.
 - **Realtime stays always on.** This only removes the unsafe browser-spoken interim ack; it does not disable the realtime listening session or Fish Audio output.

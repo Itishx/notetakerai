@@ -3189,8 +3189,9 @@ let __sbSpeechGeneration = 0;
 const __SB_TTS_PROVIDER = "fish-audio";
 const __SB_TTS_FALLBACK_PROVIDER = "openai-tts";
 const __SB_TTS_ENDPOINT = "fish-audio-tts";
-const __SB_TTS_RETRY_MIN_MS = 5000;
-const __SB_TTS_RETRY_MAX_MS = 12000;
+const __SB_TTS_RETRY_MIN_MS = 800;
+const __SB_TTS_RETRY_MAX_MS = 7000;
+const __SB_TTS_FETCH_TIMEOUT_MS = 9000;
 // Fish Audio picks the voice server-side via FISH_AUDIO_REFERENCE_ID — the client sends
 // only { text }, so no voice id is needed here. Kept as a label for cost telemetry.
 const __SB_FISH_VOICE_NAME = "Fish Audio Braino";
@@ -3246,7 +3247,7 @@ const __SB_LATEST_UPDATES = [
   },
   {
     title: "Faster browser actions",
-    text: "Spotify/open/search style commands go through fast adapters first, while complex Delegate work uses the newer DOM-grounded closed loop.",
+    text: "Spotify/open/send style voice commands now launch fast adapters immediately, skip slow progress narration, and only use the DOM-grounded closed loop for complex work.",
   },
   {
     title: "Useful working memory",
@@ -3386,10 +3387,8 @@ if (__sbContextOk()) {
           }
         }
         __sbSetStopBtn(true);
-        // Speak milestone hints in voice mode without flooding the user
-        if (msg.speakHint && __sbHeadphoneMode && !__sbRtRelayingAppMessage) {
-          void __sbSpeakWithPreferredVoice(msg.speakHint, "realtime");
-        }
+        // Keep progress visual-only in realtime. Speaking milestones can be slow and
+        // can leak back into the live mic; only final agent results should speak.
       }
     }
     if (msg.action === "SB_SUBGOAL_UPDATE" || msg.type === "SB_SUBGOAL_UPDATE") {
@@ -7644,8 +7643,15 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
     attempt += 1;
     if (speechToken !== __sbSpeechGeneration) return null;
 
+    let timeoutId = null;
     try {
-      const resp = await fetch(url, request);
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      if (controller) {
+        timeoutId = setTimeout(() => controller.abort(), __SB_TTS_FETCH_TIMEOUT_MS);
+      }
+      const timedRequest = controller ? { ...request, signal: controller.signal } : request;
+      const resp = await fetch(url, timedRequest);
+      if (timeoutId) clearTimeout(timeoutId);
       if (speechToken !== __sbSpeechGeneration) return null;
 
       if (resp.ok) {
@@ -7661,8 +7667,12 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
       lastError = httpError;
       if (httpError.isCreditIssue || !httpError.retryable) break;
     } catch (error) {
+      if (timeoutId) clearTimeout(timeoutId);
       lastError = error instanceof Error ? error : new Error(String(error));
       lastError.retryable = true;
+      if (lastError.name === "AbortError") {
+        lastError.message = `${__SB_TTS_PROVIDER} TTS timed out.`;
+      }
     }
 
     const elapsedMs = Date.now() - startedAt;
@@ -10252,6 +10262,22 @@ async function __sbShouldForceVoiceDelegate(routing) {
   return result?.shouldDelegate === true;
 }
 
+function __sbShouldFastLaunchRealtimeAgent(routing) {
+  const promptText = String(routing?.promptText || "").trim();
+  if (!promptText) return false;
+  if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
+  if (__sbIsExplicitWebSearchRequest(promptText)) return false;
+  if (routing?.intent === "agent") return true;
+
+  const connector = __sbNormalizeConnectorName(routing?.connectorHint) || "auto";
+  if (connector !== "auto" && __sbShouldConnectorForceAgent(connector, promptText, routing?.forcedMode || "page", routing?.siteContext)) {
+    return true;
+  }
+
+  if (!__sbIsBrowserActionCommand(promptText)) return false;
+  return /\b(spotify|song|track|music|playlist|youtube|video|gmail|email|mail|calendar|meeting|meet|event|maps?|directions?|linkedin|jobs?|x|twitter|drive|docs?|website|tab|page)\b/i.test(promptText);
+}
+
 async function __sbProcessPrompt(text, options = {}) {
   const routing = __sbResolvePromptRouting(text);
   const promptText = String(routing.promptText || "").trim();
@@ -10371,7 +10397,7 @@ async function __sbProcessPrompt(text, options = {}) {
   const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
 
   if (intent === "agent") {
-    const hasPremium = await __sbResolvePremiumStatus(true);
+    const hasPremium = await __sbResolvePremiumStatus(!fromVoice);
     if (!hasPremium) {
       __sbRtAwaitingDelegateResult = false;
       __sbShowUpgrade("Browser Agent (Delegate)");
@@ -10381,9 +10407,8 @@ async function __sbProcessPrompt(text, options = {}) {
     }
     if (voiceOutput === "realtime") __sbRtAwaitingDelegateResult = true;
     __sbRunAgent(promptText, { connector: connectorHint });
-    if (fromVoice) {
-      await speakVoiceReply("On it.");
-    }
+    // Do not speak an interim ack here: it delays the actual action path and can
+    // be re-captured by the realtime mic. The final agent update still speaks.
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
@@ -12076,8 +12101,6 @@ async function __sbHandleMultiIntentChain(segments, turnToken) {
       // Hold the pending-reply lock across the whole chain to block concurrent turns.
       __sbVoicePendingReply = true;
 
-      if (i === 0) void __sbSpeakWithPreferredVoice("On it.", "realtime");
-
       await __sbHandleInlineRealtimeTurn(segments[i], turnToken);
 
       // If this segment launched an agent, wait for it to finish before the next.
@@ -12137,7 +12160,7 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
 
     __sbVoicePendingReply = true;
     onReady(toProcess);
-  }, 950);
+  }, 350);
 }
 
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
@@ -12182,6 +12205,23 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   if (__sbIsTabsQuery(promptText)) {
     __sbPatchRealtimeCostTurn({ routeIntent: "tabs" });
     await __sbHandleTabsQuery(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
+  if (/\bfavou?rite\b/i.test(promptText)) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  if (__sbShouldFastLaunchRealtimeAgent(routing)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+    __sbRtAwaitingDelegateResult = true;
+    __sbRunAgent(promptText, { connector: routing.connectorHint });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
 

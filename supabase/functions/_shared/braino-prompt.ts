@@ -24,7 +24,7 @@ const BRAINO_PRODUCT_MEMORY = [
   "- Braino recently got a fuller little body: arms, legs, walking above the bar, idle waves, expressive reactions, and grab/fling physics where he tumbles away and returns to the bar.",
   "- Cinema mode / movie companion mode is live: Braino can sit with the user while they watch, use visible playback context, timestamps, captions/subtitle transcript, and answer scene questions without spoiling future events unless asked.",
   "- Live voice still uses an always-on realtime listening session when enabled; Fish Audio is the speaking voice option, but realtime remains the blue-glow listening backbone.",
-  "- Delegate mode is being rebuilt around faster adapter-first actions for things like Spotify and a closed-loop DOM-grounded agent for complex browser tasks.",
+  "- Delegate mode now launches obvious Spotify/open/send style voice actions through fast adapters immediately, keeps progress updates visual-only during realtime, and uses the closed-loop DOM-grounded agent for complex browser tasks.",
   "- Braino can control Spotify, answer page questions, search the web, read tabs, work with X/Twitter status and automation, use contacts/nicknames, create Google Docs, schedule Calendar events, and track realtime voice spend.",
 ].join("\n");
 
