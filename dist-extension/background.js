@@ -1550,8 +1550,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       bgAgentShouldStop = false;
+      const runClaim = bgTryClaimDelegateRun(recovery.tabId, task);
+      if (!runClaim.ok) {
+        sendResponse({ ok: true, duplicate: true, tabId: recovery.tabId, moved: recovery.moved, created: recovery.created });
+        return;
+      }
       void bgRunBrainAgent(recovery.tabId, task, connector, sharedContext).catch((error) => {
         bgBrainUpdate(recovery.tabId, "Agent error: " + (error?.message || error), true, { task });
+      }).finally(() => {
+        bgReleaseDelegateRun(recovery.tabId, runClaim.token);
       });
       sendResponse({ ok: true, tabId: recovery.tabId, moved: recovery.moved, created: recovery.created });
     })().catch((error) => {
@@ -2369,6 +2376,28 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 const bgAgentTaskByTab = new Map();
+const bgActiveDelegateRunsByTab = new Map();
+
+function bgDelegateTaskKey(task) {
+  return String(task || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function bgTryClaimDelegateRun(tabId, task) {
+  const key = bgDelegateTaskKey(task);
+  if (!tabId || !key) return { ok: true, token: `${Date.now()}:${Math.random()}` };
+  const active = bgActiveDelegateRunsByTab.get(tabId);
+  if (active?.key === key && Date.now() - active.startedAt < 120000) {
+    return { ok: false, duplicate: true, token: active.token };
+  }
+  const token = `${Date.now()}:${Math.random()}`;
+  bgActiveDelegateRunsByTab.set(tabId, { key, startedAt: Date.now(), token });
+  return { ok: true, token };
+}
+
+function bgReleaseDelegateRun(tabId, token) {
+  const active = bgActiveDelegateRunsByTab.get(tabId);
+  if (active?.token === token) bgActiveDelegateRunsByTab.delete(tabId);
+}
 
 function bgBrainUpdate(tabId, text, final = false, opts = {}) {
   void bgSendInlineUiMessage(tabId, {

@@ -1563,7 +1563,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       dispatchInputEvent(target, "deleteContentBackward", null);
     }
 
-    function typeIntoContentEditable(target, value) {
+    async function typeIntoContentEditable(target, value) {
       target.focus();
       target.click();
 
@@ -1575,6 +1575,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const inserted = document.execCommand("insertText", false, value);
       if (inserted) {
         dispatchInputEvent(target, "insertText", value);
+        await new Promise(r => setTimeout(r, 80));
+        if (normalizeText(target.innerText || target.textContent)) return;
       }
 
       if (!normalizeText(target.innerText || target.textContent)) {
@@ -1588,6 +1590,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }));
         } catch(e) {}
         dispatchInputEvent(target, "insertFromPaste", value);
+        await new Promise(r => setTimeout(r, 80));
       }
 
       if (!normalizeText(target.innerText || target.textContent)) {
@@ -1685,7 +1688,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           el.focus();
           el.click();
           await new Promise(r => setTimeout(r, 120));
-          typeIntoContentEditable(el, text);
+          await typeIntoContentEditable(el, text);
         } else {
           // Regular input/textarea — use native value setter for React compatibility
           const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
@@ -2782,6 +2785,7 @@ let __sbCursorFollowRaf = 0;
 let __sbCursorFollowNeedsFrame = false;
 let __sbCursorFollowPosition = null;
 let __sbLastAgentTask = "";
+let __sbAgentLaunchGuard = { task: "", ts: 0 };
 let __sbMovieModeActive = false;
 let __sbMovieModeState = { frame: null, media: null, descriptor: "" };
 let __sbMovieModeSyncTimer = null;
@@ -9978,6 +9982,11 @@ function __sbRunAgent(task, options = {}) {
   if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect Braino.", true); return; }
   __sbLastAgentTask = String(task || "").trim();
   if (!__sbLastAgentTask) return;
+  const now = Date.now();
+  if (__sbAgentPendingTurn?.prompt === __sbLastAgentTask || (__sbAgentLaunchGuard.task === __sbLastAgentTask && now - __sbAgentLaunchGuard.ts < 5000)) {
+    return;
+  }
+  __sbAgentLaunchGuard = { task: __sbLastAgentTask, ts: now };
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…");
   const handoff = __sbBuildAgentHandoffPayload(__sbLastAgentTask, options);
