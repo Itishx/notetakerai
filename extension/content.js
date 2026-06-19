@@ -3192,10 +3192,12 @@ function __sbBuildBrainUI() {
       position: fixed; bottom: 0; right: 0; z-index: 1;
       width: 1px; height: 1px; pointer-events: none; overflow: visible;
     }
+    /* Docked mascot — sits at the bottom-right of the page, anchored to #__sb_root__
+       (so it still follows cursor-ride repositioning), independent of the bar. */
     #__sb_brain_btn__ {
       position: absolute;
-      bottom: 100%;
-      left: 12px;
+      right: 18px;
+      bottom: 18px;
       width: 52px; height: 52px;
       cursor: pointer; pointer-events: all;
       filter: drop-shadow(0 2px 12px rgba(200,84,74,0.55));
@@ -3854,6 +3856,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-waking #__sb_mode_btn__,
     #__sb_bar__.sb-waking #__sb_rec_btn__,
     #__sb_bar__.sb-waking #__sb_send_btn__,
+    #__sb_bar__.sb-waking #__sb_bar_close__,
     #__sb_bar__.sb-waking #__sb_x_auto_btn__ { display: none !important; }
     #__sb_wakeup_track__ {
       flex: 1; height: 2px; background: rgba(65,48,40,0.12); border-radius: 99px; overflow: hidden;
@@ -3883,6 +3886,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin #__sb_mode_btn__,
     #__sb_bar__.sb-signin #__sb_rec_btn__,
     #__sb_bar__.sb-signin #__sb_send_btn__,
+    #__sb_bar__.sb-signin #__sb_bar_close__,
     #__sb_bar__.sb-signin #__sb_x_auto_btn__,
     #__sb_bar__.sb-signin #__sb_wakeup__ { display: none !important; }
     #__sb_signin_cta_hint__ {
@@ -4881,16 +4885,11 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-cinematic #__sb_mode_btn__,
     #__sb_bar__.sb-cinematic #__sb_rec_btn__,
     #__sb_bar__.sb-cinematic #__sb_send_btn__,
+    #__sb_bar__.sb-cinematic #__sb_bar_close__,
     #__sb_bar__.sb-cinematic #__sb_x_auto_btn__,
     #__sb_bar__.sb-cinematic #__sb_wakeup__ { display: none !important; }
-    #__sb_bar__.sb-cinematic #__sb_brain_btn__ {
-      left: 50%; transform: translateX(-50%);
-    }
-    /* When the bar is open the walker lane shows the mascot — hide the static
-       brain button so there is only ONE Braino on screen, never two. */
-    #__sb_bar__.open #__sb_brain_btn__ {
-      animation: none; translate: 0px 0px; display: none;
-    }
+    /* (The docked brain button now lives in #__sb_root__, independent of the bar.
+       It is hidden in PANEL state from JS — see __sbOpenBarReady / __sbDock.) */
 
     /* ── Walker lane — Braino strolls directly above the bar, matched to the bar's
        own width so it never wanders off past the bar edges. ── */
@@ -4971,6 +4970,12 @@ function __sbBuildBrainUI() {
 
   const root = document.createElement("div");
   root.id = "__sb_root__";
+  // The docked mascot lives in the root (an independent bottom-right anchor), NOT inside
+  // the bar — the bar is opacity:0 when closed, which used to trap/hide the docked brain.
+  const __sbBrainBtnEl = document.createElement("div");
+  __sbBrainBtnEl.id = "__sb_brain_btn__";
+  __sbBrainBtnEl.innerHTML = __SB_BRAIN_SVG;
+  root.appendChild(__sbBrainBtnEl);
   (document.documentElement||document.body).appendChild(root);
 
   // ── Brain gradient defs at document root — MUST be first in DOM so url(#sbb-fill) etc.
@@ -4986,7 +4991,6 @@ function __sbBuildBrainUI() {
   const __sbDockBar = document.createElement("div");
   __sbDockBar.id = "__sb_bar__";
   __sbDockBar.innerHTML = `
-      <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
       <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
@@ -4997,6 +5001,9 @@ function __sbBuildBrainUI() {
       </button>
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
+      <button id="__sb_bar_close__" class="sb-bar-icon-btn" title="Dock Braino (Esc)">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
       <button id="__sb_x_auto_btn__" class="sb-bar-icon-btn" title="X Automation" style="display:none;gap:4px;padding:0 8px;font-size:11px;font-weight:600;width:auto;">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -5192,7 +5199,8 @@ function __sbBuildBrainUI() {
         __sbRenderSpotifyPanel({ openCard: true, focusInput: false });
       }
     } else {
-      __sbToggleInput(!__sbInputOpen);
+      // Docked mascot is only visible/clickable in DOCKED state → open the panel.
+      __sbOpenPanel();
     }
   });
 
@@ -5229,6 +5237,8 @@ function __sbBuildBrainUI() {
   // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleHeadphoneMode);
+  // × on the bar collapses the panel back down to the docked bottom-right mascot.
+  document.getElementById("__sb_bar_close__")?.addEventListener("click", () => __sbDock());
 
   // X Auto button — show only on X/Twitter
   const xAutoBtn = document.getElementById("__sb_x_auto_btn__");
@@ -5454,7 +5464,7 @@ function __sbBuildBrainUI() {
   const inputEl = document.getElementById("__sb_input__");
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
-    if (e.key === "Escape") __sbToggleInput(false);
+    if (e.key === "Escape") __sbDock();   // collapse panel → docked bottom-right mascot
   });
   inputEl.addEventListener("input", () => __sbSyncSlashConnectorDropdown(inputEl));
 
@@ -6580,29 +6590,69 @@ function __sbSetGreetingPlaceholder() {
   });
 }
 
+// ── Three-state presence model ──────────────────────────────────────────────
+//   OFF    — Braino not on the page          (__sbBrainVisible = false)
+//   DOCKED — idle mascot bottom-right         (visible, !__sbInputOpen)
+//   PANEL  — glass bar open, Braino walking   (visible, __sbInputOpen)
+// Cmd+I cycles OFF → PANEL → DOCKED → OFF. Clicking the docked mascot opens PANEL;
+// the bar's × button docks it back; closing from DOCKED via Cmd+I hides it entirely.
+
+// PANEL: open the glass bar with the walker on top (mascot hidden while walking).
+function __sbOpenPanel() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  __sbBrainVisible = true;
+  __sbSetCursorRideMode(false);
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "none";          // walker is the mascot in PANEL
+  __sbToggleInput(true, { skipPersist: true }); // runs first-run cinematic + starts walker
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: true });
+}
+
+// DOCKED: collapse the panel and let Braino sit at the bottom-right, watching.
+function __sbDock() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  __sbBrainVisible = true;
+  __sbSetCursorRideMode(false);
+  __sbToggleInput(false, { skipPersist: true }); // closes bar, stops walker
+  const wrap = document.getElementById("__sb_card_wrap__");
+  if (wrap) wrap.classList.remove("visible");
+  __sbStopOrbit();
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "";
+  __sbSyncIdleState();
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+}
+
+// OFF: take Braino off the page entirely.
+function __sbHideAll() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  __sbBrainVisible = false;
+  __sbSetCursorRideMode(false);
+  if (__sbMovieModeActive) __sbDeactivateMovieMode({ silent: true });
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "none";
+  __sbToggleInput(false, { skipPersist: true });
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  const wrap = document.getElementById("__sb_card_wrap__");
+  if (wrap) wrap.classList.remove("visible");
+  __sbStopOrbit();
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: false, sbBrainExpanded: false });
+}
+
+// Cmd+I — cycle through the three states.
 function __sbToggleBrain() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
-  const btn = document.getElementById("__sb_brain_btn__");
-  if (__sbBrainVisible) {
-    __sbBrainVisible = false;
-    __sbSetCursorRideMode(false);
-    if (__sbMovieModeActive) __sbDeactivateMovieMode({ silent: true });
-    if (btn) btn.style.display = "none";
-    __sbToggleInput(false, { skipPersist: true });
-    if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-    const wrap = document.getElementById("__sb_card_wrap__");
-    if (wrap) wrap.classList.remove("visible");
-    __sbStopOrbit();
-    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: false });
-  } else {
-    __sbBrainVisible = true;
-    if (btn) btn.style.display = "";
-    __sbSetCursorRideMode(false);
-    __sbToggleInput(true, { skipPersist: true });
-    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
-  }
+  if (!__sbBrainVisible) __sbOpenPanel();   // OFF → PANEL
+  else if (__sbInputOpen) __sbDock();        // PANEL → DOCKED
+  else __sbHideAll();                        // DOCKED → OFF
 }
 
 function __sbToggleInput(open, options = {}) {
@@ -6640,6 +6690,9 @@ function __sbToggleInput(open, options = {}) {
     const __sbOpenBarReady = () => {
       bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
       bar.classList.add("open");
+      // PANEL: the walker is the mascot — hide the docked bottom-right brain button.
+      const __dockBtn = document.getElementById("__sb_brain_btn__");
+      if (__dockBtn) __dockBtn.style.display = "none";
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       __sbSetGreetingPlaceholder();
