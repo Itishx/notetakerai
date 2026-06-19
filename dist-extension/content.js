@@ -3903,16 +3903,18 @@ function __sbBuildBrainUI() {
       position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%) translateY(24px) scale(0.97);
       display: flex; align-items: center; gap: 8px;
-      background: rgba(255,251,247,0.12); border-radius: 100px;
+      /* Frosted light glass: opaque enough that the dark text reads clearly on ANY
+         page (incl. dark sites), while still translucent + blurred = liquid glass. */
+      background: rgba(255,251,247,0.66); border-radius: 100px;
       isolation: isolate;
       overflow: visible;
       padding: 10px 10px 10px 28px;
-      border: 1px solid rgba(255,255,255,0.5);
+      border: 1px solid rgba(255,255,255,0.6);
       box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
                   inset -1px -1px 1px rgba(255,255,255,0.3);
       width: calc(100vw - 48px); max-width: 1100px;
-      backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
+      backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%);
       pointer-events: none; opacity: 0;
       z-index: 2147483647;
       transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1),
@@ -4007,7 +4009,7 @@ function __sbBuildBrainUI() {
       font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    #__sb_input__::placeholder { color: #A79B92; }
+    #__sb_input__::placeholder { color: #6B5248; }
     .sb-bar-icon-btn {
       width: 38px; height: 38px; border-radius: 50%; border: none;
       background: transparent; color: #6B5248; cursor: pointer;
