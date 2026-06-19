@@ -2578,7 +2578,7 @@ const __SBWK_REACT = `<g id="__sbwk_react__" display="none">`
 // Self-contained: its OWN inline defs with unique ids (sbwk-*). The url(#sbb-*)
 // refs below are rewritten to url(#sbwk-*) by the .replaceAll chain at the end, so
 // the coral gradient resolves locally and never depends on a duplicated document id.
-const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="64" height="78" overflow="visible" style="display:block"><defs><linearGradient id="sbwk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbwk-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbwk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g id="__sbwk_root__"><g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_l__"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_r__"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`
+const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="64" height="78" overflow="visible" style="display:block"><defs><linearGradient id="sbwk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbwk-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbwk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g id="__sbwk_root__"><g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><g id="__sbwk_la_bg__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><g id="__sbwk_la__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_l__"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_r__"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`
   .replaceAll("url(#sbb-fill)", "url(#sbwk-fill)")
   .replaceAll("url(#sbb-glow)", "url(#sbwk-glow)")
   .replaceAll("url(#sbb-dark)", "url(#sbwk-dark)")
@@ -2611,6 +2611,8 @@ let __sbThrowRot = 0;          // tumble rotation (deg)
 let __sbWkSayTimer = null;
 let __sbWkReaction = null;     // "scared" | "celebrate" | "tears" while thrown, else null
 let __sbWkReactStart = 0;      // performance.now() when the reaction began
+let __sbWkClimbing = false;    // true while the wake-up climb owns the rig
+let __sbWkClimbRaf = null;
 
 // Trigger a single hand wave (used to acknowledge the user in headphone mode).
 function __sbWkTriggerWave() {
@@ -2724,67 +2726,73 @@ function __sbWkResetThrow() {
   __sbThrowTX = 0; __sbThrowTY = 0; __sbThrowRot = 0;
 }
 
-function __sbStartWalkLoop() {
+// Create the walker lane + mascot DOM (idempotent). Returns the lane element.
+function __sbEnsureWalker() {
   let lane = document.getElementById("__sb_walk_lane__");
-  if (!lane) {
-    lane = document.createElement("div");
-    lane.id = "__sb_walk_lane__";
-    const walker = document.createElement("div");
-    walker.id = "__sbwk_walker__";
-    const flip = document.createElement("div");
-    flip.id = "__sbwk_flip__";
-    flip.innerHTML = __SBWK_SVG;
-    const shadow = document.createElement("div");
-    shadow.id = "__sbwk_shadow__";
-    walker.appendChild(flip);
-    walker.appendChild(shadow);
+  if (lane) return lane;
+  lane = document.createElement("div");
+  lane.id = "__sb_walk_lane__";
+  const walker = document.createElement("div");
+  walker.id = "__sbwk_walker__";
+  const flip = document.createElement("div");
+  flip.id = "__sbwk_flip__";
+  flip.innerHTML = __SBWK_SVG;
+  const shadow = document.createElement("div");
+  shadow.id = "__sbwk_shadow__";
+  walker.appendChild(flip);
+  walker.appendChild(shadow);
 
-    // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
-    let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
-    walker.addEventListener("pointerdown", (e) => {
-      if (__sbWkThrown) return;
-      dragging = true; dragMoved = false;
-      try { walker.setPointerCapture(e.pointerId); } catch (_) {}
-      __sbWkThrowMode = true;            // tick stops driving the transform
-      __sbThrowTX = __sbWkPosX; __sbThrowTY = 0; __sbThrowRot = 0;
-      lastPX = e.clientX; lastPY = e.clientY; lastPT = performance.now();
-      vX = 0; vY = 0;
-      walker.style.cursor = "grabbing";
-      e.preventDefault();
-    });
-    walker.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      const now = performance.now();
-      const dt = Math.max(0.001, (now - lastPT) / 1000);
-      const dx = e.clientX - lastPX, dy = e.clientY - lastPY;
-      if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
-      __sbThrowTX += dx; __sbThrowTY += dy;
-      vX = dx / dt; vY = dy / dt;        // px/s — used as launch velocity
-      lastPX = e.clientX; lastPY = e.clientY; lastPT = now;
-      __sbWkApplyThrowTransform();
-    });
-    const endDrag = (e) => {
-      if (!dragging) return;
-      dragging = false;
-      walker.style.cursor = "grab";
-      try { walker.releasePointerCapture(e.pointerId); } catch (_) {}
-      if (!dragMoved) {
-        // simple tap → wave hello
-        __sbWkThrowMode = false; __sbThrowTX = 0; __sbThrowTY = 0; __sbThrowRot = 0;
-        if (!__sbWkBusy) {
-          __sbWkBusy = true; __sbWkWalking = false; __sbWkTriggerWave();
-          setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; }, 2200);
-        }
-        return;
+  // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
+  let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
+  walker.addEventListener("pointerdown", (e) => {
+    if (__sbWkThrown || __sbWkClimbing) return;
+    dragging = true; dragMoved = false;
+    try { walker.setPointerCapture(e.pointerId); } catch (_) {}
+    __sbWkThrowMode = true;            // tick stops driving the transform
+    __sbThrowTX = __sbWkPosX; __sbThrowTY = 0; __sbThrowRot = 0;
+    lastPX = e.clientX; lastPY = e.clientY; lastPT = performance.now();
+    vX = 0; vY = 0;
+    walker.style.cursor = "grabbing";
+    e.preventDefault();
+  });
+  walker.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const now = performance.now();
+    const dt = Math.max(0.001, (now - lastPT) / 1000);
+    const dx = e.clientX - lastPX, dy = e.clientY - lastPY;
+    if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
+    __sbThrowTX += dx; __sbThrowTY += dy;
+    vX = dx / dt; vY = dy / dt;        // px/s — used as launch velocity
+    lastPX = e.clientX; lastPY = e.clientY; lastPT = now;
+    __sbWkApplyThrowTransform();
+  });
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    walker.style.cursor = "grab";
+    try { walker.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (!dragMoved) {
+      // simple tap → wave hello
+      __sbWkThrowMode = false; __sbThrowTX = 0; __sbThrowTY = 0; __sbThrowRot = 0;
+      if (!__sbWkBusy) {
+        __sbWkBusy = true; __sbWkWalking = false; __sbWkTriggerWave();
+        setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; }, 2200);
       }
-      __sbWkLaunch(vX, vY);               // flung — tumble then return to the bar
-    };
-    walker.addEventListener("pointerup", endDrag);
-    walker.addEventListener("pointercancel", endDrag);
+      return;
+    }
+    __sbWkLaunch(vX, vY);               // flung — tumble then return to the bar
+  };
+  walker.addEventListener("pointerup", endDrag);
+  walker.addEventListener("pointercancel", endDrag);
 
-    lane.appendChild(walker);
-    (document.documentElement || document.body).appendChild(lane);
-  }
+  lane.appendChild(walker);
+  (document.documentElement || document.body).appendChild(lane);
+  return lane;
+}
+
+function __sbStartWalkLoop() {
+  if (__sbWkClimbing) return;           // the wake-up climb owns the rig — don't fight it
+  const lane = __sbEnsureWalker();
   lane.style.display = "block";
   __sbWkStart = __sbWkLast = performance.now();
   __sbWkPosX = 24; __sbWkDirX = 1;
@@ -2796,11 +2804,17 @@ function __sbStartWalkLoop() {
 
 function __sbStopWalkLoop() {
   if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+  __sbWkClimbing = false;
   clearTimeout(__sbWkAutoTimer);
   __sbWkResetThrow();
   __sbWalkTalking = false;
   const lane = document.getElementById("__sb_walk_lane__");
-  if (lane) lane.style.display = "none";
+  if (lane) {
+    lane.style.display = "none";
+    const w = document.getElementById("__sbwk_walker__");
+    if (w) w.classList.remove("sbwk-auth", "sbwk-authed");
+  }
 }
 
 function __sbRestoreWalkBrain() {
@@ -2819,6 +2833,154 @@ function __sbWkScheduleAuto() {
       setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; __sbWkScheduleAuto(); }, 2400);
     } else { __sbWkScheduleAuto(); }
   }, 3800 + Math.random() * 2600);
+}
+
+// ── Wake-up climb ───────────────────────────────────────────────────────────
+// Braino pops up from the bottom, walks under the bar, climbs onto it, waves,
+// says "allow me to authenticate you" (glows, eyes shut while the silent auth
+// handshake runs), then opens his eyes, says "hello, {name}" and hands off to the
+// normal walk loop. Runs its OWN rAF and fully owns the rig (the tick is paused).
+function __sbWakeupClimb(finishAuthed, finishRejected) {
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!walker || !root) { finishAuthed(); return; }
+
+  __sbWkClimbing = true; __sbWkThrowMode = true;
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
+
+  const flip = document.getElementById("__sbwk_flip__");
+  if (flip) flip.style.transform = "scaleX(1)";   // face forward
+
+  const laneW = lane.clientWidth || 320;
+  const climbX = Math.max(10, laneW * 0.5 - 32);
+  const ENTRY_X = Math.max(6, climbX - 150);
+  const FLOOR_TY = 74;    // feet near the viewport bottom
+  const START_TY = 230;   // below the screen
+
+  const el = {
+    la: root.querySelector("#__sbwk_la__"),   laBg: root.querySelector("#__sbwk_la_bg__"),
+    ra: root.querySelector("#__sbwk_ra__"),   raBg: root.querySelector("#__sbwk_ra_bg__"),
+    ll: root.querySelector("#__sbwk_ll__"),   rl: root.querySelector("#__sbwk_rl__"),
+    eyeL: root.querySelector("#__sbwk_eye_l__"), eyeR: root.querySelector("#__sbwk_eye_r__"),
+    pupL: root.querySelector("#__sbwk_pupil_l__"), pupR: root.querySelector("#__sbwk_pupil_r__"),
+  };
+  const setArms = (l, r) => {
+    const lt = l ? `rotate(${l} 22 53)` : "", rt = r ? `rotate(${r} 78 53)` : "";
+    if (el.la) el.la.setAttribute("transform", lt);
+    if (el.laBg) el.laBg.setAttribute("transform", lt);
+    if (el.ra) el.ra.setAttribute("transform", rt);
+    if (el.raBg) el.raBg.setAttribute("transform", rt);
+  };
+  const setLegs = (l, r) => {
+    if (el.ll) el.ll.setAttribute("transform", l ? `rotate(${l} 44 74)` : "");
+    if (el.rl) el.rl.setAttribute("transform", r ? `rotate(${r} 56 74)` : "");
+  };
+  const setEyes = (sy) => {
+    const v = Math.max(0.05, sy);
+    if (el.eyeL) el.eyeL.setAttribute("transform", `translate(38,48) scale(1,${v}) translate(-38,-48)`);
+    if (el.eyeR) el.eyeR.setAttribute("transform", `translate(62,48) scale(1,${v}) translate(-62,-48)`);
+  };
+  const setGaze = (gx, gy) => {
+    if (el.pupL) el.pupL.setAttribute("transform", `translate(${gx} ${gy})`);
+    if (el.pupR) el.pupR.setAttribute("transform", `translate(${gx} ${gy})`);
+  };
+  const place = (x, ty, rot = 0) => { walker.style.transform = `translate(${x}px, ${ty}px) rotate(${rot}deg)`; };
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const ease = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+  place(ENTRY_X, START_TY); setArms(0, 0); setLegs(0, 0); setEyes(1); setGaze(0, -0.55);
+
+  let firstName = "";
+  __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
+    firstName = authDisplayName?.split(" ")[0]?.trim() || "";
+  });
+
+  // ── auth handshake (only opens a tab if we don't already have a token) ──
+  let authResolved = null;   // true | false
+  let watcher = null, fallbackTimer = null, authBegun = false;
+  const startAuth = () => {
+    if (authBegun) return; authBegun = true;
+    __sbStorageGet(["authToken"]).then(({ authToken }) => {
+      if (authToken) { setTimeout(() => { if (authResolved === null) authResolved = true; }, 1000); return; }
+      chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
+      watcher = (changes, area) => { if (area === "local" && changes.authToken?.newValue && authResolved === null) authResolved = true; };
+      try { chrome.storage.onChanged.addListener(watcher); } catch (_) {}
+      fallbackTimer = setTimeout(() => { if (authResolved === null) authResolved = false; }, 6000);
+    });
+  };
+  const cleanupAuth = () => {
+    if (watcher) { try { chrome.storage.onChanged.removeListener(watcher); } catch (_) {} watcher = null; }
+    if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+  };
+  const endClimb = (fn) => {
+    cleanupAuth();
+    walker.classList.remove("sbwk-auth", "sbwk-authed");
+    setArms(0, 0); setLegs(0, 0); setEyes(1); setGaze(0, 0);
+    __sbWkClimbing = false; __sbWkThrowMode = false;
+    if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+    fn();
+  };
+
+  let phase = "pop", pStart = performance.now(), said1 = false, said2 = false;
+  const next = (p) => { phase = p; pStart = performance.now(); };
+
+  const step = (now) => {
+    const e = now - pStart;
+    if (phase === "pop") {
+      const k = easeOut(Math.min(1, e / 600));
+      place(ENTRY_X, lerp(START_TY, FLOOR_TY, k)); setGaze(0, -0.4);
+      if (k >= 1) next("walk");
+    } else if (phase === "walk") {
+      const k = Math.min(1, e / 1000);
+      place(lerp(ENTRY_X, climbX, ease(k)), FLOOR_TY);
+      const s = (e / 1000) * 9;
+      setLegs(Math.max(0, Math.sin(s)) * 16, Math.max(0, Math.sin(s + Math.PI)) * 16);
+      setGaze(1.6, 0);
+      if (k >= 1) { setLegs(0, 0); next("reach"); }
+    } else if (phase === "reach") {
+      const k = ease(Math.min(1, e / 600));
+      place(climbX, FLOOR_TY - lerp(0, 6, k));
+      setArms(lerp(0, -122, k), lerp(0, 122, k)); setGaze(0, -0.8);
+      if (k >= 1) next("grip");
+    } else if (phase === "grip") {
+      const k = ease(Math.min(1, e / 800));
+      place(climbX, lerp(FLOOR_TY - 6, FLOOR_TY - 44, k));   // haul up
+      setArms(lerp(-122, -100, k), lerp(122, 100, k));
+      setLegs(lerp(0, 18, k), lerp(0, 18, k));               // legs tuck
+      if (k >= 1) next("mantle");
+    } else if (phase === "mantle") {
+      const k = ease(Math.min(1, e / 800));
+      place(climbX, lerp(FLOOR_TY - 44, 0, k));              // top out onto the bar
+      setArms(lerp(-100, -26, k), lerp(100, 26, k));         // press down
+      setLegs(lerp(18, 0, easeOut(k)), lerp(18, 0, easeOut(k)));
+      if (k >= 1) { setArms(0, 0); setLegs(0, 0); next("perch"); }
+    } else if (phase === "perch") {
+      place(climbX, 0);
+      setArms(0, -28 + Math.sin(e / 45) * 18);               // wave
+      setGaze(0, 0);
+      if (e > 300 && !said1) { said1 = true; __sbWkSay("allow me to authenticate you"); }
+      if (e >= 1700) { setArms(0, 0); next("auth"); startAuth(); }
+    } else if (phase === "auth") {
+      setEyes(lerp(1, 0.06, Math.min(1, e / 350)));          // eyes close
+      walker.classList.add("sbwk-auth");
+      if (authResolved !== null) {
+        walker.classList.remove("sbwk-auth");
+        if (authResolved) { walker.classList.add("sbwk-authed"); next("hello"); }
+        else { endClimb(finishRejected); return; }
+      }
+    } else if (phase === "hello") {
+      setEyes(lerp(0.06, 1, Math.min(1, e / 350)));          // eyes open
+      if (e > 200 && !said2) { said2 = true; __sbWkSay("hello, " + (firstName || "there")); }
+      if (e >= 1600) { endClimb(finishAuthed); return; }
+    }
+    __sbWkClimbRaf = requestAnimationFrame(step);
+  };
+  __sbWkClimbRaf = requestAnimationFrame(step);
 }
 
 function __sbWkTick(now) {
@@ -3928,6 +4090,24 @@ function __sbBuildBrainUI() {
       z-index: -1; pointer-events: none;
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0) scale(1); }
+    /* Coral send-pulse — a brief ring + warm glow each time a message is sent. */
+    @keyframes __sb_bar_send__ {
+      0%   { box-shadow: 0 0 0 0 rgba(232,120,110,0.55), 0 8px 32px rgba(27,23,19,0.18); }
+      55%  { box-shadow: 0 0 0 6px rgba(232,120,110,0), 0 0 34px rgba(232,120,110,0.45), 0 8px 32px rgba(27,23,19,0.18); }
+      100% { box-shadow: 0 0 0 0 rgba(232,120,110,0), 0 8px 32px rgba(27,23,19,0.18); }
+    }
+    #__sb_bar__.sb-send-pulse { animation: __sb_bar_send__ 0.7s ease-out; }
+    /* Card is display-only now — the constant bottom bar is the single input. */
+    #__sb_bubble__ .sb-card-footer { display: none !important; }
+    /* Wake-up climb: bar is visible glass, expands from the center (scaleX driven in JS),
+       and its inputs stay hidden until Braino has climbed on + authenticated. */
+    #__sb_bar__.sb-climb { transform-origin: center center; }
+    #__sb_bar__.sb-climb #__sb_input__,
+    #__sb_bar__.sb-climb #__sb_mode_btn__,
+    #__sb_bar__.sb-climb #__sb_rec_btn__,
+    #__sb_bar__.sb-climb #__sb_send_btn__,
+    #__sb_bar__.sb-climb #__sb_bar_close__,
+    #__sb_bar__.sb-climb #__sb_x_auto_btn__ { opacity: 0; pointer-events: none; }
     /* ── Readable mode: opaque warm cream, dark text — always legible ── */
     #__sb_bar__.sb-readable {
       background: rgba(255,251,247,0.96);
@@ -5055,6 +5235,17 @@ function __sbBuildBrainUI() {
     #__sbwk_walker__.hp-speaking svg  { animation: __sbwk_glow_speak__ 1s ease-in-out infinite; }
     #__sbwk_walker__.hp-connecting svg,
     #__sbwk_walker__.hp-captured svg  { animation: __sbwk_glow_soft__ 1.6s ease-in-out infinite; }
+    /* Wake-up auth glow on the climbing mascot (gold pulse → green flash on success). */
+    @keyframes __sbwk_glow_auth__ {
+      0%,100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.3)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(255,210,50,1)) drop-shadow(0 0 50px rgba(255,175,0,0.6)); }
+    }
+    @keyframes __sbwk_glow_authed__ {
+      0%,100% { filter: drop-shadow(0 2px 12px rgba(40,180,70,0.45)); }
+      50%      { filter: drop-shadow(0 0 28px rgba(80,230,110,1)) drop-shadow(0 0 54px rgba(40,180,70,0.7)); }
+    }
+    #__sbwk_walker__.sbwk-auth svg   { animation: __sbwk_glow_auth__ 0.85s ease-in-out infinite; }
+    #__sbwk_walker__.sbwk-authed svg { animation: __sbwk_glow_authed__ 0.85s ease-in-out infinite; }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -5831,10 +6022,8 @@ function __sbOpenCard(options = {}) {
   __sbRefreshInlineOwner();
   // In headphone mode: keep bar visible, suppress automated card opens (voice is the UI)
   if (__sbHeadphoneMode && !options.forceOpen) return;
-  // Hide the bar — card has its own follow-up input. Braino only strolls on the
-  // bar, so stop the walk loop whenever the card takes over the UI.
-  document.getElementById("__sb_bar__")?.classList.remove("open");
-  __sbStopWalkLoop();
+  // The bar stays constant as the single input — the card is display-only (answers).
+  // Keep the bar open and Braino strolling on it while the answer card is up.
   const alreadyOpen = wrap.classList.contains("visible");
   wrap.classList.add("visible");
   if (!alreadyOpen) {
@@ -5857,7 +6046,10 @@ function __sbCollapseCard() {
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (__sbBrainVisible && __sbInputOpen) {
     document.getElementById("__sb_bar__")?.classList.add("open");
-    __sbStartWalkLoop(); // bar is back — Braino resumes strolling on it
+    // Bar stays open with the card now, so the walker is already running — only
+    // (re)start it if something actually stopped it (don't teleport mid-stroll).
+    const lane = document.getElementById("__sb_walk_lane__");
+    if (!lane || lane.style.display === "none") __sbStartWalkLoop();
   }
   __sbScheduleCursorFollow();
   __sbSyncIdleState(); // back to docked idle — resume animations
@@ -6707,11 +6899,12 @@ function __sbOpenPanel() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
+  const wasOff = !__sbBrainVisible;             // OFF→PANEL plays the full climb wake-up
   __sbBrainVisible = true;
   __sbSetCursorRideMode(false);
   const btn = document.getElementById("__sb_brain_btn__");
   if (btn) btn.style.display = "none";          // walker is the mascot in PANEL
-  __sbToggleInput(true, { skipPersist: true }); // runs first-run cinematic + starts walker
+  __sbToggleInput(true, { skipPersist: true, wakeClimb: wasOff });
   if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: true });
 }
 
@@ -6814,103 +7007,43 @@ function __sbToggleInput(open, options = {}) {
       __sbStartWalkLoop();
     };
 
-    chrome.storage.local.get("sbHasAwoken", ({ sbHasAwoken }) => {
-      if (sbHasAwoken) {
-        // Fast path — cinematic played before, open bar directly
-        chrome.storage.local.get("authToken", ({ authToken }) => {
-          if (!authToken) {
-            bar.classList.add("open", "sb-signin");
-                  __sbSetupBarSignIn();
-            return;
-          }
-          __sbOpenBarReady();
-        });
-        return;
-      }
-
-      // First-ever open: cinematic wakeup — brain appears at screen center, descends to bar
+    // OFF→PANEL plays the full climb wake-up; DOCKED→PANEL (and other opens) are instant.
+    if (options.wakeClimb) {
       chrome.storage.local.set({ sbHasAwoken: true });
 
-      // Create independent fixed-position brain at screen center (avoids bar transform context)
-      const cinBrain = document.createElement("div");
-      cinBrain.id = "__sb_cin_brain__";
-      // SVG lives in an inner wrapper so the animated glow filter on #__sb_cin_brain__
-      // never sits on the same node as the coral url(#sbb-fill) gradient (that combo
-      // renders the brain white). Outer = glow/motion, inner = the colored mascot.
-      cinBrain.innerHTML = `<div id="__sb_cin_inner__" style="width:100%;height:100%">${__SB_BRAIN_SVG_CIN_SLEEP}</div>`;
-      cinBrain.style.cssText = "position:fixed;width:52px;height:52px;top:calc(50vh - 26px);left:calc(50vw - 26px);z-index:2147483646;filter:drop-shadow(0 2px 18px rgba(200,84,74,0.6));pointer-events:none;";
-      (document.documentElement||document.body).appendChild(cinBrain);
+      // Bar expands from the center outward while Braino climbs onto it.
+      bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
+      bar.classList.add("open", "sb-climb");
+      bar.style.transition = "transform 0.55s cubic-bezier(0.25,0.46,0.45,0.94)";
+      bar.style.transform = "translateX(-50%) scaleX(0.04)";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        bar.style.transform = "translateX(-50%) scaleX(1)";
+      }));
 
-      // Phase 2 (800ms): awaken and authenticate IN THE CENTER of the screen.
-      // The brain stays put while it wakes + authenticates — it only descends
-      // AFTER it has woken/authed, and the pill only appears AFTER it lands.
-      setTimeout(() => {
-        const cinInner = cinBrain.querySelector("#__sb_cin_inner__");
-        if (cinInner) cinInner.innerHTML = __SB_BRAIN_SVG_CIN;
-        cinBrain.classList.add("sb-brain-auth");
+      const finishAuthed = () => {
+        bar.classList.remove("sb-climb");
+        bar.style.transition = ""; bar.style.transform = "";
+        __sbOpenBarReady();
+      };
+      const finishRejected = () => {
+        bar.classList.remove("sb-climb");
+        bar.style.transition = ""; bar.style.transform = "";
+        bar.classList.add("sb-signin");
+        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+        __sbSetupBarSignIn();
+      };
+      __sbWakeupClimb(finishAuthed, finishRejected);
+      return;
+    }
 
-        const tAuth = Date.now();
-        const minAuth = 1200;
-
-        chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
-
-        let resolved = false;
-
-        // Step 3: glide down from center to just above the bar, THEN open the pill.
-        const descendThenOpen = (authed) => {
-          cinBrain.style.transition = "top 1.8s cubic-bezier(0.25,0.46,0.45,0.94)";
-          requestAnimationFrame(() => {
-            // target: above bar (barHeight≈52px + brainHeight≈52px + gap≈12px from bottom)
-            cinBrain.style.top = "calc(100vh - 116px)";
-          });
-          setTimeout(() => finishCinematic(authed), 1850);
-        };
-
-        const finishCinematic = (authed) => {
-          cinBrain.remove();
-          if (brainBtn) {
-            brainBtn.innerHTML = __SB_BRAIN_SVG;
-            brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
-          }
-          if (authed) {
-            __sbOpenBarReady();
-          } else {
-            bar.classList.add("open", "sb-signin");
-            if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-            __sbSetupBarSignIn();
-          }
-        };
-
-        const goGreen = () => {
-          if (resolved) return;
-          resolved = true;
-          clearTimeout(fallbackTimer);
-          chrome.storage.onChanged.removeListener(authWatcher);
-          const wait = Math.max(0, minAuth - (Date.now() - tAuth));
-          setTimeout(() => {
-            // Flash the authed (green) glow in the CENTER, then descend + open.
-            cinBrain.classList.remove("sb-brain-auth");
-            cinBrain.classList.add("sb-brain-authed");
-            setTimeout(() => descendThenOpen(true), 900);
-          }, wait);
-        };
-
-        const goRed = () => {
-          if (resolved) return;
-          resolved = true;
-          chrome.storage.onChanged.removeListener(authWatcher);
-          cinBrain.classList.remove("sb-brain-auth");
-          cinBrain.classList.add("sb-brain-rejected");
-          setTimeout(() => descendThenOpen(false), 700);
-        };
-
-        const authWatcher = (changes, area) => {
-          if (area === "local" && changes.authToken?.newValue) goGreen();
-        };
-        chrome.storage.onChanged.addListener(authWatcher);
-
-        const fallbackTimer = setTimeout(goRed, 6000);
-      }, 800);
+    // Instant open (no climb): straight to ready if authed, else sign-in.
+    chrome.storage.local.get("authToken", ({ authToken }) => {
+      if (!authToken) {
+        bar.classList.add("open", "sb-signin");
+        __sbSetupBarSignIn();
+        return;
+      }
+      __sbOpenBarReady();
     });
   } else {
     __sbInputOpen = false;
@@ -10286,15 +10419,25 @@ async function __sbProcessPrompt(text, options = {}) {
 
 async function __sbSendMessage() {
   if (!__sbOwnsInlineUi()) return;
-  const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
-  const input = document.getElementById(cardOpen ? "__sb_card_input__" : "__sb_input__");
+  // The bottom bar is the single, constant input — follow-ups come from here too.
+  const input = document.getElementById("__sb_input__");
   if (!input) return;
   const text = input.value.trim();
   if (!text) return;
   input.value = "";
   if (input.tagName === "TEXTAREA") input.style.height = "auto";
-  if (cardOpen) __sbPulseFollowupBar();
+  __sbPulseBar();           // bar glows on every send
   await __sbProcessPrompt(text);
+}
+
+// Coral send-pulse on the constant input bar (mirrors __sbPulseFollowupBar).
+function __sbPulseBar() {
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  bar.classList.remove("sb-send-pulse");
+  void bar.offsetWidth;     // restart the animation
+  bar.classList.add("sb-send-pulse");
+  setTimeout(() => bar.classList.remove("sb-send-pulse"), 720);
 }
 
 function __sbShowUpgrade(feature) {
