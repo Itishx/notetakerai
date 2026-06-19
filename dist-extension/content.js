@@ -11055,7 +11055,6 @@ let __sbRtConnectFailureCount = 0;
 let __sbRtRetryTimer = null;
 let __sbRtLocalConnectInFlight = false;
 let __sbRtLastFailureAt = 0;
-let __sbRtQuickAckTimer = null;
 
 function __sbNormalizeVoiceOutputPref(value) {
   // "elevenlabs" is the legacy value — migrate it to "fish".
@@ -11077,13 +11076,6 @@ function __sbResetRealtimeConnectFailures() {
   if (__sbRtRetryTimer) {
     clearTimeout(__sbRtRetryTimer);
     __sbRtRetryTimer = null;
-  }
-}
-
-function __sbClearRealtimeQuickAck() {
-  if (__sbRtQuickAckTimer) {
-    clearTimeout(__sbRtQuickAckTimer);
-    __sbRtQuickAckTimer = null;
   }
 }
 
@@ -11887,7 +11879,6 @@ function __sbResetRealtimeResponseState() {
 }
 
 function __sbInterruptRealtimeResponse() {
-  __sbClearRealtimeQuickAck();
   if (__sbRtControlReady() && __sbHasActiveRealtimeResponse()) {
     __sbSendRtEvent({ type: "response.cancel" });
     __sbSendRtEvent({ type: "output_audio_buffer.clear" });
@@ -11989,7 +11980,6 @@ async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options =
 function __sbCompleteVoiceTurn(options = {}) {
   const fromVoice = Boolean(options.fromVoice);
   if (!fromVoice) return;
-  __sbClearRealtimeQuickAck();
 
   const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
   const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
@@ -12150,29 +12140,6 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
   }, 950);
 }
 
-function __sbPickRealtimeQuickAck(promptText) {
-  const text = String(promptText || "").toLowerCase();
-  if (/\b(play|open|search|find|look up|book|schedule|send|post|apply|close|delete|cancel)\b/.test(text)) {
-    return "On it.";
-  }
-  if (/\bwhat'?s new|what changed|what can you do|what are you capable/.test(text)) {
-    return "I know this one.";
-  }
-  return "One sec.";
-}
-
-function __sbScheduleRealtimeQuickAck(turnToken, promptText) {
-  if (!__sbHeadphoneMode || !__sbRtControlReady()) return;
-  __sbClearRealtimeQuickAck();
-  __sbRtQuickAckTimer = setTimeout(() => {
-    __sbRtQuickAckTimer = null;
-    if (!__sbHeadphoneMode || turnToken !== __sbRtTurnToken || !__sbVoicePendingReply) return;
-    if (__sbIsSpeaking || __sbHasActiveRealtimeResponse()) return;
-    const speechToken = __sbSpeechGeneration;
-    void __sbSpeakWithBrowser(__sbPickRealtimeQuickAck(promptText), speechToken);
-  }, 750);
-}
-
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   const routing = __sbResolvePromptRouting(transcript);
   const promptText = String(routing.promptText || "").trim();
@@ -12254,7 +12221,6 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 function __sbCleanupRealtimeVoice(options = {}) {
   const reason = String(options.reason || "client_cleanup");
   const usageSessionId = __sbRtUsageSessionId;
-  __sbClearRealtimeQuickAck();
   __sbCompleteRealtimeCostTurn({ force: true });
   if (__sbUseOffscreenRt) {
     __sbUseOffscreenRt = false;
@@ -12298,7 +12264,6 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "input_audio_buffer.speech_started") {
-    __sbClearRealtimeQuickAck();
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
     // voices: cancel the realtime model's audio and stop Fish Audio/browser playback.
@@ -12343,7 +12308,6 @@ function __sbHandleRtEvent(ev) {
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       const turnToken = ++__sbRtTurnToken;
       __sbBeginRealtimeCostTurn(toProcess, turnToken, transcriptionUsage);
-      __sbScheduleRealtimeQuickAck(turnToken, toProcess);
       const segments = __sbSplitAndCorrectTranscript(toProcess);
       if (segments.length > 1) {
         void __sbHandleMultiIntentChain(segments, turnToken);

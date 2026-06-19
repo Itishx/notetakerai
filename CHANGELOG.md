@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v6.3.38 — Stop realtime from hearing Braino's own quick ack
+- **Removed the spoken browser quick-ack in realtime voice.** The "One sec" fallback could be picked up by the realtime mic as if the user said it, causing a self-triggering loop.
+- **Realtime stays always on.** This only removes the unsafe browser-spoken interim ack; it does not disable the realtime listening session or Fish Audio output.
+- **Extension package updated.** The download artifact now ships as version **6.3.38**.
+
 ## v6.3.37 — Braino knows his latest body, cinema mode, and voice wakeup
 - **Braino now knows what is new with himself.** The extension answer and shared backend prompt both include current product memory, so questions like "what's new with you?" mention the latest Braino changes instead of old Fly Mode-only copy.
 - **Arms, legs, walking, waving, and throw physics are now part of Braino's own story.** Braino can describe his walking lane, idle body animation, grab/fling behavior, and little comeback-to-the-bar routine.
