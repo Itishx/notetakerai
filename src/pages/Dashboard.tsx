@@ -5045,13 +5045,13 @@ export default function Dashboard() {
                     Voice & language
                   </h3>
                   <p className="mb-5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    Choose which voice Braino uses in live voice mode. Same realtime mechanism for all — only the speaking voice changes.
+                    Choose how Braino listens and speaks in voice mode. Fish Audio is the cheaper default; Realtime AI is opt-in.
                   </p>
 
                   <div className="space-y-3">
                     {([
-                      { id: "fish",       label: "Fish Audio",           desc: "Braino's default voice — Realtime listens, Fish Audio speaks" },
-                      { id: "realtime",   label: "Realtime AI",          desc: "OpenAI's native voice — lowest latency, but uses OpenAI audio output" },
+                      { id: "fish",       label: "Fish Audio",           desc: "Default cost-saver — browser listening, Fish Audio speaks" },
+                      { id: "realtime",   label: "Realtime AI",          desc: "Opt-in OpenAI Realtime listening/voice — lowest latency, higher cost" },
                     ] as const).map(({ id: option, label, desc }) => {
                       const isSelected = voicePref === option;
                       return (

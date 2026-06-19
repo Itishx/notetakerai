@@ -1909,7 +1909,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === "voiceTransportStatus") {
-    const labelMap = { realtime: "Live AI", legacy: "Legacy", error: "Error", connecting: "Waking up…" };
+    const labelMap = { realtime: "Live AI", legacy: "Fish voice", error: "Error", connecting: "Waking up…" };
     __sbSetVoiceStatusBadge(msg.status, labelMap[msg.status] || msg.status);
     return true;
   }
@@ -3382,6 +3382,11 @@ if (__sbContextOk()) {
     }
     if (msg.action === "sbRtSessionReady") {
       // Offscreen session is up — configure usage tracking and mark ready.
+      if (!__sbPrefersRealtimeVoice()) {
+        __sbStopOffscreenRealtimeQuietly();
+        if (__sbHeadphoneMode) void __sbStartFishHeadphoneListening("Fish voice");
+        return;
+      }
       __sbUseOffscreenRt = true;
       __sbRtSessionReady = true;
       __sbResetRealtimeConnectFailures();
@@ -3406,6 +3411,10 @@ if (__sbContextOk()) {
       // offscreen doc). Remember that so future tab switches skip offscreen and go straight
       // to the in-tab session, then start the in-tab session here now.
       const errorText = String(msg.error || "Live AI could not start.");
+      if (!__sbPrefersRealtimeVoice()) {
+        if (__sbHeadphoneMode) void __sbStartFishHeadphoneListening("Fish voice");
+        return;
+      }
       __sbUseOffscreenRt = false;
       const quotaError = /limit|cap|used .*today|429/i.test(errorText);
       if (quotaError) {
@@ -3419,10 +3428,13 @@ if (__sbContextOk()) {
       if (__sbHeadphoneMode && !__sbIsRealtimeVoiceReady()) void __sbHandleRealtimeConnectFailure(errorText);
     }
     if (msg.action === "sbRtSessionEnded") {
-      // Offscreen session dropped — retry realtime first; legacy only starts after 3 failures.
+      // Offscreen session dropped — retry realtime only when explicitly selected.
       __sbUseOffscreenRt = false;
       __sbRtSessionReady = false;
-      if (__sbHeadphoneMode) void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
+      if (__sbHeadphoneMode) {
+        if (__sbPrefersRealtimeVoice()) void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
+        else void __sbStartFishHeadphoneListening("Fish voice");
+      }
     }
     if (msg.action === "sbRtAttach") {
       // Background says this tab is now focused and voice mode is on — take over presence.
@@ -7643,11 +7655,8 @@ async function __sbSpeakText(text, options = {}) {
   __sbStopSpeech();
   const speechToken = ++__sbSpeechGeneration;
   let spoke = false;
-  // In headphone (realtime) mode we DON'T mute the mic while Fish Audio speaks — the whole
-  // point of the realtime mechanism is that the user can barge in. The browser's echo
-  // cancellation (echoCancellation:true on the mic) keeps Braino's own voice from
-  // self-triggering, and speech_started stops playback the instant the user talks. We only
-  // mute in legacy (non-headphone) recording, where there's no barge-in VAD.
+  // Only native Realtime mode has barge-in VAD. Fish mode uses the cheaper legacy
+  // listener, which pauses while Braino speaks and resumes after the reply.
   const shouldMuteRealtimeMic = false;
 
   try {
@@ -11028,6 +11037,59 @@ function __sbApplyStoredVoiceOutputPref(value) {
   return pref;
 }
 
+function __sbPrefersRealtimeVoice() {
+  return __sbVoiceOutputPref === "realtime";
+}
+
+function __sbStopOffscreenRealtimeQuietly() {
+  try {
+    chrome.runtime.sendMessage({ action: "stopOffscreenRealtime" }, () => { void chrome.runtime.lastError; });
+  } catch (_) {}
+}
+
+function __sbStopRealtimeForFishMode(reason = "fish_voice_mode") {
+  __sbCleanupRealtimeVoice({ reason });
+  __sbStopOffscreenRealtimeQuietly();
+  __sbUseOffscreenRt = false;
+  __sbRtSessionReady = false;
+  document.getElementById("__sb_brain_btn__")?.classList.remove("hp-realtime");
+}
+
+async function __sbStartFishHeadphoneListening(label = "Fish voice") {
+  if (!__sbHeadphoneMode) return false;
+
+  __sbStopRealtimeForFishMode("fish_voice_mode");
+  __sbSetHpBrainState("connecting");
+  __sbSetVoiceStatusBadge("legacy", label);
+
+  const started = __sbIsRecording ? true : await __sbStartRecording({ silent: true });
+  if (!__sbHeadphoneMode) return false;
+
+  if (started) {
+    document.getElementById("__sb_brain_btn__")?.classList.remove("hp-realtime");
+    __sbSetVoiceStatusBadge("legacy", "Fish voice");
+    __sbSetHpBrainState("listening");
+    __sbSyncIdleState();
+    return true;
+  }
+
+  __sbSetHpBrainState("");
+  __sbSetVoiceStatusBadge("error", "Voice unavailable");
+  __sbShowVoiceError("Voice listening could not start.");
+  return false;
+}
+
+async function __sbRestartHeadphoneTransportForPreference() {
+  if (!__sbHeadphoneMode) return false;
+  if (!__sbPrefersRealtimeVoice()) {
+    return await __sbStartFishHeadphoneListening("Fish voice");
+  }
+  if (__sbIsRecording) __sbStopRecording({ silent: true });
+  __sbSetHpBrainState("connecting");
+  __sbSetVoiceStatusBadge("connecting", "Waking up…");
+  return await __sbStartRealtimeConnectAttempt();
+}
+
 function __sbResetRealtimeConnectFailures() {
   __sbRtConnectFailureCount = 0;
   __sbRtLastFailureAt = 0;
@@ -11400,28 +11462,22 @@ async function __sbSyncRealtimeVoiceInstructions() {
   }
 }
 
-async function __sbFallbackToLegacyHeadphone(message = "Live AI is unavailable. Switching to legacy voice.") {
+async function __sbFallbackToLegacyHeadphone(message = "Live AI is unavailable. Switching to Fish voice.") {
   if (!__sbHeadphoneMode) return false;
 
   __sbResetRealtimeConnectFailures();
-  __sbCleanupRealtimeVoice({ reason: "legacy_fallback" });
-  __sbSetVoiceStatusBadge("legacy", "Legacy");
+  __sbStopRealtimeForFishMode("legacy_fallback");
+  __sbSetVoiceStatusBadge("legacy", "Fish voice");
   __sbShowVoiceError(message);
-  __sbSetHpBrainState("connecting");
-
-  const started = await __sbStartRecording({ silent: true });
-  if (started) {
-    return true;
-  }
-
-  __sbSetHpBrainState("");
-  __sbSetVoiceStatusBadge("error", "Voice unavailable");
-  __sbShowVoiceError("Legacy voice could not start.");
-  return false;
+  return await __sbStartFishHeadphoneListening("Fish voice");
 }
 
 function __sbScheduleRealtimeRetry(message, attemptNumber) {
   if (!__sbHeadphoneMode) return;
+  if (!__sbPrefersRealtimeVoice()) {
+    void __sbStartFishHeadphoneListening("Fish voice");
+    return;
+  }
   if (__sbRtRetryTimer) clearTimeout(__sbRtRetryTimer);
 
   const delayMs = Math.min(1800, 500 + attemptNumber * 350);
@@ -11438,10 +11494,13 @@ function __sbScheduleRealtimeRetry(message, attemptNumber) {
 
 async function __sbHandleRealtimeConnectFailure(message = "Live AI failed.", options = {}) {
   if (!__sbHeadphoneMode) return false;
+  if (!__sbPrefersRealtimeVoice()) {
+    return await __sbStartFishHeadphoneListening("Fish voice");
+  }
 
   const failureMessage = String(message || "Live AI failed.");
   if (options.nonRetryable || __sbIsNonRetryableRealtimeFailure(failureMessage)) {
-    return await __sbFallbackToLegacyHeadphone(`${failureMessage} Switching to legacy voice.`);
+    return await __sbFallbackToLegacyHeadphone(`${failureMessage} Switching to Fish voice.`);
   }
 
   const now = Date.now();
@@ -11454,7 +11513,7 @@ async function __sbHandleRealtimeConnectFailure(message = "Live AI failed.", opt
   const attemptNumber = __sbRtConnectFailureCount;
 
   if (attemptNumber >= __SB_RT_MAX_CONNECT_FAILURES) {
-    return await __sbFallbackToLegacyHeadphone(`${failureMessage} Live AI failed after ${__SB_RT_MAX_CONNECT_FAILURES} attempts. Switching to legacy voice.`);
+    return await __sbFallbackToLegacyHeadphone(`${failureMessage} Live AI failed after ${__SB_RT_MAX_CONNECT_FAILURES} attempts. Switching to Fish voice.`);
   }
 
   __sbCleanupRealtimeVoice({ reason: "realtime_retry" });
@@ -11467,7 +11526,11 @@ async function __sbHandleRealtimeConnectFailure(message = "Live AI failed.", opt
 }
 
 async function __sbStartRealtimeConnectAttempt() {
-  if (!__sbHeadphoneMode || __sbRtControlReady()) return true;
+  if (!__sbHeadphoneMode) return true;
+  if (!__sbPrefersRealtimeVoice()) {
+    return await __sbStartFishHeadphoneListening("Fish voice");
+  }
+  if (__sbRtControlReady()) return true;
 
   const stored = await __sbStorageGet(["authToken", "sbOffscreenRtBroken"]);
   const authToken = stored.authToken || null;
@@ -11499,6 +11562,9 @@ async function __sbStartRealtimeConnectAttempt() {
 }
 
 async function __sbStartRealtimeVoice() {
+  if (!__sbPrefersRealtimeVoice()) {
+    return await __sbStartFishHeadphoneListening("Fish voice");
+  }
   if (__sbRtLocalConnectInFlight || __sbRtControlReady()) return true;
   __sbRtLocalConnectInFlight = true;
   const { authToken } = await __sbStorageGet(["authToken"]);
@@ -11718,11 +11784,15 @@ try {
     if ("brainoVoicePref" in changes) {
       const v = changes.brainoVoicePref.newValue;
       __sbApplyStoredVoiceOutputPref(v);
+      if (__sbHeadphoneMode) {
+        void __sbRestartHeadphoneTransportForPreference();
+      }
     }
 
     if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
       // Voice fully off everywhere.
       if (__sbHeadphoneMode) {
+        if (__sbIsRecording) __sbStopRecording({ silent: true });
         __sbCleanupRealtimeVoice({ reason: "voice_mode_off" });
         __sbDetachVoiceVisual();
         __sbStopSpeech();
@@ -11733,6 +11803,10 @@ try {
     if ("sbRtSessionActive" in changes) {
       const active = changes.sbRtSessionActive.newValue;
       if (active) {
+        if (!__sbPrefersRealtimeVoice()) {
+          __sbStopOffscreenRealtimeQuietly();
+          return;
+        }
         if (document.visibilityState === "visible") {
           // A global session is now live. If we'd started an in-tab one, drop it and
           // attach to the global one instead (single source of audio).
@@ -11742,11 +11816,14 @@ try {
           if (!__sbHeadphoneMode || !__sbUseOffscreenRt) __sbAttachVoiceVisual();
         }
       } else if (__sbUseOffscreenRt) {
-        // Global session dropped. Retry realtime first; do not start legacy until
-        // the retry budget is exhausted.
+        // Global session dropped. Realtime retries only if the user explicitly chose it.
         __sbUseOffscreenRt = false;
         if (document.visibilityState === "visible") {
-          void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
+          if (__sbPrefersRealtimeVoice()) {
+            void __sbHandleRealtimeConnectFailure("Live AI disconnected.");
+          } else {
+            void __sbStartFishHeadphoneListening("Fish voice");
+          }
         } else {
           __sbDetachVoiceVisual();
         }
@@ -12213,6 +12290,7 @@ function __sbCleanupRealtimeVoice(options = {}) {
 }
 
 function __sbHandleRtEvent(ev) {
+  if (!__sbPrefersRealtimeVoice()) return;
   if (ev.type === "session.created" || ev.type === "session.updated") {
     if (__sbRtSessionReady) {
       __sbSetVoiceStatusBadge("realtime", "Live AI");
@@ -12780,13 +12858,15 @@ function __sbShowContactPromptModal(payload = {}) {
 function __sbEnsureVoicePresence() {
   if (!__sbOwnsInlineUi()) return;
   if (__sbHeadphoneMode) return; // already present here
-  __sbStorageGet(["sbVoiceModeOn", "sbRtSessionActive"]).then(({ sbVoiceModeOn, sbRtSessionActive }) => {
+  __sbStorageGet(["sbVoiceModeOn", "sbRtSessionActive", "brainoVoicePref"]).then(({ sbVoiceModeOn, sbRtSessionActive, brainoVoicePref }) => {
     if (!sbVoiceModeOn || !__sbOwnsInlineUi() || __sbHeadphoneMode) return;
     if (document.visibilityState !== "visible") return; // only the focused tab takes over
+    __sbApplyStoredVoiceOutputPref(brainoVoicePref);
     if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-    if (sbRtSessionActive) {
+    if (__sbPrefersRealtimeVoice() && sbRtSessionActive) {
       __sbAttachVoiceVisual(); // global offscreen session — instant, no reconnect
     } else {
+      if (!__sbPrefersRealtimeVoice() && sbRtSessionActive) __sbStopOffscreenRealtimeQuietly();
       __sbEnterHeadphoneMode({ keepFlag: true }); // start an in-tab session on this tab
     }
   });
@@ -12798,8 +12878,9 @@ function __sbReleaseVoicePresence() {
   if (__sbUseOffscreenRt) {
     __sbDetachVoiceVisual(); // global session keeps running; just drop the local halo
   } else {
-    // In-tab session is bound to this tab and can't follow — tear it down so this tab
+    // In-tab voice is bound to this tab and can't follow — tear it down so this tab
     // stops listening/speaking. Keep sbVoiceModeOn so the next focused tab starts fresh.
+    if (__sbIsRecording) __sbStopRecording({ silent: true });
     __sbCleanupRealtimeVoice({ reason: "tab_blur_migrate" });
     __sbDetachVoiceVisual();
     __sbStopSpeech();
@@ -12808,6 +12889,12 @@ function __sbReleaseVoicePresence() {
 
 function __sbAttachVoiceVisual() {
   if (!__sbOwnsInlineUi()) return;
+  if (!__sbPrefersRealtimeVoice()) {
+    __sbHeadphoneMode = true;
+    __sbVoiceOnlyMode = true;
+    void __sbStartFishHeadphoneListening("Fish voice");
+    return;
+  }
   const brain = document.getElementById("__sb_brain_btn__");
   // In PANEL the walker on the bar is the listening mascot — don't also pop the docked
   // bottom-right brain (that was the duplicate "second Braino" in headphone mode).
@@ -12858,6 +12945,12 @@ function __sbEnterHeadphoneMode(options = {}) {
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
   __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
     __sbApplyStoredVoiceOutputPref(stored.brainoVoicePref);
+
+    if (!__sbPrefersRealtimeVoice()) {
+      if (stored.sbRtSessionActive) __sbStopOffscreenRealtimeQuietly();
+      void __sbStartFishHeadphoneListening("Fish voice");
+      return;
+    }
 
     if (stored.sbRtSessionActive) {
       __sbUseOffscreenRt = true;
@@ -12913,6 +13006,7 @@ function __sbExitHeadphoneMode() {
 
   if (__sbIsRecording) __sbStopRecording({ silent: true });
   __sbCleanupRealtimeVoice({ reason: "client_exit" });
+  __sbStopOffscreenRealtimeQuietly();
   __sbStopSpeech();
 
   __sbSetHpBrainState("");

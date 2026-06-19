@@ -24,7 +24,7 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
     rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
 
     // Keep the remote track attached for WebRTC compatibility, but never play OpenAI audio.
-    // Braino's primary audible voice is ElevenLabs from the content script.
+    // Braino's primary audible voice is Fish Audio from the content script.
     rtRemoteAudio = new Audio();
     rtRemoteAudio.autoplay = true;
     rtRemoteAudio.muted = true;
@@ -183,6 +183,101 @@ let mediaRecorder = null;
 let audioChunks = [];
 let audioContext = null;
 let micStream = null;
+let tabStream = null;
+let micRecorder = null;
+let micChunks = [];
+let playbackAudio = null;
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || null);
+    reader.onerror = () => reject(reader.error || new Error("Failed to read audio blob"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function flushRecorder(recorder) {
+  if (!recorder || recorder.state !== "recording") return;
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      recorder.removeEventListener("dataavailable", onDataAvailable);
+      resolve();
+    };
+    const onDataAvailable = () => finish();
+    const timer = setTimeout(finish, 300);
+    recorder.addEventListener("dataavailable", onDataAvailable, { once: true });
+    try {
+      recorder.requestData();
+    } catch (_) {
+      finish();
+    }
+  });
+}
+
+async function buildKnownSpeakerReferences() {
+  if (micRecorder && micRecorder.state === "recording") {
+    await flushRecorder(micRecorder);
+  }
+  if (!micChunks.length) return [];
+  const referenceChunks = micChunks.slice(0, 6);
+  if (referenceChunks.length < 2) return [];
+  const audioBase64 = await blobToBase64(new Blob(referenceChunks, { type: "audio/webm" }));
+  if (!audioBase64) return [];
+  return [{ name: "You", audioBase64, mimeType: "audio/webm" }];
+}
+
+async function getSegmentPayload() {
+  if (!mediaRecorder) return { audioBase64: null, knownSpeakerReferences: [] };
+  await flushRecorder(mediaRecorder);
+  if (audioChunks.length === 0) {
+    return {
+      audioBase64: null,
+      knownSpeakerReferences: await buildKnownSpeakerReferences(),
+    };
+  }
+  const chunksToProcess = audioChunks.slice();
+  audioChunks = [];
+  return {
+    audioBase64: await blobToBase64(new Blob(chunksToProcess, { type: "audio/webm" })),
+    knownSpeakerReferences: await buildKnownSpeakerReferences(),
+  };
+}
+
+function cleanupCaptureResources() {
+  if (mediaRecorder?.stream) {
+    mediaRecorder.stream.getTracks().forEach((t) => t.stop());
+  }
+  mediaRecorder = null;
+  audioChunks = [];
+  if (micRecorder) {
+    try { if (micRecorder.state !== "inactive") micRecorder.stop(); } catch (_) {}
+    micRecorder = null;
+  }
+  micChunks = [];
+  if (micStream) {
+    micStream.getTracks().forEach((t) => t.stop());
+    micStream = null;
+  }
+  if (tabStream) {
+    tabStream.getTracks().forEach((t) => t.stop());
+    tabStream = null;
+  }
+  if (audioContext) {
+    audioContext.close().catch(() => {});
+    audioContext = null;
+  }
+  if (playbackAudio) {
+    try { playbackAudio.pause(); } catch (_) {}
+    playbackAudio.srcObject = null;
+    playbackAudio.remove();
+    playbackAudio = null;
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "offscreen") return;
@@ -233,29 +328,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "stopCapture") {
     stopCapture()
-      .then((base64) => sendResponse({ audioBase64: base64 }))
+      .then((payload) => sendResponse(payload))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
 
   if (message.action === "getSegment") {
-    if (!mediaRecorder || audioChunks.length === 0) {
-      sendResponse({ audioBase64: null });
-      return true;
-    }
-    const chunksToProcess = audioChunks.slice();
-    audioChunks = [];
-    const blob = new Blob(chunksToProcess, { type: "audio/webm" });
-    const reader = new FileReader();
-    reader.onload = () => sendResponse({ audioBase64: reader.result.split(",")[1] });
-    reader.onerror = () => sendResponse({ audioBase64: null });
-    reader.readAsDataURL(blob);
+    getSegmentPayload()
+      .then((payload) => sendResponse(payload))
+      .catch(() => sendResponse({ audioBase64: null, knownSpeakerReferences: [] }));
     return true;
   }
 });
 
 async function startCapture(streamId, withMic) {
-  const tabStream = await navigator.mediaDevices.getUserMedia({
+  cleanupCaptureResources();
+
+  tabStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       mandatory: {
         chromeMediaSource: "tab",
@@ -265,11 +354,11 @@ async function startCapture(streamId, withMic) {
   });
 
   // Play the tab audio back so the user can still hear it
-  const audio = document.createElement("audio");
-  audio.srcObject = tabStream;
-  audio.autoplay = true;
-  audio.id = "playback";
-  document.body.appendChild(audio);
+  playbackAudio = document.createElement("audio");
+  playbackAudio.srcObject = tabStream;
+  playbackAudio.autoplay = true;
+  playbackAudio.id = "playback";
+  document.body.appendChild(playbackAudio);
 
   let recordStream = tabStream;
 
@@ -282,9 +371,17 @@ async function startCapture(streamId, withMic) {
       audioContext.createMediaStreamSource(tabStream).connect(dest);
       audioContext.createMediaStreamSource(micStream).connect(dest);
       recordStream = dest.stream;
+
+      micChunks = [];
+      micRecorder = new MediaRecorder(micStream, { mimeType: "audio/webm;codecs=opus" });
+      micRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) micChunks.push(e.data);
+      };
+      micRecorder.start(1000);
     } catch (e) {
-      console.warn("Mic access denied, recording tab audio only:", e.message);
-      // Fall back to tab-only
+      cleanupCaptureResources();
+      const message = e?.message || "Microphone access failed";
+      throw new Error(`Couldn't access your microphone for Meeting mode. ${message}`);
     }
   }
 
@@ -306,28 +403,18 @@ async function stopCapture() {
     }
 
     mediaRecorder.onstop = () => {
-      const blob = new Blob(audioChunks, { type: "audio/webm" });
-      mediaRecorder.stream.getTracks().forEach((t) => t.stop());
-      mediaRecorder = null;
-      audioChunks = [];
-
-      // Stop mic if active
-      if (micStream) {
-        micStream.getTracks().forEach((t) => t.stop());
-        micStream = null;
-      }
-      if (audioContext) {
-        audioContext.close().catch(() => {});
-        audioContext = null;
-      }
-
-      // Remove playback element
-      const playback = document.getElementById("playback");
-      if (playback) playback.remove();
-
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(",")[1]);
-      reader.readAsDataURL(blob);
+      (async () => {
+        const mixedChunks = audioChunks.slice();
+        const audioBase64 = mixedChunks.length
+          ? await blobToBase64(new Blob(mixedChunks, { type: "audio/webm" }))
+          : null;
+        const knownSpeakerReferences = await buildKnownSpeakerReferences();
+        cleanupCaptureResources();
+        resolve({ audioBase64, knownSpeakerReferences });
+      })().catch((error) => {
+        cleanupCaptureResources();
+        reject(error);
+      });
     };
 
     mediaRecorder.stop();
