@@ -9060,11 +9060,24 @@ function __sbFormatAgentPendingBody() {
   const status = String(__sbAgentPendingTurn.status || "Delegating...").trim() || "Delegating...";
   const subgoals = Array.isArray(__sbAgentPendingTurn.subgoals) ? __sbAgentPendingTurn.subgoals : [];
   if (!subgoals.length) return status;
-  const lines = subgoals.slice(0, 8).map((goal) => {
+  const seen = new Set();
+  const lines = [];
+  for (const goal of subgoals) {
+    const desc = String(goal?.desc || goal?.goal || "Step").trim();
+    const key = desc
+      .toLowerCase()
+      .replace(/^\s*(?:[-*]|\d+[.)]|\[[x!>\s-]\])\s*/g, "")
+      .replace(/\b(?:step|subgoal|task)\s*\d+\s*[:.)-]?\s*/g, "")
+      .replace(/[^\w\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
     const state = String(goal?.status || "pending");
     const marker = state === "done" ? "[x]" : state === "active" ? "[>]" : state === "failed" ? "[!]" : "[ ]";
-    return `${marker} ${String(goal?.desc || goal?.goal || "Step").trim()}`;
-  });
+    lines.push(`${marker} ${desc}`);
+    if (lines.length >= 8) break;
+  }
   return `${status}\n\n${lines.join("\n")}`;
 }
 
@@ -9164,12 +9177,27 @@ function __sbUpdateAgentPendingTurn(status) {
 
 function __sbUpdateAgentSubgoals(subgoals) {
   if (!__sbAgentPendingTurn?.prompt) return;
-  __sbAgentPendingTurn.subgoals = Array.isArray(subgoals)
-    ? subgoals.map((goal) => ({
-        desc: String(goal?.desc || goal?.goal || "").trim(),
+  const seen = new Set();
+  __sbAgentPendingTurn.subgoals = [];
+  if (Array.isArray(subgoals)) {
+    for (const goal of subgoals) {
+      const desc = String(goal?.desc || goal?.goal || "").trim();
+      const key = desc
+        .toLowerCase()
+        .replace(/^\s*(?:[-*]|\d+[.)]|\[[x!>\s-]\])\s*/g, "")
+        .replace(/\b(?:step|subgoal|task)\s*\d+\s*[:.)-]?\s*/g, "")
+        .replace(/[^\w\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      __sbAgentPendingTurn.subgoals.push({
+        desc,
         status: String(goal?.status || "pending").trim() || "pending",
-      })).filter((goal) => goal.desc)
-    : [];
+      });
+      if (__sbAgentPendingTurn.subgoals.length >= 8) break;
+    }
+  }
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
@@ -9508,7 +9536,7 @@ function __sbDetectIntent(text) {
   if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
   if (__sbIsBrowserActionCommand(t) || __sbIsSiteScopedBrowseSearch(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order)\b/.test(t)) return "agent";
-  if (/\b(gmail|email|calendar|maps?|directions?|linkedin|jobs?|x|twitter|spotify|youtube|amazon|reddit|whatsapp|google docs?|drive)\b/.test(t)
+  if (/\b(gmail|email|calendar|maps?|directions?|linkedin|jobs?|x|twitter|spotify|youtube|amazon|reddit|whatsapp|google docs?|google documents?|drive)\b/.test(t)
     && /\b(open|find|search|send|compose|book|schedule|read|show|create|post|apply|route|directions?)\b/.test(t)) return "agent";
   return "chat";
 }

@@ -1,5 +1,12 @@
 # Braino Changelog
 
+## v6.3.48 — Delegate finishes long research without looping
+- **Research-to-Google-Doc requests now use the fast adapter path.** Phrases like “research Anne Frank and create a Google document” route through grounded web research plus the Docs writer instead of burning the DOM loop budget.
+- **Delegate budgets are adaptive.** Short browser commands keep the tight guard; long research/write/read workflows get a larger safety window so they can finish real work.
+- **Repeated checklist items are deduped.** Near-identical planner subgoals no longer spam the floating Delegate checklist.
+- **Loop guard added.** If Delegate repeats the same concrete action without progress, it records the stall and switches tactics instead of opening/clicking the same thing again.
+- **Extension package updated.** The download artifact now ships as version **6.3.48**.
+
 ## v6.3.47 — Ctrl+Ctrl starts clean voice auto-routing
 - **Ctrl+Ctrl now enters realtime headphone mode with clean routing defaults.** It resets stale Lecture/Meeting/Web/connector state back to Auto so each voice command can route naturally to page chat, web, or Delegate.
 - **Delegate-style browser actions remain automatic.** Auto mode still sends commands like send email, play music, open Maps, or search jobs through the browser agent instead of forcing page chat.

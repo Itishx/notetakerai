@@ -2645,6 +2645,7 @@ async function bgRunBrainAgentLegacy(tabId, task, connectorHint, sharedContext =
 // ── Delegate closed-loop agent (index + assertion based) ─────────────────────
 
 const BG_DELEGATE_BUDGET = { maxSteps: 40, maxMs: 120000, maxLLMUsd: 0.50 };
+const BG_DELEGATE_LONG_TASK_BUDGET = { maxSteps: 120, maxMs: 600000, maxLLMUsd: 3.00 };
 const BG_DELEGATE_TARGETED_ACTIONS = new Set(["click", "type", "selectOption", "downloadImage"]);
 const BG_DELEGATE_ACTIONS = new Set([
   "navigate",
@@ -2661,6 +2662,20 @@ const BG_DELEGATE_ACTIONS = new Set([
   "answer",
   "clarify",
 ]);
+
+function bgLooksLikeLongDelegateTask(task) {
+  const raw = String(task || "").toLowerCase();
+  if (!raw) return false;
+  const longWork = /\b(research|write|draft|create|make|compose|article|report|brief|document|google\s+docs?|google\s+documents?|docs?|linkedin|jobs?|postings?|compare|summari[sz]e|analy[sz]e)\b/.test(raw);
+  const multiStep = /\b(and then|then|after that|put it|turn it into|create|write|draft|read\s+(?:at least\s+)?\d+|read\s+(?:several|multiple|many)|best fit|google\s+doc|google\s+document)\b/.test(raw);
+  return Boolean(longWork && multiStep);
+}
+
+function bgDelegateBudgetForTask(task) {
+  return bgLooksLikeLongDelegateTask(task)
+    ? { ...BG_DELEGATE_LONG_TASK_BUDGET }
+    : { ...BG_DELEGATE_BUDGET };
+}
 
 function bgSafeJson(value) {
   try { return JSON.stringify(value); } catch (_) { return "null"; }
@@ -2892,6 +2907,7 @@ Rules:
 - Use the observation as ground truth. If the needed element is absent, scroll, wait, read, or clarify.
 - Every non-read/browser action needs an assertion that can be checked against the next observation.
 - Do not claim done until the task is complete in observed state.
+- If recent history shows the same action was repeated or skipped, change tactic immediately. Do not repeat the same subgoal wording with punctuation-only changes.
 - If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
 - For other high-risk final actions not clearly requested by the user, clarify before acting.
 - For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location" and read the visible result.
@@ -3003,6 +3019,30 @@ function bgIsRepeatedDelegateNavigate(action, state, obs) {
   const current = bgCanonicalDelegateUrl(obs?.url || "");
   if (current && current === target) return true;
   return state.history.slice(-5).some((item) => item?.ok && item?.action?.type === "navigate" && bgCanonicalDelegateUrl(item.action.url) === target);
+}
+
+function bgDelegateActionFingerprint(action) {
+  if (!action?.type) return "";
+  const type = String(action.type);
+  if (type === "navigate") return `${type}:${bgCanonicalDelegateUrl(action.url)}`;
+  if (type === "web_search") return `${type}:${String(action.query || "").toLowerCase().replace(/\s+/g, " ").trim()}`;
+  if (type === "click" || type === "downloadImage") return `${type}:${Number(action.index)}`;
+  if (type === "type") return `${type}:${Number(action.index)}:${String(action.text || "").slice(0, 120)}`;
+  if (type === "selectOption") return `${type}:${Number(action.index)}:${String(action.value || "").toLowerCase()}`;
+  if (type === "pressKey") return `${type}:${String(action.key || "").toLowerCase()}`;
+  if (type === "scroll") return `${type}:${String(action.direction || "")}`;
+  if (type === "wait") return `${type}:${Math.round(Number(action.ms || 1000) / 500) * 500}`;
+  if (type === "read") return `${type}:${Number.isInteger(Number(action.index)) ? Number(action.index) : "main"}`;
+  return type;
+}
+
+function bgIsRepeatedDelegateAction(action, state) {
+  const fingerprint = bgDelegateActionFingerprint(action);
+  if (!fingerprint || ["done", "answer", "clarify"].includes(action?.type)) return false;
+  const recent = state.history.slice(action?.type === "scroll" || action?.type === "wait" || action?.type === "read" ? -5 : -3);
+  const repeats = recent.filter((item) => bgDelegateActionFingerprint(item?.action) === fingerprint);
+  const limit = action?.type === "scroll" || action?.type === "wait" || action?.type === "read" ? 4 : 2;
+  return repeats.length >= limit;
 }
 
 async function bgExecuteDelegateAction(tabId, action, state) {
@@ -3139,6 +3179,7 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
 async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false }) {
   let currentTabId = tabId;
   const startedAt = Date.now();
+  const budget = bgDelegateBudgetForTask(task);
   let llmUsd = 0;
   let prevObs = null;
   const observationSnapshots = [];
@@ -3180,14 +3221,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     }
   }
 
-  for (let step = 0; step < BG_DELEGATE_BUDGET.maxSteps; step++) {
+  for (let step = 0; step < budget.maxSteps; step++) {
     if (bgAgentShouldStop || (shouldStop && await shouldStop())) {
       const msg = "Task stopped.";
       onFinal?.(msg);
       return { ok: false, message: msg, state };
     }
-    if (!BrainoModels.withinBudget(BG_DELEGATE_BUDGET, { steps: step, elapsedMs: Date.now() - startedAt, llmUsd })) {
-      const msg = "I hit the Delegate budget before finishing. I stopped instead of looping blindly.";
+    if (!BrainoModels.withinBudget(budget, { steps: step, elapsedMs: Date.now() - startedAt, llmUsd })) {
+      const minutes = Math.max(1, Math.round(budget.maxMs / 60000));
+      const msg = `I hit Delegate's safety budget (${budget.maxSteps} steps / about ${minutes} min) before finishing. I stopped instead of looping blindly.`;
       onFinal?.(msg);
       return { ok: false, message: msg, state };
     }
@@ -3241,6 +3283,17 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       prevObs = obs;
       continue;
     }
+    if (bgIsRepeatedDelegateAction(action, state)) {
+      const note = `Repeated ${action.type} without clear progress; forcing a different tactic.`;
+      state.facts.push({ key: `loop_guard:${state.facts.length + 1}`, value: note, source: "runtime" });
+      state.facts = state.facts.slice(-30);
+      state.stuckCount = Math.max(state.stuckCount, 2);
+      BrainoTaskState.commitHistory(state, decision, { error: note, skipped: true }, { ok: false, reason: note });
+      await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+      onProgress?.("I noticed a repeated step, so I’m switching tactics...");
+      prevObs = obs;
+      continue;
+    }
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
@@ -3270,7 +3323,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     prevObs = newObs;
   }
 
-  const msg = "I reached the Delegate step limit before finishing. I stopped cleanly rather than guessing.";
+  const msg = `I reached the Delegate step limit (${budget.maxSteps}) before finishing. I stopped cleanly rather than guessing.`;
   onFinal?.(msg);
   return { ok: false, message: msg, state };
 }
@@ -3979,7 +4032,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   const explicitSpotifyMention = /\bspotify\b/.test(text);
   const explicitMusicIntent = /\b(?:song|track|music|playlist|album)\b/i.test(raw);
   const onSpotify = currentSite === "spotify" || normalizedConnector === "spotify" || explicitSpotifyMention;
-  const wantsGoogleDoc = /\bgoogle docs?\b|\bgdocs?\b|\bgoogle doc\b|\bgdoc\b|\bdocs?\.new\b|\bdocs?\b/.test(text);
+  const wantsGoogleDoc = /\bgoogle\s+(?:docs?|documents?)\b|\bgdocs?\b|\bgoogle doc\b|\bgdoc\b|\bdocs?\.new\b|\bdocs?\b/.test(text);
   const wantsGmail =
     currentSite === "gmail" ||
     normalizedConnector === "gmail" ||
@@ -4097,12 +4150,13 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   }
 
   const articlePatterns = [
-    /search for\s+(.+?)\s+and\s+(?:write|draft|make|create)\s+(?:about it\s+)?(?:(?:a|an)\s+)?(?:article|report|brief|google docs?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google docs?|docs?)?/i,
-    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+put\s+(?:it\s+)?(?:in|into)\s+(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)/i,
-    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+(?:write|draft|make|create|put|turn it into)\s+(?:(?:a|an)\s+)?(?:article|report|brief|google docs?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google docs?|docs?)?/i,
-    /write\s+an?\s+article\s+about\s+(.+?)\s+in\s+(?:a\s+)?google docs?/i,
-    /(?:create|make|draft|write)\s+(?:me\s+)?(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)\s+(?:about|on)\s+(.+)/i,
-    /(?:create|make|draft|write)\s+(?:me\s+)?(?:an?\s+)?(?:article|report|brief)\s+(?:about|on)\s+(.+?)\s+(?:in|as|inside)\s+(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)/i,
+    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+(?:then\s+)?(?:create|make|write|draft)\s+(?:me\s+)?(?:(?:a|an)\s+)?(?:google\s+)?(?:docs?|doc(?:ument)?)/i,
+    /search for\s+(.+?)\s+and\s+(?:then\s+)?(?:write|draft|make|create)\s+(?:about it\s+)?(?:(?:a|an)\s+)?(?:article|report|brief|google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?)?/i,
+    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+put\s+(?:it\s+)?(?:in|into)\s+(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)/i,
+    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+(?:then\s+)?(?:write|draft|make|create|put|turn it into)\s+(?:(?:a|an)\s+)?(?:article|report|brief|google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?)?/i,
+    /write\s+an?\s+article\s+about\s+(.+?)\s+in\s+(?:a\s+)?(?:google\s+docs?|google\s+documents?)/i,
+    /(?:create|make|draft|write)\s+(?:me\s+)?(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)\s+(?:about|on)\s+(.+)/i,
+    /(?:create|make|draft|write)\s+(?:me\s+)?(?:an?\s+)?(?:article|report|brief)\s+(?:about|on)\s+(.+?)\s+(?:in|as|inside)\s+(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)/i,
   ];
 
   if (wantsGoogleDoc) {
@@ -4309,7 +4363,7 @@ function bgLooksLikeBrowserTask(task) {
   const strongImperative = /^(?:open|go to|navigate to|visit|search|find|look up|pull up|bring up|take me to|show me|create|make|draft|compose|send|reply|play|pause|resume|continue|next|skip|previous|prev|book|schedule|reschedule|cancel|forward|invite|join|buy|order|post|tweet|get directions|show directions|route|move|rename|delete|remove|archive|label|organize|organise)\b/i.test(raw);
   if (!strongImperative) return false;
 
-  const actionableTarget = /\b(gmail|email|google drive|drive|spotify|youtube|netflix|google docs?|docs?\.new|google sheets?|sheets?\.new|google slides?|slides?\.new|maps?|directions?|calendar|flight|flights|hotel|hotels|restaurant|restaurants|whatsapp|x|twitter|linkedin|amazon|reddit)\b/i.test(raw);
+  const actionableTarget = /\b(gmail|email|google drive|drive|spotify|youtube|netflix|google docs?|google documents?|docs?\.new|google sheets?|sheets?\.new|google slides?|slides?\.new|maps?|directions?|calendar|flight|flights|hotel|hotels|restaurant|restaurants|whatsapp|x|twitter|linkedin|amazon|reddit)\b/i.test(raw);
   return actionableTarget;
 }
 

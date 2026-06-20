@@ -19,18 +19,38 @@
     };
   }
 
+  function normalizeSubgoalKey(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/^\s*(?:[-*]|\d+[.)]|\[[x!>\s-]\])\s*/g, "")
+      .replace(/\b(?:step|subgoal|task)\s*\d+\s*[:.)-]?\s*/g, "")
+      .replace(/[^\w\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function normalizeSubgoals(subgoals, fallbackGoal) {
     if (!Array.isArray(subgoals) || !subgoals.length) return [{ id: "1", desc: fallbackGoal, status: "active" }];
     let hasActive = false;
-    return subgoals.slice(0, 8).map((item, index) => {
+    const seen = new Set();
+    const normalized = [];
+    for (const item of subgoals) {
+      const index = normalized.length;
+      const desc = String(item?.desc || item?.goal || item || `Step ${index + 1}`).trim();
+      const key = normalizeSubgoalKey(desc);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
       const status = ["pending", "active", "done", "failed"].includes(item?.status) ? item.status : (index === 0 ? "active" : "pending");
       if (status === "active") hasActive = true;
-      return {
+      normalized.push({
         id: String(item?.id || index + 1),
-        desc: String(item?.desc || item?.goal || item || `Step ${index + 1}`).trim(),
+        desc,
         status,
-      };
-    }).map((item, index) => (!hasActive && index === 0 ? { ...item, status: "active" } : item));
+      });
+      if (normalized.length >= 8) break;
+    }
+    if (!normalized.length) normalized.push({ id: "1", desc: fallbackGoal, status: "active" });
+    return normalized.map((item, index) => (!hasActive && index === 0 ? { ...item, status: "active" } : item));
   }
 
   function setSubgoals(state, subgoals) {
@@ -58,10 +78,15 @@
     }
     if (update.current_subgoal) {
       const desc = String(update.current_subgoal).trim();
-      let matched = state.subgoals.find((goal) => goal.desc.toLowerCase() === desc.toLowerCase());
+      const key = normalizeSubgoalKey(desc);
+      let matched = state.subgoals.find((goal) => normalizeSubgoalKey(goal.desc) === key);
       if (!matched) {
-        matched = { id: String(state.subgoals.length + 1), desc, status: "pending" };
-        state.subgoals.push(matched);
+        if (state.subgoals.length < 8) {
+          matched = { id: String(state.subgoals.length + 1), desc, status: "pending" };
+          state.subgoals.push(matched);
+        } else {
+          matched = state.subgoals.find((goal) => goal.status === "active") || state.subgoals[0];
+        }
       }
       for (const goal of state.subgoals) {
         if (goal.status !== "done" && goal.status !== "failed") goal.status = goal.id === matched.id ? "active" : "pending";
@@ -129,6 +154,7 @@
     markActiveSubgoalDone,
     markActiveSubgoalFailed,
     mergeMemoryUpdate,
+    normalizeSubgoalKey,
     normalizeSubgoals,
     renderTaskState,
     setSubgoals,

@@ -28,6 +28,7 @@ describe("Delegate extension libs", () => {
     delete (globalThis as any).BrainoAssertions;
     delete (globalThis as any).BrainoMacroStore;
     delete (globalThis as any).BrainoModels;
+    delete (globalThis as any).BrainoTaskState;
     document.body.innerHTML = "";
   });
 
@@ -113,5 +114,24 @@ describe("Delegate extension libs", () => {
     expect((globalThis as any).BrainoModels.MODELS.STEP).toMatch(/^gpt-/);
     expect(JSON.stringify((globalThis as any).BrainoModels.MODELS)).not.toMatch(/claude/i);
     expect((globalThis as any).BrainoModels.pickModel("step", 2)).toBe((globalThis as any).BrainoModels.MODELS.STRATEGIST);
+  });
+
+  it("deduplicates planner subgoals and memory updates", () => {
+    loadExtensionLib("taskState.js");
+    const taskState = (globalThis as any).BrainoTaskState;
+    const state = taskState.createTaskState("Research Anne Frank and create a Google document", 1);
+
+    taskState.setSubgoals(state, [
+      { id: "1", desc: "Research Anne Frank", status: "active" },
+      { id: "2", desc: "1. Research Anne Frank.", status: "pending" },
+      { id: "3", desc: "Create the Google document", status: "pending" },
+    ]);
+    taskState.mergeMemoryUpdate(state, { current_subgoal: "Subgoal 1: research Anne Frank" }, "model");
+
+    expect(state.subgoals.map((goal: any) => goal.desc)).toEqual([
+      "Research Anne Frank",
+      "Create the Google document",
+    ]);
+    expect(state.activeSubgoal).toBe("1");
   });
 });
