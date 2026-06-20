@@ -1,5 +1,11 @@
 # Braino Changelog
 
+## v6.3.47 — Ctrl+Ctrl starts clean voice auto-routing
+- **Ctrl+Ctrl now enters realtime headphone mode with clean routing defaults.** It resets stale Lecture/Meeting/Web/connector state back to Auto so each voice command can route naturally to page chat, web, or Delegate.
+- **Delegate-style browser actions remain automatic.** Auto mode still sends commands like send email, play music, open Maps, or search jobs through the browser agent instead of forcing page chat.
+- **Fish Audio timeout fallback is less noisy.** Slow/cancelled TTS requests are normalized as timeouts instead of raw browser "signal aborted" warnings, and Fish gets a longer cold-start window without hanging forever.
+- **Extension package updated.** The download artifact now ships as version **6.3.47**.
+
 ## v6.3.46 — Maps knows local intent and Delegate finishes across tabs
 - **Local Maps requests no longer ask where you are.** "Nearest theater," "near my house," "home," and "where I am" now route through Google Maps with `near me` / `My Location` context.
 - **Theater/cinema wording routes to Maps.** Both American and British spellings are recognized as place-search tasks.

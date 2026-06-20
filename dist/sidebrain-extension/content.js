@@ -3374,8 +3374,8 @@ const __SB_TTS_PROVIDER = "fish-audio";
 const __SB_TTS_FALLBACK_PROVIDER = "openai-tts";
 const __SB_TTS_ENDPOINT = "fish-audio-tts";
 const __SB_TTS_RETRY_MIN_MS = 800;
-const __SB_TTS_RETRY_MAX_MS = 7000;
-const __SB_TTS_FETCH_TIMEOUT_MS = 9000;
+const __SB_TTS_RETRY_MAX_MS = 15000;
+const __SB_TTS_FETCH_TIMEOUT_MS = 14000;
 // Fish Audio picks the voice server-side via FISH_AUDIO_REFERENCE_ID — the client sends
 // only { text }, so no voice id is needed here. Kept as a label for cost telemetry.
 const __SB_FISH_VOICE_NAME = "Fish Audio Braino";
@@ -3427,7 +3427,7 @@ const __SB_LATEST_UPDATES = [
   },
   {
     title: "Always-on realtime voice",
-    text: "The blue glow still means realtime listening is alive. Fish Audio can be the speaking voice, but realtime remains the listening backbone.",
+    text: "The blue glow still means realtime listening is alive. Ctrl+Ctrl now enters headphone voice with clean Auto routing, so stale Lecture/Web/connector modes do not hijack commands.",
   },
   {
     title: "Faster browser actions",
@@ -7829,6 +7829,12 @@ async function __sbReadTtsError(resp) {
   return error;
 }
 
+function __sbIsAbortLikeError(error) {
+  const name = String(error?.name || "").toLowerCase();
+  const message = String(error?.message || error || "").toLowerCase();
+  return name === "aborterror" || message.includes("abort") || message.includes("signal is aborted");
+}
+
 async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
   const startedAt = Date.now();
   const deadlineAt = startedAt + __SB_TTS_RETRY_MAX_MS;
@@ -7866,8 +7872,9 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
       if (timeoutId) clearTimeout(timeoutId);
       lastError = error instanceof Error ? error : new Error(String(error));
       lastError.retryable = true;
-      if (lastError.name === "AbortError") {
+      if (__sbIsAbortLikeError(lastError)) {
         lastError.message = `${__SB_TTS_PROVIDER} TTS timed out.`;
+        lastError.isTimeout = true;
       }
     }
 
@@ -7946,21 +7953,31 @@ async function __sbSpeakText(text, options = {}) {
     __sbWalkTalking = false;
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
+    const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
+    const isTimeout = Boolean(ttsErr?.isTimeout) || __sbIsAbortLikeError(ttsErr);
     __sbRecordRealtimeCostTts({
       provider: "browser",
       error: ttsErr?.message || String(ttsErr || "TTS failed"),
     });
-    console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", ttsErr?.message || ttsErr);
-    const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
+    const fallbackMessage = ttsErr?.message || ttsErr;
+    if (isTimeout) {
+      console.debug("[Braino] Fish Audio TTS timed out; using browser voice for this reply:", fallbackMessage);
+    } else {
+      console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", fallbackMessage);
+    }
     __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish Audio credits" : "Browser voice");
     if (__sbHeadphoneMode || __sbVoiceOnlyMode) {
       __sbShowVoiceError(isCreditIssue
         ? "Fish Audio credits or rate limit are exhausted. Falling back to browser voice for now."
-        : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.");
+        : isTimeout
+          ? "Fish Audio took too long, so I used browser voice for this reply."
+          : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.");
     } else {
       __sbShowBubble(isCreditIssue
         ? "Fish Audio credits or rate limit are exhausted. Using browser voice."
-        : "Fish Audio voice is unavailable. Using browser voice.", true, { tone: "status" });
+        : isTimeout
+          ? "Fish Audio took too long. Using browser voice for this reply."
+          : "Fish Audio voice is unavailable. Using browser voice.", true, { tone: "status" });
     }
     spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
@@ -12634,6 +12651,26 @@ function __sbToggleHeadphoneMode() {
   }
 }
 
+function __sbApplyVoiceAutoRoutingDefaults() {
+  window.__sbForcedMode = "page";
+  window.__sbForcedConnector = "auto";
+
+  const label = "⚡ Auto";
+  document.getElementById("__sb_mode_label__")?.replaceChildren(document.createTextNode(label));
+  document.getElementById("__sb_card_mode_label__")?.replaceChildren(document.createTextNode(label));
+  document.getElementById("__sb_mode_btn__")?.classList.remove("active-mode");
+  document.getElementById("__sb_card_mode_btn__")?.classList.remove("active-mode");
+
+  document.querySelectorAll("#__sb_mode_dropdown__ .sb-dropdown-item").forEach((item) => {
+    item.classList.toggle("selected", item.getAttribute("data-mode") === "page");
+  });
+
+  __sbRefreshConnectorButtons();
+  document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
+  document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
+  document.getElementById("__sb_connector_dropdown__")?.classList.remove("open");
+}
+
 // ── One-time mic permission modal (same tab) ─────────────────────────────────
 // Hosts the extension-origin permission page in an iframe so getUserMedia there grants the
 // EXTENSION the microphone (which the invisible offscreen doc then inherits → global voice).
@@ -13113,6 +13150,7 @@ function __sbReleaseVoicePresence() {
 
 function __sbAttachVoiceVisual() {
   if (!__sbOwnsInlineUi()) return;
+  __sbApplyVoiceAutoRoutingDefaults();
   const brain = document.getElementById("__sb_brain_btn__");
   // In PANEL the walker on the bar is the listening mascot — don't also pop the docked
   // bottom-right brain (that was the duplicate "second Braino" in headphone mode).
@@ -13148,6 +13186,7 @@ function __sbDetachVoiceVisual() {
 function __sbEnterHeadphoneMode(options = {}) {
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
+  __sbApplyVoiceAutoRoutingDefaults();
   // Mark voice mode ON globally so every tab knows Braino should follow the user.
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: true, sbBrainDocked: true });
 
