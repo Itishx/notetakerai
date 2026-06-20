@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useState } from "react";
 import SplashScreen from "@/components/SplashScreen";
-import BrainMascot from "@/components/BrainMascot";
+import BrainoWalker from "@/components/BrainoWalker";
 import PreLaunch from "./pages/PreLaunch.tsx";
 import LaunchTeaser from "./pages/LaunchTeaser.tsx";
 import WaitlistDashboard from "./pages/WaitlistDashboard.tsx";
@@ -50,12 +50,14 @@ const queryClient = new QueryClient();
 
 function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashDone: () => void }) {
   const location = useLocation();
-  const hideMascot = location.pathname === "/chat" || location.pathname === "/home";
+  // The walking Braino shows everywhere except the dedicated chat page; the "/" landing
+  // hides it via PreLaunch's `body.sb-prelaunch #sb-brain-mascot-wrapper{display:none}` rule.
+  const hideMascot = location.pathname === "/chat";
 
   return (
     <>
       {!splashDone && <SplashScreen onDone={onSplashDone} />}
-      <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainMascot />}</div>
+      <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainoWalker />}</div>
       <Routes>
         <Route path="/" element={<PreLaunch />} />
         <Route path="/home" element={<ProfileGrid />} />
