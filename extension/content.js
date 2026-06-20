@@ -2593,6 +2593,17 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
     '<path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
     '<path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
     '<path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '</g></g></svg>')
+  // MJ fedora (hidden until Braino moonwalks) — paths from braino-char.jsx, cocked -12°.
+  .replace("</g></svg>",
+    '<g id="__sbwk_fedora__" display="none" transform="rotate(-12 50 2)">' +
+    '<path d="M 31 4 C 31 -17 39 -24 50 -24 C 61 -24 69 -17 69 4 Z" fill="#14110f" stroke="#000" stroke-width="0.6"/>' +
+    '<path d="M 44 -22 Q 50 -18 56 -22" fill="none" stroke="#2c2723" stroke-width="1.6" stroke-linecap="round"/>' +
+    '<path d="M 31 3 Q 50 9 69 3 L 69 -2 Q 50 4 31 -2 Z" fill="#000"/>' +
+    '<ellipse cx="50" cy="4" rx="45" ry="8.5" fill="#14110f" stroke="#000" stroke-width="0.6"/>' +
+    '<ellipse cx="50" cy="3" rx="32" ry="5" fill="#000" opacity="0.6"/>' +
+    '<path d="M 37 -20 Q 35 -8 38 2" fill="none" stroke="#3a332e" stroke-width="2.2" stroke-linecap="round" opacity="0.7"/>' +
+    '<path d="M 12 5 Q 50 12 88 5" fill="none" stroke="#3a332e" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>' +
     '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
@@ -2624,7 +2635,13 @@ let __sbWkReactStart = 0;      // performance.now() when the reaction began
 let __sbWkClimbing = false;    // true while the wake-up climb owns the rig
 let __sbWkClimbRaf = null;
 let __sbWkResumeFromX = null;  // start X for the next walk loop (so a climb hands off smoothly)
+let __sbWkMoonwalking = false; // true while the moonwalk owns the rig
+let __sbWkMoonRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
+
+// "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
+const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
+const __SB_BILLIE_JEAN_START_MS = 211000;   // 3:31
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -2640,6 +2657,105 @@ function __sbGlassesIntent(text) {
   if (!/(glasses|spectacle|\bspecs?\b|scholar)/.test(t)) return null;
   if (/(take off|takeoff|remove|lose the|without|take.*off|no more|put away)/.test(t)) return "off";
   return "on";
+}
+
+function __sbMoonwalkIntent(text) {
+  return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
+}
+
+// Best-effort: play "Billie Jean" from the moonwalk timestamp via the Spotify Web API.
+// We have the exact track URI, so no search — just play + seek. Needs the user's Spotify
+// connected + an active device; any failure is swallowed (Braino moonwalks regardless).
+async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
+  try {
+    const { authToken } = await __sbStorageGet(["authToken"]);
+    if (!authToken) return { ok: false, reason: "signin" };
+    const r = await fetch(`${__SB_API}/spotify-playback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ action: "play", uris: [__SB_BILLIE_JEAN_URI], positionMs }),
+    });
+    return { ok: r.ok };
+  } catch (_) { return { ok: false }; }
+}
+
+// ── Moonwalk ────────────────────────────────────────────────────────────────
+// Braino glides backward (facing the way he came) while his feet shuffle — the
+// classic moonwalk — with an MJ fedora. Self-contained rAF that owns the rig.
+function __sbWkMoonwalk(durationMs = 11000) {
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!walker || !root) return;
+
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
+  __sbWkMoonwalking = true; __sbWkThrowMode = true; __sbWkClimbing = false; __sbWkThrown = false; __sbWkReaction = null;
+
+  const flip = document.getElementById("__sbwk_flip__");
+  const fedora = root.querySelector("#__sbwk_fedora__");
+  const ll = root.querySelector("#__sbwk_ll__");
+  const rl = root.querySelector("#__sbwk_rl__");
+  if (fedora) fedora.setAttribute("display", "inline");
+  __sbWkSay("Hee-hee! 🕺");
+
+  const laneW = lane.clientWidth || 320;
+  const maxX = Math.max(40, laneW - 64 - 6);
+  let x = Math.min(Math.max(__sbWkPosX || 24, 6), maxX);
+  let dir = -1;            // glide left first; he FACES right (the illusion)
+  const SPEED = 72;        // px/s
+  let last = performance.now();
+  const start = last;
+
+  const step = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const t = (now - start) / 1000;
+    x += dir * SPEED * dt;
+    if (x <= 6) { x = 6; dir = 1; }
+    else if (x >= maxX) { x = maxX; dir = -1; }
+    walker.style.transform = `translate(${x}px, 0px)`;
+    if (flip) flip.style.transform = `scaleX(${-dir})`;   // face opposite of travel
+
+    // feet shuffle — one foot pops onto its toe while the other slides back
+    const ph = Math.sin(t * 4.0);
+    const heelL = Math.max(0, -ph) * 34, heelR = Math.max(0, ph) * 34;
+    const slideL = Math.max(0, ph) * 9,  slideR = Math.max(0, -ph) * 9;
+    const liftL = Math.max(0, -ph) * 3,  liftR = Math.max(0, ph) * 3;
+    if (ll) ll.setAttribute("transform", `translate(${slideL} ${-liftL}) rotate(${-heelL} 27 100)`);
+    if (rl) rl.setAttribute("transform", `translate(${-slideR} ${-liftR}) rotate(${heelR} 73 100)`);
+
+    const lean = (-dir) * 5;   // lean the way he faces
+    const bob = -Math.abs(ph) * 1.1 - 0.3 + Math.sin(t * 1.7) * 0.5;
+    const breath = 1 + 0.014 * Math.sin(t * 1.7);
+    root.setAttribute("transform", `rotate(${lean} 50 50) translate(0 ${bob}) scale(${breath})`);
+
+    if (now - start < durationMs) __sbWkMoonRaf = requestAnimationFrame(step);
+    else __sbWkEndMoonwalk(x);
+  };
+  __sbWkMoonRaf = requestAnimationFrame(step);
+}
+
+function __sbWkEndMoonwalk(xResume) {
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (root) {
+    root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_ll__")?.setAttribute("transform", "");
+    root.querySelector("#__sbwk_rl__")?.setAttribute("transform", "");
+  }
+  __sbWkMoonwalking = false; __sbWkThrowMode = false;
+  if (__sbInputOpen) {
+    __sbWkResumeFromX = (typeof xResume === "number") ? xResume : null;
+    __sbStartWalkLoop();   // resume strolling from where he stopped
+  } else {
+    if (walker) walker.style.transform = "";
+    const lane = document.getElementById("__sb_walk_lane__");
+    if (lane) lane.style.display = "none";
+  }
 }
 
 // Trigger a single hand wave (used to acknowledge the user in headphone mode).
@@ -2773,7 +2889,7 @@ function __sbEnsureWalker() {
   // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
   let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
   walker.addEventListener("pointerdown", (e) => {
-    if (__sbWkThrown || __sbWkClimbing) return;
+    if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking) return;
     dragging = true; dragMoved = false;
     try { walker.setPointerCapture(e.pointerId); } catch (_) {}
     __sbWkThrowMode = true;            // tick stops driving the transform
@@ -2819,7 +2935,7 @@ function __sbEnsureWalker() {
 }
 
 function __sbStartWalkLoop() {
-  if (__sbWkClimbing) return;           // the wake-up climb owns the rig — don't fight it
+  if (__sbWkClimbing || __sbWkMoonwalking) return;   // climb/moonwalk own the rig — don't fight it
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
   __sbWkStart = __sbWkLast = performance.now();
@@ -2837,7 +2953,8 @@ function __sbStartWalkLoop() {
 function __sbStopWalkLoop() {
   if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
   if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
-  __sbWkClimbing = false;
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  __sbWkClimbing = false; __sbWkMoonwalking = false;
   clearTimeout(__sbWkAutoTimer);
   __sbWkResetThrow();
   __sbWalkTalking = false;
@@ -2845,7 +2962,10 @@ function __sbStopWalkLoop() {
   if (lane) {
     lane.style.display = "none";
     const w = document.getElementById("__sbwk_walker__");
-    if (w) w.classList.remove("sbwk-auth", "sbwk-authed");
+    if (w) {
+      w.classList.remove("sbwk-auth", "sbwk-authed");
+      w.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
+    }
   }
 }
 
@@ -10352,6 +10472,14 @@ async function __sbProcessPrompt(text, options = {}) {
     __sbStopSpeech();
     if (fromVoice) { await speakVoiceReply(sayLine); }
     else { __sbWkSay(__glassesIntent === "on" ? "How do I look? 🤓" : "Specs off"); }
+    return;
+  }
+
+  // "moonwalk" → cue Billie Jean (best-effort) at the moonwalk moment, then dance.
+  if (__sbMoonwalkIntent(promptText)) {
+    __sbStopSpeech();
+    __sbSpotifyPlayBillieJean();                              // non-blocking, swallowed on failure
+    setTimeout(() => __sbWkMoonwalk(11000), 650);             // let the beat drop, then moonwalk
     return;
   }
 
