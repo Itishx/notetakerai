@@ -2575,10 +2575,17 @@ const __SBWK_REACT = `<g id="__sbwk_react__" display="none">`
     + `<path id="__sbwk_tear_r__" d="M 70 50.5 C 73 54.5 73 57 70 58 C 67 57 67 54.5 70 50.5 Z" fill="#DFF4FF"/>`
   + `</g>`
   + `</g>`;
+// Moonwalk legs — EXACT port of braino-char.jsx's profile+mirror Legs: BOTH feet are the
+// same (un-mirrored) shoe, wrapped in one mirror so the toes point the same way; each foot
+// pops onto its toe (heel rotate at 24,101) while the other slides. Hidden until moonwalking.
+const __SBWK_MOONLEGS = `<g id="__sbwk_moonlegs__" display="none"><g transform="translate(100,0) scale(-1,1)">`
+  + `<g id="__sbwk_mw_r__" transform="translate(12 0)"><g id="__sbwk_mw_rh__" transform="rotate(0 24 101)">${__SBWK_SHOE}</g></g>`
+  + `<g id="__sbwk_mw_l__" transform="translate(0 0)"><g id="__sbwk_mw_lh__" transform="rotate(0 24 101)">${__SBWK_SHOE}</g></g>`
+  + `</g></g>`;
 // Self-contained: its OWN inline defs with unique ids (sbwk-*). The url(#sbb-*)
 // refs below are rewritten to url(#sbwk-*) by the .replaceAll chain at the end, so
 // the coral gradient resolves locally and never depends on a duplicated document id.
-const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="64" height="78" overflow="visible" style="display:block"><defs><linearGradient id="sbwk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbwk-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbwk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g id="__sbwk_root__"><g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><g id="__sbwk_la_bg__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><g id="__sbwk_la__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_l__"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_r__"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`
+const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="64" height="78" overflow="visible" style="display:block"><defs><linearGradient id="sbwk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbwk-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbwk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g id="__sbwk_root__">${__SBWK_MOONLEGS}<g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><g id="__sbwk_la_bg__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><g id="__sbwk_la__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_l__"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_r__"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`
   .replaceAll("url(#sbb-fill)", "url(#sbwk-fill)")
   .replaceAll("url(#sbb-glow)", "url(#sbwk-glow)")
   .replaceAll("url(#sbb-dark)", "url(#sbwk-dark)")
@@ -2680,8 +2687,9 @@ async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS)
 }
 
 // ── Moonwalk ────────────────────────────────────────────────────────────────
-// Braino glides backward (facing the way he came) while his feet shuffle — the
-// classic moonwalk — with an MJ fedora. Self-contained rAF that owns the rig.
+// Faithful port of Braino Moonwalk.html: both feet point the SAME way (the mirrored
+// #__sbwk_moonlegs__ replaces the normal legs), each pops onto its toe while the other
+// slides, and the body GLIDES BACKWARD continuously (the classic illusion). MJ fedora on.
 function __sbWkMoonwalk(durationMs = 11000) {
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
@@ -2696,41 +2704,51 @@ function __sbWkMoonwalk(durationMs = 11000) {
   __sbWkMoonwalking = true; __sbWkThrowMode = true; __sbWkClimbing = false; __sbWkThrown = false; __sbWkReaction = null;
 
   const flip = document.getElementById("__sbwk_flip__");
-  const fedora = root.querySelector("#__sbwk_fedora__");
-  const ll = root.querySelector("#__sbwk_ll__");
-  const rl = root.querySelector("#__sbwk_rl__");
-  if (fedora) fedora.setAttribute("display", "inline");
+  const moonlegs = root.querySelector("#__sbwk_moonlegs__");
+  const mwR  = root.querySelector("#__sbwk_mw_r__");
+  const mwRh = root.querySelector("#__sbwk_mw_rh__");
+  const mwL  = root.querySelector("#__sbwk_mw_l__");
+  const mwLh = root.querySelector("#__sbwk_mw_lh__");
+  const pupL = root.querySelector("#__sbwk_pupil_l__");
+  const pupR = root.querySelector("#__sbwk_pupil_r__");
+  // Swap normal legs → moonwalk legs (both feet same direction).
+  root.querySelector("#__sbwk_ll__")?.setAttribute("display", "none");
+  root.querySelector("#__sbwk_rl__")?.setAttribute("display", "none");
+  if (moonlegs) moonlegs.setAttribute("display", "inline");
+  root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "inline");
+  if (flip) flip.style.transform = "scaleX(1)";          // body NOT mirrored — legs handle it
+  if (pupL) pupL.setAttribute("transform", "translate(0.95 0)");  // eyes look the way he faces
+  if (pupR) pupR.setAttribute("transform", "translate(0.95 0)");
   __sbWkSay("Hee-hee! 🕺");
 
+  const W = 64;                                           // walker width
   const laneW = lane.clientWidth || 320;
-  const maxX = Math.max(40, laneW - 64 - 6);
-  let x = Math.min(Math.max(__sbWkPosX || 24, 6), maxX);
-  let dir = -1;            // glide left first; he FACES right (the illusion)
-  const SPEED = 72;        // px/s
-  let last = performance.now();
-  const start = last;
+  const wrap = laneW + W;                                 // glide one full pass then wrap
+  const X0 = laneW - W;                                   // start at the right edge
+  const SPEED = 80;                                       // px/s glide
+  const start = performance.now();
 
   const step = (now) => {
-    const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const t = (now - start) / 1000;
-    x += dir * SPEED * dt;
-    if (x <= 6) { x = 6; dir = 1; }
-    else if (x >= maxX) { x = maxX; dir = -1; }
-    walker.style.transform = `translate(${x}px, 0px)`;
-    if (flip) flip.style.transform = `scaleX(${-dir})`;   // face opposite of travel
+    // continuous BACKWARD (leftward) glide, wrapping cleanly off-screen
+    const x = X0 - ((t * SPEED) % wrap);
+    walker.style.transform = `translateX(${x}px)`;
 
-    // feet shuffle — one foot pops onto its toe while the other slides back
+    // design moonwalk params (s = t*4): one foot pops onto its toe (heel ~42°) while the
+    // other slides; values fed to the same mirrored legs structure as braino-char.jsx.
     const ph = Math.sin(t * 4.0);
-    const heelL = Math.max(0, -ph) * 34, heelR = Math.max(0, ph) * 34;
-    const slideL = Math.max(0, ph) * 9,  slideR = Math.max(0, -ph) * 9;
-    const liftL = Math.max(0, -ph) * 3,  liftR = Math.max(0, ph) * 3;
-    if (ll) ll.setAttribute("transform", `translate(${slideL} ${-liftL}) rotate(${-heelL} 27 100)`);
-    if (rl) rl.setAttribute("transform", `translate(${-slideR} ${-liftR}) rotate(${heelR} 73 100)`);
+    const heelR = Math.max(0,  ph) * 42, heelL = Math.max(0, -ph) * 42;
+    const slideR = Math.max(0, -ph) * 10, slideL = Math.max(0, ph) * 10;
+    if (mwR)  mwR.setAttribute("transform",  `translate(${12 + slideR} 0)`);
+    if (mwRh) mwRh.setAttribute("transform", `rotate(${-heelR} 24 101)`);
+    if (mwL)  mwL.setAttribute("transform",  `translate(${slideL} 0)`);
+    if (mwLh) mwLh.setAttribute("transform", `rotate(${-heelL} 24 101)`);
 
-    const lean = (-dir) * 5;   // lean the way he faces
-    const bob = -Math.abs(ph) * 1.1 - 0.3 + Math.sin(t * 1.7) * 0.5;
+    const waddle = ph * 1.0;
+    const walkBob = -Math.abs(ph) * 1.0 - 0.3;
     const breath = 1 + 0.014 * Math.sin(t * 1.7);
-    root.setAttribute("transform", `rotate(${lean} 50 50) translate(0 ${bob}) scale(${breath})`);
+    const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
 
     if (now - start < durationMs) __sbWkMoonRaf = requestAnimationFrame(step);
     else __sbWkEndMoonwalk(x);
@@ -2744,13 +2762,18 @@ function __sbWkEndMoonwalk(xResume) {
   const root = walker && walker.querySelector("#__sbwk_root__");
   if (root) {
     root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
-    root.querySelector("#__sbwk_ll__")?.setAttribute("transform", "");
-    root.querySelector("#__sbwk_rl__")?.setAttribute("transform", "");
+    root.querySelector("#__sbwk_moonlegs__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_ll__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_rl__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
+    root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
   }
   __sbWkMoonwalking = false; __sbWkThrowMode = false;
   if (__sbInputOpen) {
-    __sbWkResumeFromX = (typeof xResume === "number") ? xResume : null;
-    __sbStartWalkLoop();   // resume strolling from where he stopped
+    // resume from roughly where he is (clamped into the lane)
+    const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
+    __sbWkResumeFromX = Math.max(6, Math.min(typeof xResume === "number" ? xResume : 24, laneW - 70));
+    __sbStartWalkLoop();
   } else {
     if (walker) walker.style.transform = "";
     const lane = document.getElementById("__sb_walk_lane__");
@@ -10478,7 +10501,13 @@ async function __sbProcessPrompt(text, options = {}) {
   // "moonwalk" → cue Billie Jean (best-effort) at the moonwalk moment, then dance.
   if (__sbMoonwalkIntent(promptText)) {
     __sbStopSpeech();
-    __sbSpotifyPlayBillieJean();                              // non-blocking, swallowed on failure
+    __sbSpotifyPlayBillieJean().then((r) => {
+      // If the music couldn't start (no Spotify device etc.), say why — AFTER the dance
+      // so it doesn't clobber the "Hee-hee!" bubble.
+      if (!r || !r.ok) {
+        setTimeout(() => __sbWkSay(r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧"), 11900);
+      }
+    });
     setTimeout(() => __sbWkMoonwalk(11000), 650);             // let the beat drop, then moonwalk
     return;
   }
