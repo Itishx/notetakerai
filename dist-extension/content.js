@@ -9349,11 +9349,11 @@ function __sbIsGoogleMapsPlaceTask(text) {
   if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
   if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
 
-  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby|nearest|closest)\b/.test(t);
   if (!wantsPlaceRecommendation) return false;
 
-  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
-  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theat(?:er|re)s?|movie\s+theat(?:er|re)s?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|by me|close to me|my house|my home|at home|from home|where i am|current location|nearest|closest|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
   return placeCategory && locationHint;
 }
 
@@ -9488,6 +9488,7 @@ function __sbDetectIntent(text) {
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
+  if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
   if (__sbIsBrowserActionCommand(t) || __sbIsSiteScopedBrowseSearch(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order)\b/.test(t)) return "agent";
   if (/\b(gmail|email|calendar|maps?|directions?|linkedin|jobs?|x|twitter|spotify|youtube|amazon|reddit|whatsapp|google docs?|drive)\b/.test(t)

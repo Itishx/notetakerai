@@ -2342,7 +2342,7 @@ new MutationObserver(() => {
 // sbb-arm-l / sbb-arm-r : arm pivot groups (rotate at shoulder origin)
 // sbb-pupil-l / sbb-pupil-r : pupil + highlight pairs (translate for gaze drift)
 // sbb-eye-l / sbb-eye-r : eye whites (scaleY for blink)
-const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g><g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g><g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g><g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g><g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/><g id="sbb-talk" style="display:none;transform-box:view-box;transform-origin:50px 62px"><ellipse cx="50" cy="62" rx="4" ry="3" fill="#6E211A"/><ellipse cx="50" cy="63" rx="2.3" ry="1.3" fill="#E8786E"/></g><g id="sbb-specs" style="display:none"><circle cx="38" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/><circle cx="62" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/><path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/><path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/><path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/></g></svg>`;
 
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
@@ -2575,15 +2575,43 @@ const __SBWK_REACT = `<g id="__sbwk_react__" display="none">`
     + `<path id="__sbwk_tear_r__" d="M 70 50.5 C 73 54.5 73 57 70 58 C 67 57 67 54.5 70 50.5 Z" fill="#DFF4FF"/>`
   + `</g>`
   + `</g>`;
+// Moonwalk legs — EXACT port of braino-char.jsx's profile+mirror Legs: BOTH feet are the
+// same (un-mirrored) shoe, wrapped in one mirror so the toes point the same way; each foot
+// pops onto its toe (heel rotate at 24,101) while the other slides. Hidden until moonwalking.
+const __SBWK_MOONLEGS = `<g id="__sbwk_moonlegs__" display="none"><g transform="translate(100,0) scale(-1,1)">`
+  + `<g id="__sbwk_mw_r__" transform="translate(12 0)"><g id="__sbwk_mw_rh__" transform="rotate(0 24 101)">${__SBWK_SHOE}</g></g>`
+  + `<g id="__sbwk_mw_l__" transform="translate(0 0)"><g id="__sbwk_mw_lh__" transform="rotate(0 24 101)">${__SBWK_SHOE}</g></g>`
+  + `</g></g>`;
 // Self-contained: its OWN inline defs with unique ids (sbwk-*). The url(#sbb-*)
 // refs below are rewritten to url(#sbwk-*) by the .replaceAll chain at the end, so
 // the coral gradient resolves locally and never depends on a duplicated document id.
-const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="64" height="78" overflow="visible" style="display:block"><defs><linearGradient id="sbwk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbwk-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbwk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g id="__sbwk_root__"><g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><g id="__sbwk_la_bg__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><g id="__sbwk_la__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_l__"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_r__"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`
+const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="64" height="78" overflow="visible" style="display:block"><defs><linearGradient id="sbwk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbwk-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbwk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g id="__sbwk_root__">${__SBWK_MOONLEGS}<g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><g id="__sbwk_la_bg__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><g id="__sbwk_la__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_l__"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_r__"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`
   .replaceAll("url(#sbb-fill)", "url(#sbwk-fill)")
   .replaceAll("url(#sbb-glow)", "url(#sbwk-glow)")
   .replaceAll("url(#sbb-dark)", "url(#sbwk-dark)")
   // Inject the reaction overlay on top of the face (after mouth-close, before root-close).
-  .replace("</g></g></g></svg>", "</g></g>" + __SBWK_REACT + "</g></svg>");
+  .replace("</g></g></g></svg>", "</g></g>" + __SBWK_REACT + "</g></svg>")
+  // Glasses overlay (hidden until Braino is asked to "wear specs") — same round-glasses
+  // shape as the scholar look; eye coords (38/62, 48) match the brain.
+  .replace("</g></svg>",
+    '<g id="__sbwk_specs__" display="none">' +
+    '<circle cx="38" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/>' +
+    '<circle cx="62" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/>' +
+    '<path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '<path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '<path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '</g></g></svg>')
+  // MJ fedora (hidden until Braino moonwalks) — paths from braino-char.jsx, cocked -12°.
+  .replace("</g></svg>",
+    '<g id="__sbwk_fedora__" display="none" transform="rotate(-12 50 2)">' +
+    '<path d="M 31 4 C 31 -17 39 -24 50 -24 C 61 -24 69 -17 69 4 Z" fill="#14110f" stroke="#000" stroke-width="0.6"/>' +
+    '<path d="M 44 -22 Q 50 -18 56 -22" fill="none" stroke="#2c2723" stroke-width="1.6" stroke-linecap="round"/>' +
+    '<path d="M 31 3 Q 50 9 69 3 L 69 -2 Q 50 4 31 -2 Z" fill="#000"/>' +
+    '<ellipse cx="50" cy="4" rx="45" ry="8.5" fill="#14110f" stroke="#000" stroke-width="0.6"/>' +
+    '<ellipse cx="50" cy="3" rx="32" ry="5" fill="#000" opacity="0.6"/>' +
+    '<path d="M 37 -20 Q 35 -8 38 2" fill="none" stroke="#3a332e" stroke-width="2.2" stroke-linecap="round" opacity="0.7"/>' +
+    '<path d="M 12 5 Q 50 12 88 5" fill="none" stroke="#3a332e" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>' +
+    '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
 let __sbWkStart = null;
@@ -2614,6 +2642,144 @@ let __sbWkReactStart = 0;      // performance.now() when the reaction began
 let __sbWkClimbing = false;    // true while the wake-up climb owns the rig
 let __sbWkClimbRaf = null;
 let __sbWkResumeFromX = null;  // start X for the next walk loop (so a climb hands off smoothly)
+let __sbWkMoonwalking = false; // true while the moonwalk owns the rig
+let __sbWkMoonRaf = null;
+let __sbGlassesOn = false;     // Braino is wearing his specs
+
+// "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
+const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
+const __SB_BILLIE_JEAN_START_MS = 211000;   // 3:31
+
+// Put on / take off Braino's glasses (walker + docked brain).
+function __sbSetGlasses(on) {
+  __sbGlassesOn = !!on;
+  const specs = document.querySelector("#__sbwk_walker__ #__sbwk_specs__");
+  if (specs) specs.setAttribute("display", on ? "inline" : "none");
+  document.getElementById("__sb_brain_btn__")?.classList.toggle("sb-glasses", !!on);
+}
+
+// Detect "wear/put on your specs/glasses" (or take them off) from a prompt.
+function __sbGlassesIntent(text) {
+  const t = String(text || "").toLowerCase();
+  if (!/(glasses|spectacle|\bspecs?\b|scholar)/.test(t)) return null;
+  if (/(take off|takeoff|remove|lose the|without|take.*off|no more|put away)/.test(t)) return "off";
+  return "on";
+}
+
+function __sbMoonwalkIntent(text) {
+  return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
+}
+
+// Best-effort: play "Billie Jean" from the moonwalk timestamp via the Spotify Web API.
+// We have the exact track URI, so no search — just play + seek. Needs the user's Spotify
+// connected + an active device; any failure is swallowed (Braino moonwalks regardless).
+async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
+  try {
+    const { authToken } = await __sbStorageGet(["authToken"]);
+    if (!authToken) return { ok: false, reason: "signin" };
+    const r = await fetch(`${__SB_API}/spotify-playback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ action: "play", uris: [__SB_BILLIE_JEAN_URI], positionMs }),
+    });
+    return { ok: r.ok };
+  } catch (_) { return { ok: false }; }
+}
+
+// ── Moonwalk ────────────────────────────────────────────────────────────────
+// Faithful port of Braino Moonwalk.html: both feet point the SAME way (the mirrored
+// #__sbwk_moonlegs__ replaces the normal legs), each pops onto its toe while the other
+// slides, and the body GLIDES BACKWARD continuously (the classic illusion). MJ fedora on.
+function __sbWkMoonwalk(durationMs = 11000) {
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!walker || !root) return;
+
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
+  __sbWkMoonwalking = true; __sbWkThrowMode = true; __sbWkClimbing = false; __sbWkThrown = false; __sbWkReaction = null;
+
+  const flip = document.getElementById("__sbwk_flip__");
+  const moonlegs = root.querySelector("#__sbwk_moonlegs__");
+  const mwR  = root.querySelector("#__sbwk_mw_r__");
+  const mwRh = root.querySelector("#__sbwk_mw_rh__");
+  const mwL  = root.querySelector("#__sbwk_mw_l__");
+  const mwLh = root.querySelector("#__sbwk_mw_lh__");
+  const pupL = root.querySelector("#__sbwk_pupil_l__");
+  const pupR = root.querySelector("#__sbwk_pupil_r__");
+  // Swap normal legs → moonwalk legs (both feet same direction).
+  root.querySelector("#__sbwk_ll__")?.setAttribute("display", "none");
+  root.querySelector("#__sbwk_rl__")?.setAttribute("display", "none");
+  if (moonlegs) moonlegs.setAttribute("display", "inline");
+  root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "inline");
+  if (flip) flip.style.transform = "scaleX(1)";          // body NOT mirrored — legs handle it
+  if (pupL) pupL.setAttribute("transform", "translate(0.95 0)");  // eyes look the way he faces
+  if (pupR) pupR.setAttribute("transform", "translate(0.95 0)");
+  __sbWkSay("Hee-hee! 🕺");
+
+  const W = 64;                                           // walker width
+  const laneW = lane.clientWidth || 320;
+  const wrap = laneW + W;                                 // glide one full pass then wrap
+  const X0 = laneW - W;                                   // start at the right edge
+  const SPEED = 80;                                       // px/s glide
+  const start = performance.now();
+
+  const step = (now) => {
+    const t = (now - start) / 1000;
+    // continuous BACKWARD (leftward) glide, wrapping cleanly off-screen
+    const x = X0 - ((t * SPEED) % wrap);
+    walker.style.transform = `translateX(${x}px)`;
+
+    // design moonwalk params (s = t*4): one foot pops onto its toe (heel ~42°) while the
+    // other slides; values fed to the same mirrored legs structure as braino-char.jsx.
+    const ph = Math.sin(t * 4.0);
+    const heelR = Math.max(0,  ph) * 42, heelL = Math.max(0, -ph) * 42;
+    const slideR = Math.max(0, -ph) * 10, slideL = Math.max(0, ph) * 10;
+    if (mwR)  mwR.setAttribute("transform",  `translate(${12 + slideR} 0)`);
+    if (mwRh) mwRh.setAttribute("transform", `rotate(${-heelR} 24 101)`);
+    if (mwL)  mwL.setAttribute("transform",  `translate(${slideL} 0)`);
+    if (mwLh) mwLh.setAttribute("transform", `rotate(${-heelL} 24 101)`);
+
+    const waddle = ph * 1.0;
+    const walkBob = -Math.abs(ph) * 1.0 - 0.3;
+    const breath = 1 + 0.014 * Math.sin(t * 1.7);
+    const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+
+    if (now - start < durationMs) __sbWkMoonRaf = requestAnimationFrame(step);
+    else __sbWkEndMoonwalk(x);
+  };
+  __sbWkMoonRaf = requestAnimationFrame(step);
+}
+
+function __sbWkEndMoonwalk(xResume) {
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (root) {
+    root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_moonlegs__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_ll__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_rl__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
+    root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
+  }
+  __sbWkMoonwalking = false; __sbWkThrowMode = false;
+  if (__sbInputOpen) {
+    // resume from roughly where he is (clamped into the lane)
+    const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
+    __sbWkResumeFromX = Math.max(6, Math.min(typeof xResume === "number" ? xResume : 24, laneW - 70));
+    __sbStartWalkLoop();
+  } else {
+    if (walker) walker.style.transform = "";
+    const lane = document.getElementById("__sb_walk_lane__");
+    if (lane) lane.style.display = "none";
+  }
+}
 
 // Trigger a single hand wave (used to acknowledge the user in headphone mode).
 function __sbWkTriggerWave() {
@@ -2746,7 +2912,7 @@ function __sbEnsureWalker() {
   // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
   let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
   walker.addEventListener("pointerdown", (e) => {
-    if (__sbWkThrown || __sbWkClimbing) return;
+    if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking) return;
     dragging = true; dragMoved = false;
     try { walker.setPointerCapture(e.pointerId); } catch (_) {}
     __sbWkThrowMode = true;            // tick stops driving the transform
@@ -2792,7 +2958,7 @@ function __sbEnsureWalker() {
 }
 
 function __sbStartWalkLoop() {
-  if (__sbWkClimbing) return;           // the wake-up climb owns the rig — don't fight it
+  if (__sbWkClimbing || __sbWkMoonwalking) return;   // climb/moonwalk own the rig — don't fight it
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
   __sbWkStart = __sbWkLast = performance.now();
@@ -2802,6 +2968,7 @@ function __sbStartWalkLoop() {
   __sbWkDirX = 1;
   __sbWkWalking = true; __sbWkWaving = false; __sbWkBusy = false; __sbWalkTalking = false;
   __sbWkResetThrow();
+  if (__sbGlassesOn) __sbSetGlasses(true);   // keep specs on across walker rebuilds
   clearTimeout(__sbWkAutoTimer); __sbWkScheduleAuto();
   if (!__sbWkRaf) __sbWkRaf = requestAnimationFrame(__sbWkTick);
 }
@@ -2809,7 +2976,8 @@ function __sbStartWalkLoop() {
 function __sbStopWalkLoop() {
   if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
   if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
-  __sbWkClimbing = false;
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  __sbWkClimbing = false; __sbWkMoonwalking = false;
   clearTimeout(__sbWkAutoTimer);
   __sbWkResetThrow();
   __sbWalkTalking = false;
@@ -2817,7 +2985,10 @@ function __sbStopWalkLoop() {
   if (lane) {
     lane.style.display = "none";
     const w = document.getElementById("__sbwk_walker__");
-    if (w) w.classList.remove("sbwk-auth", "sbwk-authed");
+    if (w) {
+      w.classList.remove("sbwk-auth", "sbwk-authed");
+      w.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
+    }
   }
 }
 
@@ -2973,23 +3144,33 @@ function __sbWakeupClimb(finishAuthed, finishRejected) {
       if (e >= perchDur) { setArms(0, 0); if (!alreadyAuthed) startAuth(); next("auth"); }
     } else if (phase === "auth") {
       setEyes(lerp(1, 0.06, Math.min(1, e / 350)));          // eyes close (blink shut)
+      // The display name only lands in storage AFTER auth — re-read it on the way to hello
+      // so first-time logins greet by name instead of "hello there".
+      const goHello = () => {
+        __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
+          const fn = authDisplayName?.split(" ")[0]?.trim();
+          if (fn) firstName = fn;
+        });
+        next("hello");
+      };
       if (alreadyAuthed) {
         // Already logged in: no gold "authenticating" glow — just a green confirm flash.
         walker.classList.add("sbwk-authed");
-        if (e >= 700) next("hello");
+        if (e >= 700) goHello();
       } else {
         walker.classList.add("sbwk-auth");                   // gold pulse while handshaking
         if (authResolved !== null) {
           walker.classList.remove("sbwk-auth");
-          if (authResolved) { walker.classList.add("sbwk-authed"); next("hello"); }
+          if (authResolved) { walker.classList.add("sbwk-authed"); goHello(); }
           else { endClimb(finishRejected); return; }
         }
       }
     } else if (phase === "hello") {
       setEyes(lerp(0.06, 1, Math.min(1, e / 350)));          // eyes open
-      if (e > 200 && !said2) { said2 = true; __sbWkSay("hello, " + (firstName || "there")); }
+      // Wait briefly for the name to load (up to ~900ms) before greeting.
+      if (!said2 && (firstName || e > 900)) { said2 = true; __sbWkSay("hello, " + (firstName || "there")); }
       // Hand off so the normal stroll resumes from the CENTER (no jump to the edge).
-      if (e >= 1600) { __sbWkResumeFromX = climbX; endClimb(finishAuthed); return; }
+      if (e >= 1700) { __sbWkResumeFromX = climbX; endClimb(finishAuthed); return; }
     }
     __sbWkClimbRaf = requestAnimationFrame(step);
   };
@@ -3139,9 +3320,10 @@ function __sbWkTick(now) {
     const mTalk  = root.querySelector("#__sbwk_talk__");
     const tE = root.querySelector("#__sbwk_te__");
     const tI = root.querySelector("#__sbwk_ti__");
-    // Mouth animates ONLY during real TTS speech in headphone mode — never on the
-    // idle wave (that was making Braino look like it talks every couple seconds).
-    const talking = __sbWalkTalking && __sbHeadphoneMode;
+    // Mouth animates whenever Braino is actually speaking (TTS sets __sbWalkTalking) —
+    // in voice mode or when reading an answer aloud. The idle wave no longer triggers it
+    // (that's decoupled), so no need to also gate on headphone mode.
+    const talking = __sbWalkTalking;
     if (talking) {
       const o = Math.max(0, Math.min(1,
         (0.5 + 0.5 * Math.sin(t * 13.5)) *
@@ -3149,20 +3331,22 @@ function __sbWkTick(now) {
         (0.7 + 0.3 * Math.sin(t * 23))
       ));
       const ry = 1.4 + o * 4.2, rx = 4 - o * 0.5;
-      if (mSmile) mSmile.setAttribute("display", "none");
-      if (mTalk)  mTalk.setAttribute("display", "inline");
+      // Use style.display — the talk group carries an inline style="display:none" that
+      // would otherwise override the display ATTRIBUTE (that was the missing-mouth bug).
+      if (mSmile) mSmile.style.display = "none";
+      if (mTalk)  mTalk.style.display = "block";
       if (tE) { tE.setAttribute("rx", String(rx)); tE.setAttribute("ry", String(ry)); }
       if (tI) {
         if (o > 0.25) {
-          tI.setAttribute("display", "inline");
+          tI.style.display = "block";
           tI.setAttribute("cy", String(61.8 + ry * 0.4));
           tI.setAttribute("rx", String(rx * 0.62));
           tI.setAttribute("ry", String(ry * 0.5));
-        } else { tI.setAttribute("display", "none"); }
+        } else { tI.style.display = "none"; }
       }
     } else {
-      if (mSmile) mSmile.setAttribute("display", "inline");
-      if (mTalk)  mTalk.setAttribute("display", "none");
+      if (mSmile) mSmile.style.display = "";
+      if (mTalk)  mTalk.style.display = "none";
     }
   }
 
@@ -4308,21 +4492,23 @@ function __sbBuildBrainUI() {
                   color 0.35s ease, backdrop-filter 0.35s ease;
     }
     /* ── Readable mode: opaque warm cream, dark text — always legible on any bg ── */
+    /* Glassmorphism alternate — translucent frosted panel (NOT opaque white) with dark,
+       readable text. You can still see the page through it. */
     #__sb_bubble__.sb-readable {
-      --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.8); --sb-fg-3: rgba(27,23,19,0.45);
-      --sb-bg: rgba(255,251,247,0.97); --sb-border: rgba(65,48,40,0.1);
-      --sb-q-bg: rgba(65,48,40,0.06); --sb-q-border: rgba(65,48,40,0.1);
-      --sb-footer-border: rgba(65,48,40,0.08); --sb-footer-bg: rgba(65,48,40,0.03);
-      --sb-code-bg: rgba(65,48,40,0.07); --sb-code-fg: #b44b42;
-      --sb-pre-bg: rgba(27,23,19,0.06); --sb-pre-fg: #1B1713;
-      --sb-bq-border: rgba(201,84,74,0.35); --sb-bq-fg: rgba(27,23,19,0.6);
-      --sb-hr: rgba(65,48,40,0.1); --sb-link: #C9544A;
-      --sb-btn-fg: rgba(65,48,40,0.75); --sb-btn-bg: rgba(65,48,40,0.07);
-      --sb-btn-hover: rgba(65,48,40,0.13); --sb-rec-border: rgba(65,48,40,0.1);
-      backdrop-filter: blur(20px) saturate(160%);
-      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.82); --sb-fg-3: rgba(27,23,19,0.5);
+      --sb-bg: rgba(255,251,247,0.5); --sb-border: rgba(255,255,255,0.55);
+      --sb-q-bg: rgba(65,48,40,0.08); --sb-q-border: rgba(65,48,40,0.12);
+      --sb-footer-border: rgba(65,48,40,0.1); --sb-footer-bg: rgba(65,48,40,0.04);
+      --sb-code-bg: rgba(65,48,40,0.1); --sb-code-fg: #b44b42;
+      --sb-pre-bg: rgba(27,23,19,0.08); --sb-pre-fg: #1B1713;
+      --sb-bq-border: rgba(201,84,74,0.4); --sb-bq-fg: rgba(27,23,19,0.65);
+      --sb-hr: rgba(65,48,40,0.12); --sb-link: #C9544A;
+      --sb-btn-fg: rgba(65,48,40,0.8); --sb-btn-bg: rgba(65,48,40,0.08);
+      --sb-btn-hover: rgba(65,48,40,0.15); --sb-rec-border: rgba(65,48,40,0.12);
+      backdrop-filter: blur(22px) saturate(170%);
+      -webkit-backdrop-filter: blur(22px) saturate(170%);
       box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08),
-                  inset 0 1px 0 rgba(255,255,255,0.9);
+                  inset 0 1px 0 rgba(255,255,255,0.55);
     }
     #__sb_bubble__.sb-readable .sb-turn + .sb-turn { border-top-color: rgba(65,48,40,0.08); }
     #__sb_bubble__.sb-readable::before { backdrop-filter: none; -webkit-backdrop-filter: none; filter: none; }
@@ -5166,6 +5352,15 @@ function __sbBuildBrainUI() {
     #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    /* Talking mouth on the docked brain while it speaks in voice mode (the walker has its
+       own; this covers the case where the docked mascot is the one on screen). */
+    #__sb_brain_btn__.hp-speaking #sbb-talk { display: block !important; animation: __sb_brain_talk__ 0.26s ease-in-out infinite; }
+    /* Glasses on the docked brain when Braino is asked to "wear specs". */
+    #__sb_brain_btn__.sb-glasses #sbb-specs { display: block !important; }
+    @keyframes __sb_brain_talk__ {
+      0%, 100% { transform: scaleY(0.28); }
+      50%      { transform: scaleY(1.05); }
+    }
     /* Realtime overrides — blue halo wins */
     #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
@@ -5691,10 +5886,11 @@ function __sbBuildBrainUI() {
     // (legibility there comes from the text halo), so we never force it opaque.
     bubble.classList.toggle("sb-readable", isReadable);
     __sbThemeBtn.textContent = isReadable ? "◐" : "◑";
-    __sbThemeBtn.title = isReadable ? "Switch to glass mode" : "Switch to readable mode";
+    __sbThemeBtn.title = isReadable ? "Switch to liquid glass" : "Switch to clear glass (readable)";
   };
-  // Default to readable so the floating answer card has black text (legible on any page).
-  chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "readable"));
+  // Default = liquid glass. The toggle switches to a translucent glassmorphism (still
+  // see-through, but readable) for when the liquid glass makes the page hard to read.
+  chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "glass"));
   __sbThemeBtn.addEventListener("click", () => {
     const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
     __sbApplyTheme(next);
@@ -9153,11 +9349,11 @@ function __sbIsGoogleMapsPlaceTask(text) {
   if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
   if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
 
-  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby|nearest|closest)\b/.test(t);
   if (!wantsPlaceRecommendation) return false;
 
-  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
-  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theat(?:er|re)s?|movie\s+theat(?:er|re)s?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|by me|close to me|my house|my home|at home|from home|where i am|current location|nearest|closest|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
   return placeCategory && locationHint;
 }
 
@@ -9292,6 +9488,7 @@ function __sbDetectIntent(text) {
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
+  if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
   if (__sbIsBrowserActionCommand(t) || __sbIsSiteScopedBrowseSearch(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order)\b/.test(t)) return "agent";
   if (/\b(gmail|email|calendar|maps?|directions?|linkedin|jobs?|x|twitter|spotify|youtube|amazon|reddit|whatsapp|google docs?|drive)\b/.test(t)
@@ -10290,6 +10487,31 @@ async function __sbProcessPrompt(text, options = {}) {
     if (!fromVoice) return false;
     return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
   };
+
+  // Quick local intent: "wear/put on your specs" → toggle the glasses, no model call.
+  const __glassesIntent = __sbGlassesIntent(promptText);
+  if (__glassesIntent) {
+    __sbSetGlasses(__glassesIntent === "on");
+    const sayLine = __glassesIntent === "on" ? "How do I look?" : "Specs off — better?";
+    __sbStopSpeech();
+    if (fromVoice) { await speakVoiceReply(sayLine); }
+    else { __sbWkSay(__glassesIntent === "on" ? "How do I look? 🤓" : "Specs off"); }
+    return;
+  }
+
+  // "moonwalk" → cue Billie Jean (best-effort) at the moonwalk moment, then dance.
+  if (__sbMoonwalkIntent(promptText)) {
+    __sbStopSpeech();
+    __sbSpotifyPlayBillieJean().then((r) => {
+      // If the music couldn't start (no Spotify device etc.), say why — AFTER the dance
+      // so it doesn't clobber the "Hee-hee!" bubble.
+      if (!r || !r.ok) {
+        setTimeout(() => __sbWkSay(r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧"), 11900);
+      }
+    });
+    setTimeout(() => __sbWkMoonwalk(11000), 650);             // let the beat drop, then moonwalk
+    return;
+  }
 
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });

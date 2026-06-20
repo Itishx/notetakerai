@@ -1,5 +1,11 @@
 # Braino Changelog
 
+## v6.3.46 — Maps knows local intent and Delegate finishes across tabs
+- **Local Maps requests no longer ask where you are.** "Nearest theater," "near my house," "home," and "where I am" now route through Google Maps with `near me` / `My Location` context.
+- **Theater/cinema wording routes to Maps.** Both American and British spellings are recognized as place-search tasks.
+- **Delegate final results now mirror back to the original voice tab.** When work moves into a newly opened tab, the new tab shows the final UI and the original realtime session still speaks/completes the result.
+- **Extension package updated.** The download artifact now ships as version **6.3.46**.
+
 ## v6.3.39 — Realtime actions launch fast again
 - **Realtime voice no longer waits on a spoken progress ack before starting Delegate.** Browser actions like Spotify/open/send now launch the agent immediately and only speak the final result.
 - **Progress updates are visual-only during realtime.** This prevents Braino from saying "Searching..." into its own live mic and accidentally creating a self-trigger loop.

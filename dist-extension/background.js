@@ -2768,7 +2768,7 @@ function bgSelectDelegateSkillsHeuristic(task) {
   const raw = String(task || "").toLowerCase();
   const skills = [];
   if (/\b(calendar|meeting|meet|call|event|schedule|reschedule|cancel|invite|forward)\b/.test(raw)) skills.push("google-calendar");
-  if (/\b(maps?|directions?|route|near me|restaurant|cafe|place|places|eta|distance)\b/.test(raw)) skills.push("google-maps");
+  if (/\b(maps?|directions?|route|near me|nearby|nearest|closest|restaurant|cafe|place|places|eta|distance|theat(?:er|re)s?|movie\s+theat(?:er|re)s?|cinemas?)\b/.test(raw)) skills.push("google-maps");
   if (/\b(linkedin|jobs?|roles?|openings?|sdet|developer|engineer)\b/.test(raw)) skills.push("linkedin-jobs");
   if (/\b(twitter|x\b|tweet|post|publish|followers?|mentions?)\b/.test(raw)) skills.push("x-growth-posting");
   if (/\b(cost|spend|receipt|realtime|voice)\b/.test(raw)) skills.push("realtime-costs");
@@ -2787,6 +2787,7 @@ SKILL linkedin-jobs:
   if (skill === "google-maps") return `
 SKILL google-maps:
 - Open Google Maps visibly for search or directions unless the user explicitly says not to.
+- For "near me", "nearest", "closest", "my house", "home", or "where I am", assume the user's current/home context. Use a Maps query with "near me" or "My Location"; do not ask where they are.
 - Inspect visible results before recommending; do not invent ratings, hours, ETA, or open status.
 - For recommendations, return 3-5 visible options and one best pick.
 - For phone handoff, ask which result to send unless the user already selected exactly one.
@@ -2893,6 +2894,7 @@ Rules:
 - Do not claim done until the task is complete in observed state.
 - If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
 - For other high-risk final actions not clearly requested by the user, clarify before acting.
+- For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location" and read the visible result.
 - Today is ${bgDelegateTodayText()}.
 
 Useful URL shortcuts:
@@ -3275,6 +3277,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
 
 async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
   let currentTabId = tabId;
+  const originTabId = tabId;
   const history = [];
   const conversationContext = bgBuildAgentConversationContext({
     ...sharedContext,
@@ -3287,10 +3290,22 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
   const onProgress = async (description) => {
     bgBrainUpdate(currentTabId, `→ ${description}`, false, { task, speakHint: description });
   };
+  const sendFinalUpdate = async (targetTabId, message, extra = {}) => {
+    const finalTabId = targetTabId || currentTabId || originTabId;
+    if (finalTabId) {
+      bgAgentTaskByTab.set(finalTabId, task);
+      bgBrainUpdate(finalTabId, message, true, { task, keepLectureCard: extra.keepLectureCard === true });
+      bgSaveAgentTask(finalTabId, task, message);
+    }
+    if (originTabId && originTabId !== finalTabId) {
+      bgAgentTaskByTab.set(originTabId, task);
+      bgBrainUpdate(originTabId, message, true, { task, keepLectureCard: extra.keepLectureCard === true });
+      bgSaveAgentTask(originTabId, task, message);
+    }
+  };
   const finish = async (message, ok = true, extra = {}) => {
     finalMessage = message || finalMessage;
-    bgBrainUpdate(currentTabId, finalMessage, true, { task, keepLectureCard: extra.keepLectureCard === true });
-    bgSaveAgentTask(currentTabId, task, finalMessage);
+    await sendFinalUpdate(extra.tabId || currentTabId, finalMessage, extra);
     return { ok, message: finalMessage, history, ...extra };
   };
 
@@ -3354,8 +3369,8 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
     onFinal: (message) => { finalMessage = message || finalMessage; },
     shouldStop: () => bgAgentShouldStop,
   });
-  bgBrainUpdate(currentTabId, finalMessage, true, { task });
-  bgSaveAgentTask(currentTabId, task, finalMessage);
+  const resultTabId = result?.state?.focusTabId || currentTabId;
+  await sendFinalUpdate(resultTabId, finalMessage);
   return result;
 }
 
@@ -5277,14 +5292,32 @@ function bgEncodeMapsPath(value) {
   return encodeURIComponent(String(value || "").trim()).replace(/%20/g, "+");
 }
 
+function bgIsPersonalMapsLocation(value) {
+  const text = String(value || "").toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  return /\b(my\s+)?(house|home|place|current location|location)\b/.test(text)
+    || /\b(where i am|where i'm at|near me|around me|by me|close to me)\b/.test(text);
+}
+
+function bgNormalizeMapsEndpoint(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+  return bgIsPersonalMapsLocation(raw) ? "My Location" : raw;
+}
+
 function bgCleanGoogleMapsQuery(value) {
   const raw = String(value || "").trim();
   const mealIntent = /\b(?:eat|eating|food|dinner|lunch|breakfast|brunch)\b/i.test(raw);
+  const wantsLocalAnchor = /\b(?:nearest|closest|nearby|near me|around me|by me|close to me|my house|my home|at home|from home|where i am|where i'm at|current location)\b/i.test(raw);
+  const hasExplicitNamedLocation = /\b(?:in|at|near|around)\s+(?!me\b|my\b|home\b|house\b|current\b)[a-z0-9][a-z0-9\s-]{1,40}/i.test(raw);
   let query = raw
     .replace(/\bnear me\b/gi, "__NEAR_ME__")
-    .replace(/\baround me\b/gi, "__AROUND_ME__");
+    .replace(/\baround me\b/gi, "__AROUND_ME__")
+    .replace(/\b(?:near|around|by|close to|to|from)\s+(?:my\s+)?(?:house|home|place|current location|location)\b/gi, "__NEAR_ME__")
+    .replace(/\b(?:my\s+)?(?:house|home|place|current location|location)\b/gi, "__NEAR_ME__")
+    .replace(/\bwhere\s+i(?:\s+am|'m\s+at)\b/gi, "__NEAR_ME__");
   query = query
     .replace(/[?!.,;:]+/g, " ")
+    .replace(/\bwhat(?:'s|\s+is)\b/gi, " ")
     .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
     .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
     .replace(/\bon\s+(?:google\s+)?maps?\b/gi, " ")
@@ -5292,6 +5325,7 @@ function bgCleanGoogleMapsQuery(value) {
     .replace(/\bwhere\s+to\b/gi, " ")
     .replace(/\bi\s+(?:should|can|could|want\s+to|wanna)\s+(?:eat|go)\b/gi, " ")
     .replace(/\b(?:please|pls|for me|some|a few|the|an?)\b/gi, " ")
+    .replace(/\b(?:nearest|closest|nearby)\b/gi, " ")
     .replace(/\b(?:open|show|display|pull up|bring up|find|search(?: for)?|look for|look up|get|give|recommend|suggest)\b/gi, " ")
     .replace(/\b(?:google\s+)?maps?\b/gi, " ")
     .replace(/\b(?:eat|eating|food|places?)\b/gi, " ")
@@ -5300,6 +5334,9 @@ function bgCleanGoogleMapsQuery(value) {
     .replace(/__AROUND_ME__/g, "around me")
     .replace(/\s+/g, " ")
     .trim();
+  if (wantsLocalAnchor && !hasExplicitNamedLocation && !/\b(?:near me|around me)\b/i.test(query)) {
+    query = `${query} near me`.replace(/\s+/g, " ").trim();
+  }
   if (mealIntent && !/\b(?:restaurants?|cafes?|coffee|bars?|pubs?)\b/i.test(query)) {
     const mealKind = query.match(/\b(dinner|lunch|breakfast|brunch)\b/i)?.[1];
     query = mealKind
@@ -5319,11 +5356,11 @@ function bgLooksLikeGoogleMapsPlaceTask(task) {
   if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
   if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
 
-  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby|nearest|closest)\b/.test(t);
   if (!wantsPlaceRecommendation) return false;
 
-  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
-  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theat(?:er|re)s?|movie\s+theat(?:er|re)s?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|by me|close to me|my house|my home|at home|from home|where i am|current location|nearest|closest|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
   return placeCategory && locationHint;
 }
 
@@ -5343,8 +5380,8 @@ function bgBuildGoogleMapsFastPath(task) {
     const second = (directionsMatch[2] || directionsMatch[4] || "").trim();
     const isToFrom = /\bto\b.+\bfrom\b/i.test(raw) && !/\bfrom\b.+\bto\b/i.test(raw);
     const isHowFarFrom = /^how\s+far\s+is\b/i.test(raw);
-    const origin = (isToFrom || isHowFarFrom) ? second : first;
-    const destination = (isToFrom || isHowFarFrom) ? first : second;
+    const origin = bgNormalizeMapsEndpoint((isToFrom || isHowFarFrom) ? second : first);
+    const destination = bgNormalizeMapsEndpoint((isToFrom || isHowFarFrom) ? first : second);
     return [{
       type: "navigate",
       url: `https://www.google.com/maps/dir/${bgEncodeMapsPath(origin)}/${bgEncodeMapsPath(destination)}`,
@@ -5533,12 +5570,13 @@ FLOW:
 1. If not already on Google Maps results/directions for the task, navigate using:
    - Search: https://www.google.com/maps/search/QUERY+with+spaces+as+plus
    - Directions: https://www.google.com/maps/dir/ORIGIN/DESTINATION
-2. After navigation, wait 1200 and read the visible Maps page/results. Prefer reading main, [role="main"], [role="feed"], [aria-label*="Results"], or body text.
-3. Recommend only places/routes visible on the Maps page or clearly returned by the page. Do not invent ratings, hours, distance, or open status.
-4. For recommendation tasks, return 3-5 options when visible. Include name, area/address if visible, rating/open status if visible, and why it fits the user's constraints.
-5. Pick one best option and explain why in one sentence.
-6. End by asking: "Should I send {best pick} to your phone?"
-7. If the user explicitly asks to ping/send it and no phone channel is configured, say the handoff is not set up yet and provide the Google Maps URL. Never claim it was sent.
+2. For "near me", "nearest", "closest", "my house", "home", or "where I am", assume the user's current/home context. Use "near me" in search URLs or "My Location" in directions URLs; do not ask where they are.
+3. After navigation, wait 1200 and read the visible Maps page/results. Prefer reading main, [role="main"], [role="feed"], [aria-label*="Results"], or body text.
+4. Recommend only places/routes visible on the Maps page or clearly returned by the page. Do not invent ratings, hours, distance, or open status.
+5. For recommendation tasks, return 3-5 options when visible. Include name, area/address if visible, rating/open status if visible, and why it fits the user's constraints.
+6. Pick one best option and explain why in one sentence.
+7. End by asking: "Should I send {best pick} to your phone?"
+8. If the user explicitly asks to ping/send it and no phone channel is configured, say the handoff is not set up yet and provide the Google Maps URL. Never claim it was sent.
 
 FINAL MESSAGE FORMAT:
 ## Places I found on Google Maps
