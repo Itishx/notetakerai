@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
+import BrainoIntroGate from '@/components/BrainoIntroGate';
 
 type Phase = 'sleeping' | 'yellow' | 'green' | 'awake' | 'chatting' | 'email_capture' | 'waitlisted';
 type MsgType = 'text' | 'use-cases';
@@ -543,7 +545,10 @@ function BrainoIcon({ glowing }: { glowing: boolean }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function PreLaunch() {
   const isMobile = useIsMobile();
-  const [phase, setPhase] = useState<Phase>('sleeping');
+  const navigate = useNavigate();
+  // The greeting + mascot-led capability tour run inside one persistent overlay; when it finishes
+  // (or is skipped) we head to the real site (/home).
+  const [phase, setPhase] = useState<Phase>('awake');
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
@@ -569,12 +574,8 @@ export default function PreLaunch() {
     return () => document.body.classList.remove('sb-prelaunch');
   }, []);
 
-  useEffect(() => {
-    const t1 = setTimeout(() => setPhase('yellow'), 900);
-    const t2 = setTimeout(() => setPhase('green'),  2500);
-    const t3 = setTimeout(() => setPhase('awake'),  3600);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, []);
+  // (Old sleeping→yellow→green→awake wake-up sequence removed — the BrainoIntroGate is the
+  // entrance now. The page starts in the 'awake' phase, hidden behind the gate until it falls.)
 
   // Line 1 fades in on awake, sits for ~2s, line 2 fades in, chip at 5s total
   useEffect(() => {
@@ -655,6 +656,7 @@ export default function PreLaunch() {
 
   return (
     <>
+      <BrainoIntroGate />
       <style>{`
         body.sb-prelaunch #sb-brain-mascot-wrapper { display: none !important; }
         @keyframes plGlowPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
