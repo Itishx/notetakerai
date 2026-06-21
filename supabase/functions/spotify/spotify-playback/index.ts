@@ -33,6 +33,23 @@ async function getFirstAvailableDeviceId(accessToken: string): Promise<string | 
   }
 }
 
+// Activate a device (Spotify "transfer playback"). A freshly-opened web player is *available*
+// but not *active* — without this transfer, `play?device_id=…` keeps 404-ing NO_ACTIVE_DEVICE.
+async function activateDevice(accessToken: string, deviceId: string, play = false): Promise<void> {
+  await spotifyRequestRaw(
+    "https://api.spotify.com/v1/me/player",
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ device_ids: [deviceId], play }),
+    },
+    "spotify-playback",
+  );
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -61,21 +78,7 @@ serve(async (req) => {
         return json({ error: "deviceId required for transfer." }, 400);
       }
 
-      await spotifyRequestRaw(
-        "https://api.spotify.com/v1/me/player",
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            device_ids: [payload.deviceId],
-            play: Boolean(payload.play),
-          }),
-        },
-        "spotify-playback",
-      );
+      await activateDevice(accessToken, payload.deviceId, Boolean(payload.play));
 
       return json({ ok: true });
     }
@@ -122,6 +125,10 @@ serve(async (req) => {
               reason: "NO_ACTIVE_DEVICE",
             }, 404);
           }
+          // The device exists but isn't active yet — transfer playback to activate it, give it a
+          // beat to come online, then play our track on it.
+          await activateDevice(accessToken, deviceId, false);
+          await new Promise((r) => setTimeout(r, 600));
           await attemptPlay(deviceId);
         } else {
           throw err;

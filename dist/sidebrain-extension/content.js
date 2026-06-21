@@ -3573,6 +3573,11 @@ if (__sbContextOk()) {
         if (!__sbVoiceOnlyMode) {
           if (__sbAgentPendingTurn) {
             __sbUpdateAgentPendingTurn(String(msg.text || "Working…").trim() || "Working…");
+          } else if (String(msg.task || "").trim()) {
+            // Delegate carried over to a new tab — no pending turn exists here yet. Recreate it
+            // from the task so the in-flight delegate (progress + subgoals) keeps rendering in the
+            // panel instead of resetting to a transient bubble. Continuity across tabs.
+            __sbSetAgentPendingTurn(String(msg.task).trim(), String(msg.text || "Working…").trim() || "Working…");
           } else {
             __sbShowBubble(msg.text, false, { tone: "status" });
           }
@@ -5705,7 +5710,7 @@ function __sbBuildBrainUI() {
   // This makes Braino persist across tabs: once invoked, it follows you to every tab
   // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  __sbStorageGet(["sbBrainDocked", "sbVoiceModeOn"]).then(({ sbBrainDocked, sbVoiceModeOn }) => {
+  __sbStorageGet(["sbBrainDocked", "sbBrainExpanded", "sbVoiceModeOn"]).then(({ sbBrainDocked, sbBrainExpanded, sbVoiceModeOn }) => {
     if (!__sbOwnsInlineUi()) return;
     // Show brain if docked OR if voice mode is on (voice takes over, so show it either way).
     if (sbBrainDocked || sbVoiceModeOn) {
@@ -5722,6 +5727,13 @@ function __sbBuildBrainUI() {
     // path for freshly-opened tabs (e.g. Braino opening Spotify). Hidden tabs stay idle.
     if (sbVoiceModeOn && document.visibilityState === "visible") {
       __sbEnsureVoicePresence();
+    } else if (sbBrainExpanded && document.visibilityState === "visible") {
+      // Panel was expanded when this tab opened (e.g. Delegate opened a new tab mid-task).
+      // Auto-open the centered glass panel + walker here too so Braino travels seamlessly
+      // across tabs instead of collapsing to the docked button. Instant open (no wake-climb);
+      // __sbOpenPanel falls back to the sign-in state if the user isn't authed. Hidden tabs
+      // stay docked until focused — mirrors the voice-presence path above.
+      __sbOpenPanel();
     }
   });
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
