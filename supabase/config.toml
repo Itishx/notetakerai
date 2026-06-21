@@ -1,52 +1,244 @@
 project_id = "suwhgaxxdizowbyjlljj"
 
-[functions.waitlist-signup]
+# Edge functions are grouped into category folders under supabase/functions/<category>/<slug>/.
+# The deployed slug (and its /functions/v1/<slug> URL) is the [functions.<slug>] key below;
+# `entrypoint` points the CLI at the relocated source. verify_jwt=false = intentionally public
+# (OAuth callbacks, webhooks, public stats, server-key TTS). Omitted verify_jwt defaults to true.
+
+# ── chat ─────────────────────────────────────────────────────────────
+
+[functions.braino-chat]
+entrypoint = "./functions/chat/braino-chat/index.ts"
+
+[functions.chat-about-notes]
+entrypoint = "./functions/chat/chat-about-notes/index.ts"
+
+[functions.save-note]
+entrypoint = "./functions/chat/save-note/index.ts"
+
+[functions.transcribe-and-notes]
+entrypoint = "./functions/chat/transcribe-and-notes/index.ts"
+
+# ── google ─────────────────────────────────────────────────────────────
+
+[functions.google-calendar-action]
+entrypoint = "./functions/google/google-calendar-action/index.ts"
+
+[functions.google-calendar-connection-status]
+entrypoint = "./functions/google/google-calendar-connection-status/index.ts"
+
+[functions.google-calendar-oauth-callback]
+entrypoint = "./functions/google/google-calendar-oauth-callback/index.ts"
 verify_jwt = false
 
-[functions.polar-webhook]
+[functions.google-calendar-oauth-start]
+entrypoint = "./functions/google/google-calendar-oauth-start/index.ts"
+
+[functions.google-calendar-push-webhook]
+entrypoint = "./functions/google/google-calendar-push-webhook/index.ts"
 verify_jwt = false
 
-[functions.dispatch-scheduled-x-posts]
+[functions.google-calendar-reminders]
+entrypoint = "./functions/google/google-calendar-reminders/index.ts"
+
+[functions.google-docs-append]
+entrypoint = "./functions/google/google-docs-append/index.ts"
+
+[functions.google-docs-from-prompt]
+entrypoint = "./functions/google/google-docs-from-prompt/index.ts"
+
+[functions.google-docs-save-note]
+entrypoint = "./functions/google/google-docs-save-note/index.ts"
+
+[functions.google-drive-connection-status]
+entrypoint = "./functions/google/google-drive-connection-status/index.ts"
+
+[functions.google-drive-create-doc]
+entrypoint = "./functions/google/google-drive-create-doc/index.ts"
+
+[functions.google-drive-create-folder]
+entrypoint = "./functions/google/google-drive-create-folder/index.ts"
+
+[functions.google-drive-delete]
+entrypoint = "./functions/google/google-drive-delete/index.ts"
+
+[functions.google-drive-list-files]
+entrypoint = "./functions/google/google-drive-list-files/index.ts"
+
+[functions.google-drive-move]
+entrypoint = "./functions/google/google-drive-move/index.ts"
+
+[functions.google-drive-oauth-callback]
+entrypoint = "./functions/google/google-drive-oauth-callback/index.ts"
 verify_jwt = false
 
-[functions.x-connection-status]
-verify_jwt = false
+[functions.google-drive-oauth-start]
+entrypoint = "./functions/google/google-drive-oauth-start/index.ts"
 
-# Public stats for the /live dashboard — called from the browser with no auth.
-[functions.x-auto-public-stats]
-verify_jwt = false
+[functions.google-drive-organize-apply]
+entrypoint = "./functions/google/google-drive-organize-apply/index.ts"
 
-[functions.x-oauth-start]
-verify_jwt = false
+[functions.google-drive-organize-preview]
+entrypoint = "./functions/google/google-drive-organize-preview/index.ts"
 
-[functions.x-oauth-callback]
+[functions.google-drive-rename]
+entrypoint = "./functions/google/google-drive-rename/index.ts"
+
+[functions.google-drive-search]
+entrypoint = "./functions/google/google-drive-search/index.ts"
+
+# ── spotify ─────────────────────────────────────────────────────────────
+
+[functions.spotify-add-track]
+entrypoint = "./functions/spotify/spotify-add-track/index.ts"
 verify_jwt = false
 
 [functions.spotify-oauth-callback]
+entrypoint = "./functions/spotify/spotify-oauth-callback/index.ts"
 verify_jwt = false
 
-[functions.google-drive-oauth-callback]
+[functions.spotify-oauth-start]
+entrypoint = "./functions/spotify/spotify-oauth-start/index.ts"
 verify_jwt = false
 
-[functions.google-calendar-oauth-callback]
+[functions.spotify-playback]
+entrypoint = "./functions/spotify/spotify-playback/index.ts"
 verify_jwt = false
 
-[functions.google-calendar-push-webhook]
+[functions.spotify-player-state]
+entrypoint = "./functions/spotify/spotify-player-state/index.ts"
+verify_jwt = false
+
+[functions.spotify-search]
+entrypoint = "./functions/spotify/spotify-search/index.ts"
+verify_jwt = false
+
+[functions.spotify-web-playback-token]
+entrypoint = "./functions/spotify/spotify-web-playback-token/index.ts"
+verify_jwt = false
+
+# ── x ─────────────────────────────────────────────────────────────
+
+[functions.dispatch-scheduled-x-posts]
+entrypoint = "./functions/x/dispatch-scheduled-x-posts/index.ts"
 verify_jwt = false
 
 [functions.x-assistant]
-verify_jwt = true
+entrypoint = "./functions/x/x-assistant/index.ts"
 
-# TTS uses no per-user data, only a server-side provider API key. Keep these public so an
-# expired app session cannot create fake provider failures in voice mode.
-[functions.fish-audio-tts]
+[functions.x-auto-engage]
+entrypoint = "./functions/x/x-auto-engage/index.ts"
+
+[functions.x-auto-generate]
+entrypoint = "./functions/x/x-auto-generate/index.ts"
+
+[functions.x-auto-public-stats]
+entrypoint = "./functions/x/x-auto-public-stats/index.ts"
 verify_jwt = false
 
-[functions.elevenlabs-tts]
+[functions.x-auto-session-start]
+entrypoint = "./functions/x/x-auto-session-start/index.ts"
+
+[functions.x-auto-session-stop]
+entrypoint = "./functions/x/x-auto-session-stop/index.ts"
+
+[functions.x-auto-stats-sync]
+entrypoint = "./functions/x/x-auto-stats-sync/index.ts"
+
+[functions.x-connection-status]
+entrypoint = "./functions/x/x-connection-status/index.ts"
 verify_jwt = false
+
+[functions.x-follower-snapshot]
+entrypoint = "./functions/x/x-follower-snapshot/index.ts"
+verify_jwt = false
+
+[functions.x-oauth-callback]
+entrypoint = "./functions/x/x-oauth-callback/index.ts"
+verify_jwt = false
+
+[functions.x-oauth-start]
+entrypoint = "./functions/x/x-oauth-start/index.ts"
+verify_jwt = false
+
+[functions.x-status]
+entrypoint = "./functions/x/x-status/index.ts"
+
+# ── notion ─────────────────────────────────────────────────────────────
+
+[functions.notion-connection-status]
+entrypoint = "./functions/notion/notion-connection-status/index.ts"
+
+[functions.notion-oauth-callback]
+entrypoint = "./functions/notion/notion-oauth-callback/index.ts"
+
+[functions.notion-oauth-start]
+entrypoint = "./functions/notion/notion-oauth-start/index.ts"
+
+[functions.sync-to-notion]
+entrypoint = "./functions/notion/sync-to-notion/index.ts"
+
+# ── realtime ─────────────────────────────────────────────────────────────
+
+[functions.openai-cost-overview]
+entrypoint = "./functions/realtime/openai-cost-overview/index.ts"
+
+[functions.openai-realtime-call]
+entrypoint = "./functions/realtime/openai-realtime-call/index.ts"
+
+[functions.openai-realtime-config]
+entrypoint = "./functions/realtime/openai-realtime-config/index.ts"
+
+[functions.openai-realtime-session]
+entrypoint = "./functions/realtime/openai-realtime-session/index.ts"
 
 [functions.realtime-cost-log]
+entrypoint = "./functions/realtime/realtime-cost-log/index.ts"
 verify_jwt = false
 
+[functions.realtime-cost-summary]
+entrypoint = "./functions/realtime/realtime-cost-summary/index.ts"
+
 [functions.realtime-costs-admin]
+entrypoint = "./functions/realtime/realtime-costs-admin/index.ts"
+verify_jwt = false
+
+# ── voice ─────────────────────────────────────────────────────────────
+
+[functions.fish-audio-tts]
+entrypoint = "./functions/voice/fish-audio-tts/index.ts"
+verify_jwt = false
+
+# ── research ─────────────────────────────────────────────────────────────
+
+[functions.reddit-assistant]
+entrypoint = "./functions/research/reddit-assistant/index.ts"
+
+[functions.tmdb-search]
+entrypoint = "./functions/research/tmdb-search/index.ts"
+
+[functions.web-research]
+entrypoint = "./functions/research/web-research/index.ts"
+
+# ── billing ─────────────────────────────────────────────────────────────
+
+[functions.create-checkout]
+entrypoint = "./functions/billing/create-checkout/index.ts"
+
+[functions.polar-webhook]
+entrypoint = "./functions/billing/polar-webhook/index.ts"
+verify_jwt = false
+
+# ── waitlist ─────────────────────────────────────────────────────────────
+
+[functions.waitlist-list]
+entrypoint = "./functions/waitlist/waitlist-list/index.ts"
+
+[functions.waitlist-signup]
+entrypoint = "./functions/waitlist/waitlist-signup/index.ts"
+verify_jwt = false
+
+# ── legacy (no source folder in repo) ─────────────────────────────────
+
+[functions.elevenlabs-tts]
 verify_jwt = false

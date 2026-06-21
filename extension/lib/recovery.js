@@ -49,9 +49,26 @@
       return found ? { ok: false, reason: `Element still present ${JSON.stringify(assertion.match || {})}` } : { ok: true };
     }
     if (assertion.assert === "url_contains") {
-      return normalize(obs?.url).includes(normalize(assertion.value))
+      const needle = normalize(assertion.value);
+      if (!needle) return { ok: false, reason: "url_contains requires a value" };
+      const rawUrl = String(obs?.url || "");
+      let host = "";
+      let pathq = "";
+      try {
+        const u = new URL(rawUrl);
+        host = normalize(u.hostname);
+        pathq = normalize(`${u.pathname}${u.search}${u.hash}`);
+      } catch (_) {
+        pathq = normalize(rawUrl);
+      }
+      // Match the needle only at a token boundary (host label or path/query segment),
+      // so url_contains "calendar" hits calendar.google.com but NOT mycalendarapp.com.
+      const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const boundary = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`);
+      const ok = boundary.test(host) || boundary.test(pathq);
+      return ok
         ? { ok: true }
-        : { ok: false, reason: `URL did not contain "${assertion.value || ""}"` };
+        : { ok: false, reason: `URL did not contain "${assertion.value || ""}" as a host/path token` };
     }
     if (assertion.assert === "value_equals") {
       const found = elements.find((el) => Number(el.index) === Number(assertion.index));
@@ -61,7 +78,10 @@
         : { ok: false, reason: `Value was "${found.value || ""}", expected "${assertion.value || ""}"` };
     }
     if (assertion.assert === "text_present") {
-      const hay = normalize([obs?.title, obs?.url, ...elements.map((el) => `${el.name || ""} ${el.value || ""}`)].join(" "));
+      // Search the visible page (title + the visible-element names/values that elementMap
+      // already filtered to). The URL is intentionally excluded — a fragment like #inbox in
+      // the address bar should not count as "inbox text present" on the page; use url_contains.
+      const hay = normalize([obs?.title, ...elements.map((el) => `${el.name || ""} ${el.value || ""}`)].join(" "));
       return hay.includes(normalize(assertion.value))
         ? { ok: true }
         : { ok: false, reason: `Text not present: "${assertion.value || ""}"` };

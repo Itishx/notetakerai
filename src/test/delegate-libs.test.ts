@@ -81,6 +81,26 @@ describe("Delegate extension libs", () => {
     expect(() => (globalThis as any).BrainoRecovery.validateNoSelectorAction({ type: "click", selector: "#send" })).toThrow(/forbidden/i);
   });
 
+  it("matches url_contains only at host/path token boundaries (no false positives)", () => {
+    loadExtensionLib("recovery.js");
+    const verify = (globalThis as any).BrainoRecovery.verifyAssertion;
+    // real match: calendar is a host label
+    expect(verify({ assert: "url_contains", value: "calendar" }, { url: "https://calendar.google.com/r/eventedit", elements: [] }).ok).toBe(true);
+    // false positive guarded: "calendar" inside "mycalendarapp" must NOT match
+    expect(verify({ assert: "url_contains", value: "calendar" }, { url: "https://mycalendarapp.com/home", elements: [] }).ok).toBe(false);
+    // path segment match
+    expect(verify({ assert: "url_contains", value: "eventedit" }, { url: "https://calendar.google.com/r/eventedit?text=x", elements: [] }).ok).toBe(true);
+  });
+
+  it("text_present checks the visible page, not the URL bar", () => {
+    loadExtensionLib("recovery.js");
+    const verify = (globalThis as any).BrainoRecovery.verifyAssertion;
+    // text genuinely on the page (element name)
+    expect(verify({ assert: "text_present", value: "Compose" }, { url: "https://mail.google.com/#inbox", title: "Gmail", elements: [{ index: 1, role: "button", name: "Compose" }] }).ok).toBe(true);
+    // "inbox" only appears in the URL fragment, not on the page → must NOT count
+    expect(verify({ assert: "text_present", value: "inbox" }, { url: "https://mail.google.com/#inbox", title: "Gmail", elements: [{ index: 1, role: "button", name: "Compose" }] }).ok).toBe(false);
+  });
+
   it("classifies typed errors for recovery playbooks", () => {
     loadExtensionLib("recovery.js");
 
@@ -112,8 +132,12 @@ describe("Delegate extension libs", () => {
     expect((globalThis as any).BrainoModels.withinBudget({ maxSteps: 2, maxMs: 1000, maxLLMUsd: 0.5 }, { steps: 1, elapsedMs: 999, llmUsd: 0.1 })).toBe(true);
     expect((globalThis as any).BrainoModels.withinBudget({ maxSteps: 2, maxMs: 1000, maxLLMUsd: 0.5 }, { steps: 2, elapsedMs: 999, llmUsd: 0.1 })).toBe(false);
     expect((globalThis as any).BrainoModels.MODELS.STEP).toMatch(/^gpt-/);
+    expect((globalThis as any).BrainoModels.MODELS.STRATEGIST).toMatch(/^gpt-/);
     expect(JSON.stringify((globalThis as any).BrainoModels.MODELS)).not.toMatch(/claude/i);
+    // tiering must be REAL: the strategist is a genuinely different (stronger) model than the step model
+    expect((globalThis as any).BrainoModels.MODELS.STRATEGIST).not.toBe((globalThis as any).BrainoModels.MODELS.STEP);
     expect((globalThis as any).BrainoModels.pickModel("step", 2)).toBe((globalThis as any).BrainoModels.MODELS.STRATEGIST);
+    expect((globalThis as any).BrainoModels.pickModel("step", 0)).toBe((globalThis as any).BrainoModels.MODELS.STEP);
   });
 
   it("deduplicates planner subgoals and memory updates", () => {

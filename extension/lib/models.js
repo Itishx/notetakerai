@@ -1,9 +1,12 @@
 (function initBrainoModels(global) {
   "use strict";
 
+  // STEP runs every normal loop turn — keep it fast/cheap.
+  // STRATEGIST is the stronger GPT-5 brain, used only on the rare hard moments
+  // (getting stuck / escalation / re-planning / done-verification), never the hot path.
   const MODELS = {
     STEP: "gpt-5.4-mini",
-    STRATEGIST: "gpt-5.4-mini",
+    STRATEGIST: "gpt-5.4",
   };
 
   const MODEL_COST_ESTIMATES_USD = {

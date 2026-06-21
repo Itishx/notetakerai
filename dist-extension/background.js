@@ -2828,7 +2828,7 @@ SKILL realtime-costs:
   return "";
 }
 
-async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress) {
+async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, options = {}) {
   const fallbackSkills = bgSelectDelegateSkillsHeuristic(task);
   const fallback = {
     goal: task,
@@ -2836,15 +2836,28 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress) {
     skills: fallbackSkills,
   };
   try {
-    onProgress?.("Understanding the task...");
-    const model = BrainoModels?.pickModel?.("decompose", 0) || "gpt-5.4-mini";
+    // Initial decompose stays on the FAST model (same speed as before). Re-planning
+    // (options.strong) — a rare event when the agent is stuck — uses the stronger brain.
+    const isReplan = Boolean(options.strong);
+    onProgress?.(isReplan ? "Rethinking the plan..." : "Understanding the task...");
+    const model = isReplan
+      ? (BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4")
+      : (BrainoModels?.MODELS?.STEP || "gpt-5.4-mini");
+    const stalledContext = isReplan && options.state
+      ? [
+          "The previous plan STALLED. Current run state:",
+          BrainoTaskState.renderTaskState(options.state),
+          "Produce a REVISED set of subgoals that avoids the stuck step and tries a genuinely different approach.",
+        ].join("\n")
+      : "";
     const prompt = [
       "Return strict JSON only.",
       "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting\"]}",
       "Choose only skills that are relevant. Do not include selectors or CSS.",
       `Task: ${task}`,
       `Context:\n${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
-    ].join("\n\n");
+      stalledContext,
+    ].filter(Boolean).join("\n\n");
     const reply = await bgCallDelegateModel({
       systemPrompt: "You decompose browser tasks for Braino Delegate. Return strict JSON only.",
       userPrompt: prompt,
@@ -2869,8 +2882,12 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress) {
   }
 }
 
-function bgBuildDelegateSystemPrompt(skills) {
+function bgBuildDelegateSystemPrompt(skills, lessons) {
   const skillText = (skills || []).map((skill) => bgDelegateSkillGuide(skill)).filter(Boolean).join("\n\n");
+  const lessonList = Array.isArray(lessons) ? lessons.filter(Boolean).slice(0, 8) : [];
+  const lessonText = lessonList.length
+    ? `\nLEARNED FROM PAST RUNS ON THIS SITE (apply if relevant):\n${lessonList.map((l) => `- ${l}`).join("\n")}\n`
+    : "";
   return `You are Braino Delegate, a closed-loop browser agent.
 Return ONLY strict JSON. No prose. No markdown fences.
 
@@ -2920,13 +2937,13 @@ Useful URL shortcuts:
 - LinkedIn Jobs: https://www.linkedin.com/jobs/search/?keywords=ROLE&location=CITY
 - Google Maps search: https://www.google.com/maps/search/QUERY
 - Google Maps directions: https://www.google.com/maps/dir/ORIGIN/DESTINATION
-
+${lessonText}
 ${skillText}`;
 }
 
-async function bgDecideNextAction({ task, state, observationText, skills, phase, stuckCount, validationError }) {
+async function bgDecideNextAction({ task, state, observationText, skills, lessons, phase, stuckCount, validationError }) {
   const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
-  const systemPrompt = bgBuildDelegateSystemPrompt(skills);
+  const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons);
   const userPrompt = [
     `TASK: ${task}`,
     "STATE:",
@@ -2955,6 +2972,75 @@ async function bgDecideNextAction({ task, state, observationText, skills, phase,
         model,
       };
     }
+  }
+}
+
+// Lowercased, whitespace-collapsed string match used to compare element identity.
+function bgNormalizeForMatch(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+// B1 — metacognition: before accepting a "done", confirm against the LIVE page with the
+// stronger model. Fail-open (returns complete:true on any error) so a genuinely-finished
+// task is never trapped, and the caller caps how many times this can run.
+async function bgVerifyDelegateDone({ task, state, tabId }) {
+  try {
+    const obs = await bgBuildElementObservation(tabId, task);
+    const systemPrompt =
+      "You verify whether a browser task is TRULY complete from the live page. " +
+      "Return ONLY strict JSON: {\"complete\":true|false,\"reason\":\"short\"}. " +
+      "Be strict: complete=true only if the observed page proves the goal was achieved " +
+      "(e.g. the email shows as sent, the event shows as saved, the requested data is visible). " +
+      "If it merely looks ready but not done, return false. No prose, no markdown.";
+    const userPrompt = [
+      `TASK: ${task}`,
+      "STATE:",
+      BrainoTaskState.renderTaskState(state),
+      "OBSERVATION:",
+      obs.serialized || "(empty observation)",
+      "Is the task complete in the observed state? Strict JSON only.",
+    ].join("\n\n");
+    const reply = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4",
+    });
+    const parsed = bgExtractJsonObject(reply);
+    return { complete: parsed?.complete !== false, reason: String(parsed?.reason || "").slice(0, 200) };
+  } catch (_) {
+    return { complete: true, reason: "verifier unavailable" };
+  }
+}
+
+// C1 — reflection memory: after a run, extract 1-3 durable, site-specific lessons and persist
+// them per-origin so future runs start smarter. Best-effort and fire-and-forget; never blocks
+// the user's result.
+async function bgReflectAndStoreLessons({ task, state, origin, outcome }) {
+  try {
+    if (!origin || origin === "unknown" || !BrainoMacroStore?.recordLessons) return;
+    const systemPrompt =
+      "You extract durable lessons for a browser agent from one task attempt on a website. " +
+      "Return ONLY strict JSON: {\"lessons\":[\"short imperative tip\"]}. " +
+      "0-3 concise, REUSABLE, site-specific tips (navigation quirks, where a control lives, a modal/banner that appears, a faster path). " +
+      "No secrets, no one-off values (names, emails, dates), no prose, no markdown.";
+    const userPrompt = [
+      `SITE: ${origin}`,
+      `TASK: ${task}`,
+      `OUTCOME: ${outcome || "unknown"}`,
+      "RUN STATE:",
+      BrainoTaskState.renderTaskState(state),
+      "Return strict JSON only.",
+    ].join("\n\n");
+    const reply = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4",
+    });
+    const parsed = bgExtractJsonObject(reply);
+    const lessons = Array.isArray(parsed?.lessons) ? parsed.lessons : [];
+    if (lessons.length) await BrainoMacroStore.recordLessons(origin, lessons);
+  } catch (_) {
+    // reflection is best-effort; ignore failures
   }
 }
 
@@ -3134,9 +3220,16 @@ async function bgApplyDelegateRecovery({ tabId, errorInfo, state, onProgress }) 
     return { terminal: false };
   }
   if (type === "ELEMENT_NOT_FOUND" || type === "STALE_ELEMENT") {
-    onProgress?.("Refreshing the page map and trying a safer next step...");
-    await bgExecuteAgentAction(tabId, { type: "scroll", direction: "down", amount: 500 });
-    await bgDelay(600);
+    // Reasoning-based recovery: instead of a blind scroll, record a precise failure analysis
+    // as a fact and escalate. The next decision (now on the stronger model, since stuckCount
+    // crosses the escalation threshold) reasons over this and picks a DIFFERENT approach.
+    onProgress?.("That step didn't land — rethinking the approach...");
+    state.facts.push({
+      key: `recovery:${state.facts.length + 1}`,
+      value: `Last action failed (${type}): ${errorInfo?.detail || "target not found"}. The element may have moved, be off-screen, or the chosen index was wrong. Try a DIFFERENT element, scroll to reveal it, or read the page first — do not repeat the same action.`,
+      source: "recovery",
+    });
+    state.facts = state.facts.slice(-30);
     state.stuckCount += 1;
     return { terminal: false };
   }
@@ -3145,6 +3238,15 @@ async function bgApplyDelegateRecovery({ tabId, errorInfo, state, onProgress }) 
     await bgDelay(2000);
     state.stuckCount += 1;
     return { terminal: false };
+  }
+  // Unknown / assertion failures: surface the reason so the escalated next step can adapt.
+  if (errorInfo?.detail) {
+    state.facts.push({
+      key: `recovery:${state.facts.length + 1}`,
+      value: `Last step failed (${type}): ${errorInfo.detail}. Change tactic on the next step.`,
+      source: "recovery",
+    });
+    state.facts = state.facts.slice(-30);
   }
   state.stuckCount += 1;
   return { terminal: false };
@@ -3182,9 +3284,13 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   const budget = bgDelegateBudgetForTask(task);
   let llmUsd = 0;
   let prevObs = null;
+  let verifyCount = 0;
+  let replanCount = 0;
   const observationSnapshots = [];
   const initialObs = await bgBuildElementObservation(currentTabId, task);
   const origin = BrainoMacroStore?.originFromUrl?.(initialObs.map.url) || "unknown";
+  // C1 — load durable lessons learned on this site in past runs (local storage, instant).
+  let lessons = await (BrainoMacroStore?.getLessons?.(origin) || Promise.resolve([])).catch(() => []);
   const state = BrainoTaskState.createTaskState(task, currentTabId);
   const macro = await BrainoMacroStore.lookup(task, origin);
   if (macro) {
@@ -3234,8 +3340,24 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       return { ok: false, message: msg, state };
     }
 
+    // B2 — adaptive re-planning: when genuinely stuck, revise the whole plan with the stronger
+    // model instead of grinding the original one. Rare and capped, so the hot path stays fast.
+    if (state.stuckCount >= 3 && replanCount < 2) {
+      replanCount += 1;
+      const replan = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress, { strong: true, state });
+      llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+      if (replan?.subgoals?.length) {
+        BrainoTaskState.setSubgoals(state, replan.subgoals);
+        if (Array.isArray(replan.skills) && replan.skills.length) {
+          decomp.skills = [...new Set([...(decomp.skills || []), ...replan.skills])].slice(0, 3);
+        }
+        state.stuckCount = 1; // give the revised plan a fresh chance without dropping escalation entirely
+        await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+      }
+    }
+
     const obsResult = await bgBuildElementObservation(currentTabId, state.subgoals.find((goal) => goal.status === "active")?.desc || task);
-    const obs = obsResult.map;
+    let obs = obsResult.map;
     const obsPayload = prevObs && BrainoElementMap?.diffElementMap
       ? BrainoElementMap.diffElementMap(prevObs, obs)
       : (obsResult.serialized || BrainoElementMap.serializeElementMap(obs, { keywords: task }));
@@ -3247,6 +3369,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
         state,
         observationText: obsPayload,
         skills: decomp.skills,
+        lessons,
         phase: state.stuckCount >= 2 ? "escalate" : "step",
         stuckCount: state.stuckCount,
       });
@@ -3264,8 +3387,26 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
 
     const action = decision.action;
     if (action.type === "done") {
+      // B1 — metacognition: confirm completion against the live page before claiming success.
+      // Capped at 2 checks; fail-open so a genuinely-finished task is never trapped.
+      if (verifyCount < 2) {
+        verifyCount += 1;
+        onProgress?.("Double-checking the result...");
+        const verify = await bgVerifyDelegateDone({ task, state, tabId: currentTabId });
+        llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+        if (verify && verify.complete === false) {
+          const note = `Self-check: not done yet — ${verify.reason || "the page does not yet prove the task is complete"}.`;
+          state.facts.push({ key: `self_check:${state.facts.length + 1}`, value: note, source: "verifier" });
+          state.facts = state.facts.slice(-30);
+          BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note }, { ok: false, reason: note });
+          onProgress?.("Not done yet — continuing...");
+          prevObs = (await bgBuildElementObservation(currentTabId, task)).map;
+          continue;
+        }
+      }
       BrainoTaskState.markActiveSubgoalDone(state);
       await BrainoMacroStore.record(state, origin, observationSnapshots).catch(() => null);
+      bgReflectAndStoreLessons({ task, state, origin, outcome: "success" }); // fire-and-forget; never blocks
       const msg = "Done.";
       onFinal?.(msg);
       return { ok: true, message: msg, state };
@@ -3294,6 +3435,32 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       prevObs = obs;
       continue;
     }
+    // D2 — staleness guard: a targeted action's index came from an observation that is now
+    // 2-5s old (model latency), during which the page may have shifted. Re-read and confirm
+    // the target still has the same role+name before acting, so we never click the wrong row.
+    // (Re-observing is cheap vs the model call, so the hot path stays fast; it also realigns
+    // the content-script registry that execution resolves against.)
+    if (BG_DELEGATE_TARGETED_ACTIONS.has(action.type)) {
+      const intended = (obs.elements || []).find((el) => Number(el.index) === Number(action.index));
+      const fresh = (await bgBuildElementObservation(currentTabId, task)).map;
+      const current = (fresh.elements || []).find((el) => Number(el.index) === Number(action.index));
+      const sameRole = intended && current && bgNormalizeForMatch(intended.role) === bgNormalizeForMatch(current.role);
+      const n1 = bgNormalizeForMatch(intended?.name);
+      const n2 = bgNormalizeForMatch(current?.name);
+      // Lenient on name (dynamic labels/counters shouldn't false-trip); strict on role + identity.
+      const sameName = n1 === n2 || (!!n1 && !!n2 && (n1.includes(n2) || n2.includes(n1)));
+      const sameTarget = Boolean(intended && current && sameRole && sameName);
+      if (!sameTarget) {
+        const note = `The page shifted before I could act on element [${action.index}] (${intended?.role || "?"} "${(intended?.name || "").slice(0, 60)}"). Re-reading and re-deciding instead of clicking the wrong thing.`;
+        state.facts.push({ key: `stale_guard:${state.facts.length + 1}`, value: note, source: "runtime" });
+        state.facts = state.facts.slice(-30);
+        BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note }, { ok: false, reason: note });
+        onProgress?.("Page shifted — re-reading before acting...");
+        prevObs = fresh;
+        continue;
+      }
+      obs = fresh; // act against the confirmed-fresh observation (matches the content registry)
+    }
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
@@ -3317,12 +3484,14 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     const errorInfo = BrainoRecovery.classifyError(result, verdict, newObs);
     const recovery = await bgApplyDelegateRecovery({ tabId: currentTabId, errorInfo, state, onProgress });
     if (recovery.terminal) {
+      bgReflectAndStoreLessons({ task, state, origin, outcome: `stopped: ${errorInfo?.type || "blocked"}` }); // fire-and-forget
       onFinal?.(recovery.message);
       return { ok: false, message: recovery.message, state, errorInfo };
     }
     prevObs = newObs;
   }
 
+  bgReflectAndStoreLessons({ task, state, origin, outcome: "hit step limit" }); // fire-and-forget
   const msg = `I reached the Delegate step limit (${budget.maxSteps}) before finishing. I stopped cleanly rather than guessing.`;
   onFinal?.(msg);
   return { ok: false, message: msg, state };

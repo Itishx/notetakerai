@@ -2,6 +2,8 @@
   "use strict";
 
   const STORAGE_KEY = "brainoDelegateMacros";
+  const LESSONS_KEY = "brainoDelegateLessons";
+  const MAX_LESSONS_PER_ORIGIN = 8;
   const VERSION = 1;
 
   function normalize(text) {
@@ -176,14 +178,54 @@
     }));
   }
 
+  // ── Reflection memory: durable, per-origin lessons the agent learns across runs ──
+  async function readLessonsStore() {
+    if (!global.chrome?.storage?.local) return {};
+    return new Promise((resolve) => {
+      chrome.storage.local.get([LESSONS_KEY], (data) => resolve(data?.[LESSONS_KEY] && typeof data[LESSONS_KEY] === "object" ? data[LESSONS_KEY] : {}));
+    });
+  }
+
+  async function writeLessonsStore(store) {
+    if (!global.chrome?.storage?.local) return;
+    await new Promise((resolve) => chrome.storage.local.set({ [LESSONS_KEY]: store }, resolve));
+  }
+
+  async function getLessons(origin) {
+    if (!origin || origin === "unknown") return [];
+    const store = await readLessonsStore();
+    const list = store[origin];
+    return Array.isArray(list) ? list.slice(-MAX_LESSONS_PER_ORIGIN) : [];
+  }
+
+  async function recordLessons(origin, lessons) {
+    if (!origin || origin === "unknown" || !Array.isArray(lessons) || !lessons.length) return [];
+    const store = await readLessonsStore();
+    const existing = Array.isArray(store[origin]) ? store[origin].slice() : [];
+    const seen = new Set(existing.map((tip) => normalize(tip)));
+    for (const raw of lessons) {
+      const tip = String(raw || "").trim().slice(0, 200);
+      const key = normalize(tip);
+      if (!tip || seen.has(key)) continue;
+      seen.add(key);
+      existing.push(tip);
+    }
+    const trimmed = existing.slice(-MAX_LESSONS_PER_ORIGIN);
+    store[origin] = trimmed;
+    await writeLessonsStore(store);
+    return trimmed;
+  }
+
   const api = {
     VERSION,
     demote,
     fillMacro,
+    getLessons,
     lookup,
     macroKey,
     originFromUrl,
     record,
+    recordLessons,
     resolveTargetHint,
     taskSignature,
     _private: { fillValue, parameterizeValue, slotPatterns },

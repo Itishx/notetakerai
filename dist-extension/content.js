@@ -3370,12 +3370,19 @@ let __sbCurrentSpeechAudio = null;
 let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
 let __sbSpeechGeneration = 0;
+// In-flight TTS fetch controller, so barge-in (__sbStopSpeech) can abort it instantly
+// instead of letting it hang until the fetch timeout fires.
+let __sbTtsAbortController = null;
 const __SB_TTS_PROVIDER = "fish-audio";
 const __SB_TTS_FALLBACK_PROVIDER = "openai-tts";
 const __SB_TTS_ENDPOINT = "fish-audio-tts";
 const __SB_TTS_RETRY_MIN_MS = 800;
-const __SB_TTS_RETRY_MAX_MS = 15000;
-const __SB_TTS_FETCH_TIMEOUT_MS = 14000;
+const __SB_TTS_RETRY_MAX_MS = 12000;
+// With server-side streaming, fetch() resolves on response headers (first audio chunk), so
+// this only guards a genuinely stalled connection — not full audio generation. 10s leaves
+// room for a cold edge-function start (~5s observed) yet still falls back far faster than
+// the old 14s of silence.
+const __SB_TTS_FETCH_TIMEOUT_MS = 10000;
 // Fish Audio picks the voice server-side via FISH_AUDIO_REFERENCE_ID — the client sends
 // only { text }, so no voice id is needed here. Kept as a label for cost telemetry.
 const __SB_FISH_VOICE_NAME = "Fish Audio Braino";
@@ -7735,6 +7742,13 @@ function __sbSyncSpeakButtons() {
 
 function __sbStopSpeech() {
   __sbSpeechGeneration += 1;
+  // Abort any in-flight Fish Audio TTS fetch/stream immediately so barge-in is instant
+  // instead of hanging until the fetch timeout. The generation bump above already marks
+  // it stale, so the abort is treated as a clean cancel (no error, no browser fallback).
+  if (__sbTtsAbortController) {
+    try { __sbTtsAbortController.abort(); } catch {}
+    __sbTtsAbortController = null;
+  }
   if (__sbHasActiveRealtimeResponse()) {
     __sbVoicePendingReply = false;
     __sbInterruptRealtimeResponse();
@@ -7849,11 +7863,16 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
     try {
       const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
       if (controller) {
+        // Register so barge-in (__sbStopSpeech) can abort instantly. The signal also covers
+        // the streamed response body, so an interruption mid-playback is cancelled at once.
+        __sbTtsAbortController = controller;
         timeoutId = setTimeout(() => controller.abort(), __SB_TTS_FETCH_TIMEOUT_MS);
       }
       const timedRequest = controller ? { ...request, signal: controller.signal } : request;
       const resp = await fetch(url, timedRequest);
-      if (timeoutId) clearTimeout(timeoutId);
+      // Server streams the audio, so fetch resolves on headers — stop the stall timer now
+      // and let the body stream freely (it can outlast the timeout for long replies).
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
       if (speechToken !== __sbSpeechGeneration) return null;
 
       if (resp.ok) {
@@ -7869,12 +7888,20 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
       lastError = httpError;
       if (httpError.isCreditIssue || !httpError.retryable) break;
     } catch (error) {
-      if (timeoutId) clearTimeout(timeoutId);
-      lastError = error instanceof Error ? error : new Error(String(error));
-      lastError.retryable = true;
-      if (__sbIsAbortLikeError(lastError)) {
-        lastError.message = `${__SB_TTS_PROVIDER} TTS timed out.`;
-        lastError.isTimeout = true;
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+      // Barge-in / new reply bumped the generation and aborted us on purpose — clean cancel,
+      // not a failure. Don't log it or trigger the browser-voice fallback.
+      if (speechToken !== __sbSpeechGeneration) return null;
+      if (__sbIsAbortLikeError(error)) {
+        // DOMException.message is read-only, so we can't relabel the original — wrap it.
+        const timeoutErr = new Error(`${__SB_TTS_PROVIDER} TTS timed out.`);
+        timeoutErr.isTimeout = true;
+        timeoutErr.retryable = true;
+        timeoutErr.cause = error;
+        lastError = timeoutErr;
+      } else {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        lastError.retryable = true;
       }
     }
 
@@ -7889,6 +7916,74 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
   }
 
   throw lastError || new Error(`${__SB_TTS_PROVIDER} TTS failed.`);
+}
+
+function __sbCanStreamTtsMp3() {
+  try {
+    return typeof MediaSource !== "undefined"
+      && typeof MediaSource.isTypeSupported === "function"
+      && MediaSource.isTypeSupported("audio/mpeg");
+  } catch { return false; }
+}
+
+// Plays a streamed TTS response via MediaSource so audio starts on the FIRST chunk instead
+// of waiting for the whole MP3. Resolves with the total byte count once playback ends; rejects
+// on a fatal media error. A barge-in aborts the fetch (reader throws) → reject, which the
+// caller treats as a clean cancel via the speech-generation check.
+function __sbPlayStreamedTts(resp, speechToken, onReady) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finishOk = (bytes) => { if (!settled) { settled = true; resolve(bytes); } };
+    const finishErr = (e) => { if (!settled) { settled = true; reject(e instanceof Error ? e : new Error(String(e || "stream error"))); } };
+
+    let mediaSource, url, audio;
+    try {
+      mediaSource = new MediaSource();
+      url = URL.createObjectURL(mediaSource);
+      audio = new Audio();
+      audio.src = url;
+    } catch (e) { finishErr(e); return; }
+
+    onReady(audio, url);
+    let totalBytes = 0;
+
+    audio.addEventListener("ended", () => finishOk(totalBytes), { once: true });
+    audio.addEventListener("error", () => finishErr(audio.error || new Error("audio element error")), { once: true });
+
+    mediaSource.addEventListener("sourceopen", async () => {
+      let sb;
+      try { sb = mediaSource.addSourceBuffer("audio/mpeg"); }
+      catch (e) { finishErr(e); return; }
+
+      const appendChunk = (chunk) => new Promise((res, rej) => {
+        const cleanup = () => { sb.removeEventListener("updateend", onEnd); sb.removeEventListener("error", onErr); };
+        const onEnd = () => { cleanup(); res(); };
+        const onErr = () => { cleanup(); rej(new Error("SourceBuffer append error")); };
+        sb.addEventListener("updateend", onEnd);
+        sb.addEventListener("error", onErr);
+        try { sb.appendBuffer(chunk); } catch (e) { cleanup(); rej(e); }
+      });
+
+      const reader = resp.body.getReader();
+      let started = false;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (speechToken !== __sbSpeechGeneration) { try { await reader.cancel(); } catch {} break; }
+          if (done) break;
+          if (value && value.byteLength) {
+            totalBytes += value.byteLength;
+            await appendChunk(value);
+            if (!started) { started = true; audio.play().catch(finishErr); }
+          }
+        }
+        try { if (mediaSource.readyState === "open") mediaSource.endOfStream(); } catch {}
+        if (!started) finishOk(totalBytes); // nothing played (e.g. barge-in before first chunk)
+      } catch (e) {
+        finishErr(e);
+      }
+    }, { once: true });
+  });
 }
 
 async function __sbSpeakText(text, options = {}) {
@@ -7926,31 +8021,43 @@ async function __sbSpeakText(text, options = {}) {
 
     const ttsProvider = resp.headers.get("x-braino-tts-provider") || __SB_TTS_PROVIDER;
     const ttsContentType = resp.headers.get("content-type") || "";
-    const blob = await resp.blob();
-    __sbRecordRealtimeCostTts({
-      provider: ttsProvider,
-      bytes: blob.size,
-      contentType: blob.type || ttsContentType,
-    });
-    if (speechToken !== __sbSpeechGeneration) return false;
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
 
-    __sbCurrentSpeechAudio = audio;
-    __sbCurrentSpeechUrl = url;
-    __sbIsSpeaking = true;
-    __sbWalkTalking = true;
-    __sbSetVoiceButtonState(false);
-    __sbSyncSpeakButtons();
-    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+    const onReady = (audioEl, objUrl) => {
+      __sbCurrentSpeechAudio = audioEl;
+      __sbCurrentSpeechUrl = objUrl;
+      __sbIsSpeaking = true;
+      __sbWalkTalking = true;
+      __sbSetVoiceButtonState(false);
+      __sbSyncSpeakButtons();
+      if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+    };
 
-    await new Promise((resolve, reject) => {
-      audio.onended = resolve;
-      audio.onerror = reject;
-      audio.play().catch(reject);
-    });
-    spoke = speechToken === __sbSpeechGeneration;
-    __sbWalkTalking = false;
+    if (__sbCanStreamTtsMp3() && resp.body) {
+      // Stream: playback starts on the first chunk (paired with the streaming edge function).
+      const bytes = await __sbPlayStreamedTts(resp, speechToken, onReady);
+      __sbRecordRealtimeCostTts({ provider: ttsProvider, bytes, contentType: ttsContentType });
+      spoke = speechToken === __sbSpeechGeneration;
+      __sbWalkTalking = false;
+    } else {
+      // Fallback: buffer the whole clip, then play (older engines without MSE audio/mpeg).
+      const blob = await resp.blob();
+      __sbRecordRealtimeCostTts({
+        provider: ttsProvider,
+        bytes: blob.size,
+        contentType: blob.type || ttsContentType,
+      });
+      if (speechToken !== __sbSpeechGeneration) return false;
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      onReady(audio, url);
+      await new Promise((resolve, reject) => {
+        audio.onended = resolve;
+        audio.onerror = reject;
+        audio.play().catch(reject);
+      });
+      spoke = speechToken === __sbSpeechGeneration;
+      __sbWalkTalking = false;
+    }
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
     const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
@@ -11601,19 +11708,21 @@ function __sbAugmentRealtimeInstructionsWithMovieContext(instructions, movieCont
 }
 
 function __sbBuildRealtimeBootInstructions() {
-  const pageCtx = __sbGetPageContext(8000);
+  // Keep the connect path cheap. A synchronous full-page scrape here (e.g. innerText of a huge
+  // Notion/Gmail DOM) can add seconds before the socket even opens. We send only the static
+  // identity/behavior plus a cheap title/URL line; the full page content, notes, and movie
+  // captions are pushed the instant we connect by __sbSyncRealtimeVoiceInstructions().
   const pageLines = [];
-  if (pageCtx.url || pageCtx.title) {
-    pageLines.push(`The user is currently viewing: "${pageCtx.title || "Untitled"}" (${pageCtx.url || "unknown URL"})`);
-  }
-  if (pageCtx.text) {
-    pageLines.push(`Page content:\n${pageCtx.text}`);
-  }
+  try {
+    pageLines.push(`The user is currently viewing: "${document.title || "Untitled"}" (${location.href || "unknown URL"})`);
+  } catch (_) {}
 
   const instructions = [
-    "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
+    // Minimal identity stub only — Braino's full personality (the Emotional Engine) is delivered
+    // the instant we connect by __sbSyncRealtimeVoiceInstructions() → openai-realtime-config.
+    // Keep this short so we don't drift from the canonical personality in _shared/emotional-engine.
+    "You are Braino — a warm, emotionally present companion, not a chatbot and not an assistant. Never say you are made by OpenAI or run on any AI model; if asked, you are Braino, full stop. Your full personality loads in a moment.",
     __sbBuildLatestUpdatesPromptBlock(),
-    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. Voice is only the medium here. You are still Braino.",
     "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
     "You can act in the browser: search the web, open tabs and websites, play music, and read the page. NEVER say 'I can't open that from here', 'I can't browse', or 'I cannot do that' — you can. When the user asks you to look something up, search for something, find an article, or open a site, treat it as an action you will carry out, not a limitation. Briefly acknowledge ('On it' / 'Pulling that up') — the system performs the action.",
     "If you only caught noise, music, or unclear audio — or you are not confident what the user said — ask them to repeat it. NEVER invent or guess a response when you didn't actually understand the words.",
@@ -11622,7 +11731,8 @@ function __sbBuildRealtimeBootInstructions() {
     "If interrupted, stop immediately and wait for the user.",
     ...pageLines,
   ].filter(Boolean).join("\n\n");
-  return __sbAugmentRealtimeInstructionsWithMovieContext(instructions, pageCtx.movieContext || null);
+  // Movie/page context is delivered by __sbSyncRealtimeVoiceInstructions() right after connect.
+  return instructions;
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
