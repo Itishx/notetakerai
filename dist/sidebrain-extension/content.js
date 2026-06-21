@@ -13606,7 +13606,23 @@ function __sbHandleVoiceEvent(msg) {
 }
 
 
-if (document.readyState === "loading") {
+// Braino's own marketing/app site (trybraino.com + its Vercel prod/preview deploys) runs its
+// OWN in-page Braino and the landing onboarding intro. Injecting the extension's floating mascot
+// there collides with it (the intro's "yes" gets eaten by the extension's bar), so stay dormant.
+// Auth-sync above still runs; only the floating UI is suppressed.
+function __sbIsBrainoOwnSite() {
+  try {
+    const h = String(location.hostname || "").replace(/^www\./, "").toLowerCase();
+    if (h === "trybraino.com" || h.endsWith(".trybraino.com")) return true;
+    // braino-eight.vercel.app, braino-git-<branch>-<team>.vercel.app, etc.
+    if (h.endsWith(".vercel.app") && h.startsWith("braino")) return true;
+    return false;
+  } catch { return false; }
+}
+
+if (__sbIsBrainoOwnSite()) {
+  // dormant on Braino's own site — the website provides its own Braino experience
+} else if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => __sbBuildBrainUI(), { once: true });
 } else {
   __sbBuildBrainUI();
