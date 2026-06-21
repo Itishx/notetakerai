@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 
-type Purpose = "answer" | "delegate" | "google_doc";
+type Purpose = "answer" | "delegate" | "google_doc" | "compare";
 
 type Source = {
   title: string;
@@ -65,7 +65,7 @@ async function requireAuthedUser(req: Request) {
 }
 
 function normalizePurpose(value: unknown): Purpose {
-  if (value === "delegate" || value === "google_doc") return value;
+  if (value === "delegate" || value === "google_doc" || value === "compare") return value;
   return "answer";
 }
 
@@ -158,6 +158,24 @@ function buildPrompt({
     ].join("\n");
   }
 
+  if (purpose === "compare") {
+    return [
+      common,
+      "",
+      "The user wants a COMPARISON to decide what to buy/pick. Identify the top 3-5 real candidates",
+      "that match every constraint in the request (price ceiling, use-case, brand, region).",
+      "Return markdown in exactly this shape:",
+      "- A short one-line framing of what you compared.",
+      "- A compact comparison: one bullet per option with its name, key specs/pros, the standout con,",
+      "  and current approximate price (with the currency from the request).",
+      "- End with a line that starts with **Best pick:** naming ONE winner and a one-sentence why.",
+      "Only include options you can support from cited sources; do not invent prices or specs.",
+      "Prefer product, retailer, and reputable review sources so each option is backed by a real URL.",
+      "Do not include a separate Sources section. The app adds it later.",
+      `Comparison request: ${query}`,
+    ].join("\n");
+  }
+
   return [
     common,
     "",
@@ -170,7 +188,7 @@ function buildPrompt({
 function toolConfigForPurpose(purpose: Purpose) {
   return {
     type: "web_search",
-    search_context_size: purpose === "google_doc" ? "high" : "medium",
+    search_context_size: (purpose === "google_doc" || purpose === "compare") ? "high" : "medium",
   };
 }
 

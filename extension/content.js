@@ -4892,6 +4892,77 @@ function __sbBuildBrainUI() {
       cursor: wait;
       transform: none;
     }
+    /* Compare skill choice card — reuses the X draft card's visual language. */
+    .sb-compare-card {
+      width: 100%;
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 22px;
+      border: 1px solid rgba(65,48,40,0.12);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(20,20,20,0.11), transparent 16rem),
+        linear-gradient(150deg, rgba(255,255,255,0.96), rgba(249,241,231,0.90));
+      box-shadow: 0 18px 40px rgba(27,23,19,0.10);
+      color: #17120E;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .sb-compare-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #17120E;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .sb-compare-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      background: #17120E;
+      box-shadow: 0 0 12px rgba(23,18,14,0.28);
+    }
+    .sb-compare-card h2 {
+      margin: 0;
+      color: #17120E;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+    .sb-compare-card p {
+      margin: 0;
+      color: rgba(27,23,19,0.66);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .sb-compare-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .sb-compare-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 13px;
+      cursor: pointer;
+      color: #17120E;
+      background: rgba(65,48,40,0.08);
+      font-size: 12px;
+      font-weight: 850;
+      transition: transform 0.12s, background 0.12s, opacity 0.12s;
+    }
+    .sb-compare-btn:hover { transform: translateY(-1px); background: rgba(65,48,40,0.13); }
+    .sb-compare-btn.primary {
+      color: #fff;
+      background: #17120E;
+      box-shadow: 0 10px 22px rgba(23,18,14,0.18);
+    }
     .sb-x-schedule-panel {
       display: none;
       gap: 9px;
@@ -10575,6 +10646,220 @@ async function __sbResolvePremiumStatus(forceRefresh = false) {
   return result?.isPremium === true || cached.isPremium === true;
 }
 
+// ── Compare skill ────────────────────────────────────────────────────────────
+// A self-contained front-end skill (modeled on the X skill). For "compare X / best X
+// under Y / X vs Y" requests, Braino first asks whether to open tabs for theatrics, then
+// runs the REAL comparison in the backend (web-research, purpose:"compare"), optionally
+// opens a few tabs purely for show, and finally presents/speaks the comparison + best pick.
+// It does NOT use the Delegate browser loop.
+let __sbCompareSkillState = { phase: "idle" };
+
+function __sbResetCompareSkillState() { __sbCompareSkillState = { phase: "idle" }; }
+function __sbSetCompareSkillState(next = {}) {
+  __sbCompareSkillState = { phase: "idle", ...next, updatedAt: Date.now() };
+}
+function __sbIsCompareSkillAwaitingInput() {
+  return __sbCompareSkillState?.phase === "awaiting_choice";
+}
+
+function __sbLooksLikeCompare(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  if (/\bcompare\b/.test(t)) return true;
+  if (/\b(vs\.?|versus)\b/.test(t)) return true;
+  if (/\bwhich\b.{0,40}\b(should i|is better|is best|to)\b.{0,20}\b(buy|get|pick|choose)\b/.test(t)) return true;
+  if (/\bbest\b.{0,40}\bunder\b/.test(t)) return true;          // "best headphones under 5000"
+  if (/\btop\s+\d+\b/.test(t)) return true;                     // "top 5 ..."
+  if (/\b(cheapest|most affordable|best value|value for money)\b/.test(t)) return true;
+  if (/\bhelp me\b.{0,20}\b(choose|pick|decide)\b/.test(t)) return true;
+  return false;
+}
+
+// Interpret the user's answer to "open tabs or just research?". Returns true/false, or null
+// if ambiguous (caller re-asks).
+function __sbCompareWantsTabs(text) {
+  const t = String(text || "").trim().toLowerCase();
+  if (/\b(just|only)\b.{0,20}\b(research|find out|look|tell|answer|get back|do it)\b/.test(t)) return false;
+  if (/\b(wait|come back|don'?t open|no tabs?|without tabs?|in the background|background)\b/.test(t)) return false;
+  if (__sbIsXSkillNo(t)) return false;
+  if (/\b(open|show|tabs?|watch|let me see|see you|do it live|go live)\b/.test(t)) return true;
+  if (__sbIsXSkillYes(t)) return true;
+  return null;
+}
+
+function __sbBuildCompareChoiceHtml(query) {
+  return `
+    <div class="sb-compare-card" data-sb-compare-card>
+      <div class="sb-compare-kicker">Compare</div>
+      <h2>How should I do this, sir?</h2>
+      <p>I'll research and compare <strong>${__sbEscapeHtml(query)}</strong> in the background either way. Want me to open a few tabs so you can watch me work, or just wait while I get back to you?</p>
+      <div class="sb-compare-actions">
+        <button class="sb-compare-btn primary" type="button" data-sb-compare-action="tabs">Open tabs &amp; watch me</button>
+        <button class="sb-compare-btn" type="button" data-sb-compare-action="research">Just research, come back to me</button>
+      </div>
+    </div>`;
+}
+
+function __sbBindCompareChoiceCard() {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  scroll.querySelectorAll("[data-sb-compare-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-sb-compare-action");
+      const query = String(__sbCompareSkillState?.query || "").trim();
+      if (!query) { __sbResetCompareSkillState(); return; }
+      void __sbExecuteCompare(query, {
+        openTabs: action === "tabs",
+        fromVoice: false,
+        voiceOutput: "legacy",
+        voiceTurnToken: null,
+      });
+    });
+  });
+}
+
+function __sbRenderCompareChoiceCard(query) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
+  scroll.innerHTML = `<div class="sb-card-stack">${historyHtml}${__sbBuildCompareChoiceHtml(query)}</div>`;
+  __sbOpenCard({ rich: true });
+  __sbBindCompareChoiceCard();
+  __sbScrollCardToLatest(scroll);
+  __sbSyncSpeakButtons();
+}
+
+async function __sbRunCompare(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null;
+  const query = __sbExtractSearchQuery(promptText);
+
+  __sbChatHistory.push({ role: "user", content: promptText });
+  __sbSetCompareSkillState({ phase: "awaiting_choice", query, fromVoice, voiceOutput, voiceTurnToken });
+
+  const question = "Want me to open a few tabs so you can watch me research, or should I just go do it and come back with the comparison?";
+  if (!(fromVoice && __sbVoiceOnlyMode)) {
+    __sbRenderCompareChoiceCard(query);
+  }
+  __sbChatHistory.push({ role: "assistant", content: question });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(question, voiceOutput, { verbatim: true });
+  __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+}
+
+async function __sbHandleCompareSkillFollowup(promptText, ctx = {}) {
+  if (!__sbIsCompareSkillAwaitingInput()) return false;
+  const mergedCtx = {
+    fromVoice: Boolean(ctx.fromVoice),
+    voiceOutput: ctx.voiceOutput === "realtime" ? "realtime" : "legacy",
+    voiceTurnToken: Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null,
+  };
+  const query = String(__sbCompareSkillState?.query || "").trim();
+  if (!query) { __sbResetCompareSkillState(); return false; }
+
+  const wantsTabs = __sbCompareWantsTabs(promptText);
+  if (wantsTabs === null) {
+    const nudge = "Just say 'open tabs' if you want to watch, or 'just research' if I should work in the background.";
+    __sbChatHistory.push({ role: "user", content: promptText });
+    if (mergedCtx.fromVoice) await __sbSpeakWithPreferredVoice(nudge, mergedCtx.voiceOutput, { verbatim: true });
+    else __sbShowBubble(nudge, false, { rich: true, kicker: "Braino" });
+    __sbCompleteVoiceTurn(mergedCtx);
+    return true;
+  }
+
+  __sbChatHistory.push({ role: "user", content: promptText });
+  await __sbExecuteCompare(query, { openTabs: wantsTabs, ...mergedCtx });
+  return true;
+}
+
+// First theatric tab — a marketplace search. Amazon India is the primary market; the page
+// always resolves even when the research later surfaces other retailers.
+function __sbCompareMarketplaceSearchUrl(query) {
+  return `https://www.amazon.in/s?k=${encodeURIComponent(String(query || "").trim())}`;
+}
+
+function __sbCompareIsShoppingUrl(url) {
+  return /\b(amazon|flipkart|croma|reliancedigital|myntra|ajio|bestbuy|walmart|target|ebay|noon|snapdeal|rtings|gsmarena)\b/i.test(String(url || ""));
+}
+
+async function __sbExecuteCompare(query, ctx = {}) {
+  __sbResetCompareSkillState();
+  const openTabs = Boolean(ctx.openTabs);
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null;
+  const voiceOnly = fromVoice && __sbVoiceOnlyMode;
+  const speakVoiceReply = async (t) => (fromVoice ? __sbSpeakWithPreferredVoice(t, voiceOutput) : false);
+
+  if (!voiceOnly) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, "", openTabs ? "Opening tabs and researching…" : "Researching and comparing…");
+    __sbOpenCard({ rich: true });
+    __sbSyncSpeakButtons();
+  }
+
+  // Theatric tab #1 — marketplace search, fired immediately so the user sees motion.
+  if (openTabs) {
+    chrome.runtime.sendMessage({
+      action: "openTab",
+      url: __sbCompareMarketplaceSearchUrl(query),
+      active: false,
+    }, () => { void chrome.runtime.lastError; });
+  }
+
+  const stored = await __sbStorageGet(["aiProvider"]);
+  const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
+  const previousHistory = __sbChatHistory.slice(-10);
+
+  try {
+    const searchData = await __sbPerformWebSearch(query, {
+      purpose: "compare",
+      aiProvider,
+      chatHistory: previousHistory,
+    });
+    const results = searchData.results || searchData.sources || [];
+
+    // Theatric tabs #2..#3 — top product/review pages, staggered, background only.
+    if (openTabs && results.length) {
+      const shopping = results.filter((r) => r?.url && __sbCompareIsShoppingUrl(r.url)).slice(0, 2);
+      const picks = shopping.length ? shopping : results.filter((r) => r?.url).slice(0, 2);
+      picks.forEach((r, i) => {
+        setTimeout(() => {
+          chrome.runtime.sendMessage({ action: "openTab", url: r.url, active: false }, () => { void chrome.runtime.lastError; });
+        }, 900 * (i + 1));
+      });
+    }
+
+    const finalReply = __sbAppendSearchSources(
+      String(searchData.answer || "I couldn't pull together a useful comparison just now."),
+      results,
+    );
+    __sbChatHistory.push({ role: "assistant", content: finalReply });
+    __sbCardTurns.push({ prompt: `Compare: ${query}`, answer: finalReply });
+
+    if (voiceOnly) {
+      const spoke = await speakVoiceReply(finalReply);
+      if (!spoke) {
+        const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+        __sbRenderCardHistory(scroll);
+        __sbOpenCard({ rich: true });
+        __sbSyncSpeakButtons();
+      }
+    } else {
+      const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+      __sbRenderCardHistory(scroll);
+      __sbOpenCard({ rich: true });
+      __sbSyncSpeakButtons();
+      if (fromVoice) await speakVoiceReply(finalReply);
+    }
+  } catch (err) {
+    __sbShowBubble("Error: " + (err.message || "couldn't run the comparison"), true);
+    if (fromVoice) await speakVoiceReply("Something went wrong while comparing.");
+  } finally {
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+  }
+}
+
 function __sbResolvePromptRouting(text) {
   const connectorDirective = __sbParseConnectorDirective(text);
   if (connectorDirective.connector) {
@@ -10607,6 +10892,7 @@ function __sbResolvePromptRouting(text) {
 async function __sbShouldForceVoiceDelegate(routing) {
   const promptText = String(routing?.promptText || "").trim();
   if (!promptText) return false;
+  if (__sbLooksLikeCompare(promptText)) return false; // the Compare skill owns these, not Delegate
   if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
 
   const handoff = __sbBuildAgentHandoffPayload(promptText, { connector: routing?.connectorHint });
@@ -10626,6 +10912,7 @@ async function __sbShouldForceVoiceDelegate(routing) {
 function __sbShouldFastLaunchRealtimeAgent(routing) {
   const promptText = String(routing?.promptText || "").trim();
   if (!promptText) return false;
+  if (__sbLooksLikeCompare(promptText)) return false; // Compare skill, not the realtime agent
   if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
   if (__sbIsExplicitWebSearchRequest(promptText)) return false;
   if (routing?.intent === "agent") return true;
@@ -10686,7 +10973,7 @@ async function __sbProcessPrompt(text, options = {}) {
     ? options.forceIntent
     : null;
   let intent = forceIntent || routing.intent;
-  if (!forceIntent && forcedMode === "page" && intent === "chat") {
+  if (!forceIntent && forcedMode === "page" && intent === "chat" && !__sbLooksLikeCompare(promptText)) {
     const shouldPromoteToAgent = await __sbShouldForceVoiceDelegate(routing);
     if (shouldPromoteToAgent) intent = "agent";
   }
@@ -10700,6 +10987,20 @@ async function __sbProcessPrompt(text, options = {}) {
 
   if (await __sbHandleXSkillFollowup(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
     if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "x_skill" });
+    return;
+  }
+
+  // Compare skill — capture the "open tabs or just research?" answer if we're waiting on it.
+  if (await __sbHandleCompareSkillFollowup(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "compare_skill" });
+    return;
+  }
+
+  // Compare skill — "compare X / best X under Y / X vs Y". Asks tabs-or-wait, researches in the
+  // backend, optionally opens theatric tabs, then presents the comparison + best pick.
+  if (intent !== "record" && intent !== "agent" && __sbLooksLikeCompare(promptText)) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "compare_skill" });
+    await __sbRunCompare(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 
