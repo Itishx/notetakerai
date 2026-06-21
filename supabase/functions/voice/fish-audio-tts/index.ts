@@ -99,7 +99,14 @@ Deno.serve(async (req) => {
       // "normal" is Fish's low-latency mode (faster first byte) vs "balanced" (slightly
       // higher quality, more latency). Voice mode wants responsiveness, so default to normal.
       latency = "normal",
+      // Keep-warm ping: the client fires this on voice-mode entry / periodically so this edge
+      // function's isolate stays hot and the first real reply doesn't pay a cold start.
+      warm,
     } = await req.json();
+
+    if (warm === true) {
+      return json({ ok: true, warm: true }, 200, { "X-Braino-TTS-Provider": "fish-audio" });
+    }
 
     if (!text || typeof text !== "string" || text.trim().length === 0) {
       return json({ error: "text is required" }, 400);

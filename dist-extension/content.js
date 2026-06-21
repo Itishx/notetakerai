@@ -2690,6 +2690,44 @@ async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS)
 // Faithful port of Braino Moonwalk.html: both feet point the SAME way (the mirrored
 // #__sbwk_moonlegs__ replaces the normal legs), each pops onto its toe while the other
 // slides, and the body GLIDES BACKWARD continuously (the classic illusion). MJ fedora on.
+// ── Wait entertainment ───────────────────────────────────────────────────────
+// Keeps the mascot lively while a background task (Delegate / Compare / web research) runs, so
+// the user isn't staring at a frozen Braino. Uses only safe, self-clearing animations and yields
+// to anything that already owns the rig (climb / moonwalk / throw) or to active speech.
+let __sbWaitFunTimer = null;
+let __sbWaitFunActive = false;
+const __SB_WAIT_QUIPS = [
+  "Still digging…", "On it…", "Comparing the contenders…", "Almost there…",
+  "Reading the fine print…", "Cross-checking the sources…", "Hang tight…", "Doing my homework…",
+];
+
+function __sbStartWaitEntertainment() {
+  // Only entertain when the walker is on-screen and we're not voice-frozen — in headphone /
+  // voice-only mode the mascot is engaged (or hidden) and the user is listening, not watching.
+  if (__sbWaitFunActive) return;
+  if (__sbHeadphoneMode || __sbVoiceOnlyMode) return;
+  if (!__sbInputOpen) return; // the walker only exists while the panel/bar is open
+  __sbWaitFunActive = true;
+  let beat = 0;
+  const tick = () => {
+    if (!__sbWaitFunActive) return;
+    const rigBusy = __sbWkClimbing || __sbWkMoonwalking || __sbWkThrowMode || __sbIsSpeaking;
+    if (!rigBusy) {
+      __sbWkSay(__SB_WAIT_QUIPS[Math.floor(Math.random() * __SB_WAIT_QUIPS.length)]);
+      if (beat % 3 === 2) __sbWkMoonwalk(2600); // occasional flourish
+      else __sbWkTriggerWave();
+    }
+    beat += 1;
+    __sbWaitFunTimer = setTimeout(tick, 4000 + Math.random() * 3000);
+  };
+  __sbWaitFunTimer = setTimeout(tick, 1200); // small delay so it doesn't clash with the thinking card
+}
+
+function __sbStopWaitEntertainment() {
+  __sbWaitFunActive = false;
+  if (__sbWaitFunTimer) { clearTimeout(__sbWaitFunTimer); __sbWaitFunTimer = null; }
+}
+
 function __sbWkMoonwalk(durationMs = 11000) {
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
@@ -8069,106 +8107,182 @@ function __sbPlayStreamedTts(resp, speechToken, onReady) {
   });
 }
 
+// Split a reply into speakable sentences so we can synthesize + play them one at a time. This
+// is the core latency win: the first sentence starts playing while later ones are still being
+// synthesized, instead of waiting for Fish to render the whole reply. Decimals ("5.4") and
+// abbreviations ("e.g.") don't over-split because we only break on a terminator FOLLOWED BY
+// whitespace and require a minimum chunk length before flushing.
+function __sbSplitSentencesForTts(text) {
+  const clean = String(text || "").trim();
+  if (!clean) return [];
+  const raw = clean.split(/(?<=[.!?…।])\s+/);
+  const out = [];
+  let buf = "";
+  for (const piece of raw) {
+    buf = buf ? `${buf} ${piece}` : piece;
+    const t = buf.trim();
+    if (/[.!?…।]["')\]]?$/.test(t) && t.length >= 12) { out.push(t); buf = ""; }
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.length ? out : [clean];
+}
+
+// Fetch one sentence's TTS (Fish, with retry). Never throws — returns { resp } (resp may be
+// null if the turn was superseded mid-fetch) or { error } so the caller can decide on fallback
+// without risking an unhandled rejection from a prefetch in flight.
+async function __sbFetchSentenceTts(clean, speechToken, headers) {
+  try {
+    const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text: clean }),
+    }, speechToken);
+    return { resp };
+  } catch (error) {
+    return { error };
+  }
+}
+
+// Play one already-fetched TTS Response. Returns true if it played under the current token,
+// false on token mismatch. Throws on a media error so the caller can fall back.
+async function __sbPlaySentenceResp(resp, speechToken) {
+  const ttsProvider = resp.headers.get("x-braino-tts-provider") || __SB_TTS_PROVIDER;
+  const ttsContentType = resp.headers.get("content-type") || "";
+  const onReady = (audioEl, objUrl) => {
+    __sbCurrentSpeechAudio = audioEl;
+    __sbCurrentSpeechUrl = objUrl;
+    __sbIsSpeaking = true;
+    __sbWalkTalking = true;
+    __sbSetVoiceButtonState(false);
+    __sbSyncSpeakButtons();
+    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+  };
+
+  if (__sbCanStreamTtsMp3() && resp.body) {
+    const bytes = await __sbPlayStreamedTts(resp, speechToken, onReady);
+    __sbRecordRealtimeCostTts({ provider: ttsProvider, bytes, contentType: ttsContentType });
+    return speechToken === __sbSpeechGeneration;
+  }
+  // Fallback: buffer the whole clip, then play (older engines without MSE audio/mpeg).
+  const blob = await resp.blob();
+  __sbRecordRealtimeCostTts({ provider: ttsProvider, bytes: blob.size, contentType: blob.type || ttsContentType });
+  if (speechToken !== __sbSpeechGeneration) return false;
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  onReady(audio, url);
+  await new Promise((resolve, reject) => {
+    audio.onended = resolve;
+    audio.onerror = reject;
+    audio.play().catch(reject);
+  });
+  return speechToken === __sbSpeechGeneration;
+}
+
+// Shared "Fish failed → tell the user, fall back to browser voice" handling.
+function __sbHandleFishTtsFailure(ttsErr) {
+  const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
+  const isTimeout = Boolean(ttsErr?.isTimeout) || __sbIsAbortLikeError(ttsErr);
+  __sbRecordRealtimeCostTts({ provider: "browser", error: ttsErr?.message || String(ttsErr || "TTS failed") });
+  const fallbackMessage = ttsErr?.message || ttsErr;
+  if (isTimeout) console.debug("[Braino] Fish Audio TTS timed out; using browser voice:", fallbackMessage);
+  else console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", fallbackMessage);
+  __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish Audio credits" : "Browser voice");
+  const msg = isCreditIssue
+    ? "Fish Audio credits or rate limit are exhausted. Falling back to browser voice for now."
+    : isTimeout
+      ? "Fish Audio took too long, so I used browser voice for this reply."
+      : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.";
+  if (__sbHeadphoneMode || __sbVoiceOnlyMode) __sbShowVoiceError(msg);
+  else __sbShowBubble(msg, true, { tone: "status" });
+}
+
+// Keep-warm: ping the TTS edge function so its isolate stays hot while voice mode is active.
+// Cold starts (~0.5–5s) were a top cause of the first reply feeling slow / timing out.
+let __sbFishWarmTimer = null;
+
+function __sbWarmFishTts() {
+  if (__sbVoiceOutputPref !== "fish") return; // only the Fish path pays the cold start
+  if (!__sbContextOk()) return;
+  try {
+    __sbStorageGet(["authToken"]).then(({ authToken }) => {
+      const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
+      if (authToken) headers.Authorization = `Bearer ${authToken}`;
+      fetch(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ warm: true }),
+      }).catch(() => {});
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+function __sbStartFishWarmKeepAlive() {
+  __sbWarmFishTts();
+  if (__sbFishWarmTimer) return;
+  __sbFishWarmTimer = setInterval(() => {
+    if (!__sbHeadphoneMode && !__sbVoiceOnlyMode) { __sbStopFishWarmKeepAlive(); return; }
+    __sbWarmFishTts();
+  }, 240000); // ~4 min — Supabase isolates idle out after a few minutes
+}
+
+function __sbStopFishWarmKeepAlive() {
+  if (__sbFishWarmTimer) { clearInterval(__sbFishWarmTimer); __sbFishWarmTimer = null; }
+}
+
 async function __sbSpeakText(text, options = {}) {
   const clean = __sbStripMarkdownForSpeech(text);
   if (!clean) return false;
 
   __sbStopSpeech();
   const speechToken = ++__sbSpeechGeneration;
+  const sentences = __sbSplitSentencesForTts(clean);
   let spoke = false;
-  // In headphone (realtime) mode we DON'T mute the mic while Fish Audio speaks — the whole
-  // point of the realtime mechanism is that the user can barge in. The browser's echo
-  // cancellation (echoCancellation:true on the mic) keeps Braino's own voice from
-  // self-triggering, and speech_started stops playback the instant the user talks. We only
-  // mute in legacy (non-headphone) recording, where there's no barge-in VAD.
-  const shouldMuteRealtimeMic = false;
 
   try {
-    if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(false);
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
     if (speechToken !== __sbSpeechGeneration) return false;
 
-    // fish-audio-tts uses a server-side key, so it works
-    // with just the anon apikey — no user token required. Send the token when we have it.
+    // fish-audio-tts uses a server-side key, so it works with just the anon apikey — no user
+    // token required. Send the token when we have it.
     const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
     if (ttsToken) headers.Authorization = `Bearer ${ttsToken}`;
 
-    const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        text: clean,
-      }),
-    }, speechToken);
-    if (!resp) return false;
+    // Pipeline: prefetch the NEXT sentence while the current one plays, so the gap between
+    // sentences stays tiny and the first audio lands after just sentence 1 (not the whole reply).
+    let nextPromise = __sbFetchSentenceTts(sentences[0], speechToken, headers);
+    for (let i = 0; i < sentences.length; i++) {
+      const cur = await nextPromise;
+      if (i + 1 < sentences.length) {
+        nextPromise = __sbFetchSentenceTts(sentences[i + 1], speechToken, headers);
+      }
+      if (speechToken !== __sbSpeechGeneration) return spoke;
 
-    const ttsProvider = resp.headers.get("x-braino-tts-provider") || __SB_TTS_PROVIDER;
-    const ttsContentType = resp.headers.get("content-type") || "";
+      if (cur.error) {
+        // Fish failed for this sentence → speak the unspoken remainder with the browser voice
+        // (safety net) so the reply never cuts off half-finished.
+        const remainder = sentences.slice(i).join(" ");
+        __sbHandleFishTtsFailure(cur.error);
+        spoke = (await __sbSpeakWithBrowser(remainder, speechToken)) || spoke;
+        return spoke;
+      }
+      if (!cur.resp) return spoke; // token superseded mid-fetch
 
-    const onReady = (audioEl, objUrl) => {
-      __sbCurrentSpeechAudio = audioEl;
-      __sbCurrentSpeechUrl = objUrl;
-      __sbIsSpeaking = true;
-      __sbWalkTalking = true;
-      __sbSetVoiceButtonState(false);
-      __sbSyncSpeakButtons();
-      if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
-    };
-
-    if (__sbCanStreamTtsMp3() && resp.body) {
-      // Stream: playback starts on the first chunk (paired with the streaming edge function).
-      const bytes = await __sbPlayStreamedTts(resp, speechToken, onReady);
-      __sbRecordRealtimeCostTts({ provider: ttsProvider, bytes, contentType: ttsContentType });
-      spoke = speechToken === __sbSpeechGeneration;
-      __sbWalkTalking = false;
-    } else {
-      // Fallback: buffer the whole clip, then play (older engines without MSE audio/mpeg).
-      const blob = await resp.blob();
-      __sbRecordRealtimeCostTts({
-        provider: ttsProvider,
-        bytes: blob.size,
-        contentType: blob.type || ttsContentType,
-      });
-      if (speechToken !== __sbSpeechGeneration) return false;
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      onReady(audio, url);
-      await new Promise((resolve, reject) => {
-        audio.onended = resolve;
-        audio.onerror = reject;
-        audio.play().catch(reject);
-      });
-      spoke = speechToken === __sbSpeechGeneration;
-      __sbWalkTalking = false;
+      try {
+        const played = await __sbPlaySentenceResp(cur.resp, speechToken);
+        if (speechToken !== __sbSpeechGeneration) return spoke;
+        if (played) spoke = true;
+      } catch (mediaErr) {
+        if (speechToken !== __sbSpeechGeneration) return spoke;
+        const remainder = sentences.slice(i).join(" ");
+        __sbHandleFishTtsFailure(mediaErr);
+        spoke = (await __sbSpeakWithBrowser(remainder, speechToken)) || spoke;
+        return spoke;
+      }
     }
+    __sbWalkTalking = false;
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
-    const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
-    const isTimeout = Boolean(ttsErr?.isTimeout) || __sbIsAbortLikeError(ttsErr);
-    __sbRecordRealtimeCostTts({
-      provider: "browser",
-      error: ttsErr?.message || String(ttsErr || "TTS failed"),
-    });
-    const fallbackMessage = ttsErr?.message || ttsErr;
-    if (isTimeout) {
-      console.debug("[Braino] Fish Audio TTS timed out; using browser voice for this reply:", fallbackMessage);
-    } else {
-      console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", fallbackMessage);
-    }
-    __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish Audio credits" : "Browser voice");
-    if (__sbHeadphoneMode || __sbVoiceOnlyMode) {
-      __sbShowVoiceError(isCreditIssue
-        ? "Fish Audio credits or rate limit are exhausted. Falling back to browser voice for now."
-        : isTimeout
-          ? "Fish Audio took too long, so I used browser voice for this reply."
-          : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.");
-    } else {
-      __sbShowBubble(isCreditIssue
-        ? "Fish Audio credits or rate limit are exhausted. Using browser voice."
-        : isTimeout
-          ? "Fish Audio took too long. Using browser voice for this reply."
-          : "Fish Audio voice is unavailable. Using browser voice.", true, { tone: "status" });
-    }
+    __sbHandleFishTtsFailure(ttsErr);
     spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
     if (speechToken === __sbSpeechGeneration) {
@@ -8188,7 +8302,6 @@ async function __sbSpeakText(text, options = {}) {
         __sbSetHpBrainState("listening");
       }
     }
-    if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(true);
   }
   return spoke;
 }
@@ -9396,6 +9509,7 @@ function __sbUpdateAgentSubgoals(subgoals) {
 }
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
+  __sbStopWaitEntertainment(); // delegate finished — settle the mascot
   const task = String(prompt || "").trim();
   const reply = String(answer || "").trim();
   if (task) {
@@ -10796,6 +10910,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
     __sbShowThinking(scroll, "", openTabs ? "Opening tabs and researching…" : "Researching and comparing…");
     __sbOpenCard({ rich: true });
     __sbSyncSpeakButtons();
+    __sbStartWaitEntertainment(); // keep Braino lively while the research runs
   }
 
   // Theatric tab #1 — marketplace search, fired immediately so the user sees motion.
@@ -10856,6 +10971,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
     __sbShowBubble("Error: " + (err.message || "couldn't run the comparison"), true);
     if (fromVoice) await speakVoiceReply("Something went wrong while comparing.");
   } finally {
+    __sbStopWaitEntertainment();
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
   }
 }
@@ -11121,6 +11237,7 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbShowThinking(scroll, promptText, "Searching the web…");
       __sbOpenCard({ rich: true });
       __sbSyncSpeakButtons();
+      __sbStartWaitEntertainment(); // keep Braino lively while the search runs
     }
     __sbChatHistory.push({ role: "user", content: promptText });
 
@@ -11156,6 +11273,7 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
       if (fromVoice) await speakVoiceReply("Something went wrong while searching the web.");
     } finally {
+      __sbStopWaitEntertainment();
       __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     }
     return;
@@ -11284,7 +11402,7 @@ function __sbRunAgent(task, options = {}) {
   }
   __sbAgentLaunchGuard = { task: __sbLastAgentTask, ts: now };
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
-  if (!__sbVoiceOnlyMode) __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…");
+  if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
   const handoff = __sbBuildAgentHandoffPayload(__sbLastAgentTask, options);
   // Hand off to background — it runs the full agent loop and sends sbAgentUpdate messages back
   chrome.runtime.sendMessage({
@@ -11738,6 +11856,57 @@ let __sbRtRemoteAudio = null;
 let __sbUseOffscreenRt = false; // true when realtime session lives in the offscreen doc
 const __SB_REALTIME_VOICE = "verse";
 let __sbVoiceOutputPref = "fish"; // "realtime" | "fish"
+
+// Language: Braino defaults to English in voice. It only switches after the user explicitly
+// confirms (kills the "random foreign-language reply" bug, which was noise mis-detection +
+// "mirror the user" instruction). __sbActiveLanguage = the confirmed non-English language for
+// this session (null = English). __sbPendingLanguageSwitch = a detected language awaiting a
+// yes/no confirmation.
+let __sbActiveLanguage = null;
+let __sbPendingLanguageSwitch = null;
+
+// Detect a CONFIDENT non-English signal only — never a fuzzy guess. Two triggers:
+// 1) a non-Latin script in the text (mostly typed input; voice STT is English-locked), and
+// 2) an explicit English-language request ("speak in Hindi", "reply in German", "switch to French").
+function __sbDetectLanguageRequest(text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  const scripts = [
+    [/[ऀ-ॿ]/, { code: "hi", name: "Hindi" }],
+    [/[一-鿿]/, { code: "zh", name: "Chinese" }],
+    [/[぀-ヿ]/, { code: "ja", name: "Japanese" }],
+    [/[가-힯]/, { code: "ko", name: "Korean" }],
+    [/[Ѐ-ӿ]/, { code: "ru", name: "Russian" }],
+    [/[؀-ۿ]/, { code: "ar", name: "Arabic" }],
+  ];
+  for (const [re, lang] of scripts) if (re.test(t)) return lang;
+  const names = {
+    hindi: { code: "hi", name: "Hindi" }, german: { code: "de", name: "German" },
+    french: { code: "fr", name: "French" }, spanish: { code: "es", name: "Spanish" },
+    italian: { code: "it", name: "Italian" }, portuguese: { code: "pt", name: "Portuguese" },
+    japanese: { code: "ja", name: "Japanese" }, chinese: { code: "zh", name: "Chinese" },
+    mandarin: { code: "zh", name: "Chinese" }, korean: { code: "ko", name: "Korean" },
+    russian: { code: "ru", name: "Russian" }, arabic: { code: "ar", name: "Arabic" },
+    dutch: { code: "nl", name: "Dutch" }, punjabi: { code: "pa", name: "Punjabi" },
+    urdu: { code: "ur", name: "Urdu" }, bengali: { code: "bn", name: "Bengali" },
+    tamil: { code: "ta", name: "Tamil" }, telugu: { code: "te", name: "Telugu" },
+  };
+  const lower = t.toLowerCase();
+  const m = lower.match(/\b(?:speak|talk|say|reply|respond|answer|converse|switch)\b[^.?!]*?\b(?:in|to)\s+([a-z]+)/);
+  if (m && names[m[1]]) return names[m[1]];
+  const m2 = lower.match(/\bin\s+([a-z]+)\s*(?:please|now)?[.?!]?$/);
+  if (m2 && names[m2[1]]) return names[m2[1]];
+  return null;
+}
+
+// Apply a confirmed language switch (or revert to English when lang is null): re-push the session
+// so STT and the reply-language instruction update immediately.
+function __sbApplyVoiceLanguage(lang) {
+  __sbActiveLanguage = lang || null;
+  __sbRtInstructionsFingerprint = ""; // force the next sync to re-send instructions
+  __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
+  void __sbSyncRealtimeVoiceInstructions();
+}
 let __sbRtUserTranscript = "";
 let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
@@ -12039,7 +12208,9 @@ function __sbBuildRealtimeBootInstructions() {
     "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
     "You can act in the browser: search the web, open tabs and websites, play music, and read the page. NEVER say 'I can't open that from here', 'I can't browse', or 'I cannot do that' — you can. When the user asks you to look something up, search for something, find an article, or open a site, treat it as an action you will carry out, not a limitation. Briefly acknowledge ('On it' / 'Pulling that up') — the system performs the action.",
     "If you only caught noise, music, or unclear audio — or you are not confident what the user said — ask them to repeat it. NEVER invent or guess a response when you didn't actually understand the words.",
-    "Reply in the SAME language the user is actually speaking — mirror them. But do not switch languages because of background noise, music, a stray name, quoted text, or a few foreign-sounding words; only switch when the user is clearly speaking that language in full sentences. When in doubt, stay in the language of the previous turn.",
+    __sbActiveLanguage
+      ? `Reply ONLY in ${__sbActiveLanguage.name}. The user has confirmed ${__sbActiveLanguage.name} for this session.`
+      : "ALWAYS reply in English. Do NOT switch languages because of background noise, music, accents, names, quoted text, or a few foreign-sounding words — even if a transcript looks like another language, answer in English. The system asks the user first and only tells you to switch after they confirm.",
     "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
     "If interrupted, stop immediately and wait for the user.",
     ...pageLines,
@@ -12062,9 +12233,10 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
           },
           transcription: {
             model: "gpt-4o-mini-transcribe",
-            // No hard language lock — the user wants multilingual mirroring (speak any
-            // language, Braino mirrors it). Noise-induced language hallucinations are held
-            // back by __sbIsJunkTranscript + calmer VAD instead.
+            // Lock STT to English by default so noise/music/accents can't be mis-detected as a
+            // foreign language (the root of the "random language reply" bug). After the user
+            // confirms a switch, __sbActiveLanguage relaxes the lock to that language.
+            language: __sbActiveLanguage?.code || "en",
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
@@ -12111,7 +12283,9 @@ async function __sbBuildRealtimeConfigPayload() {
       hoveredContext: pageContext.hoveredContext || null,
     },
     movieContext: pageContext.movieContext || null,
-    languagePolicy: "mirror_user",
+    // English by default; only mirror the user's language after a confirmed switch (otherwise
+    // the synced instructions would re-introduce "reply in the same language" and undo the lock).
+    languagePolicy: __sbActiveLanguage ? "mirror_user" : "english",
     voiceSurface: "floating_mascot",
   };
 }
@@ -13035,6 +13209,34 @@ function __sbHandleRtEvent(ev) {
       return;
     }
 
+    // Language confirmation flow. If we asked the user whether to switch languages, this turn is
+    // their yes/no answer — consume it instead of treating it as a normal request.
+    if (__sbPendingLanguageSwitch) {
+      const lang = __sbPendingLanguageSwitch.lang;
+      if (__sbIsXSkillYes(transcript)) {
+        __sbPendingLanguageSwitch = null;
+        __sbApplyVoiceLanguage(lang);
+        void __sbSpeakWithPreferredVoice(`Okay, switching to ${lang.name}.`, "realtime");
+      } else if (__sbIsXSkillNo(transcript)) {
+        __sbPendingLanguageSwitch = null;
+        void __sbSpeakWithPreferredVoice("Okay, I'll stay in English.", "realtime");
+      } else {
+        void __sbSpeakWithPreferredVoice(`Just say yes to switch to ${lang.name}, or no to stay in English.`, "realtime");
+      }
+      return;
+    }
+
+    // Ask-before-switching: if a clear non-English signal shows up while we're still in English,
+    // confirm in English first instead of silently replying in that language.
+    if (!__sbActiveLanguage) {
+      const detected = __sbDetectLanguageRequest(transcript);
+      if (detected) {
+        __sbPendingLanguageSwitch = { lang: detected };
+        void __sbSpeakWithPreferredVoice(`That sounded like ${detected.name}. Want me to switch to ${detected.name}, or keep speaking English?`, "realtime");
+        return;
+      }
+    }
+
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       const turnToken = ++__sbRtTurnToken;
       __sbBeginRealtimeCostTurn(toProcess, turnToken, transcriptionUsage);
@@ -13610,6 +13812,7 @@ function __sbAttachVoiceVisual() {
   __sbVoiceOnlyMode = true;
   __sbUseOffscreenRt = true;
   __sbRtSessionReady = true;
+  __sbStartFishWarmKeepAlive(); // keep the TTS function hot for this newly-focused tab
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
   document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
@@ -13624,6 +13827,7 @@ function __sbAttachVoiceVisual() {
 function __sbDetachVoiceVisual() {
   __sbHeadphoneMode = false;
   __sbVoiceOnlyMode = false;
+  __sbStopFishWarmKeepAlive();
   __sbRtSessionReady = false;
   __sbVoicePendingReply = false;
   __sbRtHandlingConversationTurn = false;
@@ -13638,6 +13842,7 @@ function __sbEnterHeadphoneMode(options = {}) {
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
   __sbApplyVoiceAutoRoutingDefaults();
+  __sbStartFishWarmKeepAlive(); // keep the TTS function hot so the first reply isn't cold-started
   // Mark voice mode ON globally so every tab knows Braino should follow the user.
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: true, sbBrainDocked: true });
 
@@ -13695,6 +13900,9 @@ function __sbExitHeadphoneMode() {
   __sbHeadphoneMode = false;
   __sbVoiceOnlyMode = false;
   __sbVoicePendingReply = false;
+  __sbStopFishWarmKeepAlive();
+  __sbActiveLanguage = null;        // reset to English default for the next session
+  __sbPendingLanguageSwitch = null;
   // User explicitly turned voice OFF — clear the global flag so no tab re-arms it.
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: false });
 
