@@ -6,6 +6,8 @@ import {
   loadRealtimeCostSummaryForRequest,
 } from "../_shared/realtime-cost-summary.ts";
 import { loadUserKnowledge } from "../_shared/user-knowledge.ts";
+import { detectMoment } from "../_shared/emotional-engine/moments.ts";
+import { captureFromConversation } from "../_shared/memory-engine/capture.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -360,7 +362,11 @@ serve(async (req) => {
     const existingImageKeys = Object.keys(existingImageMap);
 
     const resolvedUserId = typeof userId === "string" ? userId : null;
-    const userKnowledge = await loadRequestUserKnowledge(requestAuthHeader, resolvedUserId);
+    const userKnowledge = await loadRequestUserKnowledge(
+      requestAuthHeader,
+      resolvedUserId,
+      typeof message === "string" ? message : "",
+    );
     const xAutoSessionContext = await loadRelevantXAutoSessionContext(
       requestAuthHeader,
       resolvedUserId,
@@ -397,6 +403,10 @@ ${notes || "(no notes yet)"}`
           movieDiscoveryPrompt,
           responseMedium: "text",
           languagePolicy: "mirror_user",
+          // Emotional Engine: detect the emotional moment from this message so the right traits
+          // lead the reply, and apply the user's personality toggles.
+          moment: detectMoment(typeof message === "string" ? message : "").moment,
+          personalitySettings: userKnowledge?.personalitySettings ?? null,
         });
 
     // Build messages array
@@ -466,6 +476,25 @@ ${notes || "(no notes yet)"}`
       });
     }
 
+    // Memory Engine: in the background (no added latency), let Braino remember durable facts from
+    // this exchange. Only runs for normal text chat (not delegate/image), and self-gates cheaply.
+    if (!isDelegateRequest && typeof message === "string" && userKnowledge?.memoryEnabled !== false) {
+      const convoForMemory = [
+        ...(Array.isArray(chatHistory) ? chatHistory.map((m: any) => ({ role: m.role, content: m.content })) : []),
+        { role: "user", content: message },
+        { role: "assistant", content: rawContent },
+      ];
+      const captureTask = captureMemoriesForRequest(requestAuthHeader, convoForMemory, {
+        isPremium: !!userKnowledge?.isPremium,
+        memoryEnabled: userKnowledge?.memoryEnabled !== false,
+      });
+      if (typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
+        (globalThis as any).EdgeRuntime.waitUntil(captureTask);
+      } else {
+        void captureTask; // local/dev: fire and forget
+      }
+    }
+
     return new Response(JSON.stringify({ reply: rawContent }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -477,7 +506,11 @@ ${notes || "(no notes yet)"}`
   }
 });
 
-async function loadRequestUserKnowledge(authHeader: string | null, requestedUserId: string | null) {
+async function loadRequestUserKnowledge(
+  authHeader: string | null,
+  requestedUserId: string | null,
+  currentMessage = "",
+) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
@@ -511,10 +544,42 @@ async function loadRequestUserKnowledge(authHeader: string | null, requestedUser
       includeMemoryNotes: true,
       includeXPersona: true,
       includeXContentSource: false,
+      currentMessage,
     });
   } catch (error) {
     console.warn("Could not load persistent user context:", error);
     return null;
+  }
+}
+
+// Background memory capture for a chat request. Builds an auth'd client (RLS = the user can only
+// write their own memories) and runs the extractor. Never throws — memory must not break a turn.
+async function captureMemoriesForRequest(
+  authHeader: string | null,
+  messages: Array<{ role: string; content: string }>,
+  flags: { isPremium: boolean; memoryEnabled: boolean },
+) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!supabaseUrl || !anonKey || !authHeader?.startsWith("Bearer ")) return;
+
+  try {
+    const supabase = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) return;
+
+    await captureFromConversation({
+      supabase,
+      userId: user.id,
+      messages,
+      isPremium: flags.isPremium,
+      memoryEnabled: flags.memoryEnabled,
+      source: "auto",
+    });
+  } catch (err) {
+    console.warn("memory capture (request) failed:", err instanceof Error ? err.message : String(err));
   }
 }
 

@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import {
   ArrowUp,
   ChevronDown,
+  Headphones,
+  Zap,
   CircleDollarSign,
   Code2,
   FolderOpen,
@@ -19,6 +21,50 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import BrainoWalker from "@/components/BrainoWalker";
+import { TextShimmer } from "@/components/ui/shimmer-text";
+
+// The exact liquid-glass displacement filter from the extension's content.js / BrainoIntroGate.
+// The composer's ::before uses filter:url(#__sb_glass_filter__) for the same warping glass look.
+const GLASS_FILTER_SVG = `<defs><filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter></defs>`;
+
+// Lightweight markdown → HTML (same approach as the Dashboard) so Braino's **bold**, lists, and
+// links render properly instead of showing raw asterisks.
+function renderMarkdown(md: string): string {
+  const escaped = String(md || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  return escaped
+    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
+    .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`)
+    .replace(/\n{2,}/g, "</p><p>")
+    .replace(/\n/g, "<br/>");
+}
+
+// The words Braino's thinking indicator cycles through — brain/egg-hatching themed.
+const THINKING_WORDS = ["Thinking", "Hatching", "Cooking", "Brewing", "Noodling", "Piecing it together"];
+
+function ThinkingShimmer() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setI((n) => (n + 1) % THINKING_WORDS.length), 1900);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <TextShimmer key={i} as="span" duration={1.6} className="bc-thinking-shimmer">
+      {`${THINKING_WORDS[i]}…`}
+    </TextShimmer>
+  );
+}
 
 type ChatRole = "user" | "assistant";
 
@@ -276,13 +322,128 @@ const CHAT_PAGE_CSS = `
     width: min(100%, 900px);
   }
 
+  /* Verbatim cinema-dock bar (#__sb_bar__) from braino-glass-ui-blueprint.md §2 — a transparent
+     liquid-glass pill: flex row of input + mode pill + halo icon buttons + coral send. */
   .bc-composer {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
-    padding: 16px 18px 14px;
-    border-radius: 28px;
-    background: rgba(52, 52, 52, 0.94);
-    border: 1px solid rgba(255,255,255,0.06);
-    box-shadow: 0 28px 70px rgba(0,0,0,0.28);
+    padding: 10px 10px 10px 28px;
+    border-radius: 100px;
+    isolation: isolate;
+    overflow: visible;
+    background: rgba(255,251,247,0.12);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
+                inset 2px 2px 1px rgba(255,255,255,0.65),
+                inset -1px -1px 1px rgba(255,255,255,0.3);
+    backdrop-filter: blur(6px) saturate(180%);
+    -webkit-backdrop-filter: blur(6px) saturate(180%);
+    transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+  }
+
+  /* Second glass layer: refraction via the SVG displacement filter (#__sb_glass_filter__). */
+  .bc-composer::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    backdrop-filter: blur(16px) saturate(200%);
+    -webkit-backdrop-filter: blur(16px) saturate(200%);
+    filter: url(#__sb_glass_filter__);
+    z-index: -1; pointer-events: none;
+  }
+
+  .sb-chatbar-input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+    text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.7), 0 1px 1px rgba(255,255,255,0.8);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .sb-chatbar-input::placeholder { color: #4A3D34; }
+
+  .sb-bar-icon-btn {
+    width: 38px; height: 38px; border-radius: 50%; border: none;
+    background: transparent; color: #3A2D24; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background 0.15s; padding: 0;
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.9)) drop-shadow(0 0 4px rgba(255,255,255,0.55));
+  }
+  .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
+  .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
+  .sb-bar-icon-btn:disabled { cursor: default; opacity: 0.5; }
+
+  /* Coral-filled, slightly larger send. */
+  .sb-send { background: #E8786E !important; color: #fff !important; width: 42px !important; height: 42px !important; filter: none; }
+  .sb-send:hover:not(:disabled) { background: #C9544A !important; }
+
+  .sb-pill-dropdown-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    border: none; background: rgba(255,251,247,0.55); border-radius: 8px;
+    padding: 5px 9px; cursor: pointer; transition: background 0.15s;
+    font-size: 11px; font-weight: 600; color: #3A2D24; white-space: nowrap; flex-shrink: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .sb-pill-dropdown-btn:hover { background: rgba(65,48,40,0.12); }
+  .sb-pill-dropdown-btn svg { flex-shrink: 0; opacity: 0.6; }
+
+  /* After the first message, the composer settles into the slim, more-transparent floating
+     bar — the same liquid-glass pill as the extension's content.js. */
+  .bc-compose-wrap--bar {
+    width: min(100%, 760px);
+  }
+
+  .bc-composer--bar {
+    padding: 10px 12px 10px 26px;
+    border-radius: 100px;
+  }
+
+  .bc-composer--bar .bc-textarea {
+    min-height: 30px;
+    max-height: 140px;
+    font-size: 16px;
+    padding: 6px 2px 2px;
+  }
+
+  .bc-composer--bar .bc-composer-footer {
+    margin-top: 4px;
+  }
+
+  /* Ctrl ×3 → voice mode: the bar glows coral and pulses, Braino goes "Live". */
+  .bc-voice-live {
+    border-color: rgba(226,125,57,0.55) !important;
+    box-shadow: 0 0 0 1px rgba(226,125,57,0.4), 0 0 34px rgba(226,125,57,0.45),
+                0 18px 50px rgba(0,0,0,0.34) !important;
+    animation: bcVoiceGlow 1.8s ease-in-out infinite;
+  }
+
+  @keyframes bcVoiceGlow {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(226,125,57,0.35), 0 0 26px rgba(226,125,57,0.35), 0 18px 50px rgba(0,0,0,0.34); }
+    50%      { box-shadow: 0 0 0 1px rgba(226,125,57,0.6), 0 0 46px rgba(226,125,57,0.6), 0 18px 50px rgba(0,0,0,0.34); }
+  }
+
+  .bc-voice-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 auto 10px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(226,125,57,0.16);
+    border: 1px solid rgba(226,125,57,0.34);
+    color: #ffd9be;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    width: fit-content;
+  }
+
+  .bc-voice-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #ff7a33;
+    box-shadow: 0 0 10px rgba(255,122,51,0.9);
+    animation: bcVoiceGlow 1.4s ease-in-out infinite;
   }
 
   .bc-textarea {
@@ -509,10 +670,15 @@ const CHAT_PAGE_CSS = `
   }
 
   .bc-message.user {
+    justify-content: flex-end;
+  }
+
+  .bc-message.assistant {
     justify-content: flex-start;
   }
 
-  .bc-thread-scroll .bc-message:not(:last-child) {
+  /* Assistant messages read as a flowing document; only they carry the subtle divider. */
+  .bc-thread-scroll .bc-message.assistant:not(:last-child) {
     border-bottom: 1px solid rgba(255,255,255,0.035);
   }
 
@@ -530,10 +696,17 @@ const CHAT_PAGE_CSS = `
     color: #efe8de;
   }
 
+  /* User messages sit on the RIGHT — plain text, no bubble box. */
   .bc-message.user .bc-message-card {
-    max-width: min(720px, 100%);
+    width: auto;
+    max-width: min(620px, 88%);
     margin-left: auto;
     color: rgba(251,247,241,0.92);
+    text-align: right;
+  }
+
+  .bc-message.user .bc-message-meta {
+    justify-content: flex-end;
   }
 
   .bc-message-meta {
@@ -558,6 +731,28 @@ const CHAT_PAGE_CSS = `
     line-height: 1.82;
   }
 
+  /* Rendered markdown for Braino's replies (overrides the card's pre-wrap so HTML doesn't double-space). */
+  .bc-markdown { white-space: normal; }
+  .bc-markdown p { margin: 0 0 10px; }
+  .bc-markdown p:last-child { margin-bottom: 0; }
+  .bc-markdown strong { color: #fbf5ec; font-weight: 700; }
+  .bc-markdown em { font-style: italic; }
+  .bc-markdown code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 0.88em; background: rgba(255,255,255,0.08);
+    padding: 1px 5px; border-radius: 6px;
+  }
+  .bc-markdown ul { margin: 8px 0; padding-left: 20px; list-style: disc; }
+  .bc-markdown li { margin: 4px 0; padding-left: 2px; }
+  .bc-markdown a { color: #f0a98c; text-decoration: underline; text-underline-offset: 2px; }
+  .bc-markdown h1, .bc-markdown h2, .bc-markdown h3 {
+    font-family: 'Instrument Serif', Georgia, serif; font-weight: 400;
+    letter-spacing: -0.02em; margin: 12px 0 6px; line-height: 1.22;
+  }
+  .bc-markdown h1 { font-size: 22px; }
+  .bc-markdown h2 { font-size: 19px; }
+  .bc-markdown h3 { font-size: 17px; }
+
   .bc-doc-link {
     margin-top: 12px;
     display: inline-flex;
@@ -573,22 +768,20 @@ const CHAT_PAGE_CSS = `
     text-decoration: none;
   }
 
-  .bc-typing {
+  .bc-thinking {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    font-size: 15px;
   }
 
-  .bc-typing i {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: rgba(242,237,230,0.78);
-    animation: bcPulse 1.2s ease-in-out infinite;
+  .bc-thinking .bc-thinking-shimmer {
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    /* shimmer base/highlight tuned for the dark chat surface (two-class selector wins over
+       the component's Tailwind [--base-color] default regardless of dark-mode class) */
+    --base-color: rgba(242,237,230,0.42);
+    --base-gradient-color: #fff7ee;
   }
-
-  .bc-typing i:nth-child(2) { animation-delay: 0.16s; }
-  .bc-typing i:nth-child(3) { animation-delay: 0.32s; }
 
   .bc-error {
     width: min(100%, 900px);
@@ -886,11 +1079,29 @@ export default function BrainoChat() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
   const [showNotice, setShowNotice] = useState(true);
+  const [voiceLive, setVoiceLive] = useState(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     document.title = "Braino Chat";
+  }, []);
+
+  // Ctrl ×3 (same gesture as the extension's content.js) toggles voice mode — the bar + Braino
+  // glow "Live". Visual activation only for now; the realtime pipeline lands later.
+  useEffect(() => {
+    let taps = 0;
+    let timer: number | undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setVoiceLive(false); return; }
+      if (e.key !== "Control") return;
+      taps += 1;
+      window.clearTimeout(timer);
+      if (taps >= 3) { taps = 0; setVoiceLive((v) => !v); return; }
+      timer = window.setTimeout(() => { taps = 0; }, 650);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); window.clearTimeout(timer); };
   }, []);
 
   useEffect(() => {
@@ -928,13 +1139,6 @@ export default function BrainoChat() {
     if (!element) return;
     element.scrollTop = element.scrollHeight;
   }, [messages, isSending]);
-
-  useEffect(() => {
-    const element = textareaRef.current;
-    if (!element) return;
-    element.style.height = "0px";
-    element.style.height = `${Math.min(element.scrollHeight, 260)}px`;
-  }, [input]);
 
   const threadTitle = buildThreadTitle(messages);
   const displayName = getDisplayName(profile?.display_name, user?.email);
@@ -1010,61 +1214,59 @@ export default function BrainoChat() {
     textareaRef.current?.focus();
   }
 
-  function renderComposer() {
+  function renderComposer(variant: "hero" | "bar" = "hero") {
+    const composerClass = [
+      "bc-composer",
+      variant === "bar" ? "bc-composer--bar" : "",
+      voiceLive ? "bc-voice-live" : "",
+    ].filter(Boolean).join(" ");
     return (
-      <div className="bc-compose-wrap">
-        <section className="bc-composer">
-          <textarea
+      <div className={`bc-compose-wrap${variant === "bar" ? " bc-compose-wrap--bar" : ""}`}>
+        {voiceLive && (
+          <div className="bc-voice-pill" aria-live="polite">
+            <span className="bc-voice-dot" /> Live · listening — Ctrl ×3 or Esc to exit
+          </div>
+        )}
+        {/* Verbatim cinema-dock bar: transparent glass pill, single-line input with white halo,
+            round halo icon buttons, coral send. (See braino-glass-ui-blueprint.md §2.) */}
+        <section className={composerClass} id="bc-input-bar">
+          <input
             ref={textareaRef}
-            className="bc-textarea"
+            className="sb-chatbar-input"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
+              if (event.key === "Enter") {
                 event.preventDefault();
                 void handleSend();
               }
             }}
-            placeholder="How can I help you today?"
+            placeholder="What's on your mind?"
+            autoComplete="off"
+            spellCheck={false}
           />
-
-          <div className="bc-composer-footer">
-            <div className="bc-footer-left">
-              <button className="bc-icon-button" type="button" title="Attach later">
-                <MessageSquarePlus size={18} />
-              </button>
-            </div>
-
-            <div className="bc-footer-right">
-              <div className="bc-model-pill">
-                <strong>Braino Core</strong>
-                <span>Sharp</span>
-                <ChevronDown size={15} />
-              </div>
-
-              <button className="bc-icon-button" type="button" title="Voice coming soon">
-                <Mic size={18} />
-              </button>
-
-              <div className="bc-wave" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-
-              <button
-                className="bc-send-button"
-                type="button"
-                onClick={() => void handleSend()}
-                disabled={isSending || input.trim().length === 0}
-                title="Send"
-              >
-                <ArrowUp size={16} />
-              </button>
-            </div>
-          </div>
+          <button className="sb-pill-dropdown-btn" type="button" title="Mode">
+            <Zap size={12} />
+            Auto
+            <ChevronDown size={12} />
+          </button>
+          <button
+            className={`sb-bar-icon-btn${voiceLive ? " active" : ""}`}
+            type="button"
+            title="Voice mode — Ctrl ×3"
+            onClick={() => setVoiceLive((v) => !v)}
+          >
+            <Headphones size={15} />
+          </button>
+          <button
+            className="sb-bar-icon-btn sb-send"
+            type="button"
+            onClick={() => void handleSend()}
+            disabled={isSending || input.trim().length === 0}
+            title="Send"
+          >
+            <ArrowUp size={15} />
+          </button>
         </section>
 
         {showNotice && (
@@ -1172,7 +1374,6 @@ export default function BrainoChat() {
             <div className="bc-thread-head">
               <div>
                 <strong>{threadTitle}</strong>
-                <div className="bc-thread-meta">{messages.filter((message) => message.role === "user").length} prompts in this chat</div>
               </div>
               <div className="bc-thread-meta">Last reply {formatRelativeTime(lastMessage?.createdAt)}</div>
             </div>
@@ -1188,7 +1389,14 @@ export default function BrainoChat() {
                         <strong>{isUser ? "You" : "Braino"}</strong>
                         <span>{formatMessageTime(message.createdAt)}</span>
                       </div>
-                      <div className="bc-message-body">{message.text}</div>
+                      {isUser ? (
+                        <div className="bc-message-body">{message.text}</div>
+                      ) : (
+                        <div
+                          className="bc-message-body bc-markdown"
+                          dangerouslySetInnerHTML={{ __html: `<p>${renderMarkdown(message.text)}</p>` }}
+                        />
+                      )}
                       {!isUser && message.docUrl && (
                         <a
                           className="bc-doc-link"
@@ -1210,12 +1418,9 @@ export default function BrainoChat() {
                   <div className="bc-message-card">
                     <div className="bc-message-meta">
                       <strong>Braino</strong>
-                      <span>thinking</span>
                     </div>
-                    <div className="bc-typing" aria-label="Braino is thinking">
-                      <i />
-                      <i />
-                      <i />
+                    <div className="bc-thinking" aria-label="Braino is thinking">
+                      <ThinkingShimmer />
                     </div>
                   </div>
                 </article>
@@ -1224,14 +1429,16 @@ export default function BrainoChat() {
 
             {error && <div className="bc-error">{error}</div>}
 
-            {renderComposer()}
+            {renderComposer("bar")}
           </div>
         )}
       </section>
 
-      <div className="bc-floating-brain" aria-hidden="true">
-        <img src="/favicon.svg" alt="" />
-      </div>
+      {/* The liquid-glass displacement filter the composer's ::before references. */}
+      <svg width="0" height="0" aria-hidden="true" style={{ position: "absolute" }} dangerouslySetInnerHTML={{ __html: GLASS_FILTER_SVG }} />
+
+      {/* Braino walks on top of the transparent input bar and waves — same mascot as everywhere. */}
+      <BrainoWalker perchTargetId="bc-input-bar" alwaysPerched />
     </main>
   );
 }

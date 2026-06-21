@@ -10,7 +10,16 @@ import { BRAINO_WALKER_SVG } from "./brainoWalkerSvg";
 
 const W = 64;   // walker width (px)
 
-export default function BrainoWalker() {
+export default function BrainoWalker({
+  perchTargetId = "pg2-hero-bar",
+  alwaysPerched = false,
+}: {
+  // The id of the element Braino should walk ON TOP of (his feet rest on its top edge).
+  perchTargetId?: string;
+  // When true he always stays perched on that bar (e.g. the chat input bar) instead of
+  // only perching while the hero is in view.
+  alwaysPerched?: boolean;
+} = {}) {
   const laneRef = useRef<HTMLDivElement>(null);
   const walkerRef = useRef<HTMLDivElement>(null);
 
@@ -36,7 +45,35 @@ export default function BrainoWalker() {
     // cursor (for eye-follow)
     let mouseX = -1, mouseY = -1, mouseAt = 0;
 
-    const viewportMaxX = () => Math.max(40, window.innerWidth - W - 6);
+    // While "perched" the walker stands on the homepage hero's cinema bar (#pg2-hero-bar);
+    // the lane is sized/positioned over that bar so he strolls on it. On scroll he comes out
+    // of the mockup and the lane glides to the bottom of the viewport (CSS transition).
+    let perched = false;
+    const viewportMaxX = () => Math.max(40, (lane.clientWidth || window.innerWidth) - W - 6);
+
+    const roamLanePos = () => {
+      lane.style.top = `${window.innerHeight - 96 - 16}px`;
+      lane.style.left = "0px";
+      lane.style.width = `${window.innerWidth}px`;
+    };
+    const perchLanePos = (bar: HTMLElement) => {
+      const r = bar.getBoundingClientRect();
+      lane.style.top = `${r.top - 96}px`;     // walker feet (lane bottom) rest on the bar top
+      lane.style.left = `${r.left}px`;
+      lane.style.width = `${r.width}px`;
+    };
+    const applyLanePos = () => {
+      const bar = document.getElementById(perchTargetId);
+      if (perched && bar) perchLanePos(bar);
+      else roamLanePos();
+    };
+    const updatePerch = () => {
+      const bar = document.getElementById(perchTargetId);
+      const want = !!bar && (alwaysPerched || window.scrollY < 40) && !thrown && !moonwalking;
+      if (want !== perched) perched = want;
+      applyLanePos();
+      if (perched) posX = Math.max(6, Math.min(posX, viewportMaxX()));
+    };
 
     const applyThrow = () => {
       walker.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg)`;
@@ -260,7 +297,7 @@ export default function BrainoWalker() {
     const scheduleAmbient = () => {
       window.clearTimeout(autoTimer);
       autoTimer = window.setTimeout(() => {
-        if (!thrown && !moonwalking && !busy) {
+        if (!thrown && !moonwalking && !busy && !perched) {
           const roll = Math.random();
           if (roll < 0.45) moonwalk();
           else { setGlasses(!glassesOn); say(glassesOn ? "How do I look? 🤓" : "Specs off"); }
@@ -275,7 +312,18 @@ export default function BrainoWalker() {
       if (thrown || moonwalking) return;
       dragging = true; dragMoved = false;
       try { walker.setPointerCapture(e.pointerId); } catch { /* noop */ }
-      throwMode = true; tx = posX; ty = 0; rot = 0;
+      throwMode = true;
+      if (perched) {
+        // grabbed off the hero bar — drop to the roaming lane but keep him under the cursor
+        const wr = walker.getBoundingClientRect();
+        const savedTransition = lane.style.transition;
+        lane.style.transition = "none";
+        perched = false; applyLanePos();
+        const lr = lane.getBoundingClientRect();
+        tx = wr.left - lr.left; ty = wr.top - lr.top;
+        requestAnimationFrame(() => { lane.style.transition = savedTransition; });
+      } else { tx = posX; ty = 0; }
+      rot = 0;
       lpx = e.clientX; lpy = e.clientY; lpt = performance.now(); vX = 0; vY = 0;
       walker.style.cursor = "grabbing"; e.preventDefault();
     };
@@ -299,7 +347,7 @@ export default function BrainoWalker() {
       launch(vX, vY);
     };
     const onMouse = (e: MouseEvent) => { mouseX = e.clientX; mouseY = e.clientY; mouseAt = performance.now(); };
-    const onResize = () => { posX = Math.max(6, Math.min(posX, viewportMaxX())); };
+    const onResize = () => { applyLanePos(); posX = Math.max(6, Math.min(posX, viewportMaxX())); };
 
     walker.addEventListener("pointerdown", onDown);
     walker.addEventListener("pointermove", onMove);
@@ -307,8 +355,10 @@ export default function BrainoWalker() {
     walker.addEventListener("pointercancel", onUp);
     window.addEventListener("mousemove", onMouse);
     window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", updatePerch, { passive: true });
 
     posX = Math.min(Math.max(40, window.innerWidth * 0.5), viewportMaxX());
+    updatePerch();
     raf = requestAnimationFrame(tick);
     scheduleAmbient();
 
@@ -321,6 +371,7 @@ export default function BrainoWalker() {
       walker.removeEventListener("pointercancel", onUp);
       window.removeEventListener("mousemove", onMouse);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", updatePerch);
     };
   }, []);
 
@@ -328,8 +379,9 @@ export default function BrainoWalker() {
     <div
       ref={laneRef}
       style={{
-        position: "fixed", left: 0, right: 0, bottom: 16, height: 96,
+        position: "fixed", top: "calc(100dvh - 112px)", left: 0, width: "100vw", height: 96,
         pointerEvents: "none", zIndex: 99998, overflow: "visible",
+        transition: "top .55s cubic-bezier(0.25,0.46,0.45,0.94), left .55s ease, width .55s ease",
       }}
     >
       <div

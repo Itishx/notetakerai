@@ -62,6 +62,10 @@ serve(async (req) => {
       persistentUserContext: userKnowledge?.combinedContext || "",
       responseMedium: "voice",
       languagePolicy,
+      // Emotional Engine: apply the user's personality toggles. The voice session prompt is
+      // built once, so moment stays "neutral" — the full engine is present and the realtime
+      // model self-selects per turn. (Per-turn voice routing is a planned follow-up.)
+      personalitySettings: userKnowledge?.personalitySettings ?? null,
     });
 
     return json({

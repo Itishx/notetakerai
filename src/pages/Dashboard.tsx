@@ -97,6 +97,14 @@ type BrainoContact = {
   updated_at: string;
 };
 
+type BrainoMemory = {
+  id: string;
+  content: string;
+  category: string;
+  salience: number;
+  created_at: string;
+};
+
 type BrainoContactDraft = {
   id: string | null;
   name: string;
@@ -1102,6 +1110,12 @@ export default function Dashboard() {
   const [nameSaved, setNameSaved] = useState(false);
   const [contacts, setContacts] = useState<BrainoContact[]>([]);
   const [contactsDialogOpen, setContactsDialogOpen] = useState(false);
+  // Memory Engine: auto-remembered facts + the master on/off toggle.
+  const [brainoMemories, setBrainoMemories] = useState<BrainoMemory[]>([]);
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
+  const [memoryToggleSaving, setMemoryToggleSaving] = useState(false);
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+  const [editingMemoryDraft, setEditingMemoryDraft] = useState("");
   const [contactDraft, setContactDraft] = useState<BrainoContactDraft>(emptyContactDraft());
   const [contactSaving, setContactSaving] = useState(false);
   const [contactDeletingId, setContactDeletingId] = useState<string | null>(null);
@@ -1396,7 +1410,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, driveRes, calendarRes, contactsRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, calendarRes, contactsRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes, brainoMemoriesRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -1428,7 +1442,7 @@ export default function Dashboard() {
           .maybeSingle(),
         supabase
           .from("profiles")
-          .select("overall_memory")
+          .select("overall_memory,memory_enabled")
           .eq("user_id", user.id)
           .maybeSingle(),
         (supabase as any)
@@ -1460,6 +1474,14 @@ export default function Dashboard() {
           .eq("user_id", user.id)
           .order("discovered_at", { ascending: false })
           .limit(200),
+        (supabase as any)
+          .from("braino_memories")
+          .select("id,content,category,salience,created_at")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .order("salience", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(300),
       ]);
 
       if (notesRes.data) setNotes(notesRes.data as Note[]);
@@ -1472,6 +1494,8 @@ export default function Dashboard() {
       const loadedOverallMemory = String((profileMemoryRes.data as { overall_memory?: string } | null)?.overall_memory || "");
       setOverallMemory(loadedOverallMemory);
       setOverallMemoryDraft(loadedOverallMemory);
+      setBrainoMemories(((brainoMemoriesRes?.data as BrainoMemory[] | null) || []));
+      setMemoryEnabled((profileMemoryRes.data as { memory_enabled?: boolean } | null)?.memory_enabled !== false);
       setXConn((xConnRes as XConnection) || null);
       setScheduledXPosts((scheduledXRes.data as ScheduledXPost[] | null) || []);
       setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
@@ -2626,6 +2650,37 @@ export default function Dashboard() {
     setOverallMemorySaving(false);
     setOverallMemorySaved(true);
     window.setTimeout(() => setOverallMemorySaved(false), 2500);
+  };
+
+  // Memory Engine — master on/off toggle.
+  const handleToggleMemory = async (next: boolean) => {
+    if (!user) return;
+    setMemoryEnabled(next);
+    setMemoryToggleSaving(true);
+    const { error } = await supabase.from("profiles").update({ memory_enabled: next }).eq("user_id", user.id);
+    setMemoryToggleSaving(false);
+    if (error) {
+      setMemoryEnabled(!next);
+      toast({ title: "Could not update memory setting", description: error.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+    toast({ title: next ? "Memory on" : "Memory off", description: next ? "Braino will keep learning about you." : "Braino won't save new memories." });
+  };
+
+  // Memory Engine — delete one auto-remembered fact.
+  const handleDeleteBrainoMemory = async (id: string) => {
+    setBrainoMemories((prev) => prev.filter((m) => m.id !== id));
+    if (editingMemoryId === id) setEditingMemoryId(null);
+    await supabase.from("braino_memories").delete().eq("id", id);
+  };
+
+  // Memory Engine — save an inline edit to a memory's content.
+  const handleSaveBrainoMemoryEdit = async (id: string) => {
+    const next = editingMemoryDraft.trim();
+    setEditingMemoryId(null);
+    if (!next) return;
+    setBrainoMemories((prev) => prev.map((m) => (m.id === id ? { ...m, content: next } : m)));
+    await supabase.from("braino_memories").update({ content: next, source: "user", updated_at: new Date().toISOString() }).eq("id", id);
   };
 
   const handleToggleAutoMode = async (field: "auto_posting_enabled" | "auto_reply_enabled", value: boolean) => {
@@ -5524,6 +5579,108 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                <div className="mt-5 rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-5">
+                  <div className="mb-4 flex items-start justify-between gap-4">
+                    <div>
+                      <h3 style={serifStyle} className="text-[24px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
+                        What Braino <em className="text-[var(--sb-accent-deep)]">remembers.</em>
+                      </h3>
+                      <p className="mt-2 max-w-[580px] text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
+                        Braino saves these automatically as you talk — who you are, what you&apos;re building, how you like things. Edit or remove anything; he uses them across every conversation.
+                      </p>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-2.5">
+                      <span style={monoStyle} className="text-[11px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+                        {memoryEnabled ? "Memory on" : "Memory off"}
+                      </span>
+                      <Switch checked={memoryEnabled} disabled={memoryToggleSaving} onCheckedChange={handleToggleMemory} />
+                    </div>
+                  </div>
+
+                  {dataLoading ? (
+                    <div className="space-y-2.5">
+                      {Array.from({ length: 4 }).map((_, index) => (
+                        <Skeleton key={index} className="h-12 rounded-[14px] bg-[var(--sb-bg-2)]" />
+                      ))}
+                    </div>
+                  ) : brainoMemories.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 rounded-[16px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-6 py-12 text-center">
+                      <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--sb-accent-soft)]">
+                        <Sparkles className="h-5 w-5 text-[var(--sb-accent-deep)]" />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-sm font-medium text-[var(--sb-ink)]">Nothing remembered yet</div>
+                        <div className="max-w-[380px] text-[13px] text-[var(--sb-ink-3)]">
+                          As you chat, Braino starts saving the important things here on its own — your name, what you&apos;re building, the people and preferences that matter.
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <div className="mb-1 flex items-center gap-2">
+                        <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 py-1 text-[10px] text-[var(--sb-ink-3)]">
+                          {brainoMemories.length} remembered
+                        </Badge>
+                        {!memoryEnabled ? (
+                          <span className="text-[11.5px] text-[var(--sb-ink-4)]">Memory is paused — existing facts are still used.</span>
+                        ) : null}
+                      </div>
+                      {brainoMemories.map((mem) => (
+                        <div
+                          key={mem.id}
+                          className="group flex items-start gap-3 rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-3"
+                        >
+                          <Badge
+                            variant="outline"
+                            className="mt-0.5 flex-shrink-0 rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-2.5 py-0.5 text-[9.5px] uppercase tracking-[0.1em] text-[var(--sb-ink-3)]"
+                          >
+                            {mem.category}
+                          </Badge>
+                          <div className="min-w-0 flex-1">
+                            {editingMemoryId === mem.id ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  value={editingMemoryDraft}
+                                  onChange={(event) => setEditingMemoryDraft(event.target.value)}
+                                  className="min-h-[58px] rounded-[12px] border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] text-[13.5px] leading-relaxed"
+                                />
+                                <div className="flex items-center gap-2">
+                                  <Button size="sm" className="h-7 rounded-lg text-[12px]" onClick={() => handleSaveBrainoMemoryEdit(mem.id)}>
+                                    <Check className="mr-1 h-3.5 w-3.5" /> Save
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 rounded-lg text-[12px]" onClick={() => setEditingMemoryId(null)}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-[13.5px] leading-relaxed text-[var(--sb-ink-2)]">{mem.content}</div>
+                            )}
+                          </div>
+                          {editingMemoryId !== mem.id ? (
+                            <div className="flex flex-shrink-0 items-center gap-1.5 opacity-0 transition group-hover:opacity-100">
+                              <button
+                                type="button"
+                                onClick={() => { setEditingMemoryId(mem.id); setEditingMemoryDraft(mem.content); }}
+                                className="rounded-md px-1.5 py-0.5 text-[11px] text-[var(--sb-ink-4)] transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)]"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBrainoMemory(mem.id)}
+                                className="rounded-md p-1 text-[var(--sb-ink-4)] transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)]"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-5 grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
