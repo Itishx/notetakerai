@@ -73,8 +73,9 @@ async function openAiTtsResponse(text: string, fallbackReason: string) {
     );
   }
 
-  const audioBuffer = await openAiResponse.arrayBuffer();
-  return new Response(audioBuffer, {
+  // Stream the audio straight through — don't buffer the whole clip server-side.
+  // The client starts playing on the first chunk instead of waiting for the full MP3.
+  return new Response(openAiResponse.body, {
     headers: {
       ...corsHeaders,
       "Content-Type": openAiResponse.headers.get("Content-Type") || "audio/mpeg",
@@ -95,7 +96,9 @@ Deno.serve(async (req) => {
       text,
       referenceId,
       voiceId,
-      latency = "balanced",
+      // "normal" is Fish's low-latency mode (faster first byte) vs "balanced" (slightly
+      // higher quality, more latency). Voice mode wants responsiveness, so default to normal.
+      latency = "normal",
     } = await req.json();
 
     if (!text || typeof text !== "string" || text.trim().length === 0) {
@@ -122,7 +125,9 @@ Deno.serve(async (req) => {
         volume: 0,
         normalize_loudness: true,
       },
-      chunk_length: 200,
+      // Smaller chunks => Fish emits the first audio frames sooner (lower time-to-first-byte),
+      // which is what makes streaming playback feel responsive in voice mode.
+      chunk_length: 100,
       normalize: true,
       format: "mp3",
       sample_rate: 44100,
@@ -130,7 +135,7 @@ Deno.serve(async (req) => {
       latency,
       max_new_tokens: 1024,
       repetition_penalty: 1.2,
-      min_chunk_length: 50,
+      min_chunk_length: 20,
       condition_on_previous_chunks: true,
       early_stop_threshold: 1,
     };
@@ -168,8 +173,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const audioBuffer = await fishResponse.arrayBuffer();
-    return new Response(audioBuffer, {
+    // Stream Fish's audio straight through — don't await the full arrayBuffer.
+    // Bytes flow to the client as Fish generates them, so playback can start on
+    // the first chunk instead of after the entire clip + cold start.
+    return new Response(fishResponse.body, {
       headers: {
         ...corsHeaders,
         "Content-Type": fishResponse.headers.get("Content-Type") || "audio/mpeg",
