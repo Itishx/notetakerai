@@ -5503,11 +5503,11 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 16px rgba(125,211,252,0.6)) drop-shadow(0 0 7px rgba(56,189,248,0.32)); }
       50%      { filter: drop-shadow(0 0 27px rgba(125,211,252,0.84)) drop-shadow(0 0 12px rgba(34,211,238,0.5)); }
     }
-    /* ── Sonar Pulse — listening-state animation (imported from the "Braino Listening" design) ──
-       Replaces the old listening glow. While Braino listens (hp-listening) it holds its position
-       and coral rings ripple outward, with a soft coral core glow. The instant the turn flips to
-       hp-speaking the .hp-listening class is gone → rings vanish and the existing mouth/talking
-       animation takes over. Scoped to the docked mascot (the on-screen voice mascot). */
+    /* ── Sonar Pulse — plays ONLY while the USER is actively talking (hp-hearing) ──
+       Imported from the "Braino Listening" design. The realtime VAD sets hp-hearing on
+       speech_started and clears it on speech_stopped, so coral rings ripple out only while you
+       speak. When you're not talking and Braino isn't talking (hp-listening / hp-captured) it
+       sits in its calm idle; when Braino replies (hp-speaking) the mouth animation plays. */
     @keyframes __sb_sonar_ring__ {
       0%   { transform: translate(-50%,-50%) scale(0.5);  opacity: 0; }
       12%  { opacity: 0.6; }
@@ -5517,14 +5517,13 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 12px rgba(232,120,110,0.35)); }
       50%      { filter: drop-shadow(0 0 20px rgba(232,120,110,0.55)); }
     }
-    /* Listening: drop the old (blue) glow + idle pacing — Braino stays put, the sonar carries it. */
-    #__sb_brain_btn__.hp-listening,
-    #__sb_brain_btn__.hp-realtime.hp-listening {
+    #__sb_brain_btn__.hp-hearing,
+    #__sb_brain_btn__.hp-realtime.hp-hearing {
       animation: __sb_sonar_core__ 2.2s ease-in-out infinite;
       overflow: visible;
     }
-    #__sb_brain_btn__.hp-listening::before,
-    #__sb_brain_btn__.hp-listening::after {
+    #__sb_brain_btn__.hp-hearing::before,
+    #__sb_brain_btn__.hp-hearing::after {
       content: ""; position: absolute; left: 50%; top: 50%;
       width: 56px; height: 56px; border-radius: 50%;
       border: 2px solid rgba(232,120,110,0.5);
@@ -5532,7 +5531,16 @@ function __sbBuildBrainUI() {
       pointer-events: none; z-index: -1;
       animation: __sb_sonar_ring__ 2.4s ease-out infinite;
     }
-    #__sb_brain_btn__.hp-listening::after { animation-delay: 1.2s; }
+    #__sb_brain_btn__.hp-hearing::after { animation-delay: 1.2s; }
+    /* Waiting / processing — nobody's talking → calm idle float, no glow (overrides the old
+       blue listening/captured glows, incl. the realtime variants). */
+    #__sb_brain_btn__.hp-listening,
+    #__sb_brain_btn__.hp-captured,
+    #__sb_brain_btn__.hp-realtime.hp-listening,
+    #__sb_brain_btn__.hp-realtime.hp-captured {
+      animation: __sb_idle_float__ 3.8s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite;
+      filter: none;
+    }
     #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
@@ -5634,13 +5642,13 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 8px rgba(56,189,248,0.6)); }
       50%      { filter: drop-shadow(0 0 16px rgba(56,189,248,0.85)); }
     }
-    #__sbwk_walker__.hp-listening svg { animation: __sbwk_glow_listen__ 2s ease-in-out infinite; }
-    /* Sonar Pulse rings on the WALKER (the Braino that stands on the message bar) while it
-       listens — same coral ripple as the docked mascot. Centered on Braino's body; they ride
-       the walker's transform so they stay put while it's engaged. On hp-speaking they're gone
-       and the mouth/talking animation plays. */
-    #__sbwk_walker__.hp-listening::before,
-    #__sbwk_walker__.hp-listening::after {
+    /* Sonar Pulse on the WALKER (the Braino on the message bar) — ONLY while the user is talking
+       (hp-hearing): coral body glow + ripple rings centered on Braino. They ride the walker's
+       transform so they stay put. On hp-speaking they're gone and the mouth animation plays;
+       while waiting (hp-listening/hp-captured) the walker just stands and breathes — no glow. */
+    #__sbwk_walker__.hp-hearing svg { animation: __sbwk_glow_listen__ 2s ease-in-out infinite; }
+    #__sbwk_walker__.hp-hearing::before,
+    #__sbwk_walker__.hp-hearing::after {
       content: ""; position: absolute; left: 50%; top: 46%;
       width: 52px; height: 52px; border-radius: 50%;
       border: 2px solid rgba(232,120,110,0.5);
@@ -5648,10 +5656,9 @@ function __sbBuildBrainUI() {
       pointer-events: none; z-index: -1;
       animation: __sb_sonar_ring__ 2.4s ease-out infinite;
     }
-    #__sbwk_walker__.hp-listening::after { animation-delay: 1.2s; }
+    #__sbwk_walker__.hp-hearing::after { animation-delay: 1.2s; }
     #__sbwk_walker__.hp-speaking svg  { animation: __sbwk_glow_speak__ 1s ease-in-out infinite; }
-    #__sbwk_walker__.hp-connecting svg,
-    #__sbwk_walker__.hp-captured svg  { animation: __sbwk_glow_soft__ 1.6s ease-in-out infinite; }
+    #__sbwk_walker__.hp-connecting svg { animation: __sbwk_glow_soft__ 1.6s ease-in-out infinite; }
     /* Wake-up auth glow on the climbing mascot (gold pulse → green flash on success). */
     @keyframes __sbwk_glow_auth__ {
       0%,100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.3)); }
@@ -9101,6 +9108,7 @@ function __sbSyncIdleState() {
     || brain.classList.contains("sb-brain-movie")
     || brain.classList.contains("hp-connecting")
     || brain.classList.contains("hp-listening")
+    || brain.classList.contains("hp-hearing")
     || brain.classList.contains("hp-captured")
     || brain.classList.contains("hp-speaking");
   brain.classList.toggle("sb-brain-idle", !busy);
@@ -13399,11 +13407,12 @@ function __sbHandleRtEvent(ev) {
     }
     __sbStopSpeech(); // stop Fish Audio / browser TTS playback so the user can barge in
     __sbRtUserTranscript = "";
-    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    if (__sbHeadphoneMode) __sbSetHpBrainState("hearing"); // user is talking → Sonar Pulse
     return;
   }
   if (ev.type === "input_audio_buffer.speech_stopped") {
-    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
     return;
   }
   if (ev.type === "conversation.item.input_audio_transcription.delta") {
@@ -14146,9 +14155,12 @@ function __sbExitHeadphoneMode() {
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
 }
 
-// state: "connecting" | "listening" | "captured" | "speaking" | ""
+// state: "connecting" | "listening" | "hearing" | "captured" | "speaking" | ""
+//  - "hearing"   = the USER is actively talking (VAD speech_started→stopped) → Sonar Pulse
+//  - "listening"/"captured" = waiting / processing, nobody talking → calm idle (no glow)
+//  - "speaking"  = Braino is talking → mouth animation
 function __sbSetHpBrainState(state) {
-  const HP = ["hp-connecting", "hp-listening", "hp-captured", "hp-speaking"];
+  const HP = ["hp-connecting", "hp-listening", "hp-hearing", "hp-captured", "hp-speaking"];
   const brain = document.getElementById("__sb_brain_btn__");
   if (brain) {
     brain.classList.remove(...HP, "recording");
@@ -14172,8 +14184,8 @@ function __sbSetHpBrainState(state) {
   __sbWkEngaged = !!state;          // stand still + look at the user while engaged
   if (state) {
     __sbWkWalking = false;
-    // After the user finishes (captured) or once speaking begins, Braino waves hello.
-    if (state === "captured" || state === "speaking") __sbWkTriggerWave();
+    // Braino waves hello only as it starts replying — not while idling/processing.
+    if (state === "speaking") __sbWkTriggerWave();
   } else {
     __sbWkWalking = true;           // resume strolling when headphone mode ends
   }
