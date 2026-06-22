@@ -13535,23 +13535,41 @@ function __sbToggleHeadphoneMode() {
 }
 
 function __sbApplyVoiceAutoRoutingDefaults() {
-  window.__sbForcedMode = "page";
+  // Voice mode IS Delegate mode. Turning on voice (double-tap Control) auto-configures the agent —
+  // the same "🤖 Delegate" tick as picking it manually — so every spoken request gets Braino's full
+  // browser-agent capability. forcedMode "agent" makes routing.intent "agent", so
+  // __sbShouldFastLaunchRealtimeAgent fires for every turn (the instant volume/tabs/X/compare
+  // fast-paths in __sbHandleInlineRealtimeTurn still run first).
+  window.__sbForcedMode = "agent";
   window.__sbForcedConnector = "auto";
 
-  const label = "⚡ Auto";
+  const label = "🤖 Delegate";
   document.getElementById("__sb_mode_label__")?.replaceChildren(document.createTextNode(label));
   document.getElementById("__sb_card_mode_label__")?.replaceChildren(document.createTextNode(label));
-  document.getElementById("__sb_mode_btn__")?.classList.remove("active-mode");
-  document.getElementById("__sb_card_mode_btn__")?.classList.remove("active-mode");
+  document.getElementById("__sb_mode_btn__")?.classList.add("active-mode");
+  document.getElementById("__sb_card_mode_btn__")?.classList.add("active-mode");
 
   document.querySelectorAll("#__sb_mode_dropdown__ .sb-dropdown-item").forEach((item) => {
-    item.classList.toggle("selected", item.getAttribute("data-mode") === "page");
+    item.classList.toggle("selected", item.getAttribute("data-mode") === "agent");
   });
 
   __sbRefreshConnectorButtons();
   document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
   document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
   document.getElementById("__sb_connector_dropdown__")?.classList.remove("open");
+}
+
+// Voice off → leave the forced Delegate mode and return to default Page routing so typed
+// requests aren't left stuck on the agent.
+function __sbResetModeToPageDefault() {
+  window.__sbForcedMode = "page";
+  document.getElementById("__sb_mode_label__")?.replaceChildren(document.createTextNode("📄 Page"));
+  document.getElementById("__sb_card_mode_label__")?.replaceChildren(document.createTextNode("📄 Page"));
+  document.getElementById("__sb_mode_btn__")?.classList.remove("active-mode");
+  document.getElementById("__sb_card_mode_btn__")?.classList.remove("active-mode");
+  document.querySelectorAll("#__sb_mode_dropdown__ .sb-dropdown-item").forEach((item) => {
+    item.classList.toggle("selected", item.getAttribute("data-mode") === "page");
+  });
 }
 
 // ── One-time mic permission modal (same tab) ─────────────────────────────────
@@ -14131,6 +14149,7 @@ function __sbExitHeadphoneMode() {
   __sbVoiceOnlyMode = false;
   __sbVoicePendingReply = false;
   __sbStopFishWarmKeepAlive();
+  __sbResetModeToPageDefault();      // leave the auto-configured Delegate mode
   __sbActiveLanguage = null;        // reset to English default for the next session
   __sbPendingLanguageSwitch = null;
   // User explicitly turned voice OFF — clear the global flag so no tab re-arms it.
