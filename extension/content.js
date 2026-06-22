@@ -5621,9 +5621,10 @@ function __sbBuildBrainUI() {
     /* Headphone-mode glow on the walking mascot. The filter sits on the <svg> (which
        itself never gets a transform — those go on #__sbwk_walker__ / the inner <g>),
        so the coral self-contained gradient is never disturbed. Blue tones only. */
+    /* Listening glow is now CORAL (Sonar Pulse), not blue — paired with the ripple rings below. */
     @keyframes __sbwk_glow_listen__ {
-      0%,100% { filter: drop-shadow(0 0 10px rgba(59,130,246,0.75)) drop-shadow(0 0 4px rgba(125,211,252,0.5)); }
-      50%      { filter: drop-shadow(0 0 18px rgba(59,130,246,0.95)) drop-shadow(0 0 8px rgba(125,211,252,0.65)); }
+      0%,100% { filter: drop-shadow(0 0 10px rgba(232,120,110,0.55)) drop-shadow(0 0 4px rgba(246,168,162,0.4)); }
+      50%      { filter: drop-shadow(0 0 18px rgba(232,120,110,0.75)) drop-shadow(0 0 8px rgba(246,168,162,0.55)); }
     }
     @keyframes __sbwk_glow_speak__ {
       0%,100% { filter: drop-shadow(0 0 10px rgba(99,102,241,0.75)) drop-shadow(0 0 4px rgba(139,92,246,0.5)); }
@@ -5634,6 +5635,20 @@ function __sbBuildBrainUI() {
       50%      { filter: drop-shadow(0 0 16px rgba(56,189,248,0.85)); }
     }
     #__sbwk_walker__.hp-listening svg { animation: __sbwk_glow_listen__ 2s ease-in-out infinite; }
+    /* Sonar Pulse rings on the WALKER (the Braino that stands on the message bar) while it
+       listens — same coral ripple as the docked mascot. Centered on Braino's body; they ride
+       the walker's transform so they stay put while it's engaged. On hp-speaking they're gone
+       and the mouth/talking animation plays. */
+    #__sbwk_walker__.hp-listening::before,
+    #__sbwk_walker__.hp-listening::after {
+      content: ""; position: absolute; left: 50%; top: 46%;
+      width: 52px; height: 52px; border-radius: 50%;
+      border: 2px solid rgba(232,120,110,0.5);
+      transform: translate(-50%,-50%) scale(0.5);
+      pointer-events: none; z-index: -1;
+      animation: __sb_sonar_ring__ 2.4s ease-out infinite;
+    }
+    #__sbwk_walker__.hp-listening::after { animation-delay: 1.2s; }
     #__sbwk_walker__.hp-speaking svg  { animation: __sbwk_glow_speak__ 1s ease-in-out infinite; }
     #__sbwk_walker__.hp-connecting svg,
     #__sbwk_walker__.hp-captured svg  { animation: __sbwk_glow_soft__ 1.6s ease-in-out infinite; }
@@ -8004,7 +8019,10 @@ function __sbIsRetryableVoiceTtsStatus(status) {
 
 function __sbIsVoiceTtsCreditStatus(status, errorKind = "") {
   const kind = String(errorKind || "").toLowerCase();
-  return status === 402 || status === 429 || kind.includes("credit") || kind.includes("rate_limit");
+  // Only true credit exhaustion is fatal. A 429 rate limit is transient and stays RETRYABLE
+  // (see __sbIsRetryableVoiceTtsStatus) — it used to be treated as fatal, which dumped replies
+  // onto the robotic browser voice the moment Fish got busy.
+  return status === 402 || (kind.includes("credit") && !kind.includes("rate"));
 }
 
 async function __sbReadTtsError(resp) {
@@ -8178,19 +8196,28 @@ function __sbPlayStreamedTts(resp, speechToken, onReady) {
 // synthesized, instead of waiting for Fish to render the whole reply. Decimals ("5.4") and
 // abbreviations ("e.g.") don't over-split because we only break on a terminator FOLLOWED BY
 // whitespace and require a minimum chunk length before flushing.
+// Chunk a reply for TTS. Keeping the request COUNT low is what keeps Fish reliable — too many
+// rapid calls trip its rate limit (429). So short replies (the common case) go out as ONE
+// request; longer replies emit the first sentence alone (fast first audio) then group the rest
+// into ≤MAX-char chunks. A few calls per reply, never one-per-sentence.
 function __sbSplitSentencesForTts(text) {
   const clean = String(text || "").trim();
   if (!clean) return [];
-  const raw = clean.split(/(?<=[.!?…।])\s+/);
-  const out = [];
+  const MAX = 240;
+  if (clean.length <= MAX) return [clean];
+
+  const sentences = clean.split(/(?<=[.!?…।])\s+/).filter(Boolean);
+  if (sentences.length <= 1) return [clean];
+
+  const chunks = [sentences[0]]; // first sentence alone → audio starts fast
   let buf = "";
-  for (const piece of raw) {
-    buf = buf ? `${buf} ${piece}` : piece;
-    const t = buf.trim();
-    if (/[.!?…।]["')\]]?$/.test(t) && t.length >= 12) { out.push(t); buf = ""; }
+  for (let i = 1; i < sentences.length; i++) {
+    const candidate = buf ? `${buf} ${sentences[i]}` : sentences[i];
+    if (buf && candidate.length > MAX) { chunks.push(buf); buf = sentences[i]; }
+    else buf = candidate;
   }
-  if (buf.trim()) out.push(buf.trim());
-  return out.length ? out : [clean];
+  if (buf) chunks.push(buf);
+  return chunks;
 }
 
 // Fetch one sentence's TTS (Fish, with retry). Never throws — returns { resp } (resp may be
@@ -8313,14 +8340,13 @@ async function __sbSpeakText(text, options = {}) {
     const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
     if (ttsToken) headers.Authorization = `Bearer ${ttsToken}`;
 
-    // Pipeline: prefetch the NEXT sentence while the current one plays, so the gap between
-    // sentences stays tiny and the first audio lands after just sentence 1 (not the whole reply).
-    let nextPromise = __sbFetchSentenceTts(sentences[0], speechToken, headers);
+    // Strictly SEQUENTIAL: fetch a chunk, play it, then fetch the next. Never two Fish requests
+    // in flight at once — concurrent/bursted calls were tripping Fish's rate limit (429) and
+    // dumping every multi-sentence reply onto the browser voice. First audio is still fast
+    // because chunk 1 is just the opening sentence.
     for (let i = 0; i < sentences.length; i++) {
-      const cur = await nextPromise;
-      if (i + 1 < sentences.length) {
-        nextPromise = __sbFetchSentenceTts(sentences[i + 1], speechToken, headers);
-      }
+      if (speechToken !== __sbSpeechGeneration) return spoke;
+      const cur = await __sbFetchSentenceTts(sentences[i], speechToken, headers);
       if (speechToken !== __sbSpeechGeneration) return spoke;
 
       if (cur.error) {

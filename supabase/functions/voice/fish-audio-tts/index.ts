@@ -27,7 +27,8 @@ function json(payload: unknown, status = 200, extraHeaders: Record<string, strin
 }
 
 function normalizeFishErrorStatus(status: number) {
-  if (status === 402 || status === 429) return "credits_or_rate_limit";
+  if (status === 402) return "credits";        // out of credits — fatal
+  if (status === 429) return "rate_limit";     // transient burst limit — retryable
   if (status === 401) return "invalid_api_key";
   if (status >= 500) return "provider_unavailable";
   return "provider_error";
@@ -169,9 +170,11 @@ Deno.serve(async (req) => {
       if (fallback) return fallback;
       return json(
         {
-          error: errorKind === "credits_or_rate_limit"
-            ? "Fish Audio credits or rate limit exhausted."
-            : `Fish Audio TTS failed (${fishResponse.status}).`,
+          error: errorKind === "credits"
+            ? "Fish Audio credits exhausted."
+            : errorKind === "rate_limit"
+              ? "Fish Audio is rate limiting — retry shortly."
+              : `Fish Audio TTS failed (${fishResponse.status}).`,
           details: errorText,
           provider: "fish-audio",
         },
