@@ -5503,6 +5503,36 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 16px rgba(125,211,252,0.6)) drop-shadow(0 0 7px rgba(56,189,248,0.32)); }
       50%      { filter: drop-shadow(0 0 27px rgba(125,211,252,0.84)) drop-shadow(0 0 12px rgba(34,211,238,0.5)); }
     }
+    /* ── Sonar Pulse — listening-state animation (imported from the "Braino Listening" design) ──
+       Replaces the old listening glow. While Braino listens (hp-listening) it holds its position
+       and coral rings ripple outward, with a soft coral core glow. The instant the turn flips to
+       hp-speaking the .hp-listening class is gone → rings vanish and the existing mouth/talking
+       animation takes over. Scoped to the docked mascot (the on-screen voice mascot). */
+    @keyframes __sb_sonar_ring__ {
+      0%   { transform: translate(-50%,-50%) scale(0.5);  opacity: 0; }
+      12%  { opacity: 0.6; }
+      100% { transform: translate(-50%,-50%) scale(3.6);  opacity: 0; }
+    }
+    @keyframes __sb_sonar_core__ {
+      0%,100% { filter: drop-shadow(0 0 12px rgba(232,120,110,0.35)); }
+      50%      { filter: drop-shadow(0 0 20px rgba(232,120,110,0.55)); }
+    }
+    /* Listening: drop the old (blue) glow + idle pacing — Braino stays put, the sonar carries it. */
+    #__sb_brain_btn__.hp-listening,
+    #__sb_brain_btn__.hp-realtime.hp-listening {
+      animation: __sb_sonar_core__ 2.2s ease-in-out infinite;
+      overflow: visible;
+    }
+    #__sb_brain_btn__.hp-listening::before,
+    #__sb_brain_btn__.hp-listening::after {
+      content: ""; position: absolute; left: 50%; top: 50%;
+      width: 56px; height: 56px; border-radius: 50%;
+      border: 2px solid rgba(232,120,110,0.5);
+      transform: translate(-50%,-50%) scale(0.5);
+      pointer-events: none; z-index: -1;
+      animation: __sb_sonar_ring__ 2.4s ease-out infinite;
+    }
+    #__sb_brain_btn__.hp-listening::after { animation-delay: 1.2s; }
     #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
@@ -7837,20 +7867,56 @@ function __sbSetVoiceButtonState(active) {
   document.getElementById("__sb_brain_btn__")?.classList.toggle("recording", active);
 }
 
+// Convert markdown/rich text into clean SPOKEN text before it hits TTS. The goal is to stop
+// Braino verbalizing syntax — saying "slash" for /, "vertical bar" for | (markdown table rows),
+// reading **stars**, backticks, #, >, etc. — while KEEPING normal sentence punctuation (. , ? !)
+// so pacing still sounds natural.
 function __sbStripMarkdownForSpeech(text) {
-  return String(text || "")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/`(.+?)`/g, "$1")
-    .replace(/#{1,6}\s+/g, "")
-    .replace(/^\s*[\*\-\+]\s+/gm, "")
-    .replace(/^\s*\d+\.\s+/gm, "")
-    .replace(/\[(.+?)\]\(.+?\)/g, "$1")
-    .replace(/_{1,2}(.+?)_{1,2}/g, "$1")
-    .replace(/\n{2,}/g, ". ")
-    .replace(/\n/g, " ")
+  let s = String(text || "");
+
+  // Fenced code blocks ``` ``` → keep the inner text, drop the fences.
+  s = s.replace(/```[^\n]*\n?([\s\S]*?)```/g, "$1").replace(/```/g, "");
+
+  // Images → alt text; links → link text; bare autolinks → drop (don't read the URL aloud).
+  s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+  s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+  s = s.replace(/<https?:\/\/[^>\s]+>/gi, " ");
+
+  // Tables: drop the |---|:--:| separator rows entirely, and read data-row pipes as comma pauses
+  // so columns sound like a list instead of "vertical bar … vertical bar".
+  s = s.split("\n").map((line) => {
+    const t = line.trim();
+    if (/^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/.test(t)) return "";
+    if (t.includes("|")) {
+      return t.replace(/^\s*\|/, "").replace(/\|\s*$/, "").replace(/\s*\|\s*/g, ", ");
+    }
+    return line;
+  }).join("\n");
+
+  s = s
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")          // headings
+    .replace(/^\s{0,3}>\s?/gm, "")               // blockquotes
+    .replace(/^\s*[-*+]\s+/gm, "")               // bullet lists
+    .replace(/^\s*\d+[.)]\s+/gm, "")             // numbered lists
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, "")      // horizontal rules (---, ***, ___)
+    .replace(/\*\*([^*]+)\*\*/g, "$1")           // bold
+    .replace(/\*([^*]+)\*/g, "$1")               // italic *
+    .replace(/__([^_]+)__/g, "$1")               // bold _
+    .replace(/_([^_]+)_/g, "$1")                 // italic _
+    .replace(/~~([^~]+)~~/g, "$1")               // strikethrough
+    .replace(/`([^`]+)`/g, "$1")                 // inline code
+    .replace(/<\/?[a-z][^>]*>/gi, " ")           // stray HTML tags
+    .replace(/\\([^\s])/g, "$1")                 // unescape \* \_ etc.
+    .replace(/\n{2,}/g, ". ")                    // paragraph break → pause
+    .replace(/\n/g, ". ")                        // line break → pause
+    .replace(/[*_#`~|>]/g, " ")                  // leftover markdown symbols (keep . , ? !)
+    .replace(/[/\\]/g, " ")                      // slashes → space (never say "slash")
+    .replace(/(\.\s*){2,}/g, ". ")               // collapse ". . ." runs
+    .replace(/\s+([.,?!;:])/g, "$1")             // no space before punctuation
     .replace(/\s{2,}/g, " ")
     .trim();
+
+  return s;
 }
 
 function __sbSyncSpeakButtons() {
@@ -11640,32 +11706,151 @@ function __sbShowLectureRecordingCard() {
   document.getElementById("__sb_lec_stop_btn__")?.addEventListener("click", () => void __sbStopLectureRecording());
 }
 
+// ── In-page recording (getDisplayMedia) ──────────────────────────────────────
+// chrome.tabCapture.getMediaStreamId (the offscreen path) needs the extension to be INVOKED on
+// the tab (activeTab), which a floating-UI button can't grant — that's the real reason meeting
+// recording threw "open the meeting in a regular browser tab". getDisplayMedia runs in the page
+// with the Start button's user gesture, captures this tab's audio in place, and feeds the same
+// transcription backend via the `transcribeSegment` message. Must be called inside a gesture.
+let __sbInPageCaptureActive = false;
+let __sbIpDisplayStream = null, __sbIpMicStream = null, __sbIpAudioCtx = null;
+let __sbIpRecorder = null, __sbIpChunks = [];
+let __sbIpMicRecorder = null, __sbIpMicChunks = [];
+
+function __sbBlobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || "").split(",")[1] || null);
+    r.onerror = () => reject(r.error || new Error("read failed"));
+    r.readAsDataURL(blob);
+  });
+}
+
+async function __sbStartInPageCapture(withMic) {
+  const display = await navigator.mediaDevices.getDisplayMedia({
+    video: true,                  // Chrome requires a video track to be requested…
+    audio: true,
+    preferCurrentTab: true,       // …default the picker to the tab the user is already on
+    systemAudio: "include",
+    selfBrowserSurface: "include",
+  });
+  __sbIpDisplayStream = display;
+  display.getVideoTracks().forEach((t) => t.stop()); // we only need audio
+  const audioTracks = display.getAudioTracks();
+  if (!audioTracks.length) { __sbCleanupInPageCapture(); throw new Error("no_tab_audio"); }
+  // If the user hits Chrome's "Stop sharing" bar, finish the recording cleanly.
+  audioTracks[0].addEventListener("ended", () => { if (__sbIsLectureRecording) void __sbStopLectureRecording(); });
+
+  let recordStream = new MediaStream(audioTracks);
+  if (withMic) {
+    __sbIpMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    __sbIpAudioCtx = new AudioContext();
+    const dest = __sbIpAudioCtx.createMediaStreamDestination();
+    __sbIpAudioCtx.createMediaStreamSource(new MediaStream(audioTracks)).connect(dest);
+    __sbIpAudioCtx.createMediaStreamSource(__sbIpMicStream).connect(dest);
+    recordStream = dest.stream;
+    __sbIpMicChunks = [];
+    __sbIpMicRecorder = new MediaRecorder(__sbIpMicStream, { mimeType: "audio/webm;codecs=opus" });
+    __sbIpMicRecorder.ondataavailable = (e) => { if (e.data.size > 0) __sbIpMicChunks.push(e.data); };
+    __sbIpMicRecorder.start(1000);
+  }
+  __sbIpChunks = [];
+  __sbIpRecorder = new MediaRecorder(recordStream, { mimeType: "audio/webm;codecs=opus" });
+  __sbIpRecorder.ondataavailable = (e) => { if (e.data.size > 0) __sbIpChunks.push(e.data); };
+  __sbIpRecorder.start(1000);
+  __sbInPageCaptureActive = true;
+}
+
+function __sbFlushIpRecorder(rec) {
+  return new Promise((resolve) => {
+    if (!rec || rec.state !== "recording") { resolve(); return; }
+    let done = false;
+    const finish = () => { if (done) return; done = true; clearTimeout(t); rec.removeEventListener("dataavailable", on); resolve(); };
+    const on = () => finish();
+    const t = setTimeout(finish, 400);
+    rec.addEventListener("dataavailable", on, { once: true });
+    try { rec.requestData(); } catch { finish(); }
+  });
+}
+
+async function __sbBuildIpSpeakerRefs() {
+  if (__sbIpMicRecorder && __sbIpMicRecorder.state === "recording") await __sbFlushIpRecorder(__sbIpMicRecorder);
+  if (__sbIpMicChunks.length < 2) return [];
+  const b64 = await __sbBlobToBase64(new Blob(__sbIpMicChunks.slice(0, 6), { type: "audio/webm" }));
+  return b64 ? [{ name: "You", audioBase64: b64, mimeType: "audio/webm" }] : [];
+}
+
+async function __sbGetInPageSegment() {
+  if (!__sbIpRecorder) return { audioBase64: null, knownSpeakerReferences: [] };
+  await __sbFlushIpRecorder(__sbIpRecorder);
+  const refs = await __sbBuildIpSpeakerRefs();
+  if (!__sbIpChunks.length) return { audioBase64: null, knownSpeakerReferences: refs };
+  const chunks = __sbIpChunks.slice(); __sbIpChunks = [];
+  return { audioBase64: await __sbBlobToBase64(new Blob(chunks, { type: "audio/webm" })), knownSpeakerReferences: refs };
+}
+
+async function __sbTranscribeIpSegment(seg) {
+  return await new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      action: "transcribeSegment",
+      audioBase64: seg.audioBase64,
+      existingNotes: __sbLectureNotes,
+      existingTranscript: __sbLectureTranscript,
+      mode: __sbLectureRecordingMode,
+      knownSpeakerReferences: seg.knownSpeakerReferences || [],
+    }, (r) => resolve(r || {}));
+  });
+}
+
+function __sbCleanupInPageCapture() {
+  try { if (__sbIpRecorder && __sbIpRecorder.state !== "inactive") __sbIpRecorder.stop(); } catch {}
+  __sbIpRecorder = null; __sbIpChunks = [];
+  try { if (__sbIpMicRecorder && __sbIpMicRecorder.state !== "inactive") __sbIpMicRecorder.stop(); } catch {}
+  __sbIpMicRecorder = null; __sbIpMicChunks = [];
+  if (__sbIpDisplayStream) { __sbIpDisplayStream.getTracks().forEach((t) => t.stop()); __sbIpDisplayStream = null; }
+  if (__sbIpMicStream) { __sbIpMicStream.getTracks().forEach((t) => t.stop()); __sbIpMicStream = null; }
+  if (__sbIpAudioCtx) { __sbIpAudioCtx.close().catch(() => {}); __sbIpAudioCtx = null; }
+  __sbInPageCaptureActive = false;
+}
+
 async function __sbStartLectureRecording(options = {}) {
   if (!__sbContextOk()) {
     __sbShowBubble("Reload this page to reconnect Braino.", true);
     return;
   }
   if (__sbIsLectureRecording) return;
+
+  const mode = window.__sbForcedMode === "meeting" ? "meeting" : "lecture";
+  const withMic = (mode === "meeting");
+
+  // Display capture requires a user gesture. If we got here without one (voice/typed command or
+  // a background message), show the ready card so the user taps Start — that tap is the gesture.
+  if (!(navigator.userActivation && navigator.userActivation.isActive)) {
+    __sbShowLectureReadyCard(mode);
+    return;
+  }
+
   __sbIsLectureRecording = true;
   __sbLectureNotes = "";
   __sbLectureTranscript = "";
   __sbLecSegmentCount = 0;
   __sbMeetingArtifacts = { actionItems: [], followUps: [] };
-
-  const mode = window.__sbForcedMode === "meeting" ? "meeting" : "lecture";
-  const withMic = (mode === "meeting");
   __sbLectureRecordingMode = mode;
 
   try {
-    await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ action: "startRecording", withMic, mode }, (res) => {
-        if (chrome.runtime.lastError || res?.error) reject(new Error(res?.error || chrome.runtime.lastError?.message || "Failed to start"));
-        else resolve();
-      });
-    });
+    // Synchronous-until-getDisplayMedia so the click's transient activation is still valid.
+    await __sbStartInPageCapture(withMic);
   } catch (err) {
     __sbIsLectureRecording = false;
-    __sbShowBubble("Could not start recording: " + (err.message || "unknown error"), true);
+    __sbCleanupInPageCapture();
+    const name = String(err?.name || "");
+    if (name === "NotAllowedError" || name === "AbortError") {
+      __sbShowBubble("Recording cancelled.", true, { tone: "status" });
+    } else if (String(err?.message) === "no_tab_audio") {
+      __sbShowBubble("Pick “This Tab” and turn on “Also share tab audio”, then start again.", true, { tone: "status", title: mode === "meeting" ? "Meeting & Call" : "Lecture" });
+    } else {
+      __sbShowBubble("Could not start recording: " + (err?.message || "unknown error"), true);
+    }
     return;
   }
 
@@ -11706,14 +11891,16 @@ async function __sbCaptureLectureSegment() {
   if (statusEl) statusEl.textContent = "Capturing segment…";
 
   try {
-    const res = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({
-        action: "getLectureSegment",
-        existingNotes: __sbLectureNotes,
-        existingTranscript: __sbLectureTranscript,
-        mode: __sbLectureRecordingMode,
-      }, (r) => resolve(r || {}));
-    });
+    const res = __sbInPageCaptureActive
+      ? await __sbTranscribeIpSegment(await __sbGetInPageSegment())
+      : await new Promise((resolve) => {
+          chrome.runtime.sendMessage({
+            action: "getLectureSegment",
+            existingNotes: __sbLectureNotes,
+            existingTranscript: __sbLectureTranscript,
+            mode: __sbLectureRecordingMode,
+          }, (r) => resolve(r || {}));
+        });
 
     if (res.error) {
       if (statusEl) statusEl.textContent = `Capture failed — ${res.error}`;
@@ -11755,17 +11942,25 @@ async function __sbStopLectureRecording() {
     `;
   }
 
-  const res = await new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      {
-        action: "stopRecordingAndTranscribe",
-        existingNotes: __sbLectureNotes,
-        existingTranscript: __sbLectureTranscript,
-        mode: __sbLectureRecordingMode,
-      },
-      (r) => resolve(r || {}),
-    );
-  });
+  let res;
+  if (__sbInPageCaptureActive) {
+    // In-page path: flush the final segment, transcribe it, then tear the capture down.
+    const seg = await __sbGetInPageSegment();
+    res = seg.audioBase64 ? await __sbTranscribeIpSegment(seg) : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
+    __sbCleanupInPageCapture();
+  } else {
+    res = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: "stopRecordingAndTranscribe",
+          existingNotes: __sbLectureNotes,
+          existingTranscript: __sbLectureTranscript,
+          mode: __sbLectureRecordingMode,
+        },
+        (r) => resolve(r || {}),
+      );
+    });
+  }
 
   if (res.error) {
     __sbShowLectureResultMessage("Recording stopped", res.error);

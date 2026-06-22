@@ -1110,6 +1110,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
+  // In-page capture (getDisplayMedia) path: the content script records the audio itself and
+  // sends each segment's base64 here for the same transcription/notes pipeline as offscreen.
+  if (message.action === "transcribeSegment") {
+    bgTranscribeAudioChunk({
+      audioBase64: message.audioBase64 || null,
+      existingNotes: message.existingNotes || "",
+      existingTranscript: message.existingTranscript || "",
+      mode: bgNormalizeRecordingMode(message.mode),
+      knownSpeakerReferences: Array.isArray(message.knownSpeakerReferences) ? message.knownSpeakerReferences : [],
+    })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
   if (message.action === "syncLectureToNotion") {
     bgSyncToNotion(message.markdown, message.title)
       .then((res) => sendResponse(res))
