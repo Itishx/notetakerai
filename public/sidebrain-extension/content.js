@@ -2644,6 +2644,8 @@ let __sbWkClimbRaf = null;
 let __sbWkResumeFromX = null;  // start X for the next walk loop (so a climb hands off smoothly)
 let __sbWkMoonwalking = false; // true while the moonwalk owns the rig
 let __sbWkMoonRaf = null;
+let __sbWkJumping = false;      // true while the jump-and-point owns the rig
+let __sbWkJumpRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
 
 // "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
@@ -2950,7 +2952,7 @@ function __sbEnsureWalker() {
   // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
   let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
   walker.addEventListener("pointerdown", (e) => {
-    if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking) return;
+    if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;
     dragging = true; dragMoved = false;
     try { walker.setPointerCapture(e.pointerId); } catch (_) {}
     __sbWkThrowMode = true;            // tick stops driving the transform
@@ -2996,7 +2998,7 @@ function __sbEnsureWalker() {
 }
 
 function __sbStartWalkLoop() {
-  if (__sbWkClimbing || __sbWkMoonwalking) return;   // climb/moonwalk own the rig — don't fight it
+  if (__sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;   // climb/moonwalk/jump own the rig — don't fight it
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
   __sbWkStart = __sbWkLast = performance.now();
@@ -3015,7 +3017,9 @@ function __sbStopWalkLoop() {
   if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
   if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
   if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
-  __sbWkClimbing = false; __sbWkMoonwalking = false;
+  if (__sbWkJumpRaf) { cancelAnimationFrame(__sbWkJumpRaf); __sbWkJumpRaf = null; }
+  __sbWkClimbing = false; __sbWkMoonwalking = false; __sbWkJumping = false;
+  __sbPointFxClear();
   clearTimeout(__sbWkAutoTimer);
   __sbWkResetThrow();
   __sbWalkTalking = false;
@@ -3213,6 +3217,292 @@ function __sbWakeupClimb(finishAuthed, finishRejected) {
     __sbWkClimbRaf = requestAnimationFrame(step);
   };
   __sbWkClimbRaf = requestAnimationFrame(step);
+}
+
+// ── Jump & Point ─────────────────────────────────────────────────────────────
+// Braino springs off the bar, arcs across the screen, lands beside the element the
+// user asked about and points at it while a laser ring traces its outline — then
+// arcs back to the bar. The motion is a faithful port of the Claude Design
+// "Braino Jump & Point" poseAt() timeline (anticipation crouch → explosive launch →
+// airborne arc with knee-tuck → landing squash → spring-back → point + laser → return).
+// Runs its OWN rAF and fully owns the rig, exactly like the wake-up climb.
+
+let __sbPointFx = null;
+function __sbPointFxEnsure() {
+  if (__sbPointFx && document.body.contains(__sbPointFx.wrap)) return __sbPointFx;
+  const wrap = document.createElement("div");
+  wrap.id = "__sb_point_fx__";
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.id = "__sb_point_svg__";
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+  const beam = document.createElementNS(NS, "path");
+  beam.id = "__sb_point_beam__";
+  beam.setAttribute("fill", "none");
+  beam.setAttribute("stroke", "oklch(0.8 0.16 58)");
+  beam.setAttribute("stroke-width", "2.4");
+  beam.setAttribute("stroke-linecap", "round");
+  beam.setAttribute("stroke-dasharray", "1 8");
+  const ring = document.createElementNS(NS, "path");
+  ring.id = "__sb_point_ring__";
+  ring.setAttribute("fill", "none");
+  ring.setAttribute("stroke", "oklch(0.82 0.17 55)");
+  ring.setAttribute("stroke-width", "2.5");
+  ring.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(beam);
+  svg.appendChild(ring);
+  const callout = document.createElement("div");
+  callout.id = "__sb_point_callout__";
+  callout.innerHTML = `Right here <span style="font-weight:800">↗</span>`;
+  wrap.appendChild(svg);
+  wrap.appendChild(callout);
+  (document.documentElement || document.body).appendChild(wrap);
+  __sbPointFx = { wrap, svg, beam, ring, callout };
+  return __sbPointFx;
+}
+function __sbPointFxClear() {
+  if (__sbPointFx && __sbPointFx.wrap && __sbPointFx.wrap.parentNode) {
+    __sbPointFx.wrap.parentNode.removeChild(__sbPointFx.wrap);
+  }
+  __sbPointFx = null;
+}
+function __sbRoundRectPath(x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  return `M ${x + r} ${y} H ${x + w - r} A ${r} ${r} 0 0 1 ${x + w} ${y + r}`
+    + ` V ${y + h - r} A ${r} ${r} 0 0 1 ${x + w - r} ${y + h}`
+    + ` H ${x + r} A ${r} ${r} 0 0 1 ${x} ${y + h - r}`
+    + ` V ${y + r} A ${r} ${r} 0 0 1 ${x + r} ${y} Z`;
+}
+
+// Animate the jump + point at `el`. Resolves once Braino is back on the bar.
+function __sbJumpPointAt(el, opts = {}) {
+  return new Promise((resolve) => {
+    const lane = __sbEnsureWalker();
+    lane.style.display = "block";
+    const walker = document.getElementById("__sbwk_walker__");
+    const flip = document.getElementById("__sbwk_flip__");
+    const root = walker && walker.querySelector("#__sbwk_root__");
+    if (!el || !walker || !flip || !root) { resolve(false); return; }
+
+    __sbWkJumping = true; __sbWkThrowMode = true;
+    if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+    clearTimeout(__sbWkAutoTimer);
+    __sbWkWaving = false; __sbWkBusy = true; __sbWkWalking = false;
+
+    const elr = {
+      la: root.querySelector("#__sbwk_la__"), laBg: root.querySelector("#__sbwk_la_bg__"),
+      ra: root.querySelector("#__sbwk_ra__"), raBg: root.querySelector("#__sbwk_ra_bg__"),
+      ll: root.querySelector("#__sbwk_ll__"), rl: root.querySelector("#__sbwk_rl__"),
+      eyeL: root.querySelector("#__sbwk_eye_l__"), eyeR: root.querySelector("#__sbwk_eye_r__"),
+      pupL: root.querySelector("#__sbwk_pupil_l__"), pupR: root.querySelector("#__sbwk_pupil_r__"),
+    };
+    // setArms(l,r) maps 1:1 to the design's poseAt p.leftArm / p.rightArm — the walker
+    // SVG arm paths + pivots (22,53)/(78,53) are byte-identical to braino-char.jsx.
+    const setArms = (l, r) => {
+      const lt = `rotate(${l} 22 53)`, rt = `rotate(${r} 78 53)`;
+      if (elr.la) elr.la.setAttribute("transform", lt);
+      if (elr.laBg) elr.laBg.setAttribute("transform", lt);
+      if (elr.ra) elr.ra.setAttribute("transform", rt);
+      if (elr.raBg) elr.raBg.setAttribute("transform", rt);
+    };
+    const setLegs = (l, r) => {
+      if (elr.ll) elr.ll.setAttribute("transform", l ? `rotate(${l} 44 74)` : "");
+      if (elr.rl) elr.rl.setAttribute("transform", r ? `rotate(${r} 56 74)` : "");
+    };
+    const setEyes = (sy) => {
+      const v = Math.max(0.05, sy);
+      if (elr.eyeL) elr.eyeL.setAttribute("transform", `translate(38,48) scale(1,${v}) translate(-38,-48)`);
+      if (elr.eyeR) elr.eyeR.setAttribute("transform", `translate(62,48) scale(1,${v}) translate(-62,-48)`);
+    };
+    const setGaze = (gx, gy) => {
+      if (elr.pupL) elr.pupL.setAttribute("transform", `translate(${gx} ${gy})`);
+      if (elr.pupR) elr.pupR.setAttribute("transform", `translate(${gx} ${gy})`);
+    };
+
+    const lerp = (a, b, u) => a + (b - a) * u;
+    const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+    const easeBack = (x) => { const c = 2.0; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+    const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    // feet origin in the 64×78 rendered walker box (viewBox -8 -34 116 142 → feet ≈ 32,74)
+    const FOOT_DX = 32;
+    flip.style.transformOrigin = `${FOOT_DX}px 74px`;
+    const place = (tx, ty) => { walker.style.transform = `translate(${tx}px, ${ty}px)`; };
+    let FACE = 1;
+    const pose = (sx, sy, rot) => { flip.style.transform = `scale(${(sx * FACE).toFixed(3)},${sy.toFixed(3)}) rotate(${(rot * FACE).toFixed(2)}deg)`; };
+
+    // viewport ↔ lane-local foot coords
+    const laneRect = lane.getBoundingClientRect();
+    const FOOT_BASE_Y = laneRect.bottom - 4;          // foot viewport-Y when ty=0 (perched)
+    const footVx = (tx) => laneRect.left + FOOT_DX + tx;
+    const footVy = (ty) => FOOT_BASE_Y + ty;
+
+    // key positions (lane-local, feet)
+    const START = { tx: cl(__sbWkPosX, 6, (lane.clientWidth || 320) - 70), ty: 0 };
+    const r0 = el.getBoundingClientRect();
+    const elCx = r0.left + r0.width / 2;
+    const startVx = footVx(START.tx);
+    FACE = elCx >= startVx ? 1 : -1;
+    const landVx = cl(elCx - 70 * FACE, 48, window.innerWidth - 48);
+    const landVy = cl(r0.bottom + 70, 140, FOOT_BASE_Y - 8);
+    const LAND = { tx: landVx - laneRect.left - FOOT_DX, ty: landVy - FOOT_BASE_Y };
+    const APEX = cl(Math.hypot(LAND.tx - START.tx, LAND.ty - START.ty) * 0.34, 90, 260);
+
+    const fx = __sbPointFxEnsure();
+    const aimAt = (tx, ty) => {           // pupils track the element from the current foot
+      const fvx = footVx(tx), fvy = footVy(ty);
+      setGaze(cl((elCx - fvx) / 260, -1, 1) * 2.1, cl(((r0.top + r0.height / 2) - fvy) / 260, -1, 1) * 1.9);
+    };
+    const layoutRing = () => {
+      const rr = el.getBoundingClientRect();
+      const pad = 7;
+      fx.ring.setAttribute("d", __sbRoundRectPath(rr.left - pad, rr.top - pad, rr.width + pad * 2, rr.height + pad * 2, 12));
+    };
+    const layoutBeam = (tx, ty) => {
+      const rr = el.getBoundingClientRect();
+      const fvx = footVx(tx) + 30 * FACE, fvy = footVy(ty) - 70;   // ~fingertip
+      const tgx = rr.left + rr.width * 0.5, tgy = rr.top + rr.height + 4;
+      const mx = (fvx + tgx) / 2 + 14 * FACE, my = (fvy + tgy) / 2;
+      fx.beam.setAttribute("d", `M ${fvx} ${fvy} Q ${mx} ${my} ${tgx} ${tgy}`);
+    };
+
+    const bar = document.getElementById("__sb_bar__");
+    const setRecoil = (v) => { if (bar) bar.style.transform = `translateX(-50%) translateY(${(4 * v).toFixed(2)}px) scale(1)`; };
+
+    place(START.tx, START.ty); pose(1, 1, 0); setArms(0, 0); setLegs(0, 0); setEyes(1); aimAt(START.tx, START.ty);
+    layoutRing();
+    fx.ring.style.opacity = "0"; fx.beam.style.opacity = "0"; fx.callout.style.opacity = "0";
+    let ringLen = 0; try { ringLen = fx.ring.getTotalLength() || 0; } catch (_) {}
+
+    // dismiss the hold early on click / Escape
+    let dismiss = false;
+    const onKey = (e) => { if (e.key === "Escape") dismiss = true; };
+    const onClick = () => { dismiss = true; };
+
+    let phase = "crouch", pStart = performance.now(), said = false, holdStart = 0;
+    const T = { crouch: 280, launch: 160, fly: 640, land: 160, recover: 260, hold: 3400, bCrouch: 210, bFly: 580 };
+    const t0 = performance.now();
+    const next = (p) => { phase = p; pStart = performance.now(); };
+
+    const finish = () => {
+      __sbWkJumping = false; __sbWkThrowMode = false;
+      if (__sbWkJumpRaf) { cancelAnimationFrame(__sbWkJumpRaf); __sbWkJumpRaf = null; }
+      try { document.removeEventListener("keydown", onKey, true); } catch (_) {}
+      try { document.removeEventListener("pointerdown", onClick, true); } catch (_) {}
+      if (bar) bar.style.transform = "";
+      flip.style.transformOrigin = ""; flip.style.transform = "";
+      setArms(0, 0); setLegs(0, 0); setEyes(1); setGaze(0, 0);
+      walker.style.transform = "";
+      __sbPointFxClear();
+      __sbWkBusy = false;
+      __sbWkResumeFromX = START.tx;   // resume strolling from where he launched
+      __sbStartWalkLoop();
+      resolve(true);
+    };
+
+    const step = (now) => {
+      const e = now - pStart;
+      if (phase === "crouch") {                              // anticipation
+        const u = easeOut(Math.min(1, e / T.crouch));
+        place(START.tx, START.ty);
+        pose(lerp(1, 1.2, u), lerp(1, 0.6, u), lerp(0, -6, u));
+        setArms(lerp(0, 40, u), lerp(0, -40, u));
+        aimAt(START.tx, START.ty); setRecoil(u);
+        if (e >= T.crouch) next("launch");
+      } else if (phase === "launch") {                       // explosive push-off
+        const u = easeOut(Math.min(1, e / T.launch));
+        place(START.tx, START.ty - lerp(0, 22, u));
+        pose(lerp(1.2, 0.8, u), lerp(0.6, 1.32, u), -6);
+        setArms(lerp(40, 128, u), lerp(-40, -128, u));
+        setRecoil(1 - u);
+        if (e >= T.launch) next("fly");
+      } else if (phase === "fly") {                          // airborne arc
+        const u = Math.min(1, e / T.fly);
+        const tx = lerp(START.tx, LAND.tx, u);
+        const ty = lerp(START.ty - 22, LAND.ty, u) - APEX * Math.sin(Math.PI * u);
+        place(tx, ty);
+        const sy = lerp(1.2, 0.96, easeOut(u));
+        pose(2 - sy, sy, lerp(-14, 6, u));
+        const tuck = Math.sin(Math.PI * u) * 10;
+        setLegs(tuck, -tuck);
+        setArms(lerp(128, 16, u), lerp(-128, -66, u));
+        aimAt(tx, ty);
+        if (e >= T.fly) { setLegs(0, 0); next("land"); }
+      } else if (phase === "land") {                         // squash on impact
+        const u = easeOut(Math.min(1, e / T.land));
+        place(LAND.tx, LAND.ty);
+        const sy = lerp(0.96, 0.66, u);
+        pose(2 - sy, sy, lerp(6, 0, u));
+        setArms(16, -66); aimAt(LAND.tx, LAND.ty);
+        if (e >= T.land) next("recover");
+      } else if (phase === "recover") {                      // spring to full height + laser draws on
+        const u = easeBack(Math.min(1, e / T.recover));
+        const g = Math.min(1, e / T.recover);
+        place(LAND.tx, LAND.ty);
+        const sy = lerp(0.66, 1, u);
+        pose(2 - sy, sy, 0);
+        setArms(16, -66); aimAt(LAND.tx, LAND.ty);
+        layoutRing(); layoutBeam(LAND.tx, LAND.ty);
+        fx.ring.style.opacity = (0.95 * g).toFixed(3);
+        if (ringLen) { fx.ring.style.strokeDasharray = ringLen; fx.ring.style.strokeDashoffset = (ringLen * (1 - g)).toFixed(1); }
+        fx.beam.style.opacity = (0.9 * g).toFixed(3);
+        if (e >= T.recover) {
+          said = false; holdStart = now; next("hold");
+          try { document.addEventListener("keydown", onKey, true); } catch (_) {}
+          setTimeout(() => { try { document.addEventListener("pointerdown", onClick, true); } catch (_) {}; }, 350);
+        }
+      } else if (phase === "hold") {                         // point + jab, laser pulses
+        const held = now - holdStart;
+        const tt = (now - t0) / 1000;
+        place(LAND.tx, LAND.ty);
+        pose(1, 1, 0);
+        const jab = Math.sin(held / 1000 * 22) * 2.5;
+        setArms(16, -66 + jab);
+        aimAt(LAND.tx, LAND.ty);
+        layoutRing(); layoutBeam(LAND.tx, LAND.ty);
+        const pulse = 0.5 + 0.5 * Math.sin(tt * 5);
+        if (ringLen) { fx.ring.style.strokeDasharray = ringLen; fx.ring.style.strokeDashoffset = 0; }
+        fx.ring.style.opacity = (0.6 + 0.4 * pulse).toFixed(3);
+        fx.ring.style.filter = `drop-shadow(0 0 ${(6 + pulse * 12).toFixed(0)}px oklch(0.74 0.16 58 / 0.7))`;
+        fx.beam.style.opacity = "0.9";
+        fx.beam.style.strokeDashoffset = (-(tt * 22) % 200).toFixed(1);
+        const co = (held > 140 && held < T.hold - 260) ? 1 : 0;
+        fx.callout.style.opacity = String(co);
+        const cv = footVx(LAND.tx), cvy = footVy(LAND.ty);
+        fx.callout.style.left = (cv - 150) + "px";
+        fx.callout.style.top = (cvy - 96) + "px";
+        if (!said) { said = true; if (opts.say) __sbWkSay(opts.say); }
+        if (held >= T.hold || dismiss) {
+          fx.callout.style.opacity = "0";
+          next("bCrouch");
+        }
+      } else if (phase === "bCrouch") {                      // coil to jump home
+        const u = easeOut(Math.min(1, e / T.bCrouch));
+        place(LAND.tx, LAND.ty);
+        const sy = lerp(1, 0.62, u);
+        pose(2 - sy, sy, lerp(0, 7, u));
+        setArms(lerp(16, -30, u), lerp(-66, 30, u));
+        fx.ring.style.opacity = (0.95 * (1 - u)).toFixed(3);
+        fx.beam.style.opacity = (0.9 * (1 - u)).toFixed(3);
+        if (e >= T.bCrouch) next("bFly");
+      } else if (phase === "bFly") {                         // arc back to the bar
+        const u = Math.min(1, e / T.bFly);
+        const tx = lerp(LAND.tx, START.tx, u);
+        const ty = lerp(LAND.ty, START.ty, u) - APEX * 0.8 * Math.sin(Math.PI * u);
+        place(tx, ty);
+        const sy = lerp(1.22, 1, easeOut(u));
+        pose(2 - sy, sy, lerp(14, 0, u));
+        const tuck = Math.sin(Math.PI * u) * 8;
+        setLegs(tuck, -tuck);
+        setArms(lerp(-30, 0, u), lerp(30, 0, u));
+        setGaze(0, 0);
+        if (e >= T.bFly) { setLegs(0, 0); finish(); return; }
+      }
+      __sbWkJumpRaf = requestAnimationFrame(step);
+    };
+    __sbWkJumpRaf = requestAnimationFrame(step);
+  });
 }
 
 function __sbWkTick(now) {
@@ -5670,6 +5960,26 @@ function __sbBuildBrainUI() {
     }
     #__sbwk_walker__.sbwk-auth svg   { animation: __sbwk_glow_auth__ 0.85s ease-in-out infinite; }
     #__sbwk_walker__.sbwk-authed svg { animation: __sbwk_glow_authed__ 0.85s ease-in-out infinite; }
+
+    /* ── Jump & Point laser overlay (ring + beam + callout) ── */
+    #__sb_point_fx__ {
+      position: fixed; inset: 0; width: 100vw; height: 100vh;
+      pointer-events: none; z-index: 2147483644;
+    }
+    #__sb_point_svg__ {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      overflow: visible; pointer-events: none;
+    }
+    #__sb_point_callout__ {
+      position: absolute; pointer-events: none; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 7px 12px; border-radius: 11px;
+      background: oklch(0.7 0.16 48); color: #1a0f0c;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-weight: 600; font-size: 13.5px;
+      box-shadow: 0 14px 30px -12px rgba(0,0,0,.6);
+      opacity: 0; transition: opacity .18s ease;
+    }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -10904,6 +11214,134 @@ async function __sbFetchAssistantReply(body) {
   return { reply: json.reply || json.response || json.message || json.answer || "", designMockup: json.designMockup || null };
 }
 
+// ── Jump & Point intent ──────────────────────────────────────────────────────
+// "where is X / point me to X / find X on the page" → Braino leaps off the bar and
+// points at the matching element. Detection + element matching run fully client-side
+// (DOM gives exact on-screen coords via getBoundingClientRect — no vision needed).
+function __sbIsLocateRequest(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return false;
+  if (/\bpoint\s+(me\s+|us\s+)?(to|at|towards?|out)\b/.test(t)) return true;
+  if (/\bpoint\s+(me|us)\b/.test(t)) return true;
+  if (/\bwhere('?s| is| are)\b/.test(t)) return true;
+  if (/\bwhere\s+can\s+i\s+find\b/.test(t)) return true;
+  if (/\bshow\s+me\s+where\b/.test(t)) return true;
+  if (/\blocate\b/.test(t)) return true;
+  if (/\bcan\s+you\s+(find|spot|point|locate)\b/.test(t)) return true;
+  if (/\b(find|spot|highlight)\b.*\b(on\s+(the\s+)?(page|screen)|here)\b/.test(t)) return true;
+  return false;
+}
+
+// Strip the carrier phrasing to leave the thing the user is looking for.
+function __sbExtractLocateTarget(text) {
+  let t = String(text || "").trim();
+  t = t.replace(/^\s*(hey|hi|ok|okay|yo)\s+braino[\s,]*/i, "");
+  t = t.replace(/\bbraino\b/ig, " ");
+  t = t.replace(/\b(can|could|would|will)\s+you\b/ig, " ");
+  t = t.replace(/\bplease\b/ig, " ");
+  t = t.replace(/\b(point\s+(me\s+|us\s+)?(to|at|towards?|out)?|show\s+me\s+where|tell\s+me\s+where|where('?s| is| are)|where\s+can\s+i\s+find|locate|find|spot|highlight)\b/ig, " ");
+  t = t.replace(/\bon\s+(the\s+)?(page|screen)\b/ig, " ");
+  t = t.replace(/^\s*(the|a|an|me|us|to|at)\b/ig, " ");
+  t = t.replace(/["'?.!,]/g, " ").replace(/\s+/g, " ").trim();
+  return t;
+}
+
+// Gather visible, nameable elements with their on-screen rects.
+function __sbCollectLocatableTargets() {
+  const out = [];
+  const seen = new Set();
+  const sel = 'a[href], button, [role="link"], [role="button"], [role="tab"], [role="menuitem"],'
+    + ' h1, h2, h3, h4, [aria-label], img[alt], [title], input[placeholder], #video-title';
+  let nodes;
+  try { nodes = document.querySelectorAll(sel); } catch (_) { return out; }
+  let scanned = 0;
+  for (const node of nodes) {
+    if (scanned++ > 2500) break;
+    if (out.length > 700) break;
+    if (typeof __sbIsOwnUiNode === "function" && __sbIsOwnUiNode(node)) continue;
+    const rect = node.getBoundingClientRect();
+    if (!rect || rect.width < 16 || rect.height < 10) continue;
+    if (rect.width > window.innerWidth * 1.25 || rect.height > window.innerHeight * 1.5) continue;
+    const style = window.getComputedStyle(node);
+    if (style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) continue;
+    let name = (node.getAttribute && (node.getAttribute("aria-label") || node.getAttribute("title")
+      || node.getAttribute("alt") || node.getAttribute("placeholder"))) || "";
+    if (!name) name = (node.innerText || node.textContent || "").trim();
+    name = name.replace(/\s+/g, " ").trim();
+    if (!name || name.length < 2 || name.length > 220) continue;
+    const key = name.toLowerCase() + "@" + Math.round(rect.left) + "," + Math.round(rect.top);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ el: node, name, rect });
+  }
+  return out;
+}
+
+// Score candidates against the query; return the best clear winner (or null).
+function __sbMatchLocateTarget(query, candidates) {
+  const q = String(query || "").toLowerCase().trim();
+  if (!q || !candidates || !candidates.length) return null;
+  const qTokens = q.split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+  if (!qTokens.length) return null;
+  let best = null, bestScore = 0;
+  for (const c of candidates) {
+    const name = c.name.toLowerCase();
+    let score = 0;
+    if (name === q) score = 1000;
+    else if (name.includes(q)) score = 600 - Math.min(320, name.length - q.length);
+    else if (q.includes(name) && name.length >= 4) score = 470 - Math.min(220, q.length - name.length);
+    else {
+      const nameTokens = new Set(name.split(/[^a-z0-9]+/).filter(Boolean));
+      let hit = 0;
+      for (const w of qTokens) if (nameTokens.has(w)) hit++;
+      const ratio = hit / qTokens.length;
+      if (ratio >= 0.6) score = 180 + ratio * 120 - Math.min(70, name.split(/\s+/).length * 3);
+    }
+    if (score <= 0) continue;
+    const r = c.rect;
+    if (r.top >= 0 && r.bottom <= window.innerHeight) score += 18;   // already on screen
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  return bestScore >= 190 ? best : null;
+}
+
+// Orchestrate: extract → match → scroll into view → leap + point. Returns true if handled.
+async function __sbRunJumpPoint(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const speak = async (line) => { if (fromVoice) { try { await __sbSpeakWithPreferredVoice(line, voiceOutput); } catch (_) {} } };
+
+  const target = __sbExtractLocateTarget(promptText);
+  if (!target) {
+    if (fromVoice) await speak("Point you at what? Tell me what to find."); else __sbWkSay("What should I find? 👀");
+    return false;
+  }
+
+  let match = __sbMatchLocateTarget(target, __sbCollectLocatableTargets());
+  if (!match) {
+    if (fromVoice) await speak(`I can't spot that on this page.`); else __sbWkSay("Can't spot that 🤔");
+    return false;
+  }
+
+  try { match.el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" }); } catch (_) {}
+  await new Promise((r) => setTimeout(r, 480));   // let the smooth scroll settle before measuring
+
+  // Prefer a larger card/link ancestor so the laser frames the whole item, not just a title.
+  let pointEl = match.el;
+  try {
+    const a = pointEl.closest && pointEl.closest('a[href], [role="link"], ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-video-renderer, li, article');
+    if (a && a !== pointEl) {
+      const ar = a.getBoundingClientRect(), pr = pointEl.getBoundingClientRect();
+      const aArea = ar.width * ar.height, pArea = pr.width * pr.height;
+      if (aArea > pArea && aArea < window.innerWidth * window.innerHeight * 0.6) pointEl = a;
+    }
+  } catch (_) {}
+
+  await speak("Here it is.");
+  await __sbJumpPointAt(pointEl, { say: fromVoice ? null : "Right here 👇" });
+  return true;
+}
+
 async function __sbResolvePremiumStatus(forceRefresh = false) {
   const cached = await __sbStorageGet(["authEmail", "isPremium"]);
   const normalizedEmail = typeof cached.authEmail === "string" ? cached.authEmail.trim().toLowerCase() : "";
@@ -11245,6 +11683,15 @@ async function __sbProcessPrompt(text, options = {}) {
 
   __sbStopSpeech();
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
+
+  // Jump & Point — "where is X / point me to X". Braino leaps off the bar and points at
+  // the element; the chat panel does NOT open (in text or voice). Handled fully client-side.
+  if (__sbIsLocateRequest(promptText)) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "point" });
+    await __sbRunJumpPoint(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
 
   const connectorHint = routing.connectorHint;
   const forcedMode = routing.forcedMode;
@@ -13533,6 +13980,18 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   }
 
   if (/\bfavou?rite\b/i.test(promptText)) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Jump & Point — "where is X / point me to X". Steer down __sbProcessPrompt (which runs the
+  // leap-and-point) BEFORE delegate/agent classification, so it isn't grabbed by the browser agent.
+  if (__sbIsLocateRequest(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "point" });
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
