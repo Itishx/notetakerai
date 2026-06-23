@@ -36,6 +36,11 @@ const CUES: Array<{ moment: Moment; re: RegExp; weight: 1 | 2 | 3 }> = [
   // BANTER — playful, casual.
   { moment: "banter", weight: 1, re: /\b(lol|lmao|haha+|joke|you'?re funny|roast me( for fun)?|just messing|bored|entertain me|say something funny)\b/i },
 
+  // BUILDING — the user is shaping Braino himself: ideating features, reviewing what's new, asking
+  // what to build next, or reflecting on their own work. Checked BEFORE focused_task so "build you"
+  // doesn't get swallowed by the generic "build" action verb below.
+  { moment: "building", weight: 1, re: /\b(what (else )?(can|should) i (add|build|do)|make you better|improve you|what'?s new (in|with) you|ideate|brainstorm|what'?s next|next feature|work(ed|ing)? on you|when did i last|what did i (build|ship|change)|how long (was|have) i|redesign you|design you|what if you (looked|could)|make you (dance|move|wave)|new look|new animation|a pose|mock ?up|whip up)\b/i },
+
   // FOCUSED TASK — they just want the thing done. Action verbs / code asks.
   { moment: "focused_task", weight: 1, re: /\b(fix|debug|refactor|write (me )?(a|the|some)|code|function|implement|build|summari[sz]e|translate|convert|generate|how do i|give me the|just (tell|show) me|tldr)\b/i },
 ];
@@ -65,6 +70,7 @@ export const MOMENT_EMPHASIS: Record<Moment, string[]> = {
   conflict: ["honesty", "boundaries"],
   banter: ["humor", "warmth"],
   focused_task: ["boundaries", "diction"],
+  building: ["ideation", "honesty", "warmth"],
 };
 
 // A short, human label for each moment — used in the steering line the engine prepends.
@@ -79,4 +85,5 @@ export const MOMENT_LABEL: Record<Moment, string> = {
   conflict: "a give-it-to-me-straight",
   banter: "a playful",
   focused_task: "a just-get-it-done",
+  building: "a let's-build-you-together",
 };

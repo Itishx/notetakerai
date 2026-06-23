@@ -19,6 +19,10 @@ entrypoint = "./functions/chat/save-note/index.ts"
 [functions.transcribe-and-notes]
 entrypoint = "./functions/chat/transcribe-and-notes/index.ts"
 
+# ── github (Braino Dev Pulse) ──────────────────────────────────────────
+[functions.braino-dev-pulse]
+entrypoint = "./functions/github/braino-dev-pulse/index.ts"
+
 # ── google ─────────────────────────────────────────────────────────────
 
 [functions.google-calendar-action]

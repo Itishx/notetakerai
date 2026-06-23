@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { buildBrainoSystemPrompt } from "../../_shared/braino-prompt.ts";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
+import { loadDevPulseForRequest } from "../../_shared/dev-pulse.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,6 +56,10 @@ serve(async (req) => {
       includeXContentSource: false,
     });
 
+    // Dev Pulse — voice Braino is self-aware too. Built once at session start (short, no diffs).
+    const clientTimeZone = typeof payload?.clientTimeZone === "string" ? payload.clientTimeZone : null;
+    const devPulseResult = await loadDevPulseForRequest(authHeader, { clientTimeZone });
+
     const instructions = buildBrainoSystemPrompt({
       notes,
       pageContext,
@@ -62,6 +67,7 @@ serve(async (req) => {
       persistentUserContext: userKnowledge?.combinedContext || "",
       responseMedium: "voice",
       languagePolicy,
+      devPulse: devPulseResult?.formatted || null,
       // Emotional Engine: apply the user's personality toggles. The voice session prompt is
       // built once, so moment stays "neutral" — the full engine is present and the realtime
       // model self-selects per turn. (Per-turn voice routing is a planned follow-up.)

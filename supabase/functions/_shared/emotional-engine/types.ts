@@ -22,6 +22,7 @@ export type Moment =
   | "conflict"     // they're wrong, or explicitly want hard critique
   | "banter"       // playful, casual, joking around
   | "focused_task" // they just want the answer / the code / the thing done
+  | "building"     // the builder is shaping Braino himself — ideating, reviewing what's next
   | "crisis";      // safety: self-harm, hopelessness — handle with care, point to real help
 
 export type MomentReading = {

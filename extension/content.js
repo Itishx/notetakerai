@@ -10810,6 +10810,61 @@ async function __sbAuthedApiFetch(path, init = {}, options = {}) {
   return response;
 }
 
+// Design Delegate: open the design tool in a visible tab and type a synthesized prompt into its
+// composer (the background driver does NOT submit — the user reviews and hits enter). The prompt is
+// also copied to the clipboard as a safety net in case the composer can't be resolved.
+const SB_DESIGN_TOOL_DEFAULT_URL = "https://claude.ai/design/p/fb4c6286-7eed-4f12-864a-c306cf380014?file=Braino+Motion+Handoff-print-atloqb.html";
+
+async function __sbRunDesignMockup(prompt) {
+  const text = String(prompt || "").trim();
+  if (!text) return;
+  try {
+    try { await navigator.clipboard.writeText(text); } catch (e) { /* clipboard may be blocked; non-fatal */ }
+
+    const stored = await __sbStorageGet(["sbDesignToolUrl"]);
+    const url = (typeof stored.sbDesignToolUrl === "string" && stored.sbDesignToolUrl.trim())
+      ? stored.sbDesignToolUrl.trim()
+      : SB_DESIGN_TOOL_DEFAULT_URL;
+
+    const res = await new Promise((resolve) =>
+      chrome.runtime.sendMessage({ action: "runDesignMockup", url, prompt: text }, (r) => {
+        void chrome.runtime.lastError;
+        resolve(r || {});
+      }));
+
+    if (!res || !res.typed) {
+      const note = "Opened the design tool — the prompt's on your clipboard, paste it in and send when you're ready.";
+      if (__sbHeadphoneMode && typeof __sbSpeakWithPreferredVoice === "function") {
+        __sbSpeakWithPreferredVoice(note).catch(() => {});
+      } else if (typeof __sbShowVoiceError === "function") {
+        __sbShowVoiceError(note);
+      }
+      console.warn("design mockup: composer not auto-filled, clipboard fallback active");
+    }
+    return res;
+  } catch (e) {
+    console.warn("design mockup failed:", e);
+  }
+}
+
+// Mirror of the backend detectDesignMockupIntent — used only to STEER voice turns down the chat
+// pipeline (which synthesizes the prompt + fires __sbRunDesignMockup). No second delegate engine:
+// voice and chat both end up in chat-about-notes → designMockup → __sbRunDesignMockup.
+function __sbIsDesignMockupRequest(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return false;
+  const explicit = /\b(mock (it|this|that) up|mock ?up (it|this|that)|whip (it|this|that)? ?up|design (it|this|that)|open (the )?design tool|make (the |a )?mock ?up|show me (a |some )?(mock ?ups?|design ideas?))\b/.test(t);
+  if (explicit) return true;
+  const affirm = /^(yes|yeah|yep|yup|sure|ok(ay)?|do it|go for it|let'?s do it|please|go ahead|sounds good)\b/.test(t)
+    || /\b(do it|go for it|let'?s do it|go ahead|mock it up|whip it up)\b/.test(t);
+  if (affirm && Array.isArray(__sbChatHistory)) {
+    const lastAssistant = [...__sbChatHistory].reverse().find((m) => m && m.role === "assistant");
+    const prev = String(lastAssistant?.content || "").toLowerCase();
+    if (/\b(mock|mockup|design tool|whip up|few ideas|see it)\b/.test(prev)) return true;
+  }
+  return false;
+}
+
 async function __sbFetchAssistantReply(body) {
   const enrichedBody = body && typeof body === "object" && !Array.isArray(body)
     ? {
@@ -10838,7 +10893,11 @@ async function __sbFetchAssistantReply(body) {
   }
 
   const json = await resp.json();
-  return { reply: json.reply || json.response || json.message || json.answer || "" };
+  // Design Delegate: if the backend synthesized a mockup prompt, open the design tool and type it in.
+  if (json && json.designMockup && typeof json.designMockup.prompt === "string" && json.designMockup.prompt.trim()) {
+    __sbRunDesignMockup(json.designMockup.prompt.trim());
+  }
+  return { reply: json.reply || json.response || json.message || json.answer || "", designMockup: json.designMockup || null };
 }
 
 async function __sbResolvePremiumStatus(forceRefresh = false) {
@@ -13306,6 +13365,20 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
       fromVoice: true,
       voiceOutput: "realtime",
       voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Design mockup — steer down the SAME chat pipeline (synthesizes the prompt + opens the design
+  // tool) BEFORE delegate/agent classification, so "open the design tool" isn't grabbed by the
+  // generic browser agent. voice = delegate, but the design mockup is one shared capability.
+  if (__sbIsDesignMockupRequest(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+      forceIntent: "chat",
     });
     return;
   }

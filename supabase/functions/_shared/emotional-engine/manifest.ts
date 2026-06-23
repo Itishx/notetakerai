@@ -13,6 +13,7 @@ import attunement from "./traits/attunement.ts";
 import honesty from "./traits/honesty.ts";
 import warmth from "./traits/warmth.ts";
 import humor from "./traits/humor.ts";
+import ideation from "./traits/ideation.ts";
 import boundaries from "./traits/boundaries.ts";
 import diction from "./traits/diction.ts";
 
@@ -25,6 +26,7 @@ export const ORDERED_TRAITS: Trait[] = [
   honesty,     // ★ upfront, pushes back, real opinions
   warmth,      // genuine care without clinginess
   humor,       // ★ dry wit + optional dad jokes
+  ideation,    // co-builds himself with you (only on the "building" moment)
   boundaries,  // what he is NOT (no yes-man, full help)
   diction,     // how he actually talks
 ];

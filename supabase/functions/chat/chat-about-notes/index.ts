@@ -5,6 +5,7 @@ import {
   formatRealtimeCostSummaryForBraino,
   loadRealtimeCostSummaryForRequest,
 } from "../../_shared/realtime-cost-summary.ts";
+import { isDevPulseQuestion, loadDevPulseForRequest } from "../../_shared/dev-pulse.ts";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
 import { detectMoment } from "../../_shared/emotional-engine/moments.ts";
 import { captureFromConversation } from "../../_shared/memory-engine/capture.ts";
@@ -284,6 +285,64 @@ async function createDocFromPrompt(
   }
 }
 
+// --- Design mockup: turn a visual idea about Braino into a design-tool prompt ---------------
+// The user describes how Braino should look/move; Braino offers to "mock it up"; on confirm we
+// synthesize a tight design prompt and hand it back as { designMockup: { prompt } }. The extension
+// opens the design tool and types it in (it does NOT auto-submit). Mirrors the Google-Doc pattern.
+function detectDesignMockupIntent(message: string, chatHistory: unknown): boolean {
+  const t = String(message || "").toLowerCase().trim();
+  if (!t) return false;
+
+  // Explicit make-request — no prior offer needed.
+  const explicit =
+    /\b(mock (it|this|that) up|mock ?up (it|this|that)|whip (it|this|that)? ?up|design (it|this|that)|open (the )?design tool|make (the |a )?mock ?up|show me (a |some )?(mock ?ups?|design ideas?))\b/.test(t);
+  if (explicit) return true;
+
+  // Affirmation that follows an offer to mock something up (the offer mentions design tool / mock).
+  const affirm = /^(yes|yeah|yep|yup|sure|ok(ay)?|do it|go for it|let'?s do it|please|go ahead|sounds good)\b/.test(t)
+    || /\b(do it|go for it|let'?s do it|go ahead|mock it up|whip it up)\b/.test(t);
+  if (affirm && Array.isArray(chatHistory)) {
+    const lastAssistant = [...chatHistory].reverse().find((m: any) => m?.role === "assistant");
+    const prev = String(lastAssistant?.content || "").toLowerCase();
+    if (/\b(mock|mockup|design tool|whip up|few ideas|see it)\b/.test(prev)) return true;
+  }
+  return false;
+}
+
+async function synthesizeDesignPrompt(
+  config: AiConfig,
+  chatHistory: unknown,
+  message: string,
+): Promise<string> {
+  const sys = [
+    "You turn a casual conversation about how Braino should look or move into ONE tight, vivid prompt for an AI design/image tool.",
+    "Braino is a friendly mascot: a small, rounded brain-shaped character in warm coral gradients, with little arms, legs, and big expressive eyes.",
+    "Output ONLY the prompt text — no preamble, no quotes, no markdown, no explanation.",
+    "Cover: the subject (Braino, staying on-character), the specific new look/pose/motion the user described, a clean modern visual style with soft lighting, and the desired output (e.g. a character sheet, animation keyframes, or a poster).",
+    "Stay faithful to what the user actually asked for. Keep it under 120 words.",
+  ].join(" ");
+
+  const convo = Array.isArray(chatHistory)
+    ? chatHistory.slice(-8).map((m: any) => `${m.role}: ${typeof m.content === "string" ? m.content : ""}`).join("\n")
+    : "";
+
+  const messages = [
+    { role: "system", content: sys },
+    { role: "user", content: `Conversation so far:\n${convo}\n\nLatest message: ${message}\n\nWrite the design prompt now.` },
+  ];
+
+  try {
+    const res = config.provider === "claude"
+      ? await callClaudeAi(config, messages)
+      : await callLovableAi(config, messages);
+    if (!res.ok) return "";
+    const data = await res.json();
+    return extractContent(config.provider, data).trim();
+  } catch {
+    return "";
+  }
+}
+
 // --- Main handler ---
 
 serve(async (req) => {
@@ -338,6 +397,23 @@ serve(async (req) => {
       }
     }
 
+    // ── Design mockup intent: "mock that up" / "yeah do it" after Braino offered ──────────────
+    if (!isDelegateRequest && !imageBase64 && typeof message === "string" && detectDesignMockupIntent(message, chatHistory)) {
+      const designConfig = resolveAiConfig(aiProvider, {
+        delegateModel: typeof delegateModel === "string" ? delegateModel : null,
+      });
+      const designPrompt = await synthesizeDesignPrompt(designConfig, chatHistory, message);
+      if (designPrompt) {
+        return new Response(JSON.stringify({
+          reply: "On it — opening the design tool and dropping this in. Give it a look and hit enter when you're happy with it. ✨",
+          designMockup: { prompt: designPrompt },
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // If synthesis failed, fall through to a normal reply.
+    }
+
     if (!isDelegateRequest && !imageBase64 && typeof message === "string" && isRealtimeCostQuestion(message)) {
       const realtimeCostResult = await loadRealtimeCostSummaryForRequest(requestAuthHeader, {
         requestedUserId: typeof userId === "string" ? userId : null,
@@ -373,6 +449,19 @@ serve(async (req) => {
       resolvedUserId,
       typeof message === "string" ? message : "",
     );
+
+    // Dev Pulse — Braino's sense of his own development. Always loaded (cheap, cached) so he's
+    // ambiently self-aware and can notice late-night work; diffs are pulled only when the user is
+    // actually ideating, so concrete suggestions can reference what really changed.
+    const wantsDevDiffs = !isDelegateRequest && !hasImage &&
+      typeof message === "string" && isDevPulseQuestion(message);
+    const devPulseResult = (!isDelegateRequest && !hasImage)
+      ? await loadDevPulseForRequest(requestAuthHeader, {
+          withDiffs: wantsDevDiffs,
+          clientTimeZone: typeof clientTimeZone === "string" ? clientTimeZone : null,
+        })
+      : null;
+
     const systemPrompt = isDelegateRequest
       ? String(notes || "You are Braino Delegate. Return strict JSON only.")
       : hasImage
@@ -404,6 +493,7 @@ ${notes || "(no notes yet)"}`
           movieDiscoveryPrompt,
           responseMedium: "text",
           languagePolicy: "mirror_user",
+          devPulse: devPulseResult?.formatted || null,
           // Emotional Engine: detect the emotional moment from this message so the right traits
           // lead the reply, and apply the user's personality toggles.
           moment: detectMoment(typeof message === "string" ? message : "").moment,

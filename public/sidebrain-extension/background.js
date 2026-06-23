@@ -1668,10 +1668,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "openTab") {
     const url = String(message.url || "").trim();
     if (url.startsWith("https://") || url.startsWith("http://")) {
-      chrome.tabs.create({ url, active: message.active !== false }, () => { void chrome.runtime.lastError; });
+      chrome.tabs.create({ url, active: message.active !== false }, (tab) => {
+        void chrome.runtime.lastError;
+        sendResponse({ ok: true, tabId: tab?.id ?? null });
+      });
+      return true; // async sendResponse
     }
-    sendResponse({ ok: true });
+    sendResponse({ ok: false });
     return false;
+  }
+
+  // Design Delegate: open the design tool in a visible tab and TYPE a synthesized prompt into its
+  // composer (we deliberately do NOT submit — the user reviews and hits enter). Retries while the
+  // SPA loads; clipboard copy on the content side is the fallback if the composer never resolves.
+  if (message.action === "runDesignMockup") {
+    (async () => {
+      const url = String(message.url || "").trim();
+      const prompt = String(message.prompt || "");
+      if (!/^https?:\/\//.test(url) || !prompt) { sendResponse({ ok: false, typed: false }); return; }
+
+      const tab = await new Promise((res) =>
+        chrome.tabs.create({ url, active: true }, (t) => { void chrome.runtime.lastError; res(t); }));
+      const tabId = tab?.id;
+      if (!tabId) { sendResponse({ ok: false, typed: false }); return; }
+
+      await bgWaitForTabReady(tabId, 8000);
+      let typed = false;
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 700));
+        const res = await bgExecuteAgentAction(tabId, {
+          type: "type",
+          text: prompt,
+          submit: false, // user reviews and sends
+          selector: 'div[contenteditable="true"]',
+          targetText: "prompt",
+        });
+        if (res && res.success && !res.error) { typed = true; break; }
+      }
+      sendResponse({ ok: true, typed, tabId });
+    })();
+    return true;
   }
   if (message.action === "classifyBrainAgentTask") {
     (async () => {
