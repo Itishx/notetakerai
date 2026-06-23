@@ -3505,6 +3505,42 @@ function __sbJumpPointAt(el, opts = {}) {
   });
 }
 
+// A quick hop in place (bare "jump" with nothing to point at). Owns the rig briefly.
+function __sbWkHop() {
+  return new Promise((resolve) => {
+    const lane = __sbEnsureWalker();
+    lane.style.display = "block";
+    const walker = document.getElementById("__sbwk_walker__");
+    const flip = document.getElementById("__sbwk_flip__");
+    if (!walker || !flip) { resolve(false); return; }
+    __sbWkJumping = true; __sbWkThrowMode = true;
+    if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+    clearTimeout(__sbWkAutoTimer);
+    __sbWkBusy = true; __sbWkWalking = false;
+    const baseX = __sbWkPosX;
+    flip.style.transformOrigin = "32px 74px";
+    const t0 = performance.now();
+    const DUR = 720, H = 72;
+    const step = (now) => {
+      const u = Math.min(1, (now - t0) / DUR);
+      const ty = -H * Math.sin(Math.PI * u);
+      walker.style.transform = `translate(${baseX}px, ${ty}px)`;
+      let sx = 1, sy = 1;
+      if (u < 0.18) { const k = u / 0.18; sx = 1 + 0.2 * k; sy = 1 - 0.3 * k; }            // crouch
+      else if (u < 0.34) { const k = (u - 0.18) / 0.16; sx = 1.2 - 0.4 * k; sy = 0.7 + 0.62 * k; } // stretch up
+      else if (u > 0.84) { const k = Math.sin(((u - 0.84) / 0.16) * Math.PI); sx = 1 + 0.16 * k; sy = 1 - 0.16 * k; } // land squash
+      flip.style.transform = `scale(${sx.toFixed(3)},${sy.toFixed(3)})`;
+      if (u >= 1) {
+        flip.style.transform = ""; flip.style.transformOrigin = ""; walker.style.transform = "";
+        __sbWkJumping = false; __sbWkThrowMode = false; __sbWkJumpRaf = null;
+        __sbWkBusy = false; __sbWkResumeFromX = baseX; __sbStartWalkLoop(); resolve(true); return;
+      }
+      __sbWkJumpRaf = requestAnimationFrame(step);
+    };
+    __sbWkJumpRaf = requestAnimationFrame(step);
+  });
+}
+
 function __sbWkTick(now) {
   const lane = document.getElementById("__sb_walk_lane__");
   if (!lane || lane.style.display === "none") { __sbWkRaf = null; return; }
@@ -11215,35 +11251,97 @@ async function __sbFetchAssistantReply(body) {
 }
 
 // ── Jump & Point intent ──────────────────────────────────────────────────────
-// "where is X / point me to X / find X on the page" → Braino leaps off the bar and
-// points at the matching element. Detection + element matching run fully client-side
-// (DOM gives exact on-screen coords via getBoundingClientRect — no vision needed).
+// "show me X / point me to X / jump to X / where is X / find X" → Braino leaps off
+// the bar and points at the matching element. Detection + matching run fully
+// client-side (DOM gives exact on-screen coords via getBoundingClientRect).
+//
+// COMMAND LIST — any of these means "Braino, jump and point at it":
+//   • point …      point to/at/towards X · point me to X · point it out · point towards it
+//   • show …       show me X · show me where X is · show us the X · jump and show me X
+//   • jump …       jump to X · jump to the comments · jump and point at X · jump up to X
+//   • where …      where is/are/'s X · where's the X · where can i find/see X · whereabouts is X
+//   • find …       find X · find me the X · can you find the X · help me find X
+//   • take me …    take/bring/get me to the X
+//   • locate …     locate the X
+//   • highlight …  highlight the X
+//   • select …     select the X
+//   • spot …       spot the X · can you spot the X
+// Plus a bare "jump" makes him hop in place.
+const __SB_LOCATE_PATTERNS = [
+  /\bpoint\s+(me|us|it|to|at|towards?|out)\b/,      // point me/it/to/at/towards/out …
+  /\bpoint\s+(it\s+)?out\b/,
+  /\bshow\s+(me|us)\b/,                              // show me / show us …
+  /\bshow\s+(me|us)?\s*(where|the|that|this)\b/,
+  /\bjump\b/,                                        // jump / jump to / jump and show …
+  /\bwhere('?s| is| are)\b/,                         // where is/are/'s …
+  /\bwhere\s+can\s+i\s+(find|see|locate)\b/,
+  /\bwhereabouts\b/,
+  /\b(find|locate|spot|highlight|select)\b/,         // find/locate/spot/highlight/select …
+  /\b(take|bring|get)\s+me\s+to\b/,                  // take/bring/get me to …
+];
+// Conversational "show me / find …" that are NOT about locating something on screen.
+const __SB_LOCATE_NEGATIVE = /\b(show|tell)\s+(me|us)\s+(how|why|what|whether|if|about|more)\b/;
 function __sbIsLocateRequest(text) {
   const t = String(text || "").toLowerCase().trim();
   if (!t) return false;
-  if (/\bpoint\s+(me\s+|us\s+)?(to|at|towards?|out)\b/.test(t)) return true;
-  if (/\bpoint\s+(me|us)\b/.test(t)) return true;
-  if (/\bwhere('?s| is| are)\b/.test(t)) return true;
-  if (/\bwhere\s+can\s+i\s+find\b/.test(t)) return true;
-  if (/\bshow\s+me\s+where\b/.test(t)) return true;
-  if (/\blocate\b/.test(t)) return true;
-  if (/\bcan\s+you\s+(find|spot|point|locate)\b/.test(t)) return true;
-  if (/\b(find|spot|highlight)\b.*\b(on\s+(the\s+)?(page|screen)|here)\b/.test(t)) return true;
-  return false;
+  if (__SB_LOCATE_NEGATIVE.test(t) && !/\b(where|on\s+(the\s+)?(page|screen)|point|jump|highlight)\b/.test(t)) {
+    return false;
+  }
+  return __SB_LOCATE_PATTERNS.some((re) => re.test(t));
 }
 
-// Strip the carrier phrasing to leave the thing the user is looking for.
+// Strip the command scaffolding + stopwords to leave the thing the user is looking for.
+// Returns "" for bare/pronoun commands ("point towards it", "jump", "show me") → caller
+// falls back to the selection or the most prominent media on screen.
 function __sbExtractLocateTarget(text) {
-  let t = String(text || "").trim();
-  t = t.replace(/^\s*(hey|hi|ok|okay|yo)\s+braino[\s,]*/i, "");
-  t = t.replace(/\bbraino\b/ig, " ");
-  t = t.replace(/\b(can|could|would|will)\s+you\b/ig, " ");
-  t = t.replace(/\bplease\b/ig, " ");
-  t = t.replace(/\b(point\s+(me\s+|us\s+)?(to|at|towards?|out)?|show\s+me\s+where|tell\s+me\s+where|where('?s| is| are)|where\s+can\s+i\s+find|locate|find|spot|highlight)\b/ig, " ");
-  t = t.replace(/\bon\s+(the\s+)?(page|screen)\b/ig, " ");
-  t = t.replace(/^\s*(the|a|an|me|us|to|at)\b/ig, " ");
+  let t = " " + String(text || "").toLowerCase() + " ";
+  t = t.replace(/\b(hey|hi|yo|ok|okay)\s+braino\b/g, " ");
+  t = t.replace(/\bbraino\b/g, " ");
+  t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly|hey|yo)\b/g, " ");
+  // command verbs + their particles
+  t = t.replace(/\bjump(\s+(up|over|on|in|down|back))?(\s+(to|and|at|towards?))?\b/g, " ");
+  t = t.replace(/\bpoint(\s+(me|us|it))?(\s+(to|at|towards?|out))?\b/g, " ");
+  t = t.replace(/\bshow\s+(me|us)?(\s+where)?\b/g, " ");
+  t = t.replace(/\btell\s+(me|us)\s+where\b/g, " ");
+  t = t.replace(/\b(take|bring|get)\s+me\s+to\b/g, " ");
+  t = t.replace(/\bwhere\s+can\s+i\s+(find|see|locate)\b/g, " ");
+  t = t.replace(/\bwhere('?s| is| are)?\b/g, " ");
+  t = t.replace(/\bwhereabouts\b/g, " ");
+  t = t.replace(/\b(find|locate|spot|highlight|select)\b/g, " ");
+  t = t.replace(/\bon\s+(the\s+)?(page|screen|site)\b/g, " ");
+  t = t.replace(/\bfor\s+me\b/g, " ");
+  // strip stopwords (incl. pronouns — a bare "it/this/that" leaves an empty target)
+  t = t.replace(/\b(the|a|an|to|at|of|on|in|for|me|us|you|u|it|is|are|this|that|those|these|my|your|here|there|towards?|where)\b/g, " ");
   t = t.replace(/["'?.!,]/g, " ").replace(/\s+/g, " ").trim();
   return t;
+}
+
+// For bare/pronoun commands: point at the user's selection, else the most prominent
+// media (video / large image / large clickable card) currently on screen.
+function __sbLocateFallbackEl() {
+  try {
+    const sel = window.getSelection && window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) {
+      let n = sel.getRangeAt(0).commonAncestorContainer;
+      if (n && n.nodeType === 3) n = n.parentElement;
+      if (n && n.getBoundingClientRect) {
+        const r = n.getBoundingClientRect();
+        if (r.width > 8 && r.height > 8) return n;
+      }
+    }
+  } catch (_) {}
+  let best = null, bestArea = 0;
+  let nodes;
+  try { nodes = document.querySelectorAll('video, img, [role="img"], [style*="background-image"]'); } catch (_) { nodes = []; }
+  for (const el of nodes) {
+    if (typeof __sbIsOwnUiNode === "function" && __sbIsOwnUiNode(el)) continue;
+    const r = el.getBoundingClientRect();
+    const onScreen = r.bottom > 0 && r.top < window.innerHeight && r.width > 140 && r.height > 100;
+    if (!onScreen) continue;
+    const area = r.width * r.height;
+    if (area > bestArea) { bestArea = area; best = el; }
+  }
+  return best;
 }
 
 // Gather visible, nameable elements with their on-screen rects.
@@ -11278,10 +11376,15 @@ function __sbCollectLocatableTargets() {
 }
 
 // Score candidates against the query; return the best clear winner (or null).
+const __SB_STOPWORDS = new Set(["the", "a", "an", "to", "at", "of", "on", "in", "for",
+  "and", "or", "is", "are", "this", "that", "my", "your", "with", "video", "button", "tab", "link", "icon"]);
 function __sbMatchLocateTarget(query, candidates) {
   const q = String(query || "").toLowerCase().trim();
   if (!q || !candidates || !candidates.length) return null;
-  const qTokens = q.split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+  const allTokens = q.split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+  // content tokens drive the match; if the query is ONLY generic words, fall back to all
+  let qTokens = allTokens.filter((w) => !__SB_STOPWORDS.has(w));
+  if (!qTokens.length) qTokens = allTokens;
   if (!qTokens.length) return null;
   let best = null, bestScore = 0;
   for (const c of candidates) {
@@ -11295,14 +11398,14 @@ function __sbMatchLocateTarget(query, candidates) {
       let hit = 0;
       for (const w of qTokens) if (nameTokens.has(w)) hit++;
       const ratio = hit / qTokens.length;
-      if (ratio >= 0.6) score = 180 + ratio * 120 - Math.min(70, name.split(/\s+/).length * 3);
+      if (ratio >= 0.5) score = 150 + ratio * 140 - Math.min(70, name.split(/\s+/).length * 3);
     }
     if (score <= 0) continue;
     const r = c.rect;
     if (r.top >= 0 && r.bottom <= window.innerHeight) score += 18;   // already on screen
     if (score > bestScore) { bestScore = score; best = c; }
   }
-  return bestScore >= 190 ? best : null;
+  return bestScore >= 160 ? best : null;
 }
 
 // Orchestrate: extract → match → scroll into view → leap + point. Returns true if handled.
@@ -11312,22 +11415,28 @@ async function __sbRunJumpPoint(promptText, ctx = {}) {
   const speak = async (line) => { if (fromVoice) { try { await __sbSpeakWithPreferredVoice(line, voiceOutput); } catch (_) {} } };
 
   const target = __sbExtractLocateTarget(promptText);
-  if (!target) {
-    if (fromVoice) await speak("Point you at what? Tell me what to find."); else __sbWkSay("What should I find? 👀");
+
+  // Resolve what to point at: named target → DOM match; bare/pronoun command → fallback.
+  let pointEl = null;
+  if (target) {
+    const match = __sbMatchLocateTarget(target, __sbCollectLocatableTargets());
+    if (match) pointEl = match.el;
+  }
+  if (!pointEl) pointEl = __sbLocateFallbackEl();
+
+  if (!pointEl) {
+    // Nothing to point at. A bare "jump" still makes him hop; otherwise say so.
+    if (/\bjump\b/i.test(promptText)) { await __sbWkHop(); return true; }
+    if (target) { if (fromVoice) await speak(`I can't spot that on this page.`); else __sbWkSay("Can't spot that 🤔"); }
+    else { if (fromVoice) await speak("Point me at what?"); else __sbWkSay("Point me at what? 👀"); }
     return false;
   }
 
-  let match = __sbMatchLocateTarget(target, __sbCollectLocatableTargets());
-  if (!match) {
-    if (fromVoice) await speak(`I can't spot that on this page.`); else __sbWkSay("Can't spot that 🤔");
-    return false;
-  }
-
-  try { match.el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" }); } catch (_) {}
-  await new Promise((r) => setTimeout(r, 480));   // let the smooth scroll settle before measuring
+  // Auto-scroll the target into view (handles things below/above the fold), then re-measure.
+  try { pointEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" }); } catch (_) {}
+  await new Promise((r) => setTimeout(r, 520));   // let the smooth scroll settle before measuring
 
   // Prefer a larger card/link ancestor so the laser frames the whole item, not just a title.
-  let pointEl = match.el;
   try {
     const a = pointEl.closest && pointEl.closest('a[href], [role="link"], ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-video-renderer, li, article');
     if (a && a !== pointEl) {
