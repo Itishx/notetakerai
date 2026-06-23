@@ -1,5 +1,23 @@
 # Braino Changelog
 
+## v8.5.0 — Braino points at things now (Jump & Point)
+- **Braino can physically point.** When something on the page matters, Braino leaps off his bar, moves to the element, and points right at it — a real "look here" gesture instead of only describing it.
+- **Client-side targeting.** The element is matched directly in the page DOM, so the point lands on the actual thing, live.
+- **Ported the Claude Design pose.** The leap-and-point animation (`poseAt()`) and a laser-style pointer overlay were brought over for a clean, deliberate gesture.
+- **Extension package updated.** The download artifact now ships as version **8.5.0**.
+
+## v8.0.0 — Dev Pulse, Design Delegate, and sub-second voice
+- **Dev Pulse — Braino knows his own development.** Braino reads his own git history (recent commits + work rhythm: late nights, bursts, streaks, the theme he's been deep in) and uses it to ideate about himself. Ask "what should I build in you next?" and he answers grounded in what actually shipped — and notices when you were up until 4am working on him. A new `building` moment + `ideation` trait in the Emotional Engine carry the behaviour.
+- **Design Delegate — idea to mockup.** Share a visual idea for how Braino should look or move and he offers to whip it up: he synthesizes a design-tool prompt from the conversation, opens the design tool in a tab, and types the prompt in for you to review and send (he never auto-submits; the prompt is also copied to your clipboard). One shared engine drives this from both chat and voice.
+- **Voice 1B — sub-second realtime voice.** Voice conversation no longer waits for a full batch reply before speaking. The realtime model now streams its answer straight into Fish Audio sentence-by-sentence (prefetching the next while the current plays), so the first words land in well under a second. Behind a `sbVoiceBrain` toggle for instant revert.
+- **Extension package updated.** The download artifact now ships as version **8.0.0**.
+
+## v7.0.0 — The Emotional Engine and the Memory Engine
+- **The Emotional Engine shipped — Braino's heart.** Personality is no longer one giant prompt: it's modular traits (attunement, presence, warmth, honesty, humour) that lead differently depending on the moment you're in. Braino reads whether you're venting, celebrating, or quietly struggling and responds the way someone in your corner would, with user-facing toggles (humour, pushback, warmth, dad jokes).
+- **The Memory Engine shipped — Braino's mind.** Braino now auto-remembers durable facts about you across conversations and keeps that memory current on its own (ChatGPT/Claude-style saved memories), with a dashboard to review them and a master on/off toggle. Memory flows through chat, voice, and connectors so he's never starting from zero.
+- **A Braino-native chat page.** The chat experience was rebuilt around the new engines so the personality and memory show up consistently in text chat.
+- **Extension package updated.** The download artifact now ships as version **7.0.0**.
+
 ## v6.3.48 — Delegate finishes long research without looping
 - **Research-to-Google-Doc requests now use the fast adapter path.** Phrases like “research Anne Frank and create a Google document” route through grounded web research plus the Docs writer instead of burning the DOM loop budget.
 - **Delegate budgets are adaptive.** Short browser commands keep the tight guard; long research/write/read workflows get a larger safety window so they can finish real work.
