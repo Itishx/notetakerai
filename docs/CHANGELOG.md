@@ -1,5 +1,10 @@
 # Braino Changelog
 
+## v8.6.0 — Live voice status, right above his head
+- **You can always see what Braino is doing in voice.** A little status bubble now floats over his head through the conversation — "Listening…" while he's hearing you, "Understanding…" while he processes, "Waking up…" while connecting — then clears as he speaks.
+- **Same look as the wakeup bubble.** It reuses the existing speech-bubble design with a soft pulsing coral dot so it reads as a live state, not a one-off quip.
+- **Extension package updated.** The download artifact now ships as version **8.6.0**.
+
 ## v8.5.0 — Braino points at things now (Jump & Point)
 - **Braino can physically point.** When something on the page matters, Braino leaps off his bar, moves to the element, and points right at it — a real "look here" gesture instead of only describing it.
 - **Client-side targeting.** The element is matched directly in the page DOM, so the point lands on the actual thing, live.

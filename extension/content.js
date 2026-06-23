@@ -2848,6 +2848,23 @@ function __sbWkSay(text) {
   __sbWkSayTimer = setTimeout(() => b.classList.remove("show"), 1500);
 }
 
+// Persistent voice-state bubble above Braino's head (same design as __sbWkSay, but it sticks
+// while the state holds — "Listening…", "Understanding…" etc.). Pass a falsy label to hide it.
+function __sbWkStatus(label) {
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) return;
+  let b = walker.querySelector("#__sbwk_status__");
+  if (!label) { if (b) b.classList.remove("show"); return; }
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "__sbwk_status__";
+    b.innerHTML = '<span class="sbwk-dot"></span><span class="sbwk-status-label"></span>';
+    walker.appendChild(b);
+  }
+  b.querySelector(".sbwk-status-label").textContent = label;
+  requestAnimationFrame(() => b.classList.add("show"));
+}
+
 // Launch Braino with a flick velocity (px/s). Gravity + wall bounces, then return.
 function __sbWkLaunch(vx, vy) {
   const lane = document.getElementById("__sb_walk_lane__");
@@ -5946,6 +5963,29 @@ function __sbBuildBrainUI() {
       content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
       border:5px solid transparent; border-top-color:rgba(27,23,19,0.92);
     }
+    #__sbwk_status__ {
+      position:absolute; left:50%; bottom:calc(100% - 4px);
+      transform:translateX(-50%) translateY(4px) scale(0.9);
+      background:rgba(27,23,19,0.92); color:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:12px; font-weight:600; line-height:1.2;
+      padding:5px 10px 5px 9px; border-radius:12px; white-space:nowrap;
+      pointer-events:none; opacity:0; z-index:6;
+      display:flex; align-items:center; gap:6px;
+      transition:opacity .18s ease, transform .18s ease;
+      box-shadow:0 4px 14px rgba(27,23,19,0.28);
+    }
+    #__sbwk_status__.show { opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
+    #__sbwk_status__::after {
+      content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+      border:5px solid transparent; border-top-color:rgba(27,23,19,0.92);
+    }
+    #__sbwk_status__ .sbwk-dot {
+      width:6px; height:6px; border-radius:50%; background:#E8786E; flex:none;
+      animation:sbwkStatusPulse 1.1s ease-in-out infinite;
+    }
+    @keyframes sbwkStatusPulse { 0%,100%{opacity:.45; transform:scale(.8);} 50%{opacity:1; transform:scale(1.18);} }
+    @media (prefers-reduced-motion: reduce) { #__sbwk_status__ .sbwk-dot { animation:none; } }
     #__sbwk_flip__ { transform-origin:center; display:block; }
     #__sbwk_shadow__ {
       position:absolute; left:50%; bottom:-4px; width:42px; height:8px;
@@ -15018,6 +15058,16 @@ function __sbSetHpBrainState(state) {
   } else {
     __sbWkWalking = true;           // resume strolling when headphone mode ends
   }
+
+  // Live status bubble above his head, so you always see what he's doing in voice.
+  const VOICE_STATUS = {
+    connecting: "Waking up…",
+    listening: "Listening…",
+    hearing: "Listening…",
+    captured: "Understanding…",
+    speaking: "", // he's talking — the voice itself is the feedback
+  };
+  __sbWkStatus(state ? (VOICE_STATUS[state] ?? "") : "");
 }
 
 function __sbSetVoiceStatusBadge(state, label) {
