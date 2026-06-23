@@ -7951,6 +7951,10 @@ function __sbSyncSpeakButtons() {
 
 function __sbStopSpeech() {
   __sbSpeechGeneration += 1;
+  // 1B: tear down the streaming-TTS pipeline. The generation bump above already invalidates the
+  // drain loop's token checks; nulling the state stops any further feed/queueing.
+  __sbStreamFishActive = false;
+  __sbStreamTts = null;
   // Abort any in-flight Fish Audio TTS fetch/stream immediately so barge-in is instant
   // instead of hanging until the fetch timeout. The generation bump above already marks
   // it stale, so the abort is treated as a clean cancel (no error, no browser fallback).
@@ -12145,6 +12149,26 @@ let __sbUseOffscreenRt = false; // true when realtime session lives in the offsc
 const __SB_REALTIME_VOICE = "verse";
 let __sbVoiceOutputPref = "fish"; // "realtime" | "fish"
 
+// Voice 1B: the conversation "brain". "realtime" = let the realtime model stream the answer
+// straight into Fish (fast, no chat-about-notes hop). "chat" = today's batch pipeline (the
+// instant-revert fallback). Default realtime. Read once from storage; flip via sbVoiceBrain.
+let __sbVoiceBrain = "realtime"; // "realtime" | "chat"
+try {
+  chrome.storage?.local?.get?.(["sbVoiceBrain"], (r) => {
+    if (r && (r.sbVoiceBrain === "chat" || r.sbVoiceBrain === "realtime")) __sbVoiceBrain = r.sbVoiceBrain;
+  });
+  chrome.storage?.onChanged?.addListener?.((changes, area) => {
+    if (area === "local" && changes.sbVoiceBrain) {
+      const v = changes.sbVoiceBrain.newValue;
+      if (v === "chat" || v === "realtime") __sbVoiceBrain = v;
+    }
+  });
+} catch (_) {}
+// Streaming-TTS pipeline state (set while the realtime brain streams deltas into Fish).
+let __sbStreamFishActive = false;
+let __sbStreamTts = null; // { token, buffer, queue, draining, ended, headers, spoke }
+let __sbRtLastAnsweredUrl = ""; // anti-stale: re-sync session context when the page changes
+
 // Language: Braino defaults to English in voice. It only switches after the user explicitly
 // confirms (kills the "random foreign-language reply" bug, which was noise mis-detection +
 // "mirror the user" instruction). __sbActiveLanguage = the confirmed non-English language for
@@ -13064,6 +13088,154 @@ function __sbInterruptRealtimeResponse() {
   __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
 }
 
+// ── Voice 1B: stream the realtime model's text deltas into Fish, sentence-by-sentence ────────
+// Reuses the existing Fish fetch/play primitives (__sbFetchSentenceTts / __sbPlaySentenceResp)
+// and the __sbSpeechGeneration barge-in token. The win over the batch path: we PREFETCH the next
+// sentence while the current one plays, and we start the moment sentence 1 lands instead of after
+// the whole answer is written.
+function __sbBeginStreamTts(speechToken) {
+  __sbStreamTts = { token: speechToken, buffer: "", queue: [], draining: false, ended: false, headers: null, spoke: false, firstEmitted: false, group: "" };
+  const s = __sbStreamTts;
+  __sbStorageGet(["authToken"]).then(({ authToken }) => {
+    if (!__sbStreamTts || __sbStreamTts !== s || s.token !== __sbSpeechGeneration) return;
+    const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    s.headers = headers;
+    void __sbDrainStreamTts(); // sentences may already be queued
+  });
+}
+
+// Pull complete sentences out of the growing buffer and queue them. Boundary rule matches the batch
+// chunker (terminator + whitespace, so decimals/"e.g." don't over-split). To respect Fish's 429
+// limit (the v7.5.1 lesson: keep request COUNT low), only the FIRST sentence goes out alone (fast
+// first audio); the rest are grouped into ≤240-char chunks before queueing.
+const __SB_STREAM_TTS_MAX = 240;
+function __sbEnqueueStreamSentence(s, sentence) {
+  if (!s.firstEmitted) { s.queue.push(sentence); s.firstEmitted = true; return; }
+  if (s.group && (s.group.length + 1 + sentence.length) > __SB_STREAM_TTS_MAX) {
+    s.queue.push(s.group);
+    s.group = sentence;
+  } else {
+    s.group = s.group ? `${s.group} ${sentence}` : sentence;
+  }
+}
+
+function __sbFeedStreamTts(delta) {
+  const s = __sbStreamTts;
+  if (!s || s.token !== __sbSpeechGeneration) return;
+  s.buffer += delta;
+  let match;
+  while ((match = s.buffer.match(/^([\s\S]*?[.!?…।])\s+/))) {
+    const sentence = match[1].trim();
+    s.buffer = s.buffer.slice(match[0].length);
+    if (sentence) __sbEnqueueStreamSentence(s, sentence);
+  }
+  void __sbDrainStreamTts();
+}
+
+function __sbEndStreamTts() {
+  const s = __sbStreamTts;
+  if (!s || s.token !== __sbSpeechGeneration) return;
+  const tail = s.buffer.trim();
+  s.buffer = "";
+  if (tail) __sbEnqueueStreamSentence(s, tail);
+  if (s.group) { s.queue.push(s.group); s.group = ""; } // flush the trailing group
+  s.ended = true;
+  void __sbDrainStreamTts();
+}
+
+// Single drain loop: play queued sentences in order, prefetching the next while the current plays.
+async function __sbDrainStreamTts() {
+  const s = __sbStreamTts;
+  if (!s || s.draining || !s.headers) return;
+  s.draining = true;
+  try {
+    let pending = null; // { promise } — a fetch already started for the next sentence
+    while (true) {
+      if (!__sbStreamTts || s.token !== __sbSpeechGeneration) return; // barge-in / superseded
+      let item = pending;
+      pending = null;
+      if (!item) {
+        if (s.queue.length === 0) {
+          if (s.ended) break;
+          await new Promise((r) => setTimeout(r, 25));
+          continue;
+        }
+        item = { promise: __sbFetchSentenceTts(s.queue.shift(), s.token, s.headers) };
+      }
+      const cur = await item.promise;
+      if (s.token !== __sbSpeechGeneration) return;
+      // Kick off the next sentence's fetch NOW so it overlaps this one's playback (no gap).
+      if (s.queue.length > 0) {
+        pending = { promise: __sbFetchSentenceTts(s.queue.shift(), s.token, s.headers) };
+      }
+      if (cur.error) { __sbHandleFishTtsFailure(cur.error); continue; }
+      if (!cur.resp) return;
+      try {
+        const played = await __sbPlaySentenceResp(cur.resp, s.token);
+        if (played) s.spoke = true;
+      } catch (mediaErr) {
+        if (s.token !== __sbSpeechGeneration) return;
+        __sbHandleFishTtsFailure(mediaErr);
+      }
+    }
+  } finally {
+    s.draining = false;
+    if (__sbStreamTts === s && s.token === __sbSpeechGeneration && s.ended && s.queue.length === 0) {
+      __sbWalkTalking = false;
+    }
+  }
+}
+
+// 1B conversation turn: refresh session context if the page changed, then let the realtime model
+// generate and stream straight into Fish. Returns true if it answered; false → caller falls back.
+async function __sbAnswerViaRealtimeStreaming(turnToken) {
+  if (!__sbRtControlReady()) return false;
+
+  // Anti-stale gate: only pay a context re-sync when the page actually changed since last answer.
+  const url = (typeof location !== "undefined" && location.href) || "";
+  if (url && url !== __sbRtLastAnsweredUrl) {
+    try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+    __sbRtLastAnsweredUrl = url;
+    if (!__sbRtControlReady()) return false;
+  }
+
+  __sbStopSpeech(); // claim a fresh speech token + clear any prior stream
+  const speechToken = __sbSpeechGeneration;
+  __sbBeginStreamTts(speechToken);
+  __sbStreamFishActive = true;
+
+  if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
+  __sbRtAssistantTranscript = "";
+  __sbRtCurrentResponseMode = "conversation";
+  __sbRtHandlingConversationTurn = true;
+  __sbVoicePendingReply = true;
+  if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+
+  const waiter = __sbCreateRtWaiter();
+  const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: ["text"] } });
+  if (!sent) {
+    __sbStreamFishActive = false;
+    __sbStreamTts = null;
+    __sbResetRealtimeResponseState();
+    return false; // control channel not ready → fall back to batch path
+  }
+
+  const result = await waiter; // resolves at response.done / cancelled / error (TEXT done)
+  __sbStreamFishActive = false;
+  __sbEndStreamTts(); // flush the trailing partial sentence
+
+  // Fish audio lags the text stream — wait for it to finish playing (or barge-in to supersede)
+  // before finalizing the turn, so TTS cost events land on this turn and the next turn waits.
+  while (__sbStreamTts && __sbStreamTts.token === speechToken &&
+         (__sbStreamTts.draining || __sbStreamTts.queue.length > 0)) {
+    await new Promise((r) => setTimeout(r, 40));
+  }
+
+  __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+  return result?.status === "done";
+}
+
 async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = false } = {}) {
   const promptText = String(text || "").trim();
   if (!promptText) {
@@ -13412,10 +13584,20 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
-  // General conversation — route through the SAME smart text pipeline legacy voice uses
-  // (chat-about-notes, with the full page DOM context + user notes + selected text), then
-  // speak the answer in the realtime voice. The bare realtime model couldn't see the page
-  // properly and felt dumb; this gives realtime legacy's brain + realtime's voice.
+  // General conversation. 1B: when the realtime-native brain is on and Fish is the voice, let the
+  // realtime model stream its answer straight into Fish — no chat-about-notes hop, first audio in
+  // ~0.5s instead of after a full batch completion. The session already holds page/notes context
+  // (synced via __sbSyncRealtimeVoiceInstructions), so it stays page-aware. Falls back to the batch
+  // pipeline below if streaming can't run (toggle off, realtime not ready, or it errors mid-turn).
+  if (__sbVoiceBrain === "realtime" && __sbRtControlReady() && __sbVoiceOutputPref === "fish") {
+    __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+    const ok = await __sbAnswerViaRealtimeStreaming(turnToken);
+    if (ok) return;
+    // streaming failed → fall through to the batch pipeline
+  }
+
+  // Batch fallback — the SAME smart text pipeline legacy voice uses (chat-about-notes, with full
+  // page DOM + notes + selected text), spoken in the realtime voice.
   await __sbProcessPrompt(promptText, {
     fromVoice: true,
     voiceOutput: "realtime",
@@ -13560,6 +13742,7 @@ function __sbHandleRtEvent(ev) {
   if (ev.type === "response.output_audio_transcript.delta" || ev.type === "response.output_text.delta") {
     if (typeof ev.delta === "string" && ev.delta) {
       __sbRtAssistantTranscript += ev.delta;
+      if (__sbStreamFishActive) __sbFeedStreamTts(ev.delta); // 1B: stream into Fish as it arrives
     }
     if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
     return;
