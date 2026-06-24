@@ -3789,6 +3789,8 @@ let __sbMovieModeResizeListener = null;
 let __sbMovieTranscriptEntries = [];
 let __sbMovieLastSubtitleText = "";
 let __sbAgentPendingTurn = null;
+let __sbLastFinalizedAgentKey = "";   // dedupe: background can emit the final twice
+let __sbLastFinalizedAgentAt = 0;
 let __sbMovieLastTitle = "";
 let __sbPassiveMovieSyncTimer = null;
 let __sbFullscreenUiListenerBound = false;
@@ -6424,6 +6426,9 @@ function __sbBuildBrainUI() {
     }
     chrome.runtime.sendMessage({ action: "stopBrainAgent" }, () => { void chrome.runtime.lastError; });
     __sbSetStopBtn(false);
+    __sbAgentPendingTurn = null;
+    __sbClearBarAgentStatus();   // kill the bar shimmer when the user stops
+    __sbStopWaitEntertainment();
     __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
   });
   bubble.querySelector("[data-sb-copy]").addEventListener("click", async (ev) => {
@@ -9849,30 +9854,36 @@ function __sbBuildCardTurnHtml(turn = {}, options = {}) {
   return `<div class="sb-turn">${promptHtml}${answerHtml}</div>`;
 }
 
+// Tidy a raw agent status/step line: drop element indices ("#undefined", "#12"), arrows,
+// leading checklist markers, and friendly-ize bare verbs.
+function __sbCleanAgentStatus(s) {
+  let t = String(s || "").trim();
+  if (!t) return "";
+  t = t.replace(/\s*#(?:undefined|null|nan|-?\d+)\b/gi, "");        // "Read #undefined" → "Read"
+  t = t.replace(/^\s*(?:[→>]|\d+[.)]|[-*]|\[[x!>\s-]\])\s*/g, "");   // leading markers/arrows
+  t = t.replace(/\s{2,}/g, " ").trim();
+  if (/^read$/i.test(t)) t = "Reading the page";
+  return t;
+}
+
 function __sbFormatAgentPendingBody() {
-  if (!__sbAgentPendingTurn?.prompt) return "Delegating...";
-  const status = String(__sbAgentPendingTurn.status || "Delegating...").trim() || "Delegating...";
+  if (!__sbAgentPendingTurn?.prompt) return "Delegating…";
+  const status = __sbCleanAgentStatus(__sbAgentPendingTurn.status) || "Working on it…";
   const subgoals = Array.isArray(__sbAgentPendingTurn.subgoals) ? __sbAgentPendingTurn.subgoals : [];
   if (!subgoals.length) return status;
   const seen = new Set();
   const lines = [];
   for (const goal of subgoals) {
-    const desc = String(goal?.desc || goal?.goal || "Step").trim();
-    const key = desc
-      .toLowerCase()
-      .replace(/^\s*(?:[-*]|\d+[.)]|\[[x!>\s-]\])\s*/g, "")
-      .replace(/\b(?:step|subgoal|task)\s*\d+\s*[:.)-]?\s*/g, "")
-      .replace(/[^\w\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const desc = __sbCleanAgentStatus(String(goal?.desc || goal?.goal || ""));
+    const key = desc.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const state = String(goal?.status || "pending");
-    const marker = state === "done" ? "[x]" : state === "active" ? "[>]" : state === "failed" ? "[!]" : "[ ]";
-    lines.push(`${marker} ${desc}`);
-    if (lines.length >= 8) break;
+    const icon = state === "done" ? "✓" : state === "active" ? "→" : state === "failed" ? "✗" : "○";
+    lines.push(`${icon} ${desc}`);
+    if (lines.length >= 6) break;
   }
-  return `${status}\n\n${lines.join("\n")}`;
+  return lines.length ? `${status}\n\n${lines.join("\n")}` : status;
 }
 
 function __sbRenderCardHistory(scroll, options = {}) {
@@ -9950,7 +9961,7 @@ function __sbSetBarAgentStatus(text) {
   const input = document.getElementById("__sb_input__");
   const bar = document.getElementById("__sb_bar__");
   if (!input || !bar) return;
-  const log = String(text || "").trim();
+  const log = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
   if (!log) return;
   bar.classList.add("sb-agent-busy");
   if (!input.value) {                          // don't clobber what the user is typing
@@ -10030,6 +10041,20 @@ function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
   __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
   const reply = String(answer || "").trim();
+  // Dedupe: background sometimes emits the final twice (and two paths can both finalize),
+  // which rendered the SAME prompt+answer twice in the card. Drop the duplicate.
+  const finalizeKey = task + " " + reply;
+  const lastTurn = __sbCardTurns[__sbCardTurns.length - 1];
+  const dupTurn = lastTurn && String(lastTurn.prompt || "").trim() === task && String(lastTurn.answer || "").trim() === reply;
+  if (dupTurn || (finalizeKey === __sbLastFinalizedAgentKey && Date.now() - __sbLastFinalizedAgentAt < 20000)) {
+    __sbAgentPendingTurn = null;
+    if (options.render === false) return;
+    const scroll0 = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    if (scroll0) { __sbRenderConversationWithPending(scroll0); __sbSyncSpeakButtons(); }
+    return;
+  }
+  __sbLastFinalizedAgentKey = finalizeKey;
+  __sbLastFinalizedAgentAt = Date.now();
   if (task) {
     const lastUser = __sbChatHistory[__sbChatHistory.length - 1];
     if (!lastUser || lastUser.role !== "user" || String(lastUser.content || "").trim() !== task) {
@@ -12206,6 +12231,7 @@ function __sbRunAgent(task, options = {}) {
     return;
   }
   __sbAgentLaunchGuard = { task: __sbLastAgentTask, ts: now };
+  __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
   const handoff = __sbBuildAgentHandoffPayload(__sbLastAgentTask, options);
