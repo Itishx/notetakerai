@@ -3921,6 +3921,7 @@ if (__sbContextOk()) {
           if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
         }
         __sbSetStopBtn(false);
+        __sbClearBarAgentStatus();
         if (__sbRtAwaitingDelegateResult) {
           __sbRtAwaitingDelegateResult = false;
           if (finalText) {
@@ -3939,6 +3940,10 @@ if (__sbContextOk()) {
           } else {
             __sbCompleteRealtimeCostTurn({ force: true });
           }
+        } else if (__sbHeadphoneMode && finalText && !__sbVoicePendingReply) {
+          // Delegate reached from voice but not via the realtime await path — speak the
+          // result back so a spoken task always gets a spoken answer.
+          __sbSpeakWithPreferredVoice(finalText).catch(() => {});
         }
       } else {
         if (!__sbVoiceOnlyMode) {
@@ -4731,6 +4736,22 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-climb #__sb_send_btn__,
     #__sb_bar__.sb-climb #__sb_bar_close__,
     #__sb_bar__.sb-climb #__sb_x_auto_btn__ { opacity: 0; pointer-events: none; }
+    /* ── Delegate-busy: coral shimmer sweeps the bar while the agent works, and the
+       live step text rides in the input placeholder (see __sbSetBarAgentStatus). ── */
+    @keyframes __sb_agent_shimmer__ {
+      0%   { background-position: 250% 0; }
+      100% { background-position: -150% 0; }
+    }
+    #__sb_bar__.sb-agent-busy { border-color: rgba(232,120,110,0.5); }
+    #__sb_bar__.sb-agent-busy::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      z-index: 0;
+      background: linear-gradient(100deg, transparent 30%, rgba(232,120,110,0.22) 48%, rgba(246,168,162,0.28) 52%, transparent 70%);
+      background-size: 220% 100%;
+      animation: __sb_agent_shimmer__ 1.5s linear infinite;
+    }
+    #__sb_bar__.sb-agent-busy #__sb_input__ { position: relative; z-index: 1; }
+    #__sb_bar__.sb-agent-busy #__sb_input__::placeholder { color: #C9544A; opacity: 0.95; }
     /* ── Readable mode: opaque warm cream, dark text — always legible ── */
     #__sb_bar__.sb-readable {
       background: rgba(255,251,247,0.96);
@@ -9923,6 +9944,30 @@ function __sbBuildAgentHandoffPayload(task, options = {}) {
   };
 }
 
+// Live delegate logs in the constant bar: show the latest step where "Follow up…" sits,
+// with a shimmer on the bar so it's clear Braino is working (not frozen).
+function __sbSetBarAgentStatus(text) {
+  const input = document.getElementById("__sb_input__");
+  const bar = document.getElementById("__sb_bar__");
+  if (!input || !bar) return;
+  const log = String(text || "").trim();
+  if (!log) return;
+  bar.classList.add("sb-agent-busy");
+  if (!input.value) {                          // don't clobber what the user is typing
+    input.placeholder = log.length > 88 ? log.slice(0, 87) + "…" : log;
+    input.dataset.sbAgentLog = "1";
+  }
+}
+function __sbClearBarAgentStatus() {
+  const input = document.getElementById("__sb_input__");
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) bar.classList.remove("sb-agent-busy");
+  if (input && input.dataset.sbAgentLog) {
+    input.placeholder = "Follow up…";
+    delete input.dataset.sbAgentLog;
+  }
+}
+
 function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
   const task = String(prompt || "").trim();
   if (!task) return;
@@ -9931,6 +9976,7 @@ function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
     status: String(status || "Delegating…").trim() || "Delegating…",
     subgoals: [],
   };
+  __sbSetBarAgentStatus(__sbAgentPendingTurn.status);
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
@@ -9941,6 +9987,7 @@ function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
 function __sbUpdateAgentPendingTurn(status) {
   if (!__sbAgentPendingTurn?.prompt) return;
   __sbAgentPendingTurn.status = String(status || "Delegating…").trim() || "Delegating…";
+  __sbSetBarAgentStatus(__sbAgentPendingTurn.status);
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
@@ -9980,6 +10027,7 @@ function __sbUpdateAgentSubgoals(subgoals) {
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
   __sbStopWaitEntertainment(); // delegate finished — settle the mascot
+  __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
   const reply = String(answer || "").trim();
   if (task) {
@@ -11287,27 +11335,45 @@ async function __sbFetchAssistantReply(body) {
 //   • select …     select the X
 //   • spot …       spot the X · can you spot the X
 // Plus a bare "jump" makes him hop in place.
-const __SB_LOCATE_PATTERNS = [
-  /\bpoint\s+(me|us|it|to|at|towards?|out)\b/,      // point me/it/to/at/towards/out …
+// Jump & Point is ONLY for locating something that is visible ON THIS PAGE — never for
+// "find me a movie / where can I watch X / buy Y online", which belong to delegate/research.
+// Two tiers: STRONG verbs fire on their own; WEAK verbs fire only when the request is clearly
+// about the page/screen (an on-screen anchor or a UI-element noun).
+const __SB_LOCATE_STRONG = [
+  /\bpoint\s+(me|us|it|to|at|towards?|out)\b/,       // point me/it/to/at/towards/out …
   /\bpoint\s+(it\s+)?out\b/,
-  /\bshow\s+(me|us)\b/,                              // show me / show us …
-  /\bshow\s+(me|us)?\s*(where|the|that|this)\b/,
-  /\bjump\b/,                                        // jump / jump to / jump and show …
-  /\bwhere('?s| is| are)\b/,                         // where is/are/'s …
-  /\bwhere\s+can\s+i\s+(find|see|locate)\b/,
-  /\bwhereabouts\b/,
-  /\b(find|locate|spot|highlight|select)\b/,         // find/locate/spot/highlight/select …
-  /\b(take|bring|get)\s+me\s+to\b/,                  // take/bring/get me to …
+  /\bshow\s+me\s+where\b/,                            // show me where … is
+  /\b(highlight|circle)\s+(the|that|this|it)\b/,
 ];
-// Conversational "show me / find …" that are NOT about locating something on screen.
+const __SB_LOCATE_WEAK = [
+  /\b(find|locate|spot|select)\b/,
+  /\bshow\s+(me|us)\s+(the|that|this)\b/,
+  /\bwhere('?s| is| are)\b/,
+  /\bwhere\s+can\s+i\s+see\b/,
+  /\bwhereabouts\b/,
+  /\b(take|bring|get)\s+me\s+to\b/,
+];
+// Clearly about THIS page/screen.
+const __SB_LOCATE_ONSCREEN = /\b(on\s+(the\s+)?(page|screen|site|tab)|on\s+here|on\s+this\s+(page|site|screen|tab)|right\s+here)\b/;
+// A UI element is named → it's an on-screen locate ("where's the subscribe button").
+const __SB_LOCATE_UI_NOUN = /\b(button|bar|tab|link|icon|menu|field|box|input|search|searchbar|section|heading|header|footer|video|thumbnail|results?|comments?|settings?|toggle|checkbox|dropdown|sidebar|nav(igation)?|logo|cart|profile|avatar|posts?|tweets?|repl(y|ies)|like|share|subscribe|download|sign[\s-]?in|log[\s-]?in|sign[\s-]?up|play\s+button)\b/;
+// Research / media / shopping / travel → NOT an on-screen locate (let delegate handle it).
+const __SB_LOCATE_BLOCK = /\b(watch|stream(ing)?|movie|film|series|show(times?|s)?|episode|season|trailer|netflix|prime|hbo|hulu|disney|spotify|youtube\s+for|buy|rent|purchase|order|available|in\s+stock|near\s+me|cheapest|deal|price|book|flight|hotel|restaurant|recipe|how\s+to|what\s+is|who\s+is|why\s+is|explain|search\s+(for|the\s+web)|google|look\s+up|research)\b/;
+// Conversational "show/tell me how/why …" that aren't locating anything.
 const __SB_LOCATE_NEGATIVE = /\b(show|tell)\s+(me|us)\s+(how|why|what|whether|if|about|more)\b/;
 function __sbIsLocateRequest(text) {
   const t = String(text || "").toLowerCase().trim();
   if (!t) return false;
-  if (__SB_LOCATE_NEGATIVE.test(t) && !/\b(where|on\s+(the\s+)?(page|screen)|point|jump|highlight)\b/.test(t)) {
-    return false;
-  }
-  return __SB_LOCATE_PATTERNS.some((re) => re.test(t));
+  // bare "jump" / "jump up" → a hop in place (kept, it's an uncommon chat word on its own)
+  if (/^jump[\s.!]*$/.test(t) || /\bjump\s+(up|in\s+place)\b/.test(t)) return true;
+  // explicit point/highlight verbs always win — even amid other words
+  if (__SB_LOCATE_STRONG.some((re) => re.test(t))) return true;
+  if (__SB_LOCATE_NEGATIVE.test(t)) return false;
+  if (__SB_LOCATE_BLOCK.test(t)) return false;       // "find a movie", "where can I watch…" → delegate
+  const weak = __SB_LOCATE_WEAK.some((re) => re.test(t));
+  if (!weak) return false;
+  // weak verbs only count as a locate when the request is clearly about the page/screen
+  return __SB_LOCATE_ONSCREEN.test(t) || __SB_LOCATE_UI_NOUN.test(t);
 }
 
 // Strip the command scaffolding + stopwords to leave the thing the user is looking for.
