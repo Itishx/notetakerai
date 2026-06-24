@@ -2975,9 +2975,12 @@ Rules:
 - Every non-read/browser action needs an assertion that can be checked against the next observation.
 - Do not claim done until the task is complete in observed state.
 - If recent history shows the same action was repeated or skipped, change tactic immediately. Do not repeat the same subgoal wording with punctuation-only changes.
+- INFORMATIONAL tasks (find / show / list / look up / recommend / "what/which/where" + info, restaurants, places, products, facts): the goal is to REPORT, not to keep browsing. The moment the observation already shows usable results, take {"type":"read"} to capture them and then immediately return {"type":"answer","text":"<the findings: top picks with the key details>"}. This finishes the task.
+- Do NOT run another web_search or navigate to a "broader"/reworded query once usable results are already visible — one good search is enough. A second nearly-identical query is forbidden; read what you already have and answer.
+- Prefer {"type":"answer"} to finish informational tasks. Reserve {"type":"done"} for ACTION tasks (send / book / buy / save / submit) where the live page itself proves completion. Never loop trying to "prove" an informational task is done — answering IS done.
 - If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
 - For other high-risk final actions not clearly requested by the user, clarify before acting.
-- For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location" and read the visible result.
+- For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location", read the visible results once, and answer with the top options — do not keep re-searching.
 - Today is ${bgDelegateTodayText()}.
 
 Useful URL shortcuts:
@@ -3484,6 +3487,23 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       onProgress?.("I noticed a repeated step, so I’m switching tactics...");
       prevObs = obs;
       continue;
+    }
+    // Search cap: an informational task should search once, read the results, and answer.
+    // After 2 searches, stop searching — force a read so the next turn has content to answer from.
+    const isSearchAction = action.type === "web_search"
+      || (action.type === "navigate" && /\/(maps\/)?search[/?]|[?&](q|query)=/i.test(String(action.url || "")));
+    if (isSearchAction) {
+      state.searchCount = (state.searchCount || 0) + 1;
+      if (state.searchCount > 2) {
+        const note = "Enough searching — usable results are available. Read what's on the page and ANSWER with the top options instead of searching again.";
+        state.facts.push({ key: `search_cap:${state.facts.length + 1}`, value: note, source: "runtime" });
+        state.facts = state.facts.slice(-30);
+        BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note }, { ok: false, reason: note });
+        onProgress?.("Enough searching — reading the results to answer...");
+        await bgExecuteDelegateAction(currentTabId, { type: "read" }, state).catch(() => {});
+        prevObs = (await bgBuildElementObservation(currentTabId, task)).map;
+        continue;
+      }
     }
     // D2 — staleness guard: a targeted action's index came from an observation that is now
     // 2-5s old (model latency), during which the page may have shifted. Re-read and confirm
