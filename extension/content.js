@@ -11538,6 +11538,14 @@ async function __sbRunJumpPoint(promptText, ctx = {}) {
   if (!pointEl) {
     // Nothing to point at. A bare "jump" still makes him hop; otherwise say so.
     if (/\bjump\b/i.test(promptText)) { await __sbWkHop(); return true; }
+    // On a map, the pins/labels are drawn on a WebGL canvas — not DOM — so they can't be
+    // located. Be honest about it instead of a generic "can't spot that".
+    const onMap = /(?:^|\.)google\.[a-z.]+$/i.test(location.hostname) && /\/maps\b/.test(location.pathname);
+    if (target && onMap) {
+      const line = "That's a pin on the map itself — I can only point at things in the results list, not on the map canvas. Want me to open it?";
+      if (fromVoice) await speak(line); else __sbWkSay("That's on the map canvas — I can't point at pins 🗺️");
+      return false;
+    }
     if (target) { if (fromVoice) await speak(`I can't spot that on this page.`); else __sbWkSay("Can't spot that 🤔"); }
     else { if (fromVoice) await speak("Point me at what?"); else __sbWkSay("Point me at what? 👀"); }
     return false;

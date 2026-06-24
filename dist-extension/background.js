@@ -2878,6 +2878,48 @@ SKILL realtime-costs:
   return "";
 }
 
+// The missing layer: turn a natural-language request into a real search PLAN — a concise
+// keyword query (what + where) + the surface to search + soft constraints to apply to the
+// RESULTS (not stuffed into the query). This is why "restaurants that serve dosa in the
+// morning in Mumbai" used to get dumped verbatim into Maps. Fail-open (returns null).
+async function bgSynthesizeIntent(task, sharedContext) {
+  const raw = String(task || "").trim();
+  if (!raw) return null;
+  try {
+    const systemPrompt = [
+      "You convert a user's natural-language request into a clean search plan for a browser agent.",
+      "Return STRICT JSON only, no prose, no markdown:",
+      '{"surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"]}',
+      "Rules:",
+      "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
+      "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
+      "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
+      "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
+    ].join("\n");
+    const userPrompt = [
+      `REQUEST: ${raw}`,
+      `CONTEXT: ${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
+      "Return the JSON now.",
+    ].join("\n\n");
+    const reply = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+    });
+    const p = bgExtractJsonObject(reply);
+    const searchQuery = String(p.searchQuery || "").trim();
+    if (!searchQuery) return null;
+    const surface = ["maps", "web", "none"].includes(p.surface) ? p.surface : "web";
+    const softConstraints = Array.isArray(p.softConstraints)
+      ? p.softConstraints.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 5)
+      : [];
+    return { surface, searchQuery, softConstraints };
+  } catch (error) {
+    console.warn("[Braino][Delegate] intent synth fallback:", error?.message || error);
+    return null;
+  }
+}
+
 async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, options = {}) {
   const fallbackSkills = bgSelectDelegateSkillsHeuristic(task);
   const fallback = {
@@ -2997,14 +3039,17 @@ ${skillText}`;
 async function bgDecideNextAction({ task, state, observationText, skills, lessons, phase, stuckCount, validationError }) {
   const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
   const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons);
+  const synth = state?.synth || null;
   const userPrompt = [
     `TASK: ${task}`,
+    synth?.searchQuery ? `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.` : null,
+    synth?.softConstraints?.length ? `APPLY THESE PREFERENCES by reading and RANKING the results (not by adding them to the query): ${synth.softConstraints.join("; ")}.` : null,
     "STATE:",
     BrainoTaskState.renderTaskState(state),
     "OBSERVATION:",
     observationText || "(empty observation)",
     "Return the next Decision JSON now.",
-  ].join("\n\n");
+  ].filter(Boolean).join("\n\n");
   let reply = await bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError });
   try {
     return { decision: bgValidateDecision(bgExtractJsonObject(reply)), model };
@@ -3356,12 +3401,18 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     prevObs = replay.obs || prevObs;
   }
 
+  // Understand intent → form a real search query + constraints BEFORE any search runs,
+  // so we never paste the user's sentence verbatim into Maps/web. Fail-open.
+  const synth = await bgSynthesizeIntent(task, sharedContext).catch(() => null);
+  state.synth = synth;
+  if (synth?.searchQuery) onProgress?.(`Searching for "${synth.searchQuery}"`);
+
   const decomp = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress);
   state.goal = decomp.goal || task;
   BrainoTaskState.setSubgoals(state, decomp.subgoals);
   await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
 
-  const fastActions = skipFastPath ? null : bgTryFastPath(task, []);
+  const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth);
   if (fastActions?.length) {
     for (const fast of fastActions) {
       onProgress?.(fast.description || bgDescribeDelegateAction(fast, prevObs));
@@ -5657,7 +5708,7 @@ function bgLooksLikeGoogleMapsPlaceTask(task) {
   return placeCategory && locationHint;
 }
 
-function bgBuildGoogleMapsFastPath(task) {
+function bgBuildGoogleMapsFastPath(task, synth = null) {
   const raw = String(task || "").trim();
   const t = raw.toLowerCase();
   if (!bgLooksLikeGoogleMapsPlaceTask(raw)) return null;
@@ -5684,8 +5735,14 @@ function bgBuildGoogleMapsFastPath(task) {
   }
 
   let query = "";
-  const mapsSearchMatch = raw.match(/(?:search|find|look up|show|open)\s+(.+?)\s+on\s+(?:google\s+)?maps/i);
-  if (mapsSearchMatch) query = mapsSearchMatch[1].trim();
+  // Prefer the synthesized keyword query (understood intent) over the user's raw sentence.
+  if (synth && synth.searchQuery && (synth.surface === "maps" || synth.surface === "none")) {
+    query = synth.searchQuery.trim();
+  }
+  if (!query) {
+    const mapsSearchMatch = raw.match(/(?:search|find|look up|show|open)\s+(.+?)\s+on\s+(?:google\s+)?maps/i);
+    if (mapsSearchMatch) query = mapsSearchMatch[1].trim();
+  }
   if (!query) query = bgCleanGoogleMapsQuery(raw);
   if (!query) return null;
 
@@ -5881,7 +5938,7 @@ Should I send **Name** to your phone?
 `;
 }
 
-function bgTryFastPath(task, history) {
+function bgTryFastPath(task, history, synth = null) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
   if (/^(?:open|go to)\s+gmail\b/i.test(task)) {
@@ -5905,7 +5962,7 @@ function bgTryFastPath(task, history) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
   }
-  const googleMapsFastPath = bgBuildGoogleMapsFastPath(task);
+  const googleMapsFastPath = bgBuildGoogleMapsFastPath(task, synth);
   if (googleMapsFastPath) return googleMapsFastPath;
   const mediumFastPath = bgBuildMediumFastPath(task);
   if (mediumFastPath) return mediumFastPath;
