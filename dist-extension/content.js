@@ -3269,13 +3269,9 @@ function __sbPointFxEnsure() {
   ring.setAttribute("stroke-linejoin", "round");
   svg.appendChild(beam);
   svg.appendChild(ring);
-  const callout = document.createElement("div");
-  callout.id = "__sb_point_callout__";
-  callout.innerHTML = `Right here <span style="font-weight:800">↗</span>`;
   wrap.appendChild(svg);
-  wrap.appendChild(callout);
   (document.documentElement || document.body).appendChild(wrap);
-  __sbPointFx = { wrap, svg, beam, ring, callout };
+  __sbPointFx = { wrap, svg, beam, ring };
   return __sbPointFx;
 }
 function __sbPointFxClear() {
@@ -3389,7 +3385,7 @@ function __sbJumpPointAt(el, opts = {}) {
 
     place(START.tx, START.ty); pose(1, 1, 0); setArms(0, 0); setLegs(0, 0); setEyes(1); aimAt(START.tx, START.ty);
     layoutRing();
-    fx.ring.style.opacity = "0"; fx.beam.style.opacity = "0"; fx.callout.style.opacity = "0";
+    fx.ring.style.opacity = "0"; fx.beam.style.opacity = "0";
     let ringLen = 0; try { ringLen = fx.ring.getTotalLength() || 0; } catch (_) {}
 
     // dismiss the hold early on click / Escape
@@ -3484,14 +3480,8 @@ function __sbJumpPointAt(el, opts = {}) {
         fx.ring.style.filter = `drop-shadow(0 0 ${(6 + pulse * 12).toFixed(0)}px oklch(0.74 0.16 58 / 0.7))`;
         fx.beam.style.opacity = "0.9";
         fx.beam.style.strokeDashoffset = (-(tt * 22) % 200).toFixed(1);
-        const co = (held > 140 && held < T.hold - 260) ? 1 : 0;
-        fx.callout.style.opacity = String(co);
-        const cv = footVx(LAND.tx), cvy = footVy(LAND.ty);
-        fx.callout.style.left = (cv - 150) + "px";
-        fx.callout.style.top = (cvy - 96) + "px";
         if (!said) { said = true; if (opts.say) __sbWkSay(opts.say); }
         if (held >= T.hold || dismiss) {
-          fx.callout.style.opacity = "0";
           next("bCrouch");
         }
       } else if (phase === "bCrouch") {                      // coil to jump home
@@ -6037,7 +6027,7 @@ function __sbBuildBrainUI() {
     #__sbwk_walker__.sbwk-auth svg   { animation: __sbwk_glow_auth__ 0.85s ease-in-out infinite; }
     #__sbwk_walker__.sbwk-authed svg { animation: __sbwk_glow_authed__ 0.85s ease-in-out infinite; }
 
-    /* ── Jump & Point laser overlay (ring + beam + callout) ── */
+    /* ── Jump & Point laser overlay (ring + beam) ── */
     #__sb_point_fx__ {
       position: fixed; inset: 0; width: 100vw; height: 100vh;
       pointer-events: none; z-index: 2147483644;
@@ -6045,16 +6035,6 @@ function __sbBuildBrainUI() {
     #__sb_point_svg__ {
       position: absolute; inset: 0; width: 100%; height: 100%;
       overflow: visible; pointer-events: none;
-    }
-    #__sb_point_callout__ {
-      position: absolute; pointer-events: none; white-space: nowrap;
-      display: inline-flex; align-items: center; gap: 7px;
-      padding: 7px 12px; border-radius: 11px;
-      background: oklch(0.7 0.16 48); color: #1a0f0c;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-weight: 600; font-size: 13.5px;
-      box-shadow: 0 14px 30px -12px rgba(0,0,0,.6);
-      opacity: 0; transition: opacity .18s ease;
     }
 
     /* ── Voice Error Pill ── */
@@ -11487,7 +11467,7 @@ async function __sbRunJumpPoint(promptText, ctx = {}) {
   } catch (_) {}
 
   await speak("Here it is.");
-  await __sbJumpPointAt(pointEl, { say: fromVoice ? null : "Right here 👇" });
+  await __sbJumpPointAt(pointEl, { say: fromVoice ? null : "Here it is" });
   return true;
 }
 
