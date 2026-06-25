@@ -25,10 +25,11 @@ let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeMod
 // still can't work, the flag gets re-set and we quietly use the per-tab migration fallback.
 chrome.runtime.onInstalled.addListener((details) => {
   chrome.storage.local.set({ sbOffscreenRtBroken: false });
-  // First-run funnel: on a FRESH install, open the homepage so a new user actually meets
-  // Braino (the editorial intro + what's free vs Pro). Skipped on update/reload so we don't
-  // spam a tab on every reload.
-  if (details?.reason === "install") {
+  // First-run funnel: on a FRESH install of the PUBLISHED build, open the homepage so a new user
+  // actually meets Braino. Gated on `update_url` (present only for Web Store builds) so loading the
+  // unpacked extension during development never opens a tab. Also skipped on update/reload.
+  const isStoreBuild = Boolean(chrome.runtime.getManifest().update_url);
+  if (details?.reason === "install" && isStoreBuild) {
     chrome.tabs.create({ url: "https://trybraino.com/?installed=1" }, () => { void chrome.runtime.lastError; });
   }
 });
