@@ -3376,7 +3376,7 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
   return { ok: true, message: "Done.", origin };
 }
 
-async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false }) {
+async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false, synth: passedSynth = null }) {
   let currentTabId = tabId;
   const startedAt = Date.now();
   const budget = bgDelegateBudgetForTask(task);
@@ -3402,10 +3402,11 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   }
 
   // Understand intent → form a real search query + constraints BEFORE any search runs,
-  // so we never paste the user's sentence verbatim into Maps/web. Fail-open.
-  const synth = await bgSynthesizeIntent(task, sharedContext).catch(() => null);
+  // so we never paste the user's sentence verbatim into Maps/web. Reuse the one the caller
+  // already computed (bgRunBrainAgent does it before its fast path) so it isn't called twice.
+  const synth = passedSynth || await bgSynthesizeIntent(task, sharedContext).catch(() => null);
   state.synth = synth;
-  if (synth?.searchQuery) onProgress?.(`Searching for "${synth.searchQuery}"`);
+  if (!passedSynth && synth?.searchQuery) onProgress?.(`Searching for "${synth.searchQuery}"`);
 
   const decomp = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress);
   state.goal = decomp.goal || task;
@@ -3652,8 +3653,13 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
     return { ok, message: finalMessage, history, ...extra };
   };
 
+  // Understand intent → form the search query BEFORE the very first navigation, so the
+  // fast path never opens Maps/web with the user's raw sentence (then re-correct later).
+  const synth = await bgSynthesizeIntent(task, conversationContext).catch(() => null);
+  if (synth?.searchQuery) await onProgress(`Searching for "${synth.searchQuery}"`);
+
   let skipDelegateFastPath = false;
-  const fastActions = bgTryFastPath(task, []);
+  const fastActions = bgTryFastPath(task, [], synth);
   if (fastActions?.length) {
     const shouldContinueAfterFastPath = fastActions.some((action) => action.continueAfter);
     for (const action of fastActions) {
@@ -3708,6 +3714,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
     connectorHint,
     sharedContext: conversationContext,
     skipFastPath: skipDelegateFastPath,
+    synth,
     onProgress,
     onFinal: (message) => { finalMessage = message || finalMessage; },
     shouldStop: () => bgAgentShouldStop,
