@@ -4723,13 +4723,15 @@ function __sbBuildBrainUI() {
     #__sb_bar__ {
       position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%) translateY(24px) scale(0.97);
-      display: flex; align-items: center; gap: 8px;
+      /* Column so the in-pill activity log can grow from the TOP (Dynamic-Island style); the
+         input row keeps the original horizontal layout via #__sb_bar_row__. */
+      display: flex; flex-direction: column; align-items: stretch; gap: 0;
       /* Stays transparent liquid glass — legibility comes from a light text halo
          (see #__sb_input__ etc.) rather than an opaque backing. */
       background: rgba(255,251,247,0.12); border-radius: 100px;
       isolation: isolate;
       overflow: visible;
-      padding: 10px 10px 10px 28px;
+      padding: 0;
       border: 1px solid rgba(255,255,255,0.5);
       box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
@@ -4758,33 +4760,37 @@ function __sbBuildBrainUI() {
       100% { box-shadow: 0 0 0 0 rgba(232,120,110,0), 0 8px 32px rgba(27,23,19,0.18); }
     }
     #__sb_bar__.sb-send-pulse { animation: __sb_bar_send__ 0.7s ease-out; }
-    /* Agent activity log — a thin strip DOCKED just above the bar. Hidden when idle; shows the
-       live step list while a task runs (works in voice mode too). */
-    #__sb_agentlog__ {
-      position: fixed; bottom: 84px; left: 50%;
-      transform: translateX(-50%) translateY(8px);
-      width: calc(100vw - 48px); max-width: 1100px; box-sizing: border-box;
-      display: flex; flex-direction: column; gap: 3px;
-      padding: 12px 18px; border-radius: 18px;
-      background: rgba(255,251,247,0.18); border: 1px solid rgba(255,255,255,0.5);
-      box-shadow: 0 8px 28px rgba(27,23,19,0.16), inset 1px 1px 1px rgba(255,255,255,0.5);
-      backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%);
-      z-index: 2147483645; opacity: 0; pointer-events: none;
-      transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34,1.1,0.64,1);
+    /* Agent activity log — lives INSIDE the pill. The bar grows from its top (Dynamic-Island
+       style) to reveal the step list, then collapses. The bar is anchored bottom, so adding
+       height pushes it UPWARD. */
+    #__sb_bar_row__ { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 28px; width: 100%; box-sizing: border-box; }
+    #__sb_bar_log__ {
+      max-height: 0; opacity: 0; overflow: hidden;
+      display: flex; flex-direction: column; gap: 2px; padding: 0 22px;
+      transition: max-height 0.42s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease, padding 0.42s cubic-bezier(0.4,0,0.2,1);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    #__sb_agentlog__.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-    #__sb_agentlog__ .sb-alog-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #1B1713; margin-bottom: 3px; }
-    #__sb_agentlog__ .sb-alog-spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(232,120,110,0.3); border-top-color: #E8786E; animation: __sb_alog_spin__ 0.7s linear infinite; flex: none; }
-    @keyframes __sb_alog_spin__ { to { transform: rotate(360deg); } }
-    #__sb_agentlog__ .sb-alog-step { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.5; color: #6B6157; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #__sb_agentlog__ .sb-alog-step .sb-alog-ic { flex: none; width: 13px; text-align: center; }
-    #__sb_agentlog__ .sb-alog-step.done { color: #9a9088; }
-    #__sb_agentlog__ .sb-alog-step.active { color: #1B1713; font-weight: 500; }
-    html.sb-dark #__sb_agentlog__ { background: rgba(18,16,14,0.7); border-color: rgba(255,255,255,0.12); box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
-    html.sb-dark #__sb_agentlog__ .sb-alog-head { color: #FBF7F1; }
-    html.sb-dark #__sb_agentlog__ .sb-alog-step { color: #b0a89e; }
-    html.sb-dark #__sb_agentlog__ .sb-alog-step.active { color: #FBF7F1; }
+    #__sb_bar__.sb-log-open #__sb_bar_log__ { max-height: 140px; opacity: 1; padding: 13px 22px 7px; }
+    #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top: 1px solid rgba(120,110,100,0.14); }
+    #__sb_bar_log__ .sb-blog-head { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #1B1713; margin-bottom: 4px; }
+    #__sb_bar_log__ .sb-blog-spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(232,120,110,0.3); border-top-color: #E8786E; animation: __sb_blog_spin__ 0.7s linear infinite; flex: none; }
+    @keyframes __sb_blog_spin__ { to { transform: rotate(360deg); } }
+    #__sb_bar_log__ .sb-blog-step { display: flex; align-items: center; gap: 9px; font-size: 12px; line-height: 1.6; color: #6B6157; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #__sb_bar_log__ .sb-blog-step .sb-blog-ic { flex: none; width: 14px; text-align: center; font-weight: 700; }
+    #__sb_bar_log__ .sb-blog-step.done { color: #9a9088; }
+    #__sb_bar_log__ .sb-blog-step.done .sb-blog-ic { color: #3DA35D; }       /* green tick */
+    #__sb_bar_log__ .sb-blog-step.active { color: #1B1713; font-weight: 500; }
+    #__sb_bar_log__ .sb-blog-step.active .sb-blog-ic { color: #E8786E; }
+    @keyframes __sb_tick_pop__ { 0% { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
+    #__sb_bar_log__ .sb-blog-step.just-done .sb-blog-ic { display: inline-block; animation: __sb_tick_pop__ 0.36s cubic-bezier(0.34,1.56,0.64,1); }
+    html.sb-dark #__sb_bar_log__ .sb-blog-head { color: #FBF7F1; }
+    html.sb-dark #__sb_bar_log__ .sb-blog-step { color: #b0a89e; }
+    html.sb-dark #__sb_bar_log__ .sb-blog-step.active { color: #FBF7F1; }
+    html.sb-dark #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top-color: rgba(255,255,255,0.1); }
+    /* Wakeup / sign-in overlays sit where the input row sits (the bar is now a column): hide the
+       whole row (so its padding doesn't leave a gap) and give the overlay the row's padding. */
+    #__sb_bar__.sb-waking #__sb_bar_row__, #__sb_bar__.sb-signin #__sb_bar_row__ { display: none; }
+    #__sb_bar__.sb-waking #__sb_wakeup__, #__sb_bar__.sb-signin #__sb_signin_cta__ { padding: 11px 14px 11px 28px; box-sizing: border-box; width: 100%; }
     /* Card is display-only now — the constant bottom bar is the single input. */
     #__sb_bubble__ .sb-card-footer { display: none !important; }
     /* Wake-up climb: bar is visible glass, expands from the center (scaleX driven in JS),
@@ -6158,6 +6164,8 @@ function __sbBuildBrainUI() {
   const __sbDockBar = document.createElement("div");
   __sbDockBar.id = "__sb_bar__";
   __sbDockBar.innerHTML = `
+      <div id="__sb_bar_log__"><div class="sb-blog-head"><span class="sb-blog-spin"></span><span class="sb-blog-title">Working…</span></div><div class="sb-blog-steps"></div></div>
+      <div id="__sb_bar_row__">
       <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
@@ -6176,6 +6184,7 @@ function __sbBuildBrainUI() {
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span id="__sb_x_auto_label__">X Auto</span>
       </button>
+      </div>
       <div id="__sb_wakeup__">
         <span id="__sb_wakeup_label__">Waking up…</span>
         <div id="__sb_wakeup_track__"><div id="__sb_wakeup_fill__"></div></div>
@@ -6186,12 +6195,6 @@ function __sbBuildBrainUI() {
       </div>
   `;
   (document.documentElement||document.body).appendChild(__sbDockBar);
-
-  // Agent activity log strip — docked just above the bar (hidden until a task runs).
-  const __sbAgentLogBar = document.createElement("div");
-  __sbAgentLogBar.id = "__sb_agentlog__";
-  __sbAgentLogBar.innerHTML = `<div class="sb-alog-head"><span class="sb-alog-spin"></span><span class="sb-alog-title">Working…</span></div><div class="sb-alog-steps"></div>`;
-  (document.documentElement||document.body).appendChild(__sbAgentLogBar);
 
   // ── Glass SVG (with brain gradients + displacement filter) appended before bar — see above ──
 
@@ -10043,46 +10046,73 @@ function __sbClearBarAgentStatus() {
   }
 }
 
-// ── Agent activity log strip (docked above the bar) — the ALWAYS-VISIBLE play-by-play, so the
-// user can see what Braino is doing even in voice-only mode (where the card is hidden). ──
+// ── In-pill agent activity log — the pill itself grows from its top (Dynamic-Island style) to
+// show the play-by-play, so the user sees what Braino is doing even in voice-only mode. ──
 let __sbAgentLogSteps = [];
 let __sbAgentBusy = false;            // true while an agent/research task runs
 let __sbAgentBusyLabel = "Working…";  // overrides the voice indicator's "Listening…" while busy
+let __sbAgentLogCollapseTimer = null;
+
+// Strip command boilerplate so "Search the web for X" and "Searching for 'X'" read as the same
+// step (kills the duplicated/noisy log lines).
+function __sbAgentLogKey(s) {
+  return String(s || "").toLowerCase()
+    .replace(/["'“”]/g, "")
+    .replace(/\b(search(ing)?|look(ing)?\s+up|read(ing)?|open(ing|ed)?|the web|on the web|for|the page|the task|understanding|getting|started)\b/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function __sbAgentLogRender() {
+  const bar = document.getElementById("__sb_bar__");
+  const log = document.getElementById("__sb_bar_log__");
+  if (!bar || !log) return;
+  const title = log.querySelector(".sb-blog-title");
+  if (title) title.textContent = __sbAgentBusyLabel;
+  const stepsEl = log.querySelector(".sb-blog-steps");
+  if (stepsEl) {
+    const shown = __sbAgentLogSteps.slice(-4);   // grow "just enough" — last 4 steps
+    stepsEl.innerHTML = shown.map((s) =>
+      `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "→" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
+    ).join("");
+    shown.forEach((s) => { s.justDone = false; });  // tick-pop plays once
+  }
+  bar.classList.add("sb-log-open");
+}
+
 function __sbAgentLogShow(title) {
-  const el = document.getElementById("__sb_agentlog__");
+  if (__sbAgentLogCollapseTimer) { clearTimeout(__sbAgentLogCollapseTimer); __sbAgentLogCollapseTimer = null; }
   __sbAgentBusy = true;
   if (title) __sbAgentBusyLabel = title;
   if (typeof __sbWkStatus === "function") __sbWkStatus(__sbAgentBusyLabel);  // flip "Listening…" → working label
-  if (!el) return;
-  const t = el.querySelector(".sb-alog-title");
-  if (t && title) t.textContent = title;
-  el.classList.add("show");
+  __sbAgentLogRender();
 }
+
 function __sbAgentLogStep(text) {
-  const el = document.getElementById("__sb_agentlog__");
-  if (!el) return;
   const clean = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
   if (!clean) return;
-  if (__sbAgentLogSteps.length && __sbAgentLogSteps[__sbAgentLogSteps.length - 1].text === clean) return; // de-dupe repeats
-  if (__sbAgentLogSteps.length) __sbAgentLogSteps[__sbAgentLogSteps.length - 1].active = false;
-  __sbAgentLogSteps.push({ text: clean, active: true });
-  if (__sbAgentLogSteps.length > 5) __sbAgentLogSteps = __sbAgentLogSteps.slice(-5);
-  const steps = el.querySelector(".sb-alog-steps");
-  if (steps) {
-    steps.innerHTML = __sbAgentLogSteps.map((s) =>
-      `<div class="sb-alog-step ${s.active ? "active" : "done"}"><span class="sb-alog-ic">${s.active ? "→" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
-    ).join("");
-  }
-  el.classList.add("show");
+  const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
+  const key = __sbAgentLogKey(clean);
+  if (last && (last.text === clean || (key && __sbAgentLogKey(last.text) === key))) return;  // de-dupe repeats/near-repeats
+  if (last) { last.active = false; last.justDone = true; }   // prior step completes → animated green tick
+  __sbAgentLogSteps.push({ text: clean, active: true, justDone: false });
+  if (__sbAgentLogSteps.length > 8) __sbAgentLogSteps = __sbAgentLogSteps.slice(-8);
+  __sbAgentLogRender();
 }
+
 function __sbAgentLogClear() {
+  const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
+  if (last && last.active) { last.active = false; last.justDone = true; __sbAgentLogRender(); }  // final tick
   __sbAgentLogSteps = [];
   __sbAgentBusy = false;
-  const el = document.getElementById("__sb_agentlog__");
-  if (!el) return;
-  el.classList.remove("show");
-  const steps = el.querySelector(".sb-alog-steps");
-  if (steps) steps.innerHTML = "";
+  if (__sbAgentLogCollapseTimer) clearTimeout(__sbAgentLogCollapseTimer);
+  __sbAgentLogCollapseTimer = setTimeout(() => {   // let the last tick land, then collapse the pill
+    const bar = document.getElementById("__sb_bar__");
+    const log = document.getElementById("__sb_bar_log__");
+    if (bar) bar.classList.remove("sb-log-open");
+    const stepsEl = log && log.querySelector(".sb-blog-steps");
+    if (stepsEl) stepsEl.innerHTML = "";
+    __sbAgentLogCollapseTimer = null;
+  }, 600);
 }
 
 function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
@@ -11812,6 +11842,64 @@ function __sbIsCompareSkillAwaitingInput() {
   return __sbCompareSkillState?.phase === "awaiting_choice";
 }
 
+// ── Referential follow-up ────────────────────────────────────────────────────
+// After a research turn, "show me the Udemy one" / "open the one on Coursera" / "the first one"
+// resolves to the actual result Braino just found — NOT a literal "Udemy one" web search.
+let __sbLastResearchResults = [];   // [{url, title, platform}] from the last research turn
+let __sbLastResearchAt = 0;
+
+function __sbRememberResearchResults(results) {
+  __sbLastResearchResults = (results || []).filter((r) => r && r.url).slice(0, 8).map((r) => {
+    let platform = "";
+    try { platform = new URL(r.url).hostname.replace(/^www\./, "").split(".")[0]; } catch (_) {}
+    return { url: r.url, title: String(r.title || r.name || "").trim(), platform };
+  });
+  __sbLastResearchAt = Date.now();
+}
+
+function __sbIsReferentialOpen(text) {
+  if (!__sbLastResearchResults.length || Date.now() - __sbLastResearchAt > 10 * 60 * 1000) return false;
+  const t = String(text || "").toLowerCase().trim();
+  if (/\bthe\s+.{1,30}?\s+one\b/.test(t)) return true;                              // "the udemy one", "the first one"
+  if (/\b(one|course|result|link|article)\s+(on|from)\s+\w/.test(t)) return true;   // "the one on coursera"
+  if (/\b(open|show me|go to|pull up|take me to)\b.{0,18}\b(udemy|coursera|edx|youtube|skillshare|that)\b/.test(t)) return true;
+  return false;
+}
+
+function __sbResolveReferentialTarget(text) {
+  const t = String(text || "").toLowerCase();
+  let ref = null, m;
+  if ((m = t.match(/\bthe\s+(.+?)\s+one\b/))) ref = m[1].trim();
+  else if ((m = t.match(/\b(?:one|course|result|link|article)\s+(?:on|from)\s+([a-z0-9.\- ]+)/))) ref = m[1].trim();
+  else if ((m = t.match(/\b(?:open|show me|go to|pull up|take me to)\s+(?:the\s+)?([a-z0-9.\- ]+?)(?:\s+(?:one|course|result|link|page))?\s*$/))) ref = m[1].trim();
+  if (!ref) return null;
+  ref = ref.replace(/\b(course|result|link|page|article|website|site)\b/g, "").trim();
+  const ord = { first: 0, "1st": 0, top: 0, second: 1, "2nd": 1, third: 2, "3rd": 2, last: __sbLastResearchResults.length - 1 };
+  if (ref in ord && __sbLastResearchResults[ord[ref]]) return __sbLastResearchResults[ord[ref]];
+  if (!ref) return null;
+  return __sbLastResearchResults.find((r) =>
+    (r.platform && (r.platform.includes(ref) || ref.includes(r.platform))) ||
+    (r.title && r.title.toLowerCase().includes(ref))
+  ) || null;
+}
+
+async function __sbHandleReferentialOpen(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const target = __sbResolveReferentialTarget(promptText);
+  if (!target || !target.url) return false;   // no match → caller falls through to normal routing
+  let host = target.platform || "it";
+  try { host = new URL(target.url).hostname.replace(/^www\./, ""); } catch (_) {}
+  __sbAgentLogShow("Opening…");
+  __sbAgentLogStep(`Opening ${target.title || host}`);
+  chrome.runtime.sendMessage({ action: "openTab", url: target.url, active: true }, () => { void chrome.runtime.lastError; });
+  const line = target.title ? `Opening ${target.title}.` : `Opening the one on ${host}.`;
+  if (fromVoice) { try { await __sbSpeakWithPreferredVoice(line, voiceOutput); } catch (_) {} }
+  else __sbWkSay(`Opening ${host} ↗`);
+  setTimeout(__sbAgentLogClear, 600);
+  return true;
+}
+
 function __sbLooksLikeCompare(text) {
   const t = String(text || "").toLowerCase();
   if (!t) return false;
@@ -11825,7 +11913,7 @@ function __sbLooksLikeCompare(text) {
   // Research/find/recommend (informational) → same reasoned web-research path as compare, so it
   // returns an ANSWER with reasoning + sources instead of the blind delegate's "Done." + random tab.
   if (/\bresearch\b/.test(t) && !/\bresearch (paper|gate|er)\b/.test(t)) return true;
-  if (/\b(find|recommend|suggest)\b.{0,32}\b(course|courses|certification|certifications?|certs?|tool|tools|book|books|tutorial|tutorials?|resource|resources?|option|options?|alternative|alternatives?|app|apps?|library|libraries|framework|frameworks?|service|services?|provider|providers?|platform|platforms?)\b/.test(t)) return true;
+  if (/\b(find|recommend|suggest|look up|pull up|show me|get me|give me)\b.{0,34}\b(course|courses|certification|certifications?|certs?|tool|tools|book|books|tutorial|tutorials?|resource|resources?|option|options?|alternative|alternatives?|app|apps?|library|libraries|framework|frameworks?|service|services?|provider|providers?|platform|platforms?)\b/.test(t)) return true;
   if (/\b(which|what)\b.{0,42}\b(course|certification|cert|tool|book|option|framework|library|provider|platform|app|service)s?\b.{0,24}\b(should i|is best|are best|to (take|learn|use|pick|choose|get|do))\b/.test(t)) return true;
   return false;
 }
@@ -11993,6 +12081,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
       chatHistory: previousHistory,
     });
     const results = searchData.results || searchData.sources || [];
+    __sbRememberResearchResults(results);   // so "show me the Udemy one" can resolve to a real result
 
     // Theatric tabs #2..#3 — top product/review pages, staggered, background only.
     if (openTabs && results.length) {
@@ -12163,6 +12252,13 @@ async function __sbProcessPrompt(text, options = {}) {
     await __sbHandleSendDirectionsToPhone(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
+  }
+
+  // Referential follow-up: "show me the Udemy one" → open the result from the last research turn
+  // (not a literal search). Falls through to normal routing if nothing matches.
+  if (__sbIsReferentialOpen(promptText)) {
+    const opened = await __sbHandleReferentialOpen(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    if (opened) { __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken }); return; }
   }
 
   const connectorHint = routing.connectorHint;
@@ -14495,6 +14591,17 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Send directions to phone — steer down __sbProcessPrompt (QR + native push) BEFORE the
   // delegate/maps classifier, so "ping directions to X to my phone" isn't grabbed by it.
   if (__sbIsSendToPhoneRequest(promptText)) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Referential follow-up ("show me the Udemy one") — steer down __sbProcessPrompt so it opens the
+  // result Braino just found instead of being re-classified as a new search.
+  if (__sbIsReferentialOpen(promptText)) {
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
