@@ -11432,6 +11432,91 @@ function __sbExtractLocateTarget(text) {
   return t;
 }
 
+// ── Send directions to phone ───────────────────────────────────────────────────
+// "ping/send directions to X to my phone". Native push via Maps' "Send directions to
+// your phone" (driven by Delegate, the Pro agent) + an always-on QR fallback in the bar
+// that opens the route on the phone with no account/setup dependency.
+function __sbIsSendToPhoneRequest(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  if (!/\b(phone|mobile|cell)\b/.test(t)) return false;       // must target a phone
+  const toPhone = /\b(to|on)\s+(my\s+)?(phone|mobile|cell)\b/.test(t);
+  if (!toPhone) return false;
+  const sendVerb = /\b(send|ping|share|shoot|push|text|forward|beam)\b/.test(t);
+  const aboutDir = /\b(directions?|route|navigation|navigate|location|address|maps?|get me to|how (do i|to) get to|way to)\b/.test(t);
+  return sendVerb || aboutDir;                                 // "send … to my phone" OR "directions … to my phone"
+}
+
+// Strip the command scaffolding + the "to my phone" tail to leave the destination.
+function __sbExtractSendToPhoneTarget(text) {
+  let t = " " + String(text || "").toLowerCase() + " ";
+  t = t.replace(/\b(hey|hi|yo|ok|okay)\s+braino\b/g, " ");
+  t = t.replace(/\bbraino\b/g, " ");
+  t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly)\s+you\b/g, " ");
+  t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly)\b/g, " ");
+  t = t.replace(/\b(to|on)\s+(my\s+)?(phone|mobile|cell)\b.*$/, " ");   // drop the "to my phone" tail
+  t = t.replace(/\b(send|ping|share|shoot|push|text|forward|beam)\b/g, " ");
+  t = t.replace(/\b(me|us)\b/g, " ");
+  t = t.replace(/\b(the\s+)?(directions?|route|navigation|location|address|map|maps)\s+(to|for|of|towards?)\b/g, " ");
+  t = t.replace(/\b(directions?|route|navigation|location|address|map|maps)\b/g, " ");
+  t = t.replace(/\b(get me to|how (do i|to) get to|navigate to|way to)\b/g, " ");
+  t = t.replace(/\b(to|for|of|a|an|the)\b/g, " ");
+  t = t.replace(/["'?.!,]/g, " ").replace(/\s+/g, " ").trim();
+  return t;
+}
+
+function __sbEscHtml(s) {
+  return String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+}
+
+// QR fallback card in the bar: scan to open the route on the phone (no account needed).
+function __sbShowSendToPhoneCard(dest, qrSrc, mapsLink, note) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  if (typeof __sbBubbleTimer !== "undefined" && __sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  const tail = note ? `<div style="font-size:12px;line-height:1.5;color:#8a8178;margin-top:10px;text-align:center">${__sbEscHtml(note)}</div>` : "";
+  scroll.innerHTML = `
+    <div style="font-size:13.5px;line-height:1.55;color:#1B1713;margin-bottom:12px">📍 Directions to <strong>${__sbEscHtml(dest)}</strong> — scan to open it on your phone.</div>
+    <div style="display:flex;justify-content:center;margin-bottom:10px"><img src="${__sbEscHtml(qrSrc)}" alt="Scan for directions" width="180" height="180" style="border-radius:12px;background:#fff;padding:8px;border:1px solid #eee" /></div>
+    <a href="${__sbEscHtml(mapsLink)}" target="_blank" rel="noopener" style="display:block;text-align:center;font-size:12.5px;color:#E8786E;text-decoration:none">Open in Maps ↗</a>
+    ${tail}
+  `;
+  __sbOpenCard({ rich: false });
+}
+
+async function __sbHandleSendDirectionsToPhone(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const speak = async (line) => { if (fromVoice) { try { await __sbSpeakWithPreferredVoice(line, voiceOutput); } catch (_) {} } };
+
+  const dest = __sbExtractSendToPhoneTarget(promptText);
+  if (!dest) {
+    if (fromVoice) await speak("Where should I send the directions?"); else __sbWkSay("Send directions where? 📍");
+    return false;
+  }
+
+  const mapsLink = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(mapsLink)}`;
+
+  // Native push is an agent action (Pro). Pro users get the magic + the QR as a fallback;
+  // free users get the QR (which already delivers) plus a gentle nudge.
+  let hasPremium = false;
+  try { hasPremium = await __sbResolvePremiumStatus(false); } catch (_) {}
+
+  if (hasPremium) {
+    __sbShowSendToPhoneCard(dest, qrSrc, mapsLink, "…or scan if your phone doesn't buzz.");
+    if (fromVoice) await speak(`Sending directions to ${dest} to your phone now. If it doesn't buzz, scan the code I put on screen.`);
+    __sbRunAgent(
+      `Open Google Maps directions to "${dest}", then use Google Maps' "Send directions to your phone" feature to send the route to my phone (pick my phone from the device list). If no paired phone is available, stop — don't send by email or SMS.`,
+      { connector: null },
+    );
+  } else {
+    __sbShowSendToPhoneCard(dest, qrSrc, mapsLink, "With Braino Pro I can push it straight to your phone.");
+    if (fromVoice) await speak(`Scan the code to open directions to ${dest} on your phone. With Pro I can push it straight there.`);
+  }
+  return true;
+}
+
 // For bare/pronoun commands: point at the user's selection, else the most prominent
 // media (video / large image / large clickable card) currently on screen.
 function __sbLocateFallbackEl() {
@@ -11922,6 +12007,16 @@ async function __sbProcessPrompt(text, options = {}) {
   if (__sbIsLocateRequest(promptText)) {
     if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "point" });
     await __sbRunJumpPoint(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Send directions to phone — "ping directions to X to my phone". Native push via Delegate
+  // (Pro) + an always-on QR fallback in the bar. Handled before generic intent routing so it
+  // isn't swallowed by the maps/web/delegate classifier.
+  if (__sbIsSendToPhoneRequest(promptText)) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+    await __sbHandleSendDirectionsToPhone(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
@@ -14233,6 +14328,17 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // leap-and-point) BEFORE delegate/agent classification, so it isn't grabbed by the browser agent.
   if (__sbIsLocateRequest(promptText)) {
     __sbPatchRealtimeCostTurn({ routeIntent: "point" });
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Send directions to phone — steer down __sbProcessPrompt (QR + native push) BEFORE the
+  // delegate/maps classifier, so "ping directions to X to my phone" isn't grabbed by it.
+  if (__sbIsSendToPhoneRequest(promptText)) {
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
