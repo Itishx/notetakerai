@@ -233,6 +233,9 @@ entrypoint = "./functions/billing/create-checkout/index.ts"
 entrypoint = "./functions/billing/polar-webhook/index.ts"
 verify_jwt = false
 
+[functions.check-and-consume]
+entrypoint = "./functions/billing/check-and-consume/index.ts"
+
 # ── waitlist ─────────────────────────────────────────────────────────────
 
 [functions.waitlist-list]

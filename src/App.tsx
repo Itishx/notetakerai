@@ -9,6 +9,7 @@ import { useState } from "react";
 import SplashScreen from "@/components/SplashScreen";
 import BrainoWalker from "@/components/BrainoWalker";
 import PreLaunch from "./pages/PreLaunch.tsx";
+import Home from "./pages/Home.tsx";
 import LaunchTeaser from "./pages/LaunchTeaser.tsx";
 import WaitlistDashboard from "./pages/WaitlistDashboard.tsx";
 import Index from "./pages/Index.tsx";
@@ -59,7 +60,8 @@ function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashD
       {!splashDone && <SplashScreen onDone={onSplashDone} />}
       <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainoWalker />}</div>
       <Routes>
-        <Route path="/" element={<PreLaunch />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/prelaunch" element={<PreLaunch />} />
         <Route path="/home" element={<ProfileGrid />} />
         <Route path="/home-classic" element={<Index />} />
         <Route path="/teaser" element={<LaunchTeaser />} />

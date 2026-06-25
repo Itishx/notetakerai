@@ -1300,6 +1300,11 @@ function __sbParseConnectorDirective(rawText) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "sbQuotaExceeded") {
+    // Free-tier wall hit (voice/delegate/recording/chat) — show the upgrade nudge.
+    __sbShowQuotaUpgrade(msg.surface || "chat");
+    return false;
+  }
   if (msg.action === "extractPageContent") {
     const text = (document.body?.innerText || "").substring(0, 12000);
     const title = document.title || "";
@@ -12038,14 +12043,9 @@ async function __sbProcessPrompt(text, options = {}) {
   const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
 
   if (intent === "agent") {
-    const hasPremium = await __sbResolvePremiumStatus(!fromVoice);
-    if (!hasPremium) {
-      __sbRtAwaitingDelegateResult = false;
-      __sbShowUpgrade("Browser Agent (Delegate)");
-      if (fromVoice) await speakVoiceReply("Browser agent requires premium.");
-      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
-      return;
-    }
+    // Delegate is a monthly TASTE on Free (5 runs), unlimited on Pro/creator/admin. We no
+    // longer hard-block free users here — the background meters delegate_count and pushes
+    // sbQuotaExceeded (→ __sbShowQuotaUpgrade) once the taste is used up.
     if (voiceOutput === "realtime") __sbRtAwaitingDelegateResult = true;
     __sbRunAgent(promptText, { connector: connectorHint });
     // Do not speak an interim ack here: it delays the actual action path and can
@@ -12216,18 +12216,30 @@ function __sbPulseBar() {
   setTimeout(() => bar.classList.remove("sb-send-pulse"), 720);
 }
 
-function __sbShowUpgrade(feature) {
+function __sbShowUpgrade(feature, note) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  const line = note || `⚡ <strong>${feature}</strong> is a Braino Pro feature.`;
   scroll.innerHTML = `
-    <div style="font-size:13.5px;line-height:1.6;color:#1B1713;margin-bottom:14px">⚡ <strong>${feature}</strong> is a Premium feature.</div>
-    <button id="__sb_upgrade_btn__" style="width:100%;padding:9px 0;border:none;border-radius:20px;background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;">Upgrade to Premium</button>
+    <div style="font-size:13.5px;line-height:1.6;color:#1B1713;margin-bottom:14px">${line}</div>
+    <button id="__sb_upgrade_btn__" style="width:100%;padding:9px 0;border:none;border-radius:20px;background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;">Go Pro →</button>
   `;
   __sbOpenCard({ rich: false });
   document.getElementById("__sb_upgrade_btn__")?.addEventListener("click", () => {
-    window.open("https://trybraino.com/#pricing", "_blank");
+    window.open("https://trybraino.com/premium", "_blank");
   });
+}
+
+// Surface-aware free-tier nudge. Maps the gated surface to a friendly Pro pitch.
+function __sbShowQuotaUpgrade(surface) {
+  const COPY = {
+    voice: "That's today's free voice. <strong>Braino Pro</strong> is voice-first — talk to me as much as you want.",
+    delegate: "You've used your free Delegate runs this month. <strong>Braino Pro</strong> unlocks the full browser agent.",
+    recording: "That's today's free recording. <strong>Braino Pro</strong> records lectures and meetings without limits.",
+    chat: "That's today's free questions. <strong>Braino Pro</strong> is unlimited.",
+  };
+  __sbShowUpgrade("Pro", COPY[surface] || COPY.chat);
 }
 
 function __sbRunAgent(task, options = {}) {

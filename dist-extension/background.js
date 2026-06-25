@@ -23,8 +23,14 @@ let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeMod
 // On install/update, clear the "offscreen is broken" flag so every client re-attempts the
 // global offscreen voice path once (now backed by a one-time mic-permission grant). If it
 // still can't work, the flag gets re-set and we quietly use the per-tab migration fallback.
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.storage.local.set({ sbOffscreenRtBroken: false });
+  // First-run funnel: on a FRESH install, open the homepage so a new user actually meets
+  // Braino (the editorial intro + what's free vs Pro). Skipped on update/reload so we don't
+  // spam a tab on every reload.
+  if (details?.reason === "install") {
+    chrome.tabs.create({ url: "https://trybraino.com/?installed=1" }, () => { void chrome.runtime.lastError; });
+  }
 });
 
 function doCapture(windowId, sendResponse) {
@@ -1047,6 +1053,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "startRecording") {
     (async () => {
       const mode = bgNormalizeRecordingMode(message.mode);
+      // Free-tier gate: 5 min/day on Free, unlimited on Pro/creator/admin.
+      const recGate = await bgGateSurface("recording_seconds", { action: "precheck" });
+      if (!recGate.allowed) {
+        bgNotifyQuota(message.tabId || sender?.tab?.id || null, "recording", recGate);
+        sendResponse({ error: "FREE_LIMIT_RECORDING", quotaExceeded: true, surface: "recording" });
+        return;
+      }
       let targetTabId = message.tabId || sender?.tab?.id || null;
       let recovery = { tabId: targetTabId, moved: false, created: false };
 
@@ -1077,6 +1090,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       await startRecording(targetTabId, message.streamId, message.withMic, mode);
+      bgRecordingStartedAt = Date.now();
       sendResponse({
         success: true,
         tabId: targetTabId,
@@ -1087,6 +1101,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "stopRecording") {
+    bgConsumeRecordingSeconds();
     stopRecording()
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
@@ -1105,6 +1120,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "stopRecordingAndTranscribe") {
+    bgConsumeRecordingSeconds();
     bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode, message.existingTranscript || "")
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
@@ -1202,14 +1218,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "performWebSearch") {
-    bgPerformRealWebSearch(message.query, {
-      purpose: message.purpose,
-      aiProvider: message.aiProvider,
-      chatHistory: message.chatHistory,
-      instructions: message.instructions,
-    })
-      .then((result) => sendResponse(result))
-      .catch((e) => sendResponse({ error: e.message || "Web search failed." }));
+    (async () => {
+      // Free-tier gate: web search counts toward the daily question cap; unlimited on Pro/creator/admin.
+      const searchGate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
+      if (!searchGate.allowed) {
+        bgNotifyQuota(sender?.tab?.id || null, "chat", searchGate);
+        sendResponse({ error: "FREE_LIMIT_CHAT", quotaExceeded: true, surface: "chat" });
+        return;
+      }
+      const result = await bgPerformRealWebSearch(message.query, {
+        purpose: message.purpose,
+        aiProvider: message.aiProvider,
+        chatHistory: message.chatHistory,
+        instructions: message.instructions,
+      });
+      sendResponse(result);
+    })().catch((e) => sendResponse({ error: e.message || "Web search failed." }));
     return true;
   }
   if (message.action === "generateXReply") {
@@ -1364,6 +1388,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: true, starting: true });
           return;
         }
+        // Free-tier gate: voice is a daily taste on Free, unlimited on Pro/creator/admin.
+        const voiceGate = await bgGateSurface("voice_seconds", { action: "precheck" });
+        if (!voiceGate.allowed) {
+          bgNotifyQuota(requesterTabId, "voice", voiceGate);
+          sendResponse({ ok: true, quotaExceeded: true, surface: "voice" });
+          return;
+        }
+        bgVoiceSessionStartedAt = Date.now();
         bgRtSessionStarting = true;
         // The offscreen document is invisible and cannot show a mic prompt. Make sure the
         // extension already holds microphone permission (granted once via a visible helper
@@ -1439,6 +1471,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "offscreenRtDisconnected") {
     if (!bgVoiceModeOn) return false;
+    bgConsumeVoiceSeconds();
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
     bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
@@ -1462,6 +1495,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message.action === "stopOffscreenRealtime") {
+    bgConsumeVoiceSeconds();
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
     bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
@@ -1567,6 +1601,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const runClaim = bgTryClaimDelegateRun(recovery.tabId, task);
       if (!runClaim.ok) {
         sendResponse({ ok: true, duplicate: true, tabId: recovery.tabId, moved: recovery.moved, created: recovery.created });
+        return;
+      }
+      // Free-tier gate: Delegate is a monthly taste on Free, unlimited on Pro/creator/admin.
+      // Gated AFTER dedupe so a duplicate run never burns quota; release the claim if blocked.
+      const delegateGate = await bgGateSurface("delegate_count", { action: "consume", amount: 1 });
+      if (!delegateGate.allowed) {
+        bgReleaseDelegateRun(recovery.tabId, runClaim.token);
+        bgNotifyQuota(recovery.tabId, "delegate", delegateGate);
+        sendResponse({ ok: true, quotaExceeded: true, surface: "delegate", tabId: recovery.tabId });
         return;
       }
       void bgRunBrainAgent(recovery.tabId, task, connector, sharedContext).catch((error) => {
@@ -6773,6 +6816,65 @@ async function bgResolvePremiumStatus(options = {}) {
       error: error?.message || String(error),
     };
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Free-tier usage gate (V1 two-tier launch). Premium/creator/admin resolve to
+// unlimited LOCALLY via bgResolvePremiumStatus (internal-email + is_premium, which
+// also reflects access_grants) and are NEVER metered — no network dependency, so
+// the creator always passes even offline. Free users consult the server-
+// authoritative `check-and-consume` edge fn. Fails OPEN on any error so a hiccup
+// never breaks the product. Surfaces: voice_seconds, recording_seconds (daily,
+// precheck at start + consume at stop), delegate_count (monthly), chat_count (daily).
+// ─────────────────────────────────────────────────────────────────────────────
+const BG_USAGE_FN_URL = `${BG_SUPABASE_URL}/functions/v1/check-and-consume`;
+let bgVoiceSessionStartedAt = 0;
+let bgRecordingStartedAt = 0;
+
+async function bgGateSurface(surface, { action = "consume", amount = 1 } = {}) {
+  try {
+    const prem = await bgResolvePremiumStatus();
+    if (prem.isPremium) return { allowed: true, unlimited: true };
+    const { authToken } = await bgGetStorage(["authToken"]);
+    if (!authToken) return { allowed: true, unlimited: false, anon: true };
+    const res = await fetch(BG_USAGE_FN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: BG_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ surface, action, amount }),
+    });
+    if (!res.ok) return { allowed: true, degraded: true };
+    return await res.json();
+  } catch (_e) {
+    return { allowed: true, degraded: true };
+  }
+}
+
+// Tell a tab it hit a free-tier wall so the bar can show an upgrade nudge.
+function bgNotifyQuota(tabId, surface, info = {}) {
+  if (!tabId) return;
+  chrome.tabs.sendMessage(
+    tabId,
+    { action: "sbQuotaExceeded", surface, limit: info.limit ?? null },
+    () => { void chrome.runtime.lastError; },
+  );
+}
+
+function bgConsumeVoiceSeconds() {
+  if (!bgVoiceSessionStartedAt) return;
+  const secs = Math.round((Date.now() - bgVoiceSessionStartedAt) / 1000);
+  bgVoiceSessionStartedAt = 0;
+  if (secs > 0) void bgGateSurface("voice_seconds", { action: "consume", amount: secs });
+}
+
+function bgConsumeRecordingSeconds() {
+  if (!bgRecordingStartedAt) return;
+  const secs = Math.round((Date.now() - bgRecordingStartedAt) / 1000);
+  bgRecordingStartedAt = 0;
+  if (secs > 0) void bgGateSurface("recording_seconds", { action: "consume", amount: secs });
 }
 
 // --- polling ---

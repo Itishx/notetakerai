@@ -46,13 +46,14 @@ function formatDetectedPrice(usd: number, isIndia: boolean | null) {
 }
 
 const FEATURES = [
-  { tag: "Recording", title: "Record without limits.", body: "Free users hit a 5-minute cap per day. With Pro, record full lectures, long meetings, hour-long podcasts — however long it runs, SideBrain keeps up.", free: "5 min / day", pro: "Unlimited", big: true },
+  { tag: "Voice", title: "Talk to Braino, hands-free.", body: "Voice is where Braino comes alive — speak naturally and he answers in his own voice, and on Pro he can act on what you say. Free gives you a 3-minute daily taste; Pro is unlimited, conversation after conversation.", free: "3 min / day", pro: "Unlimited", big: true },
+  { tag: "Agent", title: "Let Braino do it for you.", body: "Delegate turns a sentence into action — Braino opens tabs, searches, and works the page for you. Free includes 5 task runs a month to try it; Pro removes the limit so you can automate as much as you want.", free: "5 tasks / month", pro: "Unlimited", big: true },
+  { tag: "Recording", title: "Record without limits.", body: "Free users hit a 5-minute cap per day. With Pro, record full lectures, long meetings, hour-long podcasts — however long it runs, Braino keeps up.", free: "5 min / day", pro: "Unlimited" },
+  { tag: "Chat", title: "Chat without limits.", body: "Free users get 10 questions per day. Pro unlocks unlimited chat — ask as many questions as you need and reference your notes and the current page simultaneously.", free: "10 questions / day", pro: "Unlimited" },
   { tag: "Storage", title: "Cloud sync & note history.", body: "Free notes live only on your device. Reinstall the extension and they're gone. Pro saves every note to the cloud — switch browsers, log in anywhere, your history is waiting.", free: "Local only", pro: "Unlimited cloud history" },
   { tag: "AI", title: "Smarter AI, richer notes.", body: "Pro runs recordings through a more capable model. Better structure, sharper key points, more accurate glossaries — especially on dense or fast-paced content.", free: "Basic model", pro: "Advanced model" },
   { tag: "Languages", title: "Multi-language transcription.", body: "Recording in Spanish, Hindi, Mandarin, or French? Pro transcribes and structures notes in 50+ languages, automatically detected.", free: "English only", pro: "50+ languages" },
-  { tag: "Chat", title: "Chat without limits.", body: "Free users get 5 questions per day. Pro unlocks unlimited chat — ask as many questions as you need and reference your notes and the current page simultaneously.", free: "5 questions / day", pro: "Unlimited", big: true },
-  { tag: "Delegate", title: "More Delegate tasks.", body: "Free users get 25 Delegate task runs per month. Pro gives you unlimited — automate as many workflows as you need, every day.", free: "25 tasks / month", pro: "Unlimited" },
-  { tag: "Memory", title: "Persistent memory.", body: "SideBrain remembers facts you tell it across sessions — your preferences, your context, your ongoing projects. Free users start fresh every session.", free: "Session only", pro: "Persistent across sessions" },
+  { tag: "Memory", title: "Persistent memory.", body: "Braino remembers facts you tell it across sessions — your preferences, your context, your ongoing projects. Free users start fresh every session.", free: "Session only", pro: "Persistent across sessions" },
 ];
 
 export default function Premium() {
@@ -116,7 +117,7 @@ export default function Premium() {
             <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Pro when you want more.</em>
           </h1>
           <p style={{ fontSize: 18, color: "var(--sb-ink-2)", maxWidth: 600, margin: "0 auto", lineHeight: 1.55 }}>
-            SideBrain works in your browser. The model runs on us. Pro buys you faster models, unlimited recordings, and more Delegate runs. X Auto lives as a separate add-on.
+            Braino works in your browser. The basics are free — chat about any page, search, and record. Pro is voice-first: talk to Braino and let him act for you, all unlimited. X Auto lives as a separate add-on.
           </p>
         </div>
       </section>
@@ -163,7 +164,7 @@ export default function Premium() {
               </div>
               <p style={{ color: "var(--sb-ink-2)", fontSize: 14.5, lineHeight: 1.5 }}>Everything you need to get started. No credit card.</p>
               <ul style={{ display: "flex", flexDirection: "column", gap: 12, margin: "8px 0", padding: 0 }}>
-                {["Voice mode with live captions", "Read & summarize any page", "25 Delegate tasks / month", "5 min recording / day", "Dashboard & library (local)"].map(f => (
+                {["Read & summarize any page — 10 questions/day", "Web search", "5 min recording / day", "Voice mode — 3 min / day taste", "Delegate — 5 tasks / month taste", "Dashboard & library (local)"].map(f => (
                   <li key={f} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, listStyle: "none", color: "var(--sb-accent-deep)" }}>
                     <CheckIcon /><span style={{ color: "var(--sb-ink)" }}>{f}</span>
                   </li>
@@ -192,9 +193,9 @@ export default function Premium() {
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 60, lineHeight: 1, letterSpacing: "-0.02em", color: "#FBF7F1", display: "flex", alignItems: "baseline", gap: 6 }}>
                 {priceDisplay}<span style={{ fontSize: 16, fontFamily: "'Inter',sans-serif", color: "rgba(251,247,241,0.5)", letterSpacing: 0 }}>&nbsp;{pricePer}</span>
               </div>
-              <p style={{ color: "rgba(251,247,241,0.65)", fontSize: 14.5, lineHeight: 1.5 }}>For people who actually live in their browser. X Auto is sold separately as an add-on.</p>
+              <p style={{ color: "rgba(251,247,241,0.65)", fontSize: 14.5, lineHeight: 1.5 }}>For people who actually live in their browser — voice-first and fully agentic. X Auto is sold separately as an add-on.</p>
               <ul style={{ display: "flex", flexDirection: "column", gap: 12, margin: "8px 0", padding: 0 }}>
-                {["Everything in Free", "Faster, smarter models", "Unlimited Delegate tasks", "Unlimited recording & transcription", "Cloud sync across devices", "Custom voices & 50+ languages", "Persistent memory across sessions", "Priority support"].map(f => (
+                {["Everything in Free", "Unlimited voice — talk to Braino freely", "Full browser Agent — unlimited Delegate", "Unlimited recording & transcription", "Faster, smarter models", "Cloud sync across devices", "Custom voices & 50+ languages", "Persistent memory across sessions", "Priority support"].map(f => (
                   <li key={f} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, listStyle: "none", color: "var(--sb-accent-2)" }}>
                     <CheckIcon /><span style={{ color: "rgba(251,247,241,0.9)" }}>{f}</span>
                   </li>
