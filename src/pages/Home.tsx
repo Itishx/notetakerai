@@ -372,6 +372,11 @@ export default function Home() {
           <Nb><h2 className="home-h2">{T(DELEGATE.title)}</h2></Nb>
           <Nb><p className="home-body">{T(FEATURE_COPY.delegate)}</p></Nb>
           {DELEGATE.body.map((b, i) => <Nb key={i}><p className="home-body">{T(b)}</p></Nb>)}
+          <Nb><p className="home-body">
+            <Link to="/straight-talk" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "3px" }}>
+              And yeah — sometimes he's slow or gets it wrong. Here's the honest reason why →
+            </Link>
+          </p></Nb>
         </section>
 
         {/* ── Why Braino ── */}
@@ -508,6 +513,7 @@ export default function Home() {
                 <Link to="/chat">Braino Chat</Link>
                 <Link to="/integrations">Integrations</Link>
                 <Link to="/remote-agent">Remote Agent</Link>
+                <Link to="/straight-talk">Straight talk on the agent</Link>
                 <Link to="/contact">Contact</Link>
               </div>
               <div className="home-footer-col">
