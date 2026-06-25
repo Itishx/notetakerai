@@ -3786,6 +3786,27 @@ let __sbCursorFollowNeedsFrame = false;
 let __sbCursorFollowPosition = null;
 let __sbLastAgentTask = "";
 let __sbAgentLaunchGuard = { task: "", ts: 0 };
+// Self-capture guard: remember what Braino just SAID so the mic re-hearing his own voice
+// (e.g. "sending directions to your phone") can't re-trigger the same intent into a 2nd run.
+let __sbLastSpokenLine = { text: "", ts: 0 };
+function __sbNormalizeForMatch(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+function __sbNoteSpoken(text) {
+  const t = __sbNormalizeForMatch(text);
+  if (t) __sbLastSpokenLine = { text: t, ts: Date.now() };
+}
+function __sbIsSelfEcho(transcript) {
+  const a = __sbNormalizeForMatch(transcript);
+  const b = __sbLastSpokenLine.text;
+  if (!a || !b || Date.now() - __sbLastSpokenLine.ts > 8000) return false;
+  if (a === b) return true;
+  if (a.length >= 8 && (b.includes(a) || a.includes(b))) return true;
+  const at = new Set(a.split(" "));
+  const bt = b.split(" ");
+  const overlap = bt.filter((w) => at.has(w)).length;
+  return bt.length >= 4 && overlap / bt.length >= 0.7;   // mostly Braino's own words coming back
+}
 let __sbMovieModeActive = false;
 let __sbMovieModeState = { frame: null, media: null, descriptor: "" };
 let __sbMovieModeSyncTimer = null;
@@ -11448,21 +11469,41 @@ function __sbIsSendToPhoneRequest(text) {
 }
 
 // Strip the command scaffolding + the "to my phone" tail to leave the destination.
-function __sbExtractSendToPhoneTarget(text) {
+// Parse a directions request into {origin, destination} BY STRUCTURE — using "from"/"to" as
+// delimiters instead of deleting them. The old extractor stripped "from"/"to" as stopwords, which
+// collapsed "from X to Y" into one garbled blob. origin = null means "use current location".
+function __sbParseDirections(text) {
   let t = " " + String(text || "").toLowerCase() + " ";
   t = t.replace(/\b(hey|hi|yo|ok|okay)\s+braino\b/g, " ");
   t = t.replace(/\bbraino\b/g, " ");
+  t = t.replace(/\b(to|on)\s+(my\s+)?(phone|mobile|cell)\b.*$/, " ");          // drop the "to my phone" tail
   t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly)\s+you\b/g, " ");
-  t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly)\b/g, " ");
-  t = t.replace(/\b(to|on)\s+(my\s+)?(phone|mobile|cell)\b.*$/, " ");   // drop the "to my phone" tail
-  t = t.replace(/\b(send|ping|share|shoot|push|text|forward|beam)\b/g, " ");
+  t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly|for me)\b/g, " ");
+  t = t.replace(/\bhow\s+(do\s+i|to)\s+get\b/g, " ");
+  t = t.replace(/\b(send|ping|share|shoot|push|text|forward|beam|give|show|open|find|pull up|bring up)\b/g, " ");
   t = t.replace(/\b(me|us)\b/g, " ");
-  t = t.replace(/\b(the\s+)?(directions?|route|navigation|location|address|map|maps)\s+(to|for|of|towards?)\b/g, " ");
-  t = t.replace(/\b(directions?|route|navigation|location|address|map|maps)\b/g, " ");
-  t = t.replace(/\b(get me to|how (do i|to) get to|navigate to|way to)\b/g, " ");
-  t = t.replace(/\b(to|for|of|a|an|the)\b/g, " ");
-  t = t.replace(/["'?.!,]/g, " ").replace(/\s+/g, " ").trim();
-  return t;
+  t = t.replace(/\b(the\s+)?(directions?|route|navigation|navigate|location|address|map|maps|way)\b/g, " ");
+  t = t.replace(/\s+/g, " ").trim();
+
+  const clean = (s) => String(s || "")
+    .replace(/["'?.!]/g, " ")
+    .replace(/^[\s,]+|[\s,]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  let origin = null, destination = null, m;
+  if ((m = t.match(/\bfrom\s+(.+?)\s+to\s+(.+)$/)))      { origin = m[1]; destination = m[2]; }
+  else if ((m = t.match(/\bto\s+(.+?)\s+from\s+(.+)$/))) { destination = m[1]; origin = m[2]; }
+  else if ((m = t.match(/\bto\s+(.+)$/)))                { destination = m[1]; }
+  else if ((m = t.match(/\bfrom\s+(.+)$/)))              { origin = m[1]; }
+  else                                                   { destination = t; }   // bare "directions X"
+  return { origin: clean(origin) || null, destination: clean(destination) || null };
+}
+
+function __sbBuildMapsDirUrl(origin, destination) {
+  let url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+  if (origin) url += `&origin=${encodeURIComponent(origin)}`;   // blank origin = device's current location
+  return url;
 }
 
 function __sbEscHtml(s) {
@@ -11489,30 +11530,25 @@ async function __sbHandleSendDirectionsToPhone(promptText, ctx = {}) {
   const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
   const speak = async (line) => { if (fromVoice) { try { await __sbSpeakWithPreferredVoice(line, voiceOutput); } catch (_) {} } };
 
-  const dest = __sbExtractSendToPhoneTarget(promptText);
-  if (!dest) {
-    if (fromVoice) await speak("Where should I send the directions?"); else __sbWkSay("Send directions where? 📍");
+  const { origin, destination } = __sbParseDirections(promptText);
+  const GENERIC = new Set(["location", "locations", "directions", "direction", "place", "places", "here", "there", "this", "that", "it", "map", "maps", "route", "way"]);
+  if (!destination || GENERIC.has(destination)) {
+    if (fromVoice) await speak("Where should I send the directions to?"); else __sbWkSay("Send directions where? 📍");
     return false;
   }
 
-  const mapsLink = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+  // Deterministic Google Maps deep link — exact every time, no fragile UI automation. A blank
+  // origin = the device's own current location, so on the phone it starts from your GPS — no
+  // location permission needed. The QR opens the route on the phone; the card link opens it here.
+  const mapsLink = __sbBuildMapsDirUrl(origin, destination);
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(mapsLink)}`;
+  const fromNote = origin ? `from ${origin}` : "from your current location";
 
-  // Native push is an agent action (Pro). Pro users get the magic + the QR as a fallback;
-  // free users get the QR (which already delivers) plus a gentle nudge.
-  let hasPremium = false;
-  try { hasPremium = await __sbResolvePremiumStatus(false); } catch (_) {}
-
-  if (hasPremium) {
-    __sbShowSendToPhoneCard(dest, qrSrc, mapsLink, "…or scan if your phone doesn't buzz.");
-    if (fromVoice) await speak(`Sending directions to ${dest} to your phone now. If it doesn't buzz, scan the code I put on screen.`);
-    __sbRunAgent(
-      `Open Google Maps directions to "${dest}", then use Google Maps' "Send directions to your phone" feature to send the route to my phone (pick my phone from the device list). If no paired phone is available, stop — don't send by email or SMS.`,
-      { connector: null },
-    );
-  } else {
-    __sbShowSendToPhoneCard(dest, qrSrc, mapsLink, "With Braino Pro I can push it straight to your phone.");
-    if (fromVoice) await speak(`Scan the code to open directions to ${dest} on your phone. With Pro I can push it straight there.`);
+  __sbShowSendToPhoneCard(destination, qrSrc, mapsLink, `Scan to open it on your phone — ${fromNote}.`);
+  if (fromVoice) {
+    await speak(origin
+      ? `Here's the route from ${origin} to ${destination}. Scan the code to open it on your phone.`
+      : `Here's the route to ${destination}. Scan the code to open it on your phone.`);
   }
   return true;
 }
@@ -12342,10 +12378,14 @@ function __sbRunAgent(task, options = {}) {
   __sbLastAgentTask = String(task || "").trim();
   if (!__sbLastAgentTask) return;
   const now = Date.now();
-  if (__sbAgentPendingTurn?.prompt === __sbLastAgentTask || (__sbAgentLaunchGuard.task === __sbLastAgentTask && now - __sbAgentLaunchGuard.ts < 5000)) {
+  // Semantic guard: compare normalized tasks so a near-duplicate re-trigger (e.g. the mic
+  // re-hearing a slightly different version of the same request) is still blocked.
+  const normTask = __sbNormalizeForMatch(__sbLastAgentTask);
+  if (__sbAgentPendingTurn?.prompt === __sbLastAgentTask
+      || (__sbAgentLaunchGuard.task === normTask && now - __sbAgentLaunchGuard.ts < 8000)) {
     return;
   }
-  __sbAgentLaunchGuard = { task: __sbLastAgentTask, ts: now };
+  __sbAgentLaunchGuard = { task: normTask, ts: now };
   __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
@@ -14094,6 +14134,8 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 }
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
+  // Remember what Braino is about to say so the mic can't re-hear it and re-fire an intent.
+  __sbNoteSpoken(text);
   // In native realtime mode the model speaks via WebRTC audio — we must NOT also call a
   // TTS endpoint (that would be two voices). Only call __sbSpeakText when Fish Audio is
   // selected, OR when falling back from a failed relay.
@@ -14271,6 +14313,11 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
 }
 
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
+  // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
+  if (__sbIsSelfEcho(transcript)) {
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
   const routing = __sbResolvePromptRouting(transcript);
   const promptText = String(routing.promptText || "").trim();
   if (!promptText) {

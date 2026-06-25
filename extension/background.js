@@ -2775,12 +2775,13 @@ async function bgSynthesizeIntent(task, sharedContext) {
     const systemPrompt = [
       "You convert a user's natural-language request into a clean search plan for a browser agent.",
       "Return STRICT JSON only, no prose, no markdown:",
-      '{"surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"]}',
+      '{"surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"],"directions":{"origin":"","destination":""}}',
       "Rules:",
       "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
       "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
       "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
       "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
+      "- For a DIRECTIONS/route/navigate request, fill directions.origin and directions.destination as separate places (e.g. 'from Laburnum Park, Pune to Malad West, Mumbai' → origin='Laburnum Park, Pune', destination='Malad West, Mumbai'). If the user gives only a destination, leave origin empty (current location). Otherwise leave both empty.",
     ].join("\n");
     const userPrompt = [
       `REQUEST: ${raw}`,
@@ -2799,7 +2800,12 @@ async function bgSynthesizeIntent(task, sharedContext) {
     const softConstraints = Array.isArray(p.softConstraints)
       ? p.softConstraints.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 5)
       : [];
-    return { surface, searchQuery, softConstraints };
+    const dir = p.directions && typeof p.directions === "object" ? p.directions : {};
+    const directions = {
+      origin: String(dir.origin || "").trim(),
+      destination: String(dir.destination || "").trim(),
+    };
+    return { surface, searchQuery, softConstraints, directions };
   } catch (error) {
     console.warn("[Braino][Delegate] intent synth fallback:", error?.message || error);
     return null;
@@ -5623,6 +5629,22 @@ function bgBuildGoogleMapsFastPath(task, synth = null) {
       type: "navigate",
       url: `https://www.google.com/maps/dir/${bgEncodeMapsPath(origin)}/${bgEncodeMapsPath(destination)}`,
       description: `Open Google Maps directions from "${origin}" to "${destination}"`,
+      continueAfter: true,
+    }];
+  }
+
+  // Structured-directions fallback: if the regex missed but the understanding layer parsed a
+  // destination (and maybe an origin), use the deterministic deep link. Blank origin = current location.
+  if (synth?.directions?.destination) {
+    const dest = bgNormalizeMapsEndpoint(synth.directions.destination);
+    const org = synth.directions.origin ? bgNormalizeMapsEndpoint(synth.directions.origin) : "";
+    const url = org
+      ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(org)}&destination=${encodeURIComponent(dest)}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+    return [{
+      type: "navigate",
+      url,
+      description: org ? `Open Google Maps directions from "${org}" to "${dest}"` : `Open Google Maps directions to "${dest}"`,
       continueAfter: true,
     }];
   }
