@@ -3950,6 +3950,7 @@ if (__sbContextOk()) {
         }
         __sbSetStopBtn(false);
         __sbClearBarAgentStatus();
+        __sbAgentLogClear();   // collapse the activity strip when the task finishes
         if (__sbRtAwaitingDelegateResult) {
           __sbRtAwaitingDelegateResult = false;
           if (finalText) {
@@ -3974,6 +3975,10 @@ if (__sbContextOk()) {
           __sbSpeakWithPreferredVoice(finalText).catch(() => {});
         }
       } else {
+        // ALWAYS surface progress in the docked log strip + bar (works in voice-only mode too,
+        // where the card below is suppressed). This is the fix for "I just see him standing".
+        const __alogText = String(msg.text || "").trim();
+        if (__alogText) { __sbAgentLogStep(__alogText); __sbSetBarAgentStatus(__alogText); }
         if (!__sbVoiceOnlyMode) {
           if (__sbAgentPendingTurn) {
             __sbUpdateAgentPendingTurn(String(msg.text || "Working…").trim() || "Working…");
@@ -4753,6 +4758,33 @@ function __sbBuildBrainUI() {
       100% { box-shadow: 0 0 0 0 rgba(232,120,110,0), 0 8px 32px rgba(27,23,19,0.18); }
     }
     #__sb_bar__.sb-send-pulse { animation: __sb_bar_send__ 0.7s ease-out; }
+    /* Agent activity log — a thin strip DOCKED just above the bar. Hidden when idle; shows the
+       live step list while a task runs (works in voice mode too). */
+    #__sb_agentlog__ {
+      position: fixed; bottom: 84px; left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      width: calc(100vw - 48px); max-width: 1100px; box-sizing: border-box;
+      display: flex; flex-direction: column; gap: 3px;
+      padding: 12px 18px; border-radius: 18px;
+      background: rgba(255,251,247,0.18); border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 8px 28px rgba(27,23,19,0.16), inset 1px 1px 1px rgba(255,255,255,0.5);
+      backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%);
+      z-index: 2147483645; opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34,1.1,0.64,1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #__sb_agentlog__.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #__sb_agentlog__ .sb-alog-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #1B1713; margin-bottom: 3px; }
+    #__sb_agentlog__ .sb-alog-spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(232,120,110,0.3); border-top-color: #E8786E; animation: __sb_alog_spin__ 0.7s linear infinite; flex: none; }
+    @keyframes __sb_alog_spin__ { to { transform: rotate(360deg); } }
+    #__sb_agentlog__ .sb-alog-step { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.5; color: #6B6157; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #__sb_agentlog__ .sb-alog-step .sb-alog-ic { flex: none; width: 13px; text-align: center; }
+    #__sb_agentlog__ .sb-alog-step.done { color: #9a9088; }
+    #__sb_agentlog__ .sb-alog-step.active { color: #1B1713; font-weight: 500; }
+    html.sb-dark #__sb_agentlog__ { background: rgba(18,16,14,0.7); border-color: rgba(255,255,255,0.12); box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+    html.sb-dark #__sb_agentlog__ .sb-alog-head { color: #FBF7F1; }
+    html.sb-dark #__sb_agentlog__ .sb-alog-step { color: #b0a89e; }
+    html.sb-dark #__sb_agentlog__ .sb-alog-step.active { color: #FBF7F1; }
     /* Card is display-only now — the constant bottom bar is the single input. */
     #__sb_bubble__ .sb-card-footer { display: none !important; }
     /* Wake-up climb: bar is visible glass, expands from the center (scaleX driven in JS),
@@ -6154,6 +6186,12 @@ function __sbBuildBrainUI() {
       </div>
   `;
   (document.documentElement||document.body).appendChild(__sbDockBar);
+
+  // Agent activity log strip — docked just above the bar (hidden until a task runs).
+  const __sbAgentLogBar = document.createElement("div");
+  __sbAgentLogBar.id = "__sb_agentlog__";
+  __sbAgentLogBar.innerHTML = `<div class="sb-alog-head"><span class="sb-alog-spin"></span><span class="sb-alog-title">Working…</span></div><div class="sb-alog-steps"></div>`;
+  (document.documentElement||document.body).appendChild(__sbAgentLogBar);
 
   // ── Glass SVG (with brain gradients + displacement filter) appended before bar — see above ──
 
@@ -10005,6 +10043,48 @@ function __sbClearBarAgentStatus() {
   }
 }
 
+// ── Agent activity log strip (docked above the bar) — the ALWAYS-VISIBLE play-by-play, so the
+// user can see what Braino is doing even in voice-only mode (where the card is hidden). ──
+let __sbAgentLogSteps = [];
+let __sbAgentBusy = false;            // true while an agent/research task runs
+let __sbAgentBusyLabel = "Working…";  // overrides the voice indicator's "Listening…" while busy
+function __sbAgentLogShow(title) {
+  const el = document.getElementById("__sb_agentlog__");
+  __sbAgentBusy = true;
+  if (title) __sbAgentBusyLabel = title;
+  if (typeof __sbWkStatus === "function") __sbWkStatus(__sbAgentBusyLabel);  // flip "Listening…" → working label
+  if (!el) return;
+  const t = el.querySelector(".sb-alog-title");
+  if (t && title) t.textContent = title;
+  el.classList.add("show");
+}
+function __sbAgentLogStep(text) {
+  const el = document.getElementById("__sb_agentlog__");
+  if (!el) return;
+  const clean = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
+  if (!clean) return;
+  if (__sbAgentLogSteps.length && __sbAgentLogSteps[__sbAgentLogSteps.length - 1].text === clean) return; // de-dupe repeats
+  if (__sbAgentLogSteps.length) __sbAgentLogSteps[__sbAgentLogSteps.length - 1].active = false;
+  __sbAgentLogSteps.push({ text: clean, active: true });
+  if (__sbAgentLogSteps.length > 5) __sbAgentLogSteps = __sbAgentLogSteps.slice(-5);
+  const steps = el.querySelector(".sb-alog-steps");
+  if (steps) {
+    steps.innerHTML = __sbAgentLogSteps.map((s) =>
+      `<div class="sb-alog-step ${s.active ? "active" : "done"}"><span class="sb-alog-ic">${s.active ? "→" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
+    ).join("");
+  }
+  el.classList.add("show");
+}
+function __sbAgentLogClear() {
+  __sbAgentLogSteps = [];
+  __sbAgentBusy = false;
+  const el = document.getElementById("__sb_agentlog__");
+  if (!el) return;
+  el.classList.remove("show");
+  const steps = el.querySelector(".sb-alog-steps");
+  if (steps) steps.innerHTML = "";
+}
+
 function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
   const task = String(prompt || "").trim();
   if (!task) return;
@@ -11715,12 +11795,13 @@ async function __sbResolvePremiumStatus(forceRefresh = false) {
   return result?.isPremium === true || cached.isPremium === true;
 }
 
-// ── Compare skill ────────────────────────────────────────────────────────────
-// A self-contained front-end skill (modeled on the X skill). For "compare X / best X
-// under Y / X vs Y" requests, Braino first asks whether to open tabs for theatrics, then
-// runs the REAL comparison in the backend (web-research, purpose:"compare"), optionally
-// opens a few tabs purely for show, and finally presents/speaks the comparison + best pick.
-// It does NOT use the Delegate browser loop.
+// ── Research / Compare skill ─────────────────────────────────────────────────
+// A self-contained front-end skill. For "compare X / best X under Y / X vs Y" AND
+// "find/research/recommend a few good X" requests, Braino asks ONCE whether to open tabs
+// (then remembers via sbResearchMode), streams a live log in the docked strip, runs the REAL
+// research in the backend (web-research, purpose:"compare") so it returns a reasoned answer +
+// sources, optionally opens a few tabs for show, and presents/speaks the result + best pick.
+// It does NOT use the Delegate browser loop (that's reserved for ACTION tasks).
 let __sbCompareSkillState = { phase: "idle" };
 
 function __sbResetCompareSkillState() { __sbCompareSkillState = { phase: "idle" }; }
@@ -11741,6 +11822,11 @@ function __sbLooksLikeCompare(text) {
   if (/\btop\s+\d+\b/.test(t)) return true;                     // "top 5 ..."
   if (/\b(cheapest|most affordable|best value|value for money)\b/.test(t)) return true;
   if (/\bhelp me\b.{0,20}\b(choose|pick|decide)\b/.test(t)) return true;
+  // Research/find/recommend (informational) → same reasoned web-research path as compare, so it
+  // returns an ANSWER with reasoning + sources instead of the blind delegate's "Done." + random tab.
+  if (/\bresearch\b/.test(t) && !/\bresearch (paper|gate|er)\b/.test(t)) return true;
+  if (/\b(find|recommend|suggest)\b.{0,32}\b(course|courses|certification|certifications?|certs?|tool|tools|book|books|tutorial|tutorials?|resource|resources?|option|options?|alternative|alternatives?|app|apps?|library|libraries|framework|frameworks?|service|services?|provider|providers?|platform|platforms?)\b/.test(t)) return true;
+  if (/\b(which|what)\b.{0,42}\b(course|certification|cert|tool|book|option|framework|library|provider|platform|app|service)s?\b.{0,24}\b(should i|is best|are best|to (take|learn|use|pick|choose|get|do))\b/.test(t)) return true;
   return false;
 }
 
@@ -11777,6 +11863,7 @@ function __sbBindCompareChoiceCard() {
       const action = btn.getAttribute("data-sb-compare-action");
       const query = String(__sbCompareSkillState?.query || "").trim();
       if (!query) { __sbResetCompareSkillState(); return; }
+      if (__sbContextOk()) chrome.storage.local.set({ sbResearchMode: action === "tabs" ? "tabs" : "background" });
       void __sbExecuteCompare(query, {
         openTabs: action === "tabs",
         fromVoice: false,
@@ -11804,10 +11891,22 @@ async function __sbRunCompare(promptText, ctx = {}) {
   const voiceTurnToken = Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null;
   const query = __sbExtractSearchQuery(promptText);
 
+  // Ask ONCE, then remember (sbResearchMode). "ask me each time" clears it.
+  if (/\b(ask me (each|every) time|always ask|stop remembering)\b/i.test(promptText)) {
+    if (__sbContextOk()) chrome.storage.local.remove("sbResearchMode");
+  } else {
+    const pref = (await __sbStorageGet(["sbResearchMode"])).sbResearchMode;
+    if (pref === "tabs" || pref === "background") {
+      __sbChatHistory.push({ role: "user", content: promptText });
+      await __sbExecuteCompare(query, { openTabs: pref === "tabs", fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+  }
+
   __sbChatHistory.push({ role: "user", content: promptText });
   __sbSetCompareSkillState({ phase: "awaiting_choice", query, fromVoice, voiceOutput, voiceTurnToken });
 
-  const question = "Want me to open a few tabs so you can watch me research, or should I just go do it and come back with the comparison?";
+  const question = "Want me to open a few tabs so you can watch me research, or should I just go do it and come back? (I'll remember — say 'ask me each time' to change it.)";
   if (!(fromVoice && __sbVoiceOnlyMode)) {
     __sbRenderCompareChoiceCard(query);
   }
@@ -11837,6 +11936,7 @@ async function __sbHandleCompareSkillFollowup(promptText, ctx = {}) {
   }
 
   __sbChatHistory.push({ role: "user", content: promptText });
+  if (__sbContextOk()) chrome.storage.local.set({ sbResearchMode: wantsTabs ? "tabs" : "background" });
   await __sbExecuteCompare(query, { openTabs: wantsTabs, ...mergedCtx });
   return true;
 }
@@ -11860,6 +11960,10 @@ async function __sbExecuteCompare(query, ctx = {}) {
   const voiceOnly = fromVoice && __sbVoiceOnlyMode;
   const speakVoiceReply = async (t) => (fromVoice ? __sbSpeakWithPreferredVoice(t, voiceOutput) : false);
 
+  // Live activity strip (always visible, incl. voice mode) so the user SEES the research happen.
+  __sbAgentLogShow("Researching…");
+  __sbAgentLogStep(`Searching for ${query}`);
+
   if (!voiceOnly) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbShowThinking(scroll, "", openTabs ? "Opening tabs and researching…" : "Researching and comparing…");
@@ -11882,6 +11986,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
   const previousHistory = __sbChatHistory.slice(-10);
 
   try {
+    __sbAgentLogStep("Reading the results…");
     const searchData = await __sbPerformWebSearch(query, {
       purpose: "compare",
       aiProvider,
@@ -11895,10 +12000,12 @@ async function __sbExecuteCompare(query, ctx = {}) {
       const picks = shopping.length ? shopping : results.filter((r) => r?.url).slice(0, 2);
       picks.forEach((r, i) => {
         setTimeout(() => {
+          try { __sbAgentLogStep(`Opened ${new URL(r.url).hostname.replace(/^www\./, "")}`); } catch (_) {}
           chrome.runtime.sendMessage({ action: "openTab", url: r.url, active: false }, () => { void chrome.runtime.lastError; });
         }, 900 * (i + 1));
       });
     }
+    __sbAgentLogStep("Comparing options…");
 
     const finalReply = __sbAppendSearchSources(
       String(searchData.answer || "I couldn't pull together a useful comparison just now."),
@@ -11926,6 +12033,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
     __sbShowBubble("Error: " + (err.message || "couldn't run the comparison"), true);
     if (fromVoice) await speakVoiceReply("Something went wrong while comparing.");
   } finally {
+    __sbAgentLogClear();
     __sbStopWaitEntertainment();
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
   }
@@ -12387,6 +12495,7 @@ function __sbRunAgent(task, options = {}) {
   }
   __sbAgentLaunchGuard = { task: normTask, ts: now };
   __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
+  __sbAgentLogClear(); __sbAgentLogShow("Working…"); __sbAgentLogStep("Getting started…");  // strip shows instantly, all modes
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
   const handoff = __sbBuildAgentHandoffPayload(__sbLastAgentTask, options);
@@ -15312,7 +15421,13 @@ function __sbSetHpBrainState(state) {
     captured: "Understanding…",
     speaking: "", // he's talking — the voice itself is the feedback
   };
-  __sbWkStatus(state ? (VOICE_STATUS[state] ?? "") : "");
+  // While an agent/research task is running, the mic stays open but he's NOT just listening —
+  // show the working label so it never looks like he's idly listening to nothing.
+  if (__sbAgentBusy && (state === "listening" || state === "hearing" || state === "captured")) {
+    __sbWkStatus(__sbAgentBusyLabel);
+  } else {
+    __sbWkStatus(state ? (VOICE_STATUS[state] ?? "") : "");
+  }
 }
 
 function __sbSetVoiceStatusBadge(state, label) {
