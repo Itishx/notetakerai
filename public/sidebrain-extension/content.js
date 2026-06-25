@@ -14343,14 +14343,14 @@ async function __sbDrainStreamTts() {
 // 1B conversation turn: refresh session context if the page changed, then let the realtime model
 // generate and stream straight into Fish. Returns true if it answered; false → caller falls back.
 async function __sbAnswerViaRealtimeStreaming(turnToken) {
-  if (!__sbRtControlReady()) return false;
+  if (!__sbRtControlReady()) { __sbVTMark("⚠️ fast bail: control not ready"); return false; }
 
   // Anti-stale gate: only pay a context re-sync when the page actually changed since last answer.
   const url = (typeof location !== "undefined" && location.href) || "";
   if (url && url !== __sbRtLastAnsweredUrl) {
     try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
     __sbRtLastAnsweredUrl = url;
-    if (!__sbRtControlReady()) return false;
+    if (!__sbRtControlReady()) { __sbVTMark("⚠️ fast bail: control lost after sync"); return false; }
   }
 
   const nativeVoice = __sbVoiceOutputPref === "realtime";   // model speaks audio directly (no Fish)
@@ -14368,6 +14368,7 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
   const waiter = __sbCreateRtWaiter();
   const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: nativeVoice ? ["audio"] : ["text"] } });
   if (!sent) {
+    __sbVTMark("⚠️ fast bail: send failed");
     __sbStreamFishActive = false;
     __sbStreamTts = null;
     __sbResetRealtimeResponseState();
@@ -14388,6 +14389,7 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
   // In native-voice mode the OpenAI audio plays via the offscreen WebRTC track; response.done
   // means the answer is complete.
 
+  if (result?.status !== "done") __sbVTMark(`⚠️ fast bail: response ${result?.status || "no result"}`);
   __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
   return result?.status === "done";
 }
