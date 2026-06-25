@@ -13347,6 +13347,11 @@ let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
 let __sbRtResponseWaiter = null;
 let __sbRtTurnToken = 0;
+// True if this voice turn is still the active one (no newer turn started since). Used to decide
+// whether retrying the fast path is safe, or whether this turn is stale and should be dropped.
+function __sbVoiceTurnIsCurrent(turnToken) {
+  return !Number.isInteger(turnToken) || turnToken === __sbRtTurnToken;
+}
 let __sbRtCurrentResponseMode = "idle";
 let __sbRtAwaitingDelegateResult = false;
 let __sbRtRelayingAppMessage = false;
@@ -14788,9 +14793,15 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
     // Fish mode streams the model's text into Fish; OpenAI-voice mode lets the model speak audio
     // natively (fastest). __sbAnswerViaRealtimeStreaming branches on the voice pref.
-    const ok = await __sbAnswerViaRealtimeStreaming(turnToken);
+    let ok = await __sbAnswerViaRealtimeStreaming(turnToken);
+    if (!ok && __sbRtControlReady() && __sbVoiceTurnIsCurrent(turnToken)) {
+      // The fast path usually bails for a TRANSIENT reason (a stray interrupt from background audio,
+      // a momentary channel hiccup). Retry it ONCE before resorting to the slow ~8s batch route —
+      // unless a new turn already started (then this turn is stale; let it go).
+      ok = await __sbAnswerViaRealtimeStreaming(turnToken);
+    }
     if (ok) return;
-    // streaming failed → fall through to the batch pipeline
+    // streaming failed twice → fall through to the batch pipeline
   }
 
   // Batch fallback — the SAME smart text pipeline legacy voice uses (chat-about-notes, with full
