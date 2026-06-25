@@ -14429,6 +14429,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
   // Remember what Braino is about to say so the mic can't re-hear it and re-fire an intent.
   __sbNoteSpoken(text);
+  __sbVTMark("🗣️ Answer ready — speaking");   // (no-op unless a voice-timing turn is active)
   // In native realtime mode the model speaks via WebRTC audio — we must NOT also call a
   // TTS endpoint (that would be two voices). Only call __sbSpeakText when Fish Audio is
   // selected, OR when falling back from a failed relay.
@@ -14729,7 +14730,9 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
+  __sbVTMark("🔀 Checking what you want…");
   const shouldForceDelegate = await __sbShouldForceVoiceDelegate(routing);
+  __sbVTMark("✅ Figured out the request");
   if (shouldForceDelegate) {
     __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
     await __sbProcessPrompt(promptText, {
