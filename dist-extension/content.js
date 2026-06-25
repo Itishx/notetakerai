@@ -6265,6 +6265,9 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
+    <div class="sb-dropdown-label" style="margin-top:8px">Voice — experiment</div>
+    <button class="sb-dropdown-item selected" data-voice="fish"><span class="sb-di-icon">💬</span><span class="sb-di-label">Default Braino</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-voice="realtime"><span class="sb-di-icon">⚡</span><span class="sb-di-label">OpenAI voice · faster</span><span class="sb-di-check">✓</span></button>
   `;
   (document.documentElement||document.body).appendChild(modeDd);
 
@@ -6652,11 +6655,11 @@ function __sbBuildBrainUI() {
   __sbSetupConnectorBtn(document.getElementById("__sb_connector_btn__"));
   __sbSetupConnectorBtn(document.getElementById("__sb_card_connector_btn__"));
 
-  modeDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
+  modeDd.querySelectorAll(".sb-dropdown-item[data-mode]").forEach(item => {
     item.addEventListener("click", () => {
       const mode = item.dataset.mode;
       window.__sbForcedMode = mode;
-      modeDd.querySelectorAll(".sb-dropdown-item").forEach(i => i.classList.remove("selected"));
+      modeDd.querySelectorAll(".sb-dropdown-item[data-mode]").forEach(i => i.classList.remove("selected"));
       item.classList.add("selected");
       const labels = { page: "📄 Page", web: "🔍 Web", lecture: "🎙 Lecture", meeting: "👥 Meeting", agent: "🤖 Delegate" };
       const label = labels[mode] || "📄 Page";
@@ -6668,6 +6671,24 @@ function __sbBuildBrainUI() {
       if ((mode === "lecture" || mode === "meeting") && !__sbIsLectureRecording) {
         __sbShowLectureReadyCard(mode);
       }
+    });
+  });
+
+  // Voice-engine toggle (experiment): Default Braino (Fish) vs OpenAI's native realtime voice.
+  // Takes effect next time voice mode is started (the session modalities + mute are set at start).
+  modeDd.querySelectorAll(".sb-dropdown-item[data-voice]").forEach(item => {
+    item.addEventListener("click", () => {
+      const v = item.dataset.voice === "realtime" ? "realtime" : "fish";
+      __sbApplyStoredVoiceOutputPref(v);
+      if (__sbContextOk()) chrome.storage.local.set({ brainoVoicePref: v });   // persist
+      __sbSyncVoiceDropdown();
+      __sbCloseAllDropdowns();
+      __sbShowBubble(
+        v === "realtime"
+          ? "Voice → OpenAI (faster). Restart voice mode to hear it."
+          : "Voice → Default Braino.",
+        true,
+      );
     });
   });
 
@@ -13285,7 +13306,17 @@ function __sbApplyStoredVoiceOutputPref(value) {
   if (value && value !== pref && __sbContextOk()) {
     chrome.storage.local.set({ brainoVoicePref: pref });
   }
+  __sbSyncVoiceDropdown();
   return pref;
+}
+
+// Reflect the current voice engine in the mode dropdown's Voice section.
+function __sbSyncVoiceDropdown() {
+  const dd = document.getElementById("__sb_mode_dropdown__");
+  if (!dd) return;
+  dd.querySelectorAll(".sb-dropdown-item[data-voice]").forEach((i) => {
+    i.classList.toggle("selected", i.dataset.voice === __sbVoiceOutputPref);
+  });
 }
 
 function __sbResetRealtimeConnectFailures() {
@@ -13562,7 +13593,9 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
     session: {
       type: "realtime",
       instructions,
-      output_modalities: ["text"],
+      // Default Braino = text-only (the model thinks, Fish speaks). OpenAI-voice mode = the model
+      // SPEAKS natively (audio), which is faster (no Fish round-trip) but uses OpenAI's voice.
+      output_modalities: __sbVoiceOutputPref === "realtime" ? ["audio", "text"] : ["text"],
       audio: {
         input: {
           noise_reduction: {
@@ -13753,7 +13786,7 @@ async function __sbStartRealtimeConnectAttempt() {
   if (!stored.sbOffscreenRtBroken) {
     const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
     chrome.runtime.sendMessage(
-      { action: "startOffscreenRealtime", authToken, bootInstructions },
+      { action: "startOffscreenRealtime", authToken, bootInstructions, voiceEngine: __sbVoiceOutputPref },
       (res) => {
         if (chrome.runtime.lastError || res?.error) {
           void __sbHandleRealtimeConnectFailure(res?.error || chrome.runtime.lastError?.message || "Live AI transport failed.");
@@ -14225,10 +14258,10 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
     if (!__sbRtControlReady()) return false;
   }
 
+  const nativeVoice = __sbVoiceOutputPref === "realtime";   // model speaks audio directly (no Fish)
   __sbStopSpeech(); // claim a fresh speech token + clear any prior stream
   const speechToken = __sbSpeechGeneration;
-  __sbBeginStreamTts(speechToken);
-  __sbStreamFishActive = true;
+  if (!nativeVoice) { __sbBeginStreamTts(speechToken); __sbStreamFishActive = true; }
 
   if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
   __sbRtAssistantTranscript = "";
@@ -14238,7 +14271,7 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
   if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
 
   const waiter = __sbCreateRtWaiter();
-  const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: ["text"] } });
+  const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: nativeVoice ? ["audio", "text"] : ["text"] } });
   if (!sent) {
     __sbStreamFishActive = false;
     __sbStreamTts = null;
@@ -14246,16 +14279,19 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
     return false; // control channel not ready → fall back to batch path
   }
 
-  const result = await waiter; // resolves at response.done / cancelled / error (TEXT done)
-  __sbStreamFishActive = false;
-  __sbEndStreamTts(); // flush the trailing partial sentence
-
-  // Fish audio lags the text stream — wait for it to finish playing (or barge-in to supersede)
-  // before finalizing the turn, so TTS cost events land on this turn and the next turn waits.
-  while (__sbStreamTts && __sbStreamTts.token === speechToken &&
-         (__sbStreamTts.draining || __sbStreamTts.queue.length > 0)) {
-    await new Promise((r) => setTimeout(r, 40));
+  const result = await waiter; // resolves at response.done / cancelled / error
+  if (!nativeVoice) {
+    __sbStreamFishActive = false;
+    __sbEndStreamTts(); // flush the trailing partial sentence
+    // Fish audio lags the text stream — wait for it to finish playing (or barge-in to supersede)
+    // before finalizing the turn, so TTS cost events land on this turn and the next turn waits.
+    while (__sbStreamTts && __sbStreamTts.token === speechToken &&
+           (__sbStreamTts.draining || __sbStreamTts.queue.length > 0)) {
+      await new Promise((r) => setTimeout(r, 40));
+    }
   }
+  // In native-voice mode the OpenAI audio plays via the offscreen WebRTC track; response.done
+  // means the answer is complete.
 
   __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
   return result?.status === "done";
@@ -14278,7 +14314,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
   __sbRtRelayingAppMessage = relayMode;
   __sbRtHandlingConversationTurn = !relayMode;
 
-  const rtOutputModalities = ["text"];
+  const rtOutputModalities = __sbVoiceOutputPref === "realtime" ? ["audio", "text"] : ["text"];
   const responsePromise = __sbCreateRtWaiter();
   const responseCreated = relayMode
     ? __sbSendRtEvent({
@@ -14655,8 +14691,10 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // ~0.5s instead of after a full batch completion. The session already holds page/notes context
   // (synced via __sbSyncRealtimeVoiceInstructions), so it stays page-aware. Falls back to the batch
   // pipeline below if streaming can't run (toggle off, realtime not ready, or it errors mid-turn).
-  if (__sbVoiceBrain === "realtime" && __sbRtControlReady() && __sbVoiceOutputPref === "fish") {
+  if (__sbVoiceBrain === "realtime" && __sbRtControlReady()) {
     __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+    // Fish mode streams the model's text into Fish; OpenAI-voice mode lets the model speak audio
+    // natively (fastest). __sbAnswerViaRealtimeStreaming branches on the voice pref.
     const ok = await __sbAnswerViaRealtimeStreaming(turnToken);
     if (ok) return;
     // streaming failed → fall through to the batch pipeline
@@ -15439,7 +15477,7 @@ function __sbEnterHeadphoneMode(options = {}) {
 
     const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
     chrome.runtime.sendMessage(
-      { action: "startOffscreenRealtime", authToken, bootInstructions },
+      { action: "startOffscreenRealtime", authToken, bootInstructions, voiceEngine: __sbVoiceOutputPref },
       (res) => {
         // Only the transport-level failure is handled here. Whether the offscreen session
         // actually came up is signalled asynchronously: success → sbRtSessionReady (which

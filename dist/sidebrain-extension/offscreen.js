@@ -11,7 +11,7 @@ let rtDc = null;
 let rtMic = null;
 let rtRemoteAudio = null;
 
-async function startRealtimeSession({ authToken, bootInstructions }) {
+async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }) {
   stopRealtimeSession();
 
   try {
@@ -23,12 +23,13 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
     rtPc = pc;
     rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
 
-    // Keep the remote track attached for WebRTC compatibility, but never play OpenAI audio.
-    // Braino's primary audible voice is Fish Audio from the content script.
+    // Default Braino = mute OpenAI's audio (the model is text-only; Fish Audio is the voice).
+    // OpenAI-voice mode (voiceEngine === "realtime") = PLAY the model's native audio (faster, no Fish).
+    const playOpenAiVoice = voiceEngine === "realtime";
     rtRemoteAudio = new Audio();
     rtRemoteAudio.autoplay = true;
-    rtRemoteAudio.muted = true;
-    rtRemoteAudio.volume = 0;
+    rtRemoteAudio.muted = !playOpenAiVoice;
+    rtRemoteAudio.volume = playOpenAiVoice ? 1 : 0;
     document.body.appendChild(rtRemoteAudio);
     pc.ontrack = (ev) => {
       rtRemoteAudio.srcObject = ev.streams[0] || new MediaStream([ev.track]);

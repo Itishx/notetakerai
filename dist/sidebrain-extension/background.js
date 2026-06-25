@@ -1418,7 +1418,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // on fallback that thrashed the content-side presence listener. It's set in
         // offscreenRtReady once the global session is genuinely live.
         chrome.runtime.sendMessage(
-          { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions },
+          { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions, voiceEngine: message.voiceEngine },
           (res) => {
             if (chrome.runtime.lastError || res?.error) {
               bgRtSessionStarting = false;
