@@ -30,7 +30,13 @@ serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
-    const realtimeModel = Deno.env.get("OPENAI_REALTIME_MODEL") || "gpt-realtime-mini";
+    // Per-mode model: the extension sends X-Braino-Realtime-Model (OpenAI-voice mode = full
+    // "gpt-realtime"; Default Braino = "gpt-realtime-mini"). Validated against an allowlist so a
+    // client can't request an arbitrary model; falls back to the env default.
+    const ALLOWED_REALTIME_MODELS = new Set(["gpt-realtime-2", "gpt-realtime-1.5", "gpt-realtime", "gpt-realtime-mini", "gpt-4o-realtime-preview"]);
+    const envModel = Deno.env.get("OPENAI_REALTIME_MODEL") || "gpt-realtime-mini";
+    const requestedModel = req.headers.get("X-Braino-Realtime-Model") || "";
+    const realtimeModel = ALLOWED_REALTIME_MODELS.has(requestedModel) ? requestedModel : envModel;
     const realtimeVoice = Deno.env.get("OPENAI_REALTIME_VOICE") || "marin";
 
     if (!anonKey || !supabaseUrl) {

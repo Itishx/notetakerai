@@ -63,12 +63,16 @@ async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    // Per-mode model: OpenAI-voice mode uses gpt-realtime-2; Default Braino uses gpt-realtime-mini.
+    // The backend validates this against an allowlist (falls back to env).
+    const requestedModel = voiceEngine === "realtime" ? "gpt-realtime-2" : "gpt-realtime-mini";
     const res = await fetch(`${RT_API_BASE}/openai-realtime-call`, {
       method: "POST",
       headers: {
         "Content-Type": "application/sdp",
         apikey: RT_ANON_KEY,
         Authorization: `Bearer ${authToken}`,
+        "X-Braino-Realtime-Model": requestedModel,
       },
       body: offer.sdp || "",
     });

@@ -4770,6 +4770,7 @@ function __sbBuildBrainUI() {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     #__sb_bar__.sb-log-open #__sb_bar_log__ { max-height: 60px; opacity: 1; padding: 11px 24px 5px; }
+    #__sb_bar__.sb-log-open.sb-log-timing #__sb_bar_log__ { max-height: 260px; overflow-y: auto; }   /* temporary timing readout */
     /* a touch more opaque + softer corners while open, so the steps sit on a clean surface */
     #__sb_bar__.sb-log-open { background: rgba(253,250,246,0.66); border-radius: 26px; }
     #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top: 1px solid rgba(120,110,100,0.12); }
@@ -8756,6 +8757,7 @@ async function __sbPlaySentenceResp(resp, speechToken) {
   await new Promise((resolve, reject) => {
     audio.onended = resolve;
     audio.onerror = reject;
+    audio.onplaying = () => { if (typeof __sbVTAudible === "function") __sbVTAudible("🔈 First sound (Fish)"); };
     audio.play().catch(reject);
   });
   return speechToken === __sbSpeechGeneration;
@@ -10131,6 +10133,59 @@ function __sbAgentLogClear() {
     if (stepsEl) stepsEl.innerHTML = "";
     __sbAgentLogCollapseTimer = null;
   }, 600);
+}
+
+// ── Voice-latency timing (TEMPORARY — for one test round, remove after). Stamps every stage of a
+// voice turn with a delta and shows the whole breakdown in the pill, so we can see exactly where
+// the seconds go (you stopped → transcript → model → first audio → done). Also logs to console. ──
+let __sbVT = null;
+let __sbVTFirstToken = false;
+let __sbVTAudibleDone = false;
+let __sbVTCollapse = null;
+function __sbVTReset(label) {
+  __sbVT = { t0: performance.now(), marks: [] };
+  __sbVTFirstToken = false;
+  __sbVTAudibleDone = false;
+  if (__sbVTCollapse) { clearTimeout(__sbVTCollapse); __sbVTCollapse = null; }
+  __sbVTMark(label);
+}
+function __sbVTAudible(label) {          // first AUDIBLE sound — what you stopwatch against
+  if (__sbVTAudibleDone) return;
+  __sbVTAudibleDone = true;
+  __sbVTMark(label);
+}
+function __sbVTMark(label) {
+  if (!__sbVT) return;
+  const ms = Math.round(performance.now() - __sbVT.t0);
+  __sbVT.marks.push({ label, ms });
+  try { console.log(`[Braino ⏱] ${label}  +${ms}ms`); } catch (_) {}
+  const bar = document.getElementById("__sb_bar__");
+  const log = document.getElementById("__sb_bar_log__");
+  if (!bar || !log) return;
+  const stepsEl = log.querySelector(".sb-blog-steps");
+  if (stepsEl) {
+    stepsEl.innerHTML = __sbVT.marks.map((m) =>
+      `<div class="sb-blog-step done"><span class="sb-blog-ic" style="color:#E8786E">⏱</span><span>${__sbEscHtml(m.label)} · +${m.ms}ms</span></div>`
+    ).join("");
+  }
+  bar.classList.add("sb-log-open", "sb-log-timing");
+}
+function __sbVTFirst(label) {           // mark only the FIRST token/audio of a response
+  if (__sbVTFirstToken) return;
+  __sbVTFirstToken = true;
+  __sbVTMark(label);
+}
+function __sbVTDone(label) {
+  __sbVTMark(label);
+  if (__sbVTCollapse) clearTimeout(__sbVTCollapse);
+  __sbVTCollapse = setTimeout(() => {   // hold the breakdown on screen, then settle the pill
+    const bar = document.getElementById("__sb_bar__");
+    if (bar && !__sbAgentBusy) { bar.classList.remove("sb-log-open", "sb-log-timing"); }
+    const log = document.getElementById("__sb_bar_log__");
+    const stepsEl = log && log.querySelector(".sb-blog-steps");
+    if (stepsEl) stepsEl.innerHTML = "";
+    __sbVT = null; __sbVTCollapse = null;
+  }, 6000);
 }
 
 function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
@@ -14756,6 +14811,7 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "input_audio_buffer.speech_started") {
+    __sbVTReset("🎤 You started talking");
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
     // voices: cancel the realtime model's audio and stop Fish Audio/browser playback.
@@ -14770,6 +14826,7 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "input_audio_buffer.speech_stopped") {
+    __sbVTMark("🛑 You stopped talking");
     // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
     if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
     return;
@@ -14785,6 +14842,7 @@ function __sbHandleRtEvent(ev) {
     const transcriptionUsage = ev.usage || ev.item?.usage || ev.response?.usage || {};
     __sbRtUserTranscript = "";
     if (!transcript) return;
+    __sbVTMark("📝 Transcript ready");
 
     // Guard against transcription hallucinations on loud music / background noise / silence.
     // The model would otherwise "hear" junk and answer with gibberish. Skip it; if it keeps
@@ -14839,12 +14897,14 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "response.created") {
+    __sbVTMark("🧠 Model started responding");
     __sbRtAssistantTranscript = "";
     if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
     return;
   }
   if (ev.type === "response.output_audio_transcript.delta" || ev.type === "response.output_text.delta") {
     if (typeof ev.delta === "string" && ev.delta) {
+      __sbVTFirst(ev.type.includes("audio") ? "🔊 First audio out" : "💬 First text out");
       __sbRtAssistantTranscript += ev.delta;
       if (__sbStreamFishActive) __sbFeedStreamTts(ev.delta); // 1B: stream into Fish as it arrives
     }
@@ -14852,6 +14912,7 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "response.done") {
+    __sbVTDone("✓ Response done");
     const finalText = String(ev.response ? __sbExtractRtResponseText(ev.response) : "").trim();
     const transcript = (__sbRtAssistantTranscript || finalText || "").trim();
     const usage = ev.response?.usage || ev.usage || {};
