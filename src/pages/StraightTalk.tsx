@@ -60,26 +60,27 @@ export default function StraightTalk() {
           </p>
         </section>
 
-        {/* ── Even OpenAI ── */}
+        {/* ── It's an unsolved problem (for everyone) ── */}
         <section className="home-section">
-          <div className="home-eyebrow">And here's the part that says it all</div>
-          <h2 className="home-h2">OpenAI couldn't crack it. With billions.</h2>
+          <div className="home-eyebrow">The honest part</div>
+          <h2 className="home-h2">This is an unsolved problem — for everyone.</h2>
           <p className="home-body">
-            They built the screenshot kind. They called it Operator. Billions of dollars, the
-            smartest people on the planet. And on real websites — the ones with logins and checkouts
-            — it succeeded <em>less than half the time</em>. Less than half. They quietly shut it
-            down and folded it into something else.
+            I want to be clear: this isn't me making an excuse, and it's not me throwing shade at
+            anyone. Getting an AI to reliably do things on <em>any</em> website is one of the
+            genuinely unsolved problems in the field right now. The best-funded labs in the world are
+            still figuring it out — even their browser agents stumble on messy, real-world sites.
+            Not because they aren't brilliant. Because the problem is just that hard.
           </p>
           <p className="home-body">
-            So when Braino scrolls past your video and plays the wrong one, I'm not making an excuse
-            when I tell you: the biggest companies in the world have not solved this either. It's a
-            genuinely unsolved problem.
+            So when Braino fumbles and plays the wrong video, I'm telling you the honest reason:
+            nobody has fully cracked this yet. It's the frontier, and the frontier is messy.
           </p>
           <p className="home-body">
-            And honestly — ask yourself. If OpenAI, with all that money, gets it right barely half
-            the time, how is one person building this from his room supposed to magically hit a
-            hundred percent? I'm not going to. I won't pretend I will. Anyone who promises you a
-            browser agent that "just works, every time" is selling you something that doesn't exist.
+            And look — if the biggest teams on earth are still working it out, I'm not going to stand
+            here and promise you that one person building this from his room gets it right a hundred
+            percent of the time. I won't pretend that. Anyone who promises you a browser agent that
+            "just works, every single time" is selling you something that doesn't exist yet — from
+            anyone.
           </p>
         </section>
 
@@ -88,9 +89,10 @@ export default function StraightTalk() {
           <div className="home-eyebrow">So why am I even doing this</div>
           <h2 className="home-h2">Because "it's hard" isn't where I stop. It's where I aim.</h2>
           <p className="home-body">
-            Fair question. If even the giants can't make it perfect, why am I breaking my back over
-            it? Because I can't beat OpenAI at the "do anything, anywhere" game — so I'm not playing
-            that game. That's their fight, and they're losing it too.
+            Fair question. If it's this hard, why am I breaking my back over it? Because "hard" is
+            exactly where the interesting work is. I'm not trying to win the "do anything, anywhere"
+            race — that's a frontier research problem, and it's not the game I can or want to play.
+            So I play a different one.
           </p>
           <p className="home-body">
             What I <em>can</em> do — what a small, stubborn team will actually do that they won't
@@ -115,9 +117,9 @@ export default function StraightTalk() {
             and who is too stubborn to ship something that lies to you about what it can do.
           </p>
           <p className="home-body">
-            The giants couldn't make it perfect. I'm not going to pretend I did. But I'll out-care
-            them — and on the things that matter to you, I'll make it just work. That's the deal.
-            That's the whole deal.
+            Nobody's cracked this perfectly yet — and I'm not going to pretend I have. But I'll
+            out-care anyone building it, and on the things that matter to you, I'll make it just
+            work. That's the deal. That's the whole deal.
           </p>
         </section>
 
