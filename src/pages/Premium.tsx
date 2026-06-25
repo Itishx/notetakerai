@@ -46,8 +46,7 @@ function formatDetectedPrice(usd: number, isIndia: boolean | null) {
 }
 
 const FEATURES = [
-  { tag: "Voice", title: "Talk to Braino, hands-free.", body: "Voice is where Braino comes alive — speak naturally and he answers in his own voice, and on Pro he can act on what you say. Free gives you a 3-minute daily taste; Pro is unlimited, conversation after conversation.", free: "3 min / day", pro: "Unlimited", big: true },
-  { tag: "Agent", title: "Let Braino do it for you.", body: "Delegate turns a sentence into action — Braino opens tabs, searches, and works the page for you. Free includes 5 task runs a month to try it; Pro removes the limit so you can automate as much as you want.", free: "5 tasks / month", pro: "Unlimited", big: true },
+  { tag: "Agent", title: "Talk to Braino — and he acts.", body: "The Braino Agent is one thing with two ways in: talk to him hands-free in his own voice, or just type — and he opens tabs, searches, and works the page for you. Free gives you a daily taste; Pro is unlimited, conversation after conversation.", free: "Daily taste", pro: "Unlimited", big: true },
   { tag: "Recording", title: "Record without limits.", body: "Free users hit a 5-minute cap per day. With Pro, record full lectures, long meetings, hour-long podcasts — however long it runs, Braino keeps up.", free: "5 min / day", pro: "Unlimited" },
   { tag: "Chat", title: "Chat without limits.", body: "Free users get 10 questions per day. Pro unlocks unlimited chat — ask as many questions as you need and reference your notes and the current page simultaneously.", free: "10 questions / day", pro: "Unlimited" },
   { tag: "Storage", title: "Cloud sync & note history.", body: "Free notes live only on your device. Reinstall the extension and they're gone. Pro saves every note to the cloud — switch browsers, log in anywhere, your history is waiting.", free: "Local only", pro: "Unlimited cloud history" },
@@ -164,7 +163,7 @@ export default function Premium() {
               </div>
               <p style={{ color: "var(--sb-ink-2)", fontSize: 14.5, lineHeight: 1.5 }}>Everything you need to get started. No credit card.</p>
               <ul style={{ display: "flex", flexDirection: "column", gap: 12, margin: "8px 0", padding: 0 }}>
-                {["Read & summarize any page — 10 questions/day", "Web search", "5 min recording / day", "Voice mode — 3 min / day taste", "Delegate — 5 tasks / month taste", "Dashboard & library (local)"].map(f => (
+                {["Read & summarize any page — 10 questions/day", "Web search", "5 min recording / day", "Braino Agent — a free daily taste", "Dashboard & library (local)"].map(f => (
                   <li key={f} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, listStyle: "none", color: "var(--sb-accent-deep)" }}>
                     <CheckIcon /><span style={{ color: "var(--sb-ink)" }}>{f}</span>
                   </li>
@@ -195,7 +194,7 @@ export default function Premium() {
               </div>
               <p style={{ color: "rgba(251,247,241,0.65)", fontSize: 14.5, lineHeight: 1.5 }}>For people who actually live in their browser — voice-first and fully agentic. X Auto is sold separately as an add-on.</p>
               <ul style={{ display: "flex", flexDirection: "column", gap: 12, margin: "8px 0", padding: 0 }}>
-                {["Everything in Free", "Unlimited voice — talk to Braino freely", "Full browser Agent — unlimited Delegate", "Unlimited recording & transcription", "Faster, smarter models", "Cloud sync across devices", "Custom voices & 50+ languages", "Persistent memory across sessions", "Priority support"].map(f => (
+                {["Everything in Free", "The full Braino Agent — unlimited voice + actions", "Unlimited recording & transcription", "Faster, smarter models", "Cloud sync across devices", "Custom voices & 50+ languages", "Persistent memory across sessions", "Priority support"].map(f => (
                   <li key={f} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, listStyle: "none", color: "var(--sb-accent-2)" }}>
                     <CheckIcon /><span style={{ color: "rgba(251,247,241,0.9)" }}>{f}</span>
                   </li>

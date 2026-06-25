@@ -456,17 +456,16 @@ export default function Home() {
                 <li>Chat about any page</li>
                 <li>Web search</li>
                 <li>Record lectures &amp; meetings</li>
-                <li>A daily taste of voice &amp; Delegate</li>
+                <li>A daily taste of the Braino Agent</li>
               </ul>
               <Link className="home-cta home-cta-ghost" to="/auth">Get started →</Link>
             </div>
             <div className="home-tier home-tier-pro">
               <div className="home-tier-name">Braino Pro</div>
-              <div className="home-tier-price">Voice-first</div>
+              <div className="home-tier-price">The Agent</div>
               <p className="home-tier-line">Talk to me — and I act for you.</p>
               <ul className="home-tier-list">
-                <li>Unlimited voice — just talk</li>
-                <li>Full browser Agent (Delegate)</li>
+                <li>The full Braino Agent — voice + actions, unlimited</li>
                 <li>Unlimited recording &amp; chat</li>
                 <li>Memory, cloud sync, 50+ languages</li>
               </ul>
