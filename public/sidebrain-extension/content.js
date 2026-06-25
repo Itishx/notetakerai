@@ -14763,7 +14763,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
-  if (["agent", "web", "record", "page"].includes(routing.intent)) {
+  if (["agent", "web", "record"].includes(routing.intent)) {
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
@@ -14771,6 +14771,10 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     });
     return;
   }
+  // NOTE: "page" intent is intentionally NOT short-circuited to the batch backend here. The realtime
+  // session already holds the page/notes context (synced on speech_started), so a question ABOUT the
+  // page can be answered on the fast streaming path below (~1.5s) instead of a 6-8s batch round-trip.
+  // It still falls back to the batch chat-about-notes pipeline if streaming can't run.
 
   __sbVTMark("🔀 Checking what you want…");
   const shouldForceDelegate = await __sbShouldForceVoiceDelegate(routing);
