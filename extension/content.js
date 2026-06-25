@@ -4723,8 +4723,8 @@ function __sbBuildBrainUI() {
     #__sb_bar__ {
       position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%) translateY(24px) scale(0.97);
-      /* Column so the in-pill activity log can grow from the TOP (Dynamic-Island style); the
-         input row keeps the original horizontal layout via #__sb_bar_row__. */
+      /* Column so the SAME pill can extend a little from its top to show the activity log; the
+         input row keeps its original horizontal layout via #__sb_bar_row__. Idle = unchanged. */
       display: flex; flex-direction: column; align-items: stretch; gap: 0;
       /* Stays transparent liquid glass — legibility comes from a light text halo
          (see #__sb_input__ etc.) rather than an opaque backing. */
@@ -4760,35 +4760,34 @@ function __sbBuildBrainUI() {
       100% { box-shadow: 0 0 0 0 rgba(232,120,110,0), 0 8px 32px rgba(27,23,19,0.18); }
     }
     #__sb_bar__.sb-send-pulse { animation: __sb_bar_send__ 0.7s ease-out; }
-    /* Agent activity log — lives INSIDE the pill. The bar grows from its top (Dynamic-Island
-       style) to reveal the step list, then collapses. The bar is anchored bottom, so adding
-       height pushes it UPWARD. */
+    /* Activity log INSIDE the pill — the SAME bar extends a LITTLE from its top to show the last
+       couple of steps, then settles back. Small + tight so it reads clean. */
     #__sb_bar_row__ { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 28px; width: 100%; box-sizing: border-box; }
     #__sb_bar_log__ {
       max-height: 0; opacity: 0; overflow: hidden;
-      display: flex; flex-direction: column; gap: 2px; padding: 0 22px;
-      transition: max-height 0.42s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease, padding 0.42s cubic-bezier(0.4,0,0.2,1);
+      display: flex; flex-direction: column; gap: 1px; padding: 0 24px;
+      transition: max-height 0.4s cubic-bezier(0.34,1.18,0.64,1), opacity 0.24s ease, padding 0.4s cubic-bezier(0.34,1.18,0.64,1);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    #__sb_bar__.sb-log-open #__sb_bar_log__ { max-height: 140px; opacity: 1; padding: 13px 22px 7px; }
-    #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top: 1px solid rgba(120,110,100,0.14); }
-    #__sb_bar_log__ .sb-blog-head { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #1B1713; margin-bottom: 4px; }
-    #__sb_bar_log__ .sb-blog-spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(232,120,110,0.3); border-top-color: #E8786E; animation: __sb_blog_spin__ 0.7s linear infinite; flex: none; }
-    @keyframes __sb_blog_spin__ { to { transform: rotate(360deg); } }
-    #__sb_bar_log__ .sb-blog-step { display: flex; align-items: center; gap: 9px; font-size: 12px; line-height: 1.6; color: #6B6157; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #__sb_bar_log__ .sb-blog-step .sb-blog-ic { flex: none; width: 14px; text-align: center; font-weight: 700; }
+    #__sb_bar__.sb-log-open #__sb_bar_log__ { max-height: 60px; opacity: 1; padding: 11px 24px 5px; }
+    /* a touch more opaque + softer corners while open, so the steps sit on a clean surface */
+    #__sb_bar__.sb-log-open { background: rgba(253,250,246,0.66); border-radius: 26px; }
+    #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top: 1px solid rgba(120,110,100,0.12); }
+    #__sb_bar_log__ .sb-blog-step { display: flex; align-items: center; gap: 9px; font-size: 12px; line-height: 1.5; color: #6B6157; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #__sb_bar_log__ .sb-blog-step .sb-blog-ic { flex: none; width: 13px; height: 13px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
     #__sb_bar_log__ .sb-blog-step.done { color: #9a9088; }
     #__sb_bar_log__ .sb-blog-step.done .sb-blog-ic { color: #3DA35D; }       /* green tick */
     #__sb_bar_log__ .sb-blog-step.active { color: #1B1713; font-weight: 500; }
-    #__sb_bar_log__ .sb-blog-step.active .sb-blog-ic { color: #E8786E; }
+    #__sb_bar_log__ .sb-blog-step.active .sb-blog-ic { border-radius: 50%; border: 2px solid rgba(232,120,110,0.3); border-top-color: #E8786E; box-sizing: border-box; animation: __sb_blog_spin__ 0.7s linear infinite; }
+    @keyframes __sb_blog_spin__ { to { transform: rotate(360deg); } }
     @keyframes __sb_tick_pop__ { 0% { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
-    #__sb_bar_log__ .sb-blog-step.just-done .sb-blog-ic { display: inline-block; animation: __sb_tick_pop__ 0.36s cubic-bezier(0.34,1.56,0.64,1); }
-    html.sb-dark #__sb_bar_log__ .sb-blog-head { color: #FBF7F1; }
+    #__sb_bar_log__ .sb-blog-step.just-done .sb-blog-ic { animation: __sb_tick_pop__ 0.36s cubic-bezier(0.34,1.56,0.64,1); }
+    html.sb-dark #__sb_bar__.sb-log-open { background: rgba(24,21,18,0.84); }
     html.sb-dark #__sb_bar_log__ .sb-blog-step { color: #b0a89e; }
     html.sb-dark #__sb_bar_log__ .sb-blog-step.active { color: #FBF7F1; }
     html.sb-dark #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top-color: rgba(255,255,255,0.1); }
-    /* Wakeup / sign-in overlays sit where the input row sits (the bar is now a column): hide the
-       whole row (so its padding doesn't leave a gap) and give the overlay the row's padding. */
+    /* Wakeup / sign-in overlays replace the input row (the bar is a column now): hide the row so
+       its padding doesn't leave a gap, and give the overlay the row's padding. */
     #__sb_bar__.sb-waking #__sb_bar_row__, #__sb_bar__.sb-signin #__sb_bar_row__ { display: none; }
     #__sb_bar__.sb-waking #__sb_wakeup__, #__sb_bar__.sb-signin #__sb_signin_cta__ { padding: 11px 14px 11px 28px; box-sizing: border-box; width: 100%; }
     /* Card is display-only now — the constant bottom bar is the single input. */
@@ -6164,7 +6163,7 @@ function __sbBuildBrainUI() {
   const __sbDockBar = document.createElement("div");
   __sbDockBar.id = "__sb_bar__";
   __sbDockBar.innerHTML = `
-      <div id="__sb_bar_log__"><div class="sb-blog-head"><span class="sb-blog-spin"></span><span class="sb-blog-title">Working…</span></div><div class="sb-blog-steps"></div></div>
+      <div id="__sb_bar_log__"><div class="sb-blog-steps"></div></div>
       <div id="__sb_bar_row__">
       <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
@@ -10066,13 +10065,11 @@ function __sbAgentLogRender() {
   const bar = document.getElementById("__sb_bar__");
   const log = document.getElementById("__sb_bar_log__");
   if (!bar || !log) return;
-  const title = log.querySelector(".sb-blog-title");
-  if (title) title.textContent = __sbAgentBusyLabel;
   const stepsEl = log.querySelector(".sb-blog-steps");
   if (stepsEl) {
-    const shown = __sbAgentLogSteps.slice(-4);   // grow "just enough" — last 4 steps
+    const shown = __sbAgentLogSteps.slice(-2);   // extend just a little — last 2 steps
     stepsEl.innerHTML = shown.map((s) =>
-      `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "→" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
+      `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
     ).join("");
     shown.forEach((s) => { s.justDone = false; });  // tick-pop plays once
   }
@@ -10105,7 +10102,7 @@ function __sbAgentLogClear() {
   __sbAgentLogSteps = [];
   __sbAgentBusy = false;
   if (__sbAgentLogCollapseTimer) clearTimeout(__sbAgentLogCollapseTimer);
-  __sbAgentLogCollapseTimer = setTimeout(() => {   // let the last tick land, then collapse the pill
+  __sbAgentLogCollapseTimer = setTimeout(() => {   // let the last tick land, then settle the pill down
     const bar = document.getElementById("__sb_bar__");
     const log = document.getElementById("__sb_bar_log__");
     if (bar) bar.classList.remove("sb-log-open");
