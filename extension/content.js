@@ -13595,7 +13595,7 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
       instructions,
       // Default Braino = text-only (the model thinks, Fish speaks). OpenAI-voice mode = the model
       // SPEAKS natively (audio), which is faster (no Fish round-trip) but uses OpenAI's voice.
-      output_modalities: __sbVoiceOutputPref === "realtime" ? ["audio", "text"] : ["text"],
+      output_modalities: __sbVoiceOutputPref === "realtime" ? ["audio"] : ["text"],
       audio: {
         input: {
           noise_reduction: {
@@ -14271,7 +14271,7 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
   if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
 
   const waiter = __sbCreateRtWaiter();
-  const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: nativeVoice ? ["audio", "text"] : ["text"] } });
+  const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: nativeVoice ? ["audio"] : ["text"] } });
   if (!sent) {
     __sbStreamFishActive = false;
     __sbStreamTts = null;
@@ -14314,7 +14314,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
   __sbRtRelayingAppMessage = relayMode;
   __sbRtHandlingConversationTurn = !relayMode;
 
-  const rtOutputModalities = __sbVoiceOutputPref === "realtime" ? ["audio", "text"] : ["text"];
+  const rtOutputModalities = __sbVoiceOutputPref === "realtime" ? ["audio"] : ["text"];
   const responsePromise = __sbCreateRtWaiter();
   const responseCreated = relayMode
     ? __sbSendRtEvent({
