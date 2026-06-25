@@ -10141,27 +10141,29 @@ function __sbAgentLogClear() {
 let __sbVT = null;
 let __sbVTFirstToken = false;
 let __sbVTAudibleDone = false;
+let __sbVTSummaryDone = false;
 let __sbVTCollapse = null;
 function __sbVTReset(label) {
-  __sbVT = { t0: performance.now(), marks: [] };
+  __sbVT = { t0: performance.now(), marks: [], stopMs: null };
   __sbVTFirstToken = false;
   __sbVTAudibleDone = false;
+  __sbVTSummaryDone = false;
   if (__sbVTCollapse) { clearTimeout(__sbVTCollapse); __sbVTCollapse = null; }
   __sbVTMark(label);
 }
-function __sbVTAudible(label) {          // first AUDIBLE sound — what you stopwatch against
-  if (__sbVTAudibleDone) return;
-  __sbVTAudibleDone = true;
-  __sbVTMark(label);
-}
 function __sbVTMark(label) {
-  if (!__sbVT) return;
+  if (!__sbVT) return 0;
   const ms = Math.round(performance.now() - __sbVT.t0);
   __sbVT.marks.push({ label, ms });
+  if (label.indexOf("stopped talking") !== -1) __sbVT.stopMs = ms;   // the "perceived latency" clock starts here
   try { console.log(`[Braino ⏱] ${label}  +${ms}ms`); } catch (_) {}
+  __sbVTRender();
+  return ms;
+}
+function __sbVTRender() {
   const bar = document.getElementById("__sb_bar__");
   const log = document.getElementById("__sb_bar_log__");
-  if (!bar || !log) return;
+  if (!bar || !log || !__sbVT) return;
   const stepsEl = log.querySelector(".sb-blog-steps");
   if (stepsEl) {
     stepsEl.innerHTML = __sbVT.marks.map((m) =>
@@ -10170,10 +10172,30 @@ function __sbVTMark(label) {
   }
   bar.classList.add("sb-log-open", "sb-log-timing");
 }
-function __sbVTFirst(label) {           // mark only the FIRST token/audio of a response
+// THE number that matters: from "you stopped talking" → the first sound you actually hear.
+function __sbVTSummary() {
+  if (!__sbVT || __sbVTSummaryDone) return;
+  __sbVTSummaryDone = true;
+  const last = __sbVT.marks[__sbVT.marks.length - 1];
+  const heardMs = last ? last.ms : 0;
+  const stop = __sbVT.stopMs != null ? __sbVT.stopMs : 0;
+  const total = heardMs - stop;
+  const sec = (total / 1000).toFixed(2);
+  try { console.log(`%c[Braino ⏱] ⭐ TOTAL — you stopped → first response heard: ${total}ms (${sec}s)`, "font-weight:bold;font-size:13px;color:#C9544A"); } catch (_) {}
+  __sbVT.marks.push({ label: `⭐ TOTAL  stop → heard: ${sec}s`, ms: heardMs });
+  __sbVTRender();
+}
+function __sbVTAudible(label) {          // first AUDIBLE sound (Fish playback) — what you hear
+  if (__sbVTAudibleDone) return;
+  __sbVTAudibleDone = true;
+  __sbVTMark(label);
+  __sbVTSummary();
+}
+function __sbVTFirst(label) {           // first token of a response (native OpenAI audio = audible)
   if (__sbVTFirstToken) return;
   __sbVTFirstToken = true;
   __sbVTMark(label);
+  if (label.indexOf("audio") !== -1) __sbVTSummary();   // native audio delta = first sound heard
 }
 function __sbVTDone(label) {
   __sbVTMark(label);
