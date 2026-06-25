@@ -13737,7 +13737,19 @@ async function __sbBuildRealtimeConfigPayload() {
   };
 }
 
-async function __sbSyncRealtimeVoiceInstructions() {
+let __sbRtSyncInFlight = null;
+// De-duped by URL: a background (proactive) sync and the lazy pre-answer sync won't both fire, and a
+// completed sync MARKS the page synced (__sbRtLastAnsweredUrl) so the answer path can SKIP the ~1.4s
+// wait — the page was already synced in the background while you were reading it.
+function __sbSyncRealtimeVoiceInstructions() {
+  const syncUrl = (typeof location !== "undefined" && location.href) || "";
+  if (__sbRtSyncInFlight && __sbRtSyncInFlight.url === syncUrl) return __sbRtSyncInFlight.promise;
+  const p = __sbDoSyncRealtimeVoiceInstructions(syncUrl);
+  __sbRtSyncInFlight = { url: syncUrl, promise: p };
+  p.finally(() => { if (__sbRtSyncInFlight && __sbRtSyncInFlight.promise === p) __sbRtSyncInFlight = null; });
+  return p;
+}
+async function __sbDoSyncRealtimeVoiceInstructions(syncUrl) {
   try {
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
@@ -13762,12 +13774,13 @@ async function __sbSyncRealtimeVoiceInstructions() {
     const fingerprint = String(data?.fingerprint || "").trim();
     if (!instructions) return false;
     const localFingerprint = `${fingerprint || "local"}::${__sbBuildMovieContextSummary(__sbGetPageContext(2500).movieContext || null)}`;
-    if (localFingerprint && localFingerprint === __sbRtInstructionsFingerprint) return true;
+    if (localFingerprint && localFingerprint === __sbRtInstructionsFingerprint) { __sbRtLastAnsweredUrl = syncUrl; return true; }
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
     const updated = __sbSendRealtimeSessionUpdate(instructions);
     if (updated) {
       __sbRtInstructionsFingerprint = localFingerprint;
+      __sbRtLastAnsweredUrl = syncUrl;   // page context is in the session → the answer can skip the wait
     }
     return updated;
   } catch (error) {
@@ -14837,6 +14850,9 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "input_audio_buffer.speech_started") {
     __sbVTReset("🎤 You started talking");
+    // Prefetch the page context the MOMENT you start talking — it finishes during your sentence,
+    // so the answer path finds it already synced and skips the ~1.4s wait. De-duped, so it's free.
+    void __sbSyncRealtimeVoiceInstructions();
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
     // voices: cancel the realtime model's audio and stop Fish Audio/browser playback.
