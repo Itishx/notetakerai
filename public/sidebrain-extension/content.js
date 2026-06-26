@@ -8681,24 +8681,41 @@ function __sbPlayStreamedTts(resp, speechToken, onReady) {
 // rapid calls trip its rate limit (429). So short replies (the common case) go out as ONE
 // request; longer replies emit the first sentence alone (fast first audio) then group the rest
 // into ≤MAX-char chunks. A few calls per reply, never one-per-sentence.
+// Opening clause for fast first audio: the text up to the first ,/;/:/—/– that appears BEFORE any
+// sentence terminator, within ~70 chars. (The body excludes .!? so we never merge two sentences into
+// the first chunk.) Returns { text, raw } — raw includes the delimiter + trailing space so the caller
+// can slice it off — or null when there's no clean early break. Fish renders this short opener in
+// ~0.4s instead of ~1s for a whole first sentence, so Braino starts speaking sooner.
+function __sbFirstSpeakableClause(buffer) {
+  const m = String(buffer || "").match(/^([^.!?…।]{2,70}?[,;:—–])\s+/);
+  if (!m) return null;
+  const text = m[1].trim();          // keep the trailing comma → Fish gives it natural prosody
+  if (text.length < 4) return null;  // skip ultra-short fragments ("So,", "Ok,")
+  return { text, raw: m[0] };
+}
+
 function __sbSplitSentencesForTts(text) {
   const clean = String(text || "").trim();
   if (!clean) return [];
   const MAX = 240;
-  if (clean.length <= MAX) return [clean];
 
-  const sentences = clean.split(/(?<=[.!?…।])\s+/).filter(Boolean);
-  if (sentences.length <= 1) return [clean];
+  // Peel off the opening clause as chunk 1 for fast first audio (see __sbFirstSpeakableClause).
+  const lead = __sbFirstSpeakableClause(clean);
+  const head = lead ? lead.text : null;
+  const body = lead ? clean.slice(lead.raw.length).trim() : clean;
 
-  const chunks = [sentences[0]]; // first sentence alone → audio starts fast
+  if (!head && clean.length <= MAX) return [clean]; // short reply, no early clause → one request
+
+  const sentences = body.split(/(?<=[.!?…।])\s+/).filter(Boolean);
+  const chunks = head ? [head] : [];
   let buf = "";
-  for (let i = 1; i < sentences.length; i++) {
+  for (let i = 0; i < sentences.length; i++) {
     const candidate = buf ? `${buf} ${sentences[i]}` : sentences[i];
     if (buf && candidate.length > MAX) { chunks.push(buf); buf = sentences[i]; }
     else buf = candidate;
   }
   if (buf) chunks.push(buf);
-  return chunks;
+  return chunks.length ? chunks : [clean];
 }
 
 // Fetch one sentence's TTS (Fish, with retry). Never throws — returns { resp } (resp may be
@@ -14291,6 +14308,17 @@ function __sbFeedStreamTts(delta) {
   const s = __sbStreamTts;
   if (!s || s.token !== __sbSpeechGeneration) return;
   s.buffer += delta;
+  // Fast first audio: ship the opening clause (up to the first comma/pause) as the very first chunk so
+  // Fish renders a short opener in ~0.4s instead of waiting for + rendering the whole first sentence.
+  if (!s.firstEmitted) {
+    const lead = __sbFirstSpeakableClause(s.buffer);
+    if (lead) {
+      s.buffer = s.buffer.slice(lead.raw.length);
+      s.queue.push(lead.text);
+      s.firstEmitted = true;
+      void __sbDrainStreamTts();
+    }
+  }
   let match;
   while ((match = s.buffer.match(/^([\s\S]*?[.!?…।])\s+/))) {
     const sentence = match[1].trim();
@@ -14661,7 +14689,9 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
 
     __sbVoicePendingReply = true;
     onReady(toProcess);
-  }, 350);
+  }, 200);   // settle window after a final transcript. Trimmed 350→200ms: the semantic VAD already
+             // gates turn-end, so this is just a short coalesce buffer. Bump back up if Braino starts
+             // jumping in on natural mid-sentence pauses.
 }
 
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
