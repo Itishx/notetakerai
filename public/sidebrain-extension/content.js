@@ -8633,6 +8633,8 @@ function __sbPlayStreamedTts(resp, speechToken, onReady) {
 
     audio.addEventListener("ended", () => finishOk(totalBytes), { once: true });
     audio.addEventListener("error", () => finishErr(audio.error || new Error("audio element error")), { once: true });
+    // First moment sound is actually audible → stamps the timing readout (streaming MP3 path).
+    audio.addEventListener("playing", () => { if (typeof __sbVTAudible === "function") __sbVTAudible("🔈 First sound (Fish)"); }, { once: true });
 
     mediaSource.addEventListener("sourceopen", async () => {
       let sb;
