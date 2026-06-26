@@ -8742,10 +8742,13 @@ function __sbSplitSentencesForTts(text) {
 // without risking an unhandled rejection from a prefetch in flight.
 async function __sbFetchSentenceTts(clean, speechToken, headers) {
   try {
+    // Strip markdown/symbols on EVERY chunk (the streaming path sends raw sentences straight here, so
+    // without this Fish would vocalise "||", "**", etc.). Idempotent on the already-clean batch path.
+    const speakable = __sbStripMarkdownForSpeech(clean);
     const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ text: clean }),
+      body: JSON.stringify({ text: speakable }),
     }, speechToken);
     return { resp };
   } catch (error) {
