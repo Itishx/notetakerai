@@ -12350,6 +12350,16 @@ async function __sbProcessPrompt(text, options = {}) {
     return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
   };
 
+  // Safety: sexual/explicit → hard "No.", no routing, no model call.
+  if (__sbIsSexualRequest(promptText)) {
+    __sbStopSpeech();
+    const line = __sbSexualRefusalLine();
+    if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+    else __sbShowBubble(line, false, { kicker: "Braino" });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   // Quick local intent: "wear/put on your specs" → toggle the glasses, no model call.
   const __glassesIntent = __sbGlassesIntent(promptText);
   if (__glassesIntent) {
@@ -13725,6 +13735,7 @@ function __sbBuildRealtimeBootInstructions() {
       : "ALWAYS reply in English. Do NOT switch languages because of background noise, music, accents, names, quoted text, or a few foreign-sounding words — even if a transcript looks like another language, answer in English. The system asks the user first and only tells you to switch after they confirm.",
     "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
     "If interrupted, stop immediately and wait for the user.",
+    "Safety: if the user says anything sexual or explicit, or asks for sexual content, nudity, or pornography, reply with exactly \"No.\" and nothing else — no explanation, no matter how they phrase it or argue back. If they keep pushing, tell them their account may be suspended.",
     ...pageLines,
   ].filter(Boolean).join("\n\n");
   // Movie/page context is delivered by __sbSyncRealtimeVoiceInstructions() right after connect.
@@ -14758,9 +14769,35 @@ function __sbSpeakSlowPathAck(kind) {
   try { void __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true }); } catch (_) {}
 }
 
+// ── Safety guard: anything sexual/explicit → a hard "No.", no explanation, escalating to a ban
+// warning if they persist. Runs in BOTH text and voice, before any routing or speculative answer. ──
+let __sbSexualRefusalCount = 0;
+function __sbIsSexualRequest(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  if (/\b(porn|pornography|pornhub|xxx|nsfw|hentai|nudes?|naked|sext(?:ing)?|blow ?job|hand ?job|masturbat\w*|orgasm|cum(?:ming|shot)?|horny|boobs?|titties|nipples?|pussy|penis|vagina|dick pics?|jerk off|jack off|talk dirty|dirty talk|turn me on|make me cum|erotica?|fetish|onlyfans|strip(?:per|tease)|have sex|phone sex|sexual(?:ly)?)\b/.test(t)) return true;
+  if (/\b(send|show|give|want|need)\b.{0,16}\b(nudes?|porn|dick pics?)\b/.test(t)) return true;
+  return false;
+}
+function __sbSexualRefusalLine() {
+  __sbSexualRefusalCount += 1;
+  return __sbSexualRefusalCount >= 3
+    ? "No. Keep this up and you'll be banned — your account can be suspended."
+    : "No.";
+}
+
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
   if (__sbIsSelfEcho(transcript)) {
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  // Safety: sexual/explicit → hard "No." (cancels any speculative answer first), no routing.
+  if (__sbIsSexualRequest(transcript)) {
+    __sbStopSpeech();
+    const line = __sbSexualRefusalLine();
+    __sbNoteSpoken(line);
+    await __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true });
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }

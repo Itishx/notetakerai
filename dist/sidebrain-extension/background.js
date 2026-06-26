@@ -1570,7 +1570,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         const picked = await bgPickIrrelevantTabs(String(message.instruction || ""), candidates);
         const candidateIds = new Set(candidates.map((c) => c.id));
-        const safeIds = [...new Set(picked)].filter((id) => candidateIds.has(id));
+        let safeIds = [...new Set(picked)].filter((id) => candidateIds.has(id));
+        // If the model closed nothing, fall back to clearing obvious junk so the feature never just
+        // says "everything's in use" when there's clutter sitting right there.
+        if (!safeIds.length) safeIds = bgFallbackClutterIds(candidates);
         const closedTitles = candidates.filter((c) => safeIds.includes(c.id)).map((c) => c.title || "(untitled)");
         if (safeIds.length) await chrome.tabs.remove(safeIds);
         sendResponse({ closed: closedTitles, closedCount: safeIds.length, keptCount: tabs.length - safeIds.length });
@@ -1897,18 +1900,22 @@ function bgHostOf(url) {
 // Returns an array of tab IDs. Closes nothing if the response can't be parsed.
 async function bgPickIrrelevantTabs(instruction, candidates) {
   const numbered = candidates
-    .map((t, i) => `${i}. ${String(t.title || "(untitled)").slice(0, 80)} — ${t.host || "?"}`)
+    .map((t, i) => `${i}. ${String(t.title || "(untitled)").slice(0, 80)} — ${bgHostOf(t.url) || "?"}`)
     .join("\n");
   const prompt = [
-    "You help a user close irrelevant browser tabs.",
+    "You help a user tidy their browser tabs by closing the ones they don't need.",
     `User request: "${instruction || "close the tabs I don't need"}"`,
     "",
-    "Closable tabs (already excludes the active, pinned, and audio-playing tabs):",
+    "Closable tabs (the active, pinned, and audio-playing tabs are already excluded and SAFE):",
     numbered,
     "",
+    "Pick the clutter to close: new/blank tabs, duplicates, search-result pages, finished articles,",
+    "social/news the user has clearly moved on from, ads, trackers. KEEP things that look like active",
+    "work (docs, editors, dashboards, a logged-in app mid-task).",
+    "When the user says \"the tabs I don't need\" / \"clean up\" / \"close what I'm not using\", that IS",
+    "your instruction to actually close the clutter — don't refuse or return an empty list out of caution.",
+    "Only return [] if literally every listed tab looks like active work.",
     "Return ONLY a JSON array of the indices to close (e.g. [0,2,3]).",
-    "Keep tabs that look like active work; close clutter (duplicates, search-result pages, finished reading, ads, empty/new tabs).",
-    "If the user gave no specific criteria, be conservative. Never return every index unless the user explicitly asked to close all tabs.",
   ].join("\n");
 
   try {
@@ -1925,6 +1932,21 @@ async function bgPickIrrelevantTabs(instruction, candidates) {
   } catch {
     return [];
   }
+}
+
+// Deterministic safety net: if the LLM closes nothing (over-cautious or the chat call failed), still
+// clear the obvious junk — blank/new-tab pages and exact-duplicate URLs (keeping the first of each).
+function bgFallbackClutterIds(candidates) {
+  const junk = [];
+  const seenUrl = new Set();
+  for (const t of candidates) {
+    const url = String(t.url || "");
+    const blank = !url || url === "about:blank" || /^(chrome|edge|brave|about):\/\/(newtab|blank|new-tab-page|newtabpage)/i.test(url);
+    if (blank) { junk.push(t.id); continue; }
+    if (seenUrl.has(url)) { junk.push(t.id); continue; }
+    seenUrl.add(url);
+  }
+  return junk.filter((id) => id != null);
 }
 
 let bgXPersonaCache = null;
