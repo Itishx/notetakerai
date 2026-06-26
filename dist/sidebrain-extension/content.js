@@ -6273,6 +6273,8 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
+    <div class="sb-dropdown-label" style="margin-top:8px">Speed — experiment</div>
+    <button class="sb-dropdown-item" data-spec="toggle"><span class="sb-di-icon">⚡</span><span class="sb-di-label">Faster replies · beta</span><span class="sb-di-check">✓</span></button>
   `;
   (document.documentElement||document.body).appendChild(modeDd);
 
@@ -6682,6 +6684,20 @@ function __sbBuildBrainUI() {
 
   // Voice-engine toggle removed: voice is always Braino's Fish voice now (see
   // __sbNormalizeVoiceOutputPref). No user-facing engine picker.
+
+  // "Faster replies · beta" toggle: speculative answer from audio (see __sbStartSpeculativeAnswer).
+  modeDd.querySelector('.sb-dropdown-item[data-spec="toggle"]')?.addEventListener("click", () => {
+    __sbSpeculativeReply = !__sbSpeculativeReply;
+    if (__sbContextOk()) chrome.storage.local.set({ brainoSpeculativeReply: __sbSpeculativeReply });
+    __sbSyncSpeculativeToggle();
+    __sbCloseAllDropdowns();
+    __sbShowBubble(
+      __sbSpeculativeReply
+        ? "Faster replies: ON. Braino answers from your audio, before the transcript — watch the ⚡/✅/↩️ marks in the logs."
+        : "Faster replies: OFF.",
+      true,
+    );
+  });
 
   modelDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
     item.addEventListener("click", () => {
@@ -8423,7 +8439,21 @@ function __sbSyncSpeakButtons() {
   });
 }
 
+// "Faster replies" beta (toggle): answer from the audio the instant you stop talking — before the
+// transcript — then KEEP it if the turn was plain chat, or CANCEL it if it turns out to be an action.
+let __sbSpeculativeReply = false;     // toggle state (persisted: brainoSpeculativeReply), default OFF
+let __sbSpeculativeActive = false;    // a speculative answer is live this turn
+let __sbSpeculativeToken = -1;        // the speculative answer's turn token
+let __sbSpeculativeHandledToken = -1; // token of a speculative answer that COMPLETED (already spoke)
+
 function __sbStopSpeech() {
+  // Linchpin for the speculative beta: if something else takes over speech while a speculative answer
+  // is LIVE (its realtime response already exists), cancel it cleanly. The speculative's OWN setup
+  // stop runs before its response exists, so it is spared by the __sbHasActiveRealtimeResponse check.
+  if (__sbSpeculativeActive && __sbHasActiveRealtimeResponse()) {
+    __sbSpeculativeActive = false;
+    __sbVTMark("↩️ Speculative cancelled");
+  }
   __sbSpeechGeneration += 1;
   // 1B: tear down the streaming-TTS pipeline. The generation bump above already invalidates the
   // drain loop's token checks; nulling the state stops any further feed/queueing.
@@ -13426,6 +13456,13 @@ function __sbSyncVoiceDropdown() {
   });
 }
 
+// Reflect the "Faster replies · beta" toggle's on/off in the dropdown.
+function __sbSyncSpeculativeToggle() {
+  document.getElementById("__sb_mode_dropdown__")
+    ?.querySelector('.sb-dropdown-item[data-spec="toggle"]')
+    ?.classList.toggle("selected", __sbSpeculativeReply);
+}
+
 function __sbResetRealtimeConnectFailures() {
   __sbRtConnectFailureCount = 0;
   __sbRtLastFailureAt = 0;
@@ -14367,6 +14404,31 @@ async function __sbDrainStreamTts() {
 
 // 1B conversation turn: refresh session context if the page changed, then let the realtime model
 // generate and stream straight into Fish. Returns true if it answered; false → caller falls back.
+// Speculative beta: a real voice turn reuses the speculative answer's token (so completion bookkeeping
+// stays consistent); otherwise it claims a fresh one.
+function __sbClaimVoiceTurnToken() {
+  return __sbSpeculativeActive ? __sbSpeculativeToken : ++__sbRtTurnToken;
+}
+
+// Fire the answer straight from the audio (no transcript yet). If the model already has a response in
+// flight, or the toggle is off, this no-ops. Marks the timeline so the logs show keep/cancel.
+async function __sbStartSpeculativeAnswer() {
+  if (!__sbSpeculativeReply || !__sbRtControlReady() || __sbSpeculativeActive) return;
+  if (__sbHasActiveRealtimeResponse() || __sbVoicePendingReply) return;
+  __sbSpeculativeToken = ++__sbRtTurnToken;
+  __sbSpeculativeActive = true;
+  __sbVTMark("⚡ Speculative reply (from audio)");
+  try {
+    const ok = await __sbAnswerViaRealtimeStreaming(__sbSpeculativeToken);
+    // Completed on its own (not cancelled mid-stream) → remember it answered this turn, so the
+    // transcript's conversation branch doesn't speak a second time even after it finished.
+    if (ok && __sbSpeculativeActive) __sbSpeculativeHandledToken = __sbSpeculativeToken;
+  } catch (_) {
+  } finally {
+    __sbSpeculativeActive = false;
+  }
+}
+
 async function __sbAnswerViaRealtimeStreaming(turnToken) {
   if (!__sbRtControlReady()) { __sbVTMark("⚠️ fast bail: control not ready"); return false; }
 
@@ -14846,6 +14908,13 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // pipeline below if streaming can't run (toggle off, realtime not ready, or it errors mid-turn).
   if (__sbVoiceBrain === "realtime" && __sbRtControlReady()) {
     __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+    // Speculative beta: the answer was already started from the audio (and the turn turned out to be
+    // plain chat, since no action branch above cancelled it). It's speaking — don't speak a second
+    // time. Covers both "still streaming" and "already finished" via the handled-token.
+    if (__sbSpeculativeActive || __sbSpeculativeHandledToken === turnToken) {
+      __sbVTMark("✅ Speculative kept (chat)");
+      return;   // the speculative answer owns this turn — including its own completion bookkeeping
+    }
     // Fish mode streams the model's text into Fish; OpenAI-voice mode lets the model speak audio
     // natively (fastest). __sbAnswerViaRealtimeStreaming branches on the voice pref.
     let ok = await __sbAnswerViaRealtimeStreaming(turnToken);
@@ -14919,6 +14988,8 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "input_audio_buffer.speech_started") {
     __sbVTReset("🎤 You started talking");
+    __sbSpeculativeActive = false;        // new turn → clean slate (the interrupt below kills any live one)
+    __sbSpeculativeHandledToken = -1;
     // Prefetch the page context the MOMENT you start talking — it finishes during your sentence,
     // so the answer path finds it already synced and skips the ~1.4s wait. De-duped, so it's free.
     void __sbSyncRealtimeVoiceInstructions();
@@ -14943,6 +15014,9 @@ function __sbHandleRtEvent(ev) {
     __sbVTMark("🛑 You stopped talking");
     // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
     if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    // Speculative beta: start answering from the audio NOW, before the transcript lands (~1s sooner).
+    // The transcript handler keeps it (plain chat) or any action branch cancels it via __sbStopSpeech.
+    if (__sbSpeculativeReply) void __sbStartSpeculativeAnswer();
     return;
   }
   if (ev.type === "conversation.item.input_audio_transcription.delta") {
@@ -14999,7 +15073,7 @@ function __sbHandleRtEvent(ev) {
     }
 
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
-      const turnToken = ++__sbRtTurnToken;
+      const turnToken = __sbClaimVoiceTurnToken();   // reuse the speculative token if one is live
       __sbBeginRealtimeCostTurn(toProcess, turnToken, transcriptionUsage);
       const segments = __sbSplitAndCorrectTranscript(toProcess);
       if (segments.length > 1) {
@@ -15626,8 +15700,10 @@ function __sbEnterHeadphoneMode(options = {}) {
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
-  __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
+  __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "brainoSpeculativeReply", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
     __sbApplyStoredVoiceOutputPref(stored.brainoVoicePref);
+    __sbSpeculativeReply = stored.brainoSpeculativeReply === true;   // beta toggle, default OFF
+    __sbSyncSpeculativeToggle();
 
     if (stored.sbRtSessionActive) {
       __sbUseOffscreenRt = true;

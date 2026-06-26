@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Braino \u2014 AI Browser Companion",
-  "version": "8.20.3",
+  "version": "8.21.0",
   "description": "Your AI companion that lives in the browser \u2014 record audio, chat about any page, and sync notes to Notion",
   "permissions": [
     "activeTab",
