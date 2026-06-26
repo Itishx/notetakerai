@@ -4770,7 +4770,13 @@ function __sbBuildBrainUI() {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     #__sb_bar__.sb-log-open #__sb_bar_log__ { max-height: 60px; opacity: 1; padding: 11px 24px 5px; }
-    #__sb_bar__.sb-log-open.sb-log-timing #__sb_bar_log__ { max-height: 260px; overflow-y: auto; }   /* temporary timing readout */
+    #__sb_bar__.sb-log-open.sb-log-timing #__sb_bar_log__ { max-height: 44px; }   /* single timing readout */
+    /* Single voice-timing readout: a colour dot + the path + the stop→heard duration. */
+    #__sb_bar_log__ .sb-vt-readout { gap: 8px; font-size: 12.5px; font-weight: 600; color: #2A241E; opacity: 1; }
+    #__sb_bar_log__ .sb-vt-readout .sb-vt-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+    #__sb_bar_log__ .sb-vt-readout .sb-vt-path { letter-spacing: 0.1px; }
+    #__sb_bar_log__ .sb-vt-readout .sb-vt-time { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+    html.sb-dark #__sb_bar_log__ .sb-vt-readout { color: #FBF7F1; }
     /* a touch more opaque + softer corners while open, so the steps sit on a clean surface */
     #__sb_bar__.sb-log-open { background: rgba(253,250,246,0.66); border-radius: 26px; }
     #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top: 1px solid rgba(120,110,100,0.12); }
@@ -6266,9 +6272,6 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
-    <div class="sb-dropdown-label" style="margin-top:8px">Voice — experiment</div>
-    <button class="sb-dropdown-item selected" data-voice="fish"><span class="sb-di-icon">💬</span><span class="sb-di-label">Default Braino</span><span class="sb-di-check">✓</span></button>
-    <button class="sb-dropdown-item" data-voice="realtime"><span class="sb-di-icon">⚡</span><span class="sb-di-label">OpenAI voice · faster</span><span class="sb-di-check">✓</span></button>
   `;
   (document.documentElement||document.body).appendChild(modeDd);
 
@@ -6675,23 +6678,8 @@ function __sbBuildBrainUI() {
     });
   });
 
-  // Voice-engine toggle (experiment): Default Braino (Fish) vs OpenAI's native realtime voice.
-  // Takes effect next time voice mode is started (the session modalities + mute are set at start).
-  modeDd.querySelectorAll(".sb-dropdown-item[data-voice]").forEach(item => {
-    item.addEventListener("click", () => {
-      const v = item.dataset.voice === "realtime" ? "realtime" : "fish";
-      __sbApplyStoredVoiceOutputPref(v);
-      if (__sbContextOk()) chrome.storage.local.set({ brainoVoicePref: v });   // persist
-      __sbSyncVoiceDropdown();
-      __sbCloseAllDropdowns();
-      __sbShowBubble(
-        v === "realtime"
-          ? "Voice → OpenAI (faster). Restart voice mode to hear it."
-          : "Voice → Default Braino.",
-        true,
-      );
-    });
-  });
+  // Voice-engine toggle removed: voice is always Braino's Fish voice now (see
+  // __sbNormalizeVoiceOutputPref). No user-facing engine picker.
 
   modelDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
     item.addEventListener("click", () => {
@@ -8832,13 +8820,17 @@ async function __sbSpeakText(text, options = {}) {
     const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
     if (ttsToken) headers.Authorization = `Bearer ${ttsToken}`;
 
-    // Strictly SEQUENTIAL: fetch a chunk, play it, then fetch the next. Never two Fish requests
-    // in flight at once — concurrent/bursted calls were tripping Fish's rate limit (429) and
-    // dumping every multi-sentence reply onto the browser voice. First audio is still fast
-    // because chunk 1 is just the opening sentence.
+    // N+1 look-ahead: while the current chunk PLAYS, we prefetch the NEXT one so there's no gap
+    // between sentences (the pause the batch path used to have). At most ONE fetch is in flight at a
+    // time — the chunk being spoken is already in hand, not fetching — so we never burst Fish's rate
+    // limit (429); this is the same single-look-ahead discipline the streaming path uses. First audio
+    // is still fast because chunk 1 is just the opening sentence.
+    let pendingFetch = null; // a promise for the NEXT sentence's TTS, kicked off during playback
     for (let i = 0; i < sentences.length; i++) {
       if (speechToken !== __sbSpeechGeneration) return spoke;
-      const cur = await __sbFetchSentenceTts(sentences[i], speechToken, headers);
+      const fetchPromise = pendingFetch || __sbFetchSentenceTts(sentences[i], speechToken, headers);
+      pendingFetch = null;
+      const cur = await fetchPromise;
       if (speechToken !== __sbSpeechGeneration) return spoke;
 
       if (cur.error) {
@@ -8850,6 +8842,11 @@ async function __sbSpeakText(text, options = {}) {
         return spoke;
       }
       if (!cur.resp) return spoke; // token superseded mid-fetch
+
+      // Kick off the next sentence's fetch NOW so it overlaps this one's playback (kills the gap).
+      if (i + 1 < sentences.length) {
+        pendingFetch = __sbFetchSentenceTts(sentences[i + 1], speechToken, headers);
+      }
 
       try {
         const played = await __sbPlaySentenceResp(cur.resp, speechToken);
@@ -10143,32 +10140,40 @@ let __sbVTFirstToken = false;
 let __sbVTAudibleDone = false;
 let __sbVTSummaryDone = false;
 let __sbVTCollapse = null;
+let __sbVTPath = "";   // "Fast Path" | "Slow Path" — which answer route this turn took
 function __sbVTReset(label) {
   __sbVT = { t0: performance.now(), marks: [], stopMs: null };
   __sbVTFirstToken = false;
   __sbVTAudibleDone = false;
   __sbVTSummaryDone = false;
+  __sbVTPath = "";
   if (__sbVTCollapse) { clearTimeout(__sbVTCollapse); __sbVTCollapse = null; }
   __sbVTMark(label);
 }
+// Marks are kept for the console trace + to compute the one number; they no longer paint the pill.
 function __sbVTMark(label) {
   if (!__sbVT) return 0;
   const ms = Math.round(performance.now() - __sbVT.t0);
   __sbVT.marks.push({ label, ms });
   if (label.indexOf("stopped talking") !== -1) __sbVT.stopMs = ms;   // the "perceived latency" clock starts here
   try { console.log(`[Braino ⏱] ${label}  +${ms}ms`); } catch (_) {}
-  __sbVTRender();
   return ms;
 }
-function __sbVTRender() {
+// The pill shows ONE thing: which path the turn took + how long from "you stopped" to first sound.
+// Colour-coded: green < 1.5s, yellow < 2s, red ≥ 2s.
+function __sbVTShowReadout(totalMs, sec, path) {
   const bar = document.getElementById("__sb_bar__");
   const log = document.getElementById("__sb_bar_log__");
-  if (!bar || !log || !__sbVT) return;
+  if (!bar || !log) return;
+  const color = totalMs < 1500 ? "#34C759" : totalMs < 2000 ? "#FFCC00" : "#FF3B30"; // green / yellow / red
   const stepsEl = log.querySelector(".sb-blog-steps");
   if (stepsEl) {
-    stepsEl.innerHTML = __sbVT.marks.map((m) =>
-      `<div class="sb-blog-step done"><span class="sb-blog-ic" style="color:#E8786E">⏱</span><span>${__sbEscHtml(m.label)} · +${m.ms}ms</span></div>`
-    ).join("");
+    stepsEl.innerHTML =
+      `<div class="sb-blog-step done sb-vt-readout">` +
+        `<span class="sb-vt-dot" style="background:${color}"></span>` +
+        `<span class="sb-vt-path">${__sbEscHtml(path || "Voice")}</span>` +
+        `<span class="sb-vt-time" style="color:${color}">${sec}s</span>` +
+      `</div>`;
   }
   bar.classList.add("sb-log-open", "sb-log-timing");
 }
@@ -10179,11 +10184,23 @@ function __sbVTSummary() {
   const last = __sbVT.marks[__sbVT.marks.length - 1];
   const heardMs = last ? last.ms : 0;
   const stop = __sbVT.stopMs != null ? __sbVT.stopMs : 0;
-  const total = heardMs - stop;
-  const sec = (total / 1000).toFixed(2);
-  try { console.log(`%c[Braino ⏱] ⭐ TOTAL — you stopped → first response heard: ${total}ms (${sec}s)`, "font-weight:bold;font-size:13px;color:#C9544A"); } catch (_) {}
-  __sbVT.marks.push({ label: `⭐ TOTAL  stop → heard: ${sec}s`, ms: heardMs });
-  __sbVTRender();
+  const total = Math.max(0, heardMs - stop);
+  const sec = (total / 1000).toFixed(1);
+  const path = __sbVTPath || "Voice";
+  try { console.log(`%c[Braino ⏱] ${path} · ${sec}s  (you stopped → first sound)`, "font-weight:bold;font-size:13px;color:#C9544A"); } catch (_) {}
+  __sbVTShowReadout(total, sec, path);
+  __sbVTScheduleCollapse(4000);   // works on BOTH paths (the batch path has no realtime response.done)
+}
+function __sbVTScheduleCollapse(delay) {
+  if (__sbVTCollapse) clearTimeout(__sbVTCollapse);
+  __sbVTCollapse = setTimeout(() => {   // hold the readout briefly, then settle the pill back down
+    const bar = document.getElementById("__sb_bar__");
+    if (bar && !__sbAgentBusy) { bar.classList.remove("sb-log-open", "sb-log-timing"); }
+    const log = document.getElementById("__sb_bar_log__");
+    const stepsEl = log && log.querySelector(".sb-blog-steps");
+    if (stepsEl) stepsEl.innerHTML = "";
+    __sbVT = null; __sbVTCollapse = null;
+  }, delay);
 }
 function __sbVTAudible(label) {          // first AUDIBLE sound (Fish playback) — what you hear
   if (__sbVTAudibleDone) return;
@@ -10199,15 +10216,7 @@ function __sbVTFirst(label) {           // first token of a response (native Ope
 }
 function __sbVTDone(label) {
   __sbVTMark(label);
-  if (__sbVTCollapse) clearTimeout(__sbVTCollapse);
-  __sbVTCollapse = setTimeout(() => {   // hold the breakdown on screen, then settle the pill
-    const bar = document.getElementById("__sb_bar__");
-    if (bar && !__sbAgentBusy) { bar.classList.remove("sb-log-open", "sb-log-timing"); }
-    const log = document.getElementById("__sb_bar_log__");
-    const stepsEl = log && log.querySelector(".sb-blog-steps");
-    if (stepsEl) stepsEl.innerHTML = "";
-    __sbVT = null; __sbVTCollapse = null;
-  }, 6000);
+  __sbVTScheduleCollapse(4000);
 }
 
 function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
@@ -13378,8 +13387,11 @@ let __sbRtLocalConnectInFlight = false;
 let __sbRtLastFailureAt = 0;
 
 function __sbNormalizeVoiceOutputPref(value) {
-  // "elevenlabs" is the legacy value — migrate it to "fish".
-  return value === "realtime" ? "realtime" : "fish";
+  // Voice is always Fish now (Braino's custom voice) — the OpenAI-native-voice toggle was retired
+  // (generic voice + far more expensive gpt-realtime-2, for no real speed win). Forcing "fish" here
+  // collapses every init/storage path to Fish and makes offscreen request gpt-realtime-mini. The
+  // realtime-audio branches stay in the code, dormant, as a possible silent fallback.
+  return "fish";
 }
 
 function __sbApplyStoredVoiceOutputPref(value) {
@@ -14375,6 +14387,7 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
     return false; // control channel not ready → fall back to batch path
   }
 
+  __sbVTPath = "Fast Path";   // the live model is streaming the answer (no batch backend hop)
   const result = await waiter; // resolves at response.done / cancelled / error
   if (!nativeVoice) {
     __sbStreamFishActive = false;
@@ -14471,6 +14484,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
   // Remember what Braino is about to say so the mic can't re-hear it and re-fire an intent.
   __sbNoteSpoken(text);
+  if (!__sbVTPath) __sbVTPath = "Slow Path";   // reached the batch speak entry (not fast streaming)
   __sbVTMark("🗣️ Answer ready — speaking");   // (no-op unless a voice-timing turn is active)
   // In native realtime mode the model speaks via WebRTC audio — we must NOT also call a
   // TTS endpoint (that would be two voices). Only call __sbSpeakText when Fish Audio is
