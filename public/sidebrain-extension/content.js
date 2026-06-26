@@ -14726,7 +14726,11 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
     __sbVoiceSilenceTimer = null;
     const toProcess = __sbLastFinalTranscript;
     __sbLastFinalTranscript = null;
-    if (!toProcess || __sbVoicePendingReply) return;
+    // Normally a pending reply means a turn is already being handled → skip. BUT when a speculative
+    // answer is in play, IT set the pending flag — and we MUST still run the router so it can confirm
+    // (plain chat → keep) or cancel-and-handle (action). Otherwise actions get silently swallowed.
+    const specInPlay = __sbSpeculativeActive || __sbSpeculativeHandledToken >= 0;
+    if (!toProcess || (__sbVoicePendingReply && !specInPlay)) return;
 
     if (__sbHeadphoneMode) {
       __sbSetHpBrainState("captured");
