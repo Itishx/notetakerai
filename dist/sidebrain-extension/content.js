@@ -12338,7 +12338,7 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
-  __sbStopSpeech();
+  if (!options.ackPlaying) __sbStopSpeech();   // keep a slow-path "on it…" ack playing while we work
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
 
   // Jump & Point — "where is X / point me to X". Braino leaps off the bar and points at
@@ -14666,6 +14666,21 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
              // jumping in on natural mid-sentence pauses.
 }
 
+// A short spoken "heard you, on it" the instant a turn routes to the SLOW (batch/agent) path, so the
+// user isn't met with 6-20s of silence. Contextual by intent; fire-and-forget — the real answer
+// speaks behind it (and supersedes it). Kept short so it lands in ~1s and finishes before the answer.
+// Recording starts fast, so it gets no ack. Pairs with the `ackPlaying` guard in __sbProcessPrompt.
+function __sbSpeakSlowPathAck(kind) {
+  if (!kind || kind === "record") return;
+  const sets = {
+    web:    ["Let me look that up — one sec.", "On it — searching now.", "One sec, looking that up."],
+    agent:  ["On it.", "Sure — give me a second.", "On it, working on that now."],
+  };
+  const set = sets[kind] || ["One moment.", "Give me a sec.", "Let me think on that."];
+  const line = set[Math.floor(Math.random() * set.length)];
+  try { void __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true }); } catch (_) {}
+}
+
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
   if (__sbIsSelfEcho(transcript)) {
@@ -14776,16 +14791,19 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   if (__sbShouldFastLaunchRealtimeAgent(routing)) {
     __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
     __sbRtAwaitingDelegateResult = true;
+    __sbSpeakSlowPathAck("agent");   // break the silence before the agent grinds away
     __sbRunAgent(promptText, { connector: routing.connectorHint });
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
 
   if (["agent", "web", "record"].includes(routing.intent)) {
+    __sbSpeakSlowPathAck(routing.intent);
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
       voiceTurnToken: turnToken,
+      ackPlaying: true,
     });
     return;
   }
@@ -14799,11 +14817,13 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   __sbVTMark("✅ Figured out the request");
   if (shouldForceDelegate) {
     __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+    __sbSpeakSlowPathAck("agent");
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
       voiceTurnToken: turnToken,
       forceIntent: "agent",
+      ackPlaying: true,
     });
     return;
   }
@@ -14829,12 +14849,15 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   }
 
   // Batch fallback — the SAME smart text pipeline legacy voice uses (chat-about-notes, with full
-  // page DOM + notes + selected text), spoken in the realtime voice.
+  // page DOM + notes + selected text), spoken in the realtime voice. The fast path already tried and
+  // bailed, so this round-trip is slow → break the silence with a quick ack first.
+  __sbSpeakSlowPathAck("default");
   await __sbProcessPrompt(promptText, {
     fromVoice: true,
     voiceOutput: "realtime",
     voiceTurnToken: turnToken,
     forceIntent: "chat",
+    ackPlaying: true,
   });
 }
 
