@@ -19,7 +19,7 @@ const ZIP_PATHS = [
 ];
 
 // JS files to minify (simple whitespace removal, no obfuscation — Chrome flags obfuscated code as malware)
-const JS_FILES = ["popup.js", "background.js", "offscreen.js", "content.js", "braino-popup.js", "mic-permission.js", "party-tan.js"];
+const JS_FILES = ["popup.js", "background.js", "offscreen.js", "content.js", "braino-popup.js", "mic-permission.js"];
 
 // Files/folders to copy as-is
 const COPY_FILES = [
