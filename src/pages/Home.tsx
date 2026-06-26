@@ -514,6 +514,7 @@ export default function Home() {
                 <Link to="/integrations">Integrations</Link>
                 <Link to="/remote-agent">Remote Agent</Link>
                 <Link to="/straight-talk">Straight talk on the agent</Link>
+                <Link to="/why-the-wait">Why Braino takes a beat</Link>
                 <Link to="/contact">Contact</Link>
               </div>
               <div className="home-footer-col">

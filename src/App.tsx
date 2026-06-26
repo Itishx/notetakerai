@@ -35,6 +35,7 @@ import Integrations from "./pages/Integrations.tsx";
 import ConnectorsVault from "./pages/ConnectorsVault.tsx";
 import Changelog from "./pages/Changelog.tsx";
 import StraightTalk from "./pages/StraightTalk.tsx";
+import WhyTheWait from "./pages/WhyTheWait.tsx";
 import BrainoLive from "./pages/BrainoLive.tsx";
 import Playground from "./pages/Playground.tsx";
 import BuildYourBraino from "./pages/BuildYourBraino.tsx";
@@ -89,6 +90,7 @@ function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashD
         <Route path="/connectors-vault" element={<ConnectorsVault />} />
         <Route path="/changelog" element={<Changelog />} />
         <Route path="/straight-talk" element={<StraightTalk />} />
+        <Route path="/why-the-wait" element={<WhyTheWait />} />
         <Route path="/live" element={<BrainoLive />} />
         <Route path="/playground" element={<Playground />} />
         <Route path="/build-braino" element={<BuildYourBraino />} />
