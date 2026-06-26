@@ -20,6 +20,7 @@ const EXTENSION_FILES = [
   "mic-permission.js",
   "offscreen.html",
   "offscreen.js",
+  "party-tan.js",
   "popup.html",
   "sidepanel.html",
   "styles.css",

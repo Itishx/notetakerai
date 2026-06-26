@@ -13722,8 +13722,15 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
   };
 }
 
+// Private party trick (Tan & Vishal): once a guest introduces themselves, their grounding rides along
+// on EVERY realtime session update (boot + page-syncs both flow through here) so the back-and-forth
+// stays grounded. See party-tan.js + __sbRunTanParty.
+let __sbPartyExtraInstructions = "";
+let __sbPartyTanArmed = false;
+
 function __sbSendRealtimeSessionUpdate(instructions) {
-  const promptText = String(instructions || "").trim();
+  let promptText = String(instructions || "").trim();
+  if (__sbPartyExtraInstructions) promptText += `\n\n${__sbPartyExtraInstructions}`;
   if (!promptText) return false;
   return __sbSendRtEvent(__sbBuildRealtimeSessionUpdate(promptText));
 }
@@ -14681,12 +14688,62 @@ function __sbSpeakSlowPathAck(kind) {
   try { void __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true }); } catch (_) {}
 }
 
+// ── Private party trick (Tan & Vishal) — voice-mode only. See party-tan.js. ───────────────────────
+async function __sbMaybeRunPartyTrick(transcript, turnToken) {
+  const P = globalThis.__SB_PARTY_TAN;
+  if (!P || !__sbHeadphoneMode) return false;          // voice mode only
+  const t = String(transcript || "");
+  if (P.tanTriggers.some((re) => re.test(t))) { await __sbRunTanParty(turnToken); return true; }
+  const explicitVishal = P.vishalExplicit.some((re) => re.test(t));
+  if (explicitVishal || (__sbPartyTanArmed && P.vishalTriggers.some((re) => re.test(t)))) {
+    await __sbRunVishalParty(turnToken); return true;
+  }
+  return false;
+}
+
+// The finger-scan beat: the walker glows gold (the auth wake-up glow) for a beat while Braino "reads"
+// their finger — pure theatre; he already knows everything.
+function __sbPartyScanGlow(ms) {
+  return new Promise((resolve) => {
+    const wlk = document.getElementById("__sbwk_walker__");
+    if (wlk) wlk.classList.add("sbwk-auth");
+    try { if (typeof __sbWkStatus === "function") __sbWkStatus("Reading you…"); } catch (_) {}
+    setTimeout(() => { if (wlk) wlk.classList.remove("sbwk-auth"); resolve(); }, ms);
+  });
+}
+
+async function __sbRunTanParty(turnToken) {
+  const P = globalThis.__SB_PARTY_TAN;
+  __sbPartyTanArmed = true;
+  __sbStopSpeech();
+  __sbNoteSpoken(P.tanScanLine);
+  await __sbSpeakWithPreferredVoice(P.tanScanLine, "realtime", { verbatim: true });  // "Hi Tan — keep your finger on me…"
+  await __sbPartyScanGlow(2000);                                                     // eyes-glow ~2s
+  __sbPartyExtraInstructions = P.tanContext;                                         // ground the live session
+  __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());                // push it now (persists via the chokepoint)
+  __sbNoteSpoken(P.tanReveal);
+  await __sbSpeakWithPreferredVoice(P.tanReveal, "realtime", { verbatim: true });    // warm grounded opener; the to-and-fro continues naturally
+  __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+}
+
+async function __sbRunVishalParty(turnToken) {
+  const P = globalThis.__SB_PARTY_TAN;
+  __sbStopSpeech();
+  __sbNoteSpoken(P.vishalLine);
+  __sbPartyExtraInstructions = `${P.tanContext}\n\n${P.vishalContext}`;              // keep Tan + add Vishal
+  __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
+  await __sbSpeakWithPreferredVoice(P.vishalLine, "realtime", { verbatim: true });   // "Oh, Vishal — nice guitar, man."
+  __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+}
+
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
   if (__sbIsSelfEcho(transcript)) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
+  // Private party trick: "Hi Braino, I am Tan" / Vishal → theatrical finger-scan + grounded chat.
+  if (await __sbMaybeRunPartyTrick(transcript, turnToken)) return;
   const routing = __sbResolvePromptRouting(transcript);
   const promptText = String(routing.promptText || "").trim();
   if (!promptText) {
