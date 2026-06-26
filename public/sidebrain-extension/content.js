@@ -14968,6 +14968,10 @@ function __sbHandleRtEvent(ev) {
     // Prefetch the page context the MOMENT you start talking — it finishes during your sentence,
     // so the answer path finds it already synced and skips the ~1.4s wait. De-duped, so it's free.
     void __sbSyncRealtimeVoiceInstructions();
+    // Same trick for Fish: wake its edge isolate NOW so it's hot when we synthesize the reply. The
+    // boot (~0.5-5s cold start) is paid during your sentence instead of on your wait — which is why
+    // the slowest first-sound runs were always the LONGEST utterances (isolate went cold mid-sentence).
+    try { __sbWarmFishTts(); } catch (_) {}
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
     // voices: cancel the realtime model's audio and stop Fish Audio/browser playback.
