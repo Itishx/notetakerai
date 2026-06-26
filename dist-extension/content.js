@@ -3937,6 +3937,7 @@ if (__sbContextOk()) {
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
+        __sbDelegateUiHidden = false;   // delegate done → let the result reopen the chat UI
         // Voice mode speaks the result with no panel; chat mode shows it.
         const finalText = String(msg.text || "").trim();
         const agentPrompt = String(msg.task || __sbAgentPendingTurn?.prompt || __sbLastAgentTask || "").trim();
@@ -6498,6 +6499,7 @@ function __sbBuildBrainUI() {
       __sbXRunning = false;
     }
     chrome.runtime.sendMessage({ action: "stopBrainAgent" }, () => { void chrome.runtime.lastError; });
+    __sbDelegateUiHidden = false;   // stopping a delegate → allow the UI to open again
     __sbSetStopBtn(false);
     __sbAgentPendingTurn = null;
     __sbClearBarAgentStatus();   // kill the bar shimmer when the user stops
@@ -6962,8 +6964,12 @@ function __sbDetectPageTheme() {
   return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 > 0.55 ? "light" : "dark";
 }
 
+// While a delegate task runs, the chat UI stays closed (progress lives in the floating bar/pill only);
+// it reopens with the result on finish. This flag blocks any auto-open during the run.
+let __sbDelegateUiHidden = false;
 function __sbOpenCard(options = {}) {
   if (!__sbOwnsInlineUi()) return;
+  if (__sbDelegateUiHidden && !options.forceOpen) return;   // delegate running → keep the chat UI closed
   const wrap = document.getElementById("__sb_card_wrap__");
   if (!wrap) return;
   __sbRefreshInlineOwner();
@@ -10279,6 +10285,7 @@ function __sbUpdateAgentSubgoals(subgoals) {
 }
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
+  __sbDelegateUiHidden = false;   // delegate done → re-enable the chat UI before rendering the result
   __sbStopWaitEntertainment(); // delegate finished — settle the mascot
   __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
@@ -12696,6 +12703,10 @@ function __sbRunAgent(task, options = {}) {
     return;
   }
   __sbAgentLaunchGuard = { task: normTask, ts: now };
+  // Delegate owns the floating bar/pill for progress — close the chat UI while it runs so the task
+  // doesn't render in BOTH the bar and the card. It reopens with the result on finish.
+  if (document.getElementById("__sb_card_wrap__")?.classList.contains("visible")) __sbCollapseCard();
+  __sbDelegateUiHidden = true;
   __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
   __sbAgentLogClear(); __sbAgentLogShow("Working…"); __sbAgentLogStep("Getting started…");  // strip shows instantly, all modes
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
