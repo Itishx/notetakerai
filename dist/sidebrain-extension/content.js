@@ -12079,6 +12079,10 @@ function __sbLooksLikeCompare(text) {
   if (!/\b(book|buy|order|reserve|purchase|pay|checkout|open|play|download|install|log ?in|sign ?in|fill|submit|post|tweet)\b/.test(t)
       && /\b(find|look up|look for|search for|search|recommend|suggest|show me|tell me|get me|what'?s|whats|where can i|how much|when (is|does|are|do)|is there|are there)\b/.test(t)
       && /\b(showtimes?|show times|tickets?|movies?|prices?|cheapest|deals?|discount|news|weather|forecast|hours|timings?|open (now|today)|reviews?|ratings?|restaurants?|cafes?|flights?|trains?|buses|hotels?|near me|nearby)\b/.test(t)) return true;
+  // Strong lookup phrases trigger research even with NO verb ("Cocktail 2 movie tickets Pune",
+  // "showtimes near me", "weather Pune tomorrow"). Still blocked by action verbs.
+  if (!/\b(book|buy|order|reserve|purchase|pay|open|play)\b/.test(t)
+      && /\b(movie tickets?|show ?times?|ticket prices?|weather (in|near|at|tomorrow|today)|news about)\b/.test(t)) return true;
   return false;
 }
 
