@@ -12363,6 +12363,15 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  // Open-known-site shortcut — instant navigate instead of the ~10s agent loop (simple opens only).
+  const __openSite = __sbDetectOpenSite(promptText);
+  if (__openSite) {
+    __sbStopSpeech();
+    __sbHandleOpenSite(__openSite, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   // Quick local intent: "wear/put on your specs" → toggle the glasses, no model call.
   const __glassesIntent = __sbGlassesIntent(promptText);
   if (__glassesIntent) {
@@ -14789,6 +14798,58 @@ function __sbSexualRefusalLine() {
     : "No.";
 }
 
+// ── Open-known-site shortcut: "open YouTube" navigates instantly instead of running the heavy agent
+// loop (~10s). Only fires for a SIMPLE open of a known site — anything compound ("open YouTube and
+// play X") falls through to the real agent. ──
+const __SB_KNOWN_SITES = [
+  { keys: ["youtube", "yt"], url: "https://www.youtube.com", name: "YouTube" },
+  { keys: ["spotify"], url: "https://open.spotify.com", name: "Spotify" },
+  { keys: ["gmail", "g mail"], url: "https://mail.google.com", name: "Gmail" },
+  { keys: ["google calendar", "gcal", "my calendar"], url: "https://calendar.google.com", name: "Google Calendar" },
+  { keys: ["google drive", "gdrive", "my drive"], url: "https://drive.google.com", name: "Google Drive" },
+  { keys: ["google docs"], url: "https://docs.google.com", name: "Google Docs" },
+  { keys: ["google maps", "maps"], url: "https://www.google.com/maps", name: "Google Maps" },
+  { keys: ["google"], url: "https://www.google.com", name: "Google" },
+  { keys: ["gemini"], url: "https://gemini.google.com", name: "Gemini" },
+  { keys: ["chatgpt", "chat gpt"], url: "https://chatgpt.com", name: "ChatGPT" },
+  { keys: ["claude"], url: "https://claude.ai", name: "Claude" },
+  { keys: ["twitter", "tweeter"], url: "https://x.com", name: "X" },
+  { keys: ["x"], url: "https://x.com", name: "X" },
+  { keys: ["instagram", "insta", "ig"], url: "https://www.instagram.com", name: "Instagram" },
+  { keys: ["whatsapp", "whats app"], url: "https://web.whatsapp.com", name: "WhatsApp" },
+  { keys: ["linkedin", "linked in"], url: "https://www.linkedin.com", name: "LinkedIn" },
+  { keys: ["reddit"], url: "https://www.reddit.com", name: "Reddit" },
+  { keys: ["github", "git hub"], url: "https://github.com", name: "GitHub" },
+  { keys: ["netflix"], url: "https://www.netflix.com", name: "Netflix" },
+  { keys: ["amazon"], url: "https://www.amazon.com", name: "Amazon" },
+  { keys: ["notion"], url: "https://www.notion.so", name: "Notion" },
+  { keys: ["figma"], url: "https://www.figma.com", name: "Figma" },
+];
+function __sbDetectOpenSite(text) {
+  let t = String(text || "").toLowerCase().trim().replace(/[.!?]+$/, "");
+  // Drop leading filler so "hey braino, can you open youtube" still matches.
+  t = t.replace(/^(?:hey |hi |yo |ok |okay |braino[,!. ]+|can you |could you |would you |will you |please |kindly |i want you to |i'?d like you to |let'?s )+/g, "").trim();
+  const m = t.match(/^(?:open(?:\s*up)?|go to|take me to|pull up|launch|bring up|fire up)\s+(.+)$/);
+  if (!m) return null;
+  // Strip filler so "open youtube for me please" / "open the youtube website" still matches cleanly.
+  let rest = m[1].replace(/\b(the|a|my|for me|please|website|site|app|tab|dot com|\.com)\b/g, " ").replace(/\s+/g, " ").trim();
+  if (!rest) return null;
+  // Compound commands (a second action) belong to the real agent, not the shortcut.
+  if (/\b(and|then|after that|search|play|find|look up|compose|send|email|message|to\b)/.test(rest)) return null;
+  for (const site of __SB_KNOWN_SITES) {
+    if (site.keys.some((k) => new RegExp(`(^|\\s)${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`).test(rest))) return site;
+  }
+  return null;
+}
+function __sbHandleOpenSite(site, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  try { chrome.runtime.sendMessage({ action: "openTab", url: site.url, active: true }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+  const line = `Opening ${site.name}.`;
+  if (fromVoice) { __sbNoteSpoken(line); void __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+}
+
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
   if (__sbIsSelfEcho(transcript)) {
@@ -14815,6 +14876,17 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     routeMode: routing.forcedMode,
     connector: routing.connectorHint,
   });
+
+  // Open-known-site shortcut — navigate instantly instead of the ~10s agent loop. Cancels any
+  // speculative answer first so it doesn't talk over the "Opening …" line.
+  const __openSite = __sbDetectOpenSite(promptText);
+  if (__openSite) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "open_site" });
+    __sbHandleOpenSite(__openSite, { fromVoice: true, voiceOutput: "realtime" });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
 
   // X (Twitter) status — answer from the backend and speak it, BEFORE any delegate
   // classification (which would otherwise open X in a tab).
