@@ -158,4 +158,48 @@ describe("Delegate extension libs", () => {
     ]);
     expect(state.activeSubgoal).toBe("1");
   });
+
+  it("Change A: an offscreen, intent-matched control survives the cap", () => {
+    loadExtensionLib("elementMap.js");
+    const elements: any[] = [];
+    for (let i = 1; i <= 129; i++) elements.push({ index: i, role: "button", name: `Item ${i}`, tag: "button", inViewport: true });
+    elements.push({ index: 130, role: "button", name: "Send", tag: "button", inViewport: false }); // offscreen, low viewport score
+    const map = { url: "https://mail.test", title: "Mail", elements };
+    const out = (globalThis as any).BrainoElementMap.serializeElementMap(map, { keywords: "send email" });
+    expect(out).toContain("[130] button");
+    expect(out).toContain('"Send"');
+    expect(out).toContain("more elements hidden by cap");
+  });
+
+  it("Change B: keywords anchor unchanged controls; the 2-arg call is unchanged", () => {
+    loadExtensionLib("elementMap.js");
+    const prev = { url: "https://a.test", scroll: { atTop: true }, elements: [
+      { index: 1, role: "textbox", name: "To", tag: "input", value: "" },
+      { index: 2, role: "button", name: "Send", tag: "button" },
+    ]};
+    const next = { url: "https://a.test", scroll: { atTop: true }, elements: [
+      { index: 1, role: "textbox", name: "To", tag: "input", value: "x@y.com" },
+      { index: 2, role: "button", name: "Send", tag: "button" },
+    ]};
+    const withKw = (globalThis as any).BrainoElementMap.diffElementMap(prev, next, { keywords: "send" });
+    expect(withKw).toContain("STILL AVAILABLE");
+    expect(withKw).toContain('[2] button "Send"');
+    const noKw = (globalThis as any).BrainoElementMap.diffElementMap(prev, next);
+    expect(noKw).not.toContain("STILL AVAILABLE");
+    expect(noKw).toContain('value="" -> "x@y.com"');
+  });
+
+  it("Change C: duplicate-named controls are disambiguated by section", () => {
+    loadExtensionLib("elementMap.js");
+    const map = { url: "x", title: "y", elements: [
+      { index: 1, role: "button", name: "Send", tag: "button", inViewport: true, section: "dialog" },
+      { index: 2, role: "button", name: "Send", tag: "button", inViewport: true, section: "form" },
+      { index: 3, role: "button", name: "Archive", tag: "button", inViewport: true, section: "dialog" },
+    ]};
+    const out = (globalThis as any).BrainoElementMap.serializeElementMap(map);
+    expect(out).toContain('"Send" (dialog)');
+    expect(out).toContain('"Send" (form)');
+    expect(out).toContain('"Archive"');         // unique name → no suffix
+    expect(out).not.toContain('"Archive" (dialog)');
+  });
 });

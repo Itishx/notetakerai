@@ -3376,11 +3376,12 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       }
     }
 
-    const obsResult = await bgBuildElementObservation(currentTabId, state.subgoals.find((goal) => goal.status === "active")?.desc || task);
+    const activeKeywords = state.subgoals.find((goal) => goal.status === "active")?.desc || task;
+    const obsResult = await bgBuildElementObservation(currentTabId, activeKeywords);
     let obs = obsResult.map;
     const obsPayload = prevObs && BrainoElementMap?.diffElementMap
-      ? BrainoElementMap.diffElementMap(prevObs, obs)
-      : (obsResult.serialized || BrainoElementMap.serializeElementMap(obs, { keywords: task }));
+      ? BrainoElementMap.diffElementMap(prevObs, obs, { keywords: activeKeywords })   // Change B: anchor stable controls
+      : (obsResult.serialized || BrainoElementMap.serializeElementMap(obs, { keywords: activeKeywords }));
     let decision;
     let model;
     try {

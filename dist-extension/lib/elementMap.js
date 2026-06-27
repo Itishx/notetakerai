@@ -217,6 +217,22 @@
         if (node.editable || String(el.tagName || "").toLowerCase() === "select") {
           node.value = truncate(el.value || el.innerText || el.textContent || "", MAX_VALUE);
         }
+        // Cheap "section" hint (Change C) so duplicate-named controls can be disambiguated later.
+        try {
+          const sec = el.closest?.('[role="dialog"],dialog,[role="banner"],header,[role="navigation"],nav,[role="main"],main,aside,form');
+          if (sec) {
+            const stag = String(sec.tagName || "").toLowerCase();
+            const srole = sec.getAttribute?.("role") || "";
+            const hint =
+              (srole === "dialog" || stag === "dialog") ? "dialog" :
+              (srole === "banner" || stag === "header") ? "banner" :
+              (srole === "navigation" || stag === "nav") ? "nav" :
+              (srole === "main" || stag === "main") ? "main" :
+              (stag === "form") ? "form" :
+              (stag === "aside") ? "aside" : "";
+            if (hint) node.section = hint;
+          }
+        } catch (_) {}
         elements.push(node);
         registry.set(node.index, el);
       }
@@ -277,24 +293,45 @@
       .split(/\s+/)
       .filter((word) => word.length >= 3)
       .slice(0, 12);
-    const elements = safeArray(map?.elements)
-      .map((el) => ({
-        el,
-        score: (el.inViewport ? 4 : 0) + (elementMatchesKeywords(el, keywords) ? 3 : 0) + (el.editable ? 1 : 0),
-      }))
-      .sort((a, b) => b.score - a.score || a.el.index - b.el.index)
-      .slice(0, cap)
-      .sort((a, b) => a.el.index - b.el.index)
-      .map(({ el }) => el);
+    const all = safeArray(map?.elements);
+    // Keyword match now outweighs mere viewport presence, so an intent-relevant control isn't beaten
+    // by on-screen noise (Change A).
+    const scoreOf = (el) => (elementMatchesKeywords(el, keywords) ? 4 : 0) + (el.inViewport ? 3 : 0) + (el.editable ? 1 : 0);
+
+    let elements;
+    if (all.length <= cap) {
+      // Everything fits — keep all, ordered by index. Byte-identical to the previous behaviour.
+      elements = all.slice().sort((a, b) => a.index - b.index);
+    } else {
+      // Tier 1 — ALWAYS keep editable controls + the top intent-matched controls, so the element the
+      // task actually needs is never culled by the flat cap (even when it's offscreen).
+      const keep = new Set();
+      for (const el of all) if (el.editable) keep.add(el.index);
+      all.filter((el) => elementMatchesKeywords(el, keywords))
+        .sort((a, b) => scoreOf(b) - scoreOf(a) || a.index - b.index)
+        .slice(0, 24)
+        .forEach((el) => keep.add(el.index));
+      // Tier 2 — fill the remaining budget by score/viewport ordering.
+      all.filter((el) => !keep.has(el.index))
+        .sort((a, b) => scoreOf(b) - scoreOf(a) || a.index - b.index)
+        .forEach((el) => { if (keep.size < cap) keep.add(el.index); });
+      elements = all.filter((el) => keep.has(el.index)).sort((a, b) => a.index - b.index);
+    }
+
+    // Change C — disambiguate duplicate role+name controls by appending their section ("(dialog)").
+    const labelKey = (el) => `${el.role || ""}|${normalizeText(el.name).toLowerCase()}`;
+    const labelCounts = new Map();
+    for (const el of elements) labelCounts.set(labelKey(el), (labelCounts.get(labelKey(el)) || 0) + 1);
 
     const lines = [
       `URL: ${map?.url || ""} | title: ${map?.title || ""} | scroll: ${formatScroll(map?.scroll)}`,
     ];
     for (const el of elements) {
+      const dupSuffix = (el.section && labelCounts.get(labelKey(el)) > 1) ? ` (${el.section})` : "";
       const bits = [
         `[${el.index}]`,
         String(el.role || "element").padEnd(9, " "),
-        `"${truncate(el.name || el.value || el.tag || "unnamed", 80)}"`,
+        `"${truncate(el.name || el.value || el.tag || "unnamed", 80)}"${dupSuffix}`,
       ];
       if (el.value != null && el.value !== "" && !String(el.name || "").includes(String(el.value))) {
         bits.push(`value="${truncate(el.value, 60)}"`);
@@ -305,8 +342,8 @@
       if (!el.inViewport) bits.push("(offscreen)");
       lines.push(bits.join(" "));
     }
-    if (safeArray(map?.elements).length > elements.length) {
-      lines.push(`... ${safeArray(map?.elements).length - elements.length} more elements hidden by cap`);
+    if (all.length > elements.length) {
+      lines.push(`... ${all.length - elements.length} more elements hidden by cap`);
     }
     return lines.join("\n");
   }
@@ -320,8 +357,8 @@
     ].join("|");
   }
 
-  function diffElementMap(prev, next) {
-    if (!prev) return serializeElementMap(next);
+  function diffElementMap(prev, next, options) {
+    if (!prev) return serializeElementMap(next, options);
     const prevBySig = new Map(safeArray(prev.elements).map((el) => [signature(el), el]));
     const nextBySig = new Map(safeArray(next?.elements).map((el) => [signature(el), el]));
     const lines = [
@@ -339,6 +376,28 @@
       if (!before) continue;
       if ((before.value || "") !== (el.value || "")) {
         lines.push(`~ [${el.index}] ${el.role} "${truncate(el.name || el.tag, 80)}" value="${truncate(before.value || "", 40)}" -> "${truncate(el.value || "", 40)}"`);
+      }
+    }
+    // Change B — anchor stable controls: when the loop passes the active task keywords, re-surface the
+    // top intent-relevant UNCHANGED interactables so the model never "forgets" controls that are always
+    // present (the canonical Gmail "Send" problem). Skipped when no keywords are passed → the 2-arg
+    // call is byte-identical.
+    const kw = normalizeText(options?.keywords || "").toLowerCase().split(/\s+/).filter((w) => w.length >= 3).slice(0, 12);
+    if (kw.length) {
+      const stable = [];
+      for (const [sig, el] of nextBySig) {
+        const before = prevBySig.get(sig);
+        if (!before || (before.value || "") !== (el.value || "")) continue; // truly unchanged only
+        if (elementMatchesKeywords(el, kw) || el.editable) stable.push(el);
+      }
+      const ranked = stable
+        .map((el) => ({ el, s: (elementMatchesKeywords(el, kw) ? 4 : 0) + (el.editable ? 1 : 0) }))
+        .sort((a, b) => b.s - a.s || a.el.index - b.el.index)
+        .slice(0, 8)
+        .map((x) => x.el);
+      if (ranked.length) {
+        lines.push("STILL AVAILABLE (unchanged):");
+        for (const el of ranked) lines.push(`  [${el.index}] ${el.role} "${truncate(el.name || el.value || el.tag, 80)}"`);
       }
     }
     return lines.length <= 2 ? `${lines.join("\n")}\n(no element changes)` : lines.join("\n");
