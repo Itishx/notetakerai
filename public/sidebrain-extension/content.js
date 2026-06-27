@@ -4382,6 +4382,9 @@ function __sbBuildBrainUI() {
       flex-shrink: 0; transition: background 0.15s; padding: 0;
     }
     #__sb_send_btn__:hover { background: #C9544A; }
+    #__sb_bar_stop__ { color: #C9544A; }
+    #__sb_bar_stop__:hover { background: rgba(201,84,74,0.14); }
+    html.sb-dark #__sb_bar_stop__ { color: #F0908A; }
     .sb-pill-dropdown-btn {
       display: inline-flex; align-items: center; gap: 4px;
       border: none; background: rgba(255,251,247,0.55); border-radius: 8px;
@@ -6181,6 +6184,9 @@ function __sbBuildBrainUI() {
       <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Headphone mode">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
       </button>
+      <button id="__sb_bar_stop__" class="sb-bar-icon-btn" title="Stop the task" style="display:none;">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+      </button>
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
       </button>
@@ -6496,18 +6502,8 @@ function __sbBuildBrainUI() {
   document.getElementById("__sb_newtab_btn__").addEventListener("click", () => {
     chrome.runtime.sendMessage({ action: "openTab", url: window.location.href, active: true }, () => { void chrome.runtime.lastError; });
   });
-  document.getElementById("__sb_stop_btn__").addEventListener("click", () => {
-    if (__sbXRunning) {
-      __sbXRunning = false;
-    }
-    chrome.runtime.sendMessage({ action: "stopBrainAgent" }, () => { void chrome.runtime.lastError; });
-    __sbDelegateUiHidden = false;   // stopping a delegate → allow the UI to open again
-    __sbSetStopBtn(false);
-    __sbAgentPendingTurn = null;
-    __sbClearBarAgentStatus();   // kill the bar shimmer when the user stops
-    __sbStopWaitEntertainment();
-    __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
-  });
+  document.getElementById("__sb_stop_btn__").addEventListener("click", __sbStopDelegate);
+  document.getElementById("__sb_bar_stop__")?.addEventListener("click", __sbStopDelegate);
   bubble.querySelector("[data-sb-copy]").addEventListener("click", async (ev) => {
     const btn = ev.currentTarget;
     try {
@@ -7238,6 +7234,22 @@ function __sbInitCardDrag(wrap) {
 function __sbSetStopBtn(visible) {
   const btn = document.getElementById("__sb_stop_btn__");
   if (btn) btn.style.display = visible ? "inline-flex" : "none";
+  // Mirror the stop affordance into the input bar so a running task can be stopped without the card.
+  const barBtn = document.getElementById("__sb_bar_stop__");
+  if (barBtn) barBtn.style.display = visible ? "inline-flex" : "none";
+}
+
+// Stop a running Delegate/agent task. Shared by the card's stop button and the bar's stop button.
+function __sbStopDelegate() {
+  if (__sbXRunning) __sbXRunning = false;
+  try { chrome.runtime.sendMessage({ action: "stopBrainAgent" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+  __sbDelegateUiHidden = false;   // stopping a delegate → allow the UI to open again
+  __sbSetStopBtn(false);
+  __sbAgentPendingTurn = null;
+  __sbClearBarAgentStatus();
+  __sbAgentLogClear();            // collapse the in-bar activity log too
+  __sbStopWaitEntertainment();
+  __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
 }
 
 // ===== X / TWITTER AUTOMATION =====
@@ -12061,6 +12073,12 @@ function __sbLooksLikeCompare(text) {
   if (/\bresearch\b/.test(t) && !/\bresearch (paper|gate|er)\b/.test(t)) return true;
   if (/\b(find|recommend|suggest|look up|pull up|show me|get me|give me)\b.{0,34}\b(course|courses|certification|certifications?|certs?|tool|tools|book|books|tutorial|tutorials?|resource|resources?|option|options?|alternative|alternatives?|app|apps?|library|libraries|framework|frameworks?|service|services?|provider|providers?|platform|platforms?)\b/.test(t)) return true;
   if (/\b(which|what)\b.{0,42}\b(course|certification|cert|tool|book|option|framework|library|provider|platform|app|service)s?\b.{0,24}\b(should i|is best|are best|to (take|learn|use|pick|choose|get|do))\b/.test(t)) return true;
+  // General web look-ups (showtimes, tickets, prices, news, hours, weather, "near me") → the fast
+  // web-research path (one search call, reasoned answer + sources) instead of the slow browser agent.
+  // Requires an info verb AND an info topic, and is blocked by any ACTION verb (book/buy/open/play…).
+  if (!/\b(book|buy|order|reserve|purchase|pay|checkout|open|play|download|install|log ?in|sign ?in|fill|submit|post|tweet)\b/.test(t)
+      && /\b(find|look up|look for|search for|search|recommend|suggest|show me|tell me|get me|what'?s|whats|where can i|how much|when (is|does|are|do)|is there|are there)\b/.test(t)
+      && /\b(showtimes?|show times|tickets?|movies?|prices?|cheapest|deals?|discount|news|weather|forecast|hours|timings?|open (now|today)|reviews?|ratings?|restaurants?|cafes?|flights?|trains?|buses|hotels?|near me|nearby)\b/.test(t)) return true;
   return false;
 }
 
@@ -12364,7 +12382,8 @@ async function __sbProcessPrompt(text, options = {}) {
   }
 
   // Open-known-site shortcut — instant navigate instead of the ~10s agent loop (simple opens only).
-  const __openSite = __sbDetectOpenSite(promptText);
+  // Detect on the RAW text too (forced-Delegate mode can strip the "open" verb from promptText).
+  const __openSite = __sbDetectOpenSite(text) || __sbDetectOpenSite(promptText);
   if (__openSite) {
     __sbStopSpeech();
     __sbHandleOpenSite(__openSite, { fromVoice, voiceOutput });
@@ -12761,6 +12780,7 @@ function __sbRunAgent(task, options = {}) {
   __sbDelegateUiHidden = true;
   __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
   __sbAgentLogClear(); __sbAgentLogShow("Working…"); __sbAgentLogStep("Getting started…");  // strip shows instantly, all modes
+  __sbSetStopBtn(true);   // show the stop affordance (card + bar) the instant the task starts
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
   const handoff = __sbBuildAgentHandoffPayload(__sbLastAgentTask, options);
@@ -14878,8 +14898,9 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   });
 
   // Open-known-site shortcut — navigate instantly instead of the ~10s agent loop. Cancels any
-  // speculative answer first so it doesn't talk over the "Opening …" line.
-  const __openSite = __sbDetectOpenSite(promptText);
+  // speculative answer first so it doesn't talk over the "Opening …" line. Detect on the RAW
+  // transcript (routing/forced-Delegate mode can strip the "open" verb from promptText).
+  const __openSite = __sbDetectOpenSite(transcript) || __sbDetectOpenSite(promptText);
   if (__openSite) {
     __sbStopSpeech();
     __sbPatchRealtimeCostTurn({ routeIntent: "open_site" });
