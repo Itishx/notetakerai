@@ -17242,23 +17242,13 @@ function __sbCamEnsure() {
 }
 
 function __sbCamStop() {
-  try { __sbCamFrameEl?.contentWindow?.postMessage({ __sbCamCmd: "stop" }, "*"); } catch (_) {}
-  __sbCamReady = false; __sbCamFrameEl = null; __sbCamFramePending = null; __sbCamEnsureResolve = null;
-  const pip = document.getElementById("__sb_cam__");
-  if (pip) { pip.classList.remove("on"); setTimeout(() => { try { pip.remove(); } catch (_) {} }, 350); }
+  try { chrome.runtime.sendMessage({ action: "closeCamWindow" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+  __sbCamReady = false; __sbCamFrameEl = null;
 }
 
-// Ask the iframe for a frame; resolves to bare PNG base64 (or null).
-function __sbCamGrabFrame() {
-  return new Promise((resolve) => {
-    if (!__sbCamFrameEl || !__sbCamReady) { resolve(null); return; }
-    __sbCamFramePending = resolve;
-    try { __sbCamFrameEl.contentWindow.postMessage({ __sbCamCmd: "grab" }, "*"); }
-    catch (_) { __sbCamFramePending = null; resolve(null); return; }
-    setTimeout(() => { if (__sbCamFramePending === resolve) { __sbCamFramePending = null; resolve(null); } }, 2500);
-  });
-}
-
+// Camera vision now runs entirely through the background, which opens a top-level extension popup
+// window (cam.html) — a context NO page Permissions-Policy can block — grabs a frame over a Port,
+// and runs the vision call. We just trigger it and speak the result.
 async function __sbHandleVisionRequest(promptText, ctx = {}) {
   const fromVoice = Boolean(ctx.fromVoice);
   const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
@@ -17266,40 +17256,19 @@ async function __sbHandleVisionRequest(promptText, ctx = {}) {
   __sbCamBusy = true;
   const say = async (line) => { if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); else __sbShowBubble(line, false, { kicker: "Braino" }); };
   try {
-    let status = "timeout";
-    try { status = await __sbCamEnsure(); } catch (_) { status = "timeout"; }
-    if (status === "needpermission") {
-      await say("I've opened the camera in the corner — tap “Enable camera” there and choose Allow, then ask me again.");
-      return;
-    }
-    if (status === "denied") {
-      await say("Camera's blocked. Click the camera icon in your browser's address bar, choose Allow, then ask me again. Or open the site's permissions and turn the camera on.");
-      return;
-    }
-    if (status !== "ready") { await say("I couldn't get the camera going — give it another try."); return; }
-
-    // bridge the dead air while the sensor exposes + the model looks
-    const ack = "Let me take a look…";
+    const ack = "One sec, let me look…";
     try { __sbNoteSpoken?.(ack); } catch (_) {}
     if (fromVoice) void __sbSpeakWithPreferredVoice(ack, voiceOutput, { verbatim: true });
-    await new Promise((r) => setTimeout(r, 450));
-    const frame = await __sbCamGrabFrame();
-    if (!frame) {
-      const line = "The camera's on but I couldn't grab a clear frame — try again.";
-      if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
-      return;
-    }
     const visionPrompt = `You are Braino, looking at the user live through their webcam. They asked: "${String(promptText || "Can you see me?")}". Warmly and briefly describe what you actually see — the person and their surroundings — in one or two natural spoken sentences. Do not mention being an AI or that this is an image or a frame.`;
-    let reply = "";
-    try {
-      const res = await __sbRuntimeMessage({ action: "brainoVision", imageBase64: frame, prompt: visionPrompt });
-      reply = String(res?.reply || "").trim();
-    } catch (_) {}
-    const line = reply || "I can see you — but I couldn't quite put it into words. Try once more?";
+    let res = null;
+    try { res = await __sbRuntimeMessage({ action: "brainoCameraVision", prompt: visionPrompt }); } catch (_) {}
+    const status = res?.status;
+    if (status === "needpermission") { await say("I've opened a little camera window — tap “Enable camera” in it and choose Allow, then ask me again."); return; }
+    if (status === "denied") { await say("The camera's blocked. In that little camera window, allow the camera, then ask me again."); return; }
+    if (!res?.ok) { await say("I couldn't get the camera going — check the camera window I opened, then try again."); return; }
+    const line = String(res?.reply || "").trim() || "I can see you — but I couldn't quite put it into words. Try once more?";
     if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
     else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });
-  } catch (_) {
-    if (fromVoice) { try { await __sbSpeakWithPreferredVoice("Something went wrong looking through the camera.", voiceOutput, { verbatim: true }); } catch (_) {} }
   } finally {
     __sbCamBusy = false;
     __sbCompleteVoiceTurn(ctx);

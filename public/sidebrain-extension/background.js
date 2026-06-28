@@ -1255,6 +1255,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+  if (message.action === "brainoCameraVision") {
+    (async () => {
+      const gate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
+      if (!gate.allowed) { bgNotifyQuota(sender?.tab?.id || null, "chat", gate); sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true }); return; }
+      const status = await bgEnsureCamWindow();
+      if (status !== "ready") { sendResponse({ ok: false, status }); return; }
+      const frame = await bgGrabCamFrame();
+      if (!frame) { sendResponse({ ok: false, status: "noframe" }); return; }
+      const res = await bgChatFetch({
+        notes: "",
+        chatHistory: Array.isArray(message.chatHistory) ? message.chatHistory : [],
+        message: message.prompt || "Describe what you can see.",
+        imageBase64: frame,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { sendResponse({ ok: false, status: "ready", error: `vision ${res.status}` }); return; }
+      sendResponse({ ok: true, status: "ready", reply: String(data?.reply || data?.response || "").trim() });
+    })().catch((e) => sendResponse({ ok: false, error: e?.message || "Camera vision failed." }));
+    return true;
+  }
+  if (message.action === "closeCamWindow") {
+    try { if (bgCamWindowId != null) chrome.windows.remove(bgCamWindowId, () => { void chrome.runtime.lastError; }); } catch (_) {}
+    bgCamPort = null; bgCamStatus = "idle"; bgCamWindowId = null;
+    sendResponse({ ok: true });
+    return true;
+  }
   if (message.action === "brainoVision") {
     (async () => {
       // Vision counts toward the daily chat cap (unlimited on Pro/creator/admin).
@@ -1933,6 +1959,54 @@ async function bgChatFetch(body) {
 
 function bgHostOf(url) {
   try { return new URL(url || "").hostname.replace(/^www\./, ""); } catch { return ""; }
+}
+
+// ── Camera vision: the camera lives in a top-level extension popup window (cam.html), NOT an in-page
+// iframe — that's the only context the page's Permissions-Policy can't block. It connects back over a
+// Port; we open it on demand, ask for one frame, and run the vision call. ──────────────────────────
+let bgCamPort = null;
+let bgCamStatus = "idle";      // idle | ready | needpermission | denied
+let bgCamWindowId = null;
+let bgCamFrameResolve = null;
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "camWindow") return;
+  bgCamPort = port;
+  port.onMessage.addListener((m) => {
+    if (m?.type === "ready") bgCamStatus = "ready";
+    else if (m?.type === "needpermission") bgCamStatus = "needpermission";
+    else if (m?.type === "denied") bgCamStatus = "denied";
+    else if (m?.type === "frame") { const r = bgCamFrameResolve; bgCamFrameResolve = null; if (r) r(m.data || ""); }
+  });
+  port.onDisconnect.addListener(() => {
+    if (bgCamPort === port) { bgCamPort = null; bgCamStatus = "idle"; bgCamWindowId = null; }
+  });
+});
+
+function bgEnsureCamWindow() {
+  return new Promise((resolve) => {
+    if (bgCamPort && bgCamStatus !== "idle") { resolve(bgCamStatus); return; }
+    bgCamStatus = "idle";
+    chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", width: 300, height: 250, focused: true }, (win) => {
+      if (chrome.runtime.lastError || !win) { resolve("idle"); return; }
+      bgCamWindowId = win.id || null;
+      let waited = 0;
+      const iv = setInterval(() => {
+        waited += 150;
+        if (bgCamStatus !== "idle") { clearInterval(iv); resolve(bgCamStatus); }
+        else if (waited > 15000) { clearInterval(iv); resolve(bgCamStatus); }
+      }, 150);
+    });
+  });
+}
+
+function bgGrabCamFrame() {
+  return new Promise((resolve) => {
+    if (!bgCamPort) { resolve(""); return; }
+    bgCamFrameResolve = resolve;
+    try { bgCamPort.postMessage({ type: "grab" }); } catch (_) { bgCamFrameResolve = null; resolve(""); return; }
+    setTimeout(() => { if (bgCamFrameResolve === resolve) { bgCamFrameResolve = null; resolve(""); } }, 3000);
+  });
 }
 
 // Ask the LLM which of the (already safety-filtered) candidate tabs to close.
