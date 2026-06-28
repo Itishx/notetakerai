@@ -14970,6 +14970,12 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
+  if (__sbIsScreenVisionRequest(promptText)) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "vision" });
+    await __sbHandleScreenVisionRequest(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
   if (__sbIsVisionRequest(promptText)) {
     __sbStopSpeech();
     __sbPatchRealtimeCostTurn({ routeIntent: "vision" });
@@ -17159,9 +17165,15 @@ function __sbIsVisionStopRequest(text) {
   return /\b(turn off|stop|close|kill|shut off)\b.{0,14}\b(camera|cam|looking|watching|vision|seeing)\b/.test(t)
       || /\bstop looking\b/.test(t) || /\bclose the camera\b/.test(t);
 }
+function __sbIsScreenVisionRequest(text) {
+  const t = String(text || "").toLowerCase();
+  return /\b(see (my|the|this) screen|what'?s on (my|the|this) screen|look at (my |the |this )?screen|read (my |the )?screen|see this page|look at this page|see (this|the) page|what'?s on (this |the |my )?page|what am i looking at|describe (my |the |this )?(screen|page)|what do you see on (my |the )?screen)\b/.test(t)
+      || /\blook at this\b/.test(t);
+}
 function __sbIsVisionRequest(text) {
   const t = String(text || "").toLowerCase();
   if (__sbIsVisionStopRequest(t)) return false;
+  if (/\b(screen|this page|the page|my page|this site|this website)\b/.test(t)) return false;   // that's screen vision
   return /\b(can you see me|do you see me|are you seeing me|look at me|what do you see|see me|can you see this|use (your |the )?camera|turn on (your |the )?camera|open (your |the )?camera|see my (face|room|desk|setup|surroundings)|how do i look|what am i (wearing|holding|doing))\b/.test(t);
 }
 
@@ -17223,7 +17235,7 @@ function __sbCamGrabFrame() {
   const canvas = document.createElement("canvas");
   canvas.width = w; canvas.height = h;
   try { canvas.getContext("2d").drawImage(__sbCamVideo, 0, 0, w, h); } catch (_) { return null; }
-  const url = canvas.toDataURL("image/jpeg", 0.75);
+  const url = canvas.toDataURL("image/png");   // backend declares image/png — match it or vision rejects
   return url.split(",")[1] || null;   // bare base64, no data: prefix
 }
 
@@ -17263,6 +17275,50 @@ async function __sbHandleVisionRequest(promptText, ctx = {}) {
     else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });
   } catch (_) {
     if (fromVoice) { try { await __sbSpeakWithPreferredVoice("Something went wrong looking through the camera.", voiceOutput, { verbatim: true }); } catch (_) {} }
+  } finally {
+    __sbCamBusy = false;
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+// "See my screen" — capture the visible tab (chrome.tabs.captureVisibleTab in the background; no
+// camera, no getDisplayMedia gesture). Braino's own UI is hidden for the shot so it sees the page.
+async function __sbScreenGrabBase64() {
+  const hide = ["__sb_jarvis__", "__sb_cam__", "__sb_root__", "__sb_bar__", "__sb_walk_lane__", "__sb_point_fx__"];
+  const restore = [];
+  for (const id of hide) {
+    const el = document.getElementById(id);
+    if (el && el.style.visibility !== "hidden") { restore.push([el, el.style.visibility]); el.style.visibility = "hidden"; }
+  }
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // let the hide paint
+  let dataUrl = "";
+  try { const res = await __sbRuntimeMessage({ action: "captureVisibleTabImage" }); if (res?.ok) dataUrl = String(res.dataUrl || ""); } catch (_) {}
+  for (const [el, v] of restore) { try { el.style.visibility = v; } catch (_) {} }
+  return dataUrl ? (dataUrl.split(",")[1] || "") : "";
+}
+
+async function __sbHandleScreenVisionRequest(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  if (__sbCamBusy) { __sbCompleteVoiceTurn(ctx); return; }
+  __sbCamBusy = true;
+  try {
+    const ack = "Let me look at your screen…";
+    try { __sbNoteSpoken?.(ack); } catch (_) {}
+    if (fromVoice) void __sbSpeakWithPreferredVoice(ack, voiceOutput, { verbatim: true });
+    const frame = await __sbScreenGrabBase64();
+    if (!frame) {
+      const line = "I couldn't capture this screen — some pages (Chrome settings, the web store) block it. Try on a normal site.";
+      if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
+      else __sbShowBubble(line, false, { kicker: "Braino" });
+      return;
+    }
+    const visionPrompt = `You are Braino, looking at a screenshot of the web page the user is viewing. They asked: "${String(promptText || "What's on my screen?")}". Briefly and helpfully describe what's on screen or answer their question about it, in one or two natural spoken sentences. Do not mention being an AI or that this is a screenshot.`;
+    let reply = "";
+    try { const res = await __sbRuntimeMessage({ action: "brainoVision", imageBase64: frame, prompt: visionPrompt }); reply = String(res?.reply || "").trim(); } catch (_) {}
+    const line = reply || "I grabbed your screen but couldn't read it clearly — try again.";
+    if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
+    else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });
   } finally {
     __sbCamBusy = false;
     __sbCompleteVoiceTurn(ctx);

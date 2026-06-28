@@ -1237,6 +1237,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().catch((e) => sendResponse({ error: e.message || "Web search failed." }));
     return true;
   }
+  if (message.action === "captureVisibleTabImage") {
+    (async () => {
+      try {
+        const winId = sender?.tab?.windowId;
+        const opts = { format: "png" };   // png to match the vision backend's declared mime
+        const dataUrl = await new Promise((resolve, reject) => {
+          const cb = (url) => {
+            if (chrome.runtime.lastError || !url) reject(new Error(chrome.runtime.lastError?.message || "capture failed"));
+            else resolve(url);
+          };
+          if (typeof winId === "number") chrome.tabs.captureVisibleTab(winId, opts, cb);
+          else chrome.tabs.captureVisibleTab(opts, cb);
+        });
+        sendResponse({ ok: true, dataUrl });
+      } catch (e) { sendResponse({ ok: false, error: e?.message || "capture failed" }); }
+    })();
+    return true;
+  }
   if (message.action === "brainoVision") {
     (async () => {
       // Vision counts toward the daily chat cap (unlimited on Pro/creator/admin).
