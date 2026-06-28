@@ -17156,9 +17156,12 @@ try {
    small live PiP, grabs a frame, sends it to the (GPT) vision backend, and
    speaks what it sees. Frame-sampling on demand — vision models take stills,
    not video. ================================================================= */
-let __sbCamStream = null;
-let __sbCamVideo = null;
+let __sbCamFrameEl = null;       // the extension-origin <iframe> that owns the camera + is the PiP
+let __sbCamReady = false;
 let __sbCamBusy = false;
+let __sbCamMsgHandler = null;
+let __sbCamFramePending = null;  // resolver for an in-flight frame grab
+let __sbCamEnsureResolve = null; // resolver for an in-flight ensure
 
 function __sbIsVisionStopRequest(text) {
   const t = String(text || "").toLowerCase();
@@ -17186,7 +17189,7 @@ function __sbVisionInjectStyle() {
     opacity:0;transform:translateY(10px) scale(.96);
     transition:opacity .35s ease,transform .35s cubic-bezier(.2,.7,.2,1);}
   #__sb_cam__.on{opacity:1;transform:none;}
-  #__sb_cam__ video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);}
+  #__sb_cam__ iframe{width:100%;height:100%;border:0;display:block;background:#0b0807;}
   #__sb_cam__ .sb-cam-dot{position:absolute;top:9px;left:10px;width:9px;height:9px;border-radius:50%;
     background:#ff4d4d;box-shadow:0 0 0 0 rgba(255,77,77,.6);animation:sbCamDot 1.6s ease-out infinite;}
   @keyframes sbCamDot{0%{box-shadow:0 0 0 0 rgba(255,77,77,.55);}70%{box-shadow:0 0 0 8px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
@@ -17198,45 +17201,62 @@ function __sbVisionInjectStyle() {
   document.head.appendChild(style);
 }
 
-async function __sbCamEnsure() {
-  if (__sbCamStream && __sbCamVideo) return true;
-  if (!navigator.mediaDevices?.getUserMedia) return false;
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false,
+// Open (or reuse) the extension-origin camera iframe. Resolves with a status string:
+// "ready" | "needpermission" | "denied" | "timeout". The iframe holds the EXTENSION's camera grant
+// (persistent, cross-page, not gated by the page's per-origin permission) and IS the live PiP.
+function __sbCamEnsure() {
+  return new Promise((resolve) => {
+    if (__sbCamReady && document.getElementById("__sb_cam__")) { resolve("ready"); return; }
+    __sbVisionInjectStyle();
+    let pip = document.getElementById("__sb_cam__");
+    if (!pip) {
+      pip = document.createElement("div");
+      pip.id = "__sb_cam__";
+      const iframe = document.createElement("iframe");
+      iframe.allow = "camera";                                  // delegate camera to the extension iframe
+      iframe.src = chrome.runtime.getURL("cam.html");
+      pip.appendChild(iframe);
+      const dot = document.createElement("div"); dot.className = "sb-cam-dot"; pip.appendChild(dot);
+      const x = document.createElement("button"); x.className = "sb-cam-x"; x.type = "button";
+      x.textContent = "✕"; x.setAttribute("aria-label", "Stop camera");
+      x.addEventListener("click", () => __sbCamStop());
+      pip.appendChild(x);
+      document.documentElement.appendChild(pip);
+      __sbCamFrameEl = iframe;
+    }
+    requestAnimationFrame(() => pip.classList.add("on"));
+
+    if (!__sbCamMsgHandler) {
+      __sbCamMsgHandler = (e) => {
+        const d = e?.data; if (!d || d.__sbCam !== true) return;
+        if (d.type === "ready") { __sbCamReady = true; const r = __sbCamEnsureResolve; __sbCamEnsureResolve = null; if (r) r("ready"); }
+        else if (d.type === "needpermission") { const r = __sbCamEnsureResolve; __sbCamEnsureResolve = null; if (r) r("needpermission"); }
+        else if (d.type === "denied") { const r = __sbCamEnsureResolve; __sbCamEnsureResolve = null; if (r) r("denied"); }
+        else if (d.type === "frame") { const r = __sbCamFramePending; __sbCamFramePending = null; if (r) r(d.data || ""); }
+      };
+      window.addEventListener("message", __sbCamMsgHandler);
+    }
+    __sbCamEnsureResolve = resolve;
+    setTimeout(() => { if (__sbCamEnsureResolve === resolve) { __sbCamEnsureResolve = null; resolve(__sbCamReady ? "ready" : "timeout"); } }, 12000);
   });
-  __sbCamStream = stream;
-  __sbVisionInjectStyle();
-  let pip = document.getElementById("__sb_cam__");
-  if (!pip) {
-    pip = document.createElement("div");
-    pip.id = "__sb_cam__";
-    pip.innerHTML = `<video autoplay playsinline muted></video><div class="sb-cam-dot"></div><button class="sb-cam-x" type="button" aria-label="Stop camera">✕</button>`;
-    document.documentElement.appendChild(pip);
-    pip.querySelector(".sb-cam-x").addEventListener("click", () => __sbCamStop());
-  }
-  __sbCamVideo = pip.querySelector("video");
-  __sbCamVideo.srcObject = stream;
-  try { await __sbCamVideo.play(); } catch (_) {}
-  requestAnimationFrame(() => pip.classList.add("on"));
-  return true;
 }
 
 function __sbCamStop() {
-  try { __sbCamStream?.getTracks().forEach((t) => t.stop()); } catch (_) {}
-  __sbCamStream = null; __sbCamVideo = null;
+  try { __sbCamFrameEl?.contentWindow?.postMessage({ __sbCamCmd: "stop" }, "*"); } catch (_) {}
+  __sbCamReady = false; __sbCamFrameEl = null; __sbCamFramePending = null; __sbCamEnsureResolve = null;
   const pip = document.getElementById("__sb_cam__");
   if (pip) { pip.classList.remove("on"); setTimeout(() => { try { pip.remove(); } catch (_) {} }, 350); }
 }
 
+// Ask the iframe for a frame; resolves to bare PNG base64 (or null).
 function __sbCamGrabFrame() {
-  if (!__sbCamVideo || !__sbCamVideo.videoWidth) return null;
-  const w = Math.min(1024, __sbCamVideo.videoWidth);
-  const h = Math.round(w * (__sbCamVideo.videoHeight / __sbCamVideo.videoWidth));
-  const canvas = document.createElement("canvas");
-  canvas.width = w; canvas.height = h;
-  try { canvas.getContext("2d").drawImage(__sbCamVideo, 0, 0, w, h); } catch (_) { return null; }
-  const url = canvas.toDataURL("image/png");   // backend declares image/png — match it or vision rejects
-  return url.split(",")[1] || null;   // bare base64, no data: prefix
+  return new Promise((resolve) => {
+    if (!__sbCamFrameEl || !__sbCamReady) { resolve(null); return; }
+    __sbCamFramePending = resolve;
+    try { __sbCamFrameEl.contentWindow.postMessage({ __sbCamCmd: "grab" }, "*"); }
+    catch (_) { __sbCamFramePending = null; resolve(null); return; }
+    setTimeout(() => { if (__sbCamFramePending === resolve) { __sbCamFramePending = null; resolve(null); } }, 2500);
+  });
 }
 
 async function __sbHandleVisionRequest(promptText, ctx = {}) {
@@ -17244,21 +17264,26 @@ async function __sbHandleVisionRequest(promptText, ctx = {}) {
   const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
   if (__sbCamBusy) { __sbCompleteVoiceTurn(ctx); return; }
   __sbCamBusy = true;
+  const say = async (line) => { if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); else __sbShowBubble(line, false, { kicker: "Braino" }); };
   try {
-    let ok = false;
-    try { ok = await __sbCamEnsure(); } catch (_) { ok = false; }
-    if (!ok) {
-      const line = "I couldn't get to your camera — check the camera permission for this page.";
-      if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
-      else __sbShowBubble(line, false, { kicker: "Braino" });
+    let status = "timeout";
+    try { status = await __sbCamEnsure(); } catch (_) { status = "timeout"; }
+    if (status === "needpermission") {
+      await say("I've opened the camera in the corner — tap “Enable camera” there and choose Allow, then ask me again.");
       return;
     }
+    if (status === "denied") {
+      await say("Camera's blocked. Click the camera icon in your browser's address bar, choose Allow, then ask me again. Or open the site's permissions and turn the camera on.");
+      return;
+    }
+    if (status !== "ready") { await say("I couldn't get the camera going — give it another try."); return; }
+
     // bridge the dead air while the sensor exposes + the model looks
     const ack = "Let me take a look…";
     try { __sbNoteSpoken?.(ack); } catch (_) {}
     if (fromVoice) void __sbSpeakWithPreferredVoice(ack, voiceOutput, { verbatim: true });
-    await new Promise((r) => setTimeout(r, 700));
-    const frame = __sbCamGrabFrame();
+    await new Promise((r) => setTimeout(r, 450));
+    const frame = await __sbCamGrabFrame();
     if (!frame) {
       const line = "The camera's on but I couldn't grab a clear frame — try again.";
       if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });

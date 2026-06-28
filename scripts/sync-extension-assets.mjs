@@ -12,6 +12,8 @@ const EXTENSION_FILES = [
   "background.js",
   "braino-popup.html",
   "braino-popup.js",
+  "cam.html",
+  "cam.js",
   "content.js",
   "icon128.png",
   "icon48.png",
