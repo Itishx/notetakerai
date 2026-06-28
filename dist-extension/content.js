@@ -16187,6 +16187,7 @@ let __sbJarvisLevel = 0;
 let __sbJarvisConsoleHideTimer = null;
 let __sbJarvisKeyHandler = null;
 let __sbJarvisPrevSpeculative = null;   // remembers the fast-voice toggle so we can restore on exit
+let __sbJarvisFlewMascot = false;       // true while the real walking mascot is flown to centre
 
 // Self-contained full-body walking mascot for the entrance flight: remap the body fills to the
 // walker's OWN inline gradients (no dependency on a document-level #sbb-fill → never the "white
@@ -16221,23 +16222,85 @@ function __sbJarvisCloseWalkerEyes(brain) {
   });
 }
 
-// Braino greets the moment Jarvis opens — spoken in his real (Fish) voice, fired in parallel with
-// the fly-in so he's already talking before the soul forms. Short lines = fast first audio.
+// Braino greets the moment Jarvis opens — spoken in his real (Fish) voice. Returns a promise that
+// resolves when he's DONE speaking, so we can go live to listen only AFTER the greeting (entering
+// voice earlier let the realtime boot abort the greeting mid-sentence). Short lines = fast audio.
 function __sbJarvisGreet() {
+  return __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
+    const name = authDisplayName?.split(" ")[0]?.trim() || "";
+    const n = name ? `, ${name}` : "";
+    const lines = [
+      `${__sbTimeGreeting()}${n}. What would you like to get done?`,
+      `Hey${n} — I'm right here. What are we working on?`,
+      `${__sbTimeGreeting()}${n}. What can I take off your plate?`,
+      `I'm listening${n}. What do you want to do?`,
+    ];
+    const line = lines[(Math.random() * lines.length) | 0];
+    return __sbSpeakText(line);
+  }).catch(() => {});
+}
+
+// ── Fly the REAL walking mascot (the live #__sbwk_walker__ rig — the same one that walks the bar,
+//    moonwalks and jumps) up to screen centre, glow gold, shut its eyes, then dissolve into the
+//    soul. Owns the rig like the jump does (throw-mode + cancels the idle tick so nothing fights). ──
+function __sbWkShutRealEyes(walker, sy) {
+  [["#__sbwk_eye_l__", 38, 48], ["#__sbwk_eye_r__", 62, 48]].forEach(([id, cx, cy]) => {
+    const g = walker.querySelector(id);
+    if (g) g.setAttribute("transform", `translate(${cx},${cy}) scale(1,${sy}) translate(${-cx},${-cy})`);
+  });
+}
+function __sbWkFlyToCenter() {
   try {
-    __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
-      const name = authDisplayName?.split(" ")[0]?.trim() || "";
-      const n = name ? `, ${name}` : "";
-      const lines = [
-        `${__sbTimeGreeting()}${n}. What would you like to get done?`,
-        `Hey${n} — I'm right here. What are we working on?`,
-        `${__sbTimeGreeting()}${n}. What can I take off your plate?`,
-        `I'm listening${n}. What do you want to do?`,
-      ];
-      const line = lines[(Math.random() * lines.length) | 0];
-      try { void __sbSpeakText(line); } catch (_) {}
-    }).catch(() => {});
+    const lane = __sbEnsureWalker();
+    lane.style.display = "block";
+    lane.style.zIndex = "2147483647";     // bright mascot rides ABOVE the forming overlay
+    const walker = document.getElementById("__sbwk_walker__");
+    if (!walker) return;
+    __sbJarvisFlewMascot = true;
+    // own the rig: stop the idle tick + auto so they can't overwrite our transform/eyes
+    __sbWkThrowMode = true; __sbWkJumping = true; __sbWkBusy = true;
+    __sbWkWalking = false; __sbWkWaving = false;
+    if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+    clearTimeout(__sbWkAutoTimer);
+
+    const r0 = walker.getBoundingClientRect();
+    const bx = r0.left + r0.width / 2, by = r0.top + r0.height / 2;
+    const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+    const posX = (typeof __sbWkPosX === "number" ? __sbWkPosX : 24);
+    const S = 3;
+    walker.style.transformOrigin = "center center";
+    walker.style.transition = "transform .85s cubic-bezier(.2,.7,.2,1), filter .6s ease, opacity .45s ease";
+    walker.style.transform = `translate(${cx - bx + posX}px, ${cy - by}px) scale(${S})`;
+    walker.style.filter = "drop-shadow(0 0 26px rgba(255,200,90,.95)) drop-shadow(0 0 60px rgba(255,176,69,.55))";
+    walker.style.opacity = "1";
+    __sbJarvisAfter(720, () => __sbWkShutRealEyes(walker, 0.08));   // close his eyes near the top
   } catch (_) {}
+}
+function __sbWkFadeOutForJarvis() {
+  const walker = document.getElementById("__sbwk_walker__");
+  if (walker) walker.style.opacity = "0";   // dissolve as the soul rises
+}
+function __sbWkReturnFromCenter() {
+  if (!__sbJarvisFlewMascot) return;
+  __sbJarvisFlewMascot = false;
+  const walker = document.getElementById("__sbwk_walker__");
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (!walker) return;
+  const posX = (typeof __sbWkPosX === "number" ? __sbWkPosX : 24);
+  __sbWkShutRealEyes(walker, 1);            // open his eyes
+  walker.style.opacity = "1";
+  walker.style.transition = "transform .6s cubic-bezier(.2,.7,.2,1), filter .5s ease, opacity .35s ease";
+  walker.style.transform = `translate(${posX}px, 0px) scale(1)`;
+  walker.style.filter = "";
+  setTimeout(() => {
+    walker.style.transition = ""; walker.style.transform = ""; walker.style.transformOrigin = ""; walker.style.opacity = "";
+    walker.querySelector("#__sbwk_eye_l__")?.removeAttribute("transform");
+    walker.querySelector("#__sbwk_eye_r__")?.removeAttribute("transform");
+    if (lane) lane.style.zIndex = "";
+    __sbWkThrowMode = false; __sbWkJumping = false; __sbWkBusy = false;
+    __sbThrowTX = posX; __sbThrowTY = 0; __sbThrowRot = 0;
+    try { __sbStartWalkLoop(); } catch (_) {}
+  }, 620);
 }
 
 function __sbJarvisSpeaking() {
@@ -16251,8 +16314,11 @@ function __sbToggleJarvisMode() { if (__sbJarvisOpen) __sbCloseJarvis(); else __
 function __sbJarvisInjectStyle() {
   if (document.getElementById("__sb_jarvis_style__")) return;
   const css = `
-  #__sb_jarvis__{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;
+  #__sb_jarvis__{position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;
     font-family:ui-monospace,'SF Mono',Menlo,monospace;pointer-events:none;}
+  /* while Jarvis is up, the normal floating bar + chat card are suppressed — only Jarvis */
+  html.sb-jarvis-active #__sb_card_wrap__,
+  html.sb-jarvis-active #__sb_bar__{opacity:0 !important;pointer-events:none !important;}
   #__sb_jarvis__[data-on="1"]{pointer-events:auto;}
   #__sb_jarvis__[data-stage="off"]{opacity:0;pointer-events:none;transition:opacity .4s ease;}
 
@@ -16463,44 +16529,40 @@ function __sbOpenJarvis() {
   __sbJarvisClearTimers();
   const root = __sbBuildJarvisOverlay();
 
-  // Braino: coral, eyes open, about to fly in
-  const brain = root.querySelector(".jv-braino");
-  brain.innerHTML = __SB_JARVIS_WALKER_SVG;   // the real full-limbed walking mascot
-  __sbJarvisSetFlightOrigin(root);            // fly in from where the mascot actually sits
-  root.setAttribute("data-on", "0");
-  void root.offsetWidth;                 // reflow so the stage transitions animate cleanly
-  root.setAttribute("data-stage", "enter");
-
-  // hands-off: bring voice live. Remember whether WE turned it on.
-  try {
-    if (!__sbHeadphoneMode) { __sbJarvisStartedVoice = true; __sbEnterHeadphoneMode(); }
-    else { __sbJarvisStartedVoice = false; }
-  } catch (_) {}
+  document.documentElement.classList.add("sb-jarvis-active");   // hide the normal bar/card — only Jarvis
 
   // Jarvis defaults to the fast voice path ("Faster replies · beta") → sub-2s answers.
-  // Remember the prior toggle so we restore the user's preference on exit.
   __sbJarvisPrevSpeculative = __sbSpeculativeReply;
   __sbSpeculativeReply = true;
   if (typeof __sbSyncSpeculativeToggle === "function") __sbSyncSpeculativeToggle();
 
-  // Greet right away — fires in parallel with the fly-in, so Braino is already talking
-  // before the soul finishes forming.
-  __sbJarvisGreet();
+  // Greet FIRST (Fish voice), THEN go live to listen — entering voice earlier let the realtime
+  // boot abort the greeting mid-sentence. Fallback timer so we never wait forever on TTS.
+  let __jvLived = false;
+  const __jvGoLive = () => {
+    if (__jvLived || !__sbJarvisOpen) return; __jvLived = true;
+    try { if (!__sbHeadphoneMode) { __sbJarvisStartedVoice = true; __sbEnterHeadphoneMode(); } } catch (_) {}
+  };
+  __sbJarvisGreet().finally(__jvGoLive);
+  __sbJarvisAfter(6000, __jvGoLive);
 
-  __sbJarvisStartSoul(root);              // orb renders behind the brain, hidden until "form"
+  // overlay stays hidden while the REAL walking mascot flies bar → centre, glows, shuts eyes
+  root.setAttribute("data-on", "0");
+  root.setAttribute("data-stage", "off");
+  __sbWkFlyToCenter();
+  __sbJarvisStartSoul(root);
 
-  // choreography: mascot flies to centre → eyes shut + gold glow + pulse → panel/soul → live
-  __sbJarvisAfter(900, () => {
-    root.setAttribute("data-stage", "charge");
-    __sbJarvisCloseWalkerEyes(brain);             // he closes his eyes
+  // mascot has arrived + glowed → the model takes over (crossfade mascot → soul)
+  __sbJarvisAfter(1300, () => {
+    root.setAttribute("data-stage", "form");
+    __sbWkFadeOutForJarvis();
   });
-  __sbJarvisAfter(1750, () => { root.setAttribute("data-stage", "form"); });
-  __sbJarvisAfter(2650, () => {
+  __sbJarvisAfter(2150, () => {
     root.setAttribute("data-stage", "active");
     root.setAttribute("data-on", "1");
     __sbJarvisRenderMute(root);
     __sbJarvisStartLevelLoop(root);
-    if (__sbAgentBusy) { __sbJarvisLogShow(__sbAgentBusyLabel); }   // a task already running? show it
+    if (__sbAgentBusy) __sbJarvisLogShow(__sbAgentBusyLabel);
   });
 
   __sbJarvisKeyHandler = (e) => {
@@ -16517,15 +16579,16 @@ function __sbCloseJarvis() {
   const root = document.getElementById("__sb_jarvis__");
   if (root) {
     root.setAttribute("data-on", "0");
-    const brain = root.querySelector(".jv-braino");
-    if (brain) brain.innerHTML = __SB_JARVIS_WALKER_SVG;   // bring the mascot back for the collapse
     root.setAttribute("data-stage", "collapse");
-    __sbJarvisAfter(720, () => {
+    __sbJarvisAfter(620, () => {
       root.setAttribute("data-stage", "off");
       __sbJarvisStopSoulFn();
     });
   }
   __sbJarvisHideConsole(true);
+  __sbWkReturnFromCenter();                 // the real mascot flies back down to the bar
+  try { __sbCollapseCard(); } catch (_) {}  // close the chat card so it doesn't linger after Jarvis
+  document.documentElement.classList.remove("sb-jarvis-active");
 
   // turn voice back off only if Jarvis is what switched it on
   try { if (__sbJarvisStartedVoice && __sbHeadphoneMode) __sbExitHeadphoneMode(); } catch (_) {}
