@@ -14960,6 +14960,23 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
+  // Camera vision — "can you see me", "look at me", "what do you see". Turn the webcam on, grab a
+  // frame, and let the vision model describe it. Before delegate classification so it isn't grabbed.
+  if (__sbIsVisionStopRequest(promptText)) {
+    __sbCamStop();
+    const line = "Camera off.";
+    __sbNoteSpoken(line);
+    await __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbIsVisionRequest(promptText)) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "vision" });
+    await __sbHandleVisionRequest(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
   // X (Twitter) status — answer from the backend and speak it, BEFORE any delegate
   // classification (which would otherwise open X in a tab).
   if (__sbIsXLastTweetRequest(promptText)) {
@@ -17127,6 +17144,130 @@ try {
     if (__sbWakeEnabled) __sbWakeScheduleRearm();
   }).catch(() => {});
 } catch (_) {}
+
+/* ============================================================================
+   CAMERA VISION — "Hey Braino, can you see me?" Turns the webcam on, shows a
+   small live PiP, grabs a frame, sends it to the (GPT) vision backend, and
+   speaks what it sees. Frame-sampling on demand — vision models take stills,
+   not video. ================================================================= */
+let __sbCamStream = null;
+let __sbCamVideo = null;
+let __sbCamBusy = false;
+
+function __sbIsVisionStopRequest(text) {
+  const t = String(text || "").toLowerCase();
+  return /\b(turn off|stop|close|kill|shut off)\b.{0,14}\b(camera|cam|looking|watching|vision|seeing)\b/.test(t)
+      || /\bstop looking\b/.test(t) || /\bclose the camera\b/.test(t);
+}
+function __sbIsVisionRequest(text) {
+  const t = String(text || "").toLowerCase();
+  if (__sbIsVisionStopRequest(t)) return false;
+  return /\b(can you see me|do you see me|are you seeing me|look at me|what do you see|see me|can you see this|use (your |the )?camera|turn on (your |the )?camera|open (your |the )?camera|see my (face|room|desk|setup|surroundings)|how do i look|what am i (wearing|holding|doing))\b/.test(t);
+}
+
+function __sbVisionInjectStyle() {
+  if (document.getElementById("__sb_cam_style__")) return;
+  const css = `
+  #__sb_cam__{position:fixed;right:22px;bottom:96px;width:200px;height:150px;z-index:2147483647;
+    border-radius:16px;overflow:hidden;background:#0b0807;
+    box-shadow:0 18px 50px -18px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.08);
+    opacity:0;transform:translateY(10px) scale(.96);
+    transition:opacity .35s ease,transform .35s cubic-bezier(.2,.7,.2,1);}
+  #__sb_cam__.on{opacity:1;transform:none;}
+  #__sb_cam__ video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);}
+  #__sb_cam__ .sb-cam-dot{position:absolute;top:9px;left:10px;width:9px;height:9px;border-radius:50%;
+    background:#ff4d4d;box-shadow:0 0 0 0 rgba(255,77,77,.6);animation:sbCamDot 1.6s ease-out infinite;}
+  @keyframes sbCamDot{0%{box-shadow:0 0 0 0 rgba(255,77,77,.55);}70%{box-shadow:0 0 0 8px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
+  #__sb_cam__ .sb-cam-x{position:absolute;top:7px;right:8px;width:22px;height:22px;border-radius:50%;
+    border:0;cursor:pointer;background:rgba(0,0,0,.45);color:#fff;font-size:12px;line-height:22px;padding:0;}
+  #__sb_cam__ .sb-cam-x:hover{background:rgba(0,0,0,.7);}`;
+  const style = document.createElement("style");
+  style.id = "__sb_cam_style__"; style.textContent = css;
+  document.head.appendChild(style);
+}
+
+async function __sbCamEnsure() {
+  if (__sbCamStream && __sbCamVideo) return true;
+  if (!navigator.mediaDevices?.getUserMedia) return false;
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false,
+  });
+  __sbCamStream = stream;
+  __sbVisionInjectStyle();
+  let pip = document.getElementById("__sb_cam__");
+  if (!pip) {
+    pip = document.createElement("div");
+    pip.id = "__sb_cam__";
+    pip.innerHTML = `<video autoplay playsinline muted></video><div class="sb-cam-dot"></div><button class="sb-cam-x" type="button" aria-label="Stop camera">✕</button>`;
+    document.documentElement.appendChild(pip);
+    pip.querySelector(".sb-cam-x").addEventListener("click", () => __sbCamStop());
+  }
+  __sbCamVideo = pip.querySelector("video");
+  __sbCamVideo.srcObject = stream;
+  try { await __sbCamVideo.play(); } catch (_) {}
+  requestAnimationFrame(() => pip.classList.add("on"));
+  return true;
+}
+
+function __sbCamStop() {
+  try { __sbCamStream?.getTracks().forEach((t) => t.stop()); } catch (_) {}
+  __sbCamStream = null; __sbCamVideo = null;
+  const pip = document.getElementById("__sb_cam__");
+  if (pip) { pip.classList.remove("on"); setTimeout(() => { try { pip.remove(); } catch (_) {} }, 350); }
+}
+
+function __sbCamGrabFrame() {
+  if (!__sbCamVideo || !__sbCamVideo.videoWidth) return null;
+  const w = Math.min(1024, __sbCamVideo.videoWidth);
+  const h = Math.round(w * (__sbCamVideo.videoHeight / __sbCamVideo.videoWidth));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  try { canvas.getContext("2d").drawImage(__sbCamVideo, 0, 0, w, h); } catch (_) { return null; }
+  const url = canvas.toDataURL("image/jpeg", 0.75);
+  return url.split(",")[1] || null;   // bare base64, no data: prefix
+}
+
+async function __sbHandleVisionRequest(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  if (__sbCamBusy) { __sbCompleteVoiceTurn(ctx); return; }
+  __sbCamBusy = true;
+  try {
+    let ok = false;
+    try { ok = await __sbCamEnsure(); } catch (_) { ok = false; }
+    if (!ok) {
+      const line = "I couldn't get to your camera — check the camera permission for this page.";
+      if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
+      else __sbShowBubble(line, false, { kicker: "Braino" });
+      return;
+    }
+    // bridge the dead air while the sensor exposes + the model looks
+    const ack = "Let me take a look…";
+    try { __sbNoteSpoken?.(ack); } catch (_) {}
+    if (fromVoice) void __sbSpeakWithPreferredVoice(ack, voiceOutput, { verbatim: true });
+    await new Promise((r) => setTimeout(r, 700));
+    const frame = __sbCamGrabFrame();
+    if (!frame) {
+      const line = "The camera's on but I couldn't grab a clear frame — try again.";
+      if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
+      return;
+    }
+    const visionPrompt = `You are Braino, looking at the user live through their webcam. They asked: "${String(promptText || "Can you see me?")}". Warmly and briefly describe what you actually see — the person and their surroundings — in one or two natural spoken sentences. Do not mention being an AI or that this is an image or a frame.`;
+    let reply = "";
+    try {
+      const res = await __sbRuntimeMessage({ action: "brainoVision", imageBase64: frame, prompt: visionPrompt });
+      reply = String(res?.reply || "").trim();
+    } catch (_) {}
+    const line = reply || "I can see you — but I couldn't quite put it into words. Try once more?";
+    if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
+    else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });
+  } catch (_) {
+    if (fromVoice) { try { await __sbSpeakWithPreferredVoice("Something went wrong looking through the camera.", voiceOutput, { verbatim: true }); } catch (_) {} }
+  } finally {
+    __sbCamBusy = false;
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
 
 if (__sbIsBrainoOwnSite()) {
   // dormant on Braino's own site — the website provides its own Braino experience

@@ -1237,6 +1237,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().catch((e) => sendResponse({ error: e.message || "Web search failed." }));
     return true;
   }
+  if (message.action === "brainoVision") {
+    (async () => {
+      // Vision counts toward the daily chat cap (unlimited on Pro/creator/admin).
+      const gate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
+      if (!gate.allowed) {
+        bgNotifyQuota(sender?.tab?.id || null, "chat", gate);
+        sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true });
+        return;
+      }
+      const res = await bgChatFetch({
+        notes: "",
+        chatHistory: Array.isArray(message.chatHistory) ? message.chatHistory : [],
+        message: message.prompt || "Describe what you can see.",
+        imageBase64: message.imageBase64 || "",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { sendResponse({ ok: false, error: `vision ${res.status}` }); return; }
+      sendResponse({ ok: true, reply: String(data?.reply || data?.response || "").trim() });
+    })().catch((e) => sendResponse({ ok: false, error: e?.message || "Vision failed." }));
+    return true;
+  }
   if (message.action === "generateXReply") {
     (async () => {
       const { tweetText, handle } = message;
