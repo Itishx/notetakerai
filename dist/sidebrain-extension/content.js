@@ -6404,6 +6404,7 @@ function __sbBuildBrainUI() {
 
   // ⌘I / Ctrl+I — toggle brain. Double-tap Space — primary invoke (cycles the loop).
   let __sbLastCtrlTap = 0;
+  let __sbLastAltTap = 0;
   let __sbLastSpaceTap = 0;
   document.addEventListener("keydown", (e) => {
     // Double-tap Control → toggle headphone mode.
@@ -6422,7 +6423,25 @@ function __sbBuildBrainUI() {
       }
       return;
     }
+    // Double-tap Option/Alt → toggle full-screen Jarvis mode. Deliberately on Alt (not a
+    // third Control) so it never collides with voice mode's Control×2.
+    if (e.key === "Alt") {
+      if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        const now = Date.now();
+        if (now - __sbLastAltTap < 400) {
+          __sbLastAltTap = 0;
+          if (!__sbHasExternalEditableFocus()) {
+            if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+            __sbToggleJarvisMode();
+          }
+        } else {
+          __sbLastAltTap = now;
+        }
+      }
+      return;
+    }
     __sbLastCtrlTap = 0;   // any other key breaks the double-tap (Ctrl+key combos don't count)
+    __sbLastAltTap = 0;
 
     // Double-tap Space → invoke / cycle Braino (OFF→PANEL plays the climb wake-up).
     // Ignored while typing in ANY field (page or Braino's own bar) so it never eats text.
@@ -10155,6 +10174,7 @@ function __sbAgentLogShow(title) {
   if (title) __sbAgentBusyLabel = title;
   if (typeof __sbWkStatus === "function") __sbWkStatus(__sbAgentBusyLabel);  // flip "Listening…" → working label
   __sbAgentLogRender();
+  if (__sbJarvisOpen) __sbJarvisLogShow(__sbAgentBusyLabel);   // mirror into the Jarvis HUD console
 }
 
 function __sbAgentLogStep(text) {
@@ -10163,6 +10183,7 @@ function __sbAgentLogStep(text) {
   const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
   const key = __sbAgentLogKey(clean);
   if (last && (last.text === clean || (key && __sbAgentLogKey(last.text) === key))) return;  // de-dupe repeats/near-repeats
+  if (__sbJarvisOpen) __sbJarvisPushLog(clean);              // stream the step into the Jarvis HUD console
   if (last) { last.active = false; last.justDone = true; }   // prior step completes → animated green tick
   __sbAgentLogSteps.push({ text: clean, active: true, justDone: false });
   if (__sbAgentLogSteps.length > 8) __sbAgentLogSteps = __sbAgentLogSteps.slice(-8);
@@ -10174,6 +10195,7 @@ function __sbAgentLogClear() {
   if (last && last.active) { last.active = false; last.justDone = true; __sbAgentLogRender(); }  // final tick
   __sbAgentLogSteps = [];
   __sbAgentBusy = false;
+  if (__sbJarvisOpen) __sbJarvisLogDone();   // settle the Jarvis HUD console
   if (__sbAgentLogCollapseTimer) clearTimeout(__sbAgentLogCollapseTimer);
   __sbAgentLogCollapseTimer = setTimeout(() => {   // let the last tick land, then settle the pill down
     const bar = document.getElementById("__sb_bar__");
@@ -16146,6 +16168,561 @@ function __sbIsBrainoOwnSite() {
     return false;
   } catch { return false; }
 }
+
+/* ============================================================================
+   JARVIS MODE — full-screen, voice-first takeover.
+   Double-tap Option (Alt) toggles it. Braino flies to centre, shuts his eyes
+   and pulses, charges gold, pops nodes, the transparent rounded HUD panel
+   fades in over the page, and he dissolves into his blue "soul" orb. Voice
+   mode runs underneath (hands-off); delegate/research activity streams into an
+   Iron-Man-style HUD console. Ported from Claude Design (jarvis-mode.jsx +
+   jarvis-soul.jsx) into the live extension idiom.
+   ============================================================================ */
+let __sbJarvisOpen = false;
+let __sbJarvisStartedVoice = false;
+let __sbJarvisTimers = [];
+let __sbJarvisStopSoul = null;
+let __sbJarvisLevelRaf = null;
+let __sbJarvisLevel = 0;
+let __sbJarvisConsoleHideTimer = null;
+let __sbJarvisKeyHandler = null;
+
+function __sbJarvisSpeaking() {
+  return (typeof __sbTtsAbortController !== "undefined" && __sbTtsAbortController) ? 1 : 0;
+}
+function __sbJarvisClearTimers() { __sbJarvisTimers.forEach(clearTimeout); __sbJarvisTimers = []; }
+function __sbJarvisAfter(ms, fn) { __sbJarvisTimers.push(setTimeout(fn, ms)); }
+
+function __sbToggleJarvisMode() { if (__sbJarvisOpen) __sbCloseJarvis(); else __sbOpenJarvis(); }
+
+function __sbJarvisInjectStyle() {
+  if (document.getElementById("__sb_jarvis_style__")) return;
+  const css = `
+  #__sb_jarvis__{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;
+    font-family:ui-monospace,'SF Mono',Menlo,monospace;pointer-events:none;}
+  #__sb_jarvis__[data-on="1"]{pointer-events:auto;}
+  #__sb_jarvis__[data-stage="off"]{opacity:0;pointer-events:none;transition:opacity .4s ease;}
+
+  #__sb_jarvis__ .jv-veil{position:absolute;inset:0;opacity:0;transition:opacity .6s ease;
+    background:radial-gradient(120% 120% at 50% 46%,rgba(8,16,30,.62),rgba(2,4,9,.94));
+    -webkit-backdrop-filter:blur(7px) saturate(.7);backdrop-filter:blur(7px) saturate(.7);}
+  #__sb_jarvis__[data-stage="enter"] .jv-veil,
+  #__sb_jarvis__[data-stage="charge"] .jv-veil{opacity:.72;}
+  #__sb_jarvis__[data-stage="form"] .jv-veil,
+  #__sb_jarvis__[data-stage="active"] .jv-veil{opacity:1;}
+  #__sb_jarvis__[data-stage="collapse"] .jv-veil{opacity:0;}
+
+  #__sb_jarvis__ .jv-panel{position:absolute;inset:22px;border-radius:30px;
+    border:1px solid rgba(74,158,255,.18);
+    background:radial-gradient(120% 120% at 50% 42%,rgba(10,20,38,.46),rgba(4,8,15,.7));
+    box-shadow:0 40px 120px -30px rgba(0,0,0,.8),inset 0 0 120px -40px rgba(74,158,255,.28),inset 0 1px 0 rgba(150,200,255,.07);
+    opacity:0;transform:scale(.955);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1);overflow:hidden;}
+  #__sb_jarvis__[data-stage="form"] .jv-panel,
+  #__sb_jarvis__[data-stage="active"] .jv-panel{opacity:1;transform:none;}
+  #__sb_jarvis__[data-stage="collapse"] .jv-panel{opacity:0;transform:scale(.97);}
+  #__sb_jarvis__ .jv-bracket{position:absolute;width:34px;height:34px;border:1.5px solid rgba(74,158,255,.4);}
+  #__sb_jarvis__ .jv-bracket.tl{top:26px;left:26px;border-right:0;border-bottom:0;border-radius:14px 0 0 0;}
+  #__sb_jarvis__ .jv-bracket.tr{top:26px;right:26px;border-left:0;border-bottom:0;border-radius:0 14px 0 0;}
+  #__sb_jarvis__ .jv-bracket.bl{bottom:26px;left:26px;border-right:0;border-top:0;border-radius:0 0 0 14px;}
+  #__sb_jarvis__ .jv-bracket.br{bottom:26px;right:26px;border-left:0;border-top:0;border-radius:0 0 14px 0;}
+
+  #__sb_jarvis__ .jv-stage{position:absolute;inset:0;display:grid;place-items:center;}
+  #__sb_jarvis__ .jv-orbwrap{position:relative;width:min(58vmin,560px);height:min(58vmin,560px);display:grid;place-items:center;}
+
+  #__sb_jarvis__ .jv-braino{position:absolute;display:grid;place-items:center;
+    transition:filter .8s ease,opacity .6s ease,transform .8s cubic-bezier(.2,.7,.2,1);}
+  #__sb_jarvis__ .jv-braino svg{width:196px;height:196px;display:block;}
+  #__sb_jarvis__[data-stage="enter"] .jv-braino{animation:jvFly .75s cubic-bezier(.2,.8,.2,1) both;}
+  @keyframes jvFly{from{transform:translateY(120px) scale(.42);opacity:0;}to{transform:none;opacity:1;}}
+  /* charge: eyes shut, gold glow + a little pulse */
+  #__sb_jarvis__[data-stage="charge"] .jv-braino{
+    filter:drop-shadow(0 0 30px rgba(255,200,90,.95)) drop-shadow(0 0 64px rgba(255,176,69,.55));
+    animation:jvPulse2 .62s ease-in-out 2;}
+  @keyframes jvPulse2{0%,100%{transform:scale(1);}50%{transform:scale(1.09);}}
+  #__sb_jarvis__[data-stage="form"] .jv-braino,
+  #__sb_jarvis__[data-stage="active"] .jv-braino{
+    filter:drop-shadow(0 0 50px rgba(130,195,255,.95));opacity:0;transform:scale(1.18);}
+  #__sb_jarvis__[data-stage="collapse"] .jv-braino{opacity:1;transform:scale(.62) translateY(34px);
+    filter:drop-shadow(0 0 20px rgba(255,200,90,.6));
+    transition:opacity .5s ease .12s,transform .55s cubic-bezier(.4,0,.6,1) .08s,filter .5s ease;}
+
+  #__sb_jarvis__ .jv-burst{position:absolute;inset:0;pointer-events:none;}
+  #__sb_jarvis__ .jv-spark{position:absolute;left:50%;top:46%;width:7px;height:7px;border-radius:50%;
+    background:radial-gradient(circle,#FFE9B0,#FFB845);margin:-3.5px 0 0 -3.5px;opacity:0;
+    box-shadow:0 0 10px 2px rgba(255,184,69,.8);}
+  #__sb_jarvis__[data-stage="charge"] .jv-spark,
+  #__sb_jarvis__[data-stage="form"] .jv-spark{animation:jvSpark 1.1s ease-out forwards;}
+  @keyframes jvSpark{0%{opacity:0;transform:translate(0,0) scale(.2);}25%{opacity:1;}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1);}}
+
+  #__sb_jarvis__ .jv-soul{position:absolute;opacity:0;transform:scale(.45);
+    transition:opacity .9s ease,transform 1s cubic-bezier(.2,.7,.2,1);}
+  #__sb_jarvis__[data-stage="form"] .jv-soul,
+  #__sb_jarvis__[data-stage="active"] .jv-soul{opacity:1;transform:none;}
+  #__sb_jarvis__[data-stage="collapse"] .jv-soul{opacity:0;transform:scale(.55);transition:opacity .4s ease,transform .5s ease;}
+
+  #__sb_jarvis__ .jv-ui{position:absolute;inset:0;opacity:0;transition:opacity .6s ease .2s;pointer-events:none;}
+  #__sb_jarvis__[data-stage="active"] .jv-ui{opacity:1;}
+  #__sb_jarvis__ .jv-eyebrow{position:absolute;top:44px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;color:rgba(74,158,255,.92);
+    font-size:11.5px;letter-spacing:.42em;text-transform:uppercase;}
+  #__sb_jarvis__ .jv-eyebrow .dot{width:7px;height:7px;border-radius:50%;background:#4A9EFF;
+    box-shadow:0 0 0 0 rgba(74,158,255,.6);animation:jvDot 2s ease-out infinite;}
+  @keyframes jvDot{0%{box-shadow:0 0 0 0 rgba(74,158,255,.55);}70%{box-shadow:0 0 0 9px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
+
+  #__sb_jarvis__ .jv-bars{position:absolute;left:50%;bottom:74px;transform:translateX(-50%);
+    display:flex;align-items:flex-end;gap:4px;height:24px;}
+  #__sb_jarvis__ .jv-bars i{width:3px;min-height:3px;background:linear-gradient(180deg,#C6E6FF,#4A9EFF);
+    border-radius:2px;box-shadow:0 0 8px rgba(74,158,255,.6);}
+
+  #__sb_jarvis__ .jv-hint{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);
+    color:rgba(74,158,255,.55);font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;
+    display:flex;align-items:center;gap:9px;}
+  #__sb_jarvis__ .jv-hint kbd{border:1px solid rgba(74,158,255,.35);border-radius:5px;padding:2px 7px;
+    color:rgba(224,240,255,.85);letter-spacing:.1em;font-family:inherit;}
+
+  #__sb_jarvis__ .jv-mute{position:absolute;top:38px;right:42px;display:flex;align-items:center;gap:8px;
+    pointer-events:auto;cursor:pointer;background:none;border:1px solid rgba(74,158,255,.3);border-radius:9px;
+    padding:7px 11px;color:rgba(74,158,255,.85);font-family:inherit;font-size:10px;letter-spacing:.22em;
+    text-transform:uppercase;transition:border-color .2s,color .2s;}
+  #__sb_jarvis__ .jv-mute:hover{border-color:rgba(74,158,255,.7);color:rgba(224,240,255,.95);}
+  #__sb_jarvis__ .jv-mute svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+
+  /* Iron-Man HUD console — delegate / research play-by-play */
+  #__sb_jarvis__ .jv-console{position:absolute;left:44px;bottom:44px;width:min(34vw,420px);height:min(30vw,290px);
+    border:1px solid rgba(74,158,255,.28);border-radius:16px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(8,18,34,.8),rgba(4,9,18,.88));
+    box-shadow:inset 0 0 60px -30px rgba(74,158,255,.55),0 20px 60px -24px rgba(0,0,0,.7);
+    opacity:0;transform:translateY(14px) scale(.985);
+    transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.2,1);
+    pointer-events:none;display:flex;flex-direction:column;}
+  #__sb_jarvis__ .jv-console.on{opacity:1;transform:none;}
+  #__sb_jarvis__ .jv-con-head{display:flex;align-items:center;gap:9px;padding:12px 15px 10px;
+    border-bottom:1px solid rgba(74,158,255,.16);color:rgba(198,230,255,.92);
+    font-size:10px;letter-spacing:.3em;text-transform:uppercase;}
+  #__sb_jarvis__ .jv-con-head .spin{width:11px;height:11px;border-radius:50%;
+    border:1.5px solid rgba(74,158,255,.3);border-top-color:#7FC0FF;animation:jvSpin .8s linear infinite;}
+  @keyframes jvSpin{to{transform:rotate(360deg);}}
+  #__sb_jarvis__ .jv-con-body{flex:1;overflow:hidden;padding:11px 15px 15px;
+    display:flex;flex-direction:column;justify-content:flex-end;gap:7px;}
+  #__sb_jarvis__ .jv-con-line{display:flex;gap:9px;align-items:flex-start;color:rgba(206,224,245,.86);
+    font-size:12px;line-height:1.45;letter-spacing:.01em;opacity:0;animation:jvLineIn .35s ease forwards;}
+  #__sb_jarvis__ .jv-con-line .mk{color:#4A9EFF;flex:none;}
+  #__sb_jarvis__ .jv-con-line.done{color:rgba(206,224,245,.5);}
+  #__sb_jarvis__ .jv-con-line.done .mk{color:#54E3A0;}
+  @keyframes jvLineIn{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:none;}}
+
+  @media (prefers-reduced-motion:reduce){
+    #__sb_jarvis__[data-stage="enter"] .jv-braino{animation:none;}
+    #__sb_jarvis__[data-stage="charge"] .jv-braino{animation:none;}
+    #__sb_jarvis__ .jv-spark{display:none;}
+  }`;
+  const style = document.createElement("style");
+  style.id = "__sb_jarvis_style__";
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
+function __sbBuildJarvisOverlay() {
+  let root = document.getElementById("__sb_jarvis__");
+  if (root) return root;
+  __sbJarvisInjectStyle();
+  root = document.createElement("div");
+  root.id = "__sb_jarvis__";
+  root.setAttribute("data-stage", "off");
+  root.setAttribute("data-on", "0");
+  root.innerHTML = `
+    <div class="jv-veil"></div>
+    <div class="jv-panel">
+      <div class="jv-bracket tl"></div><div class="jv-bracket tr"></div>
+      <div class="jv-bracket bl"></div><div class="jv-bracket br"></div>
+    </div>
+    <div class="jv-stage"><div class="jv-orbwrap">
+      <div class="jv-soul"></div>
+      <div class="jv-burst"></div>
+      <div class="jv-braino"></div>
+    </div></div>
+    <div class="jv-ui">
+      <div class="jv-eyebrow"><span class="dot"></span>Jarvis Mode</div>
+      <button class="jv-mute" type="button" aria-label="Toggle voice"></button>
+      <div class="jv-bars"></div>
+      <div class="jv-hint"><kbd>&#8997;</kbd><kbd>&#8997;</kbd> to exit</div>
+    </div>
+    <div class="jv-console">
+      <div class="jv-con-head"><span class="spin"></span><span class="jv-con-title">Delegate</span></div>
+      <div class="jv-con-body"></div>
+    </div>`;
+  document.documentElement.appendChild(root);
+
+  // audio bars
+  const bars = root.querySelector(".jv-bars");
+  for (let i = 0; i < 13; i++) bars.appendChild(document.createElement("i"));
+
+  // gold node-pop sparks (radial burst out of the brain)
+  const burst = root.querySelector(".jv-burst");
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2 + (i % 2) * 0.3;
+    const d = 120 + (i % 4) * 26;
+    const s = document.createElement("span");
+    s.className = "jv-spark";
+    s.style.setProperty("--dx", (Math.cos(a) * d) + "px");
+    s.style.setProperty("--dy", (Math.sin(a) * d * 0.92) + "px");
+    s.style.animationDelay = ((i % 5) * 0.05) + "s";
+    burst.appendChild(s);
+  }
+
+  // soul orb canvas
+  const soulSize = Math.min(window.innerWidth, window.innerHeight) * 0.56;
+  const canvas = document.createElement("canvas");
+  canvas.style.width = soulSize + "px";
+  canvas.style.height = soulSize + "px";
+  canvas.style.display = "block";
+  root.querySelector(".jv-soul").appendChild(canvas);
+  root.__sbSoulCanvas = canvas;
+
+  root.querySelector(".jv-mute").addEventListener("click", __sbJarvisToggleVoice);
+  __sbJarvisRenderMute(root);
+  return root;
+}
+
+function __sbJarvisRenderMute(root) {
+  const btn = root.querySelector(".jv-mute");
+  if (!btn) return;
+  const on = !!__sbHeadphoneMode;
+  const icon = on
+    ? `<svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 7a8 8 0 0 1 0 10"/></svg>`
+    : `<svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>`;
+  btn.innerHTML = icon + `<span>${on ? "Voice on" : "Muted"}</span>`;
+}
+
+function __sbJarvisToggleVoice() {
+  try {
+    if (__sbHeadphoneMode) { __sbExitHeadphoneMode(); __sbJarvisStartedVoice = false; }
+    else { __sbEnterHeadphoneMode(); __sbJarvisStartedVoice = true; }
+  } catch (_) {}
+  const root = document.getElementById("__sb_jarvis__");
+  if (root) __sbJarvisRenderMute(root);
+}
+
+function __sbOpenJarvis() {
+  if (__sbJarvisOpen) return;
+  __sbJarvisOpen = true;
+  __sbJarvisClearTimers();
+  const root = __sbBuildJarvisOverlay();
+
+  // Braino: coral, eyes open, about to fly in
+  const brain = root.querySelector(".jv-braino");
+  brain.innerHTML = __SB_BRAIN_SVG_CIN;
+  root.setAttribute("data-on", "0");
+  void root.offsetWidth;                 // reflow so the stage transitions animate cleanly
+  root.setAttribute("data-stage", "enter");
+
+  // hands-off: bring voice live. Remember whether WE turned it on.
+  try {
+    if (!__sbHeadphoneMode) { __sbJarvisStartedVoice = true; __sbEnterHeadphoneMode(); }
+    else { __sbJarvisStartedVoice = false; }
+  } catch (_) {}
+
+  __sbJarvisStartSoul(root);              // orb renders behind the brain, hidden until "form"
+
+  // choreography: fly in → close eyes + pulse + charge → panel/soul → live
+  __sbJarvisAfter(620, () => {
+    root.setAttribute("data-stage", "charge");
+    brain.innerHTML = __SB_BRAIN_SVG_CIN_SLEEP;   // he closes his eyes
+  });
+  __sbJarvisAfter(1480, () => { root.setAttribute("data-stage", "form"); });
+  __sbJarvisAfter(2480, () => {
+    root.setAttribute("data-stage", "active");
+    root.setAttribute("data-on", "1");
+    __sbJarvisRenderMute(root);
+    __sbJarvisStartLevelLoop(root);
+    if (__sbAgentBusy) { __sbJarvisLogShow(__sbAgentBusyLabel); }   // a task already running? show it
+  });
+
+  __sbJarvisKeyHandler = (e) => {
+    if (e.key === "Escape" && __sbJarvisOpen) { e.preventDefault(); e.stopPropagation(); __sbCloseJarvis(); }
+  };
+  window.addEventListener("keydown", __sbJarvisKeyHandler, true);
+}
+
+function __sbCloseJarvis() {
+  if (!__sbJarvisOpen) return;
+  __sbJarvisOpen = false;
+  __sbJarvisClearTimers();
+  __sbJarvisStopLevelLoop();
+  const root = document.getElementById("__sb_jarvis__");
+  if (root) {
+    root.setAttribute("data-on", "0");
+    const brain = root.querySelector(".jv-braino");
+    if (brain) brain.innerHTML = __SB_BRAIN_SVG_CIN;   // bring him back for the collapse
+    root.setAttribute("data-stage", "collapse");
+    __sbJarvisAfter(720, () => {
+      root.setAttribute("data-stage", "off");
+      __sbJarvisStopSoulFn();
+    });
+  }
+  __sbJarvisHideConsole(true);
+
+  // turn voice back off only if Jarvis is what switched it on
+  try { if (__sbJarvisStartedVoice && __sbHeadphoneMode) __sbExitHeadphoneMode(); } catch (_) {}
+  __sbJarvisStartedVoice = false;
+
+  if (__sbJarvisKeyHandler) {
+    window.removeEventListener("keydown", __sbJarvisKeyHandler, true);
+    __sbJarvisKeyHandler = null;
+  }
+}
+
+// audio-reactive bars + soul "speak" drive
+function __sbJarvisStartLevelLoop(root) {
+  __sbJarvisStopLevelLoop();
+  const bars = Array.from(root.querySelectorAll(".jv-bars i"));
+  const n = bars.length;
+  const t0 = performance.now();
+  const loop = (now) => {
+    const t = (now - t0) / 1000;
+    const speaking = __sbJarvisSpeaking();
+    const base = speaking ? 0.5 : 0.16;
+    const amp = speaking ? 0.45 : 0.14;
+    const l = Math.max(0, base + amp * (0.5 * Math.sin(t * 9) + 0.3 * Math.sin(t * 17 + 1) + 0.2 * Math.sin(t * 27)));
+    __sbJarvisLevel = Math.min(1, l);
+    for (let i = 0; i < n; i++) {
+      const c = Math.abs(i - (n - 1) / 2) / ((n - 1) / 2);
+      const h = 3 + __sbJarvisLevel * (20 - c * 14) * (0.5 + 0.5 * Math.sin(i * 1.7 + __sbJarvisLevel * 9));
+      bars[i].style.height = Math.max(3, h) + "px";
+      bars[i].style.opacity = (0.5 + __sbJarvisLevel * 0.5).toFixed(2);
+    }
+    __sbJarvisLevelRaf = requestAnimationFrame(loop);
+  };
+  __sbJarvisLevelRaf = requestAnimationFrame(loop);
+}
+function __sbJarvisStopLevelLoop() {
+  if (__sbJarvisLevelRaf) { cancelAnimationFrame(__sbJarvisLevelRaf); __sbJarvisLevelRaf = null; }
+}
+
+// ── HUD console: real delegate/research steps, Iron-Man style ──────────────
+function __sbJarvisLogShow(title) {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root || !__sbJarvisOpen) return;
+  const t = root.querySelector(".jv-con-title");
+  if (t && title) t.textContent = String(title).replace(/[.…\s]+$/, "") || "Working";
+  const con = root.querySelector(".jv-console");
+  if (con) con.classList.add("on");
+  if (__sbJarvisConsoleHideTimer) { clearTimeout(__sbJarvisConsoleHideTimer); __sbJarvisConsoleHideTimer = null; }
+}
+function __sbJarvisPushLog(text) {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root || !__sbJarvisOpen) return;
+  const con = root.querySelector(".jv-console");
+  const body = root.querySelector(".jv-con-body");
+  if (!con || !body) return;
+  con.classList.add("on");
+  const prev = body.lastElementChild;
+  if (prev) prev.classList.add("done");
+  const line = document.createElement("div");
+  line.className = "jv-con-line";
+  line.innerHTML = `<span class="mk">&#9656;</span><span>${__sbEscHtml(String(text))}</span>`;
+  body.appendChild(line);
+  while (body.children.length > 7) body.removeChild(body.firstChild);
+  if (__sbJarvisConsoleHideTimer) clearTimeout(__sbJarvisConsoleHideTimer);
+  __sbJarvisConsoleHideTimer = setTimeout(() => __sbJarvisHideConsole(false), 9000);
+}
+function __sbJarvisLogDone() {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root) return;
+  const prev = root.querySelector(".jv-con-body")?.lastElementChild;
+  if (prev) prev.classList.add("done");
+  if (__sbJarvisConsoleHideTimer) clearTimeout(__sbJarvisConsoleHideTimer);
+  __sbJarvisConsoleHideTimer = setTimeout(() => __sbJarvisHideConsole(false), 4500);
+}
+function __sbJarvisHideConsole(immediate) {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root) return;
+  const con = root.querySelector(".jv-console");
+  if (con) con.classList.remove("on");
+  if (immediate) { const body = root.querySelector(".jv-con-body"); if (body) body.innerHTML = ""; }
+  if (__sbJarvisConsoleHideTimer) { clearTimeout(__sbJarvisConsoleHideTimer); __sbJarvisConsoleHideTimer = null; }
+}
+
+// ── The soul: a slowly-rotating sphere of glowing nodes, wireframe meridians,
+//    radial spokes and a hot pulsing core. Canvas + additive blending. ───────
+function __sbJarvisBuildGeo() {
+  const dist2 = (a, b) => { const x = a[0]-b[0], y = a[1]-b[1], z = a[2]-b[2]; return x*x+y*y+z*z; };
+  const fib = (n) => {
+    const pts = []; const gold = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < n; i++) {
+      const y = 1 - (i / (n - 1)) * 2;
+      const r = Math.sqrt(Math.max(0, 1 - y * y));
+      const th = gold * i;
+      pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
+    }
+    return pts;
+  };
+  const shell = fib(1150).map((v) => ({
+    v, r: 0.9 + Math.random() * 0.13, b: 0.35 + Math.random() * 0.65,
+    tw: Math.random() * Math.PI * 2, ts: 0.6 + Math.random() * 2.4,
+  }));
+  const nodes = [];
+  for (let i = 0; i < 54; i++) {
+    const p = shell[(Math.random() * shell.length) | 0];
+    nodes.push({ v: p.v.map((x) => x * (0.99 + Math.random() * 0.04)), tw: Math.random() * 6.28 });
+  }
+  const links = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const d = nodes.map((n, j) => ({ j, dist: dist2(nodes[i].v, n.v) }))
+      .filter((o) => o.j !== i).sort((a, b) => a.dist - b.dist).slice(0, 2);
+    d.forEach((o) => { if (o.j > i) links.push([i, o.j]); });
+  }
+  const meridians = [];
+  for (let m = 0; m < 12; m++) {
+    const lon = (m / 12) * Math.PI * 2; const line = [];
+    for (let k = 0; k <= 30; k++) {
+      const lat = -Math.PI / 2 + (k / 30) * Math.PI;
+      line.push([Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]);
+    }
+    meridians.push(line);
+  }
+  const lats = [];
+  for (let l = 1; l < 7; l++) {
+    const lat = -Math.PI / 2 + (l / 7) * Math.PI; const cy = Math.sin(lat), rr = Math.cos(lat); const line = [];
+    for (let k = 0; k <= 48; k++) { const lon = (k / 48) * Math.PI * 2; line.push([Math.cos(lon) * rr, cy, Math.sin(lon) * rr]); }
+    lats.push(line);
+  }
+  const spokes = [];
+  for (let s = 0; s < 40; s++) {
+    const a = (s / 40) * Math.PI * 2; const jit = (Math.random() - 0.5) * 0.12;
+    spokes.push([[Math.cos(a) * 0.12, jit, Math.sin(a) * 0.12],
+      [Math.cos(a) * (1.0 + Math.random() * 0.06), jit, Math.sin(a) * (1.0 + Math.random() * 0.06)]]);
+  }
+  const ring = [];
+  for (let k = 0; k <= 90; k++) { const a = (k / 90) * Math.PI * 2; ring.push([Math.cos(a) * 1.16, Math.sin(a) * 1.16, 0]); }
+  const sparks = [];
+  const fib90 = fib(90);
+  for (let i = 0; i < 90; i++) { const v = fib90[i]; sparks.push({ v: v.map((x) => x * (1.15 + Math.random() * 0.5)), tw: Math.random() * 6.28, ts: 1 + Math.random() * 3 }); }
+  return { shell, nodes, links, meridians, lats, spokes, ring, sparks };
+}
+
+function __sbJarvisStartSoul(root) {
+  __sbJarvisStopSoulFn();
+  const canvas = root.__sbSoulCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const AMBER = [74, 158, 255], HOT = [198, 230, 255];
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+  const g = __sbJarvisBuildGeo();
+  let raf, t0 = performance.now();
+  function resize() { const s = canvas.clientWidth, h = canvas.clientHeight; canvas.width = s * dpr; canvas.height = h * dpr; }
+  resize();
+  let ro = null;
+  try { ro = new ResizeObserver(resize); ro.observe(canvas); } catch (_) {}
+  function rot(p, cy, sy, cx, sx) {
+    let x = p[0] * cy + p[2] * sy; let z = -p[0] * sy + p[2] * cy;
+    let y = p[1] * cx - z * sx; z = p[1] * sx + z * cx; return [x, y, z];
+  }
+  function frame(now) {
+    const t = (now - t0) / 1000;
+    const I = 1, SP = __sbJarvisSpeaking() ? __sbJarvisLevel : 0;
+    const W = canvas.width, H = canvas.height;
+    const cx0 = W / 2, cy0 = H * 0.5;
+    const R = Math.min(W, H) * 0.36;
+    const yaw = t * 0.28, pitch = -0.42 + Math.sin(t * 0.4) * 0.05;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cxp = Math.cos(pitch), sxp = Math.sin(pitch);
+    const focal = 3.4;
+    const pulse = 0.82 + 0.18 * Math.sin(t * 1.8) + SP * 0.25;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "lighter";
+
+    const proj = (p, rad) => {
+      const q = rot([p[0] * rad, p[1] * rad, p[2] * rad], cy, sy, cxp, sxp);
+      const per = focal / (focal - q[2]);
+      return [cx0 + q[0] * R * per, cy0 + q[1] * R * per, q[2], per];
+    };
+
+    ctx.lineWidth = 1 * dpr;
+    const drawPoly = (line, base) => {
+      for (let i = 1; i < line.length; i++) {
+        const a = proj(line[i - 1], 1), b = proj(line[i], 1);
+        const depth = (a[2] + b[2]) / 2; const da = (depth + 1) / 2;
+        ctx.strokeStyle = rgba(AMBER, base * (0.05 + da * 0.22) * I);
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      }
+    };
+    g.meridians.forEach((l) => drawPoly(l, 1));
+    g.lats.forEach((l) => drawPoly(l, 1));
+
+    ctx.lineWidth = 1 * dpr;
+    g.spokes.forEach((sp) => {
+      const a = proj(sp[0], 1), b = proj(sp[1], 1); const da = (b[2] + 1) / 2;
+      ctx.strokeStyle = rgba(HOT, (0.05 + da * 0.3) * I);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    });
+
+    ctx.lineWidth = 1.4 * dpr;
+    ctx.beginPath();
+    g.ring.forEach((p, i) => { const a = proj(p, 1); if (i === 0) ctx.moveTo(a[0], a[1]); else ctx.lineTo(a[0], a[1]); });
+    ctx.strokeStyle = rgba(AMBER, 0.22 * I); ctx.stroke();
+
+    ctx.lineWidth = 1 * dpr;
+    g.links.forEach(([i, j]) => {
+      const a = proj(g.nodes[i].v, 1), b = proj(g.nodes[j].v, 1);
+      const da = ((a[2] + b[2]) / 2 + 1) / 2;
+      ctx.strokeStyle = rgba(HOT, (0.04 + da * 0.16) * I);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    });
+
+    for (let k = 0; k < g.shell.length; k++) {
+      const s = g.shell[k]; const a = proj(s.v, s.r); const da = (a[2] + 1) / 2;
+      const tw = 0.6 + 0.4 * Math.sin(t * s.ts + s.tw);
+      const al = s.b * da * da * tw * I;
+      if (al < 0.02) continue;
+      const sz = (0.6 + da * 1.5) * dpr * a[3];
+      ctx.fillStyle = rgba(da > 0.7 ? HOT : AMBER, Math.min(1, al));
+      ctx.fillRect(a[0] - sz / 2, a[1] - sz / 2, sz, sz);
+    }
+
+    g.nodes.forEach((n) => {
+      const a = proj(n.v, 1); const da = (a[2] + 1) / 2;
+      if (da < 0.25) return;
+      const tw = 0.6 + 0.4 * Math.sin(t * 2 + n.tw);
+      const rad = (1.4 + da * 1.8) * dpr * tw;
+      ctx.fillStyle = rgba(HOT, 0.9 * da * tw * I);
+      ctx.beginPath(); ctx.arc(a[0], a[1], rad, 0, 6.283); ctx.fill();
+    });
+
+    g.sparks.forEach((s) => {
+      const a = proj(s.v, 1); const da = (a[2] + 1) / 2;
+      const tw = Math.max(0, Math.sin(t * s.ts + s.tw));
+      const al = 0.5 * da * tw * I;
+      if (al < 0.03) return;
+      const sz = 1.1 * dpr;
+      ctx.fillStyle = rgba(HOT, al);
+      ctx.fillRect(a[0] - sz / 2, a[1] - sz / 2, sz, sz);
+    });
+
+    const coreR = R * (0.5 + 0.06 * Math.sin(t * 1.8)) * pulse;
+    const grad = ctx.createRadialGradient(cx0, cy0, 0, cx0, cy0, coreR);
+    grad.addColorStop(0, rgba(HOT, 0.95 * I));
+    grad.addColorStop(0.18, rgba([130, 195, 255], 0.7 * I));
+    grad.addColorStop(0.5, rgba(AMBER, 0.28 * I));
+    grad.addColorStop(1, rgba(AMBER, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(cx0, cy0, coreR, 0, 6.283); ctx.fill();
+
+    const pr = R * 0.07 * (1 + SP * 0.6);
+    const pg = ctx.createRadialGradient(cx0, cy0, 0, cx0, cy0, pr);
+    pg.addColorStop(0, rgba([255, 255, 255], I));
+    pg.addColorStop(1, rgba(HOT, 0));
+    ctx.fillStyle = pg;
+    ctx.beginPath(); ctx.arc(cx0, cy0, pr, 0, 6.283); ctx.fill();
+
+    ctx.globalCompositeOperation = "source-over";
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+  __sbJarvisStopSoul = () => { try { cancelAnimationFrame(raf); } catch (_) {} if (ro) try { ro.disconnect(); } catch (_) {} };
+}
+function __sbJarvisStopSoulFn() { if (__sbJarvisStopSoul) { try { __sbJarvisStopSoul(); } catch (_) {} __sbJarvisStopSoul = null; } }
 
 if (__sbIsBrainoOwnSite()) {
   // dormant on Braino's own site — the website provides its own Braino experience
