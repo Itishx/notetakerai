@@ -14897,6 +14897,22 @@ function __sbHandleOpenSite(site, ctx = {}) {
   else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
 }
 
+// "Open" commands the known-site shortcut couldn't resolve — a contextual referent ("open its
+// website", "open it", "go there") or an explicit non-known site ("open the Mesa School of Business
+// website"). These currently fall through to plain conversation, where the model only PROMISES to
+// open it and never does. Route them to the Delegate agent instead — its handoff carries the recent
+// chat history, so it resolves "its"/"that" to the entity you were just discussing and actually opens
+// it. Kept tight so normal talk ("open up to me", "go to sleep") never triggers it.
+function __sbIsUnhandledOpenCommand(text) {
+  let t = String(text || "").toLowerCase().trim().replace(/[.!?]+$/, "");
+  t = t.replace(/^(?:hey |hi |yo |ok |okay |so |braino[,!. ]+|can you |could you |would you |will you |please |kindly |i want you to |i'?d like you to |let'?s |lets )+/g, "").trim();
+  if (/^open up (?:to|about)\b/.test(t)) return false;                                   // "open up to me" = conversation
+  if (/^(?:open|pull|bring)\s+(?:it|that|this|them|the (?:site|website|page))\b/.test(t)) return true;   // contextual referent
+  if (/^(?:go|take me)\s+there\b/.test(t)) return true;
+  if (/^(?:open(?:\s*up)?|go to|take me to|pull up|launch|bring up|fire up|visit|navigate to)\b.*\b(website|web ?site|site|page|\.com|dot com)\b/.test(t)) return true;
+  return false;
+}
+
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
   if (__sbIsSelfEcho(transcript)) {
@@ -15022,6 +15038,19 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
       voiceTurnToken: turnToken,
       forceIntent: "chat",
     });
+    return;
+  }
+
+  // "Open its website" / "open the X website" / "go there" the known-site shortcut didn't resolve →
+  // hand to the agent (it has chat history to resolve the referent) instead of letting the model just
+  // promise to open it. Cancel any speculative "sure, I'll open it" chatter first.
+  if (__sbIsUnhandledOpenCommand(promptText) || __sbIsUnhandledOpenCommand(transcript)) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+    __sbRtAwaitingDelegateResult = true;
+    __sbSpeakSlowPathAck("agent");
+    __sbRunAgent(promptText, { connector: routing.connectorHint });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
 
