@@ -1259,15 +1259,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       const gate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
       if (!gate.allowed) { bgNotifyQuota(sender?.tab?.id || null, "chat", gate); sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true }); return; }
-      const status = await bgEnsureCamReady();
-      if (status !== "ready") { sendResponse({ ok: false, status }); return; }
-      const frame = await bgGrabCamFrame();
-      if (!frame) { sendResponse({ ok: false, status: "noframe" }); return; }
+      const grab = await bgOffscreenGrabCameraFrame();
+      if (grab.needpermission) { try { await bgOpenCamGrantWindow(); } catch (_) {} sendResponse({ ok: false, status: "needpermission" }); return; }
+      if (!grab.frame) { sendResponse({ ok: false, status: "noframe" }); return; }
       const res = await bgChatFetch({
         notes: "",
         chatHistory: Array.isArray(message.chatHistory) ? message.chatHistory : [],
         message: message.prompt || "Describe what you can see.",
-        imageBase64: frame,
+        imageBase64: grab.frame,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { sendResponse({ ok: false, status: "ready", error: `vision ${res.status}` }); return; }
@@ -2014,30 +2013,27 @@ async function bgCamWindowPos() {
   return { width: W, height: H, left: 140, top: 120 };
 }
 
-// Ensure exactly one camera window exists, then poll it (one-shot) until its getUserMedia attempt has
-// settled. Returns "ready" | "needpermission" | "denied" | "idle".
-async function bgEnsureCamReady() {
-  let id = await bgFindCamWindow();
-  if (id == null) {
-    const pos = await bgCamWindowPos();
-    const win = await new Promise((r) => chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, (w) => r(chrome.runtime.lastError ? null : w)));
-    if (!win) return "idle";
-    id = win.id || null;
-  } else {
-    try { chrome.windows.update(id, { focused: true }); } catch (_) {}
-  }
-  bgCamWindowId = id;
-  for (let i = 0; i < 60; i++) {                 // resolves in ~1–2s normally; cap is just a safety net
-    const r = await bgSendToCam({ action: "camGetStatus" }, 900);
-    if (r && r.status && r.status !== "idle") return r.status;
-    await new Promise((res) => setTimeout(res, 250));
-  }
-  return "idle";
+// Open the one-time grant window (visible, has a button → a real gesture so the prompt appears). Once
+// the user allows, the EXTENSION origin holds the camera grant and the offscreen doc inherits it —
+// exactly how the mic permission works.
+async function bgOpenCamGrantWindow() {
+  const existing = await bgFindCamWindow();
+  if (existing != null) { try { chrome.windows.update(existing, { focused: true }); } catch (_) {} return; }
+  const pos = await bgCamWindowPos();
+  chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, () => { void chrome.runtime.lastError; });
 }
 
-async function bgGrabCamFrame() {
-  const r = await bgSendToCam({ action: "camGrab" }, 5000);
-  return (r && r.frame) ? r.frame : "";
+// Grab a single camera frame in the OFFSCREEN document — the same proven channel voice uses. Returns
+// { frame } | { needpermission: true } | { error }.
+async function bgOffscreenGrabCameraFrame() {
+  try { await ensureOffscreen(); } catch (_) {}
+  return await new Promise((resolve) => {
+    let done = false; const fin = (v) => { if (!done) { done = true; resolve(v); } };
+    try {
+      chrome.runtime.sendMessage({ target: "offscreen", action: "grabCameraFrame" }, (resp) => { void chrome.runtime.lastError; fin(resp || {}); });
+    } catch (_) { fin({}); return; }
+    setTimeout(() => fin({ error: "timeout" }), 8000);
+  });
 }
 
 // Ask the LLM which of the (already safety-filtered) candidate tabs to close.

@@ -287,6 +287,37 @@ function cleanupCaptureResources() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "offscreen") return;
 
+  if (message.action === "grabCameraFrame") {
+    (async () => {
+      let stream = null, v = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false,
+        });
+        v = document.createElement("video");
+        v.muted = true; v.playsInline = true; v.srcObject = stream;
+        v.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0;";
+        document.body.appendChild(v);
+        await new Promise((res) => { v.onloadedmetadata = () => res(); setTimeout(res, 1500); });
+        try { await v.play(); } catch (_) {}
+        await new Promise((res) => setTimeout(res, 350));   // let the sensor expose
+        const vw = v.videoWidth || 640, vh = v.videoHeight || 480;
+        const w = Math.min(1024, vw), h = Math.round(w * (vh / vw));
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(v, 0, 0, w, h);
+        const data = c.toDataURL("image/png").split(",")[1] || "";
+        sendResponse({ frame: data });
+      } catch (e) {
+        const n = e?.name || "";
+        sendResponse({ needpermission: (n === "NotAllowedError" || n === "SecurityError" || n === "PermissionDeniedError"), error: n });
+      } finally {
+        try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+        try { v && v.remove(); } catch (_) {}
+      }
+    })();
+    return true;
+  }
+
   if (message.action === "startVoiceListening") {
     voiceListening = true;
     startSpeechRecognition();
