@@ -11276,6 +11276,7 @@ async function __sbHandleXStatus(promptText, ctx = {}) {
     }
 
     __sbXLastStatus = data;
+    if (__sbJarvisOpen) __sbJarvisShowXStat(data);   // pop the count-up + ▲/▼ HUD inside Jarvis
     const formatted = __sbFormatXStatus(promptText, data);
     const offer = __sbBuildXPostOffer(data);
     const combinedReply = `${formatted}\n\n${offer}`;
@@ -16188,6 +16189,7 @@ let __sbJarvisConsoleHideTimer = null;
 let __sbJarvisKeyHandler = null;
 let __sbJarvisPrevSpeculative = null;   // remembers the fast-voice toggle so we can restore on exit
 let __sbJarvisFlewMascot = false;       // true while the real walking mascot is flown to centre
+let __sbJarvisStatHideTimer = null;
 
 // Self-contained full-body walking mascot for the entrance flight: remap the body fills to the
 // walker's OWN inline gradients (no dependency on a document-level #sbb-fill → never the "white
@@ -16267,13 +16269,11 @@ function __sbWkFlyToCenter() {
     const bx = r0.left + r0.width / 2, by = r0.top + r0.height / 2;
     const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
     const posX = (typeof __sbWkPosX === "number" ? __sbWkPosX : 24);
-    const S = 3;
-    walker.style.transformOrigin = "center center";
-    walker.style.transition = "transform .85s cubic-bezier(.2,.7,.2,1), filter .6s ease, opacity .45s ease";
-    walker.style.transform = `translate(${cx - bx + posX}px, ${cy - by}px) scale(${S})`;
-    walker.style.filter = "drop-shadow(0 0 26px rgba(255,200,90,.95)) drop-shadow(0 0 60px rgba(255,176,69,.55))";
+    walker.style.transition = "transform 1.4s cubic-bezier(.25,.6,.2,1), filter .7s ease, opacity .45s ease";
+    walker.style.transform = `translate(${cx - bx + posX}px, ${cy - by}px)`;   // SAME SIZE — translate only, no scale
+    walker.style.filter = "drop-shadow(0 0 22px rgba(255,200,90,.9)) drop-shadow(0 0 50px rgba(255,176,69,.5))";
     walker.style.opacity = "1";
-    __sbJarvisAfter(720, () => __sbWkShutRealEyes(walker, 0.08));   // close his eyes near the top
+    __sbJarvisAfter(1150, () => __sbWkShutRealEyes(walker, 0.08));   // close his eyes as he arrives
   } catch (_) {}
 }
 function __sbWkFadeOutForJarvis() {
@@ -16431,6 +16431,24 @@ function __sbJarvisInjectStyle() {
   #__sb_jarvis__ .jv-con-line.done .mk{color:#54E3A0;}
   @keyframes jvLineIn{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:none;}}
 
+  /* corner stat HUD — e.g. "how's my X doing": follower count counts up, green ▲ / red ▼ */
+  #__sb_jarvis__ .jv-stat{position:absolute;top:40px;left:46px;min-width:148px;
+    border:1px solid rgba(74,158,255,.28);border-radius:16px;padding:13px 18px 14px;
+    background:linear-gradient(180deg,rgba(8,18,34,.82),rgba(4,9,18,.9));
+    box-shadow:inset 0 0 50px -28px rgba(74,158,255,.55),0 18px 50px -22px rgba(0,0,0,.7);
+    opacity:0;transform:translateY(-12px) scale(.96);
+    transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.2,1);pointer-events:none;}
+  #__sb_jarvis__ .jv-stat.on{opacity:1;transform:none;}
+  #__sb_jarvis__ .jv-stat .lbl{font-size:9.5px;letter-spacing:.32em;text-transform:uppercase;color:rgba(74,158,255,.82);}
+  #__sb_jarvis__ .jv-stat .num{font-size:46px;line-height:1.04;font-weight:600;color:#EAF4FF;margin-top:7px;
+    letter-spacing:-.01em;font-variant-numeric:tabular-nums;text-shadow:0 0 22px rgba(74,158,255,.45);}
+  #__sb_jarvis__ .jv-stat .delta-wrap{margin-top:9px;min-height:14px;}
+  #__sb_jarvis__ .jv-stat .delta{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
+    letter-spacing:.02em;padding:3px 9px;border-radius:999px;}
+  #__sb_jarvis__ .jv-stat .delta .ar{font-size:10px;}
+  #__sb_jarvis__ .jv-stat .delta.up{color:#54E3A0;background:rgba(84,227,160,.12);border:1px solid rgba(84,227,160,.32);}
+  #__sb_jarvis__ .jv-stat .delta.down{color:#FF6B6B;background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.32);}
+  #__sb_jarvis__ .jv-stat .delta.flat{color:rgba(206,224,245,.6);background:rgba(206,224,245,.08);border:1px solid rgba(206,224,245,.18);}
   @media (prefers-reduced-motion:reduce){
     #__sb_jarvis__[data-stage="enter"] .jv-braino{animation:none;}
     #__sb_jarvis__[data-stage="charge"] .jv-braino{animation:none;}
@@ -16552,12 +16570,12 @@ function __sbOpenJarvis() {
   __sbWkFlyToCenter();
   __sbJarvisStartSoul(root);
 
-  // mascot has arrived + glowed → the model takes over (crossfade mascot → soul)
-  __sbJarvisAfter(1300, () => {
+  // mascot has slowly arrived + glowed → the model takes over (crossfade mascot → soul)
+  __sbJarvisAfter(1850, () => {
     root.setAttribute("data-stage", "form");
     __sbWkFadeOutForJarvis();
   });
-  __sbJarvisAfter(2150, () => {
+  __sbJarvisAfter(2750, () => {
     root.setAttribute("data-stage", "active");
     root.setAttribute("data-on", "1");
     __sbJarvisRenderMute(root);
@@ -16586,6 +16604,8 @@ function __sbCloseJarvis() {
     });
   }
   __sbJarvisHideConsole(true);
+  root?.querySelector?.(".jv-stat")?.classList.remove("on");
+  if (__sbJarvisStatHideTimer) { clearTimeout(__sbJarvisStatHideTimer); __sbJarvisStatHideTimer = null; }
   __sbWkReturnFromCenter();                 // the real mascot flies back down to the bar
   try { __sbCollapseCard(); } catch (_) {}  // close the chat card so it doesn't linger after Jarvis
   document.documentElement.classList.remove("sb-jarvis-active");
@@ -16676,6 +16696,49 @@ function __sbJarvisHideConsole(immediate) {
   if (con) con.classList.remove("on");
   if (immediate) { const body = root.querySelector(".jv-con-body"); if (body) body.innerHTML = ""; }
   if (__sbJarvisConsoleHideTimer) { clearTimeout(__sbJarvisConsoleHideTimer); __sbJarvisConsoleHideTimer = null; }
+}
+
+// ── Corner stat HUD: pops a follower count (count-up) with a green ▲ / red ▼ delta. Fed from the
+//    real /x-status data (data.followers.{count,delta7d}) when you ask "how's my X doing". ──
+function __sbJarvisCountUp(el, target) {
+  const dur = 1100, t0 = performance.now();
+  const fmt = (n) => Math.round(n).toLocaleString();
+  const tick = (now) => {
+    const k = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - k, 3);   // ease-out
+    el.textContent = fmt(target * e);
+    if (k < 1) requestAnimationFrame(tick); else el.textContent = fmt(target);
+  };
+  requestAnimationFrame(tick);
+}
+function __sbJarvisShowXStat(data) {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root || !__sbJarvisOpen) return;
+  const count = Number(data?.followers?.count);
+  if (!Number.isFinite(count)) return;
+  const delta = Number(data?.followers?.delta7d);
+
+  let el = root.querySelector(".jv-stat");
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "jv-stat";
+    el.innerHTML = `<div class="lbl">Followers on X</div><div class="num">0</div><div class="delta-wrap"></div>`;
+    root.appendChild(el);
+  }
+  const dWrap = el.querySelector(".delta-wrap");
+  if (Number.isFinite(delta) && delta !== 0) {
+    const up = delta > 0;
+    dWrap.innerHTML = `<span class="delta ${up ? "up" : "down"}"><span class="ar">${up ? "▲" : "▼"}</span>${up ? "+" : "−"}${Math.abs(delta)} this week</span>`;
+  } else if (Number.isFinite(delta)) {
+    dWrap.innerHTML = `<span class="delta flat">No change this week</span>`;
+  } else {
+    dWrap.innerHTML = "";
+  }
+
+  requestAnimationFrame(() => el.classList.add("on"));
+  __sbJarvisCountUp(el.querySelector(".num"), count);
+  if (__sbJarvisStatHideTimer) clearTimeout(__sbJarvisStatHideTimer);
+  __sbJarvisStatHideTimer = setTimeout(() => el.classList.remove("on"), 9000);
 }
 
 // ── The soul: a slowly-rotating sphere of glowing nodes, wireframe meridians,
