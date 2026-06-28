@@ -6281,6 +6281,8 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
     <div class="sb-dropdown-label" style="margin-top:8px">Speed — experiment</div>
     <button class="sb-dropdown-item" data-spec="toggle"><span class="sb-di-icon">⚡</span><span class="sb-di-label">Faster replies · beta</span><span class="sb-di-check">✓</span></button>
+    <div class="sb-dropdown-label" style="margin-top:8px">Wake</div>
+    <button class="sb-dropdown-item" data-wake="toggle"><span class="sb-di-icon">👂</span><span class="sb-di-label">“Hey Braino” + double-clap</span><span class="sb-di-check">✓</span></button>
   `;
   (document.documentElement||document.body).appendChild(modeDd);
 
@@ -6712,6 +6714,12 @@ function __sbBuildBrainUI() {
         : "Faster replies: OFF.",
       true,
     );
+  });
+
+  // "Hey Braino" + double-clap wake (ambient listening, opt-in).
+  modeDd.querySelector('.sb-dropdown-item[data-wake="toggle"]')?.addEventListener("click", () => {
+    __sbWakeSetEnabled(!__sbWakeEnabled);
+    __sbCloseAllDropdowns();
   });
 
   modelDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
@@ -15876,6 +15884,7 @@ function __sbDetachVoiceVisual() {
 }
 
 function __sbEnterHeadphoneMode(options = {}) {
+  try { if (typeof __sbDisarmWake === "function") __sbDisarmWake(); } catch (_) {}   // free the mic from the wake layer
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
   __sbApplyVoiceAutoRoutingDefaults();
@@ -15962,6 +15971,8 @@ function __sbExitHeadphoneMode() {
 
   document.getElementById("__sb_rec_btn__")?.classList.remove("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
+
+  try { if (typeof __sbWakeScheduleRearm === "function") __sbWakeScheduleRearm(); } catch (_) {}   // back to ambient listening
 }
 
 // state: "connecting" | "listening" | "hearing" | "captured" | "speaking" | ""
@@ -16574,6 +16585,7 @@ function __sbOpenJarvis() {
   if (__sbJarvisOpen) return;
   __sbJarvisOpen = true;
   __sbJarvisClearTimers();
+  try { if (typeof __sbDisarmWake === "function") __sbDisarmWake(); } catch (_) {}   // free the mic from the wake layer
   const root = __sbBuildJarvisOverlay();
 
   document.documentElement.classList.add("sb-jarvis-active");   // hide the normal bar/card — only Jarvis
@@ -16654,6 +16666,8 @@ function __sbCloseJarvis() {
     window.removeEventListener("keydown", __sbJarvisKeyHandler, true);
     __sbJarvisKeyHandler = null;
   }
+
+  try { if (typeof __sbWakeScheduleRearm === "function") __sbWakeScheduleRearm(); } catch (_) {}   // back to ambient listening
 }
 
 // audio-reactive bars + soul "speak" drive
@@ -16950,6 +16964,169 @@ function __sbJarvisStartSoul(root) {
   __sbJarvisStopSoul = () => { try { cancelAnimationFrame(raf); } catch (_) {} if (ro) try { ro.disconnect(); } catch (_) {} };
 }
 function __sbJarvisStopSoulFn() { if (__sbJarvisStopSoul) { try { __sbJarvisStopSoul(); } catch (_) {} __sbJarvisStopSoul = null; } }
+
+/* ============================================================================
+   AMBIENT WAKE LAYER — "Hey Braino" + double-clap, listening LOCALLY only.
+   While armed the mic NEVER reaches the GPT/real-time pipeline: a dedicated
+   SpeechRecognition watches solely for the wake phrase, and a Web Audio analyser
+   watches for a double-clap. Either trigger engages the real session
+   ("Hey Braino" → voice mode; double-clap → Jarvis), at which point the wake
+   layer disarms (handing the mic to that session) and re-arms when it ends.
+   Opt-in (brainoWakeListen), off by default. ================================ */
+let __sbWakeEnabled = false;       // persisted opt-in
+let __sbWakeArmed = false;         // currently listening for triggers
+let __sbWakeRec = null;            // dedicated wake-word recognizer (separate from voice STT)
+let __sbWakeShouldListen = false;  // drives the recognizer restart loop
+let __sbWakeStream = null;         // getUserMedia stream for clap detection
+let __sbWakeAudioCtx = null;
+let __sbWakeAnalyser = null;
+let __sbWakeRaf = null;
+let __sbWakeClapTimes = [];
+let __sbWakeLastOnset = 0;
+let __sbWakePrevRms = 0;
+let __sbWakeRearmTimer = null;
+let __sbWakeTriggering = false;
+
+const __SB_WAKE_PHRASE = /\bhey\s+(braino|bro\s*no|brno|bruno|brain\s*o|brainow|brainard|raino)\b/;
+const __SB_CLAP_THRESH = 0.18;     // RMS onset threshold for a clap (tune to taste)
+
+// The wake layer must stand down whenever a real session owns the mic.
+function __sbWakeEngaged() { return !!__sbHeadphoneMode || !!__sbJarvisOpen; }
+
+function __sbWakeSetEnabled(on) {
+  __sbWakeEnabled = !!on;
+  if (__sbContextOk()) chrome.storage.local.set({ brainoWakeListen: __sbWakeEnabled });
+  __sbWakeSyncToggle();
+  if (__sbWakeEnabled) {
+    __sbArmWake();
+    __sbShowBubble("Always listening: ON. Say “Hey Braino” to talk, or double-clap for Jarvis.", true, { tone: "status", kicker: "Braino" });
+  } else {
+    if (__sbWakeRearmTimer) { clearTimeout(__sbWakeRearmTimer); __sbWakeRearmTimer = null; }
+    __sbDisarmWake();
+    __sbShowBubble("Always listening: OFF.", false, { tone: "status", kicker: "Braino" });
+  }
+}
+
+function __sbWakeSyncToggle() {
+  document.getElementById("__sb_mode_dropdown__")
+    ?.querySelector('.sb-dropdown-item[data-wake="toggle"]')
+    ?.classList.toggle("selected", __sbWakeEnabled);
+}
+
+function __sbWakeScheduleRearm() {
+  if (!__sbWakeEnabled) return;
+  if (__sbWakeRearmTimer) clearTimeout(__sbWakeRearmTimer);
+  __sbWakeRearmTimer = setTimeout(() => {       // let the session tear down + avoid hearing its own tail
+    __sbWakeRearmTimer = null;
+    if (__sbWakeEnabled && !__sbWakeEngaged()) __sbArmWake();
+  }, 1500);
+}
+
+async function __sbArmWake() {
+  if (__sbWakeArmed || __sbWakeEngaged() || !__sbWakeEnabled || !__sbContextOk()) return;
+  __sbWakeArmed = true;
+  __sbWakeStartRec();
+  try { await __sbWakeStartClap(); } catch (_) {}
+}
+
+function __sbDisarmWake() {
+  __sbWakeArmed = false;
+  __sbWakeShouldListen = false;
+  if (__sbWakeRec) { try { __sbWakeRec.abort(); } catch (_) {} __sbWakeRec = null; }
+  if (__sbWakeRaf) { cancelAnimationFrame(__sbWakeRaf); __sbWakeRaf = null; }
+  try { __sbWakeStream?.getTracks().forEach((t) => t.stop()); } catch (_) {}
+  __sbWakeStream = null;
+  try { __sbWakeAudioCtx?.close(); } catch (_) {}
+  __sbWakeAudioCtx = null; __sbWakeAnalyser = null;
+  __sbWakeClapTimes = []; __sbWakePrevRms = 0;
+}
+
+// Dedicated wake-word recognizer — watches ONLY for the phrase, never forwards to the turn pipeline.
+function __sbWakeStartRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  __sbWakeShouldListen = true;
+  const build = () => {
+    if (!__sbWakeShouldListen || __sbWakeEngaged()) return;
+    let rec;
+    try { rec = new SR(); } catch (_) { return; }
+    rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    __sbWakeRec = rec;
+    rec.onresult = (e) => {
+      if (__sbWakeTriggering || __sbWakeEngaged()) return;
+      const text = Array.from(e.results).map((r) => r[0].transcript).join(" ").toLowerCase();
+      if (__SB_WAKE_PHRASE.test(text)) __sbWakeTrigger("voice");
+    };
+    rec.onerror = (e) => {
+      if (e.error === "aborted") return;
+      __sbWakeRec = null;
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { __sbDisarmWake(); return; }
+      if (__sbWakeShouldListen) setTimeout(build, 300);
+    };
+    rec.onend = () => { __sbWakeRec = null; if (__sbWakeShouldListen && !__sbWakeEngaged()) setTimeout(build, 200); };
+    try { rec.start(); } catch (_) { if (__sbWakeShouldListen) setTimeout(build, 500); }
+  };
+  build();
+}
+
+// Web Audio double-clap detector — sharp broadband transient, twice within a short window.
+async function __sbWakeStartClap() {
+  if (!navigator.mediaDevices?.getUserMedia) return;
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+  });
+  if (!__sbWakeArmed) { stream.getTracks().forEach((t) => t.stop()); return; }   // disarmed while awaiting permission
+  __sbWakeStream = stream;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  __sbWakeAudioCtx = new Ctx();
+  try { await __sbWakeAudioCtx.resume(); } catch (_) {}
+  const src = __sbWakeAudioCtx.createMediaStreamSource(stream);
+  __sbWakeAnalyser = __sbWakeAudioCtx.createAnalyser();
+  __sbWakeAnalyser.fftSize = 1024;
+  src.connect(__sbWakeAnalyser);
+  const buf = new Float32Array(__sbWakeAnalyser.fftSize);
+  const tick = () => {
+    if (!__sbWakeArmed || !__sbWakeAnalyser) return;
+    __sbWakeAnalyser.getFloatTimeDomainData(buf);
+    let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    const now = performance.now();
+    // onset = a sharp attack crossing the threshold from quiet, with a refractory gap
+    if (rms > __SB_CLAP_THRESH && __sbWakePrevRms < __SB_CLAP_THRESH * 0.5 && now - __sbWakeLastOnset > 120) {
+      __sbWakeLastOnset = now;
+      __sbWakeClapTimes = __sbWakeClapTimes.filter((t) => now - t < 900);
+      __sbWakeClapTimes.push(now);
+      if (__sbWakeClapTimes.length >= 2) {
+        const dt = now - __sbWakeClapTimes[__sbWakeClapTimes.length - 2];
+        if (dt >= 120 && dt <= 700) { __sbWakeClapTimes = []; __sbWakeTrigger("clap"); return; }
+      }
+    }
+    __sbWakePrevRms = rms;
+    __sbWakeRaf = requestAnimationFrame(tick);
+  };
+  __sbWakeRaf = requestAnimationFrame(tick);
+}
+
+function __sbWakeTrigger(kind) {
+  if (__sbWakeTriggering || !__sbWakeArmed) return;
+  __sbWakeTriggering = true;
+  __sbDisarmWake();                                  // hand the mic to the engaged session
+  try {
+    if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+    if (kind === "clap") { if (!__sbJarvisOpen) __sbOpenJarvis(); }
+    else { if (!__sbHeadphoneMode) __sbToggleHeadphoneMode(); }
+  } catch (_) {}
+  setTimeout(() => { __sbWakeTriggering = false; }, 1200);
+}
+
+// Load the opt-in at boot and arm if it was on.
+try {
+  __sbStorageGet(["brainoWakeListen"]).then(({ brainoWakeListen }) => {
+    __sbWakeEnabled = brainoWakeListen === true;
+    __sbWakeSyncToggle();
+    if (__sbWakeEnabled) __sbWakeScheduleRearm();
+  }).catch(() => {});
+} catch (_) {}
 
 if (__sbIsBrainoOwnSite()) {
   // dormant on Braino's own site — the website provides its own Braino experience
