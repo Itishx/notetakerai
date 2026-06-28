@@ -1255,18 +1255,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+  // The camera window pushes frames + status to us (the reliable window→worker direction).
+  if (message && message.sbCam === true) {
+    if (message.type === "frame" && message.data) { bgLatestCamFrame = message.data; bgLatestCamFrameAt = Date.now(); bgCamPushStatus = "ready"; }
+    else if (message.type === "status") { bgCamPushStatus = message.status || ""; }
+    return false;
+  }
   if (message.action === "brainoCameraVision") {
     (async () => {
       const gate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
       if (!gate.allowed) { bgNotifyQuota(sender?.tab?.id || null, "chat", gate); sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true }); return; }
-      const grab = await bgOffscreenGrabCameraFrame();
-      if (grab.needpermission) { try { await bgOpenCamGrantWindow(); } catch (_) {} sendResponse({ ok: false, status: "needpermission" }); return; }
-      if (!grab.frame) { sendResponse({ ok: false, status: "noframe" }); return; }
+      // ensure the camera window is open — it renders the live feed and pushes frames to us
+      let id = await bgFindCamWindow();
+      if (id == null) {
+        bgLatestCamFrame = ""; bgLatestCamFrameAt = 0; bgCamPushStatus = "";
+        const pos = await bgCamWindowPos();
+        const win = await new Promise((r) => chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, (w) => r(chrome.runtime.lastError ? null : w)));
+        if (!win) { sendResponse({ ok: false, status: "noframe" }); return; }
+      } else { try { chrome.windows.update(id, { focused: true }); } catch (_) {} }
+      // wait for a fresh pushed frame (granted) or a permission status
+      const startedAt = Date.now();
+      let frame = "";
+      while (Date.now() - startedAt < 9000) {
+        if (bgLatestCamFrame && (Date.now() - bgLatestCamFrameAt) < 4000) { frame = bgLatestCamFrame; break; }
+        if (bgCamPushStatus === "needpermission" || bgCamPushStatus === "denied") { sendResponse({ ok: false, status: bgCamPushStatus }); return; }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      if (!frame) { sendResponse({ ok: false, status: "noframe" }); return; }
       const res = await bgChatFetch({
         notes: "",
         chatHistory: Array.isArray(message.chatHistory) ? message.chatHistory : [],
         message: message.prompt || "Describe what you can see.",
-        imageBase64: grab.frame,
+        imageBase64: frame,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { sendResponse({ ok: false, status: "ready", error: `vision ${res.status}` }); return; }
@@ -1969,6 +1989,9 @@ function bgHostOf(url) {
 // (never a remembered id, which dies with the service worker) and talk to it with one-shot messages,
 // so a worker restart can't lose the connection or spawn duplicate windows. ─────────────────────────
 let bgCamWindowId = null;
+let bgLatestCamFrame = "";       // most recent frame the camera window pushed us (window→SW = reliable)
+let bgLatestCamFrameAt = 0;
+let bgCamPushStatus = "";        // "ready" | "needpermission" | "denied"
 
 // One-shot message to the cam window. Resolves null if it isn't open / doesn't answer in time.
 function bgSendToCam(message, timeoutMs) {
