@@ -1277,6 +1277,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "closeCamWindow") {
     try { if (bgCamWindowId != null) chrome.windows.remove(bgCamWindowId, () => { void chrome.runtime.lastError; }); } catch (_) {}
+    try { chrome.storage.session.remove("camWindowId"); } catch (_) {}
     bgCamPort = null; bgCamStatus = "idle"; bgCamWindowId = null;
     sendResponse({ ok: true });
     return true;
@@ -1983,21 +1984,59 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-function bgEnsureCamWindow() {
+function bgWaitCamStatus(ms) {
   return new Promise((resolve) => {
-    if (bgCamPort && bgCamStatus !== "idle") { resolve(bgCamStatus); return; }
-    bgCamStatus = "idle";
-    chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", width: 300, height: 250, focused: true }, (win) => {
-      if (chrome.runtime.lastError || !win) { resolve("idle"); return; }
-      bgCamWindowId = win.id || null;
-      let waited = 0;
-      const iv = setInterval(() => {
-        waited += 150;
-        if (bgCamStatus !== "idle") { clearInterval(iv); resolve(bgCamStatus); }
-        else if (waited > 15000) { clearInterval(iv); resolve(bgCamStatus); }
-      }, 150);
-    });
+    if (bgCamStatus !== "idle") { resolve(bgCamStatus); return; }
+    let waited = 0;
+    const iv = setInterval(() => {
+      waited += 150;
+      if (bgCamStatus !== "idle") { clearInterval(iv); resolve(bgCamStatus); }
+      else if (waited >= ms) { clearInterval(iv); resolve(bgCamStatus); }
+    }, 150);
   });
+}
+
+function bgWindowExists(id) {
+  return new Promise((r) => { try { chrome.windows.get(id, {}, (w) => r(!chrome.runtime.lastError && !!w)); } catch (_) { r(false); } });
+}
+
+// Put the little camera window on-screen, top-right of the user's current window (default placement
+// can land it off a multi-monitor desktop).
+async function bgCamWindowPos() {
+  const W = 340, H = 280;
+  try {
+    const cur = await new Promise((r) => chrome.windows.getCurrent({}, (w) => r(chrome.runtime.lastError ? null : w)));
+    if (cur && typeof cur.left === "number" && typeof cur.width === "number") {
+      return { width: W, height: H, left: Math.max(20, cur.left + cur.width - W - 36), top: Math.max(20, (cur.top || 0) + 96) };
+    }
+  } catch (_) {}
+  return { width: W, height: H, left: 140, top: 120 };
+}
+
+// Ensure exactly ONE camera window, surviving service-worker restarts (the window id is parked in
+// session storage; the window's cam.js reconnects its Port on restart and re-announces its status).
+async function bgEnsureCamWindow() {
+  if (bgCamPort && bgCamStatus !== "idle" && bgCamWindowId != null && await bgWindowExists(bgCamWindowId)) {
+    try { chrome.windows.update(bgCamWindowId, { focused: true }); } catch (_) {}
+    return bgCamStatus;
+  }
+  // recover a window the previous SW instance opened
+  if (bgCamWindowId == null) {
+    try { const s = await chrome.storage.session.get("camWindowId"); if (typeof s.camWindowId === "number") bgCamWindowId = s.camWindowId; } catch (_) {}
+  }
+  if (bgCamWindowId != null && await bgWindowExists(bgCamWindowId)) {
+    try { chrome.windows.update(bgCamWindowId, { focused: true }); } catch (_) {}
+    try { bgCamPort && bgCamPort.postMessage({ type: "ping" }); } catch (_) {}
+    return await bgWaitCamStatus(8000);   // wait for cam.js (re)connect + status
+  }
+  // open a fresh one
+  bgCamPort = null; bgCamStatus = "idle";
+  const pos = await bgCamWindowPos();
+  const win = await new Promise((r) => chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, (w) => r(chrome.runtime.lastError ? null : w)));
+  if (!win) return "idle";
+  bgCamWindowId = win.id || null;
+  try { await chrome.storage.session.set({ camWindowId: bgCamWindowId }); } catch (_) {}
+  return await bgWaitCamStatus(15000);
 }
 
 function bgGrabCamFrame() {
@@ -2005,7 +2044,7 @@ function bgGrabCamFrame() {
     if (!bgCamPort) { resolve(""); return; }
     bgCamFrameResolve = resolve;
     try { bgCamPort.postMessage({ type: "grab" }); } catch (_) { bgCamFrameResolve = null; resolve(""); return; }
-    setTimeout(() => { if (bgCamFrameResolve === resolve) { bgCamFrameResolve = null; resolve(""); } }, 3000);
+    setTimeout(() => { if (bgCamFrameResolve === resolve) { bgCamFrameResolve = null; resolve(""); } }, 4500);
   });
 }
 
