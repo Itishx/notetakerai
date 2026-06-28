@@ -1259,7 +1259,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       const gate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
       if (!gate.allowed) { bgNotifyQuota(sender?.tab?.id || null, "chat", gate); sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true }); return; }
-      const status = await bgEnsureCamWindow();
+      const status = await bgEnsureCamReady();
       if (status !== "ready") { sendResponse({ ok: false, status }); return; }
       const frame = await bgGrabCamFrame();
       if (!frame) { sendResponse({ ok: false, status: "noframe" }); return; }
@@ -1276,10 +1276,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "closeCamWindow") {
-    try { if (bgCamWindowId != null) chrome.windows.remove(bgCamWindowId, () => { void chrome.runtime.lastError; }); } catch (_) {}
-    try { chrome.storage.session.remove("camWindowId"); } catch (_) {}
-    bgCamPort = null; bgCamStatus = "idle"; bgCamWindowId = null;
-    sendResponse({ ok: true });
+    (async () => {
+      let id = bgCamWindowId;
+      if (id == null) id = await bgFindCamWindow();
+      try { if (id != null) chrome.windows.remove(id, () => { void chrome.runtime.lastError; }); } catch (_) {}
+      bgCamWindowId = null;
+      sendResponse({ ok: true });
+    })();
     return true;
   }
   if (message.action === "brainoVision") {
@@ -1962,46 +1965,44 @@ function bgHostOf(url) {
   try { return new URL(url || "").hostname.replace(/^www\./, ""); } catch { return ""; }
 }
 
-// ── Camera vision: the camera lives in a top-level extension popup window (cam.html), NOT an in-page
-// iframe — that's the only context the page's Permissions-Policy can't block. It connects back over a
-// Port; we open it on demand, ask for one frame, and run the vision call. ──────────────────────────
-let bgCamPort = null;
-let bgCamStatus = "idle";      // idle | ready | needpermission | denied
+// ── Camera vision: the camera lives in a top-level extension popup window (cam.html) — the only
+// context the page's Permissions-Policy can't block. STATELESS design: we find the window by URL
+// (never a remembered id, which dies with the service worker) and talk to it with one-shot messages,
+// so a worker restart can't lose the connection or spawn duplicate windows. ─────────────────────────
 let bgCamWindowId = null;
-let bgCamFrameResolve = null;
 
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== "camWindow") return;
-  bgCamPort = port;
-  port.onMessage.addListener((m) => {
-    if (m?.type === "ready") bgCamStatus = "ready";
-    else if (m?.type === "needpermission") bgCamStatus = "needpermission";
-    else if (m?.type === "denied") bgCamStatus = "denied";
-    else if (m?.type === "frame") { const r = bgCamFrameResolve; bgCamFrameResolve = null; if (r) r(m.data || ""); }
-  });
-  port.onDisconnect.addListener(() => {
-    if (bgCamPort === port) { bgCamPort = null; bgCamStatus = "idle"; bgCamWindowId = null; }
-  });
-});
-
-function bgWaitCamStatus(ms) {
+// One-shot message to the cam window. Resolves null if it isn't open / doesn't answer in time.
+function bgSendToCam(message, timeoutMs) {
   return new Promise((resolve) => {
-    if (bgCamStatus !== "idle") { resolve(bgCamStatus); return; }
-    let waited = 0;
-    const iv = setInterval(() => {
-      waited += 150;
-      if (bgCamStatus !== "idle") { clearInterval(iv); resolve(bgCamStatus); }
-      else if (waited >= ms) { clearInterval(iv); resolve(bgCamStatus); }
-    }, 150);
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    try {
+      chrome.runtime.sendMessage(message, (resp) => { void chrome.runtime.lastError; finish(resp || null); });
+    } catch (_) { finish(null); return; }
+    setTimeout(() => finish(null), timeoutMs || 4000);
   });
 }
 
-function bgWindowExists(id) {
-  return new Promise((r) => { try { chrome.windows.get(id, {}, (w) => r(!chrome.runtime.lastError && !!w)); } catch (_) { r(false); } });
+// Find an already-open camera window by its URL — robust across service-worker restarts.
+function bgFindCamWindow() {
+  const url = chrome.runtime.getURL("cam.html");
+  return new Promise((resolve) => {
+    try {
+      chrome.windows.getAll({ populate: true }, (wins) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        for (const w of (wins || [])) {
+          for (const t of (w.tabs || [])) {
+            if (t.url === url || t.pendingUrl === url) { resolve(w.id); return; }
+          }
+        }
+        resolve(null);
+      });
+    } catch (_) { resolve(null); }
+  });
 }
 
-// Put the little camera window on-screen, top-right of the user's current window (default placement
-// can land it off a multi-monitor desktop).
+// Put the window on-screen, top-right of the current window (default placement can land it off a
+// multi-monitor desktop).
 async function bgCamWindowPos() {
   const W = 340, H = 280;
   try {
@@ -2013,39 +2014,30 @@ async function bgCamWindowPos() {
   return { width: W, height: H, left: 140, top: 120 };
 }
 
-// Ensure exactly ONE camera window, surviving service-worker restarts (the window id is parked in
-// session storage; the window's cam.js reconnects its Port on restart and re-announces its status).
-async function bgEnsureCamWindow() {
-  if (bgCamPort && bgCamStatus !== "idle" && bgCamWindowId != null && await bgWindowExists(bgCamWindowId)) {
-    try { chrome.windows.update(bgCamWindowId, { focused: true }); } catch (_) {}
-    return bgCamStatus;
+// Ensure exactly one camera window exists, then poll it (one-shot) until its getUserMedia attempt has
+// settled. Returns "ready" | "needpermission" | "denied" | "idle".
+async function bgEnsureCamReady() {
+  let id = await bgFindCamWindow();
+  if (id == null) {
+    const pos = await bgCamWindowPos();
+    const win = await new Promise((r) => chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, (w) => r(chrome.runtime.lastError ? null : w)));
+    if (!win) return "idle";
+    id = win.id || null;
+  } else {
+    try { chrome.windows.update(id, { focused: true }); } catch (_) {}
   }
-  // recover a window the previous SW instance opened
-  if (bgCamWindowId == null) {
-    try { const s = await chrome.storage.session.get("camWindowId"); if (typeof s.camWindowId === "number") bgCamWindowId = s.camWindowId; } catch (_) {}
+  bgCamWindowId = id;
+  for (let i = 0; i < 60; i++) {                 // resolves in ~1–2s normally; cap is just a safety net
+    const r = await bgSendToCam({ action: "camGetStatus" }, 900);
+    if (r && r.status && r.status !== "idle") return r.status;
+    await new Promise((res) => setTimeout(res, 250));
   }
-  if (bgCamWindowId != null && await bgWindowExists(bgCamWindowId)) {
-    try { chrome.windows.update(bgCamWindowId, { focused: true }); } catch (_) {}
-    try { bgCamPort && bgCamPort.postMessage({ type: "ping" }); } catch (_) {}
-    return await bgWaitCamStatus(8000);   // wait for cam.js (re)connect + status
-  }
-  // open a fresh one
-  bgCamPort = null; bgCamStatus = "idle";
-  const pos = await bgCamWindowPos();
-  const win = await new Promise((r) => chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, (w) => r(chrome.runtime.lastError ? null : w)));
-  if (!win) return "idle";
-  bgCamWindowId = win.id || null;
-  try { await chrome.storage.session.set({ camWindowId: bgCamWindowId }); } catch (_) {}
-  return await bgWaitCamStatus(15000);
+  return "idle";
 }
 
-function bgGrabCamFrame() {
-  return new Promise((resolve) => {
-    if (!bgCamPort) { resolve(""); return; }
-    bgCamFrameResolve = resolve;
-    try { bgCamPort.postMessage({ type: "grab" }); } catch (_) { bgCamFrameResolve = null; resolve(""); return; }
-    setTimeout(() => { if (bgCamFrameResolve === resolve) { bgCamFrameResolve = null; resolve(""); } }, 4500);
-  });
+async function bgGrabCamFrame() {
+  const r = await bgSendToCam({ action: "camGrab" }, 5000);
+  return (r && r.frame) ? r.frame : "";
 }
 
 // Ask the LLM which of the (already safety-filtered) candidate tabs to close.
