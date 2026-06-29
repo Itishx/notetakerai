@@ -356,6 +356,7 @@ serve(async (req) => {
       chatHistory,
       message,
       imageBase64,
+      visionMode,
       existingImages,
       pageContext,
       aiProvider,
@@ -435,6 +436,10 @@ serve(async (req) => {
       delegateModel: typeof delegateModel === "string" ? delegateModel : null,
     });
     const hasImage = !!imageBase64;
+    // "describe" vision (camera / screen "what do you see") — NOT the lecture-notes diagram flow.
+    // gpt-5.4-mini (the default) has no image input → it 500s; route describe to a vision-capable model.
+    const visionDescribe = hasImage && visionMode === "describe";
+    if (visionDescribe && config.provider === "openai") config.model = "gpt-5.5";
     const existingImageMap = existingImages && typeof existingImages === "object" ? existingImages : {};
     const existingImageKeys = Object.keys(existingImageMap);
 
@@ -464,6 +469,8 @@ serve(async (req) => {
 
     const systemPrompt = isDelegateRequest
       ? String(notes || "You are Braino Delegate. Return strict JSON only.")
+      : visionDescribe
+      ? "You are Braino, looking at the user live through their webcam or at their screen. Answer their request about what you see in one or two warm, natural, spoken sentences. Be specific about what's actually there. Never mention being an AI, or that this is an image, a frame, or a screenshot."
       : hasImage
       ? `You are a helpful lecture notes assistant. The user has lecture notes and is sharing a diagram/image screenshot from the lecture.
 
@@ -546,6 +553,13 @@ ${notes || "(no notes yet)"}`
 
     const aiData = await aiRes.json();
     const rawContent = extractContent(config.provider, aiData);
+
+    // Camera / screen "describe" vision → just return the spoken description.
+    if (visionDescribe) {
+      return new Response(JSON.stringify({ reply: rawContent }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // If image was sent, parse for updatedNotes
     if (hasImage) {

@@ -1295,6 +1295,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         notes: "",
         chatHistory: Array.isArray(message.chatHistory) ? message.chatHistory : [],
         message: message.prompt || "Describe what you can see.",
+        visionMode: "describe",
         imageBase64: frame,
       });
       const data = await res.json().catch(() => ({}));
@@ -1327,6 +1328,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         notes: "",
         chatHistory: Array.isArray(message.chatHistory) ? message.chatHistory : [],
         message: message.prompt || "Describe what you can see.",
+        visionMode: "describe",
         imageBase64: message.imageBase64 || "",
       });
       const data = await res.json().catch(() => ({}));
