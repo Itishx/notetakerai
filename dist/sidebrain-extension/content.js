@@ -16463,12 +16463,17 @@ function __sbJarvisInjectStyle() {
   #__sb_jarvis__ .jv-hint kbd{border:1px solid rgba(74,158,255,.35);border-radius:5px;padding:2px 7px;
     color:rgba(224,240,255,.85);letter-spacing:.1em;font-family:inherit;}
 
-  #__sb_jarvis__ .jv-mute{position:absolute;top:38px;right:42px;display:flex;align-items:center;gap:8px;
+  #__sb_jarvis__ .jv-controls{position:absolute;top:38px;right:42px;display:flex;align-items:center;gap:10px;pointer-events:auto;}
+  #__sb_jarvis__ .jv-mute,
+  #__sb_jarvis__ .jv-cam{display:flex;align-items:center;gap:8px;
     pointer-events:auto;cursor:pointer;background:none;border:1px solid rgba(74,158,255,.3);border-radius:9px;
     padding:7px 11px;color:rgba(74,158,255,.85);font-family:inherit;font-size:10px;letter-spacing:.22em;
-    text-transform:uppercase;transition:border-color .2s,color .2s;}
-  #__sb_jarvis__ .jv-mute:hover{border-color:rgba(74,158,255,.7);color:rgba(224,240,255,.95);}
-  #__sb_jarvis__ .jv-mute svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+    text-transform:uppercase;transition:border-color .2s,color .2s,background .2s;}
+  #__sb_jarvis__ .jv-mute:hover,
+  #__sb_jarvis__ .jv-cam:hover{border-color:rgba(74,158,255,.7);color:rgba(224,240,255,.95);}
+  #__sb_jarvis__ .jv-mute svg,
+  #__sb_jarvis__ .jv-cam svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  #__sb_jarvis__ .jv-cam.on{color:#54E3A0;border-color:rgba(84,227,160,.55);background:rgba(84,227,160,.12);}
 
   /* Iron-Man HUD console — delegate / research play-by-play */
   #__sb_jarvis__ .jv-console{position:absolute;left:44px;bottom:44px;width:min(34vw,420px);height:min(30vw,290px);
@@ -16544,7 +16549,10 @@ function __sbBuildJarvisOverlay() {
     </div></div>
     <div class="jv-ui">
       <div class="jv-eyebrow"><span class="dot"></span>Jarvis Mode</div>
-      <button class="jv-mute" type="button" aria-label="Toggle voice"></button>
+      <div class="jv-controls">
+        <button class="jv-cam" type="button" aria-label="Camera"></button>
+        <button class="jv-mute" type="button" aria-label="Toggle voice"></button>
+      </div>
       <div class="jv-bars"></div>
       <div class="jv-hint"><kbd>&#8997;</kbd><kbd>&#8997;</kbd> to exit</div>
     </div>
@@ -16582,6 +16590,8 @@ function __sbBuildJarvisOverlay() {
 
   root.querySelector(".jv-mute").addEventListener("click", __sbJarvisToggleVoice);
   __sbJarvisRenderMute(root);
+  root.querySelector(".jv-cam").addEventListener("click", __sbJarvisToggleCamera);
+  __sbJarvisRenderCamBtn(root);
   return root;
 }
 
@@ -16602,6 +16612,48 @@ function __sbJarvisToggleVoice() {
   } catch (_) {}
   const root = document.getElementById("__sb_jarvis__");
   if (root) __sbJarvisRenderMute(root);
+}
+
+function __sbJarvisRenderCamBtn(root) {
+  const btn = root.querySelector(".jv-cam");
+  if (!btn) return;
+  btn.classList.toggle("on", !!__sbCamOn);
+  const icon = `<svg viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Z"/><path d="M15 10.5l5-3v9l-5-3"/></svg>`;
+  btn.innerHTML = icon + `<span>${__sbCamOn ? "Live" : "Camera"}</span>`;
+}
+
+// Camera button — tap to have Braino look at you (opens the camera + describes); tap again to stop.
+function __sbJarvisToggleCamera() {
+  if (__sbCamOn) {
+    try { __sbCamStop(); } catch (_) {}   // sets __sbCamOn = false
+    const root = document.getElementById("__sb_jarvis__");
+    if (root) __sbJarvisRenderCamBtn(root);
+  } else {
+    __sbJarvisLook();
+  }
+}
+
+async function __sbJarvisLook() {
+  if (__sbCamBusy) return;
+  __sbCamBusy = true;
+  const speak = (line) => __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true });
+  try {
+    try { __sbNoteSpoken?.("One sec, let me look…"); } catch (_) {}
+    void speak("One sec, let me look…");
+    const visionPrompt = `You are Braino, looking at the user live through their webcam. Warmly and briefly describe what you actually see — the person and their surroundings — in one or two natural spoken sentences. Do not mention being an AI or that this is an image or a frame.`;
+    let res = null;
+    try { res = await __sbRuntimeMessage({ action: "brainoCameraVision", prompt: visionPrompt }); } catch (_) {}
+    const status = res?.status;
+    if (status === "needpermission") { await speak("Tap “Enable camera” in the little window and allow it, then tap the camera button again."); return; }
+    if (status === "denied") { await speak("The camera's blocked — allow it in that little window, then tap the camera button again."); return; }
+    if (!res?.ok) { await speak("I couldn't get a clear view — give it another tap."); return; }
+    __sbCamOn = true;
+    const root = document.getElementById("__sb_jarvis__");
+    if (root) __sbJarvisRenderCamBtn(root);
+    await speak(String(res?.reply || "").trim() || "I can see you.");
+  } finally {
+    __sbCamBusy = false;
+  }
 }
 
 function __sbOpenJarvis() {
@@ -16671,6 +16723,7 @@ function __sbCloseJarvis() {
   root?.querySelector?.(".jv-stat")?.classList.remove("on");
   if (__sbJarvisStatHideTimer) { clearTimeout(__sbJarvisStatHideTimer); __sbJarvisStatHideTimer = null; }
   __sbWkReturnFromCenter();                 // the real mascot flies back down to the bar
+  try { __sbCamStop(); } catch (_) {}       // turn the camera off when leaving Jarvis
   try { __sbCollapseCard(); } catch (_) {}  // close the chat card so it doesn't linger after Jarvis
   document.documentElement.classList.remove("sb-jarvis-active");
 
@@ -17159,6 +17212,7 @@ try {
 let __sbCamFrameEl = null;       // the extension-origin <iframe> that owns the camera + is the PiP
 let __sbCamReady = false;
 let __sbCamBusy = false;
+let __sbCamOn = false;           // camera session active (live feed open) — drives the Jarvis cam button
 let __sbCamMsgHandler = null;
 let __sbCamFramePending = null;  // resolver for an in-flight frame grab
 let __sbCamEnsureResolve = null; // resolver for an in-flight ensure
@@ -17243,7 +17297,7 @@ function __sbCamEnsure() {
 
 function __sbCamStop() {
   try { chrome.runtime.sendMessage({ action: "closeCamWindow" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
-  __sbCamReady = false; __sbCamFrameEl = null;
+  __sbCamReady = false; __sbCamFrameEl = null; __sbCamOn = false;
 }
 
 // Camera vision now runs entirely through the background, which opens a top-level extension popup
@@ -17266,6 +17320,9 @@ async function __sbHandleVisionRequest(promptText, ctx = {}) {
     if (status === "needpermission") { await say("I've opened a little camera window — tap “Enable camera” in it and choose Allow, then ask me again."); return; }
     if (status === "denied") { await say("The camera's blocked. In that little camera window, allow the camera, then ask me again."); return; }
     if (!res?.ok) { await say("I couldn't get the camera going — check the camera window I opened, then try again."); return; }
+    __sbCamOn = true;
+    const jvRoot = document.getElementById("__sb_jarvis__");
+    if (jvRoot) __sbJarvisRenderCamBtn(jvRoot);
     const line = String(res?.reply || "").trim() || "I can see you — but I couldn't quite put it into words. Try once more?";
     if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
     else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });
