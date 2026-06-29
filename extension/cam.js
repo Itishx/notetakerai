@@ -20,6 +20,7 @@ function pushFrame() {
   const c = document.createElement("canvas"); c.width = w; c.height = h;
   try { c.getContext("2d").drawImage(video, 0, 0, w, h); } catch (_) { return; }
   const data = c.toDataURL("image/png").split(",")[1] || "";   // PNG = the backend's declared mime
+  console.log("[BrainoCam:win] pushing frame, len=", data.length);
   if (data) push({ type: "frame", data });
 }
 
@@ -37,6 +38,7 @@ async function start(viaGesture) {
     await new Promise((res) => { if (video.videoWidth) return res(); video.onloadedmetadata = () => res(); setTimeout(res, 1500); });
     try { await video.play(); } catch (_) {}
     granted = true; denied = false;
+    console.log("[BrainoCam:win] getUserMedia OK, videoWidth=", video.videoWidth);
     push({ type: "status", status: "ready" });
     setTimeout(pushFrame, 300);   // first frame ASAP
   } catch (e) {

@@ -1257,20 +1257,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   // The camera window pushes frames + status to us (the reliable window→worker direction).
   if (message && message.sbCam === true) {
-    if (message.type === "frame" && message.data) { bgLatestCamFrame = message.data; bgLatestCamFrameAt = Date.now(); bgCamPushStatus = "ready"; }
-    else if (message.type === "status") { bgCamPushStatus = message.status || ""; }
+    if (message.type === "frame" && message.data) {
+      bgLatestCamFrame = message.data; bgLatestCamFrameAt = Date.now(); bgCamPushStatus = "ready";
+      console.log("[BrainoCam] frame pushed, len=", message.data.length);
+    } else if (message.type === "status") {
+      bgCamPushStatus = message.status || "";
+      console.log("[BrainoCam] status pushed:", message.status);
+    }
     return false;
   }
   if (message.action === "brainoCameraVision") {
     (async () => {
+      console.log("[BrainoCam] brainoCameraVision requested");
       const gate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
-      if (!gate.allowed) { bgNotifyQuota(sender?.tab?.id || null, "chat", gate); sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true }); return; }
+      if (!gate.allowed) { console.log("[BrainoCam] gate blocked"); bgNotifyQuota(sender?.tab?.id || null, "chat", gate); sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true }); return; }
       // ensure the camera window is open — it renders the live feed and pushes frames to us
       let id = await bgFindCamWindow();
+      console.log("[BrainoCam] existing window id:", id);
       if (id == null) {
         bgLatestCamFrame = ""; bgLatestCamFrameAt = 0; bgCamPushStatus = "";
         const pos = await bgCamWindowPos();
         const win = await new Promise((r) => chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, (w) => r(chrome.runtime.lastError ? null : w)));
+        console.log("[BrainoCam] created window:", win && win.id, chrome.runtime.lastError && chrome.runtime.lastError.message);
         if (!win) { sendResponse({ ok: false, status: "noframe" }); return; }
       } else { try { chrome.windows.update(id, { focused: true }); } catch (_) {} }
       // wait for a fresh pushed frame (granted) or a permission status
@@ -1278,9 +1286,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       let frame = "";
       while (Date.now() - startedAt < 9000) {
         if (bgLatestCamFrame && (Date.now() - bgLatestCamFrameAt) < 4000) { frame = bgLatestCamFrame; break; }
-        if (bgCamPushStatus === "needpermission" || bgCamPushStatus === "denied") { sendResponse({ ok: false, status: bgCamPushStatus }); return; }
+        if (bgCamPushStatus === "needpermission" || bgCamPushStatus === "denied") { console.log("[BrainoCam] permission status:", bgCamPushStatus); sendResponse({ ok: false, status: bgCamPushStatus }); return; }
         await new Promise((r) => setTimeout(r, 250));
       }
+      console.log("[BrainoCam] wait done. frame?", !!frame, "lastFrameAgeMs=", bgLatestCamFrameAt ? (Date.now() - bgLatestCamFrameAt) : "none", "status=", bgCamPushStatus);
       if (!frame) { sendResponse({ ok: false, status: "noframe" }); return; }
       const res = await bgChatFetch({
         notes: "",
@@ -1289,9 +1298,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         imageBase64: frame,
       });
       const data = await res.json().catch(() => ({}));
+      console.log("[BrainoCam] vision res.ok=", res.ok, "status=", res.status, "reply?", !!(data && data.reply));
       if (!res.ok) { sendResponse({ ok: false, status: "ready", error: `vision ${res.status}` }); return; }
       sendResponse({ ok: true, status: "ready", reply: String(data?.reply || data?.response || "").trim() });
-    })().catch((e) => sendResponse({ ok: false, error: e?.message || "Camera vision failed." }));
+    })().catch((e) => { console.log("[BrainoCam] threw:", e?.message); sendResponse({ ok: false, error: e?.message || "Camera vision failed." }); });
     return true;
   }
   if (message.action === "closeCamWindow") {
@@ -2007,14 +2017,14 @@ function bgSendToCam(message, timeoutMs) {
 
 // Find an already-open camera window by its URL — robust across service-worker restarts.
 function bgFindCamWindow() {
-  const url = chrome.runtime.getURL("cam.html");
   return new Promise((resolve) => {
     try {
-      chrome.windows.getAll({ populate: true }, (wins) => {
+      chrome.windows.getAll({ populate: true, windowTypes: ["popup", "normal"] }, (wins) => {
         if (chrome.runtime.lastError) { resolve(null); return; }
         for (const w of (wins || [])) {
           for (const t of (w.tabs || [])) {
-            if (t.url === url || t.pendingUrl === url) { resolve(w.id); return; }
+            const u = t.url || t.pendingUrl || "";
+            if (u.includes("cam.html")) { resolve(w.id); return; }
           }
         }
         resolve(null);
