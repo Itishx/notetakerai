@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
+import { useBrainoVoice } from "@/hooks/useBrainoVoice";
 
 /* ============================================================================
    Braino Chat — the full-screen website chat, rebuilt to the imported
@@ -306,6 +307,30 @@ const CHAT_PAGE_CSS = `
   .bchat .dock-hint a{color:var(--accent); text-decoration:underline; text-underline-offset:2px;}
   .bchat .signin-hint{text-align:center; font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; color:var(--ink-3); margin-top:8px;}
   .bchat .signin-hint a{color:var(--accent); text-decoration:underline; text-underline-offset:2px;}
+
+  /* ── Voice mode (Ctrl ×2): the whole screen perimeter glows, no mascot, just a transcript ── */
+  .bchat .tb-mic{width:34px; height:34px; display:grid; place-items:center; border-radius:9px; border:1px solid var(--line); background:none; cursor:pointer; color:var(--ink-2); transition:border-color .2s, color .2s, background .2s;}
+  .bchat .tb-mic:hover{color:var(--ink); border-color:var(--ink-3);}
+  .bchat .tb-mic.on{color:#fff; background:var(--accent); border-color:var(--accent);}
+  .bchat .tb-mic svg{width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;}
+  .bchat-voice{position:fixed; inset:0; z-index:60; display:grid; place-items:center; background:color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); animation:bchatVoiceIn .3s ease;}
+  @keyframes bchatVoiceIn{from{opacity:0;}to{opacity:1;}}
+  .bchat-voice-veil{position:fixed; inset:0; pointer-events:none; box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 0 90px 10px color-mix(in srgb, var(--accent) 20%, transparent); animation:bchatVeilPulse 2.6s ease-in-out infinite;}
+  .bchat-voice.speaking .bchat-voice-veil{box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 130px 22px color-mix(in srgb, var(--accent) 38%, transparent); animation-duration:1.1s;}
+  .bchat-voice.thinking .bchat-voice-veil{animation-duration:1.5s;}
+  .bchat-voice.connecting .bchat-voice-veil{opacity:.6; animation-duration:1.2s;}
+  .bchat-voice.error .bchat-voice-veil{box-shadow:inset 0 0 0 2px #C9544A, inset 0 0 90px 10px rgba(201,84,74,0.24);}
+  @keyframes bchatVeilPulse{0%,100%{opacity:.5;}50%{opacity:1;}}
+  .bchat-voice-inner{position:relative; z-index:1; width:min(680px, 90vw); text-align:center; padding:24px;}
+  .bchat-voice-status{font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); display:inline-flex; align-items:center; gap:9px; margin-bottom:26px;}
+  .bchat-voice-dot{width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 12px var(--accent); animation:bchatVeilPulse 1.3s ease-in-out infinite;}
+  .bchat-voice-transcript{min-height:120px; display:flex; flex-direction:column; gap:16px; justify-content:center;}
+  .bchat-voice-you{font-family:var(--serif); font-style:italic; font-size:22px; line-height:1.4; color:var(--ink-2); margin:0;}
+  .bchat-voice-braino{font-family:var(--serif); font-size:26px; line-height:1.45; color:var(--ink); margin:0;}
+  .bchat-voice-hint{font-family:var(--serif); font-size:20px; color:var(--ink-3); font-style:italic; margin:0;}
+  .bchat-voice-err{font-family:var(--helv); font-size:15px; color:#C9544A;}
+  .bchat-voice-err a{color:var(--accent);}
+  .bchat-voice-exit{margin-top:30px; font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; color:var(--ink-3);}
 
   @media (max-width:640px){
     .bchat .greeting{white-space:normal; font-size:clamp(28px,8vw,40px);}
@@ -928,6 +953,43 @@ export default function BrainoChat() {
 
   const displayName = useMemo(() => getDisplayName(profile?.display_name, user?.email), [profile?.display_name, user?.email]);
 
+  // ── Voice mode (Ctrl ×2) — real-time, same backend + system prompt as the extension ──
+  const buildVoiceConfigBody = useCallback(() => ({
+    notes: BRAINO_SITE_CONTEXT,
+    languagePolicy: "english",
+    voiceSurface: "website_chat",
+    clientTimeZone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null,
+    pageContext: {
+      title: "Braino full-screen chat",
+      url: typeof window !== "undefined" ? window.location.href : "https://trybraino.com/chat",
+      text: "The user is talking to Braino by voice inside the dedicated website chat page.",
+    },
+  }), []);
+  const {
+    active: voiceActive, status: voiceStatus, userText: voiceUserText,
+    brainoText: voiceBrainoText, error: voiceError, toggle: voiceToggle, stop: voiceStop,
+  } = useBrainoVoice({
+    accessToken: session?.access_token,
+    buildConfigBody: buildVoiceConfigBody,
+    onLog: (scope, msg, data) => log.info(scope, msg, data),
+  });
+
+  // Double-tap Control toggles voice; Esc exits.
+  useEffect(() => {
+    let taps = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && voiceActive) { voiceStop(); return; }
+      if (e.key !== "Control") return;
+      taps += 1;
+      if (timer) clearTimeout(timer);
+      if (taps >= 2) { taps = 0; voiceToggle(); return; }
+      timer = setTimeout(() => { taps = 0; }, 400);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); if (timer) clearTimeout(timer); };
+  }, [voiceActive, voiceToggle, voiceStop]);
+
   const wrapperStyle = { ...THEMES[theme], "--read": "19px" } as React.CSSProperties;
   const placeholder = delegateMode
     ? "Tell Braino what to do — he'll run it on your browser…"
@@ -938,6 +1000,35 @@ export default function BrainoChat() {
       <style>{CHAT_PAGE_CSS}</style>
       <BrainoDefs />
 
+      {/* Voice mode (Ctrl ×2): the whole screen perimeter glows, no mascot, just a live transcript. */}
+      {voiceActive && (
+        <div className={`bchat-voice ${voiceStatus}`} role="dialog" aria-label="Braino voice mode">
+          <div className="bchat-voice-veil" aria-hidden="true" />
+          <div className="bchat-voice-inner">
+            <div className="bchat-voice-status">
+              <span className="bchat-voice-dot" />
+              {voiceStatus === "connecting" ? "Connecting…"
+                : voiceStatus === "thinking" ? "Thinking…"
+                : voiceStatus === "speaking" ? "Braino"
+                : voiceStatus === "error" ? "Voice error"
+                : "Listening"}
+            </div>
+            {voiceError ? (
+              <div className="bchat-voice-err">
+                {voiceError}{!user && <> · <Link to="/auth?redirect=/chat">sign in</Link></>}
+              </div>
+            ) : (
+              <div className="bchat-voice-transcript">
+                {voiceUserText && <p className="bchat-voice-you">{voiceUserText}</p>}
+                {voiceBrainoText && <p className="bchat-voice-braino">{voiceBrainoText}</p>}
+                {!voiceUserText && !voiceBrainoText && <p className="bchat-voice-hint">Just talk. Braino is listening.</p>}
+              </div>
+            )}
+            <div className="bchat-voice-exit">Ctrl ×2 or Esc to exit</div>
+          </div>
+        </div>
+      )}
+
       {/* top bar */}
       <header className="topbar">
         <div className="tb-left">
@@ -945,6 +1036,9 @@ export default function BrainoChat() {
           <span className="tb-name">Braino</span>
         </div>
         <div className="tb-right">
+          <button className={`tb-mic${voiceActive ? " on" : ""}`} type="button" aria-label="Voice mode (Ctrl ×2)" title="Voice mode — Ctrl ×2" onClick={() => voiceToggle()}>
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+          </button>
           {messages.length > 0 && <button className="tb-btn" onClick={newChat}>New chat</button>}
           <Link className="tb-btn" to={user ? "/dashboard" : "/auth?redirect=/chat"}>{user ? "Dashboard" : "Sign in"}</Link>
           <button className="tb-icon" aria-label="Toggle theme" onClick={() => setTheme(dark ? "light" : "dark")}>
