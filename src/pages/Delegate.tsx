@@ -1,20 +1,18 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { Download } from "lucide-react";
+import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 import Navbar from "@/components/Navbar";
+import SiteFooter from "@/components/SiteFooter";
+import "./home.css";
 
-// ─── shared styles ────────────────────────────────────────────────────────────
-const wrap: React.CSSProperties = { maxWidth: 1100, margin: "0 auto", padding: "0 32px" };
-const eyebrow: React.CSSProperties = {
-  fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
-  letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-3)",
-  display: "inline-flex", alignItems: "center", gap: 8,
-};
-const pip: React.CSSProperties = {
-  width: 6, height: 6, borderRadius: "50%",
-  background: "var(--sb-accent)", boxShadow: "0 0 10px var(--sb-accent)", display: "inline-block",
-};
+/* ============================================================================
+   Delegate — the Braino agent, in the editorial (Medium-style) shell.
+   Same structure as Home: Navbar + <article className="home-article"> sections
+   (eyebrow -> h2 -> serif body) + shared SiteFooter. The interactive trace demo
+   is kept from the old page; everything else is rebuilt in the home.css idiom.
+   ============================================================================ */
 
-// ─── animated trace ───────────────────────────────────────────────────────────
 const EXAMPLES = [
   {
     prompt: "Send an email to Priya saying I'll be ten minutes late",
@@ -27,7 +25,7 @@ const EXAMPLES = [
     ],
   },
   {
-    prompt: "Find boAt Airdopes on Amazon and check reviews",
+    prompt: "Find boAt Airdopes on Amazon and check the reviews",
     steps: [
       { label: "Navigate to Amazon.in", ms: "~20ms" },
       { label: 'Search "boAt Airdopes"', ms: "~150ms" },
@@ -46,10 +44,65 @@ const EXAMPLES = [
   },
 ];
 
+const STEPS = [
+  { num: "01", title: "Say it in plain words.", body: "Flip on Delegate and describe the outcome. No commands, no syntax, none of that prompt-engineering nonsense. Just tell him what you'd tell a sharp assistant." },
+  { num: "02", title: "He reads the page and plans.", body: "Braino scans the live page — every button, field, link and form — and works out the exact sequence of moves to get you there." },
+  { num: "03", title: "He acts, and you watch.", body: "Click, type, navigate, submit. Live, in the tab in front of you. Stop him any time, and he checks in before anything actually gets sent." },
+];
+
+const HANDLES = [
+  { icon: "✉️", title: "Send & reply to emails", detail: "Gmail, Outlook — composes, finds the thread, replies in context." },
+  { icon: "📅", title: "Book calendar events", detail: "Google Calendar — creates, invites, sets the reminders." },
+  { icon: "🛒", title: "Search & compare products", detail: "Amazon, Flipkart — opens listings, pulls specs and reviews." },
+  { icon: "📝", title: "Fill & submit forms", detail: "Job applications, sign-ups, multi-step checkouts." },
+  { icon: "✈️", title: "Find flights & hotels", detail: "MakeMyTrip, Google Flights — filters, compares, copies details." },
+  { icon: "💼", title: "Post on LinkedIn / X", detail: "Drafts, previews, posts. No copy-paste shuffle." },
+  { icon: "🛍️", title: "Add to cart & checkout", detail: "Walks the product page, picks the variant, heads to pay." },
+  { icon: "📄", title: "Edit Docs & Sheets", detail: "Updates cells, adds rows, formats by instruction." },
+  { icon: "🔍", title: "Research & extract", detail: "Reads any page and pulls out the facts you asked for." },
+  { icon: "📁", title: "Download files", detail: "Finds the attachment and grabs it, so you don't hunt." },
+  { icon: "🐙", title: "Navigate GitHub", detail: "Browses issues, PRs and diffs — summarises and acts." },
+  { icon: "🔐", title: "Multi-step sign-ups", detail: "Handles email verify, profile fill, preference setup." },
+];
+
+const WHY = [
+  { title: "It reads the page, not a screenshot.", body: "Delegate works off the live structure of the page — every button and field handed back as a real, indexed element. No screenshots, no vision model squinting at pixels. It acts against what's actually on screen." },
+  { title: "About a second a step.", body: "From \"decide\" to \"click\" is roughly a second. A five-step task is done in under fifteen. Screenshot-based agents burn three to six seconds every single step just looking around." },
+  { title: "Nothing happens behind your back.", body: "It runs on the tab in front of you. Watch it, correct it mid-task, or let it run. And it always asks before it sends an email or submits a form." },
+  { title: "Any site your browser can open.", body: "Gmail, Amazon, LinkedIn, Google Docs, GitHub, your company's internal dashboard. If the tab opens, Delegate can drive it." },
+];
+
+const DELEGATE_CSS = `
+  .dg-wide { position: relative; left: 50%; transform: translateX(-50%); width: min(1000px, 94vw); margin-top: 10px; }
+  .dg-demo { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  @media (max-width: 820px) { .dg-demo { grid-template-columns: 1fr; gap: 20px; } }
+  .dg-picker { display: flex; flex-direction: column; gap: 10px; }
+  .dg-say { text-align: left; padding: 14px 18px; border-radius: 14px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; font-family: 'Newsreader', Georgia, serif; font-size: 15px; transition: border-color .18s, background .18s, color .18s; }
+  .dg-say:hover { border-color: var(--ink-3); }
+  .dg-say.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .dg-say-label { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; opacity: .55; margin-bottom: 4px; }
+  .dg-trace { background: rgba(0,0,0,0.02); border: 1px solid var(--line); border-radius: 20px; padding: 22px; }
+  html.sb-dark .dg-trace { background: #0c0c0c; }
+  .dg-trace-head { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #C9544A; margin-bottom: 16px; }
+  .dg-trace-foot { margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--line); display: flex; align-items: center; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); }
+  .dg-time { font-family: 'Newsreader', Georgia, serif; font-size: 22px; color: #C9544A; font-style: italic; }
+  .dg-num { font-family: 'Newsreader', Georgia, serif; font-size: 44px; line-height: 1; color: #C9544A; margin-bottom: 8px; }
+  .dg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 14px; margin-top: 10px; }
+  .dg-card { background: rgba(0,0,0,0.02); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+  html.sb-dark .dg-card { background: #0c0c0c; }
+  .dg-card-top { display: flex; align-items: center; gap: 10px; }
+  .dg-ic { font-size: 20px; line-height: 1; }
+  .dg-card-title { font-family: 'Newsreader', Georgia, serif; font-size: 17px; line-height: 1.2; }
+  .dg-card-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 8px 0 0; padding-left: 30px; }
+  .dg-why { margin: 0 0 24px; }
+  .dg-why-title { font-family: 'Newsreader', Georgia, serif; font-weight: 600; font-size: 21px; margin: 0 0 6px; }
+  @keyframes sbSpin { to { transform: rotate(360deg); } }
+`;
+
 function DelegateTrace({ steps }: { steps: { label: string; ms: string }[] }) {
   const [active, setActive] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setActive(p => (p + 1) % steps.length), 1800);
+    const t = setInterval(() => setActive((p) => (p + 1) % steps.length), 1800);
     return () => clearInterval(t);
   }, [steps.length]);
 
@@ -63,22 +116,22 @@ function DelegateTrace({ steps }: { steps: { label: string; ms: string }[] }) {
           <div key={i} style={{
             display: "flex", alignItems: "center", gap: 12,
             padding: "10px 14px", borderRadius: 12,
-            background: isCurrent ? "oklch(0.97 0.025 75)" : "var(--sb-panel)",
-            border: `1px solid ${isCurrent ? "oklch(0.85 0.1 70)" : "var(--sb-line-2)"}`,
+            background: isCurrent ? "rgba(226,125,57,0.10)" : "rgba(0,0,0,0.02)",
+            border: `1px solid ${isCurrent ? "rgba(226,125,57,0.4)" : "var(--line)"}`,
             opacity: isPending ? 0.45 : 1, transition: "all .35s",
           }}>
             <span style={{
               width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
               display: "grid", placeItems: "center",
-              background: isDone ? "var(--sb-ok)" : isCurrent ? "transparent" : "var(--sb-line)",
+              background: isDone ? "#3FA66A" : isCurrent ? "transparent" : "var(--line)",
               color: isDone ? "#fff" : "transparent",
-              border: isCurrent ? "1.5px solid var(--sb-accent)" : "none",
+              border: isCurrent ? "1.5px solid #C9544A" : "none",
               borderTopColor: isCurrent ? "transparent" : undefined,
               animation: isCurrent ? "sbSpin .9s linear infinite" : "none",
               fontSize: 9,
             }}>{isDone ? "✓" : ""}</span>
-            <span style={{ flex: 1, fontSize: 13, color: "var(--sb-ink)" }}>{step.label}</span>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>{step.ms}</span>
+            <span style={{ flex: 1, fontSize: 13, color: "var(--ink)" }}>{step.label}</span>
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--ink-3)" }}>{step.ms}</span>
           </div>
         );
       })}
@@ -91,222 +144,113 @@ export default function Delegate() {
   const ex = EXAMPLES[activeExample];
 
   return (
-    <div style={{ background: "var(--sb-bg)", color: "var(--sb-ink)", minHeight: "100vh" }}>
+    <div className="home">
+      <style>{DELEGATE_CSS}</style>
       <Navbar />
 
-      {/* Hero */}
-      <section style={{ padding: "140px 0 100px" }}>
-        <div style={{ ...wrap, maxWidth: 900, textAlign: "center" }}>
-          <span style={eyebrow}><span style={pip} /> SideBrain Delegate</span>
-          <h1 style={{
-            fontFamily: "'Instrument Serif', Georgia, serif",
-            fontWeight: 400, fontSize: "clamp(44px,6vw,80px)", lineHeight: 1.0,
-            letterSpacing: "-0.025em", margin: "14px auto 24px", maxWidth: 800,
-          }}>
-            Hand it the keys to{" "}
-            <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>your browser.</em>
-          </h1>
-          <p style={{ fontSize: 18, color: "var(--sb-ink-2)", maxWidth: 620, margin: "0 auto 48px", lineHeight: 1.55 }}>
-            Tell Delegate what you want done — in plain language — and it operates your tabs the way you would. Clicks, types, scrolls, navigates. With your supervision, or on its own.
-          </p>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <Link
-              to="/#install"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                padding: "13px 24px", borderRadius: 999, fontSize: 14.5, fontWeight: 500,
-                background: "var(--sb-ink)", color: "var(--sb-on-ink)", textDecoration: "none",
-                transition: "transform .15s, background .15s",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = "#000"; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = "var(--sb-ink)"; }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>
-              Try Delegate free
-            </Link>
-            <Link
-              to="/compare"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                padding: "13px 24px", borderRadius: 999, fontSize: 14.5, fontWeight: 500,
-                background: "transparent", color: "var(--sb-ink)",
-                border: "1px solid var(--sb-line)", textDecoration: "none",
-                transition: "transform .15s, background .15s",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = "var(--sb-panel)"; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = "transparent"; }}
-            >
-              See how it compares
-            </Link>
+      <article className="home-article">
+        {/* ── Hero ── */}
+        <section className="home-hero">
+          <div className="home-kicker">Delegate · the Braino agent</div>
+          <h1 className="home-h1">Hand Braino the keys to your browser.</h1>
+          <p className="home-lede">Tell him the outcome in plain words. He reads the live page and does the clicking, typing and navigating himself — about a second a step, right in front of you.</p>
+          <div className="home-cta-row">
+            <a className="home-cta home-install" href={EXTENSION_DOWNLOAD_URL} download>
+              <Download size={16} /> Install for Chrome
+            </a>
+            <Link className="home-cta home-cta-ghost" to="/auth">Get started →</Link>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Live trace demo */}
-      <section style={{ padding: "80px 0", background: "var(--sb-bg-2)" }}>
-        <div style={wrap}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "start" }}>
-            <div>
-              <span style={eyebrow}><span style={pip} /> Live example</span>
-              <h2 style={{
-                fontFamily: "'Instrument Serif',serif", fontWeight: 400,
-                fontSize: "clamp(28px,3vw,44px)", lineHeight: 1.1, margin: "12px 0 24px",
-              }}>Watch it think and act.</h2>
-              <p style={{ fontSize: 15, color: "var(--sb-ink-2)", marginBottom: 32, lineHeight: 1.55 }}>
-                Pick a task and watch Delegate break it down step by step — exactly what you'd see in the side panel.
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {EXAMPLES.map((ex, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveExample(i)}
-                    style={{
-                      padding: "14px 18px", borderRadius: 14, textAlign: "left",
-                      background: activeExample === i ? "var(--sb-ink)" : "var(--sb-panel-2)",
-                      border: `1px solid ${activeExample === i ? "var(--sb-ink)" : "var(--sb-line-2)"}`,
-                      color: activeExample === i ? "var(--sb-on-ink)" : "var(--sb-ink)",
-                      fontSize: 14, cursor: "pointer", transition: "all .2s",
-                      fontFamily: "'Instrument Serif',serif",
-                    }}
-                  >
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, display: "block", marginBottom: 4, opacity: 0.6 }}>YOU SAY</span>
-                    "{ex.prompt}"
+        {/* ── Live trace ── */}
+        <section className="home-section">
+          <div className="home-eyebrow">Watch it work</div>
+          <h2 className="home-h2">Watch him think, then act.</h2>
+          <p className="home-body">Pick a task and watch Delegate break it into the exact clicks — the same trace you'll see in the side panel while he runs.</p>
+          <div className="dg-wide">
+            <div className="dg-demo">
+              <div className="dg-picker">
+                {EXAMPLES.map((e, i) => (
+                  <button key={i} className={`dg-say${activeExample === i ? " on" : ""}`} onClick={() => setActiveExample(i)}>
+                    <span className="dg-say-label">You say</span>
+                    "{e.prompt}"
                   </button>
                 ))}
               </div>
+              <div className="dg-trace">
+                <div className="dg-trace-head">Delegate trace</div>
+                <DelegateTrace key={activeExample} steps={ex.steps} />
+                <div className="dg-trace-foot">
+                  <span>{ex.steps.length} steps</span>
+                  <span className="dg-time">~{ex.steps.length * 2}s</span>
+                </div>
+              </div>
             </div>
-            <div style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line)", borderRadius: 22, padding: 24, boxShadow: "0 1px 2px rgba(40,28,18,.04), 0 20px 50px -20px rgba(40,28,18,.15)" }}>
-              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-accent-deep)", marginBottom: 16 }}>Delegate trace</div>
-              <DelegateTrace key={activeExample} steps={ex.steps} />
-              <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px dashed var(--sb-line)", display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>
-                <span>{ex.steps.length} steps</span>
-                <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 22, color: "var(--sb-accent-deep)", fontStyle: "italic" }}>~{ex.steps.length * 2}s</span>
+          </div>
+        </section>
+
+        {/* ── How it works ── */}
+        <section className="home-section">
+          <div className="home-eyebrow">How it works</div>
+          <h2 className="home-h2">Three steps from words to action.</h2>
+          <div className="home-more-grid">
+            {STEPS.map((s) => (
+              <div key={s.num} className="home-more-card" style={{ cursor: "default" }}>
+                <div className="dg-num">{s.num}</div>
+                <div className="home-more-title">{s.title}</div>
+                <div className="home-more-desc">{s.body}</div>
               </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── What it handles ── */}
+        <section className="home-section">
+          <div className="home-eyebrow">What it handles</div>
+          <h2 className="home-h2">A dozen things it does well.</h2>
+          <div className="dg-wide">
+            <div className="dg-grid">
+              {HANDLES.map((h) => (
+                <div key={h.title} className="dg-card">
+                  <div className="dg-card-top"><span className="dg-ic">{h.icon}</span><span className="dg-card-title">{h.title}</span></div>
+                  <p className="dg-card-desc">{h.detail}</p>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* How it works */}
-      <section style={{ padding: "110px 0" }}>
-        <div style={wrap}>
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
-            <span style={eyebrow}><span style={pip} /> How it works</span>
-            <h2 style={{
-              fontFamily: "'Instrument Serif',serif", fontWeight: 400,
-              fontSize: "clamp(32px,4vw,52px)", lineHeight: 1.05, margin: "12px auto 0", maxWidth: 700,
-            }}>Three steps from words to action.</h2>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 24 }}>
-            {[
-              { num: "01", title: "Type in plain language.", body: "Switch to Delegate mode and describe what you want. No commands, no syntax — just plain English." },
-              { num: "02", title: "It reads the page and plans.", body: "Delegate scans buttons, inputs, links, and forms — and figures out the exact sequence of actions needed." },
-              { num: "03", title: "It acts, step by step.", body: "Clicks, types, navigates, submits. Watch it work in real time. Stop it any time." },
-            ].map(({ num, title, body }) => (
-              <div key={num} style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 18, padding: 28 }}>
-                <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 52, lineHeight: 1, color: "var(--sb-accent-deep)", marginBottom: 16 }}>{num}</div>
-                <h3 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: 22, marginBottom: 10 }}>{title}</h3>
-                <p style={{ fontSize: 14.5, color: "var(--sb-ink-2)", lineHeight: 1.55 }}>{body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        {/* ── Why it's fast ── */}
+        <section className="home-section">
+          <div className="home-eyebrow">Why it's quick</div>
+          <h2 className="home-h2">It reads the page. It doesn't squint at a screenshot.</h2>
+          {WHY.map((w) => (
+            <div key={w.title} className="dg-why">
+              <h3 className="dg-why-title">{w.title}</h3>
+              <p className="home-body">{w.body}</p>
+            </div>
+          ))}
+          <p className="home-body">
+            <Link to="/straight-talk" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "3px" }}>
+              And when he's slow, or gets it wrong? Here's the honest reason why →
+            </Link>
+          </p>
+        </section>
 
-      {/* 12 things it handles well */}
-      <section style={{ padding: "80px 0 100px", background: "var(--sb-bg-2)" }}>
-        <div style={wrap}>
-          <div style={{ textAlign: "center", marginBottom: 48 }}>
-            <span style={eyebrow}><span style={pip} /> What it handles</span>
-            <h2 style={{
-              fontFamily: "'Instrument Serif',serif", fontWeight: 400,
-              fontSize: "clamp(28px,3.5vw,48px)", lineHeight: 1.05, margin: "12px auto 0", maxWidth: 640,
-            }}>
-              12 things it does <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>well.</em>
-            </h2>
+        {/* ── Close ── */}
+        <section className="home-close">
+          <h2 className="home-h2 home-h2-center">Stop doing the clicking.</h2>
+          <div className="home-cta-row">
+            <a className="home-cta home-install" href={EXTENSION_DOWNLOAD_URL} download>
+              <Download size={16} /> Install for Chrome
+            </a>
+            <Link className="home-cta home-cta-ghost" to="/premium">See Pro →</Link>
           </div>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-            gap: 14,
-          }}>
-            {[
-              { icon: "✉️", title: "Send & reply to emails", detail: "Gmail, Outlook — compose, find threads, reply in context." },
-              { icon: "📅", title: "Book calendar events", detail: "Google Calendar — create, invite, set reminders." },
-              { icon: "🛒", title: "Search & compare products", detail: "Amazon, Flipkart — open listings, extract specs and reviews." },
-              { icon: "📝", title: "Fill & submit forms", detail: "Job applications, sign-ups, multi-step checkouts." },
-              { icon: "✈️", title: "Find flights & hotels", detail: "MakeMyTrip, Google Flights — filter, compare, copy details." },
-              { icon: "💼", title: "Post on LinkedIn / X", detail: "Draft, preview, and post — no copy-paste needed." },
-              { icon: "🛍️", title: "Add to cart & checkout", detail: "Navigates product pages, selects variants, proceeds to pay." },
-              { icon: "📄", title: "Edit Google Docs & Sheets", detail: "Update cells, add rows, format documents by instruction." },
-              { icon: "🔍", title: "Research & extract data", detail: "Reads any page and pulls out the facts you ask for." },
-              { icon: "📁", title: "Download files & attachments", detail: "Locates and triggers downloads without you hunting." },
-              { icon: "🐙", title: "Navigate GitHub", detail: "Browse issues, PRs, diffs — summarise and act on them." },
-              { icon: "🔐", title: "Multi-step sign-up flows", detail: "Handles email verify, profile fill, preference setup." },
-            ].map(({ icon, title, detail }) => (
-              <div
-                key={title}
-                style={{
-                  background: "var(--sb-panel-2)",
-                  border: "1px solid var(--sb-line-2)",
-                  borderRadius: 16,
-                  padding: "20px 22px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
-                  <span style={{
-                    fontFamily: "'Instrument Serif',serif",
-                    fontWeight: 400, fontSize: 17, lineHeight: 1.2,
-                  }}>{title}</span>
-                </div>
-                <p style={{
-                  fontSize: 13, color: "var(--sb-ink-2)", lineHeight: 1.5, margin: 0,
-                  paddingLeft: 32,
-                }}>{detail}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+          <p className="home-fine">25 Delegate tasks free every month · Chrome, Arc, Brave, Edge</p>
+        </section>
+      </article>
 
-      {/* Why DOM-first */}
-      <section style={{ padding: "80px 0 110px", background: "var(--sb-bg)" }}>
-        <div style={wrap}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40 }}>
-            {[
-              { title: "DOM-first, not pixel-first.", body: "Reads the live structure of the page. No screenshots, no waiting for vision models to look at pixels. Every button and input comes back as an indexed element — the model acts against what is actually on screen." },
-              { title: "About 1 second per step.", body: 'From "decide" to "click." A five-step task finishes in under fifteen seconds. Compare that to screenshot-based agents that spend 3–6s every step just waiting for a vision model.' },
-              { title: "Always on the page you're on.", body: "You can watch it work, correct it mid-task, or let it go. Your call. Nothing happens behind your back — Delegate asks before submitting forms or sending messages." },
-              { title: "Works on any site.", body: "Gmail, Amazon, LinkedIn, Google Docs, GitHub, your company's internal tools. If your browser can open it, Delegate can operate it." },
-            ].map(({ title, body }) => (
-              <div key={title} style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-                <div style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 9, background: "var(--sb-accent-soft)", border: "1px solid rgba(240,168,107,0.35)", display: "grid", placeItems: "center", color: "var(--sb-accent-deep)" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
-                </div>
-                <div>
-                  <h4 style={{ fontFamily: "'Instrument Serif',serif", fontWeight: 400, fontSize: 20, marginBottom: 8 }}>{title}</h4>
-                  <p style={{ fontSize: 14.5, color: "var(--sb-ink-2)", lineHeight: 1.55 }}>{body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer style={{ padding: "48px 0", background: "var(--sb-bg)", borderTop: "1px solid var(--sb-line-2)" }}>
-        <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Link to="/" style={{ display: "flex", alignItems: "baseline", gap: 0, textDecoration: "none" }}>
-            <span style={{ fontFamily: "'TNR','Times New Roman',serif", fontStyle: "italic", fontWeight: 400, fontSize: 18, color: "var(--sb-ink)" }}>side</span>
-            <span style={{ fontFamily: "'BeVietnam',sans-serif", fontWeight: 800, fontSize: 18, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>brain</span>
-          </Link>
-          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>© 2026 SideBrain · Beta</div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

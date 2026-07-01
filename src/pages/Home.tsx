@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Download } from "lucide-react";
+import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 import Navbar from "@/components/Navbar";
+import SiteFooter from "@/components/SiteFooter";
 import { FEATURES, GRAPHICS } from "./UseCases";
 import { HOME_MOCKS } from "@/components/HomeMocks";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
@@ -204,34 +207,37 @@ function Nb({ children, className = "" }: { children: React.ReactNode; className
   return <div className={`nb ${className}`}>{children}</div>;
 }
 
+/* Cinema-mode hero: the frosted glass bar the real walking Braino (the global <BrainoWalker/>)
+   perches and walks on. #pg2-hero-bar is BrainoWalker's default perch target, moved here from the
+   old /home page. The actual functional bar lives in the extension's content.js (#__sb_bar__). */
+function CinemaHero() {
+  return (
+    <div className="pg2-cinema" aria-hidden="true">
+      <div className="pg2-cinema__screen">
+        <div className="pg2-cinema__page">
+          <div className="pg2-cinema__page-top"><span /><span /><span /></div>
+          {[94, 80, 88, 64, 90, 74, 84].map((w, i) => (
+            <div key={i} className={`pg2-cinema__line${i === 1 ? " is-accent" : ""}`} style={{ width: `${w}%` }} />
+          ))}
+        </div>
+        <div className="pg2-cinema__bar" id="pg2-hero-bar">
+          <span className="pg2-cinema__placeholder">Ask Braino anything…</span>
+          <span className="pg2-cinema__mode">⚡ Auto</span>
+          <span className="pg2-cinema__send" aria-hidden="true">↑</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [mode, setMode] = useState<Mode>("read");
   const [playing, setPlaying] = useState(false);
   const [trick, setTrick] = useState<Trick | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
-  const meetRef = useRef<HTMLDivElement>(null);
 
   const T = useCallback((c: Copy) => (mode === "walk" ? c.walk : c.read), [mode]);
-
-  // ── Gentle scroll parallax on the hero Braino box ──
-  useEffect(() => {
-    const stage = meetRef.current;
-    if (!stage) return;
-    let raf = 0;
-    const onScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const r = stage.getBoundingClientRect();
-        const vh = window.innerHeight || 1;
-        const prog = clamp((vh - r.top) / (vh + r.height), 0, 1); // 0..1 across the viewport
-        stage.style.setProperty("--py", String((0.5 - prog) * 46)); // px parallax on Braino
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
-  }, []);
 
   // ── Narration: highlight every .nb block in order, auto-scroll ──
   const clearHighlights = () => document.querySelectorAll(".nb-on, .nb-dim").forEach((el) => el.classList.remove("nb-on", "nb-dim"));
@@ -298,31 +304,19 @@ export default function Home() {
           <Nb><h1 className="home-h1">{T(HERO.title)}</h1></Nb>
           <Nb><p className="home-lede">{T(HERO.sub)}</p></Nb>
           <div className="home-cta-row">
-            <Link className="home-cta" to="/auth">Get started →</Link>
+            <a className="home-cta home-install" href={EXTENSION_DOWNLOAD_URL} download>
+              <Download size={16} /> Install for Chrome
+            </a>
+            <Link className="home-cta home-cta-ghost" to="/auth">Get started →</Link>
           </div>
 
-          {/* Reading-mode toggle lives in the content, not the top bar */}
-          <div className="home-modetoggle">
-            <div className="home-mode" role="tablist" aria-label="Reading mode">
-              <button className={`home-mode-btn ${mode === "read" ? "on" : ""}`} onClick={() => onModeToggle("read")}>Read it</button>
-              <button className={`home-mode-btn ${mode === "walk" ? "on" : ""}`} onClick={() => onModeToggle("walk")}>Braino narrates</button>
-            </div>
-            {mode === "walk" && (
-              <button className="home-narrate-btn" onClick={() => (playing ? stop() : play())}>
-                {playing ? "❚❚ Pause" : "▶ Play"}
-              </button>
-            )}
-          </div>
-
-          {/* Full-body Braino in a contained box — pop in + gentle scroll parallax */}
-          <div className="home-hero-stage" ref={meetRef}>
-            <div className="home-hero-word">braino</div>
-            <div className="home-hero-floor" />
-            <div className="home-hero-braino"><div className="hm-svg" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} /></div>
+          {/* Medium-style: the hero image sits right under the title + description. */}
+          <div className="home-hero-cinema">
+            <CinemaHero />
           </div>
         </section>
 
-        {/* ── Article intro ── */}
+        {/* ── Article intro — byline sits right under the hero image, Medium-style ── */}
         <section className="home-intro">
           {(() => {
             const author = mode === "walk"
@@ -338,6 +332,20 @@ export default function Home() {
               </a>
             );
           })()}
+
+          {/* Reading-mode toggle sits with the byline now, not in the hero */}
+          <div className="home-modetoggle">
+            <div className="home-mode" role="tablist" aria-label="Reading mode">
+              <button className={`home-mode-btn ${mode === "read" ? "on" : ""}`} onClick={() => onModeToggle("read")}>Read it</button>
+              <button className={`home-mode-btn ${mode === "walk" ? "on" : ""}`} onClick={() => onModeToggle("walk")}>Braino narrates</button>
+            </div>
+            {mode === "walk" && (
+              <button className="home-narrate-btn" onClick={() => (playing ? stop() : play())}>
+                {playing ? "❚❚ Pause" : "▶ Play"}
+              </button>
+            )}
+          </div>
+
           <Nb><p className="home-dek">{T(INTRO.dek)}</p></Nb>
           <Nb><p className="home-body home-dropcap">{T(INTRO.p1)}</p></Nb>
           <Nb><p className="home-body">{T(INTRO.p2)}</p></Nb>
@@ -482,54 +490,18 @@ export default function Home() {
         {/* ── Close ── */}
         <section className="home-close">
           <Nb><h2 className="home-h2 home-h2-center">{mode === "walk" ? "That's me. Want me on your tabs?" : "Ready when you are."}</h2></Nb>
-          <Link className="home-cta" to="/auth">Get started →</Link>
+          <div className="home-cta-row">
+            <a className="home-cta home-install" href={EXTENSION_DOWNLOAD_URL} download>
+              <Download size={16} /> Install for Chrome
+            </a>
+            <Link className="home-cta home-cta-ghost" to="/auth">Get started →</Link>
+          </div>
           <p className="home-fine">Free to start · Chrome, Arc, Brave, Edge</p>
         </section>
       </article>
 
-      {/* ── Footer (same structure as the main site footer) ── */}
-      <footer className="home-footer">
-        <div className="home-footer-inner">
-          <div className="home-footer-top">
-            <div className="home-footer-brand-block">
-              <div className="home-footer-brand">
-                <img src="/favicon.svg" alt="Braino" width="22" height="22" />
-                <strong>Braino</strong>
-              </div>
-              <p className="home-footer-tagline">An AI agent that floats on every tab. Reads pages. Speaks back. Handles tasks.</p>
-              <Link to="/auth" className="home-cta home-footer-cta">Get started →</Link>
-            </div>
-            <div className="home-footer-cols">
-              <div className="home-footer-col">
-                <div className="home-footer-col-head">Product</div>
-                <Link to="/use-cases">Use Cases</Link>
-                <Link to="/delegate">Delegate</Link>
-                <Link to="/premium">Pricing</Link>
-                <Link to="/changelog">Changelog</Link>
-                <Link to="/compare">Compare</Link>
-              </div>
-              <div className="home-footer-col">
-                <div className="home-footer-col-head">Resources</div>
-                <Link to="/chat">Braino Chat</Link>
-                <Link to="/integrations">Integrations</Link>
-                <Link to="/remote-agent">Remote Agent</Link>
-                <Link to="/straight-talk">Straight talk on the agent</Link>
-                <Link to="/why-the-wait">Why Braino takes a beat</Link>
-                <Link to="/contact">Contact</Link>
-              </div>
-              <div className="home-footer-col">
-                <div className="home-footer-col-head">Legal</div>
-                <Link to="/privacy">Privacy Policy</Link>
-                <Link to="/terms">Terms of Service</Link>
-              </div>
-            </div>
-          </div>
-          <div className="home-footer-bottom">
-            <span>© 2026 Braino · Built by a solo founder, somewhere with good coffee.</span>
-            <span>Beta</span>
-          </div>
-        </div>
-      </footer>
+      {/* ── Shared editorial footer ── */}
+      <SiteFooter />
     </div>
   );
 }

@@ -21,7 +21,6 @@ import ExtensionAuth from "./pages/ExtensionAuth.tsx";
 import Premium from "./pages/Premium.tsx";
 import BrowserAgent from "./pages/BrowserAgent.tsx";
 import Delegate from "./pages/Delegate.tsx";
-import Compare from "./pages/Compare.tsx";
 import RemoteAgent from "./pages/RemoteAgent.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import BuildPlan from "./pages/BuildPlan.tsx";
@@ -42,7 +41,6 @@ import BuildYourBraino from "./pages/BuildYourBraino.tsx";
 import RealtimeCosts from "./pages/RealtimeCosts.tsx";
 import SkillsTracker from "./pages/SkillsTracker.tsx";
 import BrainoChat from "./pages/BrainoChat.tsx";
-import ProfileGrid from "./pages/ProfileGrid.tsx";
 import BrainoLaunchShort from "./pages/BrainoLaunchShort.tsx";
 import Interns from "./pages/Interns.tsx";
 import Team from "./pages/Team.tsx";
@@ -64,7 +62,6 @@ function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashD
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/prelaunch" element={<PreLaunch />} />
-        <Route path="/home" element={<ProfileGrid />} />
         <Route path="/home-classic" element={<Index />} />
         <Route path="/teaser" element={<LaunchTeaser />} />
         <Route path="/waitlist-admin" element={<WaitlistDashboard />} />
@@ -76,7 +73,6 @@ function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashD
         <Route path="/premium" element={<Premium />} />
         <Route path="/browser-agent" element={<BrowserAgent />} />
         <Route path="/delegate" element={<Delegate />} />
-        <Route path="/compare" element={<Compare />} />
         <Route path="/remote-agent" element={<RemoteAgent />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/build-plan" element={<BuildPlan />} />

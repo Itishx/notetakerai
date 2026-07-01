@@ -72,7 +72,7 @@
 /* ── Article column ───────────────────────────────────────── */
 .home-article { max-width: 680px; margin: 0 auto; padding: 0 24px 120px; }
 
-.home-hero { padding: 80px 0 48px; text-align: center; }
+.home-hero { padding: 72px 0 8px; text-align: left; }
 .home-kicker, .home-eyebrow, .home-feature-kicker {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3);
@@ -84,10 +84,11 @@
   letter-spacing: -0.035em; margin: 0 0 18px;
 }
 .home-lede {
-  font-size: 20px; line-height: 1.55; color: var(--ink-2);
-  max-width: 560px; margin: 0 auto 28px;
+  font-size: 20px; line-height: 1.5; color: var(--ink-2);
+  max-width: 620px; margin: 0 0 26px;
 }
 .home-cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.home-hero .home-cta-row { justify-content: flex-start; }
 .home-cta {
   display: inline-block; background: var(--ink); color: #fff; text-decoration: none;
   font-size: 15px; font-weight: 600; padding: 13px 22px; border-radius: 999px;
@@ -158,6 +159,51 @@
 }
 .hm-svg { display: inline-block; transform: translateY(calc(var(--py, 0) * 1px)); transition: transform 0.1s linear; }
 .home-hero-stage .hm-svg svg { width: clamp(260px, 34vw, 440px) !important; height: auto !important; overflow: visible; }
+
+/* ── Install-for-Chrome button (coral accent; downloads the extension) ── */
+.home-install { display: inline-flex; align-items: center; gap: 8px; background: #E8786E; color: #fff; }
+.home-install:hover { background: #C9544A; }
+html.sb-dark .home-install { background: #E8786E; color: #fff; }
+html.sb-dark .home-install:hover { background: #C9544A; }
+
+/* ── Cinema-mode hero (moved from the old /home page). The real walking Braino
+   (the global <BrainoWalker/>) perches + walks on #pg2-hero-bar. ── */
+/* Medium-style: hero image is in-column (sized to the article), not a full-bleed breakout. */
+.home-hero-cinema { width: 100%; margin: 30px 0 0; }
+.home-hero-cinema .pg2-cinema__screen { height: auto; aspect-ratio: 16 / 10; }
+.pg2-cinema { width: 100%; }
+.pg2-cinema__screen {
+  position: relative; height: clamp(340px, 52vh, 460px); border-radius: 20px;
+  background: radial-gradient(120% 80% at 50% 0%, #fbf8f4 0%, #f3eee7 60%, #ece5db 100%);
+  border: 1px solid rgba(0,0,0,0.07);
+  box-shadow: 0 24px 60px rgba(27,23,19,0.12), 0 4px 14px rgba(27,23,19,0.06);
+  overflow: hidden;
+}
+.pg2-cinema__page { padding: 30px 34px; display: flex; flex-direction: column; gap: 13px; }
+.pg2-cinema__page-top { display: flex; gap: 7px; margin-bottom: 10px; }
+.pg2-cinema__page-top span { width: 11px; height: 11px; border-radius: 50%; background: rgba(0,0,0,0.1); }
+.pg2-cinema__page-top span:nth-child(1) { background: #FF5F57; }
+.pg2-cinema__page-top span:nth-child(2) { background: #FEBC2E; }
+.pg2-cinema__page-top span:nth-child(3) { background: #28C840; }
+.pg2-cinema__line { height: 12px; border-radius: 6px; background: rgba(17,16,16,0.07); }
+.pg2-cinema__line.is-accent { background: rgba(226,125,57,0.22); }
+.pg2-cinema__bar {
+  position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%);
+  width: min(78%, 460px); display: flex; align-items: center; gap: 10px;
+  padding: 12px 12px 12px 22px; border-radius: 100px;
+  background: rgba(255,251,247,0.55); border: 1px solid rgba(255,255,255,0.6);
+  backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%);
+  box-shadow: 0 10px 30px rgba(27,23,19,0.16), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+}
+.pg2-cinema__placeholder { flex: 1; font-size: 14px; color: #6B5248; }
+.pg2-cinema__mode { font-size: 11px; font-weight: 600; color: #3A2D24; background: rgba(255,251,247,0.7); border-radius: 8px; padding: 4px 9px; white-space: nowrap; }
+.pg2-cinema__send { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #E8786E; color: #fff; font-size: 15px; font-weight: 700; box-shadow: 0 2px 10px rgba(200,84,74,0.45); }
+html.sb-dark .pg2-cinema__screen { background: radial-gradient(120% 80% at 50% 0%, #17140f 0%, #0f0d0a 60%, #0a0806 100%); border-color: #242424; }
+html.sb-dark .pg2-cinema__line { background: rgba(255,255,255,0.06); }
+@media (max-width: 900px) {
+  .pg2-cinema__screen { height: 340px; }
+  .pg2-cinema__bar { width: min(88%, 420px); bottom: 28px; }
+}
 
 /* ── Sections ─────────────────────────────────────────────── */
 .home-section { border-top: 1px solid var(--line); padding: 72px 0 8px; }
@@ -354,7 +400,7 @@
 @media (max-width: 720px) { .dgrid { grid-template-columns: 1fr; } }
 
 /* ── In-hero reading-mode toggle (moved out of the top bar) ── */
-.home-modetoggle { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 6px; }
+.home-modetoggle { display: flex; justify-content: flex-start; align-items: center; gap: 12px; margin: 2px 0 20px; }
 .home-modetoggle .home-mode { margin: 0; }
 
 /* ── Footer (brand block + Product / Resources / Legal columns + bottom bar) ── */
