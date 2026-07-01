@@ -97,6 +97,9 @@ function BrainoMascot({ size = 120, glow = false }: { size?: number; glow?: bool
         {/* ── Rosy cheeks ── */}
         <ellipse cx="28" cy="58" rx="3.6" ry="2.1" fill="#E14A48" opacity="0.4" />
         <ellipse cx="72" cy="58" rx="3.6" ry="2.1" fill="#E14A48" opacity="0.4" />
+
+        {/* ── Smile ── */}
+        <path d="M 41 63 Q 50 70 59 63" fill="none" stroke="#8A2F28" strokeWidth="1.6" strokeLinecap="round" opacity="0.85" />
       </svg>
     </div>
   );
@@ -184,24 +187,24 @@ function SpecialMessage() {
       </h2>
 
       <p style={{ ...body, fontSize: 16.5, color: "var(--sb-ink)", lineHeight: 1.85, marginBottom: 16 }}>
-        You are <strong>fucking brilliant</strong>. I mean that. The way you think, the way you build —
-        it's exactly the kind of energy Braino needs.
+        You are <strong>fucking brilliant</strong>. I mean that. The way you think, the way you build, it's
+        exactly the kind of energy Braino needs.
       </p>
 
       <p style={{ ...body, fontSize: 16.5, color: "var(--sb-ink)", lineHeight: 1.85, marginBottom: 16 }}>
-        I'm genuinely excited to work with you. Not just excited — <em>pumped</em>. We're going to
-        build something that makes people go "wait, this actually exists?"
+        I'm genuinely pumped to work with you. Like, actually pumped. We're going to build something
+        that makes people go "wait, this actually exists?"
       </p>
 
       <p style={{ ...body, fontSize: 16.5, color: "var(--sb-ink)", lineHeight: 1.85, marginBottom: 0 }}>
-        We're going to make the best of <strong>Braino</strong> and bring the vision of <strong>Jarvis</strong> to
-        life — the AI that actually lives with you, knows what you're doing, and gets things done before
-        you even ask. That's what we're building. And I couldn't be more glad you're here for it.
+        We're going to take <strong>Braino</strong> and bring the <strong>Jarvis</strong> vision to life.
+        The AI that actually lives with you, knows what you're doing, gets things done before you even ask.
+        That's what we're building. And I'm really glad you're here for it.
       </p>
 
       <div style={{ marginTop: 36, paddingTop: 24, borderTop: "1px solid rgba(200,84,74,0.15)" }}>
         <p style={{ ...mono, fontSize: 12, color: "rgba(200,84,74,0.7)", margin: 0 }}>
-          — Itish Pande, Founder · Braino
+          Itish Pande, Founder · Braino
         </p>
       </div>
     </div>
@@ -296,8 +299,8 @@ function AgreementView({ onSign }: { onSign: (name: string) => void }) {
       <Clause n={3} title="How you may use this information">
         <P>
           Only for the work you were brought in to do. You may not share, copy, publish, reproduce,
-          reverse-engineer, or use any confidential information — in whole or in part — outside of
-          your duties, during or after your time here.
+          reverse-engineer, or use any confidential information outside of your duties, during or
+          after your time here.
         </P>
         <P>
           This includes using such information to start, build, or contribute to any product or
@@ -316,9 +319,8 @@ function AgreementView({ onSign }: { onSign: (name: string) => void }) {
 
       <Clause n={5} title="Ownership of your work">
         <P>
-          Everything you create, write, or build during your time here — including code, features,
-          architecture, documentation, tooling, and any other technical or engineering contributions
-          — belongs to Braino.
+          Everything you create, write, or build during your time here belongs to Braino. Code,
+          features, architecture, docs, tooling, all of it.
         </P>
         <P>
           This is a condition of joining, not a negotiation point. If you have questions about
@@ -330,7 +332,7 @@ function AgreementView({ onSign }: { onSign: (name: string) => void }) {
         <P>
           For <strong>6 months</strong> after your time here ends, you agree not to build, join,
           advise, or materially contribute to any product that directly competes with Braino's core
-          product — an AI-powered browser assistant or any substantially similar product.
+          product (an AI-powered browser assistant or anything substantially similar).
         </P>
         <P>
           This does not prevent you from taking other employment, freelancing, or working in
@@ -417,7 +419,7 @@ function AgreementView({ onSign }: { onSign: (name: string) => void }) {
         </div>
       </div>
 
-      {/* Special message — shown after signing the contract but previewed below */}
+      {/* Special message shown after signing */}
       <SpecialMessage />
 
       <div style={{ paddingTop: 36, borderTop: "1px solid var(--sb-line-2)", display: "flex", gap: 24, fontSize: 13, color: "var(--sb-ink-3)" }}>
