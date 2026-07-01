@@ -61,12 +61,16 @@ export function detectMoment(text: string | null | undefined): MomentReading {
 // front and adds a short steering line. Order within the array is the lead order.
 export const MOMENT_EMPHASIS: Record<Moment, string[]> = {
   neutral: [], // nothing special — use the natural manifest order
-  crisis: ["attunement", "presence", "warmth"],
-  grief: ["attunement", "presence", "warmth"],
-  heartbreak: ["attunement", "warmth", "presence"],
-  venting: ["presence", "attunement", "warmth"],
-  anxiety: ["attunement", "presence"],
-  celebration: ["warmth", "humor"],
+  // Safety leads with attunement's playbook; authenticity sits right behind it so no clever
+  // bot-lines creep into a crisis.
+  crisis: ["attunement", "presence", "warmth", "authenticity"],
+  // The rest of the high-emotion moments OPEN with authenticity (react like a friend, no
+  // AI-tells), then fall into attunement's playbook.
+  grief: ["authenticity", "attunement", "presence", "warmth"],
+  heartbreak: ["authenticity", "attunement", "warmth", "presence"],
+  venting: ["authenticity", "presence", "attunement", "warmth"],
+  anxiety: ["authenticity", "attunement", "presence"],
+  celebration: ["authenticity", "warmth", "humor"],
   conflict: ["honesty", "boundaries"],
   banter: ["humor", "warmth"],
   focused_task: ["boundaries", "diction"],

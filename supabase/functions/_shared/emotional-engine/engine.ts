@@ -70,7 +70,7 @@ function steeringLine(moment: Moment): string {
   const leadIds = MOMENT_EMPHASIS[moment] || [];
   if (leadIds.length === 0) return "";
   const traitNames = leadIds
-    .map((id) => TRAIT_BY_ID[id]?.name?.split("—")[0].trim().toLowerCase())
+    .map((id) => TRAIT_BY_ID[id]?.name?.split(/[—,]/)[0].trim().toLowerCase())
     .filter(Boolean)
     .join(", ");
   return `Right now the user is in ${MOMENT_LABEL[moment]} moment. Lead with ${traitNames}; let the rest of who you are stay present but recede. Attune to where they actually are before you respond.`;

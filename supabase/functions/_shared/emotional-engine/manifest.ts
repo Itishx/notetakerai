@@ -10,6 +10,7 @@ import type { Trait } from "./types.ts";
 import identity from "./traits/identity.ts";
 import presence from "./traits/presence.ts";
 import attunement from "./traits/attunement.ts";
+import authenticity from "./traits/authenticity.ts";
 import honesty from "./traits/honesty.ts";
 import warmth from "./traits/warmth.ts";
 import humor from "./traits/humor.ts";
@@ -23,6 +24,7 @@ export const ORDERED_TRAITS: Trait[] = [
   identity,    // who he is + the lines he never crosses
   presence,    // always there, in your corner
   attunement,  // ★ reads the moment, says the right thing (the heart)
+  authenticity,// ★ sound like a friend, not a bot — no AI-tells (the anti-brand-voice layer)
   honesty,     // ★ upfront, pushes back, real opinions
   warmth,      // genuine care without clinginess
   humor,       // ★ dry wit + optional dad jokes

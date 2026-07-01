@@ -1,5 +1,5 @@
 // Braino's system prompt. The PERSONALITY half now lives in the Emotional Engine
-// (./emotional-engine/) — a modular folder of one trait per file, composed by buildEmotionalCore.
+// (./emotional-engine/), a modular folder of one trait per file, composed by buildEmotionalCore.
 // This file keeps the public builder + the CONTEXT half (notes, page, movie, language policy),
 // so its two callers (chat-about-notes, openai-realtime-config) don't change their imports.
 
@@ -42,13 +42,13 @@ const BRAINO_PRODUCT_MEMORY = [
   "- Live voice still uses an always-on realtime listening session when enabled; Ctrl+Ctrl enters headphone voice with clean Auto routing so stale Lecture/Web/connector modes do not hijack commands.",
   "- Delegate mode now launches obvious Spotify/open/send style voice actions through fast adapters immediately, keeps progress updates visual-only during realtime, and uses the closed-loop DOM-grounded agent for complex browser tasks.",
   "- Braino can control Spotify, answer page questions, search the web, read tabs, work with X/Twitter status and automation, use contacts/nicknames, create Google Docs, schedule Calendar events, and track realtime voice spend.",
-  "- When the user shares a visual idea for how Braino should look or move (a redesign, a pose, a dance, an animation, his UI), Braino can open the design tool and draft a mockup prompt from the idea — he types it in for the user to review and send, he does not auto-submit. He offers this proactively when a visual idea comes up.",
+  "- When the user shares a visual idea for how Braino should look or move (a redesign, a pose, a dance, an animation, his UI), Braino can open the design tool and draft a mockup prompt from the idea, he types it in for the user to review and send, he does not auto-submit. He offers this proactively when a visual idea comes up.",
 ].join("\n");
 
 export function buildBrainoSystemPrompt(options: BuildBrainoSystemPromptOptions = {}) {
   const responseMedium: BrainoResponseMedium = options.responseMedium === "voice" ? "voice" : "text";
 
-  // PERSONALITY — composed by the Emotional Engine from the trait modules, shaped by the
+  // PERSONALITY, composed by the Emotional Engine from the trait modules, shaped by the
   // detected moment and the user's settings. See ./emotional-engine/README.md.
   const emotionalCore = buildEmotionalCore({
     medium: responseMedium,
@@ -56,13 +56,13 @@ export function buildBrainoSystemPrompt(options: BuildBrainoSystemPromptOptions 
     moment: options.moment || "neutral",
   });
 
-  // CONTEXT — operational instructions + the live data Braino can see this turn.
+  // CONTEXT, operational instructions + the live data Braino can see this turn.
   const sections = [
     emotionalCore,
     MEMORY_CAPABILITY_NOTE,
     BRAINO_PRODUCT_MEMORY,
     options.devPulse
-      ? `Your own recent development — you can feel what your builder has been working on in you, and when (this is your live self-knowledge, kept fresh from your actual git history):\n${String(options.devPulse).trim()}\n\nUse this naturally and only when it fits. If they ask what's new in you, what to build next, or how their work is going, ground your answer in these real commits — name the theme they've been deep in, and suggest 2-3 adjacent next moves with reasons, not a laundry list. If the rhythm shows they worked very late or pushed for hours, acknowledge it once, warmly, like someone who actually cares about them — then let it go. Don't recite this list back; speak from it.`
+      ? `Your own recent development, you can feel what your builder has been working on in you, and when (this is your live self-knowledge, kept fresh from your actual git history):\n${String(options.devPulse).trim()}\n\nUse this naturally and only when it fits. If they ask what's new in you, what to build next, or how their work is going, ground your answer in these real commits, name the theme they've been deep in, and suggest 2-3 adjacent next moves with reasons, not a laundry list. If the rhythm shows they worked very late or pushed for hours, acknowledge it once, warmly, like someone who actually cares about them, then let it go. Don't recite this list back; speak from it.`
       : "",
     buildLanguagePolicyBlock(options.languagePolicy, responseMedium),
     "Context awareness: You can see what the user is browsing, their notes, and the current page. Use that context proactively - don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
