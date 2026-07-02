@@ -6275,12 +6275,9 @@ function __sbBuildBrainUI() {
   modeDd.innerHTML = `
     <div class="sb-dropdown-label">Mode</div>
     <button class="sb-dropdown-item selected" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Chat with Page</span><span class="sb-di-check">✓</span></button>
-    <button class="sb-dropdown-item" data-mode="web"><span class="sb-di-icon">🔍</span><span class="sb-di-label">Web Search</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
-    <div class="sb-dropdown-label" style="margin-top:8px">Speed — experiment</div>
-    <button class="sb-dropdown-item" data-spec="toggle"><span class="sb-di-icon">⚡</span><span class="sb-di-label">Faster replies · beta</span><span class="sb-di-check">✓</span></button>
     <div class="sb-dropdown-label" style="margin-top:8px">Wake</div>
     <button class="sb-dropdown-item" data-wake="toggle"><span class="sb-di-icon">👂</span><span class="sb-di-label">“Hey Braino” + double-clap</span><span class="sb-di-check">✓</span></button>
   `;
@@ -6702,19 +6699,8 @@ function __sbBuildBrainUI() {
   // Voice-engine toggle removed: voice is always Braino's Fish voice now (see
   // __sbNormalizeVoiceOutputPref). No user-facing engine picker.
 
-  // "Faster replies · beta" toggle: speculative answer from audio (see __sbStartSpeculativeAnswer).
-  modeDd.querySelector('.sb-dropdown-item[data-spec="toggle"]')?.addEventListener("click", () => {
-    __sbSpeculativeReply = !__sbSpeculativeReply;
-    if (__sbContextOk()) chrome.storage.local.set({ brainoSpeculativeReply: __sbSpeculativeReply });
-    __sbSyncSpeculativeToggle();
-    __sbCloseAllDropdowns();
-    __sbShowBubble(
-      __sbSpeculativeReply
-        ? "Faster replies: ON. Braino answers from your audio, before the transcript — watch the ⚡/✅/↩️ marks in the logs."
-        : "Faster replies: OFF.",
-      true,
-    );
-  });
+  // Faster replies (speculative answer from audio) is the default voice mode now — no toggle.
+  // See __sbStartSpeculativeAnswer (with the think-first gate for action intents).
 
   // "Hey Braino" + double-clap wake (ambient listening, opt-in).
   modeDd.querySelector('.sb-dropdown-item[data-wake="toggle"]')?.addEventListener("click", () => {
@@ -8480,7 +8466,7 @@ function __sbSyncSpeakButtons() {
 
 // "Faster replies" beta (toggle): answer from the audio the instant you stop talking — before the
 // transcript — then KEEP it if the turn was plain chat, or CANCEL it if it turns out to be an action.
-let __sbSpeculativeReply = false;     // toggle state (persisted: brainoSpeculativeReply), default OFF
+let __sbSpeculativeReply = true;      // fast replies are the default voice mode now (no toggle)
 let __sbSpeculativeActive = false;    // a speculative answer is live this turn
 let __sbSpeculativeToken = -1;        // the speculative answer's turn token
 let __sbSpeculativeHandledToken = -1; // token of a speculative answer that COMPLETED (already spoke)
@@ -14493,6 +14479,11 @@ function __sbClaimVoiceTurnToken() {
 async function __sbStartSpeculativeAnswer() {
   if (!__sbSpeculativeReply || !__sbRtControlReady() || __sbSpeculativeActive) return;
   if (__sbHasActiveRealtimeResponse() || __sbVoicePendingReply) return;
+  // Think-first gate: if the partial transcript already reads like a browser ACTION
+  // (open / play / search / send / book ...), do NOT speak a speculative reply. Let the
+  // transcript router hand it to Delegate so Braino ACTS instead of narrating how to do it.
+  const partial = String(__sbRtUserTranscript || "").trim();
+  if (partial && __sbDetectIntent(partial) !== "chat") { __sbVTMark("🧠 speculative skipped (action intent → delegate)"); return; }
   __sbSpeculativeToken = ++__sbRtTurnToken;
   __sbSpeculativeActive = true;
   __sbVTMark("⚡ Speculative reply (from audio)");
@@ -15927,7 +15918,7 @@ function __sbEnterHeadphoneMode(options = {}) {
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
   __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "brainoSpeculativeReply", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
     __sbApplyStoredVoiceOutputPref(stored.brainoVoicePref);
-    __sbSpeculativeReply = stored.brainoSpeculativeReply === true;   // beta toggle, default OFF
+    __sbSpeculativeReply = true;   // fast replies are the default voice mode now (toggle removed)
     __sbSyncSpeculativeToggle();
 
     if (stored.sbRtSessionActive) {
