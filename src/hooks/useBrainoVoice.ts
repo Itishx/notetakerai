@@ -81,17 +81,27 @@ export function useBrainoVoice({ accessToken, buildConfigBody, onLog }: Options)
       const instructions = String((cfg as { instructions?: string })?.instructions || "");
       log("voice", "config ok", { promptChars: instructions.length });
 
-      // 2) Mic.
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 2) Mic (same constraints as the extension's offscreen doc).
+      const mic = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
       micRef.current = mic;
 
-      // 3) Peer connection + remote audio sink.
+      // 3) Peer connection + remote audio sink. Mirror offscreen.js: a real <audio> in the DOM,
+      // autoplay + explicit play() on track (browser autoplay policies are happier that way).
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
       const audioEl = audioRef.current || new Audio();
       audioEl.autoplay = true;
+      (audioEl as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+      audioEl.muted = false;
+      audioEl.volume = 1;
+      if (!audioEl.isConnected) { try { audioEl.style.display = "none"; document.body.appendChild(audioEl); } catch { /* ignore */ } }
       audioRef.current = audioEl;
-      pc.ontrack = (e) => { if (e.streams[0]) audioEl.srcObject = e.streams[0]; };
+      pc.ontrack = (e) => {
+        audioEl.srcObject = e.streams[0] || new MediaStream([e.track]);
+        void audioEl.play().catch(() => { /* deferred until a gesture; the toggle IS one */ });
+      };
       mic.getTracks().forEach((t) => pc.addTrack(t, mic));
 
       // 4) Data channel — session config + events.
@@ -136,13 +146,16 @@ export function useBrainoVoice({ accessToken, buildConfigBody, onLog }: Options)
       // 5) Offer → backend proxy → answer.
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      // NOTE: we intentionally do NOT send X-Braino-Realtime-Model here. That custom header is
+      // not in openai-realtime-call's Access-Control-Allow-Headers, so on the website (unlike the
+      // extension, which bypasses CORS) it fails the preflight. The server falls back to its env
+      // default model (gpt-realtime-mini), which is what we want for the web chat anyway.
       const callRes = await fetch(`${SUPABASE_URL}/functions/v1/openai-realtime-call`, {
         method: "POST",
         headers: {
           "Content-Type": "application/sdp",
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${accessToken}`,
-          "X-Braino-Realtime-Model": "gpt-realtime-mini",
         },
         body: offer.sdp || "",
       });
