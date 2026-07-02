@@ -43,6 +43,8 @@ function CommandCard({
 }) {
   const [expanded, setExpanded] = useState(cmd.status === "running");
   const isActive = cmd.status === "pending" || cmd.status === "running";
+  // Marker steps (__context conversation payload, __meta duration) are data, not progress rows.
+  const steps = (cmd.steps || []).filter(s => s && s.description);
 
   useEffect(() => {
     if (cmd.status === "running") setExpanded(true);
@@ -91,7 +93,7 @@ function CommandCard({
             {cmd.status === "running" && (
               <span className="text-xs text-primary flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                Running{cmd.steps.length > 0 ? ` · step ${cmd.steps.length}` : "…"}
+                Running{steps.length > 0 ? ` · step ${steps.length}` : "…"}
               </span>
             )}
             {cmd.status === "done" && (
@@ -120,7 +122,7 @@ function CommandCard({
             </button>
           )}
           {/* Expand toggle */}
-          {cmd.steps.length > 0 && !selectMode && (
+          {steps.length > 0 && !selectMode && (
             <button
               onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
               className="w-7 h-7 flex items-center justify-center text-muted-foreground/40 hover:text-muted-foreground transition-colors"
@@ -137,9 +139,9 @@ function CommandCard({
         </div>
       )}
 
-      {expanded && cmd.steps.length > 0 && (
+      {expanded && steps.length > 0 && (
         <div className="border-t border-border/30 px-4 py-3 space-y-2">
-          {cmd.steps.map((step, i) => (
+          {steps.map((step, i) => (
             <div key={i} className="flex items-start gap-2">
               <span className={`text-xs flex-shrink-0 mt-0.5 ${step.ok ? "text-green-500" : "text-red-400"}`}>
                 {step.ok ? "✓" : "✗"}

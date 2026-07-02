@@ -13460,6 +13460,27 @@ function __sbApplyVoiceLanguage(lang) {
 let __sbRtUserTranscript = "";
 let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
+// Fast-path turns bypass the batch chat pipeline, so nothing was recording them into
+// __sbChatHistory — a follow-up like "open that website" then reached the Delegate agent with an
+// empty context. Each half of a turn lands here as it becomes known (the speculative beta answers
+// before the transcript arrives, so order isn't guaranteed); the pair is pushed once both exist.
+const __sbVoiceTurnLog = new Map(); // turnToken -> { user, assistant, pushed }
+function __sbNoteVoiceTurn(turnToken, patch) {
+  const key = Number(turnToken);
+  if (!Number.isFinite(key)) return;
+  const turn = __sbVoiceTurnLog.get(key) || { user: "", assistant: "", pushed: false };
+  if (patch.user) turn.user = String(patch.user).trim();
+  if (patch.assistant) turn.assistant = String(patch.assistant).trim();
+  __sbVoiceTurnLog.set(key, turn);
+  if (!turn.pushed && turn.user && turn.assistant) {
+    turn.pushed = true;
+    __sbChatHistory.push({ role: "user", content: turn.user });
+    __sbChatHistory.push({ role: "assistant", content: turn.assistant });
+  }
+  if (__sbVoiceTurnLog.size > 30) {
+    __sbVoiceTurnLog.delete(__sbVoiceTurnLog.keys().next().value);
+  }
+}
 let __sbRtResponseWaiter = null;
 let __sbRtTurnToken = 0;
 // True if this voice turn is still the active one (no newer turn started since). Used to decide
@@ -14547,6 +14568,7 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
   // means the answer is complete.
 
   if (result?.status !== "done") __sbVTMark(`⚠️ fast bail: response ${result?.status || "no result"}`);
+  if (result?.status === "done") __sbNoteVoiceTurn(turnToken, { assistant: result.text });
   __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
   return result?.status === "done";
 }
@@ -15123,6 +15145,9 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // pipeline below if streaming can't run (toggle off, realtime not ready, or it errors mid-turn).
   if (__sbVoiceBrain === "realtime" && __sbRtControlReady()) {
     __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+    // Record the user half of this conversation turn; the fast path records the assistant half on
+    // completion (covers both the normal streaming answer and a kept speculative one).
+    __sbNoteVoiceTurn(turnToken, { user: promptText });
     // Speculative beta: the answer was already started from the audio (and the turn turned out to be
     // plain chat, since no action branch above cancelled it). It's speaking — don't speak a second
     // time. Covers both "still streaming" and "already finished" via the handled-token.

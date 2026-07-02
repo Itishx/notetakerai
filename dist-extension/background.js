@@ -1815,8 +1815,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "openTab") {
     const url = String(message.url || "").trim();
     if (url.startsWith("https://") || url.startsWith("http://")) {
+      // Re-fire guard: the same URL requested again within 10s (mic echo, duplicate delegate run,
+      // repeated voice turn) focuses the tab we just opened instead of stacking identical tabs.
+      for (const [u, entry] of bgRecentOpenedTabs) {
+        if (Date.now() - entry.ts > 60000) bgRecentOpenedTabs.delete(u);
+      }
+      const recent = bgRecentOpenedTabs.get(url);
+      if (recent && Date.now() - recent.ts < 10000) {
+        chrome.tabs.get(recent.tabId, (tab) => {
+          if (!chrome.runtime.lastError && tab?.id) {
+            if (message.active !== false) {
+              chrome.windows.update(tab.windowId, { focused: true }, () => { void chrome.runtime.lastError; });
+              chrome.tabs.update(tab.id, { active: true }, () => { void chrome.runtime.lastError; });
+            }
+            sendResponse({ ok: true, tabId: tab.id, reused: true });
+            return;
+          }
+          chrome.tabs.create({ url, active: message.active !== false }, (created) => {
+            void chrome.runtime.lastError;
+            if (created?.id) bgRecentOpenedTabs.set(url, { tabId: created.id, ts: Date.now() });
+            sendResponse({ ok: true, tabId: created?.id ?? null });
+          });
+        });
+        return true;
+      }
       chrome.tabs.create({ url, active: message.active !== false }, (tab) => {
         void chrome.runtime.lastError;
+        if (tab?.id) bgRecentOpenedTabs.set(url, { tabId: tab.id, ts: Date.now() });
         sendResponse({ ok: true, tabId: tab?.id ?? null });
       });
       return true; // async sendResponse
@@ -2668,6 +2693,11 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 const bgAgentTaskByTab = new Map();
 const bgActiveDelegateRunsByTab = new Map();
+// Same task claimed GLOBALLY, not just per tab — delegate runs move/create tabs, so a re-fired
+// task landed on a different tabId and slipped past the per-tab claim (the N-identical-tabs bug).
+const bgActiveDelegateRunsByTask = new Map();
+// URLs opened via the openTab message recently — lets a duplicate request reuse the tab.
+const bgRecentOpenedTabs = new Map();
 
 function bgDelegateTaskKey(task) {
   return String(task || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -2680,14 +2710,22 @@ function bgTryClaimDelegateRun(tabId, task) {
   if (active?.key === key && Date.now() - active.startedAt < 120000) {
     return { ok: false, duplicate: true, token: active.token };
   }
+  const activeTask = bgActiveDelegateRunsByTask.get(key);
+  if (activeTask && Date.now() - activeTask.startedAt < 120000) {
+    return { ok: false, duplicate: true, token: activeTask.token };
+  }
   const token = `${Date.now()}:${Math.random()}`;
   bgActiveDelegateRunsByTab.set(tabId, { key, startedAt: Date.now(), token });
+  bgActiveDelegateRunsByTask.set(key, { startedAt: Date.now(), token });
   return { ok: true, token };
 }
 
 function bgReleaseDelegateRun(tabId, token) {
   const active = bgActiveDelegateRunsByTab.get(tabId);
   if (active?.token === token) bgActiveDelegateRunsByTab.delete(tabId);
+  for (const [key, entry] of bgActiveDelegateRunsByTask) {
+    if (entry.token === token) bgActiveDelegateRunsByTask.delete(key);
+  }
 }
 
 function bgBrainUpdate(tabId, text, final = false, opts = {}) {
@@ -6804,6 +6842,12 @@ async function bgRunRemoteCommand(cmd, token) {
   console.log("[BgRemoteAgent] Running closed-loop command:", cmd.task);
   const startedAt = Date.now();
   const steps = [];
+  // The chat page smuggles its recent conversation in as a marker step (same pattern as the
+  // __meta duration step) so follow-up tasks ("open that website") arrive with context.
+  const contextStep = Array.isArray(cmd.steps) ? cmd.steps.find((s) => s && s.__context) : null;
+  const sharedContext = contextStep
+    ? { chatHistory: contextStep.chatHistory, lastUserPrompt: contextStep.lastUserPrompt, lastAssistantReply: contextStep.lastAssistantReply }
+    : {};
   await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps });
 
   const finish = async (status, result) => {
@@ -6839,7 +6883,7 @@ async function bgRunRemoteCommand(cmd, token) {
     const result = await bgRunDelegateLoop({
       tabId,
       task: cmd.task,
-      sharedContext: {},
+      sharedContext,
       onProgress: (description) => {
         steps.push({ description: String(description || "Working"), ok: null });
         bgUpdateRemoteCommand(cmd.id, token, { steps });
@@ -7136,13 +7180,23 @@ async function bgPollRemoteCommands() {
     const rows = await res.json();
     const cmd = rows[0];
     if (!cmd) return;
-    if (cmd.id === data.remoteProcessingId) {
-      // Same command seen again — only skip if we picked it up recently (< 90s).
-      // If it's been longer, the previous attempt silently died; clear the lock and retry.
-      const elapsed = Date.now() - (data.remoteProcessingTime || 0);
-      if (elapsed < 90000) return;
-      console.log("[BgRemoteAgent] Clearing stale lock for:", cmd.id);
-      chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+
+    // Atomic claim: flip pending→running conditionally. The realtime kick, the 1-min alarm poll,
+    // and a long-running task used to race here (the old local "stale lock" self-cleared after 90s
+    // and re-ran a still-running command — the duplicate-tabs bug). If another consumer already
+    // claimed the row, this PATCH matches 0 rows and we skip.
+    const claimRes = await fetch(
+      `${BG_SUPABASE_URL}/rest/v1/agent_commands?id=eq.${cmd.id}&status=eq.pending`,
+      {
+        method: "PATCH",
+        headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ status: "running" }),
+      }
+    );
+    const claimed = claimRes.ok ? await claimRes.json() : [];
+    if (!Array.isArray(claimed) || claimed.length === 0) {
+      console.log("[BgRemoteAgent] Command already claimed elsewhere:", cmd.id);
+      return;
     }
 
     console.log("[BgRemoteAgent] Found command:", cmd.id, cmd.task);

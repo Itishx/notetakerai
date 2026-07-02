@@ -564,7 +564,8 @@ function Turn({ m, reveal, onStop }: { m: ChatMessage; reveal: number | null; on
   // delegate task card
   if (m.kind === "delegate") {
     const status = m.status || "pending";
-    const steps = m.steps || [];
+    // Marker steps (__context conversation payload, __meta duration) are data, not progress rows.
+    const steps = (m.steps || []).filter((s) => s && s.description);
     const isActive = status === "pending" || status === "running";
     const stopped = m.result === "Stopped by user";
     const expr = status === "done" ? "grin" : status === "error" ? "ohh" : status === "running" ? "think" : "happy";
@@ -863,7 +864,7 @@ export default function BrainoChat() {
   }, [user, session, driveConnected, streamReply, scrollDown]);
 
   /* ----- delegate path: enqueue into the shared agent_commands queue ----- */
-  const delegate = useCallback(async (task: string) => {
+  const delegate = useCallback(async (task: string, history: ChatMessage[] = []) => {
     setError("");
     if (!user) {
       log.warn("delegate", "blocked — not signed in");
@@ -882,10 +883,21 @@ export default function BrainoChat() {
     }]);
     scrollDown();
 
+    // Ride the recent conversation along as a marker step (the extension reads and strips it),
+    // so a follow-up like "open that website" reaches the agent with the context it refers to.
+    const contextTurns = history
+      .filter((m) => (m.text || "").trim() && (m.role === "user" || m.role === "assistant"))
+      .slice(-8)
+      .map((m) => ({
+        role: m.role,
+        content: (m.kind === "delegate" ? `Ran delegate task: ${m.text}${m.result ? ` — ${m.result}` : ""}` : m.text).slice(0, 500),
+      }));
+    const steps = contextTurns.length ? [{ __context: true, chatHistory: contextTurns }] : [];
+
     try {
       const { data, error: e } = await supabase
         .from("agent_commands" as never)
-        .insert({ user_id: user.id, task, status: "pending", steps: [] } as never)
+        .insert({ user_id: user.id, task, status: "pending", steps } as never)
         .select()
         .single();
       if (e) throw e;
@@ -937,7 +949,7 @@ export default function BrainoChat() {
     setAttachments([]);
     scrollDown();
 
-    if (delegateMode) void delegate(text);
+    if (delegateMode) void delegate(text, history);
     else void ask(text, history);
   }, [draft, attachments, isSending, messages, delegateMode, delegate, ask, scrollDown]);
 
