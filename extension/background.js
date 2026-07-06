@@ -1733,12 +1733,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "openSilentAuthTab") {
-    const extId = chrome.runtime.id;
-    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}`, active: false }, (tab) => {
-      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
-    });
-    sendResponse({ ok: true });
+    (async () => {
+      // First try to authenticate from a Braino tab that's already open and signed in
+      // (production OR preview env). If we find a session there, storing it fires the
+      // content script's auth watcher (green) — no need to open an auth tab at all.
+      const existing = await bgScavengeAuthFromBrainoTabs();
+      if (existing?.access_token) { sendResponse({ ok: true, source: "existing-tab" }); return; }
+
+      // Otherwise open the /auth/extension relay page for each origin (production + preview)
+      // silently in the background. Whichever origin the user is signed into relays its session;
+      // storeAuthData then closes every tab we opened here.
+      const extId = chrome.runtime.id;
+      const openedTabIds = [];
+      for (const origin of BG_BRAINO_AUTH_ORIGINS) {
+        const tab = await new Promise((resolve) =>
+          chrome.tabs.create({ url: `${origin}/auth/extension?ext=${extId}`, active: false }, resolve));
+        if (tab?.id) openedTabIds.push(tab.id);
+      }
+      if (openedTabIds.length) await chrome.storage.local.set({ __sbAuthTabIds: openedTabIds });
+      sendResponse({ ok: true, source: "auth-tab" });
+    })();
     return true;
+  }
+  if (message.action === "closeSilentAuthTabs") {
+    bgCloseSilentAuthTabs();
+    sendResponse({ ok: true });
+    return false;
   }
   if (message.action === "openAuthTab") {
     const extId = chrome.runtime.id;
@@ -1753,38 +1773,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Pull token from extension storage
       let { authToken, authRefreshToken } = await chrome.storage.local.get(["authToken", "authRefreshToken"]);
 
-      // If no token in extension storage, try to grab it from any open trybraino.com tab
+      // If no token in extension storage, try to grab it from any open Braino tab —
+      // production (trybraino.com) or the preview env.
       if (!authToken && !authRefreshToken) {
-        try {
-          const tabs = await chrome.tabs.query({ url: "*://trybraino.com/*" });
-          if (tabs.length > 0) {
-            const results = await chrome.scripting.executeScript({
-              target: { tabId: tabs[0].id },
-              func: () => {
-                try {
-                  const raw = localStorage.getItem('sb-suwhgaxxdizowbyjlljj-auth-token');
-                  if (!raw) return null;
-                  const s = JSON.parse(raw);
-                  return s?.access_token ? s : null;
-                } catch { return null; }
-              }
-            });
-            const s = results?.[0]?.result;
-            if (s?.access_token) {
-              authToken = s.access_token;
-              authRefreshToken = s.refresh_token || null;
-              const authEmail = s.user?.email || null;
-              chrome.storage.local.set({
-                authToken,
-                authRefreshToken,
-                authEmail,
-                authUserId: s.user?.id || null,
-                authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
-                ...(bgIsInternalPremiumEmail(authEmail) ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
-              });
-            }
-          }
-        } catch {}
+        const s = await bgScavengeAuthFromBrainoTabs();
+        if (s?.access_token) {
+          authToken = s.access_token;
+          authRefreshToken = s.refresh_token || null;
+        }
       }
 
       if (!authToken && !authRefreshToken) { sendResponse({ authenticated: false }); return; }
@@ -1982,6 +1978,82 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 const BG_SUPABASE_URL = "https://suwhgaxxdizowbyjlljj.supabase.co";
 const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
 const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
+
+// Supabase persists the signed-in session under this localStorage key on every Braino web origin.
+const BG_SUPABASE_AUTH_STORAGE_KEY = "sb-suwhgaxxdizowbyjlljj-auth-token";
+
+// Every Braino web origin the extension trusts for a signed-in session: production plus the
+// Vercel preview deploys. Being logged in on any of these authenticates the extension the same
+// as trybraino.com, so the preview env "goes through" even when trybraino.com isn't signed in.
+const BG_BRAINO_WEB_MATCHES = [
+  "*://trybraino.com/*",
+  "*://braino-eight.vercel.app/*",
+  "*://braino-git-cinemamode-itishs-projects.vercel.app/*",
+];
+
+// Origins whose /auth/extension page can relay a signed-in session back to the extension.
+// The silent auth check opens each of these so a user logged into production OR the preview
+// env authenticates, even when neither tab is currently open.
+const BG_BRAINO_AUTH_ORIGINS = [
+  "https://trybraino.com",
+  "https://braino-git-cinemamode-itishs-projects.vercel.app",
+];
+
+// Close any background /auth/extension relay tab(s) the extension opened for the silent auth
+// check — the legacy single id plus the array used when opening both production and preview.
+function bgCloseSilentAuthTabs() {
+  chrome.storage.local.get(["__sbAuthTabId", "__sbAuthTabIds"], ({ __sbAuthTabId, __sbAuthTabIds }) => {
+    const ids = [];
+    if (typeof __sbAuthTabId === "number") ids.push(__sbAuthTabId);
+    if (Array.isArray(__sbAuthTabIds)) ids.push(...__sbAuthTabIds.filter((id) => typeof id === "number"));
+    for (const id of ids) {
+      chrome.tabs.remove(id, () => { void chrome.runtime.lastError; });
+    }
+    if (ids.length) chrome.storage.local.remove(["__sbAuthTabId", "__sbAuthTabIds"]);
+  });
+}
+
+// Look through any open Braino web tab (production OR preview) for a signed-in Supabase session
+// and, if found, persist it into extension storage. Setting authToken fires storage.onChanged,
+// which the content script's auth watcher turns into the green "authenticated" state.
+// Returns the session object if one was found, else null.
+async function bgScavengeAuthFromBrainoTabs() {
+  try {
+    const tabs = await chrome.tabs.query({ url: BG_BRAINO_WEB_MATCHES });
+    for (const tab of tabs) {
+      if (!tab?.id) continue;
+      let results;
+      try {
+        results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          args: [BG_SUPABASE_AUTH_STORAGE_KEY],
+          func: (storageKey) => {
+            try {
+              const raw = localStorage.getItem(storageKey);
+              if (!raw) return null;
+              const s = JSON.parse(raw);
+              return s?.access_token ? s : null;
+            } catch { return null; }
+          },
+        });
+      } catch { continue; }
+      const s = results?.[0]?.result;
+      if (s?.access_token) {
+        const authEmail = s.user?.email || null;
+        await chrome.storage.local.set({
+          authToken: s.access_token,
+          authRefreshToken: s.refresh_token || null,
+          authEmail,
+          authUserId: s.user?.id || null,
+          authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+          ...(bgIsInternalPremiumEmail(authEmail) ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
+        });
+        return s;
+      }
+    }
+  } catch {}
+  return null;
+}
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 const BG_BRAINO_FAVORITE_SONG_URI = "spotify:track:6Hgh47WXVKtXN5zGOu0hjI";
 
@@ -7364,13 +7436,8 @@ function storeAuthData(data) {
     authUserId: data.userId,
     ...(isInternalPremium ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
   });
-  // Auto-close the auth tab opened by the extension
-  chrome.storage.local.get("__sbAuthTabId", ({ __sbAuthTabId }) => {
-    if (typeof __sbAuthTabId === "number") {
-      chrome.tabs.remove(__sbAuthTabId, () => { void chrome.runtime.lastError; });
-      chrome.storage.local.remove("__sbAuthTabId");
-    }
-  });
+  // Auto-close the auth tab(s) opened by the extension.
+  bgCloseSilentAuthTabs();
   // Restart realtime with fresh credentials
   bgStartRealtime();
 }

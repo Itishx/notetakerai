@@ -3149,7 +3149,13 @@ function __sbWakeupClimb(finishAuthed, finishRejected) {
     chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
     watcher = (changes, area) => { if (area === "local" && changes.authToken?.newValue && authResolved === null) authResolved = true; };
     try { chrome.storage.onChanged.addListener(watcher); } catch (_) {}
-    fallbackTimer = setTimeout(() => { if (authResolved === null) authResolved = false; }, 6000);
+    fallbackTimer = setTimeout(() => {
+      if (authResolved === null) {
+        authResolved = false;
+        // Not signed in on any Braino env — clean up the silent background relay tabs.
+        chrome.runtime.sendMessage({ action: "closeSilentAuthTabs" }, () => { void chrome.runtime.lastError; });
+      }
+    }, 6000);
   };
   const cleanupAuth = () => {
     if (watcher) { try { chrome.storage.onChanged.removeListener(watcher); } catch (_) {} watcher = null; }

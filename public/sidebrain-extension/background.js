@@ -1733,12 +1733,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "openSilentAuthTab") {
-    const extId = chrome.runtime.id;
-    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}`, active: false }, (tab) => {
-      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
-    });
-    sendResponse({ ok: true });
+    (async () => {
+      // First try to authenticate from a Braino tab that's already open and signed in
+      // (production OR preview env). If we find a session there, storing it fires the
+      // content script's auth watcher (green) — no need to open an auth tab at all.
+      const existing = await bgScavengeAuthFromBrainoTabs();
+      if (existing?.access_token) { sendResponse({ ok: true, source: "existing-tab" }); return; }
+
+      // Otherwise open the /auth/extension relay page for each origin (production + preview)
+      // silently in the background. Whichever origin the user is signed into relays its session;
+      // storeAuthData then closes every tab we opened here.
+      const extId = chrome.runtime.id;
+      const openedTabIds = [];
+      for (const origin of BG_BRAINO_AUTH_ORIGINS) {
+        const tab = await new Promise((resolve) =>
+          chrome.tabs.create({ url: `${origin}/auth/extension?ext=${extId}`, active: false }, resolve));
+        if (tab?.id) openedTabIds.push(tab.id);
+      }
+      if (openedTabIds.length) await chrome.storage.local.set({ __sbAuthTabIds: openedTabIds });
+      sendResponse({ ok: true, source: "auth-tab" });
+    })();
     return true;
+  }
+  if (message.action === "closeSilentAuthTabs") {
+    bgCloseSilentAuthTabs();
+    sendResponse({ ok: true });
+    return false;
   }
   if (message.action === "openAuthTab") {
     const extId = chrome.runtime.id;
@@ -1753,38 +1773,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Pull token from extension storage
       let { authToken, authRefreshToken } = await chrome.storage.local.get(["authToken", "authRefreshToken"]);
 
-      // If no token in extension storage, try to grab it from any open trybraino.com tab
+      // If no token in extension storage, try to grab it from any open Braino tab —
+      // production (trybraino.com) or the preview env.
       if (!authToken && !authRefreshToken) {
-        try {
-          const tabs = await chrome.tabs.query({ url: "*://trybraino.com/*" });
-          if (tabs.length > 0) {
-            const results = await chrome.scripting.executeScript({
-              target: { tabId: tabs[0].id },
-              func: () => {
-                try {
-                  const raw = localStorage.getItem('sb-suwhgaxxdizowbyjlljj-auth-token');
-                  if (!raw) return null;
-                  const s = JSON.parse(raw);
-                  return s?.access_token ? s : null;
-                } catch { return null; }
-              }
-            });
-            const s = results?.[0]?.result;
-            if (s?.access_token) {
-              authToken = s.access_token;
-              authRefreshToken = s.refresh_token || null;
-              const authEmail = s.user?.email || null;
-              chrome.storage.local.set({
-                authToken,
-                authRefreshToken,
-                authEmail,
-                authUserId: s.user?.id || null,
-                authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
-                ...(bgIsInternalPremiumEmail(authEmail) ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
-              });
-            }
-          }
-        } catch {}
+        const s = await bgScavengeAuthFromBrainoTabs();
+        if (s?.access_token) {
+          authToken = s.access_token;
+          authRefreshToken = s.refresh_token || null;
+        }
       }
 
       if (!authToken && !authRefreshToken) { sendResponse({ authenticated: false }); return; }
@@ -1815,8 +1811,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "openTab") {
     const url = String(message.url || "").trim();
     if (url.startsWith("https://") || url.startsWith("http://")) {
+      // Re-fire guard: the same URL requested again within 10s (mic echo, duplicate delegate run,
+      // repeated voice turn) focuses the tab we just opened instead of stacking identical tabs.
+      for (const [u, entry] of bgRecentOpenedTabs) {
+        if (Date.now() - entry.ts > 60000) bgRecentOpenedTabs.delete(u);
+      }
+      const recent = bgRecentOpenedTabs.get(url);
+      if (recent && Date.now() - recent.ts < 10000) {
+        chrome.tabs.get(recent.tabId, (tab) => {
+          if (!chrome.runtime.lastError && tab?.id) {
+            if (message.active !== false) {
+              chrome.windows.update(tab.windowId, { focused: true }, () => { void chrome.runtime.lastError; });
+              chrome.tabs.update(tab.id, { active: true }, () => { void chrome.runtime.lastError; });
+            }
+            sendResponse({ ok: true, tabId: tab.id, reused: true });
+            return;
+          }
+          chrome.tabs.create({ url, active: message.active !== false }, (created) => {
+            void chrome.runtime.lastError;
+            if (created?.id) bgRecentOpenedTabs.set(url, { tabId: created.id, ts: Date.now() });
+            sendResponse({ ok: true, tabId: created?.id ?? null });
+          });
+        });
+        return true;
+      }
       chrome.tabs.create({ url, active: message.active !== false }, (tab) => {
         void chrome.runtime.lastError;
+        if (tab?.id) bgRecentOpenedTabs.set(url, { tabId: tab.id, ts: Date.now() });
         sendResponse({ ok: true, tabId: tab?.id ?? null });
       });
       return true; // async sendResponse
@@ -1957,6 +1978,82 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 const BG_SUPABASE_URL = "https://suwhgaxxdizowbyjlljj.supabase.co";
 const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
 const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
+
+// Supabase persists the signed-in session under this localStorage key on every Braino web origin.
+const BG_SUPABASE_AUTH_STORAGE_KEY = "sb-suwhgaxxdizowbyjlljj-auth-token";
+
+// Every Braino web origin the extension trusts for a signed-in session: production plus the
+// Vercel preview deploys. Being logged in on any of these authenticates the extension the same
+// as trybraino.com, so the preview env "goes through" even when trybraino.com isn't signed in.
+const BG_BRAINO_WEB_MATCHES = [
+  "*://trybraino.com/*",
+  "*://braino-eight.vercel.app/*",
+  "*://braino-git-cinemamode-itishs-projects.vercel.app/*",
+];
+
+// Origins whose /auth/extension page can relay a signed-in session back to the extension.
+// The silent auth check opens each of these so a user logged into production OR the preview
+// env authenticates, even when neither tab is currently open.
+const BG_BRAINO_AUTH_ORIGINS = [
+  "https://trybraino.com",
+  "https://braino-git-cinemamode-itishs-projects.vercel.app",
+];
+
+// Close any background /auth/extension relay tab(s) the extension opened for the silent auth
+// check — the legacy single id plus the array used when opening both production and preview.
+function bgCloseSilentAuthTabs() {
+  chrome.storage.local.get(["__sbAuthTabId", "__sbAuthTabIds"], ({ __sbAuthTabId, __sbAuthTabIds }) => {
+    const ids = [];
+    if (typeof __sbAuthTabId === "number") ids.push(__sbAuthTabId);
+    if (Array.isArray(__sbAuthTabIds)) ids.push(...__sbAuthTabIds.filter((id) => typeof id === "number"));
+    for (const id of ids) {
+      chrome.tabs.remove(id, () => { void chrome.runtime.lastError; });
+    }
+    if (ids.length) chrome.storage.local.remove(["__sbAuthTabId", "__sbAuthTabIds"]);
+  });
+}
+
+// Look through any open Braino web tab (production OR preview) for a signed-in Supabase session
+// and, if found, persist it into extension storage. Setting authToken fires storage.onChanged,
+// which the content script's auth watcher turns into the green "authenticated" state.
+// Returns the session object if one was found, else null.
+async function bgScavengeAuthFromBrainoTabs() {
+  try {
+    const tabs = await chrome.tabs.query({ url: BG_BRAINO_WEB_MATCHES });
+    for (const tab of tabs) {
+      if (!tab?.id) continue;
+      let results;
+      try {
+        results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          args: [BG_SUPABASE_AUTH_STORAGE_KEY],
+          func: (storageKey) => {
+            try {
+              const raw = localStorage.getItem(storageKey);
+              if (!raw) return null;
+              const s = JSON.parse(raw);
+              return s?.access_token ? s : null;
+            } catch { return null; }
+          },
+        });
+      } catch { continue; }
+      const s = results?.[0]?.result;
+      if (s?.access_token) {
+        const authEmail = s.user?.email || null;
+        await chrome.storage.local.set({
+          authToken: s.access_token,
+          authRefreshToken: s.refresh_token || null,
+          authEmail,
+          authUserId: s.user?.id || null,
+          authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+          ...(bgIsInternalPremiumEmail(authEmail) ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
+        });
+        return s;
+      }
+    }
+  } catch {}
+  return null;
+}
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 const BG_BRAINO_FAVORITE_SONG_URI = "spotify:track:6Hgh47WXVKtXN5zGOu0hjI";
 
@@ -2668,6 +2765,11 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 const bgAgentTaskByTab = new Map();
 const bgActiveDelegateRunsByTab = new Map();
+// Same task claimed GLOBALLY, not just per tab — delegate runs move/create tabs, so a re-fired
+// task landed on a different tabId and slipped past the per-tab claim (the N-identical-tabs bug).
+const bgActiveDelegateRunsByTask = new Map();
+// URLs opened via the openTab message recently — lets a duplicate request reuse the tab.
+const bgRecentOpenedTabs = new Map();
 
 function bgDelegateTaskKey(task) {
   return String(task || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -2680,14 +2782,22 @@ function bgTryClaimDelegateRun(tabId, task) {
   if (active?.key === key && Date.now() - active.startedAt < 120000) {
     return { ok: false, duplicate: true, token: active.token };
   }
+  const activeTask = bgActiveDelegateRunsByTask.get(key);
+  if (activeTask && Date.now() - activeTask.startedAt < 120000) {
+    return { ok: false, duplicate: true, token: activeTask.token };
+  }
   const token = `${Date.now()}:${Math.random()}`;
   bgActiveDelegateRunsByTab.set(tabId, { key, startedAt: Date.now(), token });
+  bgActiveDelegateRunsByTask.set(key, { startedAt: Date.now(), token });
   return { ok: true, token };
 }
 
 function bgReleaseDelegateRun(tabId, token) {
   const active = bgActiveDelegateRunsByTab.get(tabId);
   if (active?.token === token) bgActiveDelegateRunsByTab.delete(tabId);
+  for (const [key, entry] of bgActiveDelegateRunsByTask) {
+    if (entry.token === token) bgActiveDelegateRunsByTask.delete(key);
+  }
 }
 
 function bgBrainUpdate(tabId, text, final = false, opts = {}) {
@@ -6804,6 +6914,12 @@ async function bgRunRemoteCommand(cmd, token) {
   console.log("[BgRemoteAgent] Running closed-loop command:", cmd.task);
   const startedAt = Date.now();
   const steps = [];
+  // The chat page smuggles its recent conversation in as a marker step (same pattern as the
+  // __meta duration step) so follow-up tasks ("open that website") arrive with context.
+  const contextStep = Array.isArray(cmd.steps) ? cmd.steps.find((s) => s && s.__context) : null;
+  const sharedContext = contextStep
+    ? { chatHistory: contextStep.chatHistory, lastUserPrompt: contextStep.lastUserPrompt, lastAssistantReply: contextStep.lastAssistantReply }
+    : {};
   await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps });
 
   const finish = async (status, result) => {
@@ -6839,7 +6955,7 @@ async function bgRunRemoteCommand(cmd, token) {
     const result = await bgRunDelegateLoop({
       tabId,
       task: cmd.task,
-      sharedContext: {},
+      sharedContext,
       onProgress: (description) => {
         steps.push({ description: String(description || "Working"), ok: null });
         bgUpdateRemoteCommand(cmd.id, token, { steps });
@@ -7136,13 +7252,23 @@ async function bgPollRemoteCommands() {
     const rows = await res.json();
     const cmd = rows[0];
     if (!cmd) return;
-    if (cmd.id === data.remoteProcessingId) {
-      // Same command seen again — only skip if we picked it up recently (< 90s).
-      // If it's been longer, the previous attempt silently died; clear the lock and retry.
-      const elapsed = Date.now() - (data.remoteProcessingTime || 0);
-      if (elapsed < 90000) return;
-      console.log("[BgRemoteAgent] Clearing stale lock for:", cmd.id);
-      chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+
+    // Atomic claim: flip pending→running conditionally. The realtime kick, the 1-min alarm poll,
+    // and a long-running task used to race here (the old local "stale lock" self-cleared after 90s
+    // and re-ran a still-running command — the duplicate-tabs bug). If another consumer already
+    // claimed the row, this PATCH matches 0 rows and we skip.
+    const claimRes = await fetch(
+      `${BG_SUPABASE_URL}/rest/v1/agent_commands?id=eq.${cmd.id}&status=eq.pending`,
+      {
+        method: "PATCH",
+        headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ status: "running" }),
+      }
+    );
+    const claimed = claimRes.ok ? await claimRes.json() : [];
+    if (!Array.isArray(claimed) || claimed.length === 0) {
+      console.log("[BgRemoteAgent] Command already claimed elsewhere:", cmd.id);
+      return;
     }
 
     console.log("[BgRemoteAgent] Found command:", cmd.id, cmd.task);
@@ -7310,13 +7436,8 @@ function storeAuthData(data) {
     authUserId: data.userId,
     ...(isInternalPremium ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
   });
-  // Auto-close the auth tab opened by the extension
-  chrome.storage.local.get("__sbAuthTabId", ({ __sbAuthTabId }) => {
-    if (typeof __sbAuthTabId === "number") {
-      chrome.tabs.remove(__sbAuthTabId, () => { void chrome.runtime.lastError; });
-      chrome.storage.local.remove("__sbAuthTabId");
-    }
-  });
+  // Auto-close the auth tab(s) opened by the extension.
+  bgCloseSilentAuthTabs();
   // Restart realtime with fresh credentials
   bgStartRealtime();
 }
