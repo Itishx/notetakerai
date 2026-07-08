@@ -84,6 +84,8 @@
                 inset -1px -1px 1px rgba(255,255,255,0.3);
     width: 100%; max-width: 900px;
     backdrop-filter: blur(6px) saturate(180%); -webkit-backdrop-filter: blur(6px) saturate(180%);
+    transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1),
+                background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
   }
   .sbk-bar::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit;
@@ -121,8 +123,19 @@
   .sbk-bar-log {
     max-height: 0; opacity: 0; overflow: hidden;
     display: flex; flex-direction: column; gap: 1px; padding: 0 24px;
+    transition: max-height 0.4s cubic-bezier(0.34,1.18,0.64,1), opacity 0.24s ease, padding 0.4s cubic-bezier(0.34,1.18,0.64,1);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
+  @keyframes __sb_bar_send__ {
+    0%   { box-shadow: 0 0 0 0 rgba(232,120,110,0.55), 0 8px 32px rgba(27,23,19,0.18); }
+    55%  { box-shadow: 0 0 0 6px rgba(232,120,110,0), 0 0 34px rgba(232,120,110,0.45), 0 8px 32px rgba(27,23,19,0.18); }
+    100% { box-shadow: 0 0 0 0 rgba(232,120,110,0), 0 8px 32px rgba(27,23,19,0.18); }
+  }
+  .sbk-bar.sb-send-pulse { animation: __sb_bar_send__ 0.7s ease-out; }
+  /* Deterministic frame-export mode: freeze CSS animations, drive values inline per frame */
+  .sbk-bar.rise-export, .sbk-bar.rise-export .sbk-bar-log { transition: none !important; }
+  .sbk-bar.rise-export.sb-agent-busy::after { animation: none !important; background-position: var(--shim, 250%) 0; }
+  .sbk-bar.rise-export .sb-blog-step.active .sb-blog-ic { animation: none !important; }
   .sbk-bar.sb-log-open .sbk-bar-log { max-height: 60px; opacity: 1; padding: 11px 24px 5px; }
   .sbk-bar.sb-log-open { background: rgba(253,250,246,0.66); border-radius: 26px; }
   .sbk-bar.sb-log-open .sbk-bar-row { border-top: 1px solid rgba(120,110,100,0.12); }
@@ -526,6 +539,143 @@
   </div>
 </section>
 
+<!-- ═══════════════ 3d. BAR RISING ANIMATION ═══════════════ -->
+<section class="kit-section">
+  <h2>3d · Bar rising — the open animation, live</h2>
+  <p class="sub">The moment a delegate task lands: send pulse, then the same pill extends from its top (it does not become a second surface), the glass firms up, the radius snaps from full-round 100px to 26px, and the shimmer starts. Hit Replay to watch the real timing; export renders it as a 30fps PNG frame sequence.</p>
+  <div class="kit-stagebar">
+    <span class="tag">bar-rise · 30fps sequence</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="replayRise()">▶ Replay</button>
+      <button class="kit-dl" onclick="dlRiseFrames()">⬇ PNG frames 0–48 (ZIP)</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-bar-rise">
+    <div class="sbk-bar" id="el-bar-rise">
+      <div class="sbk-bar-log"><div class="sbk-rise-steps"></div></div>
+      <div class="sbk-bar-row">
+        <input class="sbk-input" id="el-rise-input" placeholder="What's on your mind?" readonly />
+        <button class="sb-pill-dropdown-btn">⚡ Auto
+          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+        </button>
+        <button class="sb-bar-icon-btn sbk-send" title="Send">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="kit-specs">
+    <b>Timeline:</b> send → coral pulse ring <code>0.7s ease-out</code> · strip rises <code>max-height 0 → 60px</code> + padding <code>0 → 11px/5px</code> over <code>0.4s cubic-bezier(0.34, 1.18, 0.64, 1)</code> (springy overshoot), opacity <code>0.24s ease</code> · pill bg firms <code>rgba(255,251,247,0.12) → rgba(253,250,246,0.66)</code> over <code>0.35s ease</code> · <b>radius snaps</b> 100px → 26px (not transitioned) · shimmer + spinner start immediately · on finish the strip collapses after a <code>600ms</code> hold, same curve reversed.
+  </div>
+</section>
+
+<!-- ═══════════════ 4. WALKING + WAVE ═══════════════ -->
+<section class="kit-section">
+  <h2>4 · Braino on the bar — walks, stops, waves at you</h2>
+  <p class="sub">The walker strolls the top edge of the bar, ping-ponging at 74 px/s, stops, faces you, and waves. This is the exact pose math from the product running live below (leg swing, waddle, bob, breath, blink, wave), not a re-animation. The export is a <b>transparent PNG frame sequence</b>: the character animates in place so your designer slides him across the comp at 74 px/s.</p>
+  <div class="kit-stagebar">
+    <span class="tag">walk-stop-wave · 6s loop · 30fps</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-walker','braino-walker-scene')">⬇ Scene PNG</button>
+      <button class="kit-dl" onclick="dlWalkerFrames()">⬇ Transparent frames 0–180 (ZIP)</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-walker" style="height: 340px; padding: 0; display: block; position: relative; overflow: hidden;">
+    <div class="sbk-bar" id="el-walker-bar" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: calc(100% - 96px); max-width: 760px;">
+      <div class="sbk-bar-row">
+        <input class="sbk-input" placeholder="What's on your mind?" readonly />
+        <button class="sb-pill-dropdown-btn">⚡ Auto</button>
+        <button class="sb-bar-icon-btn sbk-send">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="el-walker-lane" style="position: absolute; bottom: 78px; left: 50%; transform: translateX(-50%); width: calc(100% - 96px); max-width: 760px; height: 96px; pointer-events: none;">
+      <div id="el-walker-pos" style="position: absolute; bottom: 0; left: 0; width: 64px;">
+        <div id="el-walker-flip"></div>
+      </div>
+    </div>
+  </div>
+  <div class="kit-specs">
+    <b>Placement:</b> walker lane sits directly on the bar — lane <code>bottom: 78px</code> (bar bottom 20px + bar height ~58px), height <code>96px</code>, same width as the bar · walker is <code>64 × 78px</code>, feet on the bar's top edge<br />
+    <b>Walk cycle</b> (phase <code>s = t × 4.5</code>): legs <code>rotate(max(0, sin) × 8°)</code> + lift <code>max(0, sin) × 5px</code>, alternating half-cycle apart · waddle <code>sin(s) × 3.4°</code> around center · bob <code>−|sin(s)| × 2 − 0.4px</code> · speed <code>74 px/s</code>, flips (scaleX) at lane edges<br />
+    <b>Always on:</b> breath scale <code>1 + 0.014 sin(1.7t)</code> · float <code>sin(1.7t + 0.6) × 0.8px</code> · blink every <code>3.4s</code>, a <code>0.13s</code> sine squeeze to scaleY <code>0.06</code><br />
+    <b>Wave:</b> right arm <code>rotate(−28° + sin(11t) × 16°)</code> about <code>(78, 53)</code>, held <code>1.7s</code> · in product he auto-waves every <code>3.8–6.4s</code> while idle · faces the viewer (scaleX 1) while stopped
+  </div>
+</section>
+
+<!-- ═══════════════ 5. DOCKED ═══════════════ -->
+<section class="kit-section">
+  <h2>5 · Braino docked — the corner brain</h2>
+  <p class="sub">When docked (Esc), the bar and walker go away and only the 52px brain mascot stays, bottom-right, with a coral glow shadow and a four-layer idle: float, alternating arm sway, gaze drift, and a quick blink. Live below with the product's timing.</p>
+  <div class="kit-stagebar">
+    <span class="tag">docked-idle · 30fps</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-docked','braino-docked-corner')">⬇ Corner PNG</button>
+      <button class="kit-dl" onclick="dlBrainStatic()">⬇ Brain PNG (transparent)</button>
+      <button class="kit-dl" onclick="dlBrainSVG()">⬇ Brain SVG</button>
+      <button class="kit-dl" onclick="dlBrainFrames()">⬇ Idle frames 0–120 (ZIP)</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-docked" style="height: 260px; padding: 0; display: block; position: relative; overflow: hidden;">
+    <div style="position: absolute; inset: 0; padding: 24px 40px; opacity: 0.45;">
+      <div style="height: 12px; border-radius: 6px; background: rgba(255,255,255,0.6); margin-bottom: 10px; width: 70%;"></div>
+      <div style="height: 12px; border-radius: 6px; background: rgba(255,255,255,0.6); margin-bottom: 10px; width: 85%;"></div>
+      <div style="height: 12px; border-radius: 6px; background: rgba(255,255,255,0.6); width: 55%;"></div>
+    </div>
+    <div id="el-docked-brain" style="position: absolute; right: 38px; bottom: 38px; width: 52px; height: 52px; filter: drop-shadow(0 2px 12px rgba(200,84,74,0.55));"></div>
+  </div>
+  <div class="kit-specs">
+    <b>Placement:</b> <code>right: 38px; bottom: 38px</code> from the viewport corner (root 20px + button 18px) · <code>52 × 52px</code> · shadow <code>drop-shadow(0 2px 12px rgba(200,84,74,0.55))</code>, hover deepens to <code>0 4px 18px @ 0.75</code><br />
+    <b>Idle layers:</b> float <code>translateY 0 → −6px → 0</code>, <code>3.8s ease-in-out</code> · arms <code>±11°</code> about the shoulders, <code>3.4s</code>, left leads / right half-cycle behind · gaze <code>±0.8px</code> drift, <code>4.2s</code>, right eye delayed <code>0.4s</code> · blink <code>scaleY → 0.08</code> at the 92% mark of a <code>4s</code> cycle, eyes offset <code>0.06s</code>
+  </div>
+</section>
+
+<!-- ═══════════════ 6. STANDING ═══════════════ -->
+<section class="kit-section">
+  <h2>6 · Braino standing</h2>
+  <p class="sub">The walker at rest: legs planted, arms down, breathing and blinking. This is the pose between walking and waving.</p>
+  <div class="kit-stagebar">
+    <span class="tag">standing</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-standing','braino-standing-scene')">⬇ Scene PNG</button>
+      <button class="kit-dl" onclick="dlStandingStatic()">⬇ PNG (transparent, 6×)</button>
+      <button class="kit-dl" onclick="dlStandingSVG()">⬇ SVG</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-standing" style="padding: 40px;">
+    <div id="el-standing"></div>
+  </div>
+  <div class="kit-specs">
+    <b>At rest:</b> legs and arms at 0° · breath scale and float bob stay on (values in section 4) · blink stays on · pupils center forward (<code>gaze offset 0</code>; while walking they lead the direction by <code>2.4px</code>)
+  </div>
+</section>
+
+<!-- ═══════════════ 7. REACTIONS ═══════════════ -->
+<section class="kit-section">
+  <h2>7 · Reactions — the full face set</h2>
+  <p class="sub">All eight shipped reaction faces (the same SVGs the product uses, from <code>/reactions/</code>). Each downloads as the raw SVG or a 512px transparent PNG. In product a reaction adds a quick pop, <code>scale 1 → 1.22 → 1</code> over <code>0.34s</code>, plus a per-emotion shiver: scared <code>±3.4°</code> fast, celebrating <code>±2.2°</code>, tears <code>±1.4°</code> slow.</p>
+  <div class="kit-stagebar">
+    <span class="tag">reactions × 8</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-reactions','braino-reactions-board')">⬇ Board PNG</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-reactions" style="padding: 36px;">
+    <div id="el-reactions-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px 36px; width: 100%;"></div>
+  </div>
+</section>
+
+<!-- ═══════════════ ALPHA VIDEO NOTE ═══════════════ -->
+<section class="kit-section">
+  <h2>Turning frame sequences into transparent video</h2>
+  <p class="sub">Browsers cannot export alpha video directly, so the sequences above are the pro handoff: After Effects and Premiere import a PNG sequence as footage with alpha (File → Import, tick "PNG Sequence"). To hand off an actual transparent video file instead, run the frames through ffmpeg — every ZIP includes a README with this command:</p>
+  <div class="kit-specs" style="margin-top:0;">
+    <code>ffmpeg -framerate 30 -i braino-walk-wave_%03d.png -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le braino-walk-wave.mov</code><br />
+    That produces a ProRes 4444 <code>.mov</code> with real alpha (the industry-standard transparent video). True "transparent MP4" (HEVC + alpha) only plays on Apple devices; ProRes or the raw PNG sequence is what motion tools want.
+  </div>
+</section>
+
 <footer class="kit-foot">
   Braino design kit · generated from extension/content.js · colors: coral #E8786E → #C9544A, gradient light #F6A8A2, ink #1B1713, cream #FBF7F1, tick green #3DA35D · type: system stack (SF/Segoe), Georgia serif for answer headings.
 </footer>
@@ -540,6 +690,10 @@
     ['stage-bar-busy',      'braino-taskbar-working'],
     ['stage-steps',         'braino-tasksteps-anatomy'],
     ['stage-placement',     'braino-placement-map'],
+    ['stage-walker',        'braino-walker-scene'],
+    ['stage-docked',        'braino-docked-corner'],
+    ['stage-standing',      'braino-standing-scene'],
+    ['stage-reactions',     'braino-reactions-board'],
   ];
   const status = (m) => { document.getElementById('kit-status').textContent = m; };
 
@@ -584,6 +738,370 @@
     a.click();
     status('Done — braino-ui-kit.zip saved.');
   }
+</script>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════════════
+   CHARACTER ENGINE — geometry and pose math ported 1:1 from extension/content.js
+   (__SBWK_SHOE / __SBWK_BODY / __SB_BRAIN_SVG constants and the __sbWkTick math).
+   Live demos and PNG-sequence exports run through the SAME pose functions.
+   ════════════════════════════════════════════════════════════════════════════ */
+const FFMPEG_NOTE = (name) => 'Braino frame sequence — 30 fps, straight alpha.\n\n'
+  + 'After Effects / Premiere: import the first frame with "PNG Sequence" ticked.\n\n'
+  + 'Transparent video file:\n'
+  + 'ffmpeg -framerate 30 -i ' + name + '_%03d.png -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le ' + name + '.mov\n';
+
+const WK_SHOE = `<path d="M 45 74 L 42.5 87" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/><path d="M 45 74 L 42.5 87" fill="none" stroke="url(#sbwk-fill)" stroke-width="5.5" stroke-linecap="round"/><path d="M 47.5 89 C 47.5 87 44.5 86.4 42 87.4 C 36 89.2 29.6 90.6 25.2 94.2 C 22.2 96.7 21.8 99.4 25 100.8 C 27 101.6 31 101.6 35 101.6 L 45.6 101.6 C 47.1 101.6 47.8 100.6 47.5 99.1 Z" fill="white" stroke="rgba(176,86,78,.42)" stroke-width="0.9" stroke-linejoin="round"/><path d="M 23 98.6 Q 21.2 101.2 25.6 101.5 L 45.6 101.5 Q 47.8 101.3 47.4 98.9 Q 34.5 100.1 23 98.6 Z" fill="#F6E2DC" stroke="rgba(176,86,78,.42)" stroke-width="0.8" stroke-linejoin="round"/><g fill="none" stroke="#C9544A" stroke-width="0.85" stroke-linecap="round" opacity="0.7"><path d="M 29.5 90 Q 36 88.5 43 89.2"/><path d="M 32 92.7 Q 37.5 91.7 43 92.2" opacity="0.6"/></g><ellipse cx="30" cy="92.4" rx="3" ry="1.4" fill="#fff" opacity="0.6" transform="rotate(-12 30 92.4)"/>`;
+const WK_BODY = "M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 68 80.5 60 79.5 50 79 C 40 79.5 32 80.5 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z";
+const WK_HAND_L = `<g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g>`;
+const WK_HAND_R = `<g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g>`;
+const WK_GYRI = `<path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/>`;
+
+function walkerSVG(w, h) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="${w}" height="${h}" overflow="visible" style="display:block"><defs><linearGradient id="sbwk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><radialGradient id="sbwk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g data-part="root">`
+    + `<g data-part="ll">${WK_SHOE}</g>`
+    + `<g data-part="rl"><g transform="translate(100,0) scale(-1,1)">${WK_SHOE}</g></g>`
+    + `<g data-part="labg"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>`
+    + `<g data-part="rabg"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>`
+    + `<path d="${WK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/>`
+    + `<g data-part="la"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbwk-fill)" stroke-width="6" stroke-linecap="round"/>${WK_HAND_L}</g>`
+    + `<g data-part="ra"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbwk-fill)" stroke-width="6" stroke-linecap="round"/>${WK_HAND_R}</g>`
+    + `<path d="${WK_BODY}" fill="url(#sbwk-fill)"/><path d="${WK_BODY}" fill="url(#sbwk-glow)"/>`
+    + WK_GYRI
+    + `<g data-part="eyel"><circle cx="38" cy="48" r="6.5" fill="white"/><g data-part="pupill"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g></g>`
+    + `<g data-part="eyer"><circle cx="62" cy="48" r="6.5" fill="white"/><g data-part="pupilr"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g></g>`
+    + `<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>`
+    + `<path d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/>`
+    + `</g></svg>`;
+}
+const part = (el, p) => el.querySelector('[data-part="' + p + '"]');
+const setT = (el, p, v) => { const n = part(el, p); if (n) n.setAttribute('transform', v); };
+
+/* Exact port of __sbWkTick pose math (content.js:3592-3644, 3688-3699) */
+function walkerPose(svg, t, moving, waving) {
+  const s = t * 4.5;
+  const Lp = Math.sin(s), Rp = Math.sin(s + Math.PI);
+  const ll = moving ? Math.max(0, Lp) * 5 : 0;
+  const rl = moving ? Math.max(0, Rp) * 5 : 0;
+  const ls = moving ? Math.max(0, Lp) * 8 : 0;
+  const rs = moving ? Math.max(0, Rp) * 8 : 0;
+  const waddle  = moving ? Math.sin(s) * 3.4 : 0;
+  const walkBob = moving ? (-Math.abs(Math.sin(s)) * 2 - 0.4) : 0;
+  const breath = 1 + 0.014 * Math.sin(t * 1.7);
+  const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+  const bp = t % 3.4;
+  const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
+  const eyeSy = Math.max(0.06, 1 - blink);
+  const rightAngle = waving ? (-28 + Math.sin(t * 11) * 16) : 0;
+  const gaze = moving ? 2.4 : 0;
+  setT(svg, 'root', `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+  setT(svg, 'll', `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+  setT(svg, 'rl', `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+  const raTx = rightAngle ? `rotate(${rightAngle} 78 53)` : '';
+  setT(svg, 'ra', raTx); setT(svg, 'rabg', raTx);
+  setT(svg, 'eyel', `translate(38 48) scale(1 ${eyeSy}) translate(-38 -48)`);
+  setT(svg, 'eyer', `translate(62 48) scale(1 ${eyeSy}) translate(-62 -48)`);
+  setT(svg, 'pupill', `translate(${gaze} 0)`);
+  setT(svg, 'pupilr', `translate(${gaze} 0)`);
+}
+
+/* 6s scenario: stroll → stop, face you → wave 1.7s → stand */
+const SCENARIO = (t) => {
+  const c = t % 6;
+  if (c < 2.6) return { moving: true,  waving: false };
+  if (c < 3.0) return { moving: false, waving: false };
+  if (c < 4.7) return { moving: false, waving: true  };
+  return { moving: false, waving: false };
+};
+
+/* ── Live walker stage ── */
+const wkFlip = document.getElementById('el-walker-flip');
+wkFlip.innerHTML = walkerSVG(64, 78);
+const wkSvg = wkFlip.firstElementChild;
+const wkPos = document.getElementById('el-walker-pos');
+const wkLane = document.getElementById('el-walker-lane');
+let wkX = 24, wkDir = 1, wkLast = performance.now(), wkStart = performance.now();
+(function wkTick(now) {
+  const dt = Math.min(0.05, (now - wkLast) / 1000); wkLast = now;
+  const t = (now - wkStart) / 1000;
+  const sc = SCENARIO(t);
+  if (sc.moving) {
+    const maxX = Math.max(28, wkLane.clientWidth - 64 - 6);
+    wkX += wkDir * 74 * dt;
+    if (wkX >= maxX) { wkX = maxX; wkDir = -1; }
+    else if (wkX <= 6) { wkX = 6; wkDir = 1; }
+  }
+  wkPos.style.transform = `translateX(${wkX}px)`;
+  wkFlip.style.transform = `scaleX(${sc.moving ? wkDir : 1})`;
+  walkerPose(wkSvg, t, sc.moving, sc.waving);
+  requestAnimationFrame(wkTick);
+})(performance.now());
+
+/* ── Standing instance (live, breathing + blinking) ── */
+const standWrap = document.getElementById('el-standing');
+standWrap.innerHTML = walkerSVG(128, 156);
+const standSvg = standWrap.firstElementChild;
+const standStart = performance.now();
+(function standTick(now) {
+  walkerPose(standSvg, (now - standStart) / 1000, false, false);
+  requestAnimationFrame(standTick);
+})(performance.now());
+
+/* ── Serialize an SVG pose to a transparent canvas frame ── */
+async function svgToCanvas(svg, ctx, W, H) {
+  const xml = new XMLSerializer().serializeToString(svg);
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej;
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml); });
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(img, 0, 0, W, H);
+}
+async function framesToZip(zipName, baseName, count, fps, W, H, poseFn) {
+  const zip = new JSZip();
+  zip.file('README.txt', FFMPEG_NOTE(baseName));
+  const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const holder = document.createElement('div');
+  holder.innerHTML = poseFn.svg(W, H);
+  const svg = holder.firstElementChild;
+  for (let f = 0; f < count; f++) {
+    poseFn.at(svg, f / fps);
+    await svgToCanvas(svg, ctx, W, H);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    zip.file(`${baseName}_${String(f).padStart(3, '0')}.png`, blob);
+    if (f % 15 === 0) status(`${baseName}: frame ${f}/${count}…`);
+  }
+  status('Zipping…');
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.download = zipName; a.href = URL.createObjectURL(blob); a.click();
+  status(`Done — ${zipName} saved.`);
+}
+function dlWalkerFrames() {
+  return framesToZip('braino-walk-wave-frames.zip', 'braino-walk-wave', 180, 30, 464, 568, {
+    svg: walkerSVG,
+    at: (svg, t) => { const sc = SCENARIO(t); walkerPose(svg, t, sc.moving, sc.waving); },
+  });
+}
+async function dlStandingStatic() {
+  status('Rendering…');
+  const holder = document.createElement('div'); holder.innerHTML = walkerSVG(696, 852);
+  const svg = holder.firstElementChild;
+  walkerPose(svg, 1.0, false, false);
+  const canvas = document.createElement('canvas'); canvas.width = 696; canvas.height = 852;
+  await svgToCanvas(svg, canvas.getContext('2d'), 696, 852);
+  const a = document.createElement('a'); a.download = 'braino-standing.png';
+  a.href = canvas.toDataURL('image/png'); a.click(); status('');
+}
+function dlStandingSVG() {
+  const holder = document.createElement('div'); holder.innerHTML = walkerSVG(128, 156);
+  const svg = holder.firstElementChild;
+  walkerPose(svg, 1.0, false, false);
+  const a = document.createElement('a'); a.download = 'braino-standing.svg';
+  a.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+  a.click();
+}
+
+/* ════════════ Docked brain (__SB_BRAIN_SVG port, idle keyframes → pose fn) ════════════ */
+function brainSVG(w, h) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${w}" height="${h}" overflow="visible"><defs><linearGradient id="sbbk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbbk-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbbk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g data-part="root">`
+    + `<path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/>`
+    + `<path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/>`
+    + `<g data-part="arml"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>`
+    + `<g data-part="armr"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g>`
+    + `<path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/>`
+    + `<path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbbk-dark)"/>`
+    + `<path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbbk-dark)"/>`
+    + `<path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/>`
+    + `<path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/>`
+    + `<path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbbk-fill)"/>`
+    + `<path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbbk-glow)"/>`
+    + `<path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/>`
+    + `<path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/>`
+    + `<path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/>`
+    + `<g data-part="armlf"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbbk-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbbk-fill)"/></g>`
+    + `<g data-part="armrf"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbbk-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbbk-fill)"/></g>`
+    + `<g data-part="eyel"><circle cx="38" cy="48" r="6.5" fill="white"/></g>`
+    + `<g data-part="eyer"><circle cx="62" cy="48" r="6.5" fill="white"/></g>`
+    + `<g data-part="pupill"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g>`
+    + `<g data-part="pupilr"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g>`
+    + `<ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/>`
+    + `<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>`
+    + `</g></svg>`;
+}
+/* Idle keyframes (content.js:4198-4249) expressed as continuous curves:
+   float 3.8s ±6px · arms 3.4s ±11° counterphase · gaze 4.2s ±0.8px · blink at 92% of 4s */
+function brainPose(svg, t) {
+  const y = -3 * (1 - Math.cos(2 * Math.PI * t / 3.8));
+  const a = 11 * Math.sin(2 * Math.PI * t / 3.4);
+  const gx = 0.8 * Math.sin(2 * Math.PI * t / 4.2), gy = -0.25 * gx;
+  const p = (t % 4) / 4;
+  const bl = (p > 0.88 && p < 0.96) ? Math.max(0.08, 1 - 0.92 * Math.sin(Math.PI * (p - 0.88) / 0.08)) : 1;
+  setT(svg, 'root', `translate(0 ${y})`);
+  setT(svg, 'arml', `rotate(${a} 22 52)`);  setT(svg, 'armlf', `rotate(${a} 22 52)`);
+  setT(svg, 'armr', `rotate(${-a} 78 52)`); setT(svg, 'armrf', `rotate(${-a} 78 52)`);
+  setT(svg, 'eyel', `translate(38 48) scale(1 ${bl}) translate(-38 -48)`);
+  setT(svg, 'eyer', `translate(62 48) scale(1 ${bl}) translate(-62 -48)`);
+  setT(svg, 'pupill', `translate(${gx} ${gy})`);
+  setT(svg, 'pupilr', `translate(${gx} ${gy})`);
+}
+const brainWrap = document.getElementById('el-docked-brain');
+brainWrap.innerHTML = brainSVG(52, 52);
+const brainSvgEl = brainWrap.firstElementChild;
+const brainStart = performance.now();
+(function brainTick(now) {
+  brainPose(brainSvgEl, (now - brainStart) / 1000);
+  requestAnimationFrame(brainTick);
+})(performance.now());
+
+async function dlBrainStatic() {
+  status('Rendering…');
+  const holder = document.createElement('div'); holder.innerHTML = brainSVG(416, 416);
+  const canvas = document.createElement('canvas'); canvas.width = 416; canvas.height = 416;
+  await svgToCanvas(holder.firstElementChild, canvas.getContext('2d'), 416, 416);
+  const a = document.createElement('a'); a.download = 'braino-docked-brain.png';
+  a.href = canvas.toDataURL('image/png'); a.click(); status('');
+}
+function dlBrainSVG() {
+  const a = document.createElement('a'); a.download = 'braino-docked-brain.svg';
+  a.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(brainSVG(52, 52));
+  a.click();
+}
+function dlBrainFrames() {
+  return framesToZip('braino-docked-idle-frames.zip', 'braino-docked-idle', 120, 30, 208, 208, {
+    svg: brainSVG, at: brainPose,
+  });
+}
+
+/* ════════════ Reactions grid ════════════ */
+const REACTIONS = ['idle', 'happy', 'focus', 'celebrating', 'laughing', 'shocked', 'scared', 'tears-of-joy'];
+const rxGrid = document.getElementById('el-reactions-grid');
+rxGrid.innerHTML = REACTIONS.map(n => `
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+    <img src="/reactions/braino-${n}.svg" alt="${n}" width="110" height="110" style="display:block;" />
+    <div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#B09080;">${n}</div>
+    <div style="display:flex;gap:6px;">
+      <a class="kit-dl" style="text-decoration:none;" href="/reactions/braino-${n}.svg" download="braino-${n}.svg">SVG</a>
+      <button class="kit-dl" onclick="dlReactionPng('${n}')">PNG</button>
+    </div>
+  </div>`).join('');
+async function dlReactionPng(name) {
+  status('Rendering…');
+  try {
+    const text = await (await fetch(`/reactions/braino-${name}.svg`)).text();
+    const sized = text.replace('<svg ', '<svg width="512" height="512" ');
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej;
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(sized); });
+    const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
+    canvas.getContext('2d').drawImage(img, 0, 0, 512, 512);
+    const a = document.createElement('a'); a.download = `braino-${name}.png`;
+    a.href = canvas.toDataURL('image/png'); a.click(); status('');
+  } catch (e) { status('PNG export needs the hosted page (same-origin fetch).'); }
+}
+
+/* ════════════ Bar rise: live replay + deterministic frame export ════════════ */
+const riseBar = document.getElementById('el-bar-rise');
+const riseSteps = riseBar.querySelector('.sbk-rise-steps');
+const riseInput = document.getElementById('el-rise-input');
+let riseTimers = [];
+function riseRender(steps) {
+  riseSteps.innerHTML = steps.slice(-2).map(s =>
+    `<div class="sb-blog-step ${s.active ? 'active' : 'done'}${s.justDone ? ' just-done' : ''}"><span class="sb-blog-ic">${s.active ? '' : '✓'}</span><span>${s.text}</span></div>`).join('');
+}
+function replayRise() {
+  riseTimers.forEach(clearTimeout); riseTimers = [];
+  riseBar.classList.remove('sb-log-open', 'sb-agent-busy', 'sb-send-pulse', 'rise-export');
+  riseBar.removeAttribute('style'); riseSteps.innerHTML = '';
+  riseInput.placeholder = "What's on your mind?";
+  void riseBar.offsetWidth;
+  const steps = [];
+  const stepAt = (ms, text) => riseTimers.push(setTimeout(() => {
+    const last = steps[steps.length - 1];
+    if (last) { last.active = false; last.justDone = true; }
+    if (text) steps.push({ text, active: true, justDone: false });
+    riseRender(steps);
+    if (text) riseInput.placeholder = text;
+  }, ms));
+  riseTimers.push(setTimeout(() => riseBar.classList.add('sb-send-pulse'), 0));
+  riseTimers.push(setTimeout(() => {
+    riseBar.classList.add('sb-log-open', 'sb-agent-busy');
+    steps.push({ text: 'Getting started…', active: true, justDone: false });
+    riseRender(steps); riseInput.placeholder = 'Getting started…';
+  }, 120));
+  stepAt(1300, 'Scrolling the page…');
+  stepAt(2500, 'Clicking "Nonstop only"…');
+  stepAt(3700, 'Filtering results by price…');
+  stepAt(4900, null);
+  riseTimers.push(setTimeout(() => {
+    riseBar.classList.remove('sb-log-open', 'sb-agent-busy', 'sb-send-pulse');
+    riseInput.placeholder = "What's on your mind?";
+  }, 5600));
+}
+const lerp = (a, b, p) => a + (b - a) * p;
+/* cubic-bezier evaluator for the strip's 0.34,1.18,0.64,1 spring */
+function cubicBezier(p1x, p1y, p2x, p2y) {
+  const cx = 3 * p1x, bx = 3 * (p2x - p1x) - cx, ax = 1 - cx - bx;
+  const cy = 3 * p1y, by = 3 * (p2y - p1y) - cy, ay = 1 - cy - by;
+  const xAt = t => ((ax * t + bx) * t + cx) * t;
+  const yAt = t => ((ay * t + by) * t + cy) * t;
+  const dxAt = t => (3 * ax * t + 2 * bx) * t + cx;
+  return x => {
+    if (x <= 0) return 0; if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 6; i++) { const d = dxAt(t); if (Math.abs(d) < 1e-6) break; t -= (xAt(t) - x) / d; }
+    return yAt(t);
+  };
+}
+const riseEase = cubicBezier(0.34, 1.18, 0.64, 1);
+function riseFrameAt(t) {
+  const log = riseBar.querySelector('.sbk-bar-log');
+  const row = riseBar.querySelector('.sbk-bar-row');
+  const open = t >= 0.1;
+  const p = open ? riseEase(Math.min(1, (t - 0.1) / 0.4)) : 0;
+  riseBar.classList.add('rise-export');
+  riseBar.classList.toggle('sb-log-open', open);
+  riseBar.classList.toggle('sb-agent-busy', open);
+  log.style.maxHeight = (60 * p) + 'px';
+  log.style.opacity = String(open ? Math.min(1, (t - 0.1) / 0.24) : 0);
+  log.style.padding = `${11 * p}px 24px ${5 * p}px`;
+  riseBar.style.background = `rgba(${lerp(255, 253, p)},${lerp(251, 250, p)},${lerp(247, 246, p)},${lerp(0.12, 0.66, p)})`;
+  riseBar.style.borderRadius = (open ? 26 : 100) + 'px';
+  riseBar.style.borderColor = open ? 'rgba(232,120,110,0.5)' : 'rgba(255,255,255,0.5)';
+  row.style.borderTop = `1px solid rgba(120,110,100,${(0.12 * p).toFixed(3)})`;
+  const pulse = Math.min(1, t / 0.7);
+  riseBar.style.boxShadow = `0 0 0 ${(6 * Math.sin(Math.PI * pulse)).toFixed(2)}px rgba(232,120,110,${(0.4 * (1 - pulse)).toFixed(2)}), 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3)`;
+  riseBar.style.setProperty('--shim', `${250 - 400 * ((t / 1.5) % 1)}%`);
+  riseSteps.innerHTML = open
+    ? `<div class="sb-blog-step done"><span class="sb-blog-ic">✓</span><span>Scrolling the page…</span></div>`
+      + `<div class="sb-blog-step active"><span class="sb-blog-ic" style="transform:rotate(${(t / 0.7 * 360) % 360}deg)"></span><span>Clicking "Nonstop only"…</span></div>`
+    : '';
+  riseInput.placeholder = open ? 'Clicking "Nonstop only"…' : "What's on your mind?";
+}
+async function dlRiseFrames() {
+  riseTimers.forEach(clearTimeout); riseTimers = [];
+  const zip = new JSZip();
+  zip.file('README.txt', FFMPEG_NOTE('braino-bar-rise'));
+  const stage = document.getElementById('stage-bar-rise');
+  const fps = 30, count = 48;
+  for (let f = 0; f < count; f++) {
+    riseFrameAt(f / fps);
+    const canvas = await html2canvas(stage, { scale: 2, logging: false });
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    zip.file(`braino-bar-rise_${String(f).padStart(3, '0')}.png`, blob);
+    status(`bar rise: frame ${f + 1}/${count}…`);
+  }
+  riseBar.classList.remove('rise-export', 'sb-log-open', 'sb-agent-busy');
+  riseBar.removeAttribute('style');
+  riseBar.querySelector('.sbk-bar-log').removeAttribute('style');
+  riseBar.querySelector('.sbk-bar-row').removeAttribute('style');
+  riseSteps.innerHTML = ''; riseInput.placeholder = "What's on your mind?";
+  status('Zipping…');
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.download = 'braino-bar-rise-frames.zip'; a.href = URL.createObjectURL(blob); a.click();
+  status('Done — braino-bar-rise-frames.zip saved.');
+}
 </script>
 </body>
 </html>
