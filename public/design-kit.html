@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<meta name="robots" content="noindex" />
+<title>Braino UI Design Kit — motion handoff</title>
+<link rel="icon" href="/favicon.svg" />
+<style>
+  /* ════════════════ Kit page chrome (not part of the exported elements) ════════════════ */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #FBF7F1; color: #1B1713;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .kit-head { max-width: 1100px; margin: 0 auto; padding: 56px 32px 8px; }
+  .kit-head h1 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 40px; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .kit-head p { font-size: 14px; line-height: 1.6; color: rgba(27,23,19,0.65); max-width: 62ch; margin: 0 0 6px; }
+  .kit-head .accent { color: #C9544A; font-weight: 600; }
+  .kit-actions { max-width: 1100px; margin: 18px auto 0; padding: 0 32px; display: flex; gap: 10px; align-items: center; }
+  .kit-btn {
+    border: none; background: #E8786E; color: #fff; font-size: 13px; font-weight: 600;
+    padding: 10px 18px; border-radius: 100px; cursor: pointer; transition: background 0.15s;
+    font-family: inherit;
+  }
+  .kit-btn:hover { background: #C9544A; }
+  .kit-btn.ghost { background: rgba(65,48,40,0.08); color: #3A2D24; }
+  .kit-btn.ghost:hover { background: rgba(65,48,40,0.15); }
+  .kit-note { font-size: 12px; color: rgba(27,23,19,0.5); }
+
+  .kit-section { max-width: 1100px; margin: 0 auto; padding: 44px 32px 0; }
+  .kit-section > h2 { font-family: Georgia, serif; font-weight: 400; font-size: 24px; margin: 0 0 4px; }
+  .kit-section > .sub { font-size: 13px; color: rgba(27,23,19,0.55); margin: 0 0 16px; line-height: 1.6; max-width: 70ch; }
+
+  .kit-stagebar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
+  .kit-stagebar .tag {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #B09080;
+  }
+  .kit-stagebar .dl { display: flex; gap: 8px; }
+  .kit-dl {
+    border: 1px solid rgba(65,48,40,0.15); background: #fff; color: #3A2D24;
+    font-size: 11.5px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+    font-family: inherit; transition: background 0.12s;
+  }
+  .kit-dl:hover { background: rgba(65,48,40,0.06); }
+
+  /* Stage = what gets captured. Warm page-like backdrop so the glass reads. */
+  .kit-stage {
+    border-radius: 20px; overflow: hidden; position: relative;
+    border: 1px solid rgba(65,48,40,0.1);
+    display: flex; align-items: center; justify-content: center;
+    padding: 56px 48px;
+  }
+  .kit-stage.bg-warm { background: linear-gradient(140deg, #F7EFE6 0%, #F1E2D4 45%, #E8D3C2 100%); }
+  .kit-stage.bg-dark { background: linear-gradient(150deg, #2B2622 0%, #4A3A31 55%, #6B4A3C 100%); }
+  .kit-stage.bg-photo { background: radial-gradient(1200px 500px at 70% -10%, #F6A8A2 0%, transparent 55%), linear-gradient(160deg, #3E3630 0%, #24201C 70%); }
+
+  .kit-specs {
+    margin: 10px 0 0; padding: 14px 18px; border-radius: 14px;
+    background: rgba(65,48,40,0.045); font-size: 12px; line-height: 1.7; color: rgba(27,23,19,0.7);
+  }
+  .kit-specs b { color: #1B1713; }
+  .kit-specs code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; background: rgba(65,48,40,0.08); padding: 1px 5px; border-radius: 4px; color: #b44b42; }
+  .kit-foot { max-width: 1100px; margin: 0 auto; padding: 60px 32px 80px; font-size: 12px; color: rgba(27,23,19,0.45); }
+
+  /* ════════════════════════════════════════════════════════════════════════════════════
+     BRAINO ELEMENTS — CSS below is copied verbatim from extension/content.js
+     (values untouched; only the selectors are renamed #__sb_bar__ → .sbk-bar etc. so the
+     kit can show several instances at once, and position:fixed → relative for staging).
+     ════════════════════════════════════════════════════════════════════════════════════ */
+
+  /* ── The dock bar (search bar) — content.js #__sb_bar__ ── */
+  .sbk-bar {
+    position: relative;
+    display: flex; flex-direction: column; align-items: stretch; gap: 0;
+    background: rgba(255,251,247,0.12); border-radius: 100px;
+    isolation: isolate;
+    overflow: visible;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
+                inset 2px 2px 1px rgba(255,255,255,0.65),
+                inset -1px -1px 1px rgba(255,255,255,0.3);
+    width: 100%; max-width: 900px;
+    backdrop-filter: blur(6px) saturate(180%); -webkit-backdrop-filter: blur(6px) saturate(180%);
+  }
+  .sbk-bar::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    backdrop-filter: blur(16px) saturate(200%);
+    -webkit-backdrop-filter: blur(16px) saturate(200%);
+    filter: url(#__sb_glass_filter__);
+    z-index: -1; pointer-events: none;
+  }
+  .sbk-bar-row { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 28px; width: 100%; }
+  .sbk-input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+    text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.7), 0 1px 1px rgba(255,255,255,0.8);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .sbk-input::placeholder { color: #4A3D34; }
+  .sb-pill-dropdown-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    border: none; background: rgba(255,251,247,0.55); border-radius: 8px;
+    padding: 4px 8px 4px 9px; cursor: pointer;
+    font-size: 11px; font-weight: 600; color: #3A2D24; white-space: nowrap;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .sb-pill-dropdown-btn svg { flex-shrink: 0; opacity: 0.5; }
+  .sb-bar-icon-btn {
+    width: 38px; height: 38px; border-radius: 50%; border: none;
+    background: transparent; color: #3A2D24; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; padding: 0;
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.9)) drop-shadow(0 0 4px rgba(255,255,255,0.55));
+  }
+  .sbk-send { background: #E8786E !important; color: white !important; width: 42px !important; height: 42px !important; filter: none; }
+
+  /* ── Task-run states — content.js .sb-log-open / .sb-agent-busy ── */
+  .sbk-bar-log {
+    max-height: 0; opacity: 0; overflow: hidden;
+    display: flex; flex-direction: column; gap: 1px; padding: 0 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .sbk-bar.sb-log-open .sbk-bar-log { max-height: 60px; opacity: 1; padding: 11px 24px 5px; }
+  .sbk-bar.sb-log-open { background: rgba(253,250,246,0.66); border-radius: 26px; }
+  .sbk-bar.sb-log-open .sbk-bar-row { border-top: 1px solid rgba(120,110,100,0.12); }
+  .sb-blog-step { display: flex; align-items: center; gap: 9px; font-size: 12px; line-height: 1.5; color: #6B6157; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-blog-step .sb-blog-ic { flex: none; width: 13px; height: 13px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+  .sb-blog-step.done { color: #9a9088; }
+  .sb-blog-step.done .sb-blog-ic { color: #3DA35D; }
+  .sb-blog-step.active { color: #1B1713; font-weight: 500; }
+  .sb-blog-step.active .sb-blog-ic { border-radius: 50%; border: 2px solid rgba(232,120,110,0.3); border-top-color: #E8786E; animation: __sb_blog_spin__ 0.7s linear infinite; }
+  @keyframes __sb_blog_spin__ { to { transform: rotate(360deg); } }
+  @keyframes __sb_tick_pop__ { 0% { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
+  .sb-blog-step.just-done .sb-blog-ic { animation: __sb_tick_pop__ 0.36s cubic-bezier(0.34,1.56,0.64,1); }
+  @keyframes __sb_agent_shimmer__ {
+    0%   { background-position: 250% 0; }
+    100% { background-position: -150% 0; }
+  }
+  .sbk-bar.sb-agent-busy { border-color: rgba(232,120,110,0.5); }
+  .sbk-bar.sb-agent-busy::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(232,120,110,0.22) 48%, rgba(246,168,162,0.28) 52%, transparent 70%);
+    background-size: 220% 100%;
+    animation: __sb_agent_shimmer__ 1.5s linear infinite;
+  }
+  .sbk-bar.sb-agent-busy .sbk-input { position: relative; z-index: 1; }
+  .sbk-bar.sb-agent-busy .sbk-input::placeholder { color: #C9544A; opacity: 0.95; }
+
+  /* ── The chat card — content.js #__sb_bubble__ ── */
+  .sbk-bubble {
+    --sb-fg: #ffffff; --sb-fg-2: rgba(255,255,255,0.85); --sb-fg-3: rgba(255,255,255,0.4);
+    --sb-bg: rgba(255,255,255,0.04); --sb-border: rgba(255,255,255,0.38);
+    --sb-q-bg: rgba(255,255,255,0.12); --sb-q-border: rgba(255,255,255,0.2);
+    --sb-code-bg: rgba(255,255,255,0.12); --sb-code-fg: #FFD0CB;
+    --sb-pre-bg: rgba(0,0,0,0.35); --sb-pre-fg: #FBF7F1;
+    --sb-bq-border: rgba(255,160,150,0.5); --sb-bq-fg: rgba(255,255,255,0.7);
+    --sb-hr: rgba(255,255,255,0.15); --sb-link: #FFB3AE;
+    --sb-btn-fg: rgba(255,255,255,0.75); --sb-btn-bg: rgba(255,255,255,0.18);
+    --sb-btn-hover: rgba(255,255,255,0.32);
+    position: relative; width: 100%; max-width: 720px;
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--sb-bg); border-radius: 24px;
+    border: 1px solid var(--sb-border);
+    box-shadow: 0 40px 100px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.18),
+                inset 2px 2px 1px rgba(255,255,255,0.25),
+                inset -1px -1px 1px rgba(255,255,255,0.15);
+    backdrop-filter: blur(4px) saturate(180%);
+    -webkit-backdrop-filter: blur(4px) saturate(180%);
+    isolation: isolate;
+    color: var(--sb-fg);
+  }
+  .sbk-bubble::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    backdrop-filter: blur(20px) saturate(200%);
+    -webkit-backdrop-filter: blur(20px) saturate(200%);
+    filter: url(#__sb_glass_filter__);
+    z-index: -1; pointer-events: none;
+  }
+  .sbk-bubble.sb-readable {
+    --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.82); --sb-fg-3: rgba(27,23,19,0.5);
+    --sb-bg: rgba(255,251,247,0.5); --sb-border: rgba(255,255,255,0.55);
+    --sb-q-bg: rgba(65,48,40,0.08); --sb-q-border: rgba(65,48,40,0.12);
+    --sb-code-bg: rgba(65,48,40,0.1); --sb-code-fg: #b44b42;
+    --sb-pre-bg: rgba(27,23,19,0.08); --sb-pre-fg: #1B1713;
+    --sb-bq-border: rgba(201,84,74,0.4); --sb-bq-fg: rgba(27,23,19,0.65);
+    --sb-hr: rgba(65,48,40,0.12); --sb-link: #C9544A;
+    --sb-btn-fg: rgba(65,48,40,0.8); --sb-btn-bg: rgba(65,48,40,0.08);
+    --sb-btn-hover: rgba(65,48,40,0.15);
+    backdrop-filter: blur(22px) saturate(170%);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08),
+                inset 0 1px 0 rgba(255,255,255,0.55);
+  }
+  .sbk-bubble.sb-readable::before { backdrop-filter: none; -webkit-backdrop-filter: none; filter: none; }
+  .sb-card-header {
+    display: flex; align-items: center; justify-content: flex-end; gap: 5px;
+    padding: 12px 14px 4px; flex-shrink: 0;
+  }
+  .sb-card-header-btn {
+    border: none; background: var(--sb-btn-bg); color: var(--sb-btn-fg);
+    height: 26px; padding: 0 10px; border-radius: 8px; cursor: pointer;
+    font-size: 11px; font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .sb-card-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px; }
+  .sb-card-stack { min-height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+  .sb-turn { display: flex; flex-direction: column; align-items: flex-start; }
+  .sb-turn + .sb-turn { margin-top: 18px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .sbk-bubble.sb-readable .sb-turn + .sb-turn { border-top-color: rgba(65,48,40,0.08); }
+  .sb-card-q {
+    display: inline-block; background: var(--sb-q-bg); border: 1px solid var(--sb-q-border);
+    border-radius: 14px; padding: 10px 14px; font-size: 13px; color: var(--sb-fg-2); line-height: 1.5;
+    margin-bottom: 18px; max-width: 100%; word-break: break-word;
+  }
+  .sb-card-a { font-size: 14.5px; line-height: 1.75; color: var(--sb-fg); word-break: break-word; }
+  .sb-card-a h1, .sb-card-a h2, .sb-card-a h3 {
+    font-family: Georgia, 'Times New Roman', serif; color: var(--sb-fg); margin: 0 0 10px; line-height: 1.25; font-weight: 600;
+  }
+  .sb-card-a h2 { font-size: 18px; }
+  .sb-card-a p { margin: 0 0 12px; }
+  .sb-card-a p:last-child { margin-bottom: 0; }
+  .sb-card-a ul, .sb-card-a ol { margin: 0 0 12px 18px; padding: 0; }
+  .sb-card-a li { margin: 0 0 5px; }
+  .sb-card-a code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px; padding: 2px 5px; border-radius: 5px;
+    background: var(--sb-code-bg); color: var(--sb-code-fg);
+  }
+</style>
+</head>
+<body>
+
+<!-- SVG glass displacement filter — copied from content.js so the liquid-glass edge renders live -->
+<svg width="0" height="0" style="position:absolute"><defs>
+  <filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox">
+    <feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/>
+    <feComponentTransfer in="turbulence" result="mapped">
+      <feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/>
+      <feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/>
+      <feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/>
+    </feComponentTransfer>
+    <feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/>
+    <feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight">
+      <fePointLight x="-200" y="-200" z="300"/>
+    </feSpecularLighting>
+    <feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/>
+    <feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</defs></svg>
+
+<header class="kit-head">
+  <h1>Braino UI Design Kit</h1>
+  <p>Every element below is rebuilt from the shipped extension code (<span class="accent">content.js</span>), values untouched: same colors, radii, shadows, blur, and animation timings. Spinners, shimmer, and tick pops are live so you can eyeball the motion.</p>
+  <p>Each block downloads as a PNG at 3× (on its backdrop, or transparent). Note: browser PNG capture cannot bake in <b>backdrop-filter blur</b>, so exported glass keeps its translucency but not the blur. Blur specs are listed under each element.</p>
+</header>
+<div class="kit-actions">
+  <button class="kit-btn" onclick="downloadAllZip()">⬇ Download all (ZIP)</button>
+  <button class="kit-btn ghost" onclick="downloadAllPngs()">Download all as separate PNGs</button>
+  <span class="kit-note" id="kit-status"></span>
+</div>
+
+<!-- ═══════════════ 1. SEARCH BAR (reference) ═══════════════ -->
+<section class="kit-section">
+  <h2>1 · Search bar (dock) — idle</h2>
+  <p class="sub">Included for reference and alignment. Liquid glass pill, bottom-center of the viewport.</p>
+  <div class="kit-stagebar">
+    <span class="tag">searchbar-idle</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-bar-idle','braino-searchbar-idle')">⬇ PNG</button>
+      <button class="kit-dl" onclick="dlT('el-bar-idle','braino-searchbar-idle-transparent')">⬇ PNG (transparent)</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-bar-idle">
+    <div class="sbk-bar" id="el-bar-idle">
+      <div class="sbk-bar-row">
+        <input class="sbk-input" placeholder="What's on your mind?" readonly />
+        <button class="sb-pill-dropdown-btn">⚡ Auto
+          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+        </button>
+        <button class="sb-bar-icon-btn" title="Headphone mode">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        </button>
+        <button class="sb-bar-icon-btn sbk-send" title="Send">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+        <button class="sb-bar-icon-btn" title="Dock">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="kit-specs">
+    <b>Placement:</b> fixed, <code>bottom: 20px</code>, horizontally centered · width <code>100vw - 48px</code>, max <code>1100px</code><br />
+    <b>Surface:</b> bg <code>rgba(255,251,247,0.12)</code> · radius <code>100px</code> · border <code>1px rgba(255,255,255,0.5)</code> · blur <code>6px</code> sat <code>180%</code> (+ inner layer blur <code>16px</code>)<br />
+    <b>Entrance:</b> <code>translateY(24px) scale(0.97) → 0/1</code>, <code>0.38s cubic-bezier(0.34, 1.1, 0.64, 1)</code> · send pulse: coral ring <code>0.7s ease-out</code>
+  </div>
+</section>
+
+<!-- ═══════════════ 2. CHAT BOXES ═══════════════ -->
+<section class="kit-section">
+  <h2>2 · Chat boxes — glass mode</h2>
+  <p class="sub">The answer card. User question rides in a small pill (<code>.sb-card-q</code>), Braino's answer is open text (<code>.sb-card-a</code>). Glass mode sits on any page; white text.</p>
+  <div class="kit-stagebar">
+    <span class="tag">chatcard-glass</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-card-glass','braino-chatcard-glass')">⬇ PNG</button>
+      <button class="kit-dl" onclick="dlT('el-card-glass','braino-chatcard-glass-transparent')">⬇ PNG (transparent)</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-photo" id="stage-card-glass">
+    <div class="sbk-bubble" id="el-card-glass">
+      <div class="sb-card-header">
+        <button class="sb-card-header-btn">Speak</button>
+        <button class="sb-card-header-btn">Copy</button>
+        <button class="sb-card-header-btn" style="padding:0 8px;font-size:13px;">◑</button>
+        <button class="sb-card-header-btn" style="padding:0 8px;font-size:12px;">↗ New tab</button>
+        <button class="sb-card-header-btn">×</button>
+      </div>
+      <div class="sb-card-scroll"><div class="sb-card-stack">
+        <div class="sb-turn">
+          <div class="sb-card-q">Find me nonstop flights to Tokyo under $600</div>
+          <div class="sb-card-a">
+            <p>Found a few good ones. The best value is the <b>ANA departure on March 14</b>, it lands early so you keep the whole day.</p>
+            <ul>
+              <li>ANA · Mar 14 · $548 · 10h 45m</li>
+              <li>ZIPAIR · Mar 16 · $512 · 11h 05m</li>
+              <li>United · Mar 18 · $589 · 10h 55m</li>
+            </ul>
+            <p>Want me to open the ANA one and start checkout?</p>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+  <div class="kit-specs">
+    <b>Card:</b> width <code>min(820px, 100vw - 32px)</code>, centered in viewport · radius <code>24px</code> · bg <code>rgba(255,255,255,0.04)</code> · border <code>1px rgba(255,255,255,0.38)</code> · blur <code>4px</code> sat <code>180%</code> (+ inner layer blur <code>20px</code>)<br />
+    <b>User pill:</b> bg <code>rgba(255,255,255,0.12)</code> · border <code>rgba(255,255,255,0.2)</code> · radius <code>14px</code> · pad <code>10px 14px</code> · 13px/1.5<br />
+    <b>Answer:</b> 14.5px/1.75 · headings Georgia serif · links <code>#FFB3AE</code><br />
+    <b>Entrance:</b> <code>scale(0.88) translateY(22px) → 1/0</code>, <code>0.38s cubic-bezier(0.34, 1.15, 0.64, 1)</code>
+  </div>
+</section>
+
+<section class="kit-section">
+  <h2>2b · Chat boxes — readable mode</h2>
+  <p class="sub">Same card with the ◑ toggle on: warm frosted cream, dark text, coral links.</p>
+  <div class="kit-stagebar">
+    <span class="tag">chatcard-readable</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-card-readable','braino-chatcard-readable')">⬇ PNG</button>
+      <button class="kit-dl" onclick="dlT('el-card-readable','braino-chatcard-readable-transparent')">⬇ PNG (transparent)</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-card-readable">
+    <div class="sbk-bubble sb-readable" id="el-card-readable">
+      <div class="sb-card-header">
+        <button class="sb-card-header-btn">Speak</button>
+        <button class="sb-card-header-btn">Copy</button>
+        <button class="sb-card-header-btn" style="padding:0 8px;font-size:13px;">◑</button>
+        <button class="sb-card-header-btn" style="padding:0 8px;font-size:12px;">↗ New tab</button>
+        <button class="sb-card-header-btn">×</button>
+      </div>
+      <div class="sb-card-scroll"><div class="sb-card-stack">
+        <div class="sb-turn">
+          <div class="sb-card-q">Summarize this page in three bullets</div>
+          <div class="sb-card-a">
+            <ul>
+              <li>The proposal cuts onboarding from five steps to two.</li>
+              <li>Activation is up 18% in the pilot cohort.</li>
+              <li>Rollout is blocked on the <code>auth-v2</code> migration, planned next sprint.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="sb-turn">
+          <div class="sb-card-q">Who owns the migration?</div>
+          <div class="sb-card-a"><p>Priya's team. The tracking issue is linked in the last section of the doc.</p></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+  <div class="kit-specs">
+    <b>Readable surface:</b> bg <code>rgba(255,251,247,0.5)</code> · blur <code>22px</code> sat <code>170%</code> · text <code>#1B1713</code> · links/accent <code>#C9544A</code><br />
+    <b>Turn divider:</b> <code>1px rgba(65,48,40,0.08)</code>, 18px above + below
+  </div>
+</section>
+
+<!-- ═══════════════ 3. TASK PROCESS UI ═══════════════ -->
+<section class="kit-section">
+  <h2>3 · Task given — bar working (scrolling → clicking → filtering)</h2>
+  <p class="sub">When a task is delegated, the same pill extends from its top to show the last two steps. Completed steps get a green tick with a pop, the active step spins coral. A coral shimmer sweeps the pill for the whole run, and live status also rides in the input placeholder in coral.</p>
+  <div class="kit-stagebar">
+    <span class="tag">taskbar-working</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-bar-busy','braino-taskbar-working')">⬇ PNG</button>
+      <button class="kit-dl" onclick="dlT('el-bar-busy','braino-taskbar-working-transparent')">⬇ PNG (transparent)</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-bar-busy">
+    <div class="sbk-bar sb-log-open sb-agent-busy" id="el-bar-busy">
+      <div class="sbk-bar-log">
+        <div class="sb-blog-step done"><span class="sb-blog-ic">✓</span><span>Scrolling the page…</span></div>
+        <div class="sb-blog-step active"><span class="sb-blog-ic"></span><span>Clicking "Nonstop only"…</span></div>
+      </div>
+      <div class="sbk-bar-row">
+        <input class="sbk-input" placeholder="Filtering results by price…" readonly />
+        <button class="sb-pill-dropdown-btn">⚡ Auto
+          <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+        </button>
+        <button class="sb-bar-icon-btn" title="Stop the task" style="color:#C9544A;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+        </button>
+        <button class="sb-bar-icon-btn sbk-send" title="Send">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+        <button class="sb-bar-icon-btn" title="Dock">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="kit-specs">
+    <b>Log open:</b> pill bg firms to <code>rgba(253,250,246,0.66)</code>, radius <code>100px → 26px</code> · strip expands <code>max-height 0 → 60px</code> over <code>0.4s cubic-bezier(0.34, 1.18, 0.64, 1)</code> · shows the <b>last 2 steps only</b> (older ones roll away)<br />
+    <b>Active step:</b> text <code>#1B1713</code> w500 · spinner 13px ring, <code>2px rgba(232,120,110,0.3)</code> with coral <code>#E8786E</code> top arc, <code>0.7s linear infinite</code><br />
+    <b>Done step:</b> text fades to <code>#9a9088</code> · tick <code>#3DA35D</code> pops in <code>scale 0.2 → 1.3 → 1</code>, <code>0.36s cubic-bezier(0.34, 1.56, 0.64, 1)</code><br />
+    <b>Shimmer:</b> border tints <code>rgba(232,120,110,0.5)</code> · diagonal coral sweep (<code>100deg</code>, peaks 0.22/0.28 alpha) loops <code>1.5s linear</code><br />
+    <b>Placeholder status:</b> live step text, coral <code>#C9544A</code> at 0.95 opacity, truncated at 88 chars
+  </div>
+</section>
+
+<section class="kit-section">
+  <h2>3b · Step rows — every state, in order</h2>
+  <p class="sub">The full lifecycle of a step row, isolated on cream so you can grab each state. In product only two rows show at a time; this strip is the anatomy.</p>
+  <div class="kit-stagebar">
+    <span class="tag">tasksteps-anatomy</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-steps','braino-tasksteps-anatomy')">⬇ PNG</button>
+      <button class="kit-dl" onclick="dlT('el-steps','braino-tasksteps-anatomy-transparent')">⬇ PNG (transparent)</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-steps">
+    <div id="el-steps" style="background: rgba(253,250,246,0.9); border-radius: 26px; padding: 22px 30px; display: flex; flex-direction: column; gap: 10px; min-width: 420px; box-shadow: 0 8px 32px rgba(27,23,19,0.12);">
+      <div class="sb-blog-step done"><span class="sb-blog-ic">✓</span><span>Scrolling the page…</span></div>
+      <div class="sb-blog-step done"><span class="sb-blog-ic">✓</span><span>Clicking "Nonstop only"…</span></div>
+      <div class="sb-blog-step done just-done"><span class="sb-blog-ic">✓</span><span>Filtering results by price…</span></div>
+      <div class="sb-blog-step active"><span class="sb-blog-ic"></span><span>Done. Wrapping up…</span></div>
+    </div>
+  </div>
+  <div class="kit-specs">
+    <b>Row:</b> 12px system font, 1.5 line-height, icon-to-text gap <code>9px</code>, row gap <code>1px</code> in product · single line, ellipsis overflow<br />
+    <b>States top to bottom:</b> done · done · just-done (tick mid-pop, re-triggers on page load) · active (spinning)
+  </div>
+</section>
+
+<section class="kit-section">
+  <h2>3c · Placement — where it all sits when a task runs</h2>
+  <p class="sub">Full-viewport placement map. Bar bottom-center with the step strip grown from its top; the answer card lands dead-center when Braino reports back.</p>
+  <div class="kit-stagebar">
+    <span class="tag">placement-map</span>
+    <span class="dl">
+      <button class="kit-dl" onclick="dl('stage-placement','braino-placement-map')">⬇ PNG</button>
+    </span>
+  </div>
+  <div class="kit-stage bg-warm" id="stage-placement" style="padding: 0; display: block;">
+    <div style="position: relative; width: 100%; height: 620px; background: linear-gradient(180deg, #EFE6DA 0%, #E6D7C6 100%); overflow: hidden;">
+      <!-- fake page skeleton -->
+      <div style="position:absolute; inset: 0; padding: 28px 48px; opacity: 0.5;">
+        <div style="height: 44px; border-radius: 10px; background: rgba(255,255,255,0.55); margin-bottom: 22px;"></div>
+        <div style="display: flex; gap: 22px;">
+          <div style="flex: 2;">
+            <div style="height: 130px; border-radius: 14px; background: rgba(255,255,255,0.5); margin-bottom: 16px;"></div>
+            <div style="height: 12px; border-radius: 6px; background: rgba(255,255,255,0.6); margin-bottom: 10px; width: 80%;"></div>
+            <div style="height: 12px; border-radius: 6px; background: rgba(255,255,255,0.6); margin-bottom: 10px; width: 92%;"></div>
+            <div style="height: 12px; border-radius: 6px; background: rgba(255,255,255,0.6); width: 65%;"></div>
+          </div>
+          <div style="flex: 1;">
+            <div style="height: 90px; border-radius: 14px; background: rgba(255,255,255,0.5); margin-bottom: 14px;"></div>
+            <div style="height: 90px; border-radius: 14px; background: rgba(255,255,255,0.5);"></div>
+          </div>
+        </div>
+      </div>
+      <!-- centered card -->
+      <div class="sbk-bubble sb-readable" style="position: absolute; top: 44%; left: 50%; transform: translate(-50%, -50%); max-width: 480px; width: 60%;">
+        <div class="sb-card-header">
+          <button class="sb-card-header-btn">Speak</button>
+          <button class="sb-card-header-btn">Copy</button>
+          <button class="sb-card-header-btn">×</button>
+        </div>
+        <div class="sb-card-scroll"><div class="sb-card-stack">
+          <div class="sb-turn">
+            <div class="sb-card-q">Find me nonstop flights to Tokyo under $600</div>
+            <div class="sb-card-a"><p>Done. Six nonstop options under $600, cheapest is $512 on ZIPAIR.</p></div>
+          </div>
+        </div></div>
+      </div>
+      <!-- annotation: card -->
+      <div style="position: absolute; top: 12%; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #C9544A; text-align: center;">
+        answer card · viewport center · min(820px, 100vw − 32px)
+        <div style="width: 1px; height: 26px; background: #C9544A; margin: 6px auto 0;"></div>
+      </div>
+      <!-- bar with log at bottom -->
+      <div class="sbk-bar sb-log-open sb-agent-busy" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: calc(100% - 48px); max-width: 1100px;">
+        <div class="sbk-bar-log">
+          <div class="sb-blog-step done"><span class="sb-blog-ic">✓</span><span>Filtering results by price…</span></div>
+          <div class="sb-blog-step active"><span class="sb-blog-ic"></span><span>Done. Wrapping up…</span></div>
+        </div>
+        <div class="sbk-bar-row">
+          <input class="sbk-input" placeholder="Done. Wrapping up…" readonly />
+          <button class="sb-pill-dropdown-btn">⚡ Auto</button>
+          <button class="sb-bar-icon-btn sbk-send">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <!-- annotation: bar -->
+      <div style="position: absolute; bottom: 116px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #C9544A; text-align: center;">
+        dock bar · bottom 20px · centered · 100vw − 48px, max 1100px
+        <div style="width: 1px; height: 18px; background: #C9544A; margin: 6px auto 0;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="kit-specs">
+    <b>Sequence when a task is given:</b> user hits send → coral <b>send pulse</b> ring (0.7s) → pill grows the step strip from its top (0.4s spring) + <b>shimmer</b> starts looping → steps roll through (tick pop per completed step, only last 2 visible) → strip collapses 600ms after the final step → answer card scales in at viewport center (0.38s spring).
+  </div>
+</section>
+
+<footer class="kit-foot">
+  Braino design kit · generated from extension/content.js · colors: coral #E8786E → #C9544A, gradient light #F6A8A2, ink #1B1713, cream #FBF7F1, tick green #3DA35D · type: system stack (SF/Segoe), Georgia serif for answer headings.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+  const STAGES = [
+    ['stage-bar-idle',      'braino-searchbar-idle'],
+    ['stage-card-glass',    'braino-chatcard-glass'],
+    ['stage-card-readable', 'braino-chatcard-readable'],
+    ['stage-bar-busy',      'braino-taskbar-working'],
+    ['stage-steps',         'braino-tasksteps-anatomy'],
+    ['stage-placement',     'braino-placement-map'],
+  ];
+  const status = (m) => { document.getElementById('kit-status').textContent = m; };
+
+  async function snap(id, transparent) {
+    const el = document.getElementById(id);
+    return html2canvas(el, {
+      scale: 3,
+      backgroundColor: transparent ? null : undefined,
+      useCORS: true,
+      logging: false,
+    });
+  }
+  function save(canvas, name) {
+    const a = document.createElement('a');
+    a.download = name + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  }
+  async function dl(id, name)  { status('Rendering…'); save(await snap(id, false), name); status(''); }
+  async function dlT(id, name) { status('Rendering…'); save(await snap(id, true),  name); status(''); }
+
+  async function downloadAllPngs() {
+    for (const [id, name] of STAGES) {
+      status('Rendering ' + name + '…');
+      save(await snap(id, false), name);
+      await new Promise(r => setTimeout(r, 400));
+    }
+    status('Done — check your downloads.');
+  }
+  async function downloadAllZip() {
+    const zip = new JSZip();
+    for (const [id, name] of STAGES) {
+      status('Rendering ' + name + '…');
+      const canvas = await snap(id, false);
+      zip.file(name + '.png', canvas.toDataURL('image/png').split(',')[1], { base64: true });
+    }
+    status('Zipping…');
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.download = 'braino-ui-kit.zip';
+    a.href = URL.createObjectURL(blob);
+    a.click();
+    status('Done — braino-ui-kit.zip saved.');
+  }
+</script>
+</body>
+</html>
