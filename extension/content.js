@@ -10688,19 +10688,37 @@ function __sbIsTabsQuery(text) {
 
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
+  // Politeness/vocative prefixes hide the action verb from the anchored checks below
+  // ("Braino, can you please play this song" → "play this song"). Strip them once so
+  // vague-but-actionable commands still gate into Delegate.
+  const bare = t
+    .replace(/^(?:hey\s+|ok(?:ay)?\s+|yo\s+)?braino[,!.\s]+/, "")
+    .replace(/^(?:can|could|will|would)\s+you\s+(?:please\s+)?/, "")
+    .replace(/^please\s+/, "")
+    .trim();
   const onOttSite = __SB_MOVIE_CONTEXT_HOST_RE.test(String(location.hostname || "").replace(/^www\./, ""));
   if (__sbIsMovieSceneQuestion(t) && (onOttSite || __sbBuildMovieContext())) return "page";
   // Binary Delegate gate: only decide whether this needs browser control. The
   // background planner handles app/skill classification from the live page.
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
+  // Media playback — must run BEFORE the "this video/this page" summarize gate, or
+  // "play this song/video" reads as a page question. Anaphora ("this song") is fine:
+  // the background synthesizer resolves the referent from chat context.
+  if (/^(?:play|queue|put on)\b/.test(bare) || /\b(?:play|queue|put on)\s+(?:this|that|the)\s+(?:song|track|album|playlist|video|movie)\b/.test(bare)) return "agent";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
   if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
   if (__sbIsBrowserActionCommand(t) || __sbIsSiteScopedBrowseSearch(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
-  if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order)\b/.test(t)) return "agent";
+  if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order|purchase|add)\b/.test(bare)) return "agent";
+  // Vague anaphoric commands mid-conversation — "search that up", "show me that",
+  // "buy it for me". The referent is resolved downstream from the shared chat context.
+  if (/\b(?:search|look)\s+(?:that|this|it)\s+up\b/.test(bare)
+    || /\b(?:search|google)\s+(?:for\s+)?(?:that|this|it)\b/.test(bare)
+    || /\b(?:show|open|pull\s+up|bring\s+up)\s+(?:me\s+)?(?:that|this|it)\b/.test(bare)
+    || /\b(?:buy|order|purchase)\s+(?:that|this|it|them)\b/.test(bare)) return "agent";
   if (/\b(gmail|email|calendar|maps?|directions?|linkedin|jobs?|x|twitter|spotify|youtube|amazon|reddit|whatsapp|google docs?|google documents?|drive)\b/.test(t)
-    && /\b(open|find|search|send|compose|book|schedule|read|show|create|post|apply|route|directions?)\b/.test(t)) return "agent";
+    && /\b(open|find|search|send|compose|book|schedule|read|show|create|post|apply|route|directions?|play|buy|order|purchase)\b/.test(t)) return "agent";
   return "chat";
 }
 

@@ -3031,6 +3031,10 @@ function bgSelectDelegateSkillsHeuristic(task) {
   if (/\b(linkedin|jobs?|roles?|openings?|sdet|developer|engineer)\b/.test(raw)) skills.push("linkedin-jobs");
   if (/\b(twitter|x\b|tweet|post|publish|followers?|mentions?)\b/.test(raw)) skills.push("x-growth-posting");
   if (/\b(cost|spend|receipt|realtime|voice)\b/.test(raw)) skills.push("realtime-costs");
+  // Shopping: Amazon by name, or a buy/purchase ask with no other store named (Amazon is
+  // the default store). "order" alone is excluded — too food-delivery shaped.
+  if (/\b(amazon|add to cart|checkout)\b/.test(raw)
+    || (/\b(buy|purchase)\b/.test(raw) && !/\b(swiggy|zomato|uber\s*eats|doordash|instamart|blinkit|flipkart|food)\b/.test(raw))) skills.push("amazon-shopping");
   return [...new Set(skills)].slice(0, 3);
 }
 
@@ -3069,6 +3073,16 @@ SKILL realtime-costs:
 - Answer from stored Braino realtime cost data when available.
 - Use exact dates for today/last 7 days. Do not invent costs.
 - Usually this should answer rather than operate the browser.`;
+  if (skill === "amazon-shopping") return `
+SKILL amazon-shopping (guided buying — the user stays in the loop):
+- PREREQUISITE: the user must already be signed in. If the header shows "Hello, sign in" or a Sign in prompt, STOP with {"type":"clarify","text":"You're not signed in to Amazon, so I can't shop for you yet. Sign in and ask me again."}. NEVER type credentials, even if they appear in context.
+- CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
+- BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
+- Amazon re-renders after every click. After each click take {"type":"wait","ms":1000}, then re-read before acting again.
+- AMBIGUITY = ASK: if results show several plausible matches (editions, formats, bundles, sellers), scroll down ~600 once so options are visible, then {"type":"clarify","text":"Which one from this page do you want me to add to cart? I can see <top 2-3 options with price>."}. Never guess between editions. The user's next command continues the run on this same page.
+- MULTIPLE PRODUCTS ("buy X and Y"): strictly sequential — search X, add to cart, then search Y, add to cart. Go to cart only after all items are added.
+- PAYMENT BOUNDARY: never enter or select payment details, addresses, or place the final order. Advance to the payment-method step (open the UPI/QR view if offered) and finish with {"type":"answer","text":"Checkout is ready — finish the payment on your screen."}.
+- done only when the observed page proves the requested stage: item visibly in cart, or the checkout/payment page reached.`;
   return "";
 }
 
@@ -3076,26 +3090,30 @@ SKILL realtime-costs:
 // keyword query (what + where) + the surface to search + soft constraints to apply to the
 // RESULTS (not stuffed into the query). This is why "restaurants that serve dosa in the
 // morning in Mumbai" used to get dumped verbatim into Maps. Fail-open (returns null).
-async function bgSynthesizeIntent(task, sharedContext) {
+async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
   const raw = String(task || "").trim();
   if (!raw) return null;
   try {
     const systemPrompt = [
       "You convert a user's natural-language request into a clean search plan for a browser agent.",
       "Return STRICT JSON only, no prose, no markdown:",
-      '{"surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"],"directions":{"origin":"","destination":""}}',
+      '{"resolvedTask":"the request rewritten as ONE self-contained instruction naming concrete targets","surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"],"directions":{"origin":"","destination":""}}',
       "Rules:",
+      "- resolvedTask is the MOST IMPORTANT field. Vague mid-conversation asks (\"play this song\", \"show me that book on Amazon\", \"search that up\", \"buy it for me\") MUST be rewritten with the real entity taken from CONTEXT (e.g. 'Play the song Levitating by Dua Lipa on Spotify', 'Show the book The Subtle Art of Not Giving a F*ck by Mark Manson on Amazon'). Keep the user's verb and target site; never invent an entity the context does not support. If the request is already self-contained, return it unchanged. Never leave an unresolved 'this/that/it' in resolvedTask when CONTEXT names the referent.",
+      "- If CURRENT PAGE already shows the thing the user is referring to (e.g. they're on the product page and say 'buy it'), resolvedTask must say to CONTINUE on the current page rather than re-open or re-search (e.g. 'On the currently open Amazon page for <product>, add it to cart and proceed to checkout').",
       "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
       "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
+      "- searchQuery must name the RESOLVED entity too, never the pronoun ('The Subtle Art of Not Giving a F*ck book', not 'that book').",
       "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
       "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
       "- For a DIRECTIONS/route/navigate request, fill directions.origin and directions.destination as separate places (e.g. 'from Laburnum Park, Pune to Malad West, Mumbai' → origin='Laburnum Park, Pune', destination='Malad West, Mumbai'). If the user gives only a destination, leave origin empty (current location). Otherwise leave both empty.",
     ].join("\n");
     const userPrompt = [
       `REQUEST: ${raw}`,
+      pageInfo?.url ? `CURRENT PAGE: ${pageInfo.url}${pageInfo.title ? ` — ${pageInfo.title}` : ""}` : null,
       `CONTEXT: ${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
       "Return the JSON now.",
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
@@ -3103,7 +3121,8 @@ async function bgSynthesizeIntent(task, sharedContext) {
     });
     const p = bgExtractJsonObject(reply);
     const searchQuery = String(p.searchQuery || "").trim();
-    if (!searchQuery) return null;
+    const resolvedTask = String(p.resolvedTask || "").trim().slice(0, 300);
+    if (!searchQuery && !resolvedTask) return null;
     const surface = ["maps", "web", "none"].includes(p.surface) ? p.surface : "web";
     const softConstraints = Array.isArray(p.softConstraints)
       ? p.softConstraints.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 5)
@@ -3113,7 +3132,7 @@ async function bgSynthesizeIntent(task, sharedContext) {
       origin: String(dir.origin || "").trim(),
       destination: String(dir.destination || "").trim(),
     };
-    return { surface, searchQuery, softConstraints, directions };
+    return { surface, searchQuery, softConstraints, directions, resolvedTask };
   } catch (error) {
     console.warn("[Braino][Delegate] intent synth fallback:", error?.message || error);
     return null;
@@ -3144,7 +3163,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       : "";
     const prompt = [
       "Return strict JSON only.",
-      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting\"]}",
+      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping\"]}",
       "Choose only skills that are relevant. Do not include selectors or CSS.",
       `Task: ${task}`,
       `Context:\n${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
@@ -3162,6 +3181,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       "linkedin-jobs",
       "realtime-costs",
       "x-growth-posting",
+      "amazon-shopping",
     ].includes(skill)) : fallbackSkills;
     return {
       goal: String(parsed.goal || task).trim() || task,
@@ -3604,8 +3624,17 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   // Understand intent → form a real search query + constraints BEFORE any search runs,
   // so we never paste the user's sentence verbatim into Maps/web. Reuse the one the caller
   // already computed (bgRunBrainAgent does it before its fast path) so it isn't called twice.
-  const synth = passedSynth || await bgSynthesizeIntent(task, sharedContext).catch(() => null);
+  const synth = passedSynth
+    || await bgSynthesizeIntent(task, sharedContext, { url: initialObs.map?.url, title: initialObs.map?.title }).catch(() => null);
   state.synth = synth;
+  // Vague mid-conversation asks ("play this song", "buy that book") arrive as the literal
+  // utterance; synthesis resolves the referent from chat context. From here on, the
+  // RESOLVED task is the task — decomposition, every per-step decision, and done-verification
+  // all steer by the concrete target instead of a pronoun.
+  if (synth?.resolvedTask && bgNormalizeForMatch(synth.resolvedTask) !== bgNormalizeForMatch(task)) {
+    task = synth.resolvedTask;
+    onProgress?.(`Understood: ${task}`);
+  }
   if (!passedSynth && synth?.searchQuery) onProgress?.(`Searching for "${synth.searchQuery}"`);
 
   const decomp = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress);
@@ -3856,7 +3885,17 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
 
   // Understand intent → form the search query BEFORE the very first navigation, so the
   // fast path never opens Maps/web with the user's raw sentence (then re-correct later).
-  const synth = await bgSynthesizeIntent(task, conversationContext).catch(() => null);
+  const pageInfo = await new Promise((resolve) => {
+    try { chrome.tabs.get(currentTabId, (tab) => resolve(chrome.runtime.lastError ? null : { url: tab?.url, title: tab?.title })); }
+    catch { resolve(null); }
+  });
+  const synth = await bgSynthesizeIntent(task, conversationContext, pageInfo).catch(() => null);
+  // Steer the fast path and everything after it by the context-resolved task, not the
+  // literal utterance ("show me that book on Amazon" → the actual title).
+  if (synth?.resolvedTask && bgNormalizeForMatch(synth.resolvedTask) !== bgNormalizeForMatch(task)) {
+    task = synth.resolvedTask;
+    await onProgress(`Understood: ${task}`);
+  }
   if (synth?.searchQuery) await onProgress(`Searching for "${synth.searchQuery}"`);
 
   let skipDelegateFastPath = false;
@@ -6288,9 +6327,16 @@ Connect: click targetText="Connect" → click targetText="Send without a note"
 Message: navigate to profile → click targetText="Message" → type [aria-label*="Write a message"] → pressKey Enter`;
   if (/amazon\./.test(url)) return `
 ── AMAZON (you are here) ──
+Signed-in check FIRST: if the header greets "Hello, sign in", STOP and ask the user to sign in. Never type credentials.
 Search: type selector="#twotabsearchtextbox" → pressKey Enter
-  → click product title → click selector="#add-to-cart-button"
-Buy Now: selector="#buy-now-button"`;
+Open product: click the product title link in results
+Add to Cart (fallbacks, in order): selector="#add-to-cart-button" → selector="#add-to-cart-button-ubb" → targetText="Add to Cart"
+Dismiss add-on/protection popup: targetText="No Thanks" → selector="#attachSiNoCoverage input" → selector="#attach-close_sideSheet-link"
+Go to Cart (fallbacks): selector="#attach-sidesheet-view-cart-button input" → selector="#sw-gtc a" → selector="#nav-cart" → targetText="Go to Cart"
+Proceed to checkout (fallbacks): selector="input[name='proceedToRetailCheckout']" → selector="#sc-buy-box-ptc-button input" → targetText="Proceed to Buy"
+Buy Now (single-item express, only if user asked to buy just one thing): selector="#buy-now-button"
+Amazon re-renders after every click — wait 1000 between steps and re-read.
+Payment boundary: advance to the payment-method page (open UPI/QR if offered) and hand off — never fill payment or address fields, never place the final order.`;
   if (/web\.whatsapp\.com/.test(url)) return `
 ── WHATSAPP WEB (you are here) ──
 Send by contact name:

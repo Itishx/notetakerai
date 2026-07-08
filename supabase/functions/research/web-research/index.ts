@@ -188,8 +188,18 @@ function buildPrompt({
 function toolConfigForPurpose(purpose: Purpose) {
   return {
     type: "web_search",
-    search_context_size: (purpose === "google_doc" || purpose === "compare") ? "high" : "medium",
+    // "answer"/"delegate" are conversational lookups where speed IS the feature — "low"
+    // fetches far less search context and shaves seconds. Deep purposes keep "high".
+    search_context_size: (purpose === "google_doc" || purpose === "compare") ? "high" : "low",
   };
+}
+
+// Quick conversational searches (chat + voice) ride the fast lane: mini model, minimal
+// reasoning. Deep purposes (doc writing, comparisons) keep the strong model for quality.
+function modelForPurpose(purpose: Purpose) {
+  const deep = purpose === "google_doc" || purpose === "compare";
+  if (deep) return Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || "gpt-5.5";
+  return Deno.env.get("OPENAI_WEB_SEARCH_FAST_MODEL") || Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || "gpt-5.4-mini";
 }
 
 async function sha256(value: string) {
@@ -214,18 +224,22 @@ async function callOpenAiWebSearch({
   chatHistory?: unknown;
 }) {
   const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
-  const model = Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || "gpt-5.5";
+  const model = modelForPurpose(purpose);
   if (!openAiApiKey) throw new Error("OPENAI_API_KEY is not configured.");
 
+  const quick = purpose !== "google_doc" && purpose !== "compare";
   const safetyIdentifier = await sha256(userId);
-  const body = {
+  const body: Record<string, unknown> = {
     model,
     tool_choice: "required",
     tools: [toolConfigForPurpose(purpose)],
     input: buildPrompt({ query, purpose, instructions, chatHistory }),
   };
+  // Reasoning burn is the hidden cost on gpt-5.x: default effort thinks for seconds
+  // before it even searches. Quick lookups don't need it.
+  if (quick) body.reasoning = { effort: "low" };
 
-  const res = await fetch(OPENAI_RESPONSES_URL, {
+  const doFetch = () => fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${openAiApiKey}`,
@@ -234,8 +248,15 @@ async function callOpenAiWebSearch({
     },
     body: JSON.stringify(body),
   });
-
-  const raw = await res.text();
+  let res = await doFetch();
+  let raw = await res.text();
+  // Fail-open on the speed knob: if the configured model rejects the reasoning param,
+  // drop it and retry once rather than failing the search.
+  if (!res.ok && quick && body.reasoning && /reasoning/i.test(raw)) {
+    delete body.reasoning;
+    res = await doFetch();
+    raw = await res.text();
+  }
   let data: any = {};
   if (raw) {
     try {
