@@ -10756,6 +10756,10 @@ function __sbDetectIntent(text) {
   // "play this song/video" reads as a page question. Anaphora ("this song") is fine:
   // the background synthesizer resolves the referent from chat context.
   if (/^(?:play|queue|put on)\b/.test(bare) || /\b(?:play|queue|put on)\s+(?:this|that|the)\s+(?:song|track|album|playlist|video|movie)\b/.test(bare)) return "agent";
+  // Personal-context questions (my time / date / location / timezone) are answered from
+  // the user-context block in the chat prompt — NEVER web-searched. The words "current"
+  // and "right now" used to trip the freshness regex below and google the user's own clock.
+  if (/(?:what(?:'s|s| is)\s+(?:the\s+)?(?:time|date|day)(?:\s+(?:today|now|right\s+now))?\s*\??$|what\s+time\s+is\s+it|what\s+day\s+is\s+(?:it|today)|current\s+time\b|time\s+right\s+now\b|what(?:'s|s| is)\s+my\s+(?:current\s+)?(?:location|city|timezone|time\s*zone)|where\s+am\s+i\b|my\s+current\s+location)/.test(bare)) return "chat";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
   if (__sbIsGoogleMapsPlaceTask(t)) return "agent";

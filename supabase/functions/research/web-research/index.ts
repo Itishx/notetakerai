@@ -109,11 +109,13 @@ function buildPrompt({
   purpose,
   instructions,
   chatHistory,
+  userContext,
 }: {
   query: string;
   purpose: Purpose;
   instructions?: string;
   chatHistory?: unknown;
+  userContext?: string;
 }) {
   const freshnessNote = isFreshQuery(query)
     ? "This request is freshness-sensitive. Prefer up-to-date sources and mention exact dates when relevant."
@@ -127,6 +129,7 @@ function buildPrompt({
     "Use only claims you can support from the cited web sources.",
     "Keep inline citations in the answer.",
     freshnessNote,
+    userContext ? `User context (authoritative — interpret "near me", "now", "today", prices and availability with it): ${userContext}` : "",
     historyBlock,
     extraInstructions ? `Additional instructions: ${extraInstructions}` : "",
   ]
@@ -216,12 +219,14 @@ async function callOpenAiWebSearch({
   purpose,
   instructions,
   chatHistory,
+  userContext,
 }: {
   userId: string;
   query: string;
   purpose: Purpose;
   instructions?: string;
   chatHistory?: unknown;
+  userContext?: string;
 }) {
   const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
   const model = modelForPurpose(purpose);
@@ -233,7 +238,7 @@ async function callOpenAiWebSearch({
     model,
     tool_choice: "required",
     tools: [toolConfigForPurpose(purpose)],
-    input: buildPrompt({ query, purpose, instructions, chatHistory }),
+    input: buildPrompt({ query, purpose, instructions, chatHistory, userContext }),
   };
   // Reasoning burn is the hidden cost on gpt-5.x: default effort thinks for seconds
   // before it even searches. Quick lookups don't need it.
@@ -419,12 +424,26 @@ serve(async (req) => {
     if (!query) return json({ error: "query is required." }, 400);
 
     const purpose = normalizePurpose(payload?.purpose);
+    const tz = typeof payload?.clientTimeZone === "string" ? payload.clientTimeZone.trim() : "";
+    let localTime = "";
+    if (tz) {
+      try {
+        localTime = new Date().toLocaleString("en-US", {
+          timeZone: tz, weekday: "short", month: "short", day: "numeric",
+          hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        });
+      } catch (_) { /* bad tz */ }
+    }
+    const loc = typeof payload?.clientLocation === "string" ? payload.clientLocation.trim() : "";
+    const userContext = [localTime ? `local time ${localTime} (${tz})` : "", loc ? `location ${loc}` : ""]
+      .filter(Boolean).join(", ");
     const openAiData = await callOpenAiWebSearch({
       userId: user.id,
       query,
       purpose,
       instructions: payload?.instructions,
       chatHistory: payload?.chatHistory,
+      userContext,
     });
 
     const outputText = extractOutputText(openAiData);

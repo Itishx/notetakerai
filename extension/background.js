@@ -505,12 +505,17 @@ async function bgPerformRealWebSearch(query, options = {}) {
     if (!token) token = await bgRefreshAuthToken();
     if (!token) return { error: "Please sign in to Braino before using web research." };
 
+    const searchGeo = await bgGetUserGeo().catch(() => null);
     const researchBody = JSON.stringify({
       query: trimmedQuery,
       purpose: options.purpose || "answer",
       aiProvider: options.aiProvider,
       chatHistory: options.chatHistory,
       instructions: options.instructions,
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+      clientLocation: searchGeo
+        ? [searchGeo.city, searchGeo.region, searchGeo.country].filter(Boolean).join(", ") || null
+        : null,
     });
 
     const callResearch = (jwt) => fetch(`${BG_API_BASE}/web-research`, {
@@ -3228,6 +3233,7 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
       "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
       "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
       "- searchQuery must name the RESOLVED entity too, never the pronoun ('The Subtle Art of Not Giving a F*ck book', not 'that book').",
+      "- searchQuery is what gets typed INTO a site's own search box. NEVER include the site name, 'Amazon', 'India', or any storefront/country words in it ('Atomic Habits book' — NOT 'Atomic Habits Amazon India'). The storefront choice belongs in resolvedTask only.",
       "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
       "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
       "- For a DIRECTIONS/route/navigate request, fill directions.origin and directions.destination as separate places (e.g. 'from Laburnum Park, Pune to Malad West, Mumbai' → origin='Laburnum Park, Pune', destination='Malad West, Mumbai'). If the user gives only a destination, leave origin empty (current location). Otherwise leave both empty.",
@@ -3247,7 +3253,12 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
       model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
     });
     const p = bgExtractJsonObject(reply);
-    const searchQuery = String(p.searchQuery || "").trim();
+    // Deterministic scrub: a trailing "on amazon india"-style storefront tag in the query
+    // gets typed into the site's own search box and wrecks results. Strip it always
+    // (only the TRAILING form — "amazon rainforest facts" stays untouched).
+    const searchQuery = String(p.searchQuery || "").trim()
+      .replace(/\s+(?:on\s+)?(?:amazon|flipkart|ebay)(?:\.[a-z.]{2,6})?(?:\s+(?:india|usa?|uk|germany|japan))?\s*$/i, "")
+      .trim();
     const resolvedTask = String(p.resolvedTask || "").trim().slice(0, 300);
     if (!searchQuery && !resolvedTask) return null;
     const surface = ["maps", "web", "none"].includes(p.surface) ? p.surface : "web";
@@ -3989,7 +4000,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       if (onThisProductsPage && sbSearchHost === currentHost) {
         redundantNote = `You are ALREADY on the product page for this (${pageUrl.slice(0, 120)}). Do not search again — the next step is acting on THIS page (e.g. Add to Cart).`;
       } else if (state.facts.some((f) => f.key === `search_done:${sbSearchHost}` && bgNormalizeForMatch(f.value) === actionQuery)) {
-        redundantNote = `You already ran this exact search on ${sbSearchHost}. Do not repeat it — act on the results you have, or search for something DIFFERENT if the task needs it.`;
+        redundantNote = `This exact search already ran on ${sbSearchHost} and its results page loaded. Do not retype the query — open the matching result on THIS page (scroll if needed), or search for something DIFFERENT if the task needs it.`;
       }
       if (redundantNote) {
         state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: redundantNote, source: "runtime" });
@@ -4004,10 +4015,6 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
-    if (searchLike && !result?.error) {
-      state.facts.push({ key: `search_done:${sbSearchHost}`, value: actionQuery, source: "runtime" });
-      state.facts = state.facts.slice(-30);
-    }
     if (bgDelegateAdoptTabId && bgDelegateAdoptTabId !== currentTabId) {
       // The click spawned a child tab — the task lives there now. Adoption beats the
       // active-tab check below (a background-opened child is NOT the active tab yet).
@@ -4031,6 +4038,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       }
     }
     const newObs = (await bgBuildElementObservation(currentTabId, task)).map;
+    // Mark a search as done ONLY when it actually EXECUTED — the results page is up.
+    // Typing a query is not searching (no Enter = no search); marking on type once
+    // blocked the legitimate retry of a search that never ran.
+    if (searchLike && !result?.error
+      && /[?&](k|q)=|\/s(\?|earch)/i.test(String(newObs?.url || ""))
+      && !state.facts.some((f) => f.key === `search_done:${sbSearchHost}` && bgNormalizeForMatch(f.value) === actionQuery)) {
+      state.facts.push({ key: `search_done:${sbSearchHost}`, value: actionQuery, source: "runtime" });
+      state.facts = state.facts.slice(-30);
+    }
     const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);
     BrainoTaskState.commitHistory(state, decision, result, verdict);
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
