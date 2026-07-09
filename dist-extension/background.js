@@ -6341,26 +6341,31 @@ Should I send **Name** to your phone?
 function bgTryFastPath(task, history, synth = null) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
+  // A task that OPENS a place and then does more ("Go to amazon.com, search for X, and
+  // buy it") must keep running after the navigate. Returning it as a bare open once
+  // turned a whole buy task into navigate + "Done." — only a PURE open may finish here.
+  const restAfterOpen = t.replace(/^(?:go to|open|navigate to|visit|new|create)\s+\S+/i, "");
+  const opensThenActs = /\b(search|find|buy|purchase|order|add|play|book|apply|send|post|compose|reply|write|draft|create|schedule|email|read|check(?:out)?|cart|watch|download|type|fill|look)\b/i.test(restAfterOpen);
   if (/^(?:open|go to)\s+gmail\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://mail.google.com/mail/u/0/#inbox", description: "Open Gmail" }];
+    return [{ type: "navigate", url: "https://mail.google.com/mail/u/0/#inbox", description: "Open Gmail", continueAfter: opensThenActs }];
   }
   if (/^(?:open|go to)\s+(?:google\s+)?drive\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://drive.google.com", description: "Open Google Drive" }];
+    return [{ type: "navigate", url: "https://drive.google.com", description: "Open Google Drive", continueAfter: opensThenActs }];
   }
   if (/^(?:open|go to)\s+(?:google\s+)?calendar\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://calendar.google.com/calendar/u/0/r", description: "Open Google Calendar" }];
+    return [{ type: "navigate", url: "https://calendar.google.com/calendar/u/0/r", description: "Open Google Calendar", continueAfter: opensThenActs }];
   }
   if (/^(?:open|go to)\s+spotify\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://open.spotify.com", description: "Open Spotify" }];
+    return [{ type: "navigate", url: "https://open.spotify.com", description: "Open Spotify", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google doc\b|^(?:new|open)\s+docs\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://docs.new", description: "Open a new Google Doc" }];
+    return [{ type: "navigate", url: "https://docs.new", description: "Open a new Google Doc", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google sheet\b|^(?:new|open)\s+sheets\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://sheets.new", description: "Open a new Google Sheet" }];
+    return [{ type: "navigate", url: "https://sheets.new", description: "Open a new Google Sheet", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
+    return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck", continueAfter: opensThenActs }];
   }
   const googleMapsFastPath = bgBuildGoogleMapsFastPath(task, synth);
   if (googleMapsFastPath) return googleMapsFastPath;
@@ -6371,7 +6376,7 @@ function bgTryFastPath(task, history, synth = null) {
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
     const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
-    return [{ type: "navigate", url, description: `Navigate to ${url}` }];
+    return [{ type: "navigate", url, description: `Navigate to ${url}`, continueAfter: opensThenActs }];
   }
   const ytMatch = t.match(/search\s+(.+?)\s+on\s+youtube/i) || t.match(/youtube\s+search\s+(.+)/i);
   if (ytMatch) {
