@@ -37,6 +37,7 @@ try {
     "lib/taskState.js",
     "lib/recovery.js",
     "lib/macroStore.js",
+    "lib/searchGuard.js",
   );
 } catch (error) {
   console.warn("[Braino][Delegate] helper import failed:", error);
@@ -3401,14 +3402,15 @@ async function bgDecideNextAction({ task, state, observationText, skills, lesson
   const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons, decideGeo);
   const synth = state?.synth || null;
   // Once searches have run, the hint lists them so the model doesn't repeat one — while
-  // saying plainly that FRESH searches (new site, new product) stay allowed. A blanket
+  // keeping the canonical query available for any REMAINING search (a multi-site task
+  // still needs it) and saying plainly that fresh searches stay allowed. A blanket
   // "searching is forbidden" here once stranded a run that still had to reach Amazon.
-  const priorSearches = (state?.facts || []).filter((f) => String(f.key || "").startsWith("search_done:"));
+  const priorSearches = Array.isArray(state?.searchesDone) ? state.searchesDone : [];
   const userPrompt = [
     `TASK: ${task}`,
     synth?.searchQuery
       ? (priorSearches.length
-        ? `Searches already run this task: ${priorSearches.map((f) => `"${f.value}" on ${String(f.key).slice(12)}`).join("; ")}. Do not repeat any of them. Fresh searches (a different site or a different product) are fine. If you are already on the right product page, act on it (e.g. Add to Cart) instead of searching.`
+        ? `Searches already run this task: ${priorSearches.map((s) => `"${s.query}" on ${s.host}`).join("; ")}. Do not repeat any of them. For any REMAINING search this task needs, use the query "${synth.searchQuery}" on the right site — fresh sites and different products are fine. If you are already on the right product page, act on it (e.g. Add to Cart) instead of searching.`
         : `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.`)
       : null,
     synth?.softConstraints?.length ? `APPLY THESE PREFERENCES by reading and RANKING the results (not by adding them to the query): ${synth.softConstraints.join("; ")}.` : null,
@@ -3744,6 +3746,23 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
   return { ok: true, message: "Done.", origin };
 }
 
+// Record "this search executed" when a URL proves its results page is up. The mark lives
+// in state.searchesDone (never evicted — the facts list caps at 30 and was scrolling
+// marks out on long runs) plus a copy in facts for model visibility. Idempotent.
+function bgRecordSearchDone(state, url) {
+  if (typeof BrainoSearchGuard === "undefined" || !BrainoSearchGuard || !state) return;
+  if (!Array.isArray(state.searchesDone)) state.searchesDone = [];
+  const mark = BrainoSearchGuard.shouldMark({
+    newUrl: url,
+    synthQuery: state.synth?.searchQuery,
+    searchesDone: state.searchesDone,
+  });
+  if (!mark) return;
+  state.searchesDone.push(mark);
+  state.facts.push({ key: `search_done:${mark.host}`, value: mark.query, source: "runtime" });
+  state.facts = state.facts.slice(-30);
+}
+
 async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false, synth: passedSynth = null }) {
   let currentTabId = tabId;
   bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
@@ -3760,6 +3779,9 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   // C1 — load durable lessons learned on this site in past runs (local storage, instant).
   let lessons = await (BrainoMacroStore?.getLessons?.(origin) || Promise.resolve([])).catch(() => []);
   const state = BrainoTaskState.createTaskState(task, currentTabId);
+  // Un-evictable record of executed searches ({host, query}) — the facts list caps at 30
+  // entries and long runs were scrolling search_done marks out, silently re-arming repeats.
+  state.searchesDone = [];
   const macro = await BrainoMacroStore.lookup(task, origin);
   if (macro) {
     const replay = await bgRunMacroReplay({ tabId: currentTabId, task, state, macro, origin, onProgress });
@@ -3844,6 +3866,11 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     const activeKeywords = state.subgoals.find((goal) => goal.status === "active")?.desc || task;
     const obsResult = await bgBuildElementObservation(currentTabId, activeKeywords);
     let obs = obsResult.map;
+    // The results page may have finished loading AFTER the previous step's re-observe
+    // (typing + Enter navigates on a race the fixed 450ms delay loses) — every iteration
+    // starts by checking whether the CURRENT page proves a search executed, BEFORE the
+    // decision is made, so the model's search hint is never one step stale. Idempotent.
+    bgRecordSearchDone(state, obs?.url);
     const obsPayload = prevObs && BrainoElementMap?.diffElementMap
       ? BrainoElementMap.diffElementMap(prevObs, obs, { keywords: activeKeywords })   // Change B: anchor stable controls
       : (obsResult.serialized || BrainoElementMap.serializeElementMap(obs, { keywords: activeKeywords }));
@@ -3965,51 +3992,20 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       obs = fresh; // act against the confirmed-fresh observation (matches the content registry)
     }
 
-    // ── Redundant-search guard v2: block ONLY true redundancy, never exploration.
-    // (v1 was too blunt — one search anywhere forbade search-shaped actions everywhere,
-    // so a run fired from an unrelated tab could never reach Amazon search, and a
-    // 5-product comparison would have starved.) Blocked cases, nothing else:
-    //   a) searching for a thing while ALREADY standing on that thing's product/detail
-    //      page (URL slug matches the query) — the next step is acting on the page;
-    //   b) re-running the IDENTICAL query on the SAME site a second time.
-    // New sites, new queries, navigation, multi-product research: always allowed. ──
-    const bgHostOf = (u) => { try { return new URL(String(u || "")).hostname.replace(/^www\./, ""); } catch (_) { return ""; } };
-    const guardQuery = bgNormalizeForMatch(state.synth?.searchQuery || "");
-    const actionQuery = bgNormalizeForMatch(
-      action.type === "type" ? action.text
-        : action.type === "web_search" ? action.query
-        : action.type === "navigate" && /[?&](k|q)=|\/search/.test(String(action.url || "")) ? action.url
-        : "");
-    const searchLike = Boolean(actionQuery) && Boolean(guardQuery)
-      && (actionQuery.includes(guardQuery) || guardQuery.includes(actionQuery));
-    let sbSearchHost = "";
-    if (searchLike) {
-      const pageUrl = String(obs?.url || "");
-      const currentHost = bgHostOf(pageUrl);
-      sbSearchHost = action.type === "web_search" ? "web"
-        : action.type === "navigate" ? bgHostOf(action.url)
-        : currentHost;
-      // "On this product's page" = detail-page URL shape AND the query's words are in the
-      // URL slug (amazon.com/Atomic-Habits-Proven-Build-Break/dp/... vs query "atomic habits").
-      const onDetail = /\/(dp|gp\/product)\/|\/product\/|\/item\//i.test(pageUrl);
-      const urlLower = pageUrl.toLowerCase();
-      const tokens = guardQuery.split(" ").filter((t) => t.length >= 3);
-      const tokenHits = tokens.filter((t) => urlLower.includes(t)).length;
-      const onThisProductsPage = onDetail && tokens.length > 0 && tokenHits >= Math.ceil(tokens.length * 0.6);
-      let redundantNote = "";
-      if (onThisProductsPage && sbSearchHost === currentHost) {
-        redundantNote = `You are ALREADY on the product page for this (${pageUrl.slice(0, 120)}). Do not search again — the next step is acting on THIS page (e.g. Add to Cart).`;
-      } else if (state.facts.some((f) => f.key === `search_done:${sbSearchHost}` && bgNormalizeForMatch(f.value) === actionQuery)) {
-        redundantNote = `This exact search already ran on ${sbSearchHost} and its results page loaded. Do not retype the query — open the matching result on THIS page (scroll if needed), or search for something DIFFERENT if the task needs it.`;
-      }
-      if (redundantNote) {
-        state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: redundantNote, source: "runtime" });
-        state.facts = state.facts.slice(-30);
-        BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: redundantNote }, { ok: false, reason: redundantNote });
-        onProgress?.("Already there — skipping a repeat search...");
-        prevObs = obs;
-        continue;
-      }
+    // ── Redundant-search guard: pure logic in lib/searchGuard.js (unit-tested in
+    // tests/search-guard.test.mjs). Blocks ONLY: re-typing the query while on that
+    // thing's product page, or the identical query re-run on a site whose results
+    // already loaded. Navigation and everything else always passes. ──
+    const guardVerdict = (typeof BrainoSearchGuard !== "undefined" && BrainoSearchGuard)
+      ? BrainoSearchGuard.evaluate({ action, pageUrl: obs?.url, synthQuery: state.synth?.searchQuery, searchesDone: state.searchesDone })
+      : { blocked: false };
+    if (guardVerdict.blocked) {
+      state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: guardVerdict.note, source: "runtime" });
+      state.facts = state.facts.slice(-30);
+      BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: guardVerdict.note }, { ok: false, reason: guardVerdict.note });
+      onProgress?.("Already there — skipping a repeat search...");
+      prevObs = obs;
+      continue;
     }
 
     observationSnapshots.push(obs);
@@ -4038,15 +4034,9 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       }
     }
     const newObs = (await bgBuildElementObservation(currentTabId, task)).map;
-    // Mark a search as done ONLY when it actually EXECUTED — the results page is up.
-    // Typing a query is not searching (no Enter = no search); marking on type once
-    // blocked the legitimate retry of a search that never ran.
-    if (searchLike && !result?.error
-      && /[?&](k|q)=|\/s(\?|earch)/i.test(String(newObs?.url || ""))
-      && !state.facts.some((f) => f.key === `search_done:${sbSearchHost}` && bgNormalizeForMatch(f.value) === actionQuery)) {
-      state.facts.push({ key: `search_done:${sbSearchHost}`, value: actionQuery, source: "runtime" });
-      state.facts = state.facts.slice(-30);
-    }
+    // Post-action check too (the per-iteration check at the loop top catches races that
+    // resolve later): a search is done ONLY when its results page is actually up.
+    if (!result?.error) bgRecordSearchDone(state, newObs?.url);
     const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);
     BrainoTaskState.commitHistory(state, decision, result, verdict);
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
