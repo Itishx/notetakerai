@@ -6297,6 +6297,15 @@ function __sbBuildBrainUI() {
   `;
   (document.documentElement||document.body).appendChild(cardWrap);
 
+  // ── User geo (timezone/city/country, no permission prompts — background caches an
+  // IP lookup daily). Rides into chat requests + voice instructions so Braino knows
+  // the user's local time and where they are. ──
+  try {
+    chrome.runtime.sendMessage({ action: "sbGetUserGeo" }, (geo) => {
+      if (!chrome.runtime.lastError && geo && typeof geo === "object") window.__sbUserGeo = geo;
+    });
+  } catch (_) {}
+
   // ── Hive-mind handshake: this tab may have been opened BY a running delegate task
   // (Amazon and friends open products in new tabs). Ask the background if a run is
   // mid-flight here; if so, come up already in the working state instead of blank. ──
@@ -11692,6 +11701,12 @@ async function __sbFetchAssistantReply(body) {
         clientUtcOffsetMinutes: Number.isFinite(Number(body.clientUtcOffsetMinutes))
           ? Number(body.clientUtcOffsetMinutes)
           : new Date().getTimezoneOffset(),
+        clientLocalTime: new Date().toLocaleString("en-US", {
+          weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        }),
+        clientLocation: window.__sbUserGeo
+          ? [window.__sbUserGeo.city, window.__sbUserGeo.region, window.__sbUserGeo.country].filter(Boolean).join(", ") || null
+          : null,
       }
     : body;
   const resp = await __sbAuthedApiFetch("chat-about-notes", {
@@ -13859,6 +13874,13 @@ function __sbBuildRealtimeBootInstructions() {
   try {
     pageLines.push(`The user is currently viewing: "${document.title || "Untitled"}" (${location.href || "unknown URL"})`);
   } catch (_) {}
+  try {
+    const geo = window.__sbUserGeo;
+    const place = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "";
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    const now = new Date().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+    pageLines.push(`User context (real, current — use for any time/location question): local time ${now}${tz ? ` (${tz})` : ""}${place ? `, location ${place}` : ""}. Never answer time questions in UTC.`);
+  } catch (_) {}
 
   const instructions = [
     // Minimal identity stub only — Braino's full personality (the Emotional Engine) is delivered
@@ -13953,6 +13975,13 @@ async function __sbBuildRealtimeConfigPayload() {
     // the synced instructions would re-introduce "reply in the same language" and undo the lock).
     languagePolicy: __sbActiveLanguage ? "mirror_user" : "english",
     voiceSurface: "floating_mascot",
+    clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    clientLocalTime: new Date().toLocaleString("en-US", {
+      weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    }),
+    clientLocation: window.__sbUserGeo
+      ? [window.__sbUserGeo.city, window.__sbUserGeo.region, window.__sbUserGeo.country].filter(Boolean).join(", ") || null
+      : null,
   };
 }
 

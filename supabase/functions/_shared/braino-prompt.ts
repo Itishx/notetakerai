@@ -23,6 +23,7 @@ export type BuildBrainoSystemPromptOptions = {
   notes?: string | null;
   pageContext?: BrainoPageContext | null;
   selectedText?: string | null;
+  userContext?: string | null;              // the user's REAL local time/timezone/location this turn
   persistentUserContext?: string | null;
   xAutoSessionContext?: string | null;
   movieContext?: any;
@@ -45,6 +46,32 @@ const BRAINO_PRODUCT_MEMORY = [
   "- When the user shares a visual idea for how Braino should look or move (a redesign, a pose, a dance, an animation, his UI), Braino can open the design tool and draft a mockup prompt from the idea, he types it in for the user to review and send, he does not auto-submit. He offers this proactively when a visual idea comes up.",
 ].join("\n");
 
+// Compose the "user's real local context" line from what the client sent. The time is
+// recomputed HERE from the IANA timezone so it's fresh at prompt-build (a voice session's
+// client-sent stamp goes stale within minutes); the client string is only the fallback.
+export function buildUserContextText(input: {
+  clientTimeZone?: string | null;
+  clientLocalTime?: string | null;
+  clientLocation?: string | null;
+}) {
+  const tz = typeof input?.clientTimeZone === "string" && input.clientTimeZone.trim() ? input.clientTimeZone.trim() : "";
+  let localTime = typeof input?.clientLocalTime === "string" && input.clientLocalTime.trim() ? input.clientLocalTime.trim() : "";
+  if (tz) {
+    try {
+      localTime = new Date().toLocaleString("en-US", {
+        timeZone: tz,
+        weekday: "short", month: "short", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit", timeZoneName: "short",
+      });
+    } catch (_) { /* bad tz string — keep the client-provided stamp */ }
+  }
+  const location = typeof input?.clientLocation === "string" && input.clientLocation.trim() ? input.clientLocation.trim() : "";
+  const lines: string[] = [];
+  if (localTime) lines.push(`Local time: ${localTime}${tz ? ` (${tz})` : ""}`);
+  if (location) lines.push(`Location: ${location}`);
+  return lines.length ? lines.join("\n") : null;
+}
+
 export function buildBrainoSystemPrompt(options: BuildBrainoSystemPromptOptions = {}) {
   const responseMedium: BrainoResponseMedium = options.responseMedium === "voice" ? "voice" : "text";
 
@@ -66,6 +93,9 @@ export function buildBrainoSystemPrompt(options: BuildBrainoSystemPromptOptions 
       : "",
     buildLanguagePolicyBlock(options.languagePolicy, responseMedium),
     "Context awareness: You can see what the user is browsing, their notes, and the current page. Use that context proactively - don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
+    options.userContext
+      ? `The user's real, current local context (authoritative - use it for ANY time, date, or location question; never answer with UTC or a guess):\n${String(options.userContext).trim()}`
+      : "",
     "If the app asks you to relay a task update or final result, preserve the meaning and do not add new facts.",
     options.persistentUserContext
       ? `Persistent user context - who this user is across sessions:\n${String(options.persistentUserContext).trim()}`

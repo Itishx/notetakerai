@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { buildBrainoSystemPrompt } from "../../_shared/braino-prompt.ts";
+import { buildBrainoSystemPrompt, buildUserContextText } from "../../_shared/braino-prompt.ts";
 import {
   formatRealtimeCostSummaryForBraino,
   loadRealtimeCostSummaryForRequest,
@@ -368,6 +368,8 @@ serve(async (req) => {
       driveConnected,
       clientTimeZone,
       clientUtcOffsetMinutes,
+      clientLocalTime,
+      clientLocation,
     } = await req.json();
     const requestAuthHeader = req.headers.get("Authorization");
 
@@ -494,6 +496,7 @@ ${notes || "(no notes yet)"}`
           notes,
           pageContext,
           selectedText: typeof pageContext?.selectedText === "string" ? pageContext.selectedText : null,
+          userContext: buildUserContextText({ clientTimeZone, clientLocalTime, clientLocation }),
           persistentUserContext: userKnowledge?.combinedContext || "",
           xAutoSessionContext,
           movieContext,

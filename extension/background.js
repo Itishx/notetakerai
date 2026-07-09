@@ -1178,6 +1178,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
+  if (message.action === "sbGetUserGeo") {
+    bgGetUserGeo().then((geo) => sendResponse(geo)).catch(() => sendResponse(null));
+    return true;
+  }
   if (message.action === "sbAgentBootQuery") {
     // Hive-mind handshake: a freshly injected content script asks whether a delegate
     // run is mid-flight on (or adopting) its tab, so it can restore the working UI
@@ -3081,6 +3085,66 @@ function bgDelegateTodayText() {
   });
 }
 
+// ── User geo/locale context — no permission prompts. Timezone comes from Intl (the SW
+// runs on the user's machine), coarse city/country from one cached IP lookup per day.
+// Powers local storefronts (amazon.in vs amazon.com), local-time answers, "where am I".
+let bgUserGeoCache = null;
+async function bgGetUserGeo() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  if (bgUserGeoCache && Date.now() - bgUserGeoCache.fetchedAt < 24 * 3600 * 1000) return bgUserGeoCache;
+  try {
+    const stored = await chrome.storage.local.get("sbUserGeo");
+    if (stored?.sbUserGeo?.fetchedAt && Date.now() - stored.sbUserGeo.fetchedAt < 24 * 3600 * 1000) {
+      bgUserGeoCache = stored.sbUserGeo;
+      return bgUserGeoCache;
+    }
+  } catch (_) {}
+  let geo = { country: "", countryCode: "", city: "", region: "", timeZone, fetchedAt: Date.now() };
+  try {
+    const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const j = await res.json();
+      geo = {
+        country: j.country_name || "",
+        countryCode: String(j.country_code || "").toUpperCase(),
+        city: j.city || "",
+        region: j.region || "",
+        timeZone: j.timezone || timeZone,
+        fetchedAt: Date.now(),
+      };
+    }
+  } catch (_) {}
+  bgUserGeoCache = geo;
+  try { chrome.storage.local.set({ sbUserGeo: geo }); } catch (_) {}
+  return geo;
+}
+function bgUserContextLine(geo) {
+  const now = new Date().toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  });
+  const place = [geo?.city, geo?.region, geo?.country].filter(Boolean).join(", ");
+  return `User's local time: ${now}${geo?.timeZone ? ` (${geo.timeZone})` : ""}${place ? `. User's location: ${place}` : ""}.`;
+}
+const BG_AMAZON_TLD_BY_COUNTRY = {
+  IN: "amazon.in", US: "amazon.com", GB: "amazon.co.uk", UK: "amazon.co.uk", DE: "amazon.de",
+  FR: "amazon.fr", IT: "amazon.it", ES: "amazon.es", CA: "amazon.ca", JP: "amazon.co.jp",
+  AU: "amazon.com.au", BR: "amazon.com.br", MX: "amazon.com.mx", NL: "amazon.nl", AE: "amazon.ae", SG: "amazon.sg",
+};
+// Deterministic storefront swap: a task/nav that names another country's Amazon gets the
+// user's local domain (amazon.com → amazon.in for an India user).
+function bgLocalizeStorefront(url, geo) {
+  try {
+    const u = new URL(String(url));
+    const host = u.hostname.replace(/^www\./, "");
+    const local = BG_AMAZON_TLD_BY_COUNTRY[geo?.countryCode || ""];
+    if (local && /^amazon\.[a-z.]+$/.test(host) && host !== local) {
+      u.hostname = "www." + local;
+      return u.toString();
+    }
+  } catch (_) {}
+  return String(url);
+}
+
 function bgSelectDelegateSkillsHeuristic(task) {
   const raw = String(task || "").toLowerCase();
   const skills = [];
@@ -3133,6 +3197,7 @@ SKILL realtime-costs:
 - Usually this should answer rather than operate the browser.`;
   if (skill === "amazon-shopping") return `
 SKILL amazon-shopping (guided buying — the user stays in the loop):
+- DOMAIN: always use the user's LOCAL Amazon (see the user-context line: India → amazon.in, US → amazon.com). If you find yourself on another country's Amazon, navigate to the local one first.
 - PREREQUISITE: the user must already be signed in. If the header shows "Hello, sign in" or a Sign in prompt, STOP with {"type":"clarify","text":"You're not signed in to Amazon, so I can't shop for you yet. Sign in and ask me again."}. NEVER type credentials, even if they appear in context.
 - CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
 - BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
@@ -3166,10 +3231,13 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
       "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
       "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
       "- For a DIRECTIONS/route/navigate request, fill directions.origin and directions.destination as separate places (e.g. 'from Laburnum Park, Pune to Malad West, Mumbai' → origin='Laburnum Park, Pune', destination='Malad West, Mumbai'). If the user gives only a destination, leave origin empty (current location). Otherwise leave both empty.",
+      "- Sites with country storefronts (Amazon etc.): resolvedTask must name the USER's local domain from USER CONTEXT (India → amazon.in, US → amazon.com, UK → amazon.co.uk), even if the user said 'amazon.com'.",
     ].join("\n");
+    const geo = await bgGetUserGeo().catch(() => null);
     const userPrompt = [
       `REQUEST: ${raw}`,
       pageInfo?.url ? `CURRENT PAGE: ${pageInfo.url}${pageInfo.title ? ` — ${pageInfo.title}` : ""}` : null,
+      `USER CONTEXT: ${bgUserContextLine(geo)}`,
       `CONTEXT: ${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
       "Return the JSON now.",
     ].filter(Boolean).join("\n\n");
@@ -3253,7 +3321,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
   }
 }
 
-function bgBuildDelegateSystemPrompt(skills, lessons) {
+function bgBuildDelegateSystemPrompt(skills, lessons, geo = null) {
   const skillText = (skills || []).map((skill) => bgDelegateSkillGuide(skill)).filter(Boolean).join("\n\n");
   const lessonList = Array.isArray(lessons) ? lessons.filter(Boolean).slice(0, 8) : [];
   const lessonText = lessonList.length
@@ -3302,7 +3370,8 @@ Rules:
 - If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
 - For other high-risk final actions not clearly requested by the user, clarify before acting.
 - For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location", read the visible results once, and answer with the top options — do not keep re-searching.
-- Today is ${bgDelegateTodayText()}.
+- Today is ${bgDelegateTodayText()}. ${geo ? bgUserContextLine(geo) : ""}
+- Use the user's LOCAL storefront for country-specific sites: ${geo?.countryCode && BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode] ? `Amazon = ${BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode]}` : "match the Amazon domain to the user's location"}. If you land on another country's storefront, navigate to the local one.
 
 Useful URL shortcuts:
 - Gmail inbox: https://mail.google.com/mail/u/0/#inbox
@@ -3317,7 +3386,8 @@ ${skillText}`;
 
 async function bgDecideNextAction({ task, state, observationText, skills, lessons, phase, stuckCount, validationError }) {
   const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
-  const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons);
+  const decideGeo = await bgGetUserGeo().catch(() => null);
+  const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons, decideGeo);
   const synth = state?.synth || null;
   // Once searches have run, the hint lists them so the model doesn't repeat one — while
   // saying plainly that FRESH searches (new site, new product) stay allowed. A blanket
@@ -3711,7 +3781,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   BrainoTaskState.setSubgoals(state, decomp.subgoals);
   await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
 
-  const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth);
+  const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
   if (fastActions?.length) {
     for (const fast of fastActions) {
       onProgress?.(fast.description || bgDescribeDelegateAction(fast, prevObs));
@@ -4026,6 +4096,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
     try { chrome.tabs.get(currentTabId, (tab) => resolve(chrome.runtime.lastError ? null : { url: tab?.url, title: tab?.title })); }
     catch { resolve(null); }
   });
+  const userGeo = await bgGetUserGeo().catch(() => null);
   const synth = await bgSynthesizeIntent(task, conversationContext, pageInfo).catch(() => null);
   // Steer the fast path and everything after it by the context-resolved task, not the
   // literal utterance ("show me that book on Amazon" → the actual title).
@@ -4036,7 +4107,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
   if (synth?.searchQuery) await onProgress(`Searching for "${synth.searchQuery}"`);
 
   let skipDelegateFastPath = false;
-  const fastActions = bgTryFastPath(task, [], synth);
+  const fastActions = bgTryFastPath(task, [], synth, userGeo);
   if (fastActions?.length) {
     const shouldContinueAfterFastPath = fastActions.some((action) => action.continueAfter);
     for (const action of fastActions) {
@@ -6338,7 +6409,7 @@ Should I send **Name** to your phone?
 `;
 }
 
-function bgTryFastPath(task, history, synth = null) {
+function bgTryFastPath(task, history, synth = null, geo = null) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
   // A task that OPENS a place and then does more ("Go to amazon.com, search for X, and
@@ -6375,7 +6446,8 @@ function bgTryFastPath(task, history, synth = null) {
   if (linkedInJobsFastPath) return linkedInJobsFastPath;
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
-    const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
+    const rawUrl = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
+    const url = bgLocalizeStorefront(rawUrl, geo);
     return [{ type: "navigate", url, description: `Navigate to ${url}`, continueAfter: opensThenActs }];
   }
   const ytMatch = t.match(/search\s+(.+?)\s+on\s+youtube/i) || t.match(/youtube\s+search\s+(.+)/i);

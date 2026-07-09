@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { buildBrainoSystemPrompt } from "../../_shared/braino-prompt.ts";
+import { buildBrainoSystemPrompt, buildUserContextText } from "../../_shared/braino-prompt.ts";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
 import { loadDevPulseForRequest } from "../../_shared/dev-pulse.ts";
 
@@ -64,6 +64,11 @@ serve(async (req) => {
       notes,
       pageContext,
       selectedText,
+      userContext: buildUserContextText({
+        clientTimeZone,
+        clientLocalTime: typeof payload?.clientLocalTime === "string" ? payload.clientLocalTime : null,
+        clientLocation: typeof payload?.clientLocation === "string" ? payload.clientLocation : null,
+      }),
       persistentUserContext: userKnowledge?.combinedContext || "",
       responseMedium: "voice",
       languagePolicy,
