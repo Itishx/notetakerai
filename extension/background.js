@@ -1147,6 +1147,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
+  if (message.action === "sbAgentBootQuery") {
+    // Hive-mind handshake: a freshly injected content script asks whether a delegate
+    // run is mid-flight on (or adopting) its tab, so it can restore the working UI
+    // instead of booting blank and looking like Braino forgot what it was doing.
+    const bootTabId = sender?.tab?.id || null;
+    const bootTask = (bootTabId && bgAgentTaskByTab.get(bootTabId)) || "";
+    const runFresh = Boolean(bgDelegateRunInfo) && (Date.now() - bgDelegateRunInfo.at < 30000);
+    sendResponse({ task: bootTask, running: Boolean(bootTask) && runFresh });
+    return false;
+  }
   if (message.action === "getStatus") {
     sendResponse({ isRecording });
     return true;
@@ -2764,6 +2774,23 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 const bgAgentTaskByTab = new Map();
+
+// ── Hive mind: the delegate loop follows child tabs. A mid-task click that opens a NEW
+// tab (Amazon loves target=_blank) used to strand the loop on the old tab while the real
+// flow continued in the child. onCreated marks the child for adoption; the loop switches
+// at its next safe point. Freshness-gated so a finished run can never adopt anything. ──
+let bgDelegateRunInfo = null;   // { tabId, at } — refreshed every loop iteration
+let bgDelegateAdoptTabId = null;
+chrome.tabs.onCreated.addListener((tab) => {
+  if (!bgDelegateRunInfo || !tab?.id || !tab.openerTabId) return;
+  if (tab.openerTabId !== bgDelegateRunInfo.tabId) return;
+  if (Date.now() - bgDelegateRunInfo.at > 30000) return;
+  bgDelegateAdoptTabId = tab.id;
+  // Seed the child's task mapping NOW so its freshly injected content script's boot
+  // handshake (sbAgentBootQuery) finds the run before the loop formally adopts the tab.
+  const parentTask = bgAgentTaskByTab.get(tab.openerTabId);
+  if (parentTask) bgAgentTaskByTab.set(tab.id, parentTask);
+});
 const bgActiveDelegateRunsByTab = new Map();
 // Same task claimed GLOBALLY, not just per tab — delegate runs move/create tabs, so a re-fired
 // task landed on a different tabId and slipped past the per-tab claim (the N-identical-tabs bug).
@@ -3078,6 +3105,7 @@ SKILL amazon-shopping (guided buying — the user stays in the loop):
 - PREREQUISITE: the user must already be signed in. If the header shows "Hello, sign in" or a Sign in prompt, STOP with {"type":"clarify","text":"You're not signed in to Amazon, so I can't shop for you yet. Sign in and ask me again."}. NEVER type credentials, even if they appear in context.
 - CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
 - BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
+- SEARCH ONCE: use the provided search query exactly one time. If the product is visible in the results, open it; if not, scroll once, then clarify. NEVER re-run reworded variations of the same search — a second near-identical query is forbidden.
 - Amazon re-renders after every click. After each click take {"type":"wait","ms":1000}, then re-read before acting again.
 - AMBIGUITY = ASK: if results show several plausible matches (editions, formats, bundles, sellers), scroll down ~600 once so options are visible, then {"type":"clarify","text":"Which one from this page do you want me to add to cart? I can see <top 2-3 options with price>."}. Never guess between editions. The user's next command continues the run on this same page.
 - MULTIPLE PRODUCTS ("buy X and Y"): strictly sequential — search X, add to cart, then search Y, add to cart. Go to cart only after all items are added.
@@ -3598,6 +3626,8 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
 
 async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false, synth: passedSynth = null }) {
   let currentTabId = tabId;
+  bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+  bgDelegateAdoptTabId = null;
   const startedAt = Date.now();
   const budget = bgDelegateBudgetForTask(task);
   let llmUsd = 0;
@@ -3662,6 +3692,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   }
 
   for (let step = 0; step < budget.maxSteps; step++) {
+    bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
     if (bgAgentShouldStop || (shouldStop && await shouldStop())) {
       const msg = "Task stopped.";
       onFinal?.(msg);
@@ -3816,12 +3847,27 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
-    const latestActiveTabId = await bgGetActiveTabId();
-    if (latestActiveTabId && latestActiveTabId !== currentTabId) {
-      currentTabId = latestActiveTabId;
+    if (bgDelegateAdoptTabId && bgDelegateAdoptTabId !== currentTabId) {
+      // The click spawned a child tab — the task lives there now. Adoption beats the
+      // active-tab check below (a background-opened child is NOT the active tab yet).
+      const adopted = bgDelegateAdoptTabId;
+      bgDelegateAdoptTabId = null;
+      onProgress?.("Following the new tab...");
+      try { chrome.tabs.update(adopted, { active: true }); } catch (_) {}
+      await bgWaitForTabReady(adopted, 8000);
+      currentTabId = adopted;
       state.focusTabId = currentTabId;
       bgAgentTaskByTab.set(currentTabId, task);
       chrome.storage.local.set({ activeTabId: currentTabId });
+      bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+    } else {
+      const latestActiveTabId = await bgGetActiveTabId();
+      if (latestActiveTabId && latestActiveTabId !== currentTabId) {
+        currentTabId = latestActiveTabId;
+        state.focusTabId = currentTabId;
+        bgAgentTaskByTab.set(currentTabId, task);
+        chrome.storage.local.set({ activeTabId: currentTabId });
+      }
     }
     const newObs = (await bgBuildElementObservation(currentTabId, task)).map;
     const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);

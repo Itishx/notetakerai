@@ -6269,6 +6269,19 @@ function __sbBuildBrainUI() {
   `;
   (document.documentElement||document.body).appendChild(cardWrap);
 
+  // ── Hive-mind handshake: this tab may have been opened BY a running delegate task
+  // (Amazon and friends open products in new tabs). Ask the background if a run is
+  // mid-flight here; if so, come up already in the working state instead of blank. ──
+  try {
+    chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
+      if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) return;
+      document.getElementById("__sb_bar__")?.classList.add("open");
+      if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
+      if (typeof __sbAgentLogStep === "function") __sbAgentLogStep("Continuing here…");
+      if (typeof __sbSetBarAgentStatus === "function") __sbSetBarAgentStatus(resp.task);
+    });
+  } catch (_) {}
+
   // ── Voice Error Pill ──
   const errPill = document.createElement("div");
   errPill.id = "__sb_voice_error_pill__";
@@ -13526,7 +13539,7 @@ let __sbRtUsageDeadlineTimer = null;
 let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
 let __sbRtRealtimeModel = "gpt-realtime-mini";
-let __sbRtTranscriptionModel = "gpt-4o-mini-transcribe";
+let __sbRtTranscriptionModel = "gpt-4o-transcribe";
 let __sbRtCostTurn = null;
 let __sbRtLastCostTurn = null;
 let __sbRtCostTurnSeq = 0;
@@ -13855,7 +13868,9 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
             type: "near_field",
           },
           transcription: {
-            model: "gpt-4o-mini-transcribe",
+            // Full transcribe model, not mini — accuracy is the whole point of STT and the
+            // delta is ~$0.003/min. Mini was the source of the "Braino misheard me" wonkiness.
+            model: "gpt-4o-transcribe",
             // Lock STT to English by default so noise/music/accents can't be mis-detected as a
             // foreign language (the root of the "random language reply" bug). After the user
             // confirms a switch, __sbActiveLanguage relaxes the lock to that language.

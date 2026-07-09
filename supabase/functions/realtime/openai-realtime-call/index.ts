@@ -130,7 +130,7 @@ serve(async (req) => {
       "X-Braino-Realtime-Session-Id": voiceSession.id,
       "X-Braino-Realtime-Allocated-Ms": String(MAX_REALTIME_SESSION_MS),
       "X-Braino-Realtime-Model": realtimeModel,
-      "X-Braino-Realtime-Transcription-Model": "gpt-4o-mini-transcribe",
+      "X-Braino-Realtime-Transcription-Model": "gpt-4o-transcribe",
     };
 
     const locationHeader = openAiResponse.headers.get("Location");

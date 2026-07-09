@@ -116,7 +116,7 @@ export function useBrainoVoice({ accessToken, buildConfigBody, onLog }: Options)
             output_modalities: ["audio"],
             audio: {
               input: {
-                transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
+                transcription: { model: "gpt-4o-transcribe", language: "en" },
                 // semantic_vad + create_response:true → Braino auto-answers when you stop talking.
                 turn_detection: { type: "semantic_vad", eagerness: "auto", create_response: true, interrupt_response: true },
               },
