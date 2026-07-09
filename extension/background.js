@@ -3128,7 +3128,7 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
       '{"resolvedTask":"the request rewritten as ONE self-contained instruction naming concrete targets","surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"],"directions":{"origin":"","destination":""}}',
       "Rules:",
       "- resolvedTask is the MOST IMPORTANT field. Vague mid-conversation asks (\"play this song\", \"show me that book on Amazon\", \"search that up\", \"buy it for me\") MUST be rewritten with the real entity taken from CONTEXT (e.g. 'Play the song Levitating by Dua Lipa on Spotify', 'Show the book The Subtle Art of Not Giving a F*ck by Mark Manson on Amazon'). Keep the user's verb and target site; never invent an entity the context does not support. If the request is already self-contained, return it unchanged. Never leave an unresolved 'this/that/it' in resolvedTask when CONTEXT names the referent.",
-      "- If CURRENT PAGE already shows the thing the user is referring to (e.g. they're on the product page and say 'buy it'), resolvedTask must say to CONTINUE on the current page rather than re-open or re-search (e.g. 'On the currently open Amazon page for <product>, add it to cart and proceed to checkout').",
+      "- If CURRENT PAGE already shows the thing the user is referring to (e.g. they're on the product page and say 'buy it'), resolvedTask must say to CONTINUE on the current page rather than re-open or re-search (e.g. 'On the currently open Amazon page for <product>, add it to cart and proceed to checkout'). This applies ONLY when the current page genuinely matches the request (right site AND right content). If the current page is unrelated to the ask (e.g. a dashboard is open and they ask to buy something on Amazon), do NOT anchor to it — resolvedTask must direct the agent to the right site (e.g. 'Go to amazon.com, search for <product>, and buy it').",
       "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
       "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
       "- searchQuery must name the RESOLVED entity too, never the pronoun ('The Subtle Art of Not Giving a F*ck book', not 'that book').",
@@ -3288,14 +3288,15 @@ async function bgDecideNextAction({ task, state, observationText, skills, lesson
   const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
   const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons);
   const synth = state?.synth || null;
-  // The search hint flips to past tense once a search has run — leaving the imperative
-  // form in every step actively tempts the model to re-search from a product page.
-  const alreadySearched = Boolean(state?.facts?.some?.((f) => f.key === "search_done"));
+  // Once searches have run, the hint lists them so the model doesn't repeat one — while
+  // saying plainly that FRESH searches (new site, new product) stay allowed. A blanket
+  // "searching is forbidden" here once stranded a run that still had to reach Amazon.
+  const priorSearches = (state?.facts || []).filter((f) => String(f.key || "").startsWith("search_done:"));
   const userPrompt = [
     `TASK: ${task}`,
     synth?.searchQuery
-      ? (alreadySearched
-        ? `YOU ALREADY SEARCHED for "${synth.searchQuery}". Searching again is forbidden — act on what the current page shows.`
+      ? (priorSearches.length
+        ? `Searches already run this task: ${priorSearches.map((f) => `"${f.value}" on ${String(f.key).slice(12)}`).join("; ")}. Do not repeat any of them. Fresh searches (a different site or a different product) are fine. If you are already on the right product page, act on it (e.g. Add to Cart) instead of searching.`
         : `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.`)
       : null,
     synth?.softConstraints?.length ? `APPLY THESE PREFERENCES by reading and RANKING the results (not by adding them to the query): ${synth.softConstraints.join("; ")}.` : null,
@@ -3852,28 +3853,47 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       obs = fresh; // act against the confirmed-fresh observation (matches the content registry)
     }
 
-    // ── Redundant-search guard: deterministic, not prompt-hope. Once this run has
-    // already searched (or is standing on a product/detail page), re-typing the search
-    // query is SKIPPED and the model is told where it is instead. This is the "on the
-    // Atomic Habits page, typing 'Atomic Habits' into search again" bug. ──
+    // ── Redundant-search guard v2: block ONLY true redundancy, never exploration.
+    // (v1 was too blunt — one search anywhere forbade search-shaped actions everywhere,
+    // so a run fired from an unrelated tab could never reach Amazon search, and a
+    // 5-product comparison would have starved.) Blocked cases, nothing else:
+    //   a) searching for a thing while ALREADY standing on that thing's product/detail
+    //      page (URL slug matches the query) — the next step is acting on the page;
+    //   b) re-running the IDENTICAL query on the SAME site a second time.
+    // New sites, new queries, navigation, multi-product research: always allowed. ──
+    const bgHostOf = (u) => { try { return new URL(String(u || "")).hostname.replace(/^www\./, ""); } catch (_) { return ""; } };
     const guardQuery = bgNormalizeForMatch(state.synth?.searchQuery || "");
     const actionQuery = bgNormalizeForMatch(
       action.type === "type" ? action.text
         : action.type === "web_search" ? action.query
         : action.type === "navigate" && /[?&](k|q)=|\/search/.test(String(action.url || "")) ? action.url
         : "");
-    const searchLike = Boolean(guardQuery && actionQuery
-      && (actionQuery.includes(guardQuery) || guardQuery.includes(actionQuery)));
+    const searchLike = Boolean(actionQuery) && Boolean(guardQuery)
+      && (actionQuery.includes(guardQuery) || guardQuery.includes(actionQuery));
+    let sbSearchHost = "";
     if (searchLike) {
-      const onDetailPage = /\/(dp|gp\/product)\/|\/product\/|\/item\/|\/p\/[a-z0-9]/i.test(String(obs?.url || ""));
-      const alreadySearched = state.facts.some((f) => f.key === "search_done");
-      if (alreadySearched || onDetailPage) {
-        const note = onDetailPage
-          ? `You are ALREADY on the product/detail page (${String(obs?.url || "").slice(0, 120)}). Do not search again — act on THIS page (e.g. Add to Cart / read it).`
-          : `You have ALREADY searched for "${state.synth.searchQuery}". Do not search again — read the results you have and act on them.`;
-        state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: note, source: "runtime" });
+      const pageUrl = String(obs?.url || "");
+      const currentHost = bgHostOf(pageUrl);
+      sbSearchHost = action.type === "web_search" ? "web"
+        : action.type === "navigate" ? bgHostOf(action.url)
+        : currentHost;
+      // "On this product's page" = detail-page URL shape AND the query's words are in the
+      // URL slug (amazon.com/Atomic-Habits-Proven-Build-Break/dp/... vs query "atomic habits").
+      const onDetail = /\/(dp|gp\/product)\/|\/product\/|\/item\//i.test(pageUrl);
+      const urlLower = pageUrl.toLowerCase();
+      const tokens = guardQuery.split(" ").filter((t) => t.length >= 3);
+      const tokenHits = tokens.filter((t) => urlLower.includes(t)).length;
+      const onThisProductsPage = onDetail && tokens.length > 0 && tokenHits >= Math.ceil(tokens.length * 0.6);
+      let redundantNote = "";
+      if (onThisProductsPage && sbSearchHost === currentHost) {
+        redundantNote = `You are ALREADY on the product page for this (${pageUrl.slice(0, 120)}). Do not search again — the next step is acting on THIS page (e.g. Add to Cart).`;
+      } else if (state.facts.some((f) => f.key === `search_done:${sbSearchHost}` && bgNormalizeForMatch(f.value) === actionQuery)) {
+        redundantNote = `You already ran this exact search on ${sbSearchHost}. Do not repeat it — act on the results you have, or search for something DIFFERENT if the task needs it.`;
+      }
+      if (redundantNote) {
+        state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: redundantNote, source: "runtime" });
         state.facts = state.facts.slice(-30);
-        BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note }, { ok: false, reason: note });
+        BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: redundantNote }, { ok: false, reason: redundantNote });
         onProgress?.("Already there — skipping a repeat search...");
         prevObs = obs;
         continue;
@@ -3883,8 +3903,9 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
-    if (searchLike && !result?.error && !state.facts.some((f) => f.key === "search_done")) {
-      state.facts.push({ key: "search_done", value: `Searched for "${state.synth.searchQuery}" — do not search again this run.`, source: "runtime" });
+    if (searchLike && !result?.error) {
+      state.facts.push({ key: `search_done:${sbSearchHost}`, value: actionQuery, source: "runtime" });
+      state.facts = state.facts.slice(-30);
     }
     if (bgDelegateAdoptTabId && bgDelegateAdoptTabId !== currentTabId) {
       // The click spawned a child tab — the task lives there now. Adoption beats the
