@@ -3288,9 +3288,16 @@ async function bgDecideNextAction({ task, state, observationText, skills, lesson
   const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
   const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons);
   const synth = state?.synth || null;
+  // The search hint flips to past tense once a search has run — leaving the imperative
+  // form in every step actively tempts the model to re-search from a product page.
+  const alreadySearched = Boolean(state?.facts?.some?.((f) => f.key === "search_done"));
   const userPrompt = [
     `TASK: ${task}`,
-    synth?.searchQuery ? `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.` : null,
+    synth?.searchQuery
+      ? (alreadySearched
+        ? `YOU ALREADY SEARCHED for "${synth.searchQuery}". Searching again is forbidden — act on what the current page shows.`
+        : `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.`)
+      : null,
     synth?.softConstraints?.length ? `APPLY THESE PREFERENCES by reading and RANKING the results (not by adding them to the query): ${synth.softConstraints.join("; ")}.` : null,
     "STATE:",
     BrainoTaskState.renderTaskState(state),
@@ -3844,9 +3851,41 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       }
       obs = fresh; // act against the confirmed-fresh observation (matches the content registry)
     }
+
+    // ── Redundant-search guard: deterministic, not prompt-hope. Once this run has
+    // already searched (or is standing on a product/detail page), re-typing the search
+    // query is SKIPPED and the model is told where it is instead. This is the "on the
+    // Atomic Habits page, typing 'Atomic Habits' into search again" bug. ──
+    const guardQuery = bgNormalizeForMatch(state.synth?.searchQuery || "");
+    const actionQuery = bgNormalizeForMatch(
+      action.type === "type" ? action.text
+        : action.type === "web_search" ? action.query
+        : action.type === "navigate" && /[?&](k|q)=|\/search/.test(String(action.url || "")) ? action.url
+        : "");
+    const searchLike = Boolean(guardQuery && actionQuery
+      && (actionQuery.includes(guardQuery) || guardQuery.includes(actionQuery)));
+    if (searchLike) {
+      const onDetailPage = /\/(dp|gp\/product)\/|\/product\/|\/item\/|\/p\/[a-z0-9]/i.test(String(obs?.url || ""));
+      const alreadySearched = state.facts.some((f) => f.key === "search_done");
+      if (alreadySearched || onDetailPage) {
+        const note = onDetailPage
+          ? `You are ALREADY on the product/detail page (${String(obs?.url || "").slice(0, 120)}). Do not search again — act on THIS page (e.g. Add to Cart / read it).`
+          : `You have ALREADY searched for "${state.synth.searchQuery}". Do not search again — read the results you have and act on them.`;
+        state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: note, source: "runtime" });
+        state.facts = state.facts.slice(-30);
+        BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note }, { ok: false, reason: note });
+        onProgress?.("Already there — skipping a repeat search...");
+        prevObs = obs;
+        continue;
+      }
+    }
+
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
+    if (searchLike && !result?.error && !state.facts.some((f) => f.key === "search_done")) {
+      state.facts.push({ key: "search_done", value: `Searched for "${state.synth.searchQuery}" — do not search again this run.`, source: "runtime" });
+    }
     if (bgDelegateAdoptTabId && bgDelegateAdoptTabId !== currentTabId) {
       // The click spawned a child tab — the task lives there now. Adoption beats the
       // active-tab check below (a background-opened child is NOT the active tab yet).
