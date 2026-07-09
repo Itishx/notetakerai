@@ -1,4 +1,35 @@
 // Background service worker for Braino (MV3)
+
+// ── Production error hygiene ─────────────────────────────────────────────────
+// chrome://extensions records uncaught exceptions/rejections and unchecked
+// runtime.lastError as red "Errors" for developer-mode installs (our zip flow).
+// Everything is caught here, logged quietly, and marked handled so the collector
+// stays empty. Real failures still reach the user via Braino's own UI paths.
+self.addEventListener("error", (e) => {
+  console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+  e.preventDefault();
+});
+self.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+// Every callback passed to sendMessage reads runtime.lastError first — an answered
+// call whose peer vanished (closed tab, SW race) otherwise logs "Unchecked
+// runtime.lastError". No-callback calls return promises; rejections land above.
+for (const [obj, key] of [[chrome.runtime, "sendMessage"], [chrome.tabs, "sendMessage"]]) {
+  const orig = obj[key].bind(obj);
+  obj[key] = (...args) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      args[args.length - 1] = (...cbArgs) => {
+        void chrome.runtime.lastError;
+        try { cb(...cbArgs); } catch (err) { console.warn("[Braino] callback error:", err?.message || err); }
+      };
+    }
+    return orig(...args);
+  };
+}
+
 try {
   importScripts(
     "lib/elementMap.js",

@@ -4,6 +4,34 @@ if (globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ !== `${chrome.runtime?.id || "no-
   (() => {
 // Braino Content Script — extracts page text for AI context
 
+// ── Production error hygiene: keep our uncaught noise out of chrome://extensions.
+// The isolated world sees window "error" events from the page too — only swallow
+// events whose source file is ours (chrome-extension://). Rejections in this
+// listener's realm are ours by definition (page rejections fire in the main world).
+window.addEventListener("error", (e) => {
+  if (String(e?.filename || "").startsWith("chrome-extension://")) {
+    console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+    e.preventDefault();
+  }
+}, true);
+window.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+if (chrome?.runtime?.sendMessage) {
+  const __sbOrigSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+  chrome.runtime.sendMessage = (...args) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      args[args.length - 1] = (...cbArgs) => {
+        void chrome.runtime.lastError;
+        try { cb(...cbArgs); } catch (err) { console.warn("[Braino] callback error:", err?.message || err); }
+      };
+    }
+    return __sbOrigSendMessage(...args);
+  };
+}
+
 // Sync Supabase session from website localStorage into extension storage so
 // checkAuth finds a token even when the user logged in on the website (not via the extension auth tab).
 if (location.hostname === 'trybraino.com') {

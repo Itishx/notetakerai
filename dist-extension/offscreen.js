@@ -2,6 +2,16 @@
 // Also handles SpeechRecognition for voice mode (mic access works here, not in side panel)
 // Phase 2: hosts the realtime WebRTC session so voice follows across tabs.
 
+// ── Production error hygiene: keep uncaught noise out of chrome://extensions ──
+window.addEventListener("error", (e) => {
+  console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+  e.preventDefault();
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+
 // ===== REALTIME VOICE SESSION (extension-global) =====
 const RT_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const RT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
