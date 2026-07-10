@@ -4216,6 +4216,16 @@ if (__sbContextOk()) {
       sendResponse?.({ ok: true });
       return false;
     }
+    if (msg.action === "SB_AGENT_RUN_META" || msg.type === "SB_AGENT_RUN_META") {
+      if (typeof __sbAgentTraceStart === "function") __sbAgentTraceStart(msg.meta || {});
+      sendResponse?.({ ok: true });
+      return false;
+    }
+    if (msg.action === "SB_AGENT_TRACE" || msg.type === "SB_AGENT_TRACE") {
+      if (typeof __sbAgentTracePush === "function") __sbAgentTracePush(msg.trace || {});
+      sendResponse?.({ ok: true });
+      return false;
+    }
     if (msg.action === "SB_AGENT_THOUGHT" || msg.type === "SB_AGENT_THOUGHT") {
       // Delegate's per-step reasoning, streamed live into the bar's island so thinking
       // gaps are visible while it works (same spirit as showing the model's thinking).
@@ -10397,6 +10407,57 @@ function __sbAgentLogKey(s) {
     .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// ── Delegate console trace ───────────────────────────────────────────────────
+// Every run prints its full reasoning to the tab's DevTools console — live lines per
+// step (thought → action → result) and one copy-paste-ready summary at the end. Same
+// playbook as the voice-latency logging: copy the block, send it, find the gaps.
+let __sbAgentTraceBuf = null;
+
+function __sbAgentTraceStart(meta) {
+  __sbAgentTraceBuf = { meta: meta || {}, steps: [], startedAt: Date.now() };
+  try {
+    console.log(
+      `%c[Braino][Delegate] ▶ RUN START%c\n  task: ${meta.task || ""}\n  query: "${meta.searchQuery || ""}"\n  goal: ${meta.goal || ""}\n  plan: ${(meta.subgoals || []).join(" → ")}\n  skills: ${(meta.skills || []).join(", ") || "none"}`,
+      "color:#C9544A;font-weight:bold", "color:inherit",
+    );
+  } catch (_) {}
+}
+
+function __sbAgentTracePush(t) {
+  if (!t || typeof t !== "object") return;
+  if (!__sbAgentTraceBuf) __sbAgentTraceBuf = { meta: {}, steps: [], startedAt: Date.now() };
+  __sbAgentTraceBuf.steps.push(t);
+  try {
+    if (t.thought) console.log(`%c[Braino][Delegate][${t.step}] 💭 ${t.thought}`, "color:#97897e;font-style:italic");
+    console.log(`[Braino][Delegate][${t.step}] ▶ ${t.action} → ${t.result}${t.verdict && t.verdict !== "ok" ? ` | expect: ${t.verdict}` : ""}`);
+  } catch (_) {}
+}
+
+function __sbAgentTraceFinish() {
+  const buf = __sbAgentTraceBuf;
+  __sbAgentTraceBuf = null;
+  if (!buf || !buf.steps.length) return;
+  try {
+    const secs = Math.round((Date.now() - buf.startedAt) / 1000);
+    const lines = [
+      "══ BRAINO DELEGATE RUN SUMMARY ══════════════════",
+      `Task: ${buf.meta.task || ""}`,
+      `Query: "${buf.meta.searchQuery || ""}"`,
+      `Goal: ${buf.meta.goal || ""}`,
+      `Plan: ${(buf.meta.subgoals || []).join(" → ")}`,
+      `Steps: ${buf.steps.length} · Duration: ${secs}s`,
+      "",
+      ...buf.steps.flatMap((t) => [
+        `${String(t.step).padStart(2, " ")}. 💭 ${t.thought || "(no thought)"}`,
+        `    ▶ ${t.action} → ${t.result}${t.verdict && t.verdict !== "ok" ? ` | expect: ${t.verdict}` : ""}`,
+        `    @ ${t.url || ""}`,
+      ]),
+      "═════════════════════════════════════════════════",
+    ];
+    console.log(`[Braino][Delegate] ✔ RUN COMPLETE — copy the block below and send it to debug reasoning gaps:\n${lines.join("\n")}`);
+  } catch (_) {}
+}
+
 function __sbAgentLogRender() {
   const bar = document.getElementById("__sb_bar__");
   const log = document.getElementById("__sb_bar_log__");
@@ -10450,6 +10511,7 @@ function __sbAgentLogThought(text) {
 
 function __sbAgentLogClear() {
   __sbAgentThought = "";
+  if (typeof __sbAgentTraceFinish === "function") __sbAgentTraceFinish();
   const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
   if (last && last.active) { last.active = false; last.justDone = true; __sbAgentLogRender(); }  // final tick
   __sbAgentLogSteps = [];

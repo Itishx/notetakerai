@@ -3872,6 +3872,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   state.goal = decomp.goal || task;
   BrainoTaskState.setSubgoals(state, decomp.subgoals);
   await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+  // Console trace: run header → the tab's DevTools console (the user copies these to
+  // debug reasoning gaps — same playbook as the voice-latency logging).
+  bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_RUN_META", meta: {
+    task,
+    searchQuery: synth?.searchQuery || "",
+    goal: state.goal,
+    subgoals: (state.subgoals || []).map((g) => g.desc),
+    skills: decomp.skills || [],
+  } });
 
   const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
   if (fastActions?.length) {
@@ -4067,6 +4076,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: guardVerdict.note, source: "runtime" });
       state.facts = state.facts.slice(-30);
       BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: guardVerdict.note }, { ok: false, reason: guardVerdict.note });
+      bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", trace: {
+        step: step + 1,
+        thought: String(decision?.thought || "").trim(),
+        action: bgDescribeDelegateAction(action, obs) || action.type,
+        actionRaw: JSON.stringify({ type: action.type }),
+        result: `skipped by search guard: ${guardVerdict.note.slice(0, 160)}`,
+        verdict: "skipped",
+        url: String(obs?.url || "").slice(0, 160),
+      } });
       onProgress?.("Already there — skipping a repeat search...");
       prevObs = obs;
       continue;
@@ -4103,6 +4121,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     if (!result?.error) bgRecordSearchDone(state, newObs?.url);
     const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);
     BrainoTaskState.commitHistory(state, decision, result, verdict);
+    bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", trace: {
+      step: step + 1,
+      thought: stepThought,
+      action: bgDescribeDelegateAction(action, obs) || action.type,
+      actionRaw: JSON.stringify({ type: action.type, index: action.index, url: action.url, text: action.text, query: action.query }),
+      result: result?.error ? `error: ${String(result.error).slice(0, 200)}` : "ok",
+      verdict: verdict?.ok ? "ok" : `failed: ${String(verdict?.reason || "").slice(0, 200)}`,
+      url: String(newObs?.url || "").slice(0, 160),
+    } });
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
 
     if (!result?.error && verdict.ok) {
