@@ -14388,8 +14388,25 @@ let __sbRtSyncInFlight = null;
 // De-duped by URL: a background (proactive) sync and the lazy pre-answer sync won't both fire, and a
 // completed sync MARKS the page synced (__sbRtLastAnsweredUrl) so the answer path can SKIP the ~1.4s
 // wait — the page was already synced in the background while you were reading it.
+// Page identity for voice staleness = URL + a signature of the VISIBLE TEXT. SPA quizzes
+// (Udemy, forms, next/prev flows) change the question without changing the URL, so a
+// URL-only check left the voice session answering the PREVIOUS question. Digits/timers
+// are stripped so a ticking clock doesn't churn the signature.
+function __sbPageContentSig() {
+  const t = (document.body?.innerText || "").slice(0, 6000)
+    .replace(/\d{1,2}:\d{2}(?::\d{2})?/g, "")
+    .replace(/\d+/g, "")
+    .replace(/\s+/g, " ").trim();
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+function __sbRtPageKey() {
+  return ((typeof location !== "undefined" && location.href) || "") + "::" + __sbPageContentSig();
+}
+
 function __sbSyncRealtimeVoiceInstructions() {
-  const syncUrl = (typeof location !== "undefined" && location.href) || "";
+  const syncUrl = __sbRtPageKey();
   if (__sbRtSyncInFlight && __sbRtSyncInFlight.url === syncUrl) return __sbRtSyncInFlight.promise;
   const p = __sbDoSyncRealtimeVoiceInstructions(syncUrl);
   __sbRtSyncInFlight = { url: syncUrl, promise: p };
@@ -15017,8 +15034,9 @@ async function __sbStartSpeculativeAnswer() {
 async function __sbAnswerViaRealtimeStreaming(turnToken) {
   if (!__sbRtControlReady()) { __sbVTMark("⚠️ fast bail: control not ready"); return false; }
 
-  // Anti-stale gate: only pay a context re-sync when the page actually changed since last answer.
-  const url = (typeof location !== "undefined" && location.href) || "";
+  // Anti-stale gate: re-sync when the page's URL OR its visible text changed since the
+  // last answer (SPA quizzes keep the URL and swap the question — see __sbRtPageKey).
+  const url = __sbRtPageKey();
   if (url && url !== __sbRtLastAnsweredUrl) {
     try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
     __sbRtLastAnsweredUrl = url;
