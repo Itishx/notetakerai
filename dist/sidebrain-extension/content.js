@@ -4169,7 +4169,8 @@ if (__sbContextOk()) {
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
-        __sbDelegateUiHidden = false;   // delegate done → let the result reopen the chat UI
+        // NOTE: __sbDelegateUiHidden stays true through finalize — the result renders
+        // into the card silently and surfaces as a bar bubble; finalize clears the flag.
         // Voice mode speaks the result with no panel; chat mode shows it.
         const finalText = String(msg.text || "").trim();
         const agentPrompt = String(msg.task || __sbAgentPendingTurn?.prompt || __sbLastAgentTask || "").trim();
@@ -6547,6 +6548,7 @@ function __sbBuildBrainUI() {
   try {
     chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
       if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) return;
+      __sbDelegateUiHidden = true;   // a delegate run owns this tab — the chat card stays SHUT
       document.getElementById("__sb_bar__")?.classList.add("open");
       if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
       if (typeof __sbAgentLogStep === "function") __sbAgentLogStep("Continuing here…");
@@ -10733,12 +10735,10 @@ function __sbUpdateAgentSubgoals(subgoals) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
-  __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
 }
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
-  __sbDelegateUiHidden = false;   // delegate done → re-enable the chat UI before rendering the result
   __sbAgentFlowDone(); // delegate finished — settle EVERY surface (island, status, walker)
   __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
@@ -10750,6 +10750,7 @@ function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
   const dupTurn = lastTurn && String(lastTurn.prompt || "").trim() === task && String(lastTurn.answer || "").trim() === reply;
   if (dupTurn || (finalizeKey === __sbLastFinalizedAgentKey && Date.now() - __sbLastFinalizedAgentAt < 20000)) {
     __sbAgentPendingTurn = null;
+    __sbDelegateUiHidden = false;
     if (options.render === false) return;
     const scroll0 = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     if (scroll0) { __sbRenderConversationWithPending(scroll0); __sbSyncSpeakButtons(); }
@@ -10768,12 +10769,17 @@ function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
     if (task) __sbCardTurns.push({ prompt: task, answer: reply });
   }
   __sbAgentPendingTurn = null;
-  if (options.render === false) return;
+  if (options.render === false) { __sbDelegateUiHidden = false; return; }
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-  if (!scroll) return;
-  __sbRenderConversationWithPending(scroll);
-  __sbOpenCard({ rich: true });
-  __sbSyncSpeakButtons();
+  if (scroll) {
+    // Render the turn into the card WITHOUT opening it — delegate never opens the
+    // floating UI (owner's law). The user can open it manually; chat flows re-enable
+    // opening the moment the flag clears below.
+    __sbRenderConversationWithPending(scroll);
+    __sbSyncSpeakButtons();
+  }
+  if (reply) __sbShowBubble(reply, true, { tone: "status" });
+  __sbDelegateUiHidden = false;
 }
 
 function __sbShowThinking(scroll, promptText = "", pendingText = "Thinking…") {
