@@ -1222,9 +1222,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (!/device|active|404/i.test(msg)) return { ok: false };
       }
       try {
-        // background:true — the user must keep WATCHING Braino; a focus-stealing tab
-        // also pauses his rAF dance in the now-hidden page.
-        await bgPlaySpotifyWithAutoOpen(uris, positionMs, { background: true });
+        // A NEVER-focused background tab is throttled so hard the web player never boots
+        // (no device registers → silence). So: an EXISTING player tab is reused quietly;
+        // a NEW tab opens focused just long enough to boot, then focus bounces back to
+        // the user's page — the dance doesn't start until this resolves.
+        const prevActive = await bgGetActiveTabId();
+        const existing = await bgFindSpotifyTab().catch(() => null);
+        await bgPlaySpotifyWithAutoOpen(uris, positionMs, { background: Boolean(existing) });
+        if (!existing && prevActive) { try { chrome.tabs.update(prevActive, { active: true }); } catch (_) {} }
         ensureSeek();
         return { ok: true };
       } catch (_) { return { ok: false }; }

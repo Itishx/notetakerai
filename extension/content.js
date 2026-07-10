@@ -2679,6 +2679,7 @@ let __sbWkMoonwalking = false; // true while the moonwalk owns the rig
 let __sbWkMoonRaf = null;
 let __sbWkDancing = false;     // true while the dance routine owns the rig
 let __sbWkDanceRaf = null;
+let __sbWkDanceArmAnchor = null; // original paint-order slot for the arm groups (restored on end)
 let __sbWkJumping = false;      // true while the jump-and-point owns the rig
 let __sbWkJumpRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
@@ -2903,6 +2904,14 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
   const pupL = q("#__sbwk_pupil_l__"), pupR = q("#__sbwk_pupil_r__");
   q("#__sbwk_ll__")?.setAttribute("transform", "");
   q("#__sbwk_rl__")?.setAttribute("transform", "");
+  // The coral body is painted AFTER the arm layers, so arms raised overhead vanish
+  // BEHIND the torso ("where are his hands?!"). Lift the arm groups to the top of the
+  // paint order for the performance; __sbWkEndDance restores the original order.
+  if (laFg && raFg && raFg.nextSibling) {
+    __sbWkDanceArmAnchor = raFg.nextSibling;   // the coral body path — never moves
+    root.appendChild(laFg);
+    root.appendChild(raFg);
+  }
   __sbWkSay("Watch this 🕺");
 
   const W = 64;
@@ -2998,6 +3007,14 @@ function __sbWkEndDance(xResume) {
     root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
     root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
     root.setAttribute("transform", "");
+    // put the arm groups back into their original paint-order slot (before the coral body)
+    if (__sbWkDanceArmAnchor && __sbWkDanceArmAnchor.parentNode === root) {
+      const laFg2 = root.querySelector("#__sbwk_la__");
+      const raFg2 = root.querySelector("#__sbwk_ra__");
+      if (laFg2) root.insertBefore(laFg2, __sbWkDanceArmAnchor);
+      if (raFg2) root.insertBefore(raFg2, __sbWkDanceArmAnchor);
+    }
+    __sbWkDanceArmAnchor = null;
   }
   __sbWkDancing = false; __sbWkMoonwalking = false; __sbWkThrowMode = false;
   if (__sbInputOpen) {
@@ -12682,16 +12699,21 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
-  // "dance for me" → cue DAF at 0:59 (best-effort), then run the five-move routine to 1:10.
+  // "dance for me" → cue DAF at 0:59, and START DANCING ONLY once the music resolves
+  // (cold-player tab boot can take a few seconds and briefly bounces focus; dancing on a
+  // fixed 650ms timer used to spend the routine hidden behind the Spotify tab).
   if (__sbDanceIntent(promptText)) {
     __sbStopSpeech();
-    __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS).then((r) => {
-      // If the music couldn't start, say why AFTER the routine so it doesn't clobber the bubble.
-      if (!r || !r.ok) {
-        setTimeout(() => __sbWkSay(r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧"), __SB_DANCE_DURATION_MS + 900);
+    __sbWkSay("One sec… 🎧");
+    const playP = __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS);
+    const capP = new Promise((res) => setTimeout(() => res({ ok: false, timedOut: true }), 8000));
+    Promise.race([playP, capP]).then((r) => {
+      setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
+      if (r && !r.ok && !r.timedOut) {
+        // Music genuinely failed — say why AFTER the routine so it doesn't clobber the bubble.
+        setTimeout(() => __sbWkSay(r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧"), __SB_DANCE_DURATION_MS + 1300);
       }
     });
-    setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 650);   // let the drop land, then dance
     if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
