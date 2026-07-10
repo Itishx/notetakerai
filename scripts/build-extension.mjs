@@ -10,6 +10,7 @@ const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "extension");
 const DIST = path.join(ROOT, "dist-extension");
 const ZIP_PATHS = [
+  path.join(ROOT, "public", "braino.zip"),          // the production download (simple name)
   path.join(ROOT, "public", "braino-extension.zip"),
   path.join(ROOT, "public", "braino-preview.zip"),
   path.join(ROOT, "dist", "braino-extension.zip"),
