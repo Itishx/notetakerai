@@ -3305,7 +3305,8 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
       "- If CURRENT PAGE already shows the thing the user is referring to (e.g. they're on the product page and say 'buy it'), resolvedTask must say to CONTINUE on the current page rather than re-open or re-search (e.g. 'On the currently open Amazon page for <product>, add it to cart and proceed to checkout'). This applies ONLY when the current page genuinely matches the request (right site AND right content). If the current page is unrelated to the ask (e.g. a dashboard is open and they ask to buy something on Amazon), do NOT anchor to it — resolvedTask must direct the agent to the right site (e.g. 'Go to amazon.com, search for <product>, and buy it').",
       "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
       "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
-      "- searchQuery must name the RESOLVED entity too, never the pronoun ('The Subtle Art of Not Giving a F*ck book', not 'that book').",
+      "- searchQuery must name the RESOLVED entity, never the pronoun ('The Subtle Art of Not Giving a F*ck', not 'that book').",
+      "- For a SPECIFIC NAMED product/title, searchQuery is EXACTLY that name — do NOT append a category word the user didn't say ('The Subtle Art of Not Giving a F*ck', NOT '...book'; 'OnePlus Buds Pro 4', NOT '...headphones'). The store already knows the category.",
       "- searchQuery is what gets typed INTO a site's own search box. NEVER include the site name, 'Amazon', 'India', or any storefront/country words in it ('Atomic Habits book' — NOT 'Atomic Habits Amazon India'). The storefront choice belongs in resolvedTask only.",
       "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
       "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
@@ -6447,6 +6448,32 @@ function bgLooksLikeGoogleMapsPlaceTask(task) {
   return placeCategory && locationHint;
 }
 
+// Amazon search fast-path — same philosophy as the Maps from-A-to-B deep link. Typing
+// into Amazon's search box and submitting is flaky friction with zero intelligence value
+// (one run looped 13 steps on it). When the task is an Amazon shop/buy, jump STRAIGHT to
+// the results URL for the exact title, then let the loop do the real work (locate → cart →
+// buy). The loop's intelligence is spent where it matters, not on a search box.
+function bgBuildAmazonSearchFastPath(task, synth = null, geo = null) {
+  const raw = String(task || "").trim();
+  const t = raw.toLowerCase();
+  if (!/\bamazon\b/.test(t) && !(/\b(buy|purchase|order|shop for)\b/.test(t) && !/\b(flipkart|ebay|swiggy|zomato|blinkit|instamart)\b/.test(t))) return null;
+  // The clean product title comes from synthesis (now stripped of category suffixes).
+  let title = String(synth?.searchQuery || "").trim();
+  if (!title) {
+    // Fallback: pull the thing between the buy/search verb and any "on amazon" tail.
+    const m = raw.match(/\b(?:buy|purchase|order|search for|shop for|find|get)\s+(.+?)(?:\s+(?:on|from|at|in)\s+amazon[a-z.]*)?(?:\s+(?:for me|please|pls))?\s*$/i);
+    title = (m?.[1] || "").trim();
+  }
+  if (!title || title.length < 2) return null;
+  const tld = (geo?.countryCode && BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode]) || "amazon.in";
+  return [{
+    type: "navigate",
+    url: `https://www.${tld}/s?k=${encodeURIComponent(title)}`,
+    description: `Search ${tld} for "${title}"`,
+    continueAfter: true,
+  }];
+}
+
 function bgBuildGoogleMapsFastPath(task, synth = null) {
   const raw = String(task || "").trim();
   const t = raw.toLowerCase();
@@ -6722,6 +6749,8 @@ function bgTryFastPath(task, history, synth = null, geo = null) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck", continueAfter: opensThenActs }];
   }
+  const amazonSearchFastPath = bgBuildAmazonSearchFastPath(task, synth, geo);
+  if (amazonSearchFastPath) return amazonSearchFastPath;
   const googleMapsFastPath = bgBuildGoogleMapsFastPath(task, synth);
   if (googleMapsFastPath) return googleMapsFastPath;
   const mediumFastPath = bgBuildMediumFastPath(task);
