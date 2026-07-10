@@ -3274,6 +3274,7 @@ SKILL amazon-shopping (guided buying — the user stays in the loop):
 - CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
 - CART IS SACRED: NEVER click Delete, Remove, "Save for later", or a quantity +/− stepper on ANY cart item. Do not "clean up", "clear", or adjust the existing cart. Only ADD what the user asked for and move forward. (This is also enforced deterministically — such clicks are blocked — but never even attempt them.)
 - THE ORDERED STEPS — always know which one you are on: (1) SEARCH the book, (2) OPEN the book (click its result link), (3) ADD TO CART, (4) PROCEED to checkout. Announce the step in your thought ("Step 2: opening the listing").
+- SUBMITTING THE SEARCH: after typing the query, Enter is unreliable on Amazon — click the "Go" / magnifying-glass search button next to the box. Once the URL contains "/s?k=", the search ran; do not retype.
 - LOCATING THE RESULT: after a search, the product listings ARE in the observation as link elements — a link whose name starts with the title you searched IS the book (names truncate before the author; that is fine). Do NOT read or scroll repeatedly waiting for them to "appear" — click the best-matching title link. If the task is only to SEARCH, opening the top matching result and confirming it counts as done.
 - BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
 - SEARCH ONCE: use the provided search query exactly one time. If the product is visible in the results, open it; if not, scroll once, then clarify. NEVER re-run reworded variations of the same search — a second near-identical query is forbidden.
@@ -4000,7 +4001,13 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       }
     }
 
-    const activeKeywords = state.subgoals.find((goal) => goal.status === "active")?.desc || task;
+    // Observation keywords decide which elements survive the cull. Using ONLY the
+    // subgoal desc ("open the matching product listing") culled the actual result links —
+    // their titles ("The Subtle Art of Not Giving a F*ck") share no words with the desc,
+    // so they scored 0 and header/cart controls won the budget. Lead with the search
+    // query + task so the TARGET's own words keep its links in the observation.
+    const activeGoalDesc = state.subgoals.find((goal) => goal.status === "active")?.desc || "";
+    const activeKeywords = [state.synth?.searchQuery || "", task, activeGoalDesc].filter(Boolean).join(" ") || task;
     const obsResult = await bgBuildElementObservation(currentTabId, activeKeywords);
     let obs = obsResult.map;
     // The results page may have finished loading AFTER the previous step's re-observe
