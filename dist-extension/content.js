@@ -12668,10 +12668,11 @@ async function __sbProcessPrompt(text, options = {}) {
       }
     });
     setTimeout(() => __sbWkMoonwalk(11000), 650);             // let the beat drop, then moonwalk
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 
-  // "dance for me" → cue DAF at 0:59 (best-effort), then run the six-move routine to 1:10.
+  // "dance for me" → cue DAF at 0:59 (best-effort), then run the five-move routine to 1:10.
   if (__sbDanceIntent(promptText)) {
     __sbStopSpeech();
     __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS).then((r) => {
@@ -12681,6 +12682,7 @@ async function __sbProcessPrompt(text, options = {}) {
       }
     });
     setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 650);   // let the drop land, then dance
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 

@@ -1192,10 +1192,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const uris = [String(message.uri || "")].filter(Boolean);
       const positionMs = Number.isFinite(Number(message.positionMs)) ? Number(message.positionMs) : 0;
       if (!uris.length) return { ok: false };
+      // Cold web players accept play-with-position but their first state sync can snap
+      // back to 0:00 — verify progress shortly after and issue a corrective seek.
+      const ensureSeek = () => {
+        if (!(positionMs > 0)) return;
+        setTimeout(async () => {
+          try {
+            const st = await bgCallSpotifyFunction("spotify-player-state", {});
+            const prog = Number(st?.progressMs);
+            if (Number.isFinite(prog) && prog >= positionMs - 4000) return;   // already there
+            await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs });
+          } catch (_) {
+            try { await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs }); } catch (_) {}
+          }
+        }, 1500);
+      };
       try {
         const payload = { action: "play", uris };
         if (positionMs > 0) payload.positionMs = positionMs;
         await bgCallSpotifyFunction("spotify-playback", payload);
+        ensureSeek();
         return { ok: true };
       } catch (err) {
         const msg = String(err?.message || "");
@@ -1203,7 +1219,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (!/device|active|404/i.test(msg)) return { ok: false };
       }
       try {
-        await bgPlaySpotifyWithAutoOpen(uris, positionMs);
+        // background:true — the user must keep WATCHING Braino; a focus-stealing tab
+        // also pauses his rAF dance in the now-hidden page.
+        await bgPlaySpotifyWithAutoOpen(uris, positionMs, { background: true });
+        ensureSeek();
         return { ok: true };
       } catch (_) { return { ok: false }; }
     })().then(sendResponse).catch(() => sendResponse({ ok: false }));
@@ -4743,15 +4762,17 @@ async function bgFetchSpotifyPlayerState() {
   }
 }
 
-async function bgPlaySpotifyWithAutoOpen(uris, positionMs = null) {
+async function bgPlaySpotifyWithAutoOpen(uris, positionMs = null, opts = {}) {
   const payload = { action: "play", uris };
   if (Number.isFinite(Number(positionMs)) && Number(positionMs) > 0) payload.positionMs = Number(positionMs);
   // Reuse the web player when it already exists. Creating a new tab on every retry
   // makes Delegate look broken and can register multiple devices.
+  // opts.background: open the player WITHOUT stealing focus — party tricks need the
+  // user watching Braino, not a Spotify tab (a hidden tab also pauses his rAF dance).
   try {
     const existing = await bgFindSpotifyTab();
-    if (existing?.id != null) await new Promise(r => chrome.tabs.update(existing.id, { active: true }, r));
-    else await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: true }, r));
+    if (existing?.id != null) { if (!opts.background) await new Promise(r => chrome.tabs.update(existing.id, { active: true }, r)); }
+    else await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: !opts.background }, r));
   } catch (_) {}
   // Try immediately; if no active device yet, poll until web player registers
   for (let i = 0; i < 5; i++) {

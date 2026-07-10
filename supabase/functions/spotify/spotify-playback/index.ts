@@ -15,7 +15,8 @@ type SpotifyPlaybackAction =
   | { action: "transfer"; deviceId: string; play?: boolean }
   | { action: "play"; deviceId?: string | null; uris?: string[]; contextUri?: string | null; offsetUri?: string | null; positionMs?: number | null }
   | { action: "pause" | "next" | "previous"; deviceId?: string | null }
-  | { action: "volume"; volumePercent: number; deviceId?: string | null };
+  | { action: "volume"; volumePercent: number; deviceId?: string | null }
+  | { action: "seek"; positionMs: number; deviceId?: string | null };
 
 async function getFirstAvailableDeviceId(accessToken: string): Promise<string | null> {
   try {
@@ -136,6 +137,21 @@ serve(async (req) => {
       }
 
       return json({ ok: true });
+    }
+
+    if (payload.action === "seek") {
+      // Corrective seek: a cold web player accepts play-with-position but its initial
+      // state sync can reset to 0 — the client verifies progress and seeks after.
+      const positionMs = Math.max(0, Math.round(Number(payload.positionMs) || 0));
+      const deviceId = await resolveDeviceId(payload.deviceId ?? null);
+      const params = new URLSearchParams({ position_ms: String(positionMs) });
+      if (deviceId) params.set("device_id", deviceId);
+      await spotifyRequestRaw(
+        `https://api.spotify.com/v1/me/player/seek?${params}`,
+        { method: "PUT", headers: { Authorization: `Bearer ${accessToken}` } },
+        "spotify-playback",
+      );
+      return json({ ok: true, positionMs });
     }
 
     if (payload.action === "volume") {
