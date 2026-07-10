@@ -12711,7 +12711,10 @@ async function __sbProcessPrompt(text, options = {}) {
       "You picked the right brain for this. Watch.",
     ];
     const danceLine = danceLines[Math.floor(Math.random() * danceLines.length)];
-    if (fromVoice) { speakVoiceReply(danceLine); } else { __sbWkSay(danceLine); }
+    // STRICT sequence: the line finishes FIRST, then Spotify fires, then (once the music
+    // confirms) the dance. Awaiting the speech is what stops the overlap.
+    if (fromVoice) { try { await speakVoiceReply(danceLine); } catch (_) {} }
+    else { __sbWkSay(danceLine); }
     const playP = __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS);
     const capP = new Promise((res) => setTimeout(() => res({ ok: false, timedOut: true }), 9000));
     Promise.race([playP, capP]).then((r) => {
