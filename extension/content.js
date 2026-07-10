@@ -10878,8 +10878,28 @@ function __sbGetSelectedText() {
   return window.getSelection?.()?.toString?.()?.trim?.() || "";
 }
 
+// Read the current visible text INCLUDING same-origin iframes. Udemy quizzes (and many
+// exam/form tools) render the question inside an iframe, so top-frame innerText never
+// has it — chat then answered from conversation history = "one question behind". Any
+// same-origin frame's body is appended; cross-origin frames are silently skipped.
+function __sbReadVisibleText() {
+  let text = (document.body?.innerText || "").trim();
+  try {
+    const frames = document.querySelectorAll("iframe");
+    for (const f of frames) {
+      let doc = null;
+      try { doc = f.contentDocument; } catch (_) { doc = null; }   // cross-origin → SecurityError
+      const inner = doc?.body?.innerText?.trim();
+      if (inner && inner.length > 40 && !text.includes(inner.slice(0, 120))) {
+        text += `\n\n[Embedded frame]\n${inner}`;
+      }
+    }
+  } catch (_) {}
+  return text;
+}
+
 function __sbGetPageContext(maxChars = 12000) {
-  const rawPageText = (document.body?.innerText || "").trim();
+  const rawPageText = __sbReadVisibleText();
   const selectedText = __sbGetSelectedText();
   const movieContext = __sbBuildMovieContext();
   const movieSummary = __sbBuildMovieContextSummary(movieContext);
@@ -14393,7 +14413,7 @@ let __sbRtSyncInFlight = null;
 // URL-only check left the voice session answering the PREVIOUS question. Digits/timers
 // are stripped so a ticking clock doesn't churn the signature.
 function __sbPageContentSig() {
-  const t = (document.body?.innerText || "").slice(0, 6000)
+  const t = __sbReadVisibleText().slice(0, 6000)
     .replace(/\d{1,2}:\d{2}(?::\d{2})?/g, "")
     .replace(/\d+/g, "")
     .replace(/\s+/g, " ").trim();
