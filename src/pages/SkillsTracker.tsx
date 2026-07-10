@@ -1,5 +1,18 @@
-import Navbar from "@/components/Navbar";
+import "./home.css";
 import { Link } from "react-router-dom";
+import Navbar from "@/components/Navbar";
+import SiteFooter from "@/components/SiteFooter";
+import {
+  wrap, mono, serif, readFont,
+  Eyebrow, Section, EditorialHero, EdTitle, EdDek,
+} from "@/lib/editorial";
+
+/* ============================================================================
+   Braino Skills · trybraino.com/skills
+   A live inventory of what Braino can actually do: skills, integration surfaces,
+   and ops pages, each with a status and the next refinement. Re-skinned into the
+   editorial "Medium theme"; the data + status logic is preserved intact.
+   ============================================================================ */
 
 type SkillStatus = "Working" | "Needs refinement" | "Planned";
 
@@ -13,10 +26,11 @@ type SkillRow = {
   next: string;
 };
 
-const statusClass: Record<SkillStatus, string> = {
-  Working: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  "Needs refinement": "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  Planned: "border-slate-500/25 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+// Token-driven status pills. Flip cleanly in light/dark.
+const statusStyle: Record<SkillStatus, React.CSSProperties> = {
+  Working: { color: "var(--sb-ok, #4caf7d)", borderColor: "rgba(76,175,125,0.4)", background: "rgba(76,175,125,0.1)" },
+  "Needs refinement": { color: "var(--sb-accent-deep)", borderColor: "var(--sb-line-2)", background: "var(--sb-accent-soft)" },
+  Planned: { color: "var(--sb-ink-3)", borderColor: "var(--sb-line-2)", background: "var(--sb-panel)" },
 };
 
 const rows: SkillRow[] = [
@@ -28,10 +42,10 @@ const rows: SkillRow[] = [
     canDo: [
       "Search LinkedIn Jobs by role and location.",
       "Open and inspect 3-5 jobs.",
-      "Return job links, descriptions, requirements, and fit recommendations.",
+      "Return links, descriptions, requirements, and a fit read.",
     ],
-    notes: "Surprisingly useful already. Main risk is LinkedIn UI/login changes.",
-    next: "Keep improving result formatting and make sure it never stops after one job when more are available.",
+    notes: "Already surprisingly useful. Main risk is LinkedIn UI or login changes.",
+    next: "Sharpen result formatting and never stop at one job when more are open.",
   },
   {
     name: "X Growth + Posting",
@@ -40,11 +54,11 @@ const rows: SkillRow[] = [
     path: "skills/x-growth-posting/SKILL.md",
     canDo: [
       "Read X status and follower changes.",
-      "Offer to create a post after status checks.",
-      "Draft in saved X tone, then post or schedule only after approval.",
+      "Offer to draft a post after a status check.",
+      "Write in your saved X tone, then post or schedule only on your approval.",
     ],
-    notes: "Good product loop because it turns account insight into action.",
-    next: "QA voice/text parity and make the draft modal feel smoother.",
+    notes: "A strong loop: it turns account insight straight into action.",
+    next: "QA voice and text parity, and smooth out the draft modal.",
   },
   {
     name: "Google Maps",
@@ -52,12 +66,12 @@ const rows: SkillRow[] = [
     status: "Needs refinement",
     path: "skills/google-maps/SKILL.md",
     canDo: [
-      "Open Google Maps visibly for places, directions, and distance checks.",
-      "Recommend places from visible Maps results.",
-      "Ask whether to send the best pick to the phone.",
+      "Open Maps visibly for places, directions, and distance checks.",
+      "Recommend spots from the visible results.",
+      "Ask whether to send the best pick to your phone.",
     ],
-    notes: "Useful only if it becomes an outing planner, not just a Maps search wrapper.",
-    next: "Add Resend email handoff and combine Maps with menu/budget sources for better recommendations.",
+    notes: "Only earns its place as an outing planner, not a Maps search wrapper.",
+    next: "Add Resend email handoff and blend in menu and budget sources.",
   },
   {
     name: "Google Calendar",
@@ -65,12 +79,12 @@ const rows: SkillRow[] = [
     status: "Working",
     path: "skills/google-calendar/SKILL.md",
     canDo: [
-      "Schedule, reschedule, cancel, forward, and list Calendar events.",
-      "Create Google Meet links and 15-minute reminders by default.",
-      "Open Meet at start time and hand off into Meeting & Call mode.",
+      "Schedule, reschedule, cancel, forward, and list events.",
+      "Add Meet links and 15-minute reminders by default.",
+      "Open Meet at start time and hand off into Meeting mode.",
     ],
-    notes: "OAuth, Calendar actions, reminders, and Meet handoff are now wired through the real backend flow.",
-    next: "Keep QA focused on watch renewal edge cases and any natural-language parsing misses.",
+    notes: "OAuth, actions, reminders, and the Meet handoff run on the real backend now.",
+    next: "Keep QA on watch-renewal edge cases and natural-language parsing misses.",
   },
   {
     name: "Realtime Costs Memory",
@@ -78,12 +92,12 @@ const rows: SkillRow[] = [
     status: "Working",
     path: "skills/realtime-costs/SKILL.md",
     canDo: [
-      "Answer exact realtime spend for the current or most recent session.",
-      "Report today's cost and the last 7 days with concrete dates.",
+      "Answer exact realtime spend for the current or latest session.",
+      "Report today and the last 7 days with concrete dates.",
       "Name the biggest cost driver and the priciest recent session.",
     ],
-    notes: "This turns the ops logs into something Braino can actually speak back on demand.",
-    next: "Keep polishing phrasing so voice-mode receipts feel instant and natural.",
+    notes: "Turns the ops logs into something Braino can speak back on demand.",
+    next: "Polish phrasing so voice-mode receipts land instant and natural.",
   },
   {
     name: "Realtime Costs",
@@ -93,10 +107,10 @@ const rows: SkillRow[] = [
     canDo: [
       "Log headphone-mode voice turns.",
       "Show transcripts, replies, token usage, and estimated cost.",
-      "Warn if OpenAI audio output tokens appear when external TTS is selected.",
+      "Flag OpenAI audio tokens that show up when external TTS is on.",
     ],
-    notes: "Important for keeping GPT Realtime cost under control.",
-    next: "Use this data before switching models or tuning voice behavior further.",
+    notes: "Key to keeping GPT Realtime cost under control.",
+    next: "Read this data before switching models or tuning voice behavior.",
   },
   {
     name: "Voice Stack",
@@ -104,23 +118,23 @@ const rows: SkillRow[] = [
     status: "Needs refinement",
     canDo: [
       "Use OpenAI Realtime for listening, VAD, transcription, and routing.",
-      "Use Fish Audio as the main spoken voice.",
+      "Use Fish Audio as the one spoken voice.",
       "Track session cost logs and realtime voice usage.",
     ],
-    notes: "Architecture is better now, but still needs careful QA because voice bugs are very visible.",
-    next: "Keep external TTS as the only Braino voice and verify no duplicate speakers.",
+    notes: "Architecture is better, but voice bugs are loud, so it needs careful QA.",
+    next: "Keep external TTS as the only voice and verify no duplicate speakers.",
   },
   {
     name: "Maps Phone Handoff",
     type: "Integration",
     status: "Planned",
     canDo: [
-      "Send a selected Maps result to the user's phone.",
-      "Include place name, reason, ETA, and a Google Maps button.",
-      "Start with email via Resend before SMS/push.",
+      "Send a chosen Maps result to your phone.",
+      "Include place, reason, ETA, and a Maps button.",
+      "Start with email via Resend before SMS or push.",
     ],
-    notes: "This is what will make the Maps skill feel practical instead of decorative.",
-    next: "Build a small authenticated Resend endpoint and store the user's preferred phone/email target.",
+    notes: "This is what makes the Maps skill feel practical instead of decorative.",
+    next: "Build a small authenticated Resend endpoint and store your target contact.",
   },
 ];
 
@@ -132,85 +146,104 @@ const counts = rows.reduce(
   { Working: 0, "Needs refinement": 0, Planned: 0 } as Record<SkillStatus, number>,
 );
 
+const ORDER: SkillStatus[] = ["Working", "Needs refinement", "Planned"];
+
 export default function SkillsTracker() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div style={{ background: "var(--sb-bg)", color: "var(--sb-ink)", minHeight: "100vh" }}>
       <Navbar />
 
-      <main className="container mx-auto max-w-6xl px-6 pb-20 pt-32">
-        <section className="mb-10">
-          <p className="mb-4 text-xs font-medium uppercase tracking-[0.28em] text-muted-foreground">
-            Braino skills tracker
-          </p>
-          <h1
-            className="max-w-3xl text-4xl font-normal leading-tight tracking-tight md:text-5xl"
-            style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-          >
-            One simple place to track what Braino can do.
-          </h1>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
-            A lightweight inventory of the skills and integration surfaces we have built, their current status,
-            and what needs to happen next.
-          </p>
-        </section>
+      {/* ── Hero ── */}
+      <EditorialHero
+        eyebrow="Skills tracker"
+        title={<>Everything Braino can <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>actually do.</em></>}
+        dek="A living inventory of the skills, integrations, and ops surfaces we've built, where each one stands, and what comes next."
+      />
 
-        <section className="mb-8 grid gap-3 sm:grid-cols-3">
-          {(["Working", "Needs refinement", "Planned"] as SkillStatus[]).map((status) => (
-            <div key={status} className="rounded-2xl border border-border bg-card/50 p-5">
-              <div className="text-sm text-muted-foreground">{status}</div>
-              <div className="mt-2 text-3xl font-semibold">{counts[status]}</div>
-            </div>
-          ))}
-        </section>
+      {/* ── Status counts ── */}
+      <Section tone="2" pad="10px 0 80px">
+        <div style={{ ...wrap, maxWidth: 900, paddingTop: 40 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 18 }}>
+            {ORDER.map((status) => (
+              <div key={status} style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 20, padding: "24px 26px" }}>
+                <div style={{ ...mono, fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-ink-3)" }}>{status}</div>
+                <div style={{ fontFamily: serif, fontSize: 52, lineHeight: 1, letterSpacing: "-0.02em", color: "var(--sb-ink)", marginTop: 10 }}>{counts[status]}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
 
-        <section className="overflow-hidden rounded-2xl border border-border bg-card/40">
-          <div className="hidden grid-cols-12 gap-4 border-b border-border px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground md:grid">
-            <div className="col-span-4">Skill / integration</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-3">Can do</div>
-            <div className="col-span-3">Next refinement</div>
+      {/* ── The inventory ── */}
+      <Section tone="1" pad="80px 0 100px">
+        <div style={{ ...wrap, maxWidth: 1000 }}>
+          <div style={{ marginBottom: 40 }}>
+            <Eyebrow>The inventory</Eyebrow>
+            <EdTitle size="clamp(32px,4.4vw,52px)" style={{ margin: "14px 0 14px" }}>
+              Every surface, status, and next move.
+            </EdTitle>
+            <EdDek style={{ maxWidth: 640 }}>
+              No roadmap theater. Just what works today, what needs a pass, and what's still on the bench.
+            </EdDek>
           </div>
 
-          {rows.map((row) => (
-            <article key={row.name} className="grid grid-cols-1 gap-4 border-b border-border px-5 py-5 last:border-b-0 md:grid-cols-12">
-              <div className="md:col-span-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-semibold">{row.name}</h2>
-                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">{row.type}</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {rows.map((row) => (
+              <article
+                key={row.name}
+                style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 24, padding: 30, display: "grid", gap: 22, gridTemplateColumns: "minmax(220px,1fr) minmax(260px,1.3fr) minmax(220px,1.1fr)", alignItems: "start" }}
+              >
+                {/* Name / type / path / notes */}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                    <h2 style={{ fontFamily: serif, fontWeight: 400, fontSize: 26, lineHeight: 1.05, letterSpacing: "-0.02em", color: "var(--sb-ink)", margin: 0 }}>{row.name}</h2>
+                    <span style={{ ...mono, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--sb-ink-3)", border: "1px solid var(--sb-line-2)", borderRadius: 999, padding: "3px 9px" }}>{row.type}</span>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", ...mono, fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", fontWeight: 500, border: "1px solid", borderRadius: 999, padding: "4px 11px", ...statusStyle[row.status] }}>
+                      {row.status}
+                    </span>
+                  </div>
+
+                  {row.path ? (
+                    row.path.startsWith("/") ? (
+                      <Link to={row.path} style={{ ...mono, fontSize: 12, color: "var(--sb-accent-deep)", textDecoration: "none", marginTop: 14, display: "inline-block" }}>
+                        {row.path}
+                      </Link>
+                    ) : (
+                      <div style={{ ...mono, fontSize: 12, color: "var(--sb-ink-3)", marginTop: 14 }}>{row.path}</div>
+                    )
+                  ) : null}
+
+                  <p style={{ fontFamily: readFont, fontSize: 16, lineHeight: 1.55, color: "var(--sb-ink-2)", marginTop: 14, marginBottom: 0 }}>{row.notes}</p>
                 </div>
-                {row.path ? (
-                  row.path.startsWith("/") ? (
-                    <Link to={row.path} className="mt-2 inline-block text-xs text-primary hover:underline">
-                      {row.path}
-                    </Link>
-                  ) : (
-                    <div className="mt-2 font-mono text-xs text-muted-foreground">{row.path}</div>
-                  )
-                ) : null}
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">{row.notes}</p>
-              </div>
 
-              <div className="md:col-span-2">
-                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass[row.status]}`}>
-                  {row.status}
-                </span>
-              </div>
+                {/* Can do */}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ ...mono, fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 12 }}>Can do</div>
+                  <ul style={{ display: "flex", flexDirection: "column", gap: 9, margin: 0, padding: 0, listStyle: "none" }}>
+                    {row.canDo.map((item) => (
+                      <li key={item} style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 14, lineHeight: 1.5, color: "var(--sb-ink)" }}>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--sb-accent)", flexShrink: 0, marginTop: 7 }} />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-              <div className="md:col-span-3">
-                <ul className="space-y-2 text-sm leading-6 text-muted-foreground">
-                  {row.canDo.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
+                {/* Next refinement */}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ ...mono, fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 12 }}>Next refinement</div>
+                  <p style={{ fontFamily: readFont, fontSize: 15.5, lineHeight: 1.6, color: "var(--sb-ink-2)", margin: 0 }}>{row.next}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </Section>
 
-              <div className="text-sm leading-6 text-muted-foreground md:col-span-3">
-                {row.next}
-              </div>
-            </article>
-          ))}
-        </section>
-      </main>
+      <SiteFooter />
     </div>
   );
 }
