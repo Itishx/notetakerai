@@ -1193,22 +1193,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const positionMs = Number.isFinite(Number(message.positionMs)) ? Number(message.positionMs) : 0;
       if (!uris.length) return { ok: false };
       // Cold web players accept play-with-position but their first state sync can snap
-      // back to 0:00. An audible from-the-top blip is the failure mode, so correct FAST:
-      // an immediate blind seek right after play (harmless when already in place — it
-      // lands within the same second), then a verified pass to catch slow players.
+      // back to 0:00. VERIFIED-only correction: seek ONLY when progress proves the track
+      // restarted (a blind seek re-fired on top of a correct start and the song audibly
+      // played "twice"). Two passes to catch slow players; silence otherwise.
       const ensureSeek = () => {
         if (!(positionMs > 0)) return;
-        setTimeout(async () => {
-          try { await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs }); } catch (_) {}
-        }, 250);
-        setTimeout(async () => {
-          try {
-            const st = await bgCallSpotifyFunction("spotify-player-state", {});
-            const prog = Number(st?.progressMs);
-            if (Number.isFinite(prog) && prog >= positionMs - 4000) return;   // already there
-            await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs });
-          } catch (_) {}
-        }, 1800);
+        const checkOnce = async () => {
+          const st = await bgCallSpotifyFunction("spotify-player-state", {});
+          const prog = Number(st?.progressMs);
+          if (!Number.isFinite(prog)) return true;                 // can't verify — do NOT stutter
+          if (prog >= positionMs - 4000) return true;              // position took — leave it alone
+          await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs });
+          return true;
+        };
+        setTimeout(() => { checkOnce().catch(() => {}); }, 700);
+        setTimeout(() => { checkOnce().catch(() => {}); }, 2200);
       };
       try {
         const payload = { action: "play", uris };

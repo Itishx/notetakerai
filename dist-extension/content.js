@@ -2687,10 +2687,10 @@ let __sbGlassesOn = false;     // Braino is wearing his specs
 // "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
 const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
 const __SB_BILLIE_JEAN_START_MS = 211000;   // 3:31
-// "DAF" — the dance-party track + the drop (0:59 → 1:10) the user picked.
+// "DAF" — the dance-party track + the drop (0:59) the user picked.
 const __SB_DANCE_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
 const __SB_DANCE_START_MS = 59000;          // 0:59
-const __SB_DANCE_DURATION_MS = 11000;       // dance until 1:10
+const __SB_DANCE_DURATION_MS = 16000;       // dance until ~1:15 — gun fingers get the runway
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -2938,8 +2938,8 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
   const smooth = (u) => u * u * (3 - 2 * u);
 
   const totalS = durationMs / 1000;
-  const GUN_S = Math.min(7, totalS - 2);   // gun fingers holds the floor for 7s
-  const BLEND_S = 0.7;                     // then a smooth turn into raise the roof
+  const GUN_S = Math.max(6, totalS - 5);   // gun fingers OWNS the floor (11s of 16); roof gets the rest
+  const BLEND_S = 0.7;                     // smooth turn into raise the roof
   const start = performance.now();
   let last = start;
   let strutX = null;
@@ -12699,19 +12699,27 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
-  // "dance for me" → cue DAF at 0:59, and START DANCING ONLY once the music resolves
-  // (cold-player tab boot can take a few seconds and briefly bounces focus; dancing on a
-  // fixed 650ms timer used to spend the routine hidden behind the Spotify tab).
+  // "dance for me" → the showman flow: a playful line FIRST, cue DAF at 0:59 while it
+  // lands, and start dancing ONLY once the music is confirmed playing. No music, no
+  // dance — Braino says what's missing instead.
   if (__sbDanceIntent(promptText)) {
     __sbStopSpeech();
-    __sbWkSay("One sec… 🎧");
+    const danceLines = [
+      "Oh, you want to see me dance? Watch this.",
+      "A dance? Say less.",
+      "Alright, clearing the floor. Watch this.",
+      "You picked the right brain for this. Watch.",
+    ];
+    const danceLine = danceLines[Math.floor(Math.random() * danceLines.length)];
+    if (fromVoice) { speakVoiceReply(danceLine); } else { __sbWkSay(danceLine); }
     const playP = __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS);
-    const capP = new Promise((res) => setTimeout(() => res({ ok: false, timedOut: true }), 8000));
+    const capP = new Promise((res) => setTimeout(() => res({ ok: false, timedOut: true }), 9000));
     Promise.race([playP, capP]).then((r) => {
-      setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
-      if (r && !r.ok && !r.timedOut) {
-        // Music genuinely failed — say why AFTER the routine so it doesn't clobber the bubble.
-        setTimeout(() => __sbWkSay(r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧"), __SB_DANCE_DURATION_MS + 1300);
+      if (r && r.ok) {
+        setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
+      } else {
+        const line = r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧";
+        if (fromVoice) { speakVoiceReply(line); } else { __sbWkSay(line); }
       }
     });
     if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
