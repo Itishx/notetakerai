@@ -2872,10 +2872,11 @@ function __sbWkEndMoonwalk(xResume) {
 }
 
 // ── Dance ───────────────────────────────────────────────────────────────────
-// "Braino, dance for me" → DAF drops at 0:59 and Braino chains the website's five
-// signature moves (faithful ports of BrainoDanceGrid.tsx pose math, SAME time
-// constants — the slow groove, not a frantic pulse): The Twist → Disco Fever →
-// The Sprinkler → Raise the Roof → Gun Fingers (strut left). Ends at 1:10.
+// "Braino, dance for me" → DAF drops at 0:59 and Braino performs the owner's cut:
+// GUN FINGERS (7s — fingers to the sky, strutting left) blending smoothly into
+// RAISE THE ROOF for the remainder, ending at 1:10. Pose math is the verbatim
+// port of the website's BrainoDanceGrid.tsx (the slow groove). The blend lerps
+// arms/body AND scaleX through zero, which reads as Braino turning to face you.
 // Same rig-ownership contract as the moonwalk.
 function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
   const lane = __sbEnsureWalker();
@@ -2913,33 +2914,21 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
     if (fg) fg.setAttribute("transform", tx);
   };
 
-  // The website grid's pose functions, verbatim math. la/ra in degrees (left positive
-  // = raised, right negative = raised — same convention as the wave). tx/ty px, sy squash.
-  const MOVES = [
-    (t) => { // The Twist — hips, low swing
-      const b = t * 3.4, sway = Math.sin(b), knee = Math.abs(Math.sin(b));
-      return { tx: sway * 9, ty: 0, sy: 1 - knee * 0.06, la: 42 + sway * 26, ra: -42 + sway * 26, lookX: sway * 0.5, lookY: 0 };
-    },
-    (t) => { // Disco Fever — diagonal point, one arm
-      const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
-      return { tx: stab * 6, ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56, lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25 };
-    },
-    (t) => { // The Sprinkler — arm sweep, snap back
-      const period = 2.0, raw = (t % period) / period;
-      let e;
-      if (raw < 0.78) { const u = raw / 0.78; e = u * u * (3 - 2 * u); } else { e = 1 - (raw - 0.78) / 0.22; }
-      return { tx: (e - 0.5) * 5, ty: 0, sy: 1 - Math.abs(Math.sin(raw * Math.PI)) * 0.03, la: 102, ra: -128 + e * 100, lookX: -0.35 + e * 0.7, lookY: 0 };
-    },
-    (t) => { // Raise the Roof — both hands, push up
-      const b = t * 3.9, push = Math.abs(Math.sin(b)), lean = Math.sin(b * 0.5);
-      return { tx: lean * 5, ty: -push * 11, sy: 1, la: 116 + push * 20, ra: -116 - push * 20, lookX: lean * 0.3, lookY: -0.4 };
-    },
-    (t) => { // Gun Fingers — point to the sky, strut left
-      const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
-      return { strut: true, ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25, lookX: -0.4, lookY: -0.45 };
-    },
-  ];
-  const MOVE_S = (durationMs / 1000) / MOVES.length;   // five moves fill 0:59 → 1:10
+  // Website pose math, verbatim time constants (BrainoDanceGrid.tsx).
+  const poseGun = (t) => {   // Gun Fingers — point to the sky, strut left
+    const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
+    return { ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25, lookX: -0.4, lookY: -0.45, tilt: 0 };
+  };
+  const poseRoof = (t) => {  // Raise the Roof — both hands, push up
+    const b = t * 3.9, push = Math.abs(Math.sin(b)), lean = Math.sin(b * 0.5);
+    return { ty: -push * 11, sy: 1, la: 116 + push * 20, ra: -116 - push * 20, lookX: lean * 0.3, lookY: -0.4, tilt: lean * 5 * 0.35, tx: lean * 5 };
+  };
+  const lerp = (a, b2, u) => a + (b2 - a) * u;
+  const smooth = (u) => u * u * (3 - 2 * u);
+
+  const totalS = durationMs / 1000;
+  const GUN_S = Math.min(7, totalS - 2);   // gun fingers holds the floor for 7s
+  const BLEND_S = 0.7;                     // then a smooth turn into raise the roof
   const start = performance.now();
   let last = start;
   let strutX = null;
@@ -2948,26 +2937,42 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const t = (now - start) / 1000;
-    const idx = Math.min(MOVES.length - 1, Math.floor(t / MOVE_S));
-    const p = MOVES[idx](t);
 
-    let x, face = 1;
-    if (p.strut) {
+    let x, face, la, ra, ty, sy, lookX, lookY, tilt;
+    if (t < GUN_S) {
+      // strut leftward, wrapping — the signature move gets the room
       if (strutX === null) strutX = maxX;
-      strutX -= 40 * dt;                                  // slow strut leftward
+      strutX -= 34 * dt;
       if (strutX < minX) strutX = maxX;
-      x = strutX; face = -1;                              // faces the way he struts
+      const g = poseGun(t);
+      if (t < GUN_S - BLEND_S) {
+        x = strutX; face = -1;
+        ({ la, ra, ty, sy, lookX, lookY } = g); tilt = 0;
+      } else {
+        // blend the last 0.7s of gun fingers into raise the roof: arms/body lerp,
+        // scaleX sweeps -1 → 1 (he turns to face you), position eases to centre
+        const u = smooth((t - (GUN_S - BLEND_S)) / BLEND_S);
+        const r0 = poseRoof(0);
+        x = lerp(strutX, midX, u); face = lerp(-1, 1, u) || 0.02;
+        la = lerp(g.la, r0.la, u); ra = lerp(g.ra, r0.ra, u);
+        ty = lerp(g.ty, r0.ty, u); sy = lerp(g.sy, r0.sy, u);
+        lookX = lerp(g.lookX, r0.lookX, u); lookY = lerp(g.lookY, r0.lookY, u);
+        tilt = lerp(0, r0.tilt, u);
+      }
     } else {
-      x = midX + (p.tx || 0) * 1.6;
+      const r = poseRoof(t - GUN_S);
+      x = midX + (r.tx || 0) * 1.6; face = 1;
+      ({ la, ra, ty, sy, lookX, lookY, tilt } = r);
     }
+
     walker.style.transform = `translateX(${x}px)`;
     if (flip) flip.style.transform = `scaleX(${face})`;
-    setArm(laBg, laFg, p.la || 0);
-    setArm(raBg, raFg, p.ra || 0);
-    const sy = p.sy == null ? 1 : p.sy;
+    setArm(laBg, laFg, la || 0);
+    setArm(raBg, raFg, ra || 0);
+    const sy2 = sy == null ? 1 : sy;
     // squash about the FEET (y≈101) so knees bend without him floating
-    root.setAttribute("transform", `rotate(${(p.tx || 0) * 0.35} 50 50) translate(0 ${(p.ty || 0) + 101 * (1 - sy)}) scale(1 ${sy})`);
-    const px = (p.lookX || 0) * 2.4, py = (p.lookY || 0) * 2;
+    root.setAttribute("transform", `rotate(${tilt || 0} 50 50) translate(0 ${(ty || 0) + 101 * (1 - sy2)}) scale(1 ${sy2})`);
+    const px = (lookX || 0) * 2.4, py = (lookY || 0) * 2;
     if (pupL) pupL.setAttribute("transform", `translate(${px} ${py})`);
     if (pupR) pupR.setAttribute("transform", `translate(${px} ${py})`);
 

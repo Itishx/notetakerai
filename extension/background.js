@@ -1193,19 +1193,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const positionMs = Number.isFinite(Number(message.positionMs)) ? Number(message.positionMs) : 0;
       if (!uris.length) return { ok: false };
       // Cold web players accept play-with-position but their first state sync can snap
-      // back to 0:00 — verify progress shortly after and issue a corrective seek.
+      // back to 0:00. An audible from-the-top blip is the failure mode, so correct FAST:
+      // an immediate blind seek right after play (harmless when already in place — it
+      // lands within the same second), then a verified pass to catch slow players.
       const ensureSeek = () => {
         if (!(positionMs > 0)) return;
+        setTimeout(async () => {
+          try { await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs }); } catch (_) {}
+        }, 250);
         setTimeout(async () => {
           try {
             const st = await bgCallSpotifyFunction("spotify-player-state", {});
             const prog = Number(st?.progressMs);
             if (Number.isFinite(prog) && prog >= positionMs - 4000) return;   // already there
             await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs });
-          } catch (_) {
-            try { await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs }); } catch (_) {}
-          }
-        }, 1500);
+          } catch (_) {}
+        }, 1800);
       };
       try {
         const payload = { action: "play", uris };
