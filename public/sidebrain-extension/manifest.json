@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Braino — AI Browser Companion",
-  "version": "9.4.2",
+  "version": "9.4.3",
   "description": "Your AI companion that lives in the browser — record audio, chat about any page, and sync notes to Notion",
   "permissions": [
     "activeTab",

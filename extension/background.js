@@ -3367,7 +3367,8 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       : "";
     const prompt = [
       "Return strict JSON only.",
-      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping|youtube\"]}",
+      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\",\"doneWhen\":\"observable postcondition\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping|youtube\"]}",
+      "Every subgoal MUST include doneWhen: a postcondition CHECKABLE from the live page — a URL fragment ('URL contains /watch'), visible text, or a visible element. Never a feeling ('video is playing' → 'URL contains /watch').",
       "Choose only skills that are relevant. Do not include selectors or CSS.",
       `Task: ${task}`,
       `Context:\n${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
@@ -3481,6 +3482,10 @@ async function bgDecideNextAction({ task, state, observationText, skills, lesson
         : `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.`)
       : null,
     synth?.softConstraints?.length ? `APPLY THESE PREFERENCES by reading and RANKING the results (not by adding them to the query): ${synth.softConstraints.join("; ")}.` : null,
+    (() => {
+      const active = (state?.subgoals || []).find((g) => g.status === "active");
+      return active?.doneWhen ? `ACTIVE SUBGOAL IS DONE WHEN: ${active.doneWhen} — check the observation against THIS, not your impression.` : null;
+    })(),
     "STATE:",
     BrainoTaskState.renderTaskState(state),
     "OBSERVATION:",
@@ -3527,14 +3532,16 @@ async function bgVerifyDelegateDone({ task, state, tabId }) {
       "Be strict: complete=true only if the observed page proves the goal was achieved " +
       "(e.g. the email shows as sent, the event shows as saved, the requested data is visible). " +
       "If it merely looks ready but not done, return false. No prose, no markdown.";
+    const doneContracts = (state?.subgoals || []).filter((g) => g.doneWhen).map((g) => `- ${g.desc}: ${g.doneWhen}`).join("\n");
     const userPrompt = [
       `TASK: ${task}`,
+      doneContracts ? `COMPLETION CONTRACTS (each subgoal counts as done only when its check holds):\n${doneContracts}` : null,
       "STATE:",
       BrainoTaskState.renderTaskState(state),
       "OBSERVATION:",
       obs.serialized || "(empty observation)",
       "Is the task complete in the observed state? Strict JSON only.",
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
@@ -3892,6 +3899,12 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     skills: decomp.skills || [],
   };
   bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_RUN_META", meta: traceMeta });
+  // First thought lands the moment the plan exists — the island should never sit on
+  // "Getting started…" while the first per-step decision (~2-4s) is still coming.
+  if (state.subgoals?.length) {
+    const planLine = state.subgoals.map((g) => g.desc).join(", then ");
+    bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_THOUGHT", thought: `Here's my plan: ${planLine}.` });
+  }
 
   const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
   if (fastActions?.length) {
@@ -3991,6 +4004,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
         onProgress?.("Double-checking the result...");
         const verify = await bgVerifyDelegateDone({ task, state, tabId: currentTabId });
         llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+        bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", meta: traceMeta, trace: {
+          step: step + 1,
+          thought: String(decision?.thought || "").trim(),
+          action: "verify done (self-check)",
+          actionRaw: "{}",
+          result: verify && verify.complete === false ? `verifier says NOT done: ${String(verify?.reason || "").slice(0, 160)}` : "verifier confirms done",
+          verdict: verify && verify.complete === false ? "rejected" : "ok",
+          url: "",
+        } });
         if (verify && verify.complete === false) {
           const note = `Self-check: not done yet — ${verify.reason || "the page does not yet prove the task is complete"}.`;
           state.facts.push({ key: `self_check:${state.facts.length + 1}`, value: note, source: "verifier" });
@@ -4130,6 +4152,27 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     // Post-action check too (the per-iteration check at the loop top catches races that
     // resolve later): a search is done ONLY when its results page is actually up.
     if (!result?.error) bgRecordSearchDone(state, newObs?.url);
+    // Subgoal-stagnation escalation: action success is not progress. If the ACTIVE
+    // subgoal hasn't advanced in 8 steps, force the existing replan machinery — the
+    // 118s YouTube loop never tripped stuckCount because every click "succeeded".
+    {
+      const activeGoal = state.subgoals.find((g) => g.status === "active");
+      const streakId = activeGoal ? activeGoal.id : "";
+      state.subgoalStreak = (state.subgoalStreak && state.subgoalStreak.id === streakId)
+        ? { id: streakId, n: state.subgoalStreak.n + 1 }
+        : { id: streakId, n: 1 };
+      if (activeGoal && (state.subgoalStreak.n === 8 || state.subgoalStreak.n === 14)) {
+        state.stuckCount = Math.max(state.stuckCount || 0, 3);   // triggers strong-model replan
+        state.facts.push({
+          key: `stalled_subgoal:${streakId}:${state.subgoalStreak.n}`,
+          value: `Subgoal "${activeGoal.desc}" has not advanced in ${state.subgoalStreak.n} steps even though individual actions succeeded. Progress is measured by the GOAL, not by clicks. Replan or finish with what you already have.`,
+          source: "runtime",
+        });
+        state.facts = state.facts.slice(-30);
+        onProgress?.("This subgoal is stalled — rethinking the plan...");
+      }
+    }
+
     // Going-in-circles detector: every click can "succeed" while the run ping-pongs
     // between the same two pages (results ↔ channel, 9 visits in one real trace) —
     // action success is not goal progress. Third landing on the same URL = say so.

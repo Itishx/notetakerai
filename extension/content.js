@@ -3163,6 +3163,25 @@ function __sbWkResetThrow() {
 }
 
 // Create the walker lane + mascot DOM (idempotent). Returns the lane element.
+// Keep the walker lane glued to the BAR's top edge — the island grows the bar upward
+// (thinking mode adds ~70px) and Braino must ride up with it, then settle back down.
+let __sbWalkerLaneRo = null;
+function __sbSyncWalkerLane() {
+  const lane = document.getElementById("__sb_walk_lane__");
+  const bar = document.getElementById("__sb_bar__");
+  if (!lane || !bar) return;
+  const apply = () => {
+    const r = bar.getBoundingClientRect();
+    if (!r.height) return;
+    lane.style.bottom = `${Math.max(78, Math.round(window.innerHeight - r.top))}px`;
+  };
+  apply();
+  if (!__sbWalkerLaneRo && typeof ResizeObserver !== "undefined") {
+    __sbWalkerLaneRo = new ResizeObserver(apply);   // fires every frame of the island's height transition
+    __sbWalkerLaneRo.observe(bar);
+  }
+}
+
 function __sbEnsureWalker() {
   let lane = document.getElementById("__sb_walk_lane__");
   if (lane) return lane;
@@ -10505,6 +10524,7 @@ function __sbAgentLogRender() {
   }
   bar.classList.toggle("sb-log-thinking", Boolean(__sbAgentThought));
   bar.classList.add("sb-log-open");
+  if (typeof __sbSyncWalkerLane === "function") __sbSyncWalkerLane();
 }
 
 function __sbAgentLogShow(title) {
@@ -13225,7 +13245,7 @@ function __sbRunAgent(task, options = {}) {
   if (document.getElementById("__sb_card_wrap__")?.classList.contains("visible")) __sbCollapseCard();
   __sbDelegateUiHidden = true;
   __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
-  __sbAgentLogClear(); __sbAgentLogShow("Working…"); __sbAgentLogStep("Getting started…");  // strip shows instantly, all modes
+  __sbAgentLogClear(); __sbAgentLogShow("Working…"); __sbAgentLogThought("Thinking…");  // island opens ALREADY thinking; real thoughts replace in ~2s
   __sbSetStopBtn(true);   // show the stop affordance (card + bar) the instant the task starts
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
