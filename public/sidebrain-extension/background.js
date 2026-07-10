@@ -1253,7 +1253,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const bootTabId = sender?.tab?.id || null;
     const bootTask = (bootTabId && bgAgentTaskByTab.get(bootTabId)) || "";
     const runFresh = Boolean(bgDelegateRunInfo) && (Date.now() - bgDelegateRunInfo.at < 30000);
-    sendResponse({ task: bootTask, running: Boolean(bootTask) && runFresh });
+    sendResponse({ task: bootTask, running: Boolean(bootTask) && runFresh, lastThought: bgLastThoughtByTab.get(bootTabId) || "" });
     return false;
   }
   if (message.action === "getStatus") {
@@ -2880,6 +2880,7 @@ const bgAgentTaskByTab = new Map();
 // at its next safe point. Freshness-gated so a finished run can never adopt anything. ──
 let bgDelegateRunInfo = null;   // { tabId, at } — refreshed every loop iteration
 let bgDelegateAdoptTabId = null;
+const bgLastThoughtByTab = new Map();   // last thought per tab → the reborn content script restores the island instantly
 chrome.tabs.onCreated.addListener((tab) => {
   if (!bgDelegateRunInfo || !tab?.id || !tab.openerTabId) return;
   if (tab.openerTabId !== bgDelegateRunInfo.tabId) return;
@@ -3695,7 +3696,7 @@ async function bgExecuteDelegateAction(tabId, action, state) {
   const result = await bgExecuteAgentAction(tabId, action);
   if (!result?.error && action.type === "navigate") {
     await bgWaitForTabReady(tabId, 8000);
-    await bgDelay(700);
+    await bgDelay(1300);   // lazy result grids (Amazon etc.) render after readyState — let them
   } else if (!result?.error && ["click", "type", "selectOption", "pressKey", "scroll"].includes(action.type)) {
     await bgDelay(450);
   }
@@ -4006,7 +4007,10 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     // Stream the model's reasoning into the bar's island BEFORE the action runs —
     // think, then act, and the user watches both.
     const stepThought = String(decision?.thought || "").trim();
-    if (stepThought) bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_THOUGHT", thought: stepThought });
+    if (stepThought) {
+      bgLastThoughtByTab.set(currentTabId, stepThought);
+      bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_THOUGHT", thought: stepThought });
+    }
 
     BrainoTaskState.mergeMemoryUpdate(state, decision.memory_update, "model");
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });

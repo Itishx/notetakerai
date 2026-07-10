@@ -4169,6 +4169,7 @@ if (__sbContextOk()) {
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
+        __sbDelegateActive = false;   // task truly ended → allow teardown
         // NOTE: __sbDelegateUiHidden stays true through finalize — the result renders
         // into the card silently and surfaces as a bar bubble; finalize clears the flag.
         // Voice mode speaks the result with no panel; chat mode shows it.
@@ -6549,9 +6550,13 @@ function __sbBuildBrainUI() {
     chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
       if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) return;
       __sbDelegateUiHidden = true;   // a delegate run owns this tab — the chat card stays SHUT
+      __sbDelegateActive = true;     // run still going → no surface may tear down until it truly ends
       document.getElementById("__sb_bar__")?.classList.add("open");
       if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
-      if (typeof __sbAgentLogStep === "function") __sbAgentLogStep("Continuing here…");
+      // Restore the thinking island immediately (last thought carried from the background)
+      // so it never blinks empty across the navigation.
+      __sbAgentThought = String(resp.lastThought || "").trim() || "Thinking…";
+      if (typeof __sbAgentLogRender === "function") __sbAgentLogRender();
       if (typeof __sbSetBarAgentStatus === "function") __sbSetBarAgentStatus(resp.task);
     });
   } catch (_) {}
@@ -7285,6 +7290,7 @@ function __sbDetectPageTheme() {
 // While a delegate task runs, the chat UI stays closed (progress lives in the floating bar/pill only);
 // it reopens with the result on finish. This flag blocks any auto-open during the run.
 let __sbDelegateUiHidden = false;
+let __sbDelegateActive = false;   // true from delegate start to genuine finish — blocks any mid-run teardown
 function __sbOpenCard(options = {}) {
   if (!__sbOwnsInlineUi()) return;
   if (__sbDelegateUiHidden && !options.forceOpen) return;   // delegate running → keep the chat UI closed
@@ -7553,6 +7559,7 @@ function __sbStopDelegate() {
   __sbSetStopBtn(false);
   __sbAgentPendingTurn = null;
   __sbClearBarAgentStatus();
+  __sbDelegateActive = false;
   __sbAgentFlowDone();            // settle island + status + walker together
   __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
 }
@@ -10576,6 +10583,7 @@ function __sbAgentFlowDone() {
 }
 
 function __sbAgentLogClear() {
+  if (__sbDelegateActive) return;   // run still going — keep the island up (nav resets must not collapse it)
   __sbAgentThought = "";
   if (typeof __sbAgentTraceFinish === "function") __sbAgentTraceFinish();
   const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
@@ -10739,6 +10747,7 @@ function __sbUpdateAgentSubgoals(subgoals) {
 }
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
+  __sbDelegateActive = false;   // genuine end — release the teardown guard
   __sbAgentFlowDone(); // delegate finished — settle EVERY surface (island, status, walker)
   __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
@@ -13299,7 +13308,7 @@ function __sbRunAgent(task, options = {}) {
   if (document.getElementById("__sb_card_wrap__")?.classList.contains("visible")) __sbCollapseCard();
   __sbDelegateUiHidden = true;
   __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
-  __sbAgentLogClear(); __sbAgentLogShow("Working…"); __sbAgentLogThought("Thinking…");  // island opens ALREADY thinking; real thoughts replace in ~2s
+  __sbAgentLogClear(); __sbDelegateActive = true; __sbAgentLogShow("Working…"); __sbAgentLogThought("Thinking…");  // island opens ALREADY thinking; real thoughts replace in ~2s
   __sbSetStopBtn(true);   // show the stop affordance (card + bar) the instant the task starts
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
