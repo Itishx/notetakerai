@@ -344,3 +344,7 @@ The large voice-mode orb (180px) uses a slightly different gradient for more dep
 background: radial-gradient(circle at 33% 30%, #FFE0B0 0%, #F7A84A 40%, #E07820 72%, #C05810 100%);
 box-shadow: 0 0 80px rgba(243,154,66,0.55), 0 0 160px rgba(243,154,66,0.22), inset 0 -20px 40px rgba(140,50,5,0.22);
 ```
+
+## 10. Motion-Designer Handoff Kit
+
+`public/design-kit.html` (live at `trybraino.com/design-kit.html`) rebuilds the extension's core UI elements from `extension/content.js` with untouched values — dock bar (idle + task-working with step strip, spinner, tick pop, shimmer), chat card (glass + readable, `.sb-card-q` / `.sb-card-a`), step-row anatomy, and a full-viewport placement map. Each block exports as 3× PNG (on-backdrop or transparent) plus a download-all ZIP; animation timings are listed under each element. The kit also runs the character live — bar-rise open animation (replayable), walker walk/stop/wave on the bar, docked-brain idle, standing pose, and the 8-reaction face grid — each animation exportable as a 30fps transparent PNG frame sequence (ZIPs include the ffmpeg ProRes-4444 command for true alpha video). The pose math is a 1:1 port of `__sbWkTick`; update the kit when bar / card / step-strip / walker code changes in content.js.

@@ -4,6 +4,34 @@ if (globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ !== `${chrome.runtime?.id || "no-
   (() => {
 // Braino Content Script — extracts page text for AI context
 
+// ── Production error hygiene: keep our uncaught noise out of chrome://extensions.
+// The isolated world sees window "error" events from the page too — only swallow
+// events whose source file is ours (chrome-extension://). Rejections in this
+// listener's realm are ours by definition (page rejections fire in the main world).
+window.addEventListener("error", (e) => {
+  if (String(e?.filename || "").startsWith("chrome-extension://")) {
+    console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+    e.preventDefault();
+  }
+}, true);
+window.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+if (chrome?.runtime?.sendMessage) {
+  const __sbOrigSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+  chrome.runtime.sendMessage = (...args) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      args[args.length - 1] = (...cbArgs) => {
+        void chrome.runtime.lastError;
+        try { cb(...cbArgs); } catch (err) { console.warn("[Braino] callback error:", err?.message || err); }
+      };
+    }
+    return __sbOrigSendMessage(...args);
+  };
+}
+
 // Sync Supabase session from website localStorage into extension storage so
 // checkAuth finds a token even when the user logged in on the website (not via the extension auth tab).
 if (location.hostname === 'trybraino.com') {
@@ -2649,6 +2677,9 @@ let __sbWkClimbRaf = null;
 let __sbWkResumeFromX = null;  // start X for the next walk loop (so a climb hands off smoothly)
 let __sbWkMoonwalking = false; // true while the moonwalk owns the rig
 let __sbWkMoonRaf = null;
+let __sbWkDancing = false;     // true while the dance routine owns the rig
+let __sbWkDanceRaf = null;
+let __sbWkDanceArmAnchor = null; // original paint-order slot for the arm groups (restored on end)
 let __sbWkJumping = false;      // true while the jump-and-point owns the rig
 let __sbWkJumpRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
@@ -2656,6 +2687,12 @@ let __sbGlassesOn = false;     // Braino is wearing his specs
 // "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
 const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
 const __SB_BILLIE_JEAN_START_MS = 211000;   // 3:31
+// "DAF" — the dance-party track + the window the user picked: song from 0:52,
+// dance 0:52→1:08 (16s), music stops by 1:10.
+const __SB_DANCE_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
+const __SB_DANCE_START_MS = 52000;          // 0:52
+const __SB_DANCE_DURATION_MS = 16000;       // dance until 1:08
+const __SB_DANCE_OUTRO_MS = 1800;           // music rides ~2 more beats, stops by 1:10
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -2677,20 +2714,33 @@ function __sbMoonwalkIntent(text) {
   return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
 }
 
-// Best-effort: play "Billie Jean" from the moonwalk timestamp via the Spotify Web API.
-// We have the exact track URI, so no search — just play + seek. Needs the user's Spotify
-// connected + an active device; any failure is swallowed (Braino moonwalks regardless).
+// "Braino, dance!" — deliberately LOOSE: voice STT mangles the wake word ("Reynos,
+// dance for me"), so ANY utterance containing the word dance fires the trick (owner's
+// explicit call). Only media commands ("play dance monkey") stay music, and moonwalk
+// keeps its own trick.
+function __sbDanceIntent(text) {
+  const t = String(text || "").toLowerCase();
+  if (__sbMoonwalkIntent(t)) return false;
+  if (/\b(play|queue|put on|song|track|album|playlist|spotify)\b/.test(t)) return false;
+  return /\bdanc(?:e|es|ed|ing)\b|\bbust a move\b|\bshow (?:me|us) your moves\b/.test(t);
+}
+
+// Best-effort: play an exact track from a timestamp. Routed through the BACKGROUND so a
+// missing active device gets the full treatment: open/reuse the Spotify web-player tab
+// (theatric, like all voice music) and retry until it registers, then play + seek.
+// Any failure is swallowed (Braino performs regardless).
+async function __sbSpotifyPlayTrack(uri, positionMs = 0) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: "sbSpotifyPlaySeek", uri, positionMs }, (resp) => {
+        if (chrome.runtime.lastError || !resp || typeof resp !== "object") return resolve({ ok: false });
+        resolve(resp);
+      });
+    } catch (_) { resolve({ ok: false }); }
+  });
+}
 async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
-  try {
-    const { authToken } = await __sbStorageGet(["authToken"]);
-    if (!authToken) return { ok: false, reason: "signin" };
-    const r = await fetch(`${__SB_API}/spotify-playback`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({ action: "play", uris: [__SB_BILLIE_JEAN_URI], positionMs }),
-    });
-    return { ok: r.ok };
-  } catch (_) { return { ok: false }; }
+  return __sbSpotifyPlayTrack(__SB_BILLIE_JEAN_URI, positionMs);
 }
 
 // ── Moonwalk ────────────────────────────────────────────────────────────────
@@ -2826,6 +2876,160 @@ function __sbWkEndMoonwalk(xResume) {
   }
 }
 
+// ── Dance ───────────────────────────────────────────────────────────────────
+// "Braino, dance for me" → DAF from 0:52 and Braino performs the owner's cut:
+// GUN FINGERS (11s — fingers to the sky, strutting left) blending smoothly into
+// DISCO FEVER (the diagonal point) for the remainder, ending at 1:08. Pose math is
+// the verbatim port of the website's BrainoDanceGrid.tsx (the slow groove). The
+// blend lerps arms/body AND scaleX through zero — Braino turns to face you.
+// Same rig-ownership contract as the moonwalk.
+function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!walker || !root) return;
+
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
+  // __sbWkMoonwalking doubles as "a routine owns the rig" for every existing guard.
+  __sbWkDancing = true; __sbWkMoonwalking = true; __sbWkThrowMode = true;
+  __sbWkClimbing = false; __sbWkThrown = false; __sbWkReaction = null;
+
+  const flip = document.getElementById("__sbwk_flip__");
+  const q = (sel) => root.querySelector(sel);
+  const laBg = q("#__sbwk_la_bg__"), raBg = q("#__sbwk_ra_bg__");
+  const laFg = q("#__sbwk_la__"), raFg = q("#__sbwk_ra__");
+  const pupL = q("#__sbwk_pupil_l__"), pupR = q("#__sbwk_pupil_r__");
+  q("#__sbwk_ll__")?.setAttribute("transform", "");
+  q("#__sbwk_rl__")?.setAttribute("transform", "");
+  // The coral body is painted AFTER the arm layers, so arms raised overhead vanish
+  // BEHIND the torso ("where are his hands?!"). Lift the arm groups to the top of the
+  // paint order for the performance; __sbWkEndDance restores the original order.
+  if (laFg && raFg && raFg.nextSibling) {
+    __sbWkDanceArmAnchor = raFg.nextSibling;   // the coral body path — never moves
+    root.appendChild(laFg);
+    root.appendChild(raFg);
+  }
+  __sbWkSay("Watch this 🕺");
+
+  const W = 64;
+  const laneW = lane.clientWidth || 320;
+  const minX = 6, maxX = Math.max(minX + 10, laneW - W - 6);
+  const midX = (minX + maxX) / 2;
+  const setArm = (bg, fg, deg) => {
+    const cx = bg === laBg ? 22 : 78;
+    const tx = deg ? `rotate(${deg} ${cx} 53)` : "";
+    if (bg) bg.setAttribute("transform", tx);
+    if (fg) fg.setAttribute("transform", tx);
+  };
+
+  // Website pose math, verbatim time constants (BrainoDanceGrid.tsx).
+  const poseGun = (t) => {   // Gun Fingers — point to the sky, strut left
+    const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
+    return { ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25, lookX: -0.4, lookY: -0.45, tilt: 0 };
+  };
+  const poseDisco = (t) => { // Disco Fever — diagonal point, one arm
+    const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
+    return { ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56, lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35, tx: stab * 6 };
+  };
+  const lerp = (a, b2, u) => a + (b2 - a) * u;
+  const smooth = (u) => u * u * (3 - 2 * u);
+
+  const totalS = durationMs / 1000;
+  const GUN_S = Math.max(6, totalS - 5);   // gun fingers OWNS the floor (11s of 16); disco gets the rest
+  const BLEND_S = 0.7;                     // smooth turn into disco fever
+  const start = performance.now();
+  let last = start;
+  let strutX = null;
+
+  const step = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    const t = (now - start) / 1000;
+
+    let x, face, la, ra, ty, sy, lookX, lookY, tilt;
+    if (t < GUN_S) {
+      // strut leftward, wrapping — the signature move gets the room
+      if (strutX === null) strutX = maxX;
+      strutX -= 34 * dt;
+      if (strutX < minX) strutX = maxX;
+      const g = poseGun(t);
+      if (t < GUN_S - BLEND_S) {
+        x = strutX; face = -1;
+        ({ la, ra, ty, sy, lookX, lookY } = g); tilt = 0;
+      } else {
+        // blend the last 0.7s of gun fingers into disco fever: arms/body lerp,
+        // scaleX sweeps -1 → 1 (he turns to face you), position eases to centre
+        const u = smooth((t - (GUN_S - BLEND_S)) / BLEND_S);
+        const r0 = poseDisco(0);
+        x = lerp(strutX, midX, u); face = lerp(-1, 1, u) || 0.02;
+        la = lerp(g.la, r0.la, u); ra = lerp(g.ra, r0.ra, u);
+        ty = lerp(g.ty, r0.ty, u); sy = lerp(g.sy, r0.sy, u);
+        lookX = lerp(g.lookX, r0.lookX, u); lookY = lerp(g.lookY, r0.lookY, u);
+        tilt = lerp(0, r0.tilt, u);
+      }
+    } else {
+      const r = poseDisco(t - GUN_S);
+      x = midX + (r.tx || 0) * 1.6; face = 1;
+      ({ la, ra, ty, sy, lookX, lookY, tilt } = r);
+    }
+
+    walker.style.transform = `translateX(${x}px)`;
+    if (flip) flip.style.transform = `scaleX(${face})`;
+    setArm(laBg, laFg, la || 0);
+    setArm(raBg, raFg, ra || 0);
+    const sy2 = sy == null ? 1 : sy;
+    // squash about the FEET (y≈101) so knees bend without him floating
+    root.setAttribute("transform", `rotate(${tilt || 0} 50 50) translate(0 ${(ty || 0) + 101 * (1 - sy2)}) scale(1 ${sy2})`);
+    const px = (lookX || 0) * 2.4, py = (lookY || 0) * 2;
+    if (pupL) pupL.setAttribute("transform", `translate(${px} ${py})`);
+    if (pupR) pupR.setAttribute("transform", `translate(${px} ${py})`);
+
+    if (now - start < durationMs) __sbWkDanceRaf = requestAnimationFrame(step);
+    else __sbWkEndDance(x);
+  };
+  __sbWkDanceRaf = requestAnimationFrame(step);
+}
+
+function __sbWkEndDance(xResume) {
+  if (__sbWkDanceRaf) { cancelAnimationFrame(__sbWkDanceRaf); __sbWkDanceRaf = null; }
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (root) {
+    for (const sel of ["#__sbwk_la__", "#__sbwk_ra__", "#__sbwk_la_bg__", "#__sbwk_ra_bg__", "#__sbwk_ll__", "#__sbwk_rl__"]) {
+      root.querySelector(sel)?.setAttribute("transform", "");
+    }
+    root.querySelector("#__sbwk_react__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_rc__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_mouth__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
+    root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
+    root.setAttribute("transform", "");
+    // put the arm groups back into their original paint-order slot (before the coral body)
+    if (__sbWkDanceArmAnchor && __sbWkDanceArmAnchor.parentNode === root) {
+      const laFg2 = root.querySelector("#__sbwk_la__");
+      const raFg2 = root.querySelector("#__sbwk_ra__");
+      if (laFg2) root.insertBefore(laFg2, __sbWkDanceArmAnchor);
+      if (raFg2) root.insertBefore(raFg2, __sbWkDanceArmAnchor);
+    }
+    __sbWkDanceArmAnchor = null;
+  }
+  __sbWkDancing = false; __sbWkMoonwalking = false; __sbWkThrowMode = false;
+  if (__sbInputOpen) {
+    const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
+    __sbWkResumeFromX = Math.max(6, Math.min(typeof xResume === "number" ? xResume : 24, laneW - 70));
+    __sbStartWalkLoop();
+  } else {
+    if (walker) walker.style.transform = "";
+    const lane = document.getElementById("__sb_walk_lane__");
+    if (lane) lane.style.display = "none";
+  }
+}
+
 // Trigger a single hand wave (used to acknowledge the user in headphone mode).
 function __sbWkTriggerWave() {
   __sbWkWaving = true;
@@ -2859,6 +3063,9 @@ function __sbWkStatus(label) {
   const walker = document.getElementById("__sbwk_walker__");
   if (!walker) return;
   let b = walker.querySelector("#__sbwk_status__");
+  // Mid-performance the show is the show — no "Listening…"/"Understanding…" chips over
+  // a dancing/moonwalking Braino (the mic still listens; only the label hides).
+  if (label && (__sbWkDancing || __sbWkMoonwalking)) { if (b) b.classList.remove("show"); return; }
   if (!label) { if (b) b.classList.remove("show"); return; }
   if (!b) {
     b = document.createElement("div");
@@ -6268,6 +6475,28 @@ function __sbBuildBrainUI() {
     </div>
   `;
   (document.documentElement||document.body).appendChild(cardWrap);
+
+  // ── User geo (timezone/city/country, no permission prompts — background caches an
+  // IP lookup daily). Rides into chat requests + voice instructions so Braino knows
+  // the user's local time and where they are. ──
+  try {
+    chrome.runtime.sendMessage({ action: "sbGetUserGeo" }, (geo) => {
+      if (!chrome.runtime.lastError && geo && typeof geo === "object") window.__sbUserGeo = geo;
+    });
+  } catch (_) {}
+
+  // ── Hive-mind handshake: this tab may have been opened BY a running delegate task
+  // (Amazon and friends open products in new tabs). Ask the background if a run is
+  // mid-flight here; if so, come up already in the working state instead of blank. ──
+  try {
+    chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
+      if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) return;
+      document.getElementById("__sb_bar__")?.classList.add("open");
+      if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
+      if (typeof __sbAgentLogStep === "function") __sbAgentLogStep("Continuing here…");
+      if (typeof __sbSetBarAgentStatus === "function") __sbSetBarAgentStatus(resp.task);
+    });
+  } catch (_) {}
 
   // ── Voice Error Pill ──
   const errPill = document.createElement("div");
@@ -10688,19 +10917,41 @@ function __sbIsTabsQuery(text) {
 
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
+  // Politeness/vocative prefixes hide the action verb from the anchored checks below
+  // ("Braino, can you please play this song" → "play this song"). Strip them once so
+  // vague-but-actionable commands still gate into Delegate.
+  const bare = t
+    .replace(/^(?:hey\s+|ok(?:ay)?\s+|yo\s+)?braino[,!.\s]+/, "")
+    .replace(/^(?:can|could|will|would)\s+you\s+(?:please\s+)?/, "")
+    .replace(/^please\s+/, "")
+    .trim();
   const onOttSite = __SB_MOVIE_CONTEXT_HOST_RE.test(String(location.hostname || "").replace(/^www\./, ""));
   if (__sbIsMovieSceneQuestion(t) && (onOttSite || __sbBuildMovieContext())) return "page";
   // Binary Delegate gate: only decide whether this needs browser control. The
   // background planner handles app/skill classification from the live page.
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
+  // Media playback — must run BEFORE the "this video/this page" summarize gate, or
+  // "play this song/video" reads as a page question. Anaphora ("this song") is fine:
+  // the background synthesizer resolves the referent from chat context.
+  if (/^(?:play|queue|put on)\b/.test(bare) || /\b(?:play|queue|put on)\s+(?:this|that|the)\s+(?:song|track|album|playlist|video|movie)\b/.test(bare)) return "agent";
+  // Personal-context questions (my time / date / location / timezone) are answered from
+  // the user-context block in the chat prompt — NEVER web-searched. The words "current"
+  // and "right now" used to trip the freshness regex below and google the user's own clock.
+  if (/(?:what(?:'s|s| is)\s+(?:the\s+)?(?:time|date|day)(?:\s+(?:today|now|right\s+now))?\s*\??$|what\s+time\s+is\s+it|what\s+day\s+is\s+(?:it|today)|current\s+time\b|time\s+right\s+now\b|what(?:'s|s| is)\s+my\s+(?:current\s+)?(?:location|city|timezone|time\s*zone)|where\s+am\s+i\b|my\s+current\s+location)/.test(bare)) return "chat";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
   if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
   if (__sbIsBrowserActionCommand(t) || __sbIsSiteScopedBrowseSearch(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
-  if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order)\b/.test(t)) return "agent";
+  if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order|purchase|add)\b/.test(bare)) return "agent";
+  // Vague anaphoric commands mid-conversation — "search that up", "show me that",
+  // "buy it for me". The referent is resolved downstream from the shared chat context.
+  if (/\b(?:search|look)\s+(?:that|this|it)\s+up\b/.test(bare)
+    || /\b(?:search|google)\s+(?:for\s+)?(?:that|this|it)\b/.test(bare)
+    || /\b(?:show|open|pull\s+up|bring\s+up)\s+(?:me\s+)?(?:that|this|it)\b/.test(bare)
+    || /\b(?:buy|order|purchase)\s+(?:that|this|it|them)\b/.test(bare)) return "agent";
   if (/\b(gmail|email|calendar|maps?|directions?|linkedin|jobs?|x|twitter|spotify|youtube|amazon|reddit|whatsapp|google docs?|google documents?|drive)\b/.test(t)
-    && /\b(open|find|search|send|compose|book|schedule|read|show|create|post|apply|route|directions?)\b/.test(t)) return "agent";
+    && /\b(open|find|search|send|compose|book|schedule|read|show|create|post|apply|route|directions?|play|buy|order|purchase)\b/.test(t)) return "agent";
   return "chat";
 }
 
@@ -11633,6 +11884,12 @@ async function __sbFetchAssistantReply(body) {
         clientUtcOffsetMinutes: Number.isFinite(Number(body.clientUtcOffsetMinutes))
           ? Number(body.clientUtcOffsetMinutes)
           : new Date().getTimezoneOffset(),
+        clientLocalTime: new Date().toLocaleString("en-US", {
+          weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        }),
+        clientLocation: window.__sbUserGeo
+          ? [window.__sbUserGeo.city, window.__sbUserGeo.region, window.__sbUserGeo.country].filter(Boolean).join(", ") || null
+          : null,
       }
     : body;
   const resp = await __sbAuthedApiFetch("chat-about-notes", {
@@ -12440,6 +12697,45 @@ async function __sbProcessPrompt(text, options = {}) {
       }
     });
     setTimeout(() => __sbWkMoonwalk(11000), 650);             // let the beat drop, then moonwalk
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // "dance for me" → the showman flow: a playful line FIRST, cue DAF at 0:59 while it
+  // lands, and start dancing ONLY once the music is confirmed playing. No music, no
+  // dance — Braino says what's missing instead.
+  if (__sbDanceIntent(promptText)) {
+    __sbStopSpeech();
+    const danceLines = [
+      "Oh, you want to see me dance? Watch this.",
+      "A dance? Say less.",
+      "Alright, clearing the floor. Watch this.",
+      "You picked the right brain for this. Watch.",
+    ];
+    const danceLine = danceLines[Math.floor(Math.random() * danceLines.length)];
+    // STRICT sequence: the line finishes FIRST, then Spotify fires, then (once the music
+    // confirms) the dance. Awaiting the speech is what stops the overlap.
+    if (fromVoice) { try { await speakVoiceReply(danceLine); } catch (_) {} }
+    else { __sbWkSay(danceLine); }
+    const playP = __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS);
+    const capP = new Promise((res) => setTimeout(() => res({ ok: false, timedOut: true }), 9000));
+    Promise.race([playP, capP]).then((r) => {
+      if (r && r.ok) {
+        setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
+        // Curtain call: dance ends at 1:08, the music rides a couple more beats and
+        // stops by 1:10, then he asks for the review.
+        setTimeout(async () => {
+          try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
+          const followUp = "So, how was it?";
+          if (fromVoice) { try { await speakVoiceReply(followUp); } catch (_) {} }
+          else { __sbWkSay(followUp); }
+        }, 350 + __SB_DANCE_DURATION_MS + __SB_DANCE_OUTRO_MS);
+      } else {
+        const line = r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧";
+        if (fromVoice) { speakVoiceReply(line); } else { __sbWkSay(line); }
+      }
+    });
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
 
@@ -13508,7 +13804,7 @@ let __sbRtUsageDeadlineTimer = null;
 let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
 let __sbRtRealtimeModel = "gpt-realtime-mini";
-let __sbRtTranscriptionModel = "gpt-4o-mini-transcribe";
+let __sbRtTranscriptionModel = "gpt-4o-transcribe";
 let __sbRtCostTurn = null;
 let __sbRtLastCostTurn = null;
 let __sbRtCostTurnSeq = 0;
@@ -13800,6 +14096,13 @@ function __sbBuildRealtimeBootInstructions() {
   try {
     pageLines.push(`The user is currently viewing: "${document.title || "Untitled"}" (${location.href || "unknown URL"})`);
   } catch (_) {}
+  try {
+    const geo = window.__sbUserGeo;
+    const place = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "";
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    const now = new Date().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+    pageLines.push(`User context (real, current — use for any time/location question): local time ${now}${tz ? ` (${tz})` : ""}${place ? `, location ${place}` : ""}. Never answer time questions in UTC.`);
+  } catch (_) {}
 
   const instructions = [
     // Minimal identity stub only — Braino's full personality (the Emotional Engine) is delivered
@@ -13837,7 +14140,9 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
             type: "near_field",
           },
           transcription: {
-            model: "gpt-4o-mini-transcribe",
+            // Full transcribe model, not mini — accuracy is the whole point of STT and the
+            // delta is ~$0.003/min. Mini was the source of the "Braino misheard me" wonkiness.
+            model: "gpt-4o-transcribe",
             // Lock STT to English by default so noise/music/accents can't be mis-detected as a
             // foreign language (the root of the "random language reply" bug). After the user
             // confirms a switch, __sbActiveLanguage relaxes the lock to that language.
@@ -13892,6 +14197,13 @@ async function __sbBuildRealtimeConfigPayload() {
     // the synced instructions would re-introduce "reply in the same language" and undo the lock).
     languagePolicy: __sbActiveLanguage ? "mirror_user" : "english",
     voiceSurface: "floating_mascot",
+    clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    clientLocalTime: new Date().toLocaleString("en-US", {
+      weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    }),
+    clientLocation: window.__sbUserGeo
+      ? [window.__sbUserGeo.city, window.__sbUserGeo.region, window.__sbUserGeo.country].filter(Boolean).join(", ") || null
+      : null,
   };
 }
 
@@ -15035,6 +15347,19 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   }
 
   if (/\bfavou?rite\b/i.test(promptText)) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Party tricks — dance / moonwalk. Steer down __sbProcessPrompt BEFORE any classification,
+  // or the realtime model just NARRATES a dance instead of Braino actually dancing.
+  if (__sbDanceIntent(transcript) || __sbDanceIntent(promptText)
+    || __sbMoonwalkIntent(transcript) || __sbMoonwalkIntent(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "party_trick" });
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",

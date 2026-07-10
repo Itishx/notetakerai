@@ -1,4 +1,35 @@
 // Background service worker for Braino (MV3)
+
+// ── Production error hygiene ─────────────────────────────────────────────────
+// chrome://extensions records uncaught exceptions/rejections and unchecked
+// runtime.lastError as red "Errors" for developer-mode installs (our zip flow).
+// Everything is caught here, logged quietly, and marked handled so the collector
+// stays empty. Real failures still reach the user via Braino's own UI paths.
+self.addEventListener("error", (e) => {
+  console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+  e.preventDefault();
+});
+self.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+// Every callback passed to sendMessage reads runtime.lastError first — an answered
+// call whose peer vanished (closed tab, SW race) otherwise logs "Unchecked
+// runtime.lastError". No-callback calls return promises; rejections land above.
+for (const [obj, key] of [[chrome.runtime, "sendMessage"], [chrome.tabs, "sendMessage"]]) {
+  const orig = obj[key].bind(obj);
+  obj[key] = (...args) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      args[args.length - 1] = (...cbArgs) => {
+        void chrome.runtime.lastError;
+        try { cb(...cbArgs); } catch (err) { console.warn("[Braino] callback error:", err?.message || err); }
+      };
+    }
+    return orig(...args);
+  };
+}
+
 try {
   importScripts(
     "lib/elementMap.js",
@@ -6,6 +37,7 @@ try {
     "lib/taskState.js",
     "lib/recovery.js",
     "lib/macroStore.js",
+    "lib/searchGuard.js",
   );
 } catch (error) {
   console.warn("[Braino][Delegate] helper import failed:", error);
@@ -474,12 +506,17 @@ async function bgPerformRealWebSearch(query, options = {}) {
     if (!token) token = await bgRefreshAuthToken();
     if (!token) return { error: "Please sign in to Braino before using web research." };
 
+    const searchGeo = await bgGetUserGeo().catch(() => null);
     const researchBody = JSON.stringify({
       query: trimmedQuery,
       purpose: options.purpose || "answer",
       aiProvider: options.aiProvider,
       chatHistory: options.chatHistory,
       instructions: options.instructions,
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+      clientLocation: searchGeo
+        ? [searchGeo.city, searchGeo.region, searchGeo.country].filter(Boolean).join(", ") || null
+        : null,
     });
 
     const callResearch = (jwt) => fetch(`${BG_API_BASE}/web-research`, {
@@ -1146,6 +1183,78 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
+  }
+  if (message.action === "sbSpotifyPlaySeek") {
+    // Party-trick soundtrack: play an exact track from a timestamp. Direct play first
+    // (device already active = instant); otherwise open/reuse the web-player tab and
+    // poll until it registers (same theatric flow as voice music).
+    (async () => {
+      const uris = [String(message.uri || "")].filter(Boolean);
+      const positionMs = Number.isFinite(Number(message.positionMs)) ? Number(message.positionMs) : 0;
+      if (!uris.length) return { ok: false };
+      // Cold web players accept play-with-position but their first state sync can snap
+      // back to 0:00. VERIFIED-only correction: seek ONLY when progress proves the track
+      // restarted (a blind seek re-fired on top of a correct start and the song audibly
+      // played "twice"). Two passes to catch slow players; silence otherwise.
+      const ensureSeek = () => {
+        if (!(positionMs > 0)) return;
+        const checkOnce = async () => {
+          const st = await bgCallSpotifyFunction("spotify-player-state", {});
+          const prog = Number(st?.progressMs);
+          if (!Number.isFinite(prog)) return true;                 // can't verify — do NOT stutter
+          if (prog >= positionMs - 4000) return true;              // position took — leave it alone
+          await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs });
+          return true;
+        };
+        setTimeout(() => { checkOnce().catch(() => {}); }, 700);
+        setTimeout(() => { checkOnce().catch(() => {}); }, 2200);
+      };
+      try {
+        const payload = { action: "play", uris };
+        if (positionMs > 0) payload.positionMs = positionMs;
+        await bgCallSpotifyFunction("spotify-playback", payload);
+        ensureSeek();
+        return { ok: true };
+      } catch (err) {
+        const msg = String(err?.message || "");
+        if (/sign\s?in|auth|connect/i.test(msg)) return { ok: false, reason: "signin" };
+        if (!/device|active|404/i.test(msg)) return { ok: false };
+      }
+      try {
+        // A NEVER-focused background tab is throttled so hard the web player never boots
+        // (no device registers → silence). So: an EXISTING player tab is reused quietly;
+        // a NEW tab opens focused just long enough to boot, then focus bounces back to
+        // the user's page — the dance doesn't start until this resolves.
+        const prevActive = await bgGetActiveTabId();
+        const existing = await bgFindSpotifyTab().catch(() => null);
+        await bgPlaySpotifyWithAutoOpen(uris, positionMs, { background: Boolean(existing) });
+        if (!existing && prevActive) { try { chrome.tabs.update(prevActive, { active: true }); } catch (_) {} }
+        ensureSeek();
+        return { ok: true };
+      } catch (_) { return { ok: false }; }
+    })().then(sendResponse).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (message.action === "sbSpotifyPause") {
+    // End of a party trick: the band stops when the show stops.
+    bgCallSpotifyFunction("spotify-playback", { action: "pause" })
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (message.action === "sbGetUserGeo") {
+    bgGetUserGeo().then((geo) => sendResponse(geo)).catch(() => sendResponse(null));
+    return true;
+  }
+  if (message.action === "sbAgentBootQuery") {
+    // Hive-mind handshake: a freshly injected content script asks whether a delegate
+    // run is mid-flight on (or adopting) its tab, so it can restore the working UI
+    // instead of booting blank and looking like Braino forgot what it was doing.
+    const bootTabId = sender?.tab?.id || null;
+    const bootTask = (bootTabId && bgAgentTaskByTab.get(bootTabId)) || "";
+    const runFresh = Boolean(bgDelegateRunInfo) && (Date.now() - bgDelegateRunInfo.at < 30000);
+    sendResponse({ task: bootTask, running: Boolean(bootTask) && runFresh });
+    return false;
   }
   if (message.action === "getStatus") {
     sendResponse({ isRecording });
@@ -2764,6 +2873,23 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 const bgAgentTaskByTab = new Map();
+
+// ── Hive mind: the delegate loop follows child tabs. A mid-task click that opens a NEW
+// tab (Amazon loves target=_blank) used to strand the loop on the old tab while the real
+// flow continued in the child. onCreated marks the child for adoption; the loop switches
+// at its next safe point. Freshness-gated so a finished run can never adopt anything. ──
+let bgDelegateRunInfo = null;   // { tabId, at } — refreshed every loop iteration
+let bgDelegateAdoptTabId = null;
+chrome.tabs.onCreated.addListener((tab) => {
+  if (!bgDelegateRunInfo || !tab?.id || !tab.openerTabId) return;
+  if (tab.openerTabId !== bgDelegateRunInfo.tabId) return;
+  if (Date.now() - bgDelegateRunInfo.at > 30000) return;
+  bgDelegateAdoptTabId = tab.id;
+  // Seed the child's task mapping NOW so its freshly injected content script's boot
+  // handshake (sbAgentBootQuery) finds the run before the loop formally adopts the tab.
+  const parentTask = bgAgentTaskByTab.get(tab.openerTabId);
+  if (parentTask) bgAgentTaskByTab.set(tab.id, parentTask);
+});
 const bgActiveDelegateRunsByTab = new Map();
 // Same task claimed GLOBALLY, not just per tab — delegate runs move/create tabs, so a re-fired
 // task landed on a different tabId and slipped past the per-tab claim (the N-identical-tabs bug).
@@ -3023,6 +3149,66 @@ function bgDelegateTodayText() {
   });
 }
 
+// ── User geo/locale context — no permission prompts. Timezone comes from Intl (the SW
+// runs on the user's machine), coarse city/country from one cached IP lookup per day.
+// Powers local storefronts (amazon.in vs amazon.com), local-time answers, "where am I".
+let bgUserGeoCache = null;
+async function bgGetUserGeo() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  if (bgUserGeoCache && Date.now() - bgUserGeoCache.fetchedAt < 24 * 3600 * 1000) return bgUserGeoCache;
+  try {
+    const stored = await chrome.storage.local.get("sbUserGeo");
+    if (stored?.sbUserGeo?.fetchedAt && Date.now() - stored.sbUserGeo.fetchedAt < 24 * 3600 * 1000) {
+      bgUserGeoCache = stored.sbUserGeo;
+      return bgUserGeoCache;
+    }
+  } catch (_) {}
+  let geo = { country: "", countryCode: "", city: "", region: "", timeZone, fetchedAt: Date.now() };
+  try {
+    const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const j = await res.json();
+      geo = {
+        country: j.country_name || "",
+        countryCode: String(j.country_code || "").toUpperCase(),
+        city: j.city || "",
+        region: j.region || "",
+        timeZone: j.timezone || timeZone,
+        fetchedAt: Date.now(),
+      };
+    }
+  } catch (_) {}
+  bgUserGeoCache = geo;
+  try { chrome.storage.local.set({ sbUserGeo: geo }); } catch (_) {}
+  return geo;
+}
+function bgUserContextLine(geo) {
+  const now = new Date().toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  });
+  const place = [geo?.city, geo?.region, geo?.country].filter(Boolean).join(", ");
+  return `User's local time: ${now}${geo?.timeZone ? ` (${geo.timeZone})` : ""}${place ? `. User's location: ${place}` : ""}.`;
+}
+const BG_AMAZON_TLD_BY_COUNTRY = {
+  IN: "amazon.in", US: "amazon.com", GB: "amazon.co.uk", UK: "amazon.co.uk", DE: "amazon.de",
+  FR: "amazon.fr", IT: "amazon.it", ES: "amazon.es", CA: "amazon.ca", JP: "amazon.co.jp",
+  AU: "amazon.com.au", BR: "amazon.com.br", MX: "amazon.com.mx", NL: "amazon.nl", AE: "amazon.ae", SG: "amazon.sg",
+};
+// Deterministic storefront swap: a task/nav that names another country's Amazon gets the
+// user's local domain (amazon.com → amazon.in for an India user).
+function bgLocalizeStorefront(url, geo) {
+  try {
+    const u = new URL(String(url));
+    const host = u.hostname.replace(/^www\./, "");
+    const local = BG_AMAZON_TLD_BY_COUNTRY[geo?.countryCode || ""];
+    if (local && /^amazon\.[a-z.]+$/.test(host) && host !== local) {
+      u.hostname = "www." + local;
+      return u.toString();
+    }
+  } catch (_) {}
+  return String(url);
+}
+
 function bgSelectDelegateSkillsHeuristic(task) {
   const raw = String(task || "").toLowerCase();
   const skills = [];
@@ -3031,6 +3217,10 @@ function bgSelectDelegateSkillsHeuristic(task) {
   if (/\b(linkedin|jobs?|roles?|openings?|sdet|developer|engineer)\b/.test(raw)) skills.push("linkedin-jobs");
   if (/\b(twitter|x\b|tweet|post|publish|followers?|mentions?)\b/.test(raw)) skills.push("x-growth-posting");
   if (/\b(cost|spend|receipt|realtime|voice)\b/.test(raw)) skills.push("realtime-costs");
+  // Shopping: Amazon by name, or a buy/purchase ask with no other store named (Amazon is
+  // the default store). "order" alone is excluded — too food-delivery shaped.
+  if (/\b(amazon|add to cart|checkout)\b/.test(raw)
+    || (/\b(buy|purchase)\b/.test(raw) && !/\b(swiggy|zomato|uber\s*eats|doordash|instamart|blinkit|flipkart|food)\b/.test(raw))) skills.push("amazon-shopping");
   return [...new Set(skills)].slice(0, 3);
 }
 
@@ -3069,6 +3259,18 @@ SKILL realtime-costs:
 - Answer from stored Braino realtime cost data when available.
 - Use exact dates for today/last 7 days. Do not invent costs.
 - Usually this should answer rather than operate the browser.`;
+  if (skill === "amazon-shopping") return `
+SKILL amazon-shopping (guided buying — the user stays in the loop):
+- DOMAIN: always use the user's LOCAL Amazon (see the user-context line: India → amazon.in, US → amazon.com). If you find yourself on another country's Amazon, navigate to the local one first.
+- PREREQUISITE: the user must already be signed in. If the header shows "Hello, sign in" or a Sign in prompt, STOP with {"type":"clarify","text":"You're not signed in to Amazon, so I can't shop for you yet. Sign in and ask me again."}. NEVER type credentials, even if they appear in context.
+- CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
+- BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
+- SEARCH ONCE: use the provided search query exactly one time. If the product is visible in the results, open it; if not, scroll once, then clarify. NEVER re-run reworded variations of the same search — a second near-identical query is forbidden.
+- Amazon re-renders after every click. After each click take {"type":"wait","ms":1000}, then re-read before acting again.
+- AMBIGUITY = ASK: if results show several plausible matches (editions, formats, bundles, sellers), scroll down ~600 once so options are visible, then {"type":"clarify","text":"Which one from this page do you want me to add to cart? I can see <top 2-3 options with price>."}. Never guess between editions. The user's next command continues the run on this same page.
+- MULTIPLE PRODUCTS ("buy X and Y"): strictly sequential — search X, add to cart, then search Y, add to cart. Go to cart only after all items are added.
+- PAYMENT BOUNDARY: never enter or select payment details, addresses, or place the final order. Advance to the payment-method step (open the UPI/QR view if offered) and finish with {"type":"answer","text":"Checkout is ready — finish the payment on your screen."}.
+- done only when the observed page proves the requested stage: item visibly in cart, or the checkout/payment page reached.`;
   return "";
 }
 
@@ -3076,34 +3278,48 @@ SKILL realtime-costs:
 // keyword query (what + where) + the surface to search + soft constraints to apply to the
 // RESULTS (not stuffed into the query). This is why "restaurants that serve dosa in the
 // morning in Mumbai" used to get dumped verbatim into Maps. Fail-open (returns null).
-async function bgSynthesizeIntent(task, sharedContext) {
+async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
   const raw = String(task || "").trim();
   if (!raw) return null;
   try {
     const systemPrompt = [
       "You convert a user's natural-language request into a clean search plan for a browser agent.",
       "Return STRICT JSON only, no prose, no markdown:",
-      '{"surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"],"directions":{"origin":"","destination":""}}',
+      '{"resolvedTask":"the request rewritten as ONE self-contained instruction naming concrete targets","surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"],"directions":{"origin":"","destination":""}}',
       "Rules:",
+      "- resolvedTask is the MOST IMPORTANT field. Vague mid-conversation asks (\"play this song\", \"show me that book on Amazon\", \"search that up\", \"buy it for me\") MUST be rewritten with the real entity taken from CONTEXT (e.g. 'Play the song Levitating by Dua Lipa on Spotify', 'Show the book The Subtle Art of Not Giving a F*ck by Mark Manson on Amazon'). Keep the user's verb and target site; never invent an entity the context does not support. If the request is already self-contained, return it unchanged. Never leave an unresolved 'this/that/it' in resolvedTask when CONTEXT names the referent.",
+      "- If CURRENT PAGE already shows the thing the user is referring to (e.g. they're on the product page and say 'buy it'), resolvedTask must say to CONTINUE on the current page rather than re-open or re-search (e.g. 'On the currently open Amazon page for <product>, add it to cart and proceed to checkout'). This applies ONLY when the current page genuinely matches the request (right site AND right content). If the current page is unrelated to the ask (e.g. a dashboard is open and they ask to buy something on Amazon), do NOT anchor to it — resolvedTask must direct the agent to the right site (e.g. 'Go to amazon.com, search for <product>, and buy it').",
       "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
       "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
+      "- searchQuery must name the RESOLVED entity too, never the pronoun ('The Subtle Art of Not Giving a F*ck book', not 'that book').",
+      "- searchQuery is what gets typed INTO a site's own search box. NEVER include the site name, 'Amazon', 'India', or any storefront/country words in it ('Atomic Habits book' — NOT 'Atomic Habits Amazon India'). The storefront choice belongs in resolvedTask only.",
       "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
       "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
       "- For a DIRECTIONS/route/navigate request, fill directions.origin and directions.destination as separate places (e.g. 'from Laburnum Park, Pune to Malad West, Mumbai' → origin='Laburnum Park, Pune', destination='Malad West, Mumbai'). If the user gives only a destination, leave origin empty (current location). Otherwise leave both empty.",
+      "- Sites with country storefronts (Amazon etc.): resolvedTask must name the USER's local domain from USER CONTEXT (India → amazon.in, US → amazon.com, UK → amazon.co.uk), even if the user said 'amazon.com'.",
     ].join("\n");
+    const geo = await bgGetUserGeo().catch(() => null);
     const userPrompt = [
       `REQUEST: ${raw}`,
+      pageInfo?.url ? `CURRENT PAGE: ${pageInfo.url}${pageInfo.title ? ` — ${pageInfo.title}` : ""}` : null,
+      `USER CONTEXT: ${bgUserContextLine(geo)}`,
       `CONTEXT: ${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
       "Return the JSON now.",
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
       model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
     });
     const p = bgExtractJsonObject(reply);
-    const searchQuery = String(p.searchQuery || "").trim();
-    if (!searchQuery) return null;
+    // Deterministic scrub: a trailing "on amazon india"-style storefront tag in the query
+    // gets typed into the site's own search box and wrecks results. Strip it always
+    // (only the TRAILING form — "amazon rainforest facts" stays untouched).
+    const searchQuery = String(p.searchQuery || "").trim()
+      .replace(/\s+(?:on\s+)?(?:amazon|flipkart|ebay)(?:\.[a-z.]{2,6})?(?:\s+(?:india|usa?|uk|germany|japan))?\s*$/i, "")
+      .trim();
+    const resolvedTask = String(p.resolvedTask || "").trim().slice(0, 300);
+    if (!searchQuery && !resolvedTask) return null;
     const surface = ["maps", "web", "none"].includes(p.surface) ? p.surface : "web";
     const softConstraints = Array.isArray(p.softConstraints)
       ? p.softConstraints.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 5)
@@ -3113,7 +3329,7 @@ async function bgSynthesizeIntent(task, sharedContext) {
       origin: String(dir.origin || "").trim(),
       destination: String(dir.destination || "").trim(),
     };
-    return { surface, searchQuery, softConstraints, directions };
+    return { surface, searchQuery, softConstraints, directions, resolvedTask };
   } catch (error) {
     console.warn("[Braino][Delegate] intent synth fallback:", error?.message || error);
     return null;
@@ -3144,7 +3360,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       : "";
     const prompt = [
       "Return strict JSON only.",
-      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting\"]}",
+      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping\"]}",
       "Choose only skills that are relevant. Do not include selectors or CSS.",
       `Task: ${task}`,
       `Context:\n${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
@@ -3162,6 +3378,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       "linkedin-jobs",
       "realtime-costs",
       "x-growth-posting",
+      "amazon-shopping",
     ].includes(skill)) : fallbackSkills;
     return {
       goal: String(parsed.goal || task).trim() || task,
@@ -3174,7 +3391,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
   }
 }
 
-function bgBuildDelegateSystemPrompt(skills, lessons) {
+function bgBuildDelegateSystemPrompt(skills, lessons, geo = null) {
   const skillText = (skills || []).map((skill) => bgDelegateSkillGuide(skill)).filter(Boolean).join("\n\n");
   const lessonList = Array.isArray(lessons) ? lessons.filter(Boolean).slice(0, 8) : [];
   const lessonText = lessonList.length
@@ -3223,7 +3440,8 @@ Rules:
 - If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
 - For other high-risk final actions not clearly requested by the user, clarify before acting.
 - For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location", read the visible results once, and answer with the top options — do not keep re-searching.
-- Today is ${bgDelegateTodayText()}.
+- Today is ${bgDelegateTodayText()}. ${geo ? bgUserContextLine(geo) : ""}
+- Use the user's LOCAL storefront for country-specific sites: ${geo?.countryCode && BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode] ? `Amazon = ${BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode]}` : "match the Amazon domain to the user's location"}. If you land on another country's storefront, navigate to the local one.
 
 Useful URL shortcuts:
 - Gmail inbox: https://mail.google.com/mail/u/0/#inbox
@@ -3238,11 +3456,21 @@ ${skillText}`;
 
 async function bgDecideNextAction({ task, state, observationText, skills, lessons, phase, stuckCount, validationError }) {
   const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
-  const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons);
+  const decideGeo = await bgGetUserGeo().catch(() => null);
+  const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons, decideGeo);
   const synth = state?.synth || null;
+  // Once searches have run, the hint lists them so the model doesn't repeat one — while
+  // keeping the canonical query available for any REMAINING search (a multi-site task
+  // still needs it) and saying plainly that fresh searches stay allowed. A blanket
+  // "searching is forbidden" here once stranded a run that still had to reach Amazon.
+  const priorSearches = Array.isArray(state?.searchesDone) ? state.searchesDone : [];
   const userPrompt = [
     `TASK: ${task}`,
-    synth?.searchQuery ? `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.` : null,
+    synth?.searchQuery
+      ? (priorSearches.length
+        ? `Searches already run this task: ${priorSearches.map((s) => `"${s.query}" on ${s.host}`).join("; ")}. Do not repeat any of them. For any REMAINING search this task needs, use the query "${synth.searchQuery}" on the right site — fresh sites and different products are fine. If you are already on the right product page, act on it (e.g. Add to Cart) instead of searching.`
+        : `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.`)
+      : null,
     synth?.softConstraints?.length ? `APPLY THESE PREFERENCES by reading and RANKING the results (not by adding them to the query): ${synth.softConstraints.join("; ")}.` : null,
     "STATE:",
     BrainoTaskState.renderTaskState(state),
@@ -3576,8 +3804,27 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
   return { ok: true, message: "Done.", origin };
 }
 
+// Record "this search executed" when a URL proves its results page is up. The mark lives
+// in state.searchesDone (never evicted — the facts list caps at 30 and was scrolling
+// marks out on long runs) plus a copy in facts for model visibility. Idempotent.
+function bgRecordSearchDone(state, url) {
+  if (typeof BrainoSearchGuard === "undefined" || !BrainoSearchGuard || !state) return;
+  if (!Array.isArray(state.searchesDone)) state.searchesDone = [];
+  const mark = BrainoSearchGuard.shouldMark({
+    newUrl: url,
+    synthQuery: state.synth?.searchQuery,
+    searchesDone: state.searchesDone,
+  });
+  if (!mark) return;
+  state.searchesDone.push(mark);
+  state.facts.push({ key: `search_done:${mark.host}`, value: mark.query, source: "runtime" });
+  state.facts = state.facts.slice(-30);
+}
+
 async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false, synth: passedSynth = null }) {
   let currentTabId = tabId;
+  bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+  bgDelegateAdoptTabId = null;
   const startedAt = Date.now();
   const budget = bgDelegateBudgetForTask(task);
   let llmUsd = 0;
@@ -3590,6 +3837,9 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   // C1 — load durable lessons learned on this site in past runs (local storage, instant).
   let lessons = await (BrainoMacroStore?.getLessons?.(origin) || Promise.resolve([])).catch(() => []);
   const state = BrainoTaskState.createTaskState(task, currentTabId);
+  // Un-evictable record of executed searches ({host, query}) — the facts list caps at 30
+  // entries and long runs were scrolling search_done marks out, silently re-arming repeats.
+  state.searchesDone = [];
   const macro = await BrainoMacroStore.lookup(task, origin);
   if (macro) {
     const replay = await bgRunMacroReplay({ tabId: currentTabId, task, state, macro, origin, onProgress });
@@ -3604,8 +3854,17 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   // Understand intent → form a real search query + constraints BEFORE any search runs,
   // so we never paste the user's sentence verbatim into Maps/web. Reuse the one the caller
   // already computed (bgRunBrainAgent does it before its fast path) so it isn't called twice.
-  const synth = passedSynth || await bgSynthesizeIntent(task, sharedContext).catch(() => null);
+  const synth = passedSynth
+    || await bgSynthesizeIntent(task, sharedContext, { url: initialObs.map?.url, title: initialObs.map?.title }).catch(() => null);
   state.synth = synth;
+  // Vague mid-conversation asks ("play this song", "buy that book") arrive as the literal
+  // utterance; synthesis resolves the referent from chat context. From here on, the
+  // RESOLVED task is the task — decomposition, every per-step decision, and done-verification
+  // all steer by the concrete target instead of a pronoun.
+  if (synth?.resolvedTask && bgNormalizeForMatch(synth.resolvedTask) !== bgNormalizeForMatch(task)) {
+    task = synth.resolvedTask;
+    onProgress?.(`Understood: ${task}`);
+  }
   if (!passedSynth && synth?.searchQuery) onProgress?.(`Searching for "${synth.searchQuery}"`);
 
   const decomp = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress);
@@ -3613,7 +3872,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   BrainoTaskState.setSubgoals(state, decomp.subgoals);
   await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
 
-  const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth);
+  const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
   if (fastActions?.length) {
     for (const fast of fastActions) {
       onProgress?.(fast.description || bgDescribeDelegateAction(fast, prevObs));
@@ -3633,6 +3892,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   }
 
   for (let step = 0; step < budget.maxSteps; step++) {
+    bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
     if (bgAgentShouldStop || (shouldStop && await shouldStop())) {
       const msg = "Task stopped.";
       onFinal?.(msg);
@@ -3664,6 +3924,11 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     const activeKeywords = state.subgoals.find((goal) => goal.status === "active")?.desc || task;
     const obsResult = await bgBuildElementObservation(currentTabId, activeKeywords);
     let obs = obsResult.map;
+    // The results page may have finished loading AFTER the previous step's re-observe
+    // (typing + Enter navigates on a race the fixed 450ms delay loses) — every iteration
+    // starts by checking whether the CURRENT page proves a search executed, BEFORE the
+    // decision is made, so the model's search hint is never one step stale. Idempotent.
+    bgRecordSearchDone(state, obs?.url);
     const obsPayload = prevObs && BrainoElementMap?.diffElementMap
       ? BrainoElementMap.diffElementMap(prevObs, obs, { keywords: activeKeywords })   // Change B: anchor stable controls
       : (obsResult.serialized || BrainoElementMap.serializeElementMap(obs, { keywords: activeKeywords }));
@@ -3784,17 +4049,52 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       }
       obs = fresh; // act against the confirmed-fresh observation (matches the content registry)
     }
+
+    // ── Redundant-search guard: pure logic in lib/searchGuard.js (unit-tested in
+    // tests/search-guard.test.mjs). Blocks ONLY: re-typing the query while on that
+    // thing's product page, or the identical query re-run on a site whose results
+    // already loaded. Navigation and everything else always passes. ──
+    const guardVerdict = (typeof BrainoSearchGuard !== "undefined" && BrainoSearchGuard)
+      ? BrainoSearchGuard.evaluate({ action, pageUrl: obs?.url, synthQuery: state.synth?.searchQuery, searchesDone: state.searchesDone })
+      : { blocked: false };
+    if (guardVerdict.blocked) {
+      state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: guardVerdict.note, source: "runtime" });
+      state.facts = state.facts.slice(-30);
+      BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: guardVerdict.note }, { ok: false, reason: guardVerdict.note });
+      onProgress?.("Already there — skipping a repeat search...");
+      prevObs = obs;
+      continue;
+    }
+
     observationSnapshots.push(obs);
     onProgress?.(bgDescribeDelegateAction(action, obs));
     const result = await bgExecuteDelegateAction(currentTabId, action, state);
-    const latestActiveTabId = await bgGetActiveTabId();
-    if (latestActiveTabId && latestActiveTabId !== currentTabId) {
-      currentTabId = latestActiveTabId;
+    if (bgDelegateAdoptTabId && bgDelegateAdoptTabId !== currentTabId) {
+      // The click spawned a child tab — the task lives there now. Adoption beats the
+      // active-tab check below (a background-opened child is NOT the active tab yet).
+      const adopted = bgDelegateAdoptTabId;
+      bgDelegateAdoptTabId = null;
+      onProgress?.("Following the new tab...");
+      try { chrome.tabs.update(adopted, { active: true }); } catch (_) {}
+      await bgWaitForTabReady(adopted, 8000);
+      currentTabId = adopted;
       state.focusTabId = currentTabId;
       bgAgentTaskByTab.set(currentTabId, task);
       chrome.storage.local.set({ activeTabId: currentTabId });
+      bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+    } else {
+      const latestActiveTabId = await bgGetActiveTabId();
+      if (latestActiveTabId && latestActiveTabId !== currentTabId) {
+        currentTabId = latestActiveTabId;
+        state.focusTabId = currentTabId;
+        bgAgentTaskByTab.set(currentTabId, task);
+        chrome.storage.local.set({ activeTabId: currentTabId });
+      }
     }
     const newObs = (await bgBuildElementObservation(currentTabId, task)).map;
+    // Post-action check too (the per-iteration check at the loop top catches races that
+    // resolve later): a search is done ONLY when its results page is actually up.
+    if (!result?.error) bgRecordSearchDone(state, newObs?.url);
     const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);
     BrainoTaskState.commitHistory(state, decision, result, verdict);
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
@@ -3856,11 +4156,22 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
 
   // Understand intent → form the search query BEFORE the very first navigation, so the
   // fast path never opens Maps/web with the user's raw sentence (then re-correct later).
-  const synth = await bgSynthesizeIntent(task, conversationContext).catch(() => null);
+  const pageInfo = await new Promise((resolve) => {
+    try { chrome.tabs.get(currentTabId, (tab) => resolve(chrome.runtime.lastError ? null : { url: tab?.url, title: tab?.title })); }
+    catch { resolve(null); }
+  });
+  const userGeo = await bgGetUserGeo().catch(() => null);
+  const synth = await bgSynthesizeIntent(task, conversationContext, pageInfo).catch(() => null);
+  // Steer the fast path and everything after it by the context-resolved task, not the
+  // literal utterance ("show me that book on Amazon" → the actual title).
+  if (synth?.resolvedTask && bgNormalizeForMatch(synth.resolvedTask) !== bgNormalizeForMatch(task)) {
+    task = synth.resolvedTask;
+    await onProgress(`Understood: ${task}`);
+  }
   if (synth?.searchQuery) await onProgress(`Searching for "${synth.searchQuery}"`);
 
   let skipDelegateFastPath = false;
-  const fastActions = bgTryFastPath(task, [], synth);
+  const fastActions = bgTryFastPath(task, [], synth, userGeo);
   if (fastActions?.length) {
     const shouldContinueAfterFastPath = fastActions.some((action) => action.continueAfter);
     for (const action of fastActions) {
@@ -4465,14 +4776,17 @@ async function bgFetchSpotifyPlayerState() {
   }
 }
 
-async function bgPlaySpotifyWithAutoOpen(uris) {
+async function bgPlaySpotifyWithAutoOpen(uris, positionMs = null, opts = {}) {
   const payload = { action: "play", uris };
+  if (Number.isFinite(Number(positionMs)) && Number(positionMs) > 0) payload.positionMs = Number(positionMs);
   // Reuse the web player when it already exists. Creating a new tab on every retry
   // makes Delegate look broken and can register multiple devices.
+  // opts.background: open the player WITHOUT stealing focus — party tricks need the
+  // user watching Braino, not a Spotify tab (a hidden tab also pauses his rAF dance).
   try {
     const existing = await bgFindSpotifyTab();
-    if (existing?.id != null) await new Promise(r => chrome.tabs.update(existing.id, { active: true }, r));
-    else await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: true }, r));
+    if (existing?.id != null) { if (!opts.background) await new Promise(r => chrome.tabs.update(existing.id, { active: true }, r)); }
+    else await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: !opts.background }, r));
   } catch (_) {}
   // Try immediately; if no active device yet, poll until web player registers
   for (let i = 0; i < 5; i++) {
@@ -6162,29 +6476,34 @@ Should I send **Name** to your phone?
 `;
 }
 
-function bgTryFastPath(task, history, synth = null) {
+function bgTryFastPath(task, history, synth = null, geo = null) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
+  // A task that OPENS a place and then does more ("Go to amazon.com, search for X, and
+  // buy it") must keep running after the navigate. Returning it as a bare open once
+  // turned a whole buy task into navigate + "Done." — only a PURE open may finish here.
+  const restAfterOpen = t.replace(/^(?:go to|open|navigate to|visit|new|create)\s+\S+/i, "");
+  const opensThenActs = /\b(search|find|buy|purchase|order|add|play|book|apply|send|post|compose|reply|write|draft|create|schedule|email|read|check(?:out)?|cart|watch|download|type|fill|look)\b/i.test(restAfterOpen);
   if (/^(?:open|go to)\s+gmail\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://mail.google.com/mail/u/0/#inbox", description: "Open Gmail" }];
+    return [{ type: "navigate", url: "https://mail.google.com/mail/u/0/#inbox", description: "Open Gmail", continueAfter: opensThenActs }];
   }
   if (/^(?:open|go to)\s+(?:google\s+)?drive\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://drive.google.com", description: "Open Google Drive" }];
+    return [{ type: "navigate", url: "https://drive.google.com", description: "Open Google Drive", continueAfter: opensThenActs }];
   }
   if (/^(?:open|go to)\s+(?:google\s+)?calendar\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://calendar.google.com/calendar/u/0/r", description: "Open Google Calendar" }];
+    return [{ type: "navigate", url: "https://calendar.google.com/calendar/u/0/r", description: "Open Google Calendar", continueAfter: opensThenActs }];
   }
   if (/^(?:open|go to)\s+spotify\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://open.spotify.com", description: "Open Spotify" }];
+    return [{ type: "navigate", url: "https://open.spotify.com", description: "Open Spotify", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google doc\b|^(?:new|open)\s+docs\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://docs.new", description: "Open a new Google Doc" }];
+    return [{ type: "navigate", url: "https://docs.new", description: "Open a new Google Doc", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google sheet\b|^(?:new|open)\s+sheets\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://sheets.new", description: "Open a new Google Sheet" }];
+    return [{ type: "navigate", url: "https://sheets.new", description: "Open a new Google Sheet", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
+    return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck", continueAfter: opensThenActs }];
   }
   const googleMapsFastPath = bgBuildGoogleMapsFastPath(task, synth);
   if (googleMapsFastPath) return googleMapsFastPath;
@@ -6194,8 +6513,9 @@ function bgTryFastPath(task, history, synth = null) {
   if (linkedInJobsFastPath) return linkedInJobsFastPath;
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
-    const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
-    return [{ type: "navigate", url, description: `Navigate to ${url}` }];
+    const rawUrl = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
+    const url = bgLocalizeStorefront(rawUrl, geo);
+    return [{ type: "navigate", url, description: `Navigate to ${url}`, continueAfter: opensThenActs }];
   }
   const ytMatch = t.match(/search\s+(.+?)\s+on\s+youtube/i) || t.match(/youtube\s+search\s+(.+)/i);
   if (ytMatch) {
@@ -6288,9 +6608,16 @@ Connect: click targetText="Connect" → click targetText="Send without a note"
 Message: navigate to profile → click targetText="Message" → type [aria-label*="Write a message"] → pressKey Enter`;
   if (/amazon\./.test(url)) return `
 ── AMAZON (you are here) ──
+Signed-in check FIRST: if the header greets "Hello, sign in", STOP and ask the user to sign in. Never type credentials.
 Search: type selector="#twotabsearchtextbox" → pressKey Enter
-  → click product title → click selector="#add-to-cart-button"
-Buy Now: selector="#buy-now-button"`;
+Open product: click the product title link in results
+Add to Cart (fallbacks, in order): selector="#add-to-cart-button" → selector="#add-to-cart-button-ubb" → targetText="Add to Cart"
+Dismiss add-on/protection popup: targetText="No Thanks" → selector="#attachSiNoCoverage input" → selector="#attach-close_sideSheet-link"
+Go to Cart (fallbacks): selector="#attach-sidesheet-view-cart-button input" → selector="#sw-gtc a" → selector="#nav-cart" → targetText="Go to Cart"
+Proceed to checkout (fallbacks): selector="input[name='proceedToRetailCheckout']" → selector="#sc-buy-box-ptc-button input" → targetText="Proceed to Buy"
+Buy Now (single-item express, only if user asked to buy just one thing): selector="#buy-now-button"
+Amazon re-renders after every click — wait 1000 between steps and re-read.
+Payment boundary: advance to the payment-method page (open UPI/QR if offered) and hand off — never fill payment or address fields, never place the final order.`;
   if (/web\.whatsapp\.com/.test(url)) return `
 ── WHATSAPP WEB (you are here) ──
 Send by contact name:
