@@ -3304,6 +3304,7 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
       "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
       "- For a DIRECTIONS/route/navigate request, fill directions.origin and directions.destination as separate places (e.g. 'from Laburnum Park, Pune to Malad West, Mumbai' → origin='Laburnum Park, Pune', destination='Malad West, Mumbai'). If the user gives only a destination, leave origin empty (current location). Otherwise leave both empty.",
       "- Sites with country storefronts (Amazon etc.): resolvedTask must name the USER's local domain from USER CONTEXT (India → amazon.in, US → amazon.com, UK → amazon.co.uk), even if the user said 'amazon.com'.",
+      "- PLAY requests — pick the surface by CONTENT TYPE, not by the currently open site: videos/reactions/vlogs/trailers/episodes/interviews → YouTube (resolvedTask names youtube.com), songs/tracks/albums/playlists/music → Spotify. 'Play Tanmay Bhat reaction videos' while ON Spotify still goes to YouTube.",
     ].join("\n");
     const geo = await bgGetUserGeo().catch(() => null);
     const userPrompt = [
@@ -5041,13 +5042,20 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     }
   }
 
+  // VIDEO content veto — "play <X> reaction videos / vlog / trailer / episode" is
+  // YouTube-shaped no matter what site is open. Spotify's search happily returns a
+  // random song for it (real bug: "play tanmay bhat's reaction videos" on Spotify
+  // played music). Explicit song words re-enable the music path.
+  const wantsVideoContent = /\b(videos?|reaction|reactions|vlogs?|trailers?|episodes?|shorts|documentary|interview|watch)\b/i.test(raw)
+    && !/\b(songs?|tracks?|albums?|playlists?|music)\b/i.test(raw);
+
   const quotedDirectPlay = raw.match(/play\s+[“”](.+?)[“”](?:\s+(?:on|in)\s+spotify)?$/i);
-  if ((onSpotify || explicitMusicIntent) && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
+  if (!wantsVideoContent && (onSpotify || explicitMusicIntent) && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
     return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
   }
 
   const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
-  if ((onSpotify || explicitMusicIntent) && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
+  if (!wantsVideoContent && (onSpotify || explicitMusicIntent) && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
     return { adapter: "spotify", intent: "playSong", song: directPlay[1].trim() };
   }
 
