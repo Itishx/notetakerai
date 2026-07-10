@@ -2720,20 +2720,19 @@ function __sbDanceIntent(text) {
   return /(?:^|[,!.:]\s*)(?:please\s+)?(?:dance|bust a move)\b|\b(?:can|could|will|would) you\s+(?:please\s+)?dance\b|\bdance for (?:me|us)\b|\bshow (?:me|us) your moves\b|\bdo (?:a|your) (?:little\s+)?dance\b/.test(t);
 }
 
-// Best-effort: play an exact track from a timestamp via the Spotify Web API. No search —
-// just play + seek. Needs the user's Spotify connected + an active device; any failure
-// is swallowed (Braino performs regardless).
+// Best-effort: play an exact track from a timestamp. Routed through the BACKGROUND so a
+// missing active device gets the full treatment: open/reuse the Spotify web-player tab
+// (theatric, like all voice music) and retry until it registers, then play + seek.
+// Any failure is swallowed (Braino performs regardless).
 async function __sbSpotifyPlayTrack(uri, positionMs = 0) {
-  try {
-    const { authToken } = await __sbStorageGet(["authToken"]);
-    if (!authToken) return { ok: false, reason: "signin" };
-    const r = await fetch(`${__SB_API}/spotify-playback`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({ action: "play", uris: [uri], positionMs }),
-    });
-    return { ok: r.ok };
-  } catch (_) { return { ok: false }; }
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: "sbSpotifyPlaySeek", uri, positionMs }, (resp) => {
+        if (chrome.runtime.lastError || !resp || typeof resp !== "object") return resolve({ ok: false });
+        resolve(resp);
+      });
+    } catch (_) { resolve({ ok: false }); }
+  });
 }
 async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
   return __sbSpotifyPlayTrack(__SB_BILLIE_JEAN_URI, positionMs);
@@ -2873,10 +2872,11 @@ function __sbWkEndMoonwalk(xResume) {
 }
 
 // ── Dance ───────────────────────────────────────────────────────────────────
-// "Braino, dance for me" → DAF drops at 0:59 and Braino runs a six-move routine built
-// from the rig he already has: groove bounce, disco point (the Travolta), spin flips,
-// hands-in-the-air sway, double-time footwork, then the celebrate face + confetti
-// finale. Same rig-ownership contract as the moonwalk.
+// "Braino, dance for me" → DAF drops at 0:59 and Braino chains the website's five
+// signature moves (faithful ports of BrainoDanceGrid.tsx pose math, SAME time
+// constants — the slow groove, not a frantic pulse): The Twist → Disco Fever →
+// The Sprinkler → Raise the Roof → Gun Fingers (strut left). Ends at 1:10.
+// Same rig-ownership contract as the moonwalk.
 function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
@@ -2895,21 +2895,17 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
 
   const flip = document.getElementById("__sbwk_flip__");
   const q = (sel) => root.querySelector(sel);
-  const legL = q("#__sbwk_ll__"), legR = q("#__sbwk_rl__");
   const laBg = q("#__sbwk_la_bg__"), raBg = q("#__sbwk_ra_bg__");
   const laFg = q("#__sbwk_la__"), raFg = q("#__sbwk_ra__");
   const pupL = q("#__sbwk_pupil_l__"), pupR = q("#__sbwk_pupil_r__");
-  const reactG = q("#__sbwk_react__"), celebG = q("#__sbwk_rc__"), mouthG = q("#__sbwk_mouth__");
+  q("#__sbwk_ll__")?.setAttribute("transform", "");
+  q("#__sbwk_rl__")?.setAttribute("transform", "");
   __sbWkSay("Watch this 🕺");
 
   const W = 64;
   const laneW = lane.clientWidth || 320;
   const minX = 6, maxX = Math.max(minX + 10, laneW - W - 6);
   const midX = (minX + maxX) / 2;
-  const span = Math.max(20, (maxX - minX) / 2);
-  const BEAT = 2 * Math.PI * 2;              // 120 BPM pulse
-  const MOVE_S = 1.8;                        // six moves fill the 11s window
-  const start = performance.now();
   const setArm = (bg, fg, deg) => {
     const cx = bg === laBg ? 22 : 78;
     const tx = deg ? `rotate(${deg} ${cx} 53)` : "";
@@ -2917,62 +2913,63 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
     if (fg) fg.setAttribute("transform", tx);
   };
 
+  // The website grid's pose functions, verbatim math. la/ra in degrees (left positive
+  // = raised, right negative = raised — same convention as the wave). tx/ty px, sy squash.
+  const MOVES = [
+    (t) => { // The Twist — hips, low swing
+      const b = t * 3.4, sway = Math.sin(b), knee = Math.abs(Math.sin(b));
+      return { tx: sway * 9, ty: 0, sy: 1 - knee * 0.06, la: 42 + sway * 26, ra: -42 + sway * 26, lookX: sway * 0.5, lookY: 0 };
+    },
+    (t) => { // Disco Fever — diagonal point, one arm
+      const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
+      return { tx: stab * 6, ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56, lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25 };
+    },
+    (t) => { // The Sprinkler — arm sweep, snap back
+      const period = 2.0, raw = (t % period) / period;
+      let e;
+      if (raw < 0.78) { const u = raw / 0.78; e = u * u * (3 - 2 * u); } else { e = 1 - (raw - 0.78) / 0.22; }
+      return { tx: (e - 0.5) * 5, ty: 0, sy: 1 - Math.abs(Math.sin(raw * Math.PI)) * 0.03, la: 102, ra: -128 + e * 100, lookX: -0.35 + e * 0.7, lookY: 0 };
+    },
+    (t) => { // Raise the Roof — both hands, push up
+      const b = t * 3.9, push = Math.abs(Math.sin(b)), lean = Math.sin(b * 0.5);
+      return { tx: lean * 5, ty: -push * 11, sy: 1, la: 116 + push * 20, ra: -116 - push * 20, lookX: lean * 0.3, lookY: -0.4 };
+    },
+    (t) => { // Gun Fingers — point to the sky, strut left
+      const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
+      return { strut: true, ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25, lookX: -0.4, lookY: -0.45 };
+    },
+  ];
+  const MOVE_S = (durationMs / 1000) / MOVES.length;   // five moves fill 0:59 → 1:10
+  const start = performance.now();
+  let last = start;
+  let strutX = null;
+
   const step = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
     const t = (now - start) / 1000;
-    const b = Math.sin(t * BEAT);            // the pulse
-    const B = Math.abs(b);
-    const move = Math.floor(t / MOVE_S) % 6;
+    const idx = Math.min(MOVES.length - 1, Math.floor(t / MOVE_S));
+    const p = MOVES[idx](t);
 
-    let x = midX + Math.sin(t * 0.9) * span * 0.5;
-    let face = Math.cos(t * 0.9) >= 0 ? 1 : -1;
-    let armL = 0, armR = 0, ll = 0, rl = 0, ls = 0, rs = 0;
-    let waddle = b * 5, hop = -B * 2.5;
-
-    if (move === 0) {           // groove: bounce + alternating arm swing + step
-      armL = b * 38; armR = -b * 38;
-      ll = Math.max(0, b) * 4; rl = Math.max(0, -b) * 4;
-      ls = Math.max(0, b) * 9;  rs = Math.max(0, -b) * 9;
-    } else if (move === 1) {    // disco point: right arm sky on the beat, left on hip
-      armR = b > 0 ? -125 : -35;
-      armL = 28;
-      waddle = b * 7; hop = -B * 3.5;
-      x = midX; face = 1;
-    } else if (move === 2) {    // spin: flip each half-beat + slide across the bar
-      face = Math.sin(t * BEAT / 2) >= 0 ? 1 : -1;
-      x = midX + Math.sin(t * 1.6) * span;
-      armL = 55; armR = -55;
-      waddle = b * 3;
-    } else if (move === 3) {    // hands in the air, big sway
-      armL = 120; armR = -120;
-      waddle = Math.sin(t * BEAT / 2) * 9;
-      hop = -B * 2;
-      x = midX + Math.sin(t * BEAT / 2) * 10; face = 1;
-    } else if (move === 4) {    // footwork: double-time steps
-      const f = Math.sin(t * BEAT * 2);
-      ll = Math.max(0, f) * 6; rl = Math.max(0, -f) * 6;
-      ls = Math.max(0, f) * 14; rs = Math.max(0, -f) * 14;
-      armL = f * 20; armR = -f * 20;
-      hop = -Math.abs(f) * 1.5;
-    } else {                    // finale: celebrate face + confetti + big bounce
-      armL = 115 + b * 12; armR = -115 - b * 12;
-      hop = -B * 5; waddle = b * 6; face = 1;
+    let x, face = 1;
+    if (p.strut) {
+      if (strutX === null) strutX = maxX;
+      strutX -= 40 * dt;                                  // slow strut leftward
+      if (strutX < minX) strutX = maxX;
+      x = strutX; face = -1;                              // faces the way he struts
+    } else {
+      x = midX + (p.tx || 0) * 1.6;
     }
-    const finale = move === 5;
-    if (reactG) reactG.setAttribute("display", finale ? "inline" : "none");
-    if (celebG) celebG.setAttribute("display", finale ? "inline" : "none");
-    if (mouthG) mouthG.setAttribute("display", finale ? "none" : "inline");
-
     walker.style.transform = `translateX(${x}px)`;
     if (flip) flip.style.transform = `scaleX(${face})`;
-    setArm(laBg, laFg, armL);
-    setArm(raBg, raFg, armR);
-    if (legL) legL.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
-    if (legR) legR.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
-    const breath = 1 + 0.014 * Math.sin(t * 1.7);
-    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${hop - 0.4}) scale(${breath})`);
-    const gz = b * 1.2;
-    if (pupL) pupL.setAttribute("transform", `translate(${gz} 0)`);
-    if (pupR) pupR.setAttribute("transform", `translate(${gz} 0)`);
+    setArm(laBg, laFg, p.la || 0);
+    setArm(raBg, raFg, p.ra || 0);
+    const sy = p.sy == null ? 1 : p.sy;
+    // squash about the FEET (y≈101) so knees bend without him floating
+    root.setAttribute("transform", `rotate(${(p.tx || 0) * 0.35} 50 50) translate(0 ${(p.ty || 0) + 101 * (1 - sy)}) scale(1 ${sy})`);
+    const px = (p.lookX || 0) * 2.4, py = (p.lookY || 0) * 2;
+    if (pupL) pupL.setAttribute("transform", `translate(${px} ${py})`);
+    if (pupR) pupR.setAttribute("transform", `translate(${px} ${py})`);
 
     if (now - start < durationMs) __sbWkDanceRaf = requestAnimationFrame(step);
     else __sbWkEndDance(x);
@@ -2993,6 +2990,7 @@ function __sbWkEndDance(xResume) {
     root.querySelector("#__sbwk_mouth__")?.setAttribute("display", "inline");
     root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
     root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
+    root.setAttribute("transform", "");
   }
   __sbWkDancing = false; __sbWkMoonwalking = false; __sbWkThrowMode = false;
   if (__sbInputOpen) {
@@ -15294,6 +15292,19 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   }
 
   if (/\bfavou?rite\b/i.test(promptText)) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Party tricks — dance / moonwalk. Steer down __sbProcessPrompt BEFORE any classification,
+  // or the realtime model just NARRATES a dance instead of Braino actually dancing.
+  if (__sbDanceIntent(transcript) || __sbDanceIntent(promptText)
+    || __sbMoonwalkIntent(transcript) || __sbMoonwalkIntent(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "party_trick" });
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",

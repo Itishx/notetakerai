@@ -1184,6 +1184,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
+  if (message.action === "sbSpotifyPlaySeek") {
+    // Party-trick soundtrack: play an exact track from a timestamp. Direct play first
+    // (device already active = instant); otherwise open/reuse the web-player tab and
+    // poll until it registers (same theatric flow as voice music).
+    (async () => {
+      const uris = [String(message.uri || "")].filter(Boolean);
+      const positionMs = Number.isFinite(Number(message.positionMs)) ? Number(message.positionMs) : 0;
+      if (!uris.length) return { ok: false };
+      try {
+        const payload = { action: "play", uris };
+        if (positionMs > 0) payload.positionMs = positionMs;
+        await bgCallSpotifyFunction("spotify-playback", payload);
+        return { ok: true };
+      } catch (err) {
+        const msg = String(err?.message || "");
+        if (/sign\s?in|auth|connect/i.test(msg)) return { ok: false, reason: "signin" };
+        if (!/device|active|404/i.test(msg)) return { ok: false };
+      }
+      try {
+        await bgPlaySpotifyWithAutoOpen(uris, positionMs);
+        return { ok: true };
+      } catch (_) { return { ok: false }; }
+    })().then(sendResponse).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (message.action === "sbGetUserGeo") {
     bgGetUserGeo().then((geo) => sendResponse(geo)).catch(() => sendResponse(null));
     return true;
@@ -4718,8 +4743,9 @@ async function bgFetchSpotifyPlayerState() {
   }
 }
 
-async function bgPlaySpotifyWithAutoOpen(uris) {
+async function bgPlaySpotifyWithAutoOpen(uris, positionMs = null) {
   const payload = { action: "play", uris };
+  if (Number.isFinite(Number(positionMs)) && Number(positionMs) > 0) payload.positionMs = Number(positionMs);
   // Reuse the web player when it already exists. Creating a new tab on every retry
   // makes Delegate look broken and can register multiple devices.
   try {
