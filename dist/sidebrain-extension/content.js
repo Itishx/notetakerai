@@ -4241,7 +4241,7 @@ if (__sbContextOk()) {
       return false;
     }
     if (msg.action === "SB_AGENT_TRACE" || msg.type === "SB_AGENT_TRACE") {
-      if (typeof __sbAgentTracePush === "function") __sbAgentTracePush(msg.trace || {}, msg.meta || null);
+      if (typeof __sbAgentTracePush === "function") __sbAgentTracePush(msg.trace || {}, msg.meta || null, msg.history || null);
       sendResponse?.({ ok: true });
       return false;
     }
@@ -10454,9 +10454,12 @@ function __sbAgentTraceStart(meta) {
   } catch (_) {}
 }
 
-function __sbAgentTracePush(t, meta) {
+function __sbAgentTracePush(t, meta, history) {
   if (!t || typeof t !== "object") return;
   if (!__sbAgentTraceBuf) __sbAgentTraceBuf = { meta: {}, steps: [], startedAt: Date.now() };
+  // The background ships the FULL run journal with each trace — adopt it wholesale so
+  // the final summary is complete even though real navigations reset this buffer.
+  if (Array.isArray(history) && history.length) __sbAgentTraceBuf.steps = history.slice(0, -1);
   // The run header often landed on the ORIGIN tab before a cross-site hop — every trace
   // carries the meta so the destination page's summary still knows the task.
   if (meta && !(__sbAgentTraceBuf.meta && __sbAgentTraceBuf.meta.task)) {

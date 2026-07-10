@@ -3274,6 +3274,8 @@ SKILL amazon-shopping (guided buying — the user stays in the loop):
 - BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
 - SEARCH ONCE: use the provided search query exactly one time. If the product is visible in the results, open it; if not, scroll once, then clarify. NEVER re-run reworded variations of the same search — a second near-identical query is forbidden.
 - Amazon re-renders after every click. After each click take {"type":"wait","ms":1000}, then re-read before acting again.
+- RESULT TITLES TRUNCATE: the author's name is usually NOT visible in a result's element name ("Atomic Habits: The life-changing million-copy..." cuts off before "James Clear"). A result whose name STARTS WITH the requested title IS the listing — open it and verify the author on the product page. Do not read/scroll in circles waiting for title+author to appear together; they won't.
+- Never use web_search while on Amazon — everything the task needs is on the page or one site-search away.
 - AMBIGUITY = ASK: if results show several plausible matches (editions, formats, bundles, sellers), scroll down ~600 once so options are visible, then {"type":"clarify","text":"Which one from this page do you want me to add to cart? I can see <top 2-3 options with price>."}. Never guess between editions. The user's next command continues the run on this same page.
 - MULTIPLE PRODUCTS ("buy X and Y"): strictly sequential — search X, add to cart, then search Y, add to cart. Go to cart only after all items are added.
 - PAYMENT BOUNDARY: never enter or select payment details, addresses, or place the final order. Advance to the payment-method step (open the UPI/QR view if offered) and finish with {"type":"answer","text":"Checkout is ready — finish the payment on your screen."}.
@@ -3824,6 +3826,15 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
 // Record "this search executed" when a URL proves its results page is up. The mark lives
 // in state.searchesDone (never evicted — the facts list caps at 30 and was scrolling
 // marks out on long runs) plus a copy in facts for model visibility. Idempotent.
+// Accumulate the run's full trace in STATE (survives page navigations, unlike the
+// content-script buffer) and ship it whole with every trace message.
+function bgPushTrace(state, tabId, meta, trace) {
+  if (!state.traceLog) state.traceLog = [];
+  state.traceLog.push(trace);
+  if (state.traceLog.length > 60) state.traceLog = state.traceLog.slice(-60);
+  bgSendInlineUiMessage(tabId, { action: "SB_AGENT_TRACE", meta, trace, history: state.traceLog });
+}
+
 function bgRecordSearchDone(state, url) {
   if (typeof BrainoSearchGuard === "undefined" || !BrainoSearchGuard || !state) return;
   if (!Array.isArray(state.searchesDone)) state.searchesDone = [];
@@ -4005,7 +4016,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
         onProgress?.("Double-checking the result...");
         const verify = await bgVerifyDelegateDone({ task, state, tabId: currentTabId });
         llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
-        bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", meta: traceMeta, trace: {
+        bgPushTrace(state, currentTabId, traceMeta, {
           step: step + 1,
           thought: String(decision?.thought || "").trim(),
           action: "verify done (self-check)",
@@ -4013,7 +4024,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
           result: verify && verify.complete === false ? `verifier says NOT done: ${String(verify?.reason || "").slice(0, 160)}` : "verifier confirms done",
           verdict: verify && verify.complete === false ? "rejected" : "ok",
           url: "",
-        } });
+        });
         if (verify && verify.complete === false) {
           const note = `Self-check: not done yet — ${verify.reason || "the page does not yet prove the task is complete"}.`;
           state.facts.push({ key: `self_check:${state.facts.length + 1}`, value: note, source: "verifier" });
@@ -4033,6 +4044,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     }
     if (action.type === "answer" || action.type === "clarify") {
       const msg = action.text || "I need more information to continue.";
+      bgPushTrace(state, currentTabId, traceMeta, {
+        step: step + 1,
+        thought: String(decision?.thought || "").trim(),
+        action: action.type === "answer" ? "ANSWER (run ends)" : "CLARIFY (run ends, asks the user)",
+        actionRaw: "{}",
+        result: String(msg).slice(0, 240),
+        verdict: "terminal",
+        url: String(obs?.url || "").slice(0, 160),
+      });
       onFinal?.(msg);
       return { ok: action.type === "answer", message: msg, state };
     }
@@ -4110,7 +4130,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: guardVerdict.note, source: "runtime" });
       state.facts = state.facts.slice(-30);
       BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: guardVerdict.note }, { ok: false, reason: guardVerdict.note });
-      bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", meta: traceMeta, trace: {
+      bgPushTrace(state, currentTabId, traceMeta, {
         step: step + 1,
         thought: String(decision?.thought || "").trim(),
         action: bgDescribeDelegateAction(action, obs) || action.type,
@@ -4118,7 +4138,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
         result: `skipped by search guard: ${guardVerdict.note.slice(0, 160)}`,
         verdict: "skipped",
         url: String(obs?.url || "").slice(0, 160),
-      } });
+      });
       onProgress?.("Already there — skipping a repeat search...");
       prevObs = obs;
       continue;
@@ -4193,7 +4213,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     } catch (_) {}
     const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);
     BrainoTaskState.commitHistory(state, decision, result, verdict);
-    bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", meta: traceMeta, trace: {
+    bgPushTrace(state, currentTabId, traceMeta, {
       step: step + 1,
       thought: stepThought,
       action: String(bgDescribeDelegateAction(action, obs) || action.type).replace(/\s*#undefined\b/, " (page)"),
@@ -4201,7 +4221,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       result: result?.error ? `error: ${String(result.error).slice(0, 200)}` : "ok",
       verdict: verdict?.ok ? "ok" : `failed: ${String(verdict?.reason || "").slice(0, 200)}`,
       url: String(newObs?.url || "").slice(0, 160),
-    } });
+    });
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
 
     if (!result?.error && verdict.ok) {
