@@ -2687,10 +2687,12 @@ let __sbGlassesOn = false;     // Braino is wearing his specs
 // "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
 const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
 const __SB_BILLIE_JEAN_START_MS = 211000;   // 3:31
-// "DAF" — the dance-party track + the drop (0:59) the user picked.
+// "DAF" — the dance-party track + the window the user picked: song from 0:52,
+// dance 0:52→1:08 (16s), music stops by 1:10.
 const __SB_DANCE_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
-const __SB_DANCE_START_MS = 59000;          // 0:59
-const __SB_DANCE_DURATION_MS = 16000;       // dance until ~1:15 — gun fingers get the runway
+const __SB_DANCE_START_MS = 52000;          // 0:52
+const __SB_DANCE_DURATION_MS = 16000;       // dance until 1:08
+const __SB_DANCE_OUTRO_MS = 1800;           // music rides ~2 more beats, stops by 1:10
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -2875,11 +2877,11 @@ function __sbWkEndMoonwalk(xResume) {
 }
 
 // ── Dance ───────────────────────────────────────────────────────────────────
-// "Braino, dance for me" → DAF drops at 0:59 and Braino performs the owner's cut:
-// GUN FINGERS (7s — fingers to the sky, strutting left) blending smoothly into
-// RAISE THE ROOF for the remainder, ending at 1:10. Pose math is the verbatim
-// port of the website's BrainoDanceGrid.tsx (the slow groove). The blend lerps
-// arms/body AND scaleX through zero, which reads as Braino turning to face you.
+// "Braino, dance for me" → DAF from 0:52 and Braino performs the owner's cut:
+// GUN FINGERS (11s — fingers to the sky, strutting left) blending smoothly into
+// DISCO FEVER (the diagonal point) for the remainder, ending at 1:08. Pose math is
+// the verbatim port of the website's BrainoDanceGrid.tsx (the slow groove). The
+// blend lerps arms/body AND scaleX through zero — Braino turns to face you.
 // Same rig-ownership contract as the moonwalk.
 function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
   const lane = __sbEnsureWalker();
@@ -2930,16 +2932,16 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
     const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
     return { ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25, lookX: -0.4, lookY: -0.45, tilt: 0 };
   };
-  const poseRoof = (t) => {  // Raise the Roof — both hands, push up
-    const b = t * 3.9, push = Math.abs(Math.sin(b)), lean = Math.sin(b * 0.5);
-    return { ty: -push * 11, sy: 1, la: 116 + push * 20, ra: -116 - push * 20, lookX: lean * 0.3, lookY: -0.4, tilt: lean * 5 * 0.35, tx: lean * 5 };
+  const poseDisco = (t) => { // Disco Fever — diagonal point, one arm
+    const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
+    return { ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56, lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35, tx: stab * 6 };
   };
   const lerp = (a, b2, u) => a + (b2 - a) * u;
   const smooth = (u) => u * u * (3 - 2 * u);
 
   const totalS = durationMs / 1000;
-  const GUN_S = Math.max(6, totalS - 5);   // gun fingers OWNS the floor (11s of 16); roof gets the rest
-  const BLEND_S = 0.7;                     // smooth turn into raise the roof
+  const GUN_S = Math.max(6, totalS - 5);   // gun fingers OWNS the floor (11s of 16); disco gets the rest
+  const BLEND_S = 0.7;                     // smooth turn into disco fever
   const start = performance.now();
   let last = start;
   let strutX = null;
@@ -2960,10 +2962,10 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
         x = strutX; face = -1;
         ({ la, ra, ty, sy, lookX, lookY } = g); tilt = 0;
       } else {
-        // blend the last 0.7s of gun fingers into raise the roof: arms/body lerp,
+        // blend the last 0.7s of gun fingers into disco fever: arms/body lerp,
         // scaleX sweeps -1 → 1 (he turns to face you), position eases to centre
         const u = smooth((t - (GUN_S - BLEND_S)) / BLEND_S);
-        const r0 = poseRoof(0);
+        const r0 = poseDisco(0);
         x = lerp(strutX, midX, u); face = lerp(-1, 1, u) || 0.02;
         la = lerp(g.la, r0.la, u); ra = lerp(g.ra, r0.ra, u);
         ty = lerp(g.ty, r0.ty, u); sy = lerp(g.sy, r0.sy, u);
@@ -2971,7 +2973,7 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
         tilt = lerp(0, r0.tilt, u);
       }
     } else {
-      const r = poseRoof(t - GUN_S);
+      const r = poseDisco(t - GUN_S);
       x = midX + (r.tx || 0) * 1.6; face = 1;
       ({ la, ra, ty, sy, lookX, lookY, tilt } = r);
     }
@@ -12720,13 +12722,14 @@ async function __sbProcessPrompt(text, options = {}) {
     Promise.race([playP, capP]).then((r) => {
       if (r && r.ok) {
         setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
-        // Curtain call: the music stops with the last move, then he asks for the review.
+        // Curtain call: dance ends at 1:08, the music rides a couple more beats and
+        // stops by 1:10, then he asks for the review.
         setTimeout(async () => {
           try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
           const followUp = "So, how was it?";
           if (fromVoice) { try { await speakVoiceReply(followUp); } catch (_) {} }
           else { __sbWkSay(followUp); }
-        }, 350 + __SB_DANCE_DURATION_MS + 400);
+        }, 350 + __SB_DANCE_DURATION_MS + __SB_DANCE_OUTRO_MS);
       } else {
         const line = r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧";
         if (fromVoice) { speakVoiceReply(line); } else { __sbWkSay(line); }
