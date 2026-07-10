@@ -1235,6 +1235,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().then(sendResponse).catch(() => sendResponse({ ok: false }));
     return true;
   }
+  if (message.action === "sbSpotifyPause") {
+    // End of a party trick: the band stops when the show stops.
+    bgCallSpotifyFunction("spotify-playback", { action: "pause" })
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (message.action === "sbGetUserGeo") {
     bgGetUserGeo().then((geo) => sendResponse(geo)).catch(() => sendResponse(null));
     return true;

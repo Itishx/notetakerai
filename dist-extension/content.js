@@ -12720,6 +12720,13 @@ async function __sbProcessPrompt(text, options = {}) {
     Promise.race([playP, capP]).then((r) => {
       if (r && r.ok) {
         setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
+        // Curtain call: the music stops with the last move, then he asks for the review.
+        setTimeout(async () => {
+          try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
+          const followUp = "So, how was it?";
+          if (fromVoice) { try { await speakVoiceReply(followUp); } catch (_) {} }
+          else { __sbWkSay(followUp); }
+        }, 350 + __SB_DANCE_DURATION_MS + 400);
       } else {
         const line = r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧";
         if (fromVoice) { speakVoiceReply(line); } else { __sbWkSay(line); }
