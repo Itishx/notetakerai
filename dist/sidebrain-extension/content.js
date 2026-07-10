@@ -4222,7 +4222,7 @@ if (__sbContextOk()) {
       return false;
     }
     if (msg.action === "SB_AGENT_TRACE" || msg.type === "SB_AGENT_TRACE") {
-      if (typeof __sbAgentTracePush === "function") __sbAgentTracePush(msg.trace || {});
+      if (typeof __sbAgentTracePush === "function") __sbAgentTracePush(msg.trace || {}, msg.meta || null);
       sendResponse?.({ ok: true });
       return false;
     }
@@ -5027,9 +5027,20 @@ function __sbBuildBrainUI() {
     /* Delegate's live thinking — dimmed italic, Claude-style, above the action steps */
     #__sb_bar_log__ .sb-blog-thought { display: flex; gap: 9px; font-size: 11.5px; line-height: 1.45; font-style: italic; color: #97897e; margin-bottom: 3px; }
     #__sb_bar_log__ .sb-blog-thought .sb-blog-tic { flex: none; width: 13px; text-align: center; font-style: normal; opacity: 0.75; }
-    #__sb_bar_log__ .sb-blog-thought > span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    #__sb_bar_log__ .sb-blog-thought > span:last-child {
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      /* live-thinking shimmer: a bright band sweeps the dimmed text (TextShimmer, vanilla) */
+      background-image: linear-gradient(90deg, rgba(0,0,0,0) 42%, #3b332c 50%, rgba(0,0,0,0) 58%), linear-gradient(#97897e, #97897e);
+      background-size: 250% 100%, auto; background-repeat: no-repeat, padding-box;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: __sb_thought_shimmer__ 2.2s linear infinite;
+    }
+    @keyframes __sb_thought_shimmer__ { 0% { background-position: 100% center, 0 0; } 100% { background-position: -150% center, 0 0; } }
     #__sb_bar__.sb-log-open.sb-log-thinking #__sb_bar_log__ { max-height: 104px; }
     html.sb-dark #__sb_bar_log__ .sb-blog-thought { color: #8f867c; }
+    html.sb-dark #__sb_bar_log__ .sb-blog-thought > span:last-child {
+      background-image: linear-gradient(90deg, rgba(0,0,0,0) 42%, #f5efe8 50%, rgba(0,0,0,0) 58%), linear-gradient(#8f867c, #8f867c);
+    }
     html.sb-dark #__sb_bar__.sb-log-open { background: rgba(24,21,18,0.84); }
     html.sb-dark #__sb_bar_log__ .sb-blog-step { color: #b0a89e; }
     html.sb-dark #__sb_bar_log__ .sb-blog-step.active { color: #FBF7F1; }
@@ -10414,7 +10425,7 @@ function __sbAgentLogKey(s) {
 let __sbAgentTraceBuf = null;
 
 function __sbAgentTraceStart(meta) {
-  __sbAgentTraceBuf = { meta: meta || {}, steps: [], startedAt: Date.now() };
+  __sbAgentTraceBuf = { meta: meta || {}, steps: [], startedAt: Date.now(), headerPrinted: true };
   try {
     console.log(
       `%c[Braino][Delegate] ▶ RUN START%c\n  task: ${meta.task || ""}\n  query: "${meta.searchQuery || ""}"\n  goal: ${meta.goal || ""}\n  plan: ${(meta.subgoals || []).join(" → ")}\n  skills: ${(meta.skills || []).join(", ") || "none"}`,
@@ -10423,9 +10434,23 @@ function __sbAgentTraceStart(meta) {
   } catch (_) {}
 }
 
-function __sbAgentTracePush(t) {
+function __sbAgentTracePush(t, meta) {
   if (!t || typeof t !== "object") return;
   if (!__sbAgentTraceBuf) __sbAgentTraceBuf = { meta: {}, steps: [], startedAt: Date.now() };
+  // The run header often landed on the ORIGIN tab before a cross-site hop — every trace
+  // carries the meta so the destination page's summary still knows the task.
+  if (meta && !(__sbAgentTraceBuf.meta && __sbAgentTraceBuf.meta.task)) {
+    __sbAgentTraceBuf.meta = meta;
+    if (!__sbAgentTraceBuf.headerPrinted) {
+      __sbAgentTraceBuf.headerPrinted = true;
+      try {
+        console.log(
+          `%c[Braino][Delegate] ▶ RUN (continuing on this page)%c\n  task: ${meta.task || ""}\n  query: "${meta.searchQuery || ""}"\n  goal: ${meta.goal || ""}`,
+          "color:#C9544A;font-weight:bold", "color:inherit",
+        );
+      } catch (_) {}
+    }
+  }
   __sbAgentTraceBuf.steps.push(t);
   try {
     if (t.thought) console.log(`%c[Braino][Delegate][${t.step}] 💭 ${t.thought}`, "color:#97897e;font-style:italic");

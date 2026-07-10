@@ -3217,6 +3217,7 @@ function bgSelectDelegateSkillsHeuristic(task) {
   if (/\b(linkedin|jobs?|roles?|openings?|sdet|developer|engineer)\b/.test(raw)) skills.push("linkedin-jobs");
   if (/\b(twitter|x\b|tweet|post|publish|followers?|mentions?)\b/.test(raw)) skills.push("x-growth-posting");
   if (/\b(cost|spend|receipt|realtime|voice)\b/.test(raw)) skills.push("realtime-costs");
+  if (/\b(youtube|video|videos|watch|reaction)\b/.test(raw)) skills.push("youtube");
   // Shopping: Amazon by name, or a buy/purchase ask with no other store named (Amazon is
   // the default store). "order" alone is excluded — too food-delivery shaped.
   if (/\b(amazon|add to cart|checkout)\b/.test(raw)
@@ -3259,6 +3260,12 @@ SKILL realtime-costs:
 - Answer from stored Braino realtime cost data when available.
 - Use exact dates for today/last 7 days. Do not invent costs.
 - Usually this should answer rather than operate the browser.`;
+  if (skill === "youtube") return `
+SKILL youtube:
+- Search by typing into the search combobox and submitting; the results URL contains /results.
+- RESULTS PAGE — the critical distinction: an element named ONLY a channel name (e.g. "Tanmay Bhat") is a CHANNEL card. Clicking it opens the channel page, NEVER a video. To PLAY something, click a link whose name is a full video TITLE (long text, usually with views/age/duration). If you land on a channel page (URL has /@handle) more than once, STOP clicking channel-named elements — go back to results and open a titled video row.
+- WATCH PAGE (URL contains /watch): playback AUTOSTARTS. Do not hunt for a "Play" button. Assert url_contains "watch", and for a play task that IS completion — return done.
+- Never re-run the same search while its results are already visible.`;
   if (skill === "amazon-shopping") return `
 SKILL amazon-shopping (guided buying — the user stays in the loop):
 - DOMAIN: always use the user's LOCAL Amazon (see the user-context line: India → amazon.in, US → amazon.com). If you find yourself on another country's Amazon, navigate to the local one first.
@@ -3360,7 +3367,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       : "";
     const prompt = [
       "Return strict JSON only.",
-      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping\"]}",
+      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping|youtube\"]}",
       "Choose only skills that are relevant. Do not include selectors or CSS.",
       `Task: ${task}`,
       `Context:\n${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
@@ -3379,6 +3386,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       "realtime-costs",
       "x-growth-posting",
       "amazon-shopping",
+      "youtube",
     ].includes(skill)) : fallbackSkills;
     return {
       goal: String(parsed.goal || task).trim() || task,
@@ -3873,14 +3881,17 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   BrainoTaskState.setSubgoals(state, decomp.subgoals);
   await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
   // Console trace: run header → the tab's DevTools console (the user copies these to
-  // debug reasoning gaps — same playbook as the voice-latency logging).
-  bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_RUN_META", meta: {
+  // debug reasoning gaps — same playbook as the voice-latency logging). The meta ALSO
+  // rides on every per-step trace: the run often starts on tab A and navigates away,
+  // and the destination page's fresh content script never saw the header.
+  const traceMeta = {
     task,
     searchQuery: synth?.searchQuery || "",
     goal: state.goal,
     subgoals: (state.subgoals || []).map((g) => g.desc),
     skills: decomp.skills || [],
-  } });
+  };
+  bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_RUN_META", meta: traceMeta });
 
   const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
   if (fastActions?.length) {
@@ -4076,7 +4087,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: guardVerdict.note, source: "runtime" });
       state.facts = state.facts.slice(-30);
       BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: guardVerdict.note }, { ok: false, reason: guardVerdict.note });
-      bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", trace: {
+      bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", meta: traceMeta, trace: {
         step: step + 1,
         thought: String(decision?.thought || "").trim(),
         action: bgDescribeDelegateAction(action, obs) || action.type,
@@ -4119,12 +4130,29 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     // Post-action check too (the per-iteration check at the loop top catches races that
     // resolve later): a search is done ONLY when its results page is actually up.
     if (!result?.error) bgRecordSearchDone(state, newObs?.url);
+    // Going-in-circles detector: every click can "succeed" while the run ping-pongs
+    // between the same two pages (results ↔ channel, 9 visits in one real trace) —
+    // action success is not goal progress. Third landing on the same URL = say so.
+    try {
+      const cu = new URL(String(newObs?.url || ""));
+      const cKey = cu.host + cu.pathname;
+      state.urlVisits = state.urlVisits || {};
+      state.urlVisits[cKey] = (state.urlVisits[cKey] || 0) + 1;
+      if (state.urlVisits[cKey] === 3) {
+        state.facts.push({
+          key: `going_in_circles:${cKey.slice(0, 60)}`,
+          value: `You have now landed on ${cKey} 3 times this run — you are going in circles. Change tactic decisively: open a FULL-TITLED item instead of a repeated generic element, or finish with answer/clarify using what you already have.`,
+          source: "runtime",
+        });
+        state.facts = state.facts.slice(-30);
+      }
+    } catch (_) {}
     const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);
     BrainoTaskState.commitHistory(state, decision, result, verdict);
-    bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", trace: {
+    bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_TRACE", meta: traceMeta, trace: {
       step: step + 1,
       thought: stepThought,
-      action: bgDescribeDelegateAction(action, obs) || action.type,
+      action: String(bgDescribeDelegateAction(action, obs) || action.type).replace(/\s*#undefined\b/, " (page)"),
       actionRaw: JSON.stringify({ type: action.type, index: action.index, url: action.url, text: action.text, query: action.query }),
       result: result?.error ? `error: ${String(result.error).slice(0, 200)}` : "ok",
       verdict: verdict?.ok ? "ok" : `failed: ${String(verdict?.reason || "").slice(0, 200)}`,
