@@ -2711,13 +2711,15 @@ function __sbMoonwalkIntent(text) {
   return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
 }
 
-// "Braino, dance for me" — imperative forms only, so questions ABOUT dance stay chat,
-// media commands ("play dance monkey") stay music, and moonwalk keeps its own trick.
+// "Braino, dance!" — deliberately LOOSE: voice STT mangles the wake word ("Reynos,
+// dance for me"), so ANY utterance containing the word dance fires the trick (owner's
+// explicit call). Only media commands ("play dance monkey") stay music, and moonwalk
+// keeps its own trick.
 function __sbDanceIntent(text) {
   const t = String(text || "").toLowerCase();
   if (__sbMoonwalkIntent(t)) return false;
   if (/\b(play|queue|put on|song|track|album|playlist|spotify)\b/.test(t)) return false;
-  return /(?:^|[,!.:]\s*)(?:please\s+)?(?:dance|bust a move)\b|\b(?:can|could|will|would) you\s+(?:please\s+)?dance\b|\bdance for (?:me|us)\b|\bshow (?:me|us) your moves\b|\bdo (?:a|your) (?:little\s+)?dance\b/.test(t);
+  return /\bdanc(?:e|es|ed|ing)\b|\bbust a move\b|\bshow (?:me|us) your moves\b/.test(t);
 }
 
 // Best-effort: play an exact track from a timestamp. Routed through the BACKGROUND so a
@@ -3042,6 +3044,9 @@ function __sbWkStatus(label) {
   const walker = document.getElementById("__sbwk_walker__");
   if (!walker) return;
   let b = walker.querySelector("#__sbwk_status__");
+  // Mid-performance the show is the show — no "Listening…"/"Understanding…" chips over
+  // a dancing/moonwalking Braino (the mic still listens; only the label hides).
+  if (label && (__sbWkDancing || __sbWkMoonwalking)) { if (b) b.classList.remove("show"); return; }
   if (!label) { if (b) b.classList.remove("show"); return; }
   if (!b) {
     b = document.createElement("div");
