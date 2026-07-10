@@ -33,6 +33,7 @@ export type MomentReading = {
 // User-facing personality toggles. Defaults live in settings.ts.
 export type PersonalitySettings = {
   dadJokes: boolean;                 // when true, Braino sprinkles the occasional lame dad joke
+  swearing: boolean;                 // when true, Braino may use the occasional salty word with friends
   humor: "off" | "dry" | "playful";  // overall comedic register
   pushback: "gentle" | "direct";     // how hard he challenges a bad idea
   warmth: "measured" | "warm";       // how openly affectionate he runs

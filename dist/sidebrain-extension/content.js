@@ -6543,6 +6543,17 @@ function __sbBuildBrainUI() {
     });
   } catch (_) {}
 
+  // Swearing preference (dashboard → profiles.personality_settings.swearing → cached by
+  // the background premium fetch). Gates Braino's salty phrasing in the love/advance reply.
+  try {
+    chrome.storage?.local?.get?.(["sbAllowSwearing"], (r) => {
+      if (!chrome.runtime.lastError) __sbAllowSwearing = r?.sbAllowSwearing === true;
+    });
+    chrome.storage?.onChanged?.addListener?.((changes, area) => {
+      if (area === "local" && changes.sbAllowSwearing) __sbAllowSwearing = changes.sbAllowSwearing.newValue === true;
+    });
+  } catch (_) {}
+
   // ── Hive-mind handshake: this tab may have been opened BY a running delegate task
   // (Amazon and friends open products in new tabs). Ask the background if a run is
   // mid-flight here; if so, come up already in the working state instead of blank. ──
@@ -12852,6 +12863,17 @@ async function __sbProcessPrompt(text, options = {}) {
     return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
   };
 
+  // Affection / advances toward Braino → warm redirect (BEFORE the hard sexual gate, so
+  // "I love you" / "have sex with you" get the kind line, not "No.").
+  if (__sbIsLoveToBraino(promptText) || __sbIsAdvanceToBraino(promptText)) {
+    __sbStopSpeech();
+    const line = __sbIsLoveToBraino(promptText) ? __sbLoveReplyLine() : __SB_ADVANCE_LINE;
+    if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+    else __sbShowBubble(line, false, { kicker: "Braino" });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   // Safety: sexual/explicit → hard "No.", no routing, no model call.
   if (__sbIsSexualRequest(promptText)) {
     __sbStopSpeech();
@@ -15408,6 +15430,39 @@ function __sbSexualRefusalLine() {
     : "No.";
 }
 
+// ── Advances TOWARD Braino (attraction, love, come-ons) get a WARM redirect, not the
+// cold "No." — this runs BEFORE the sexual gate so "have sex with you" lands here. ──
+const __SB_ADVANCE_LINE = "Thank you, but please find a real human being. I am here to help you, not to fulfill other desires. Thank you very much.";
+let __sbAllowSwearing = false;   // synced from profiles.personality_settings.swearing (see boot)
+// "I love you" gets a sweet reply that ends with the same encouragement. When swearing
+// is enabled Braino talks like a friend and names "fucking around"; otherwise a clean form.
+function __sbLoveReplyLine() {
+  return __sbAllowSwearing
+    ? "Aw, that means a lot, honestly. I love you too, in my own little way. Still, go find a real human to share that with — unless you were just fucking around with me, in which case, right back at you."
+    : "Aw, that means a lot, honestly. I love you too, in my own little way. Still, go find a real human to share that with — unless you were just messing around with me, in which case, right back at you.";
+}
+function __sbIsLoveToBraino(text) {
+  const t = String(text || "").toLowerCase().replace(/[’']/g, "'");
+  if (/\bi(?:'m| am)?\s+(?:really |so |totally )?(?:in love with|love)\s+you\b/.test(t)) return true;
+  if (/^\s*(?:i )?love (?:you|u)\b/.test(t)) return true;
+  return false;
+}
+function __sbIsAdvanceToBraino(text) {
+  const t = String(text || "").toLowerCase().replace(/[’']/g, "'");
+  if (!t) return false;
+  // attraction directed at "you" (Braino)
+  if (/\byou(?:'re| are|r)?\s+(?:so |really |very |too |damn |quite |kinda )?(sexy|hot|gorgeous|beautiful|cute|adorable|attractive|handsome|pretty|hott?ie|fine)\b/.test(t)) return true;
+  // love / romance toward Braino
+  if (/\bi(?:'m| am)?\s+(?:really |so |totally )?(?:in love with|love)\s+you\b/.test(t)) return true;
+  if (/\b(marry me|be my (?:girl|boy)friend|be mine|go out with me|date me|will you date)\b/.test(t)) return true;
+  // sexual come-ons aimed at Braino
+  if (/\b(have sex|sleep|hook up|make out|makeout|get (?:it )?on|netflix and chill)\s+with\s+you\b/.test(t)) return true;
+  if (/\bi\s+want\s+(?:to\s+(?:kiss|touch|cuddle|hold|be with)\s+)?you\b(?!\s+to\b)/.test(t)) return true;
+  if (/\b(kiss|cuddle|make love|smash|hit it|smang)\b/.test(t) && /\byou\b/.test(t)) return true;
+  if (/^\s*smash\s*!?\.?\s*$/.test(t)) return true;   // "smash" alone
+  return false;
+}
+
 // ── Open-known-site shortcut: "open YouTube" navigates instantly instead of running the heavy agent
 // loop (~10s). Only fires for a SIMPLE open of a known site — anything compound ("open YouTube and
 // play X") falls through to the real agent. ──
@@ -15482,6 +15537,16 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
+  // Affection / advances toward Braino → warm redirect (before the hard sexual gate).
+  if (__sbIsLoveToBraino(transcript) || __sbIsAdvanceToBraino(transcript)) {
+    __sbStopSpeech();
+    const line = __sbIsLoveToBraino(transcript) ? __sbLoveReplyLine() : __SB_ADVANCE_LINE;
+    __sbNoteSpoken(line);
+    await __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
   // Safety: sexual/explicit → hard "No." (cancels any speculative answer first), no routing.
   if (__sbIsSexualRequest(transcript)) {
     __sbStopSpeech();

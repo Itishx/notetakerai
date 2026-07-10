@@ -1113,6 +1113,8 @@ export default function Dashboard() {
   // Memory Engine: auto-remembered facts + the master on/off toggle.
   const [brainoMemories, setBrainoMemories] = useState<BrainoMemory[]>([]);
   const [memoryEnabled, setMemoryEnabled] = useState(true);
+  const [swearingEnabled, setSwearingEnabled] = useState(false);
+  const [swearingSaving, setSwearingSaving] = useState(false);
   const [memoryToggleSaving, setMemoryToggleSaving] = useState(false);
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
   const [editingMemoryDraft, setEditingMemoryDraft] = useState("");
@@ -1442,7 +1444,7 @@ export default function Dashboard() {
           .maybeSingle(),
         supabase
           .from("profiles")
-          .select("overall_memory,memory_enabled")
+          .select("overall_memory,memory_enabled,personality_settings")
           .eq("user_id", user.id)
           .maybeSingle(),
         (supabase as any)
@@ -1496,6 +1498,7 @@ export default function Dashboard() {
       setOverallMemoryDraft(loadedOverallMemory);
       setBrainoMemories(((brainoMemoriesRes?.data as BrainoMemory[] | null) || []));
       setMemoryEnabled((profileMemoryRes.data as { memory_enabled?: boolean } | null)?.memory_enabled !== false);
+      setSwearingEnabled(((profileMemoryRes.data as { personality_settings?: { swearing?: boolean } } | null)?.personality_settings?.swearing) === true);
       setXConn((xConnRes as XConnection) || null);
       setScheduledXPosts((scheduledXRes.data as ScheduledXPost[] | null) || []);
       setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
@@ -2665,6 +2668,23 @@ export default function Dashboard() {
       return;
     }
     toast({ title: next ? "Memory on" : "Memory off", description: next ? "Braino will keep learning about you." : "Braino won't save new memories." });
+  };
+
+  // Personality — "let Braino swear" toggle (merges into personality_settings jsonb).
+  const handleToggleSwearing = async (next: boolean) => {
+    if (!user) return;
+    setSwearingEnabled(next);
+    setSwearingSaving(true);
+    const { data: cur } = await supabase.from("profiles").select("personality_settings").eq("user_id", user.id).maybeSingle();
+    const merged = { ...((cur as { personality_settings?: Record<string, unknown> } | null)?.personality_settings || {}), swearing: next };
+    const { error } = await supabase.from("profiles").update({ personality_settings: merged }).eq("user_id", user.id);
+    setSwearingSaving(false);
+    if (error) {
+      setSwearingEnabled(!next);
+      toast({ title: "Could not update setting", description: error.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+    toast({ title: next ? "Swearing on" : "Swearing off", description: next ? "Braino can talk like a friend now." : "Braino keeps it clean." });
   };
 
   // Memory Engine — delete one auto-remembered fact.
@@ -5055,6 +5075,24 @@ export default function Dashboard() {
 
             {activeTab === "settings" && (
               <div className="grid gap-5 xl:grid-cols-2">
+                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6 xl:col-span-2">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 style={serifStyle} className="mb-1 text-[24px] leading-none tracking-[-0.02em]">
+                        Let Braino <em className="text-[var(--sb-accent-deep)]">swear.</em>
+                      </h3>
+                      <p className="max-w-[560px] text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
+                        Off by default. When on, Braino talks like a close friend and is allowed the occasional salty word (for example, he&apos;ll say &quot;fucking around&quot; when you&apos;re joking with him). Off keeps every reply clean.
+                      </p>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-2.5">
+                      <span style={monoStyle} className="text-[11px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+                        {swearingEnabled ? "Swearing on" : "Swearing off"}
+                      </span>
+                      <Switch checked={swearingEnabled} disabled={swearingSaving} onCheckedChange={handleToggleSwearing} />
+                    </div>
+                  </div>
+                </div>
                 <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                   <h3 style={serifStyle} className="mb-1 text-[26px] leading-none tracking-[-0.02em]">
                     Profile

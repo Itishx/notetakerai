@@ -7663,7 +7663,7 @@ async function bgResolvePremiumStatus(options = {}) {
 
   let token = data.authToken;
   const fetchPremium = async (accessToken) => fetch(
-    `${BG_SUPABASE_URL}/rest/v1/profiles?user_id=eq.${encodeURIComponent(data.authUserId)}&select=is_premium&limit=1`,
+    `${BG_SUPABASE_URL}/rest/v1/profiles?user_id=eq.${encodeURIComponent(data.authUserId)}&select=is_premium,personality_settings&limit=1`,
     { headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}` } },
   );
 
@@ -7680,7 +7680,10 @@ async function bgResolvePremiumStatus(options = {}) {
 
     const rows = await res.json();
     const isPremium = rows?.[0]?.is_premium === true;
-    await bgSetStorage({ isPremium, isPremiumCachedAt: now });
+    // Cache the swearing preference (personality_settings.swearing) so the content
+    // script can gate salty phrasing instantly, offline, without its own fetch.
+    const allowSwearing = rows?.[0]?.personality_settings?.swearing === true;
+    await bgSetStorage({ isPremium, isPremiumCachedAt: now, sbAllowSwearing: allowSwearing });
     return { ok: true, isPremium, source: "profile" };
   } catch (error) {
     return {
