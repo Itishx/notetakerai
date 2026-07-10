@@ -1,5 +1,5 @@
 declare const __EXTENSION_VERSION__: string;
 
 export const EXTENSION_VERSION = __EXTENSION_VERSION__;
-export const EXTENSION_DOWNLOAD_URL = `/braino-preview.zip?v=${encodeURIComponent(EXTENSION_VERSION)}`;
-export const EXTENSION_DOWNLOAD_FILENAME = `braino-preview-v${EXTENSION_VERSION}.zip`;
+export const EXTENSION_DOWNLOAD_URL = `/braino.zip?v=${encodeURIComponent(EXTENSION_VERSION)}`;
+export const EXTENSION_DOWNLOAD_FILENAME = "braino.zip";
