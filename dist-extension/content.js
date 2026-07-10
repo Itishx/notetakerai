@@ -2677,6 +2677,8 @@ let __sbWkClimbRaf = null;
 let __sbWkResumeFromX = null;  // start X for the next walk loop (so a climb hands off smoothly)
 let __sbWkMoonwalking = false; // true while the moonwalk owns the rig
 let __sbWkMoonRaf = null;
+let __sbWkDancing = false;     // true while the dance routine owns the rig
+let __sbWkDanceRaf = null;
 let __sbWkJumping = false;      // true while the jump-and-point owns the rig
 let __sbWkJumpRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
@@ -2684,6 +2686,10 @@ let __sbGlassesOn = false;     // Braino is wearing his specs
 // "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
 const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
 const __SB_BILLIE_JEAN_START_MS = 211000;   // 3:31
+// "DAF" — the dance-party track + the drop (0:59 → 1:10) the user picked.
+const __SB_DANCE_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
+const __SB_DANCE_START_MS = 59000;          // 0:59
+const __SB_DANCE_DURATION_MS = 11000;       // dance until 1:10
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -2705,20 +2711,32 @@ function __sbMoonwalkIntent(text) {
   return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
 }
 
-// Best-effort: play "Billie Jean" from the moonwalk timestamp via the Spotify Web API.
-// We have the exact track URI, so no search — just play + seek. Needs the user's Spotify
-// connected + an active device; any failure is swallowed (Braino moonwalks regardless).
-async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
+// "Braino, dance for me" — imperative forms only, so questions ABOUT dance stay chat,
+// media commands ("play dance monkey") stay music, and moonwalk keeps its own trick.
+function __sbDanceIntent(text) {
+  const t = String(text || "").toLowerCase();
+  if (__sbMoonwalkIntent(t)) return false;
+  if (/\b(play|queue|put on|song|track|album|playlist|spotify)\b/.test(t)) return false;
+  return /(?:^|[,!.:]\s*)(?:please\s+)?(?:dance|bust a move)\b|\b(?:can|could|will|would) you\s+(?:please\s+)?dance\b|\bdance for (?:me|us)\b|\bshow (?:me|us) your moves\b|\bdo (?:a|your) (?:little\s+)?dance\b/.test(t);
+}
+
+// Best-effort: play an exact track from a timestamp via the Spotify Web API. No search —
+// just play + seek. Needs the user's Spotify connected + an active device; any failure
+// is swallowed (Braino performs regardless).
+async function __sbSpotifyPlayTrack(uri, positionMs = 0) {
   try {
     const { authToken } = await __sbStorageGet(["authToken"]);
     if (!authToken) return { ok: false, reason: "signin" };
     const r = await fetch(`${__SB_API}/spotify-playback`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: __SB_ANON_KEY, Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({ action: "play", uris: [__SB_BILLIE_JEAN_URI], positionMs }),
+      body: JSON.stringify({ action: "play", uris: [uri], positionMs }),
     });
     return { ok: r.ok };
   } catch (_) { return { ok: false }; }
+}
+async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
+  return __sbSpotifyPlayTrack(__SB_BILLIE_JEAN_URI, positionMs);
 }
 
 // ── Moonwalk ────────────────────────────────────────────────────────────────
@@ -2844,6 +2862,140 @@ function __sbWkEndMoonwalk(xResume) {
   __sbWkMoonwalking = false; __sbWkThrowMode = false;
   if (__sbInputOpen) {
     // resume from roughly where he is (clamped into the lane)
+    const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
+    __sbWkResumeFromX = Math.max(6, Math.min(typeof xResume === "number" ? xResume : 24, laneW - 70));
+    __sbStartWalkLoop();
+  } else {
+    if (walker) walker.style.transform = "";
+    const lane = document.getElementById("__sb_walk_lane__");
+    if (lane) lane.style.display = "none";
+  }
+}
+
+// ── Dance ───────────────────────────────────────────────────────────────────
+// "Braino, dance for me" → DAF drops at 0:59 and Braino runs a six-move routine built
+// from the rig he already has: groove bounce, disco point (the Travolta), spin flips,
+// hands-in-the-air sway, double-time footwork, then the celebrate face + confetti
+// finale. Same rig-ownership contract as the moonwalk.
+function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!walker || !root) return;
+
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
+  // __sbWkMoonwalking doubles as "a routine owns the rig" for every existing guard.
+  __sbWkDancing = true; __sbWkMoonwalking = true; __sbWkThrowMode = true;
+  __sbWkClimbing = false; __sbWkThrown = false; __sbWkReaction = null;
+
+  const flip = document.getElementById("__sbwk_flip__");
+  const q = (sel) => root.querySelector(sel);
+  const legL = q("#__sbwk_ll__"), legR = q("#__sbwk_rl__");
+  const laBg = q("#__sbwk_la_bg__"), raBg = q("#__sbwk_ra_bg__");
+  const laFg = q("#__sbwk_la__"), raFg = q("#__sbwk_ra__");
+  const pupL = q("#__sbwk_pupil_l__"), pupR = q("#__sbwk_pupil_r__");
+  const reactG = q("#__sbwk_react__"), celebG = q("#__sbwk_rc__"), mouthG = q("#__sbwk_mouth__");
+  __sbWkSay("Watch this 🕺");
+
+  const W = 64;
+  const laneW = lane.clientWidth || 320;
+  const minX = 6, maxX = Math.max(minX + 10, laneW - W - 6);
+  const midX = (minX + maxX) / 2;
+  const span = Math.max(20, (maxX - minX) / 2);
+  const BEAT = 2 * Math.PI * 2;              // 120 BPM pulse
+  const MOVE_S = 1.8;                        // six moves fill the 11s window
+  const start = performance.now();
+  const setArm = (bg, fg, deg) => {
+    const cx = bg === laBg ? 22 : 78;
+    const tx = deg ? `rotate(${deg} ${cx} 53)` : "";
+    if (bg) bg.setAttribute("transform", tx);
+    if (fg) fg.setAttribute("transform", tx);
+  };
+
+  const step = (now) => {
+    const t = (now - start) / 1000;
+    const b = Math.sin(t * BEAT);            // the pulse
+    const B = Math.abs(b);
+    const move = Math.floor(t / MOVE_S) % 6;
+
+    let x = midX + Math.sin(t * 0.9) * span * 0.5;
+    let face = Math.cos(t * 0.9) >= 0 ? 1 : -1;
+    let armL = 0, armR = 0, ll = 0, rl = 0, ls = 0, rs = 0;
+    let waddle = b * 5, hop = -B * 2.5;
+
+    if (move === 0) {           // groove: bounce + alternating arm swing + step
+      armL = b * 38; armR = -b * 38;
+      ll = Math.max(0, b) * 4; rl = Math.max(0, -b) * 4;
+      ls = Math.max(0, b) * 9;  rs = Math.max(0, -b) * 9;
+    } else if (move === 1) {    // disco point: right arm sky on the beat, left on hip
+      armR = b > 0 ? -125 : -35;
+      armL = 28;
+      waddle = b * 7; hop = -B * 3.5;
+      x = midX; face = 1;
+    } else if (move === 2) {    // spin: flip each half-beat + slide across the bar
+      face = Math.sin(t * BEAT / 2) >= 0 ? 1 : -1;
+      x = midX + Math.sin(t * 1.6) * span;
+      armL = 55; armR = -55;
+      waddle = b * 3;
+    } else if (move === 3) {    // hands in the air, big sway
+      armL = 120; armR = -120;
+      waddle = Math.sin(t * BEAT / 2) * 9;
+      hop = -B * 2;
+      x = midX + Math.sin(t * BEAT / 2) * 10; face = 1;
+    } else if (move === 4) {    // footwork: double-time steps
+      const f = Math.sin(t * BEAT * 2);
+      ll = Math.max(0, f) * 6; rl = Math.max(0, -f) * 6;
+      ls = Math.max(0, f) * 14; rs = Math.max(0, -f) * 14;
+      armL = f * 20; armR = -f * 20;
+      hop = -Math.abs(f) * 1.5;
+    } else {                    // finale: celebrate face + confetti + big bounce
+      armL = 115 + b * 12; armR = -115 - b * 12;
+      hop = -B * 5; waddle = b * 6; face = 1;
+    }
+    const finale = move === 5;
+    if (reactG) reactG.setAttribute("display", finale ? "inline" : "none");
+    if (celebG) celebG.setAttribute("display", finale ? "inline" : "none");
+    if (mouthG) mouthG.setAttribute("display", finale ? "none" : "inline");
+
+    walker.style.transform = `translateX(${x}px)`;
+    if (flip) flip.style.transform = `scaleX(${face})`;
+    setArm(laBg, laFg, armL);
+    setArm(raBg, raFg, armR);
+    if (legL) legL.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+    if (legR) legR.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+    const breath = 1 + 0.014 * Math.sin(t * 1.7);
+    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${hop - 0.4}) scale(${breath})`);
+    const gz = b * 1.2;
+    if (pupL) pupL.setAttribute("transform", `translate(${gz} 0)`);
+    if (pupR) pupR.setAttribute("transform", `translate(${gz} 0)`);
+
+    if (now - start < durationMs) __sbWkDanceRaf = requestAnimationFrame(step);
+    else __sbWkEndDance(x);
+  };
+  __sbWkDanceRaf = requestAnimationFrame(step);
+}
+
+function __sbWkEndDance(xResume) {
+  if (__sbWkDanceRaf) { cancelAnimationFrame(__sbWkDanceRaf); __sbWkDanceRaf = null; }
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (root) {
+    for (const sel of ["#__sbwk_la__", "#__sbwk_ra__", "#__sbwk_la_bg__", "#__sbwk_ra_bg__", "#__sbwk_ll__", "#__sbwk_rl__"]) {
+      root.querySelector(sel)?.setAttribute("transform", "");
+    }
+    root.querySelector("#__sbwk_react__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_rc__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_mouth__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
+    root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
+  }
+  __sbWkDancing = false; __sbWkMoonwalking = false; __sbWkThrowMode = false;
+  if (__sbInputOpen) {
     const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
     __sbWkResumeFromX = Math.max(6, Math.min(typeof xResume === "number" ? xResume : 24, laneW - 70));
     __sbStartWalkLoop();
@@ -12518,6 +12670,19 @@ async function __sbProcessPrompt(text, options = {}) {
       }
     });
     setTimeout(() => __sbWkMoonwalk(11000), 650);             // let the beat drop, then moonwalk
+    return;
+  }
+
+  // "dance for me" → cue DAF at 0:59 (best-effort), then run the six-move routine to 1:10.
+  if (__sbDanceIntent(promptText)) {
+    __sbStopSpeech();
+    __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS).then((r) => {
+      // If the music couldn't start, say why AFTER the routine so it doesn't clobber the bubble.
+      if (!r || !r.ok) {
+        setTimeout(() => __sbWkSay(r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧"), __SB_DANCE_DURATION_MS + 900);
+      }
+    });
+    setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 650);   // let the drop land, then dance
     return;
   }
 
