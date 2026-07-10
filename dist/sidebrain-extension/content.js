@@ -4183,7 +4183,7 @@ if (__sbContextOk()) {
         }
         __sbSetStopBtn(false);
         __sbClearBarAgentStatus();
-        __sbAgentLogClear();   // collapse the activity strip when the task finishes
+        __sbAgentFlowDone();   // task finished — settle EVERY surface (island, status, walker)
         if (__sbRtAwaitingDelegateResult) {
           __sbRtAwaitingDelegateResult = false;
           if (finalText) {
@@ -7551,8 +7551,7 @@ function __sbStopDelegate() {
   __sbSetStopBtn(false);
   __sbAgentPendingTurn = null;
   __sbClearBarAgentStatus();
-  __sbAgentLogClear();            // collapse the in-bar activity log too
-  __sbStopWaitEntertainment();
+  __sbAgentFlowDone();            // settle island + status + walker together
   __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
 }
 
@@ -10559,6 +10558,18 @@ function __sbAgentLogThought(text) {
   __sbAgentLogRender();
 }
 
+// End-of-task teardown, ONE call: island (thought + steps) collapses, placeholder
+// restores, walker status bubble settles (back to Listening… only if voice is live),
+// wait-entertainment stops. Every flow exit calls this so no surface is left saying
+// "Thinking/Researching…" after the task ended.
+function __sbAgentFlowDone() {
+  __sbAgentLogClear();
+  if (typeof __sbClearBarAgentStatus === "function") __sbClearBarAgentStatus();
+  if (typeof __sbStopWaitEntertainment === "function") __sbStopWaitEntertainment();
+  __sbAgentBusyLabel = "Working…";
+  if (typeof __sbWkStatus === "function") __sbWkStatus(__sbHeadphoneMode ? "Listening…" : "");
+}
+
 function __sbAgentLogClear() {
   __sbAgentThought = "";
   if (typeof __sbAgentTraceFinish === "function") __sbAgentTraceFinish();
@@ -10725,7 +10736,7 @@ function __sbUpdateAgentSubgoals(subgoals) {
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
   __sbDelegateUiHidden = false;   // delegate done → re-enable the chat UI before rendering the result
-  __sbStopWaitEntertainment(); // delegate finished — settle the mascot
+  __sbAgentFlowDone(); // delegate finished — settle EVERY surface (island, status, walker)
   __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
   const reply = String(answer || "").trim();
@@ -12641,6 +12652,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
 
   // Live activity strip (always visible, incl. voice mode) so the user SEES the research happen.
   __sbAgentLogShow("Researching…");
+  __sbAgentLogThought(`Let me dig into ${query}. I'll search first, then read the strongest results and compare them properly.`);
   __sbAgentLogStep(`Searching for ${query}`);
 
   if (!voiceOnly) {
@@ -12673,6 +12685,11 @@ async function __sbExecuteCompare(query, ctx = {}) {
     });
     const results = searchData.results || searchData.sources || [];
     __sbRememberResearchResults(results);   // so "show me the Udemy one" can resolve to a real result
+    // Live thinking from REAL state: name what actually came back before reading it.
+    if (results.length) {
+      const found = results.slice(0, 3).map((r) => String(r?.title || "").trim() || (() => { try { return new URL(r.url).hostname.replace(/^www\./, ""); } catch (_) { return ""; } })()).filter(Boolean);
+      if (found.length) __sbAgentLogThought(`Okay, here's what I found so far: ${found.join("; ")}. Now I'm reading these to pull out what actually matters.`);
+    }
 
     // Theatric tabs #2..#3 — top product/review pages, staggered, background only.
     if (openTabs && results.length) {
@@ -12713,8 +12730,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
     __sbShowBubble("Error: " + (err.message || "couldn't run the comparison"), true);
     if (fromVoice) await speakVoiceReply("Something went wrong while comparing.");
   } finally {
-    __sbAgentLogClear();
-    __sbStopWaitEntertainment();
+    __sbAgentFlowDone();
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
   }
 }
@@ -13062,6 +13078,9 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbSyncSpeakButtons();
       __sbStartWaitEntertainment(); // keep Braino lively while the search runs
     }
+    __sbAgentLogShow("Searching…");
+    __sbAgentLogThought(`The user wants to know about ${searchQuery}. I'm searching the live web now — once results land I'll read the credible ones and answer from those.`);
+    __sbAgentLogStep(`Searching for ${searchQuery}`);
     __sbChatHistory.push({ role: "user", content: promptText });
 
     try {
@@ -13071,9 +13090,15 @@ async function __sbProcessPrompt(text, options = {}) {
         chatHistory: previousHistory,
       });
 
+      const webResults = searchData.results || searchData.sources || [];
+      if (webResults.length) {
+        const found = webResults.slice(0, 3).map((r) => String(r?.title || "").trim() || (() => { try { return new URL(r.url).hostname.replace(/^www\./, ""); } catch (_) { return ""; } })()).filter(Boolean);
+        if (found.length) __sbAgentLogThought(`Okay, here's what I found so far: ${found.join("; ")}. Now I'm pulling the answer together from these.`);
+      }
+      __sbAgentLogStep("Reading the results…");
       const finalReply = __sbAppendSearchSources(
         String(searchData.answer || "I couldn't turn those web results into a useful answer."),
-        searchData.results || searchData.sources || [],
+        webResults,
       );
       __sbChatHistory.push({ role: "assistant", content: finalReply });
       __sbCardTurns.push({ prompt: promptText, answer: finalReply });
@@ -13096,7 +13121,7 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
       if (fromVoice) await speakVoiceReply("Something went wrong while searching the web.");
     } finally {
-      __sbStopWaitEntertainment();
+      __sbAgentFlowDone();
       __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     }
     return;
