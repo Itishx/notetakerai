@@ -3601,7 +3601,7 @@ async function bgBuildElementObservation(tabId, keywords = "") {
   if (!tabId) return empty;
   return new Promise((resolve) => {
     function send(retrying) {
-      chrome.tabs.sendMessage(tabId, { action: "buildElementMap", keywords, cap: 120 }, (res) => {
+      chrome.tabs.sendMessage(tabId, { action: "buildElementMap", keywords, cap: 170 }, (res) => {
         if (chrome.runtime.lastError) {
           if (retrying) { resolve(empty); return; }
           chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
