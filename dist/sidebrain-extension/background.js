@@ -3401,7 +3401,7 @@ function bgBuildDelegateSystemPrompt(skills, lessons, geo = null) {
 Return ONLY strict JSON. No prose. No markdown fences.
 
 Decision shape:
-{"thought":"1-2 short sentences","memory_update":{"facts":[{"key":"...","value":"..."}],"current_subgoal":"...","subgoal_complete":false},"action":ACTION,"expect":ASSERTION,"done_confidence":0}
+{"thought":"your ACTUAL thinking, 1-2 complete first-person sentences","memory_update":{"facts":[{"key":"...","value":"..."}],"current_subgoal":"...","subgoal_complete":false},"action":ACTION,"expect":ASSERTION,"done_confidence":0}
 
 Actions:
 {"type":"navigate","url":"https://..."}
@@ -3428,6 +3428,7 @@ Assertions:
 {"assert":"none"}
 
 Rules:
+- thought is YOUR live reasoning, shown to the user while you work. Write complete first-person sentences that connect what you see, what the user wants, and why this next action — like "The user wants the hardcover and I can see Add to Cart, so I'll click it." Never telegraphic fragments ("search box. type query."), never third person.
 - Return exactly one action per turn.
 - Never output selector, targetText, targetTag, XPath, or CSS. Target live elements only by index.
 - Use the observation as ground truth. If the needed element is absent, scroll, wait, read, or clarify.
@@ -3952,6 +3953,11 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       onFinal?.(msg);
       return { ok: false, message: msg, state };
     }
+
+    // Stream the model's reasoning into the bar's island BEFORE the action runs —
+    // think, then act, and the user watches both.
+    const stepThought = String(decision?.thought || "").trim();
+    if (stepThought) bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_THOUGHT", thought: stepThought });
 
     BrainoTaskState.mergeMemoryUpdate(state, decision.memory_update, "model");
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });

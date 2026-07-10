@@ -4216,6 +4216,14 @@ if (__sbContextOk()) {
       sendResponse?.({ ok: true });
       return false;
     }
+    if (msg.action === "SB_AGENT_THOUGHT" || msg.type === "SB_AGENT_THOUGHT") {
+      // Delegate's per-step reasoning, streamed live into the bar's island so thinking
+      // gaps are visible while it works (same spirit as showing the model's thinking).
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      if (typeof __sbAgentLogThought === "function") __sbAgentLogThought(msg.thought);
+      sendResponse?.({ ok: true });
+      return false;
+    }
     if (msg.action === "sbSpotifyState") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       // FIX 3: never auto-open the inline Spotify modal on an action. Spotify opens in a
@@ -5006,6 +5014,12 @@ function __sbBuildBrainUI() {
     @keyframes __sb_blog_spin__ { to { transform: rotate(360deg); } }
     @keyframes __sb_tick_pop__ { 0% { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
     #__sb_bar_log__ .sb-blog-step.just-done .sb-blog-ic { animation: __sb_tick_pop__ 0.36s cubic-bezier(0.34,1.56,0.64,1); }
+    /* Delegate's live thinking — dimmed italic, Claude-style, above the action steps */
+    #__sb_bar_log__ .sb-blog-thought { display: flex; gap: 9px; font-size: 11.5px; line-height: 1.45; font-style: italic; color: #97897e; margin-bottom: 3px; }
+    #__sb_bar_log__ .sb-blog-thought .sb-blog-tic { flex: none; width: 13px; text-align: center; font-style: normal; opacity: 0.75; }
+    #__sb_bar_log__ .sb-blog-thought > span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    #__sb_bar__.sb-log-open.sb-log-thinking #__sb_bar_log__ { max-height: 104px; }
+    html.sb-dark #__sb_bar_log__ .sb-blog-thought { color: #8f867c; }
     html.sb-dark #__sb_bar__.sb-log-open { background: rgba(24,21,18,0.84); }
     html.sb-dark #__sb_bar_log__ .sb-blog-step { color: #b0a89e; }
     html.sb-dark #__sb_bar_log__ .sb-blog-step.active { color: #FBF7F1; }
@@ -10369,6 +10383,7 @@ function __sbClearBarAgentStatus() {
 // ── In-pill agent activity log — the pill itself grows from its top (Dynamic-Island style) to
 // show the play-by-play, so the user sees what Braino is doing even in voice-only mode. ──
 let __sbAgentLogSteps = [];
+let __sbAgentThought = "";   // Delegate's live per-step reasoning (rendered above the steps)
 let __sbAgentBusy = false;            // true while an agent/research task runs
 let __sbAgentBusyLabel = "Working…";  // overrides the voice indicator's "Listening…" while busy
 let __sbAgentLogCollapseTimer = null;
@@ -10389,11 +10404,15 @@ function __sbAgentLogRender() {
   const stepsEl = log.querySelector(".sb-blog-steps");
   if (stepsEl) {
     const shown = __sbAgentLogSteps.slice(-2);   // extend just a little — last 2 steps
-    stepsEl.innerHTML = shown.map((s) =>
+    const thoughtRow = __sbAgentThought
+      ? `<div class="sb-blog-thought"><span class="sb-blog-tic">💭</span><span>${__sbEscHtml(__sbAgentThought)}</span></div>`
+      : "";
+    stepsEl.innerHTML = thoughtRow + shown.map((s) =>
       `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
     ).join("");
     shown.forEach((s) => { s.justDone = false; });  // tick-pop plays once
   }
+  bar.classList.toggle("sb-log-thinking", Boolean(__sbAgentThought));
   bar.classList.add("sb-log-open");
 }
 
@@ -10419,7 +10438,18 @@ function __sbAgentLogStep(text) {
   __sbAgentLogRender();
 }
 
+// Delegate's live reasoning line — rendered Claude-thinking-style (dimmed italic) above
+// the action steps, so the user can SEE how he's thinking and spot the gaps.
+function __sbAgentLogThought(text) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean || clean === __sbAgentThought) return;
+  __sbAgentThought = clean;
+  if (__sbJarvisOpen) __sbJarvisPushLog(`💭 ${clean}`);
+  __sbAgentLogRender();
+}
+
 function __sbAgentLogClear() {
+  __sbAgentThought = "";
   const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
   if (last && last.active) { last.active = false; last.justDone = true; __sbAgentLogRender(); }  // final tick
   __sbAgentLogSteps = [];
