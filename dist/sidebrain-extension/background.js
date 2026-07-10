@@ -3271,6 +3271,8 @@ SKILL amazon-shopping (guided buying — the user stays in the loop):
 - DOMAIN: always use the user's LOCAL Amazon (see the user-context line: India → amazon.in, US → amazon.com). If you find yourself on another country's Amazon, navigate to the local one first.
 - PREREQUISITE: the user must already be signed in. "Hello, sign in" in the header means logged OUT; "Hello, <name>" means logged IN. A "Sign in" link merely EXISTING somewhere on the page does NOT mean logged out — every Amazon page has one. Treat login as blocking ONLY when the URL itself is a sign-in page (/ap/signin) or a password field is visible; then STOP with {"type":"clarify","text":"Amazon is asking you to sign in on this page. Do that and ask me to continue."}. NEVER type credentials, even if they appear in context.
 - CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
+- THE ORDERED STEPS — always know which one you are on: (1) SEARCH the book, (2) OPEN the book (click its result link), (3) ADD TO CART, (4) PROCEED to checkout. Announce the step in your thought ("Step 2: opening the listing").
+- LOCATING THE RESULT: after a search, the product listings ARE in the observation as link elements — a link whose name starts with the title you searched IS the book (names truncate before the author; that is fine). Do NOT read or scroll repeatedly waiting for them to "appear" — click the best-matching title link. If the task is only to SEARCH, opening the top matching result and confirming it counts as done.
 - BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
 - SEARCH ONCE: use the provided search query exactly one time. If the product is visible in the results, open it; if not, scroll once, then clarify. NEVER re-run reworded variations of the same search — a second near-identical query is forbidden.
 - Amazon re-renders after every click. After each click take {"type":"wait","ms":1000}, then re-read before acting again.
@@ -3698,7 +3700,9 @@ async function bgExecuteDelegateAction(tabId, action, state) {
     await bgDelay(450);
   }
   if (action.type === "read" && result?.text) {
-    state.facts.push({ key: `read:${state.facts.length + 1}`, value: String(result.text).slice(0, 2000), source: "page" });
+    // 2000 chars was just the top chrome on list-heavy pages (Amazon nav/filters) — the
+    // actual results sit lower, so reads kept returning junk. 5000 reaches the listings.
+    state.facts.push({ key: `read:${state.facts.length + 1}`, value: String(result.text).slice(0, 5000), source: "page" });
   }
   return result || { error: "No response from action execution" };
 }
@@ -4173,6 +4177,25 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     // Post-action check too (the per-iteration check at the loop top catches races that
     // resolve later): a search is done ONLY when its results page is actually up.
     if (!result?.error) bgRecordSearchDone(state, newObs?.url);
+    // Repeated-action breaker (general): reading/scrolling the SAME page over and over
+    // yields nothing new — the interactive elements are ALREADY in every observation.
+    // The atomic-habits run read the results page 11 times insisting it "couldn't see
+    // the listing." After 3 same-type actions on one URL, forbid another and force a
+    // click on the best-matching visible element (or answer/clarify).
+    try {
+      const au = new URL(String(obs?.url || ""));
+      const aKey = au.host + au.pathname + ":" + action.type;
+      state.actionStreak = (state.actionStreak && state.actionStreak.key === aKey)
+        ? { key: aKey, n: state.actionStreak.n + 1 }
+        : { key: aKey, n: 1 };
+      if (["read", "scroll"].includes(action.type) && state.actionStreak.n >= 3) {
+        const note = `You have used "${action.type}" ${state.actionStreak.n} times on this page. Reading/scrolling again reveals NOTHING new — every interactive element on the page is ALREADY listed in the observation above (result links included, even offscreen ones). Do NOT ${action.type} again. Instead: pick the element whose name best matches what you want and CLICK it; if genuinely nothing matches, answer or clarify. On a shopping/search-results page, the product you want is a link whose name STARTS WITH the title you searched — click it.`;
+        state.facts.push({ key: `repeated_action:${state.facts.length + 1}`, value: note, source: "runtime" });
+        state.facts = state.facts.slice(-30);
+        onProgress?.("Reading in circles — I'll pick a result and click it...");
+      }
+    } catch (_) {}
+
     // Subgoal-stagnation escalation: action success is not progress. If the ACTIVE
     // subgoal hasn't advanced in 8 steps, force the existing replan machinery — the
     // 118s YouTube loop never tripped stuckCount because every click "succeeded".
