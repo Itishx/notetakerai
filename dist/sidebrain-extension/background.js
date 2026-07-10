@@ -3272,6 +3272,7 @@ SKILL amazon-shopping (guided buying — the user stays in the loop):
 - DOMAIN: always use the user's LOCAL Amazon (see the user-context line: India → amazon.in, US → amazon.com). If you find yourself on another country's Amazon, navigate to the local one first.
 - PREREQUISITE: the user must already be signed in. "Hello, sign in" in the header means logged OUT; "Hello, <name>" means logged IN. A "Sign in" link merely EXISTING somewhere on the page does NOT mean logged out — every Amazon page has one. Treat login as blocking ONLY when the URL itself is a sign-in page (/ap/signin) or a password field is visible; then STOP with {"type":"clarify","text":"Amazon is asking you to sign in on this page. Do that and ask me to continue."}. NEVER type credentials, even if they appear in context.
 - CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
+- CART IS SACRED: NEVER click Delete, Remove, "Save for later", or a quantity +/− stepper on ANY cart item. Do not "clean up", "clear", or adjust the existing cart. Only ADD what the user asked for and move forward. (This is also enforced deterministically — such clicks are blocked — but never even attempt them.)
 - THE ORDERED STEPS — always know which one you are on: (1) SEARCH the book, (2) OPEN the book (click its result link), (3) ADD TO CART, (4) PROCEED to checkout. Announce the step in your thought ("Step 2: opening the listing").
 - LOCATING THE RESULT: after a search, the product listings ARE in the observation as link elements — a link whose name starts with the title you searched IS the book (names truncate before the author; that is fine). Do NOT read or scroll repeatedly waiting for them to "appear" — click the best-matching title link. If the task is only to SEARCH, opening the top matching result and confirming it counts as done.
 - BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
@@ -3828,6 +3829,33 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
   return { ok: true, message: "Done.", origin };
 }
 
+// CART SAFETY: refuse any click that removes an item from or changes the quantity of a
+// cart. Returns a block reason string, or "" to allow. Deterministic — the model can
+// never override it. Explicit safe actions (add to cart, buy, checkout, proceed, place
+// order) are always allowed even if their label mentions "cart".
+function bgCartSafetyBlock(action, obs) {
+  if (!action || action.type !== "click") return "";
+  const els = (obs && Array.isArray(obs.elements)) ? obs.elements : [];
+  const el = els.find((e) => Number(e.index) === Number(action.index));
+  const name = String(el?.name || el?.value || "").trim().toLowerCase();
+  if (!name) return "";
+  // Never treat the forward/purchase controls as destructive.
+  if (/\b(add to cart|add to basket|buy now|buy it|place (your )?order|proceed|checkout|check out|continue|order now)\b/.test(name)) return "";
+  // Destructive-to-cart controls — blocked no matter the page.
+  const destructive =
+    /\b(delete|remove)\b/.test(name)                                   // "Delete", "Remove", "Remove from cart"
+    || /\bsave for later\b/.test(name)                                 // moves it out of the active cart
+    || /\bmove to (?:wish ?list|saved|list)\b/.test(name)
+    || /\b(decrease|reduce|decrement|increase|increment)\b.*\b(quantity|qty|item)\b/.test(name)
+    || /\b(quantity|qty)\b.*\b(decrease|reduce|increase)\b/.test(name)
+    || /^[-‐‑‒–—−+]$/.test(name)                              // a bare stepper "+" / "−" (all dash/minus variants)
+    || /^(?:minus|plus)$/.test(name);
+  if (destructive) {
+    return `SAFETY: refused to click "${String(el?.name || "").slice(0, 60)}". Braino never deletes items from or changes quantities in a cart. If you need to reach checkout, use Proceed/Buy — do not modify existing cart items. If the user explicitly wants an item removed, they must do it themselves.`;
+  }
+  return "";
+}
+
 // Record "this search executed" when a URL proves its results page is up. The mark lives
 // in state.searchesDone (never evicted — the facts list caps at 30 and was scrolling
 // marks out on long runs) plus a copy in facts for model visibility. Idempotent.
@@ -4148,6 +4176,29 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
         url: String(obs?.url || "").slice(0, 160),
       });
       onProgress?.("Already there — skipping a repeat search...");
+      prevObs = obs;
+      continue;
+    }
+
+    // ── CART SAFETY (hard, non-negotiable): Braino must NEVER remove items from or
+    // change quantities in a cart. It deleted items from a real user's cart. This is a
+    // deterministic block on clicking delete/remove/save-for-later/quantity-stepper
+    // controls — enforcement, not a prompt request. Add-to-Cart / Buy / Checkout pass. ──
+    const cartBlock = bgCartSafetyBlock(action, obs);
+    if (cartBlock) {
+      state.facts.push({ key: `cart_safety:${state.facts.length + 1}`, value: cartBlock, source: "runtime" });
+      state.facts = state.facts.slice(-30);
+      BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: cartBlock }, { ok: false, reason: cartBlock });
+      bgPushTrace(state, currentTabId, traceMeta, {
+        step: step + 1,
+        thought: String(decision?.thought || "").trim(),
+        action: bgDescribeDelegateAction(action, obs) || action.type,
+        actionRaw: JSON.stringify({ type: action.type, index: action.index }),
+        result: `BLOCKED by cart safety: ${cartBlock.slice(0, 160)}`,
+        verdict: "blocked",
+        url: String(obs?.url || "").slice(0, 160),
+      });
+      onProgress?.("Not touching existing cart items — safety.");
       prevObs = obs;
       continue;
     }
