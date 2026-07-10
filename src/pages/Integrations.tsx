@@ -1,8 +1,14 @@
+import "./home.css";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import Navbar from "@/components/Navbar";
+import SiteFooter from "@/components/SiteFooter";
 import { ArrowRight, BellRing, BookOpen, Briefcase, Calendar, CheckCircle2, ClipboardList, CreditCard, Database, FileText, FolderOpen, Github, KanbanSquare, LayoutGrid, Mail, MessageCircle, MessageSquareText, Network, ShieldCheck, ShoppingCart, Video } from "lucide-react";
 import type { ComponentType } from "react";
 import { Link } from "react-router-dom";
+import {
+  Eyebrow, Section, EditorialHero, EdTitle, EdDek,
+  wrap, mono, serif, readFont, ghostBtnLink, primaryBtn,
+} from "@/lib/editorial";
 
 type IntegrationCard = {
   slug: string;
@@ -78,7 +84,7 @@ const integrations: IntegrationCard[] = [
     ],
     notes: [
       "This is now one of Braino's live ambient connectors, not just a roadmap idea.",
-      "The right QA loop is: connect -> create -> reschedule -> cancel -> reminder -> Meet join.",
+      "The right QA loop is: connect, create, reschedule, cancel, reminder, Meet join.",
     ],
   },
   {
@@ -169,7 +175,7 @@ const integrations: IntegrationCard[] = [
     ],
     notes: [
       "This is the clean long-term replacement for brittle Google Docs browser automation.",
-      "Drive helps Braino locate the doc; Docs helps Braino edit it well.",
+      "Drive helps Braino locate the doc. Docs helps Braino edit it well.",
     ],
   },
   {
@@ -284,7 +290,7 @@ const integrations: IntegrationCard[] = [
       "Verify subscription callbacks and normalize them into Braino activity events.",
     ],
     plan: [
-      "Treat this as the Outlook/enterprise twin of Gmail plus Calendar.",
+      "Treat this as the Outlook and enterprise twin of Gmail plus Calendar.",
       "Start with calendar and inbox awareness before write actions.",
       "Ship only to users who clearly live in Microsoft 365 so the experience feels targeted.",
     ],
@@ -349,7 +355,7 @@ const integrations: IntegrationCard[] = [
       "Bundle this alongside Slack for product-team users.",
     ],
     notes: [
-      "Excellent if Braino is becoming a startup/product assistant.",
+      "Excellent if Braino is becoming a startup and product assistant.",
       "Usually cleaner and more focused than broader PM tools.",
     ],
   },
@@ -436,7 +442,7 @@ const integrations: IntegrationCard[] = [
     plan: [
       "Start small with assigned-task and comment events.",
       "Avoid trying to mirror all of ClickUp into Braino.",
-      "Treat this as a long-tail PM/workflow integration after Slack and Calendar are solid.",
+      "Treat this as a long-tail PM and workflow integration after Slack and Calendar are solid.",
     ],
     notes: [
       "Valuable for breadth, but not as strategically central as Slack, Calendar, or GitHub.",
@@ -495,7 +501,7 @@ const integrations: IntegrationCard[] = [
     ],
     plan: [
       "Start with failed payments and new subscriptions because they are high-value and easy to act on.",
-      "Use Stripe for founder/operator awareness rather than broad customer support first.",
+      "Use Stripe for founder and operator awareness rather than broad customer support first.",
       "Pair with Slack or n8n if you want team-wide routing later.",
     ],
     notes: [
@@ -525,7 +531,7 @@ const integrations: IntegrationCard[] = [
     ],
     plan: [
       "Start with high-signal commerce events only.",
-      "Keep this as a founder/operator feature, not a general consumer feature.",
+      "Keep this as a founder and operator feature, not a general consumer feature.",
       "Use n8n later for richer post-order workflows.",
     ],
     notes: [
@@ -540,7 +546,7 @@ const integrations: IntegrationCard[] = [
     badge: "Simple PM",
     auth: "API key + token or Atlassian flow",
     cost: "Free to start depending on workspace plan.",
-    why: "Trello is a lighter task/workflow integration for smaller teams that don't want Jira-level complexity.",
+    why: "Trello is a lighter task and workflow integration for smaller teams that don't want Jira-level complexity.",
     actions: [
       "Announce card assignments, list moves, and due dates.",
       "Create cards from Braino sessions or quick follow-ups.",
@@ -604,255 +610,237 @@ const tomorrowStack = [
   "n8n after the native event contract is stable",
 ];
 
+const STATS: { kicker: string; value: string; note: string }[] = [
+  {
+    kicker: "Realtime fit",
+    value: "Excellent",
+    note: "Slack, Calendar, GitHub, Gmail, and n8n events all fit Braino's push-to-extension speaking model.",
+  },
+  {
+    kicker: "Fastest wins",
+    value: "Slack + Calendar",
+    note: "They create instant ambient-assistant moments without dragging you into Gmail's heavier review path first.",
+  },
+  {
+    kicker: "Compliance heat",
+    value: "Gmail highest",
+    note: "Keep Gmail in the plan, but don't let it block the integrations that ship faster and still feel magical.",
+  },
+];
+
+// ─── Shared card chrome for the accordion internals ───────────────────────────
+const panelCard: React.CSSProperties = {
+  border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", borderRadius: 18, padding: 18,
+};
+const panelKicker: React.CSSProperties = {
+  ...mono, fontSize: 10.5, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--sb-ink-3)",
+};
+
 export default function Integrations() {
   return (
-    <div className="relative min-h-screen overflow-hidden" style={{ background: "var(--sb-bg)", color: "var(--sb-ink)" }}>
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[520px]"
-        style={{ background: "radial-gradient(circle at top, rgba(226,125,57,0.14), transparent 58%)" }}
-      />
-      <div
-        className="pointer-events-none absolute left-[-8%] top-52 h-72 w-72 rounded-full blur-3xl"
-        style={{ background: "rgba(226,125,57,0.10)" }}
-      />
-      <div
-        className="pointer-events-none absolute right-[-10%] top-[28rem] h-80 w-80 rounded-full blur-3xl"
-        style={{ background: "rgba(27,23,19,0.06)" }}
-      />
+    <div style={{ background: "var(--sb-bg)", color: "var(--sb-ink)", minHeight: "100vh" }}>
       <Navbar />
 
-      <section className="container relative z-10 mx-auto max-w-6xl px-6 pt-32 pb-12">
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
-          <div>
-            <p className="mb-5 text-xs font-medium uppercase tracking-[0.34em] text-muted-foreground/60">
-              Integration Stack
-            </p>
-            <h1
-              className="max-w-4xl text-4xl font-normal leading-[1.02] tracking-tight md:text-6xl"
-              style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-            >
-              One page for every API Braino should{" "}
-              <em className="text-primary" style={{ fontStyle: "italic" }}>connect next.</em>
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-              Each card below tells us why the integration matters, how to get access, what Braino can do with it,
-              and the cleanest order to build it in. The goal is simple: tomorrow we pick one, wire it well, and keep moving.
-            </p>
-          </div>
+      {/* ── Hero ── */}
+      <EditorialHero
+        eyebrow="Integration Stack"
+        align="left"
+        maxWidth={1100}
+        pad="140px 0 40px"
+        title={<>One page for every API Braino should <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>connect next.</em></>}
+        dek="Each card tells us why an integration matters, how to get access, what Braino can do with it, and the cleanest order to build it. Pick one tomorrow, wire it well, keep moving."
+      />
 
-          <div
-            className="rounded-[30px] p-6 backdrop-blur-xl"
-            style={{
-              border: "1px solid var(--sb-line)",
-              background: "color-mix(in srgb, var(--sb-panel-2) 82%, transparent)",
-              boxShadow: "var(--sb-shadow)",
-            }}
-          >
-            <div className="flex items-center gap-3 text-sm font-medium" style={{ color: "var(--sb-ink)" }}>
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              Build posture
+      {/* ── Build posture + roadmap ── */}
+      <Section tone="1" pad="10px 0 70px">
+        <div style={wrap}>
+          <div style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 24, padding: "32px 34px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <ShieldCheck className="h-4 w-4" style={{ color: "var(--sb-accent-deep)" }} />
+              <span style={panelKicker}>Build posture</span>
             </div>
-            <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>
+            <p style={{ fontFamily: readFont, fontSize: 19, color: "var(--sb-ink-2)", lineHeight: 1.6, margin: "0 0 24px", maxWidth: 640 }}>
               Start with low-drama integrations that already fit Braino's realtime speaking model, then layer in the compliance-heavy ones later.
             </p>
-            <div className="mt-5 space-y-3">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
               {tomorrowStack.map((item, index) => (
-                <div
-                  key={item}
-                  className="flex items-start gap-3 rounded-2xl px-4 py-3"
-                  style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)" }}
-                >
-                  <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold" style={{ background: "var(--sb-ink)", color: "var(--sb-on-ink)" }}>
+                <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 12, ...panelCard, padding: "14px 16px" }}>
+                  <span style={{ display: "inline-flex", flexShrink: 0, height: 24, width: 24, alignItems: "center", justifyContent: "center", borderRadius: 999, fontSize: 12, fontWeight: 600, background: "var(--sb-ink)", color: "var(--sb-on-ink)" }}>
                     {index + 1}
                   </span>
-                  <div className="text-sm" style={{ color: "var(--sb-ink-2)" }}>{item}</div>
+                  <span style={{ fontSize: 14, color: "var(--sb-ink-2)", lineHeight: 1.45 }}>{item}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </section>
+      </Section>
 
-      <section className="container relative z-10 mx-auto max-w-6xl px-6 pb-10">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-[26px] p-5" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel-2)", boxShadow: "var(--sb-shadow-sm)" }}>
-            <div className="text-xs uppercase tracking-[0.28em]" style={{ color: "var(--sb-ink-3)" }}>Realtime fit</div>
-            <div className="mt-3 text-2xl font-semibold" style={{ color: "var(--sb-ink)" }}>Excellent</div>
-            <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>
-              Slack, Calendar, GitHub, Gmail, and n8n events all fit Braino's push-to-extension speaking model.
-            </p>
+      {/* ── Read on the field ── */}
+      <Section tone="2" pad="70px 0">
+        <div style={wrap}>
+          <div style={{ marginBottom: 34 }}>
+            <Eyebrow>The read</Eyebrow>
+            <EdTitle size="clamp(30px,3.8vw,46px)" style={{ marginTop: 14 }}>Where the leverage lives</EdTitle>
           </div>
-          <div className="rounded-[26px] p-5" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel-2)", boxShadow: "var(--sb-shadow-sm)" }}>
-            <div className="text-xs uppercase tracking-[0.28em]" style={{ color: "var(--sb-ink-3)" }}>Fastest wins</div>
-            <div className="mt-3 text-2xl font-semibold" style={{ color: "var(--sb-ink)" }}>Slack + Calendar</div>
-            <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>
-              They create immediate ambient-assistant moments without dragging you into Gmail's heavier review path first.
-            </p>
-          </div>
-          <div className="rounded-[26px] p-5" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel-2)", boxShadow: "var(--sb-shadow-sm)" }}>
-            <div className="text-xs uppercase tracking-[0.28em]" style={{ color: "var(--sb-ink-3)" }}>Compliance heat</div>
-            <div className="mt-3 text-2xl font-semibold" style={{ color: "var(--sb-ink)" }}>Gmail highest</div>
-            <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>
-              Keep Gmail in the plan, but don't let it block the integrations that are easier to ship and still feel magical.
-            </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
+            {STATS.map(s => (
+              <div key={s.kicker} style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 22, padding: 26 }}>
+                <div style={panelKicker}>{s.kicker}</div>
+                <div style={{ fontFamily: serif, fontSize: 30, lineHeight: 1.05, letterSpacing: "-0.02em", color: "var(--sb-ink)", margin: "12px 0 10px" }}>{s.value}</div>
+                <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--sb-ink-2)", margin: 0 }}>{s.note}</p>
+              </div>
+            ))}
           </div>
         </div>
-      </section>
+      </Section>
 
-      <section className="container relative z-10 mx-auto max-w-6xl px-6 pb-24">
-        <div
-          className="rounded-[32px] p-3 backdrop-blur-xl md:p-5"
-          style={{
-            border: "1px solid var(--sb-line)",
-            background: "color-mix(in srgb, var(--sb-panel-2) 88%, transparent)",
-            boxShadow: "var(--sb-shadow-lg)",
-          }}
-        >
-          <Accordion type="single" collapsible className="w-full">
-            {integrations.map((integration) => {
-              const Icon = integration.icon;
-              return (
-                <AccordionItem key={integration.slug} value={integration.slug} className="px-3 md:px-4" style={{ borderColor: "var(--sb-line-2)" }}>
-                  <AccordionTrigger className="gap-4 py-5 text-left hover:no-underline">
-                    <div className="flex min-w-0 flex-1 items-center gap-4">
-                      <div
-                        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl"
-                        style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", boxShadow: "var(--sb-shadow-sm)" }}
-                      >
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-base font-semibold" style={{ color: "var(--sb-ink)" }}>{integration.name}</span>
-                          <span
-                            className="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]"
-                            style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-accent-soft)", color: "var(--sb-accent-deep)" }}
-                          >
-                            {integration.badge}
-                          </span>
+      {/* ── Integration catalogue ── */}
+      <Section tone="1" pad="70px 0">
+        <div style={wrap}>
+          <div style={{ marginBottom: 30 }}>
+            <Eyebrow>The catalogue</Eyebrow>
+            <EdTitle size="clamp(30px,3.8vw,46px)" style={{ marginTop: 14 }}>Every connector, one tap away</EdTitle>
+            <EdDek style={{ marginTop: 14, maxWidth: 640 }}>Open any row for auth, cost, what Braino can do, and the exact build order.</EdDek>
+          </div>
+          <div style={{ background: "var(--sb-panel-2)", border: "1px solid var(--sb-line-2)", borderRadius: 26, padding: "6px 18px" }}>
+            <Accordion type="single" collapsible className="w-full">
+              {integrations.map((integration) => {
+                const Icon = integration.icon;
+                return (
+                  <AccordionItem key={integration.slug} value={integration.slug} style={{ borderColor: "var(--sb-line-2)" }}>
+                    <AccordionTrigger className="gap-4 py-5 text-left hover:no-underline">
+                      <div className="flex min-w-0 flex-1 items-center gap-4">
+                        <div
+                          className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl"
+                          style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)" }}
+                        >
+                          <Icon className="h-5 w-5" />
                         </div>
-                        <p className="mt-1 text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>{integration.why}</p>
-                      </div>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pb-6">
-                    <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-                      <div className="space-y-4">
-                        <div className="rounded-2xl p-4" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", boxShadow: "var(--sb-shadow-sm)" }}>
-                          <div className="text-xs uppercase tracking-[0.24em]" style={{ color: "var(--sb-ink-3)" }}>Auth</div>
-                          <p className="mt-2 text-sm" style={{ color: "var(--sb-ink)" }}>{integration.auth}</p>
-                        </div>
-                        <div className="rounded-2xl p-4" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", boxShadow: "var(--sb-shadow-sm)" }}>
-                          <div className="text-xs uppercase tracking-[0.24em]" style={{ color: "var(--sb-ink-3)" }}>Cost</div>
-                          <p className="mt-2 text-sm" style={{ color: "var(--sb-ink)" }}>{integration.cost}</p>
-                        </div>
-                        <div className="rounded-2xl p-4" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", boxShadow: "var(--sb-shadow-sm)" }}>
-                          <div className="mb-3 text-xs uppercase tracking-[0.24em]" style={{ color: "var(--sb-ink-3)" }}>What Braino can do</div>
-                          <div className="space-y-3">
-                            {integration.actions.map((action) => (
-                              <div key={action} className="flex items-start gap-3 text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>
-                                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                                <span>{action}</span>
-                              </div>
-                            ))}
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span style={{ fontSize: 17, fontWeight: 600, color: "var(--sb-ink)" }}>{integration.name}</span>
+                            <span
+                              style={{ ...mono, borderRadius: 999, padding: "3px 9px", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", border: "1px solid var(--sb-line-2)", background: "var(--sb-accent-soft)", color: "var(--sb-accent-deep)" }}
+                            >
+                              {integration.badge}
+                            </span>
                           </div>
+                          <p style={{ marginTop: 5, fontSize: 14, lineHeight: 1.5, color: "var(--sb-ink-2)" }}>{integration.why}</p>
                         </div>
                       </div>
-
-                      <div className="space-y-4">
-                        <div className="rounded-2xl p-4" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", boxShadow: "var(--sb-shadow-sm)" }}>
-                          <div className="mb-3 text-xs uppercase tracking-[0.24em]" style={{ color: "var(--sb-ink-3)" }}>How to get it</div>
-                          <div className="space-y-3">
-                            {integration.setup.map((step, index) => (
-                              <div key={step} className="flex items-start gap-3">
-                                <span className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold" style={{ background: "var(--sb-ink)", color: "var(--sb-on-ink)" }}>
-                                  {index + 1}
-                                </span>
-                                <p className="text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>{step}</p>
-                              </div>
-                            ))}
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-6">
+                      <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+                        <div className="space-y-4">
+                          <div style={panelCard}>
+                            <div style={panelKicker}>Auth</div>
+                            <p style={{ marginTop: 8, fontSize: 14, color: "var(--sb-ink)" }}>{integration.auth}</p>
                           </div>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div className="rounded-2xl p-4" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", boxShadow: "var(--sb-shadow-sm)" }}>
-                            <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.24em]" style={{ color: "var(--sb-ink-3)" }}>
-                              <Database className="h-3.5 w-3.5" style={{ color: "var(--sb-accent-deep)" }} />
-                              Tomorrow plan
-                            </div>
+                          <div style={panelCard}>
+                            <div style={panelKicker}>Cost</div>
+                            <p style={{ marginTop: 8, fontSize: 14, color: "var(--sb-ink)" }}>{integration.cost}</p>
+                          </div>
+                          <div style={panelCard}>
+                            <div style={{ ...panelKicker, marginBottom: 12 }}>What Braino can do</div>
                             <div className="space-y-3">
-                              {integration.plan.map((step) => (
-                                <div key={step} className="flex items-start gap-3 text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>
-                                  <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                                  <span>{step}</span>
+                              {integration.actions.map((action) => (
+                                <div key={action} className="flex items-start gap-3" style={{ fontSize: 14, lineHeight: 1.55, color: "var(--sb-ink-2)" }}>
+                                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: "var(--sb-accent-deep)" }} />
+                                  <span>{action}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div style={panelCard}>
+                            <div style={{ ...panelKicker, marginBottom: 12 }}>How to get it</div>
+                            <div className="space-y-3">
+                              {integration.setup.map((step, index) => (
+                                <div key={step} className="flex items-start gap-3">
+                                  <span className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full" style={{ fontSize: 12, fontWeight: 600, background: "var(--sb-ink)", color: "var(--sb-on-ink)" }}>
+                                    {index + 1}
+                                  </span>
+                                  <p style={{ fontSize: 14, lineHeight: 1.55, color: "var(--sb-ink-2)", margin: 0 }}>{step}</p>
                                 </div>
                               ))}
                             </div>
                           </div>
 
-                          <div className="rounded-2xl p-4" style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel)", boxShadow: "var(--sb-shadow-sm)" }}>
-                            <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.24em]" style={{ color: "var(--sb-ink-3)" }}>
-                              <BellRing className="h-3.5 w-3.5" style={{ color: "var(--sb-accent-deep)" }} />
-                              Notes
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div style={panelCard}>
+                              <div className="flex items-center gap-2" style={{ ...panelKicker, marginBottom: 12 }}>
+                                <Database className="h-3.5 w-3.5" style={{ color: "var(--sb-accent-deep)" }} />
+                                Tomorrow plan
+                              </div>
+                              <div className="space-y-3">
+                                {integration.plan.map((step) => (
+                                  <div key={step} className="flex items-start gap-3" style={{ fontSize: 14, lineHeight: 1.55, color: "var(--sb-ink-2)" }}>
+                                    <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: "var(--sb-accent-deep)" }} />
+                                    <span>{step}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                            <div className="space-y-3">
-                              {integration.notes.map((note) => (
-                                <p key={note} className="text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>{note}</p>
-                              ))}
+
+                            <div style={panelCard}>
+                              <div className="flex items-center gap-2" style={{ ...panelKicker, marginBottom: 12 }}>
+                                <BellRing className="h-3.5 w-3.5" style={{ color: "var(--sb-accent-deep)" }} />
+                                Notes
+                              </div>
+                              <div className="space-y-3">
+                                {integration.notes.map((note) => (
+                                  <p key={note} style={{ fontSize: 14, lineHeight: 1.55, color: "var(--sb-ink-2)", margin: 0 }}>{note}</p>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              );
-            })}
-          </Accordion>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          </div>
         </div>
-      </section>
+      </Section>
 
-      <section className="container relative z-10 mx-auto max-w-6xl px-6 pb-32">
-        <div
-          className="flex flex-col gap-5 rounded-[30px] p-8 md:flex-row md:items-center md:justify-between"
-          style={{
-            border: "1px solid var(--sb-line)",
-            background: "linear-gradient(135deg, var(--sb-panel-2), var(--sb-panel), var(--sb-bg))",
-            boxShadow: "var(--sb-shadow)",
-          }}
-        >
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em]" style={{ color: "var(--sb-ink-3)" }}>Next move</p>
-            <h2
-              className="mt-3 text-3xl font-normal tracking-tight"
-              style={{ color: "var(--sb-ink)", fontFamily: "'Instrument Serif', Georgia, serif" }}
-            >
-              Pick one integration and ship it cleanly.
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed" style={{ color: "var(--sb-ink-2)" }}>
-              If we do Slack or Calendar first, Braino can start speaking useful real-world activity without waiting on the hardest compliance path.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              to="/connectors-vault"
-              className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold"
-              style={{ border: "1px solid var(--sb-line)", background: "var(--sb-panel)", color: "var(--sb-ink)" }}
-            >
-              Open Secrets Playbook
-              <ShieldCheck className="h-4 w-4" />
-            </Link>
-            <Link
-              to="/automations"
-              className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
-              style={{ background: "var(--sb-ink)", color: "var(--sb-on-ink)" }}
-            >
-              Back to Automations
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+      {/* ── Next move CTA ── */}
+      <Section tone="2" pad="80px 0 100px">
+        <div style={wrap}>
+          <div
+            className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between"
+            style={{ border: "1px solid var(--sb-line-2)", background: "var(--sb-panel-2)", borderRadius: 28, padding: "40px 40px" }}
+          >
+            <div>
+              <Eyebrow>Next move</Eyebrow>
+              <h2 style={{ fontFamily: serif, fontWeight: 400, fontSize: "clamp(28px,3.4vw,42px)", letterSpacing: "-0.02em", lineHeight: 1.05, color: "var(--sb-ink)", margin: "12px 0 12px" }}>
+                Pick one integration and ship it <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>cleanly.</em>
+              </h2>
+              <p style={{ fontFamily: readFont, fontSize: 18, color: "var(--sb-ink-2)", lineHeight: 1.6, margin: 0, maxWidth: 620 }}>
+                Do Slack or Calendar first and Braino starts speaking real-world activity without waiting on the hardest compliance path.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3" style={{ flexShrink: 0 }}>
+              <Link to="/connectors-vault" style={ghostBtnLink}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = "var(--sb-accent-soft)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = "var(--sb-panel)"; }}>
+                <ShieldCheck className="h-4 w-4" /> Secrets Playbook
+              </Link>
+              <Link to="/automations" style={primaryBtn}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ""; }}>
+                Back to Automations <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </div>
-      </section>
+      </Section>
+
+      <SiteFooter />
     </div>
   );
 }

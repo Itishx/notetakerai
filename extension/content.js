@@ -4,6 +4,34 @@ if (globalThis.__SB_CONTENT_SCRIPT_BOOTSTRAP__ !== `${chrome.runtime?.id || "no-
   (() => {
 // Braino Content Script — extracts page text for AI context
 
+// ── Production error hygiene: keep our uncaught noise out of chrome://extensions.
+// The isolated world sees window "error" events from the page too — only swallow
+// events whose source file is ours (chrome-extension://). Rejections in this
+// listener's realm are ours by definition (page rejections fire in the main world).
+window.addEventListener("error", (e) => {
+  if (String(e?.filename || "").startsWith("chrome-extension://")) {
+    console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+    e.preventDefault();
+  }
+}, true);
+window.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+if (chrome?.runtime?.sendMessage) {
+  const __sbOrigSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+  chrome.runtime.sendMessage = (...args) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      args[args.length - 1] = (...cbArgs) => {
+        void chrome.runtime.lastError;
+        try { cb(...cbArgs); } catch (err) { console.warn("[Braino] callback error:", err?.message || err); }
+      };
+    }
+    return __sbOrigSendMessage(...args);
+  };
+}
+
 // Sync Supabase session from website localStorage into extension storage so
 // checkAuth finds a token even when the user logged in on the website (not via the extension auth tab).
 if (location.hostname === 'trybraino.com') {
@@ -1300,6 +1328,11 @@ function __sbParseConnectorDirective(rawText) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "sbQuotaExceeded") {
+    // Free-tier wall hit (voice/delegate/recording/chat) — show the upgrade nudge.
+    __sbShowQuotaUpgrade(msg.surface || "chat");
+    return false;
+  }
   if (msg.action === "extractPageContent") {
     const text = (document.body?.innerText || "").substring(0, 12000);
     const title = document.title || "";
@@ -1307,6 +1340,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const faviconUrl = document.querySelector("link[rel~='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']")?.href || "";
     const hoveredContext = __sbGetHoveredContext();
     sendResponse({ text, title, url, faviconUrl, hoveredContext });
+    return true;
+  }
+
+  if (msg.action === "buildElementMap") {
+    const map = window.BrainoElementMap?.buildElementMap(document) || {
+      url: window.location.href,
+      title: document.title || "",
+      scroll: { x: window.scrollX || 0, y: window.scrollY || 0, maxX: 0, maxY: 0, atTop: true, atBottom: true },
+      elements: [],
+    };
+    const serialized = window.BrainoElementMap?.serializeElementMap
+      ? window.BrainoElementMap.serializeElementMap(map, { keywords: msg.keywords || "", cap: msg.cap || 120 })
+      : "";
+    sendResponse({ map, serialized });
     return true;
   }
 
@@ -1463,7 +1510,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ===== BROWSER AGENT: execute action on page =====
   if (msg.action === "agentAction") {
-    const { type, selector, targetText, targetTag, text, url, direction, amount } = msg;
+    const { type, selector, targetText, targetTag, text, url, direction, amount, index } = msg;
 
     // Pierces open shadow roots so we can find elements inside web components
     function deepQuery(sel, root) {
@@ -1549,7 +1596,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       dispatchInputEvent(target, "deleteContentBackward", null);
     }
 
-    function typeIntoContentEditable(target, value) {
+    async function typeIntoContentEditable(target, value) {
       target.focus();
       target.click();
 
@@ -1561,6 +1608,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const inserted = document.execCommand("insertText", false, value);
       if (inserted) {
         dispatchInputEvent(target, "insertText", value);
+        await new Promise(r => setTimeout(r, 80));
+        if (normalizeText(target.innerText || target.textContent)) return;
       }
 
       if (!normalizeText(target.innerText || target.textContent)) {
@@ -1574,6 +1623,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }));
         } catch(e) {}
         dispatchInputEvent(target, "insertFromPaste", value);
+        await new Promise(r => setTimeout(r, 80));
       }
 
       if (!normalizeText(target.innerText || target.textContent)) {
@@ -1582,9 +1632,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     }
 
+    function resolveIndexedElement() {
+      if (!Number.isInteger(Number(index))) return null;
+      return window.BrainoElementMap?.resolveElement(Number(index)) || null;
+    }
+
+    function dispatchSyntheticKey(target, key) {
+      const keyCode = key === "Enter" ? 13 : key === "Tab" ? 9 : key.charCodeAt(0);
+      target.dispatchEvent(new KeyboardEvent("keydown", { key, keyCode, bubbles: true, cancelable: true }));
+      target.dispatchEvent(new KeyboardEvent("keypress", { key, keyCode, bubbles: true, cancelable: true }));
+      target.dispatchEvent(new KeyboardEvent("keyup", { key, keyCode, bubbles: true, cancelable: true }));
+    }
+
     (async () => { try {
       if (type === "click") {
-        let el = null;
+        let el = resolveIndexedElement();
         // Try CSS selector first (with shadow DOM piercing)
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
@@ -1622,7 +1684,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ success: true });
 
       } else if (type === "type") {
-        let el = null;
+        let el = resolveIndexedElement();
         if (selector) {
           try { el = document.querySelector(selector); } catch (e) {}
           if (!el) el = deepQuery(selector);
@@ -1659,7 +1721,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           el.focus();
           el.click();
           await new Promise(r => setTimeout(r, 120));
-          typeIntoContentEditable(el, text);
+          await typeIntoContentEditable(el, text);
         } else {
           // Regular input/textarea — use native value setter for React compatibility
           const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
@@ -1683,6 +1745,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             el.dispatchEvent(new KeyboardEvent("keyup", { key: char, bubbles: true }));
           }
           el.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (msg.submit === true) {
+          dispatchSyntheticKey(el, "Enter");
+          const form = el.closest?.("form");
+          if (form) form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
         }
         sendResponse({ success: true });
 
@@ -1719,7 +1786,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       } else if (type === "selectOption") {
         // For <select> dropdowns (e.g. Netflix season selector)
-        let el = null;
+        let el = resolveIndexedElement();
         if (selector) { try { el = document.querySelector(selector); } catch (e) {} }
         if (!el && msg.targetText) {
           el = Array.from(document.querySelectorAll("select")).find(s => {
@@ -1746,7 +1813,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       } else if (type === "read") {
         // Read element content so agent can verify state before acting
-        let el = null;
+        let el = resolveIndexedElement();
         const requestedMaxChars = Number(msg.maxChars || msg.maxLength || 0);
         const maxChars = Number.isFinite(requestedMaxChars) && requestedMaxChars > 0
           ? Math.min(Math.max(Math.floor(requestedMaxChars), 200), 8000)
@@ -1774,7 +1841,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
 
       } else if (type === "downloadImage") {
-        let img = null;
+        let img = resolveIndexedElement();
         if (selector) { try { img = document.querySelector(selector); } catch(e) {} }
         if (!img && targetText) {
           img = Array.from(document.querySelectorAll("img")).find(i =>
@@ -2308,7 +2375,7 @@ new MutationObserver(() => {
 // sbb-arm-l / sbb-arm-r : arm pivot groups (rotate at shoulder origin)
 // sbb-pupil-l / sbb-pupil-r : pupil + highlight pairs (translate for gaze drift)
 // sbb-eye-l / sbb-eye-r : eye whites (scaleY for blink)
-const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g><g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g><g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const __SB_BRAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52"><defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><path d="M 60 78 C 64 84 75 86 80 80 C 86 76 85 67 81 65 L 62 65 Z" fill="white"/><path d="M 47 82 L 47 90 Q 50 93 53 90 L 53 82 Z" fill="white"/><g id="sbb-arm-l" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="sbb-arm-r" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><path d="M 47 80 L 47 88 Q 50 91 53 88 L 53 80 Z" fill="url(#sbb-dark)"/><path d="M 60 76 C 64 82 73 84 78 78 C 84 74 83 67 79 65 L 62 65 Z" fill="url(#sbb-dark)"/><path d="M 63 70 Q 70 71 77 70" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 62 74 Q 70 75 78 74" fill="none" stroke="#8A2F28" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-fill)"/><path d="M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 72 78 60 80 52 76 C 50 80 50 80 50 78 C 50 80 50 80 48 76 C 40 80 28 78 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 51 65 50 78" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><g id="sbb-arm-l-fill" style="transform-origin:22px 52px"><path d="M 22 52 Q 8 50 6 60 Q 6 66 14 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="6" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-arm-r-fill" style="transform-origin:78px 52px"><path d="M 78 52 Q 92 50 94 60 Q 94 66 86 67" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><circle cx="94" cy="63" r="5.5" fill="url(#sbb-fill)"/></g><g id="sbb-eye-l" style="transform-origin:38px 48px"><circle cx="38" cy="48" r="6.5" fill="white"/></g><g id="sbb-eye-r" style="transform-origin:62px 48px"><circle cx="62" cy="48" r="6.5" fill="white"/></g><g id="sbb-pupil-l"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g><g id="sbb-pupil-r"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/><g id="sbb-talk" style="display:none;transform-box:view-box;transform-origin:50px 62px"><ellipse cx="50" cy="62" rx="4" ry="3" fill="#6E211A"/><ellipse cx="50" cy="63" rx="2.3" ry="1.3" fill="#E8786E"/></g><g id="sbb-specs" style="display:none"><circle cx="38" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/><circle cx="62" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/><path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/><path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/><path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/></g></svg>`;
 
 
 const __SB_BRAIN_SVG_ORBIT = __SB_BRAIN_SVG.replace('width="52" height="52"', 'width="40" height="40"');
@@ -2335,6 +2402,14 @@ const __SB_BRAIN_SVG_SLEEPING = __SB_BRAIN_SVG
     '<ellipse cx="28" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/><ellipse cx="72" cy="58" rx="4" ry="2.5" fill="#E14A48" opacity="0.5"/>')
   .replace('<path d="M 45 61 Q 50 65 55 61" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>',
     '<path d="M 46 62 Q 50 62 54 62" fill="none" stroke="#1B1713" stroke-width="1.8" stroke-linecap="round"/>');
+
+// Self-contained variants for the cinematic wakeup brain. The gradients get UNIQUE
+// ids (sbcin-*) so the coral fill resolves from the SVG's own inline defs and never
+// depends on a duplicated document-level #sbb-fill (the cause of the white brain).
+const __SB_BRAIN_SVG_CIN = __SB_BRAIN_SVG
+  .replaceAll("sbb-fill", "sbcin-fill").replaceAll("sbb-dark", "sbcin-dark").replaceAll("sbb-glow", "sbcin-glow");
+const __SB_BRAIN_SVG_CIN_SLEEP = __SB_BRAIN_SVG_SLEEPING
+  .replaceAll("sbb-fill", "sbcin-fill").replaceAll("sbb-dark", "sbcin-dark").replaceAll("sbb-glow", "sbcin-glow");
 
 // ── Emotion SVG variants ──────────────────────────────────────────────────────
 // All derived from __SB_BRAIN_SVG. Keep sbb-* IDs so idle CSS animations still work.
@@ -2498,6 +2573,1375 @@ const __SB_BRAIN_SVG_SCHOLAR = __SB_BRAIN_SVG
     '</svg>'
   );
 
+// ── Walker lane — Braino walks above the bar (exact design from braino-char.jsx) ──
+const __SBWK_SHOE = `<path d="M 45 74 L 42.5 87" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/><path d="M 45 74 L 42.5 87" fill="none" stroke="url(#sbb-fill)" stroke-width="5.5" stroke-linecap="round"/><path d="M 47.5 89 C 47.5 87 44.5 86.4 42 87.4 C 36 89.2 29.6 90.6 25.2 94.2 C 22.2 96.7 21.8 99.4 25 100.8 C 27 101.6 31 101.6 35 101.6 L 45.6 101.6 C 47.1 101.6 47.8 100.6 47.5 99.1 Z" fill="white" stroke="rgba(176,86,78,.42)" stroke-width="0.9" stroke-linejoin="round"/><path d="M 23 98.6 Q 21.2 101.2 25.6 101.5 L 45.6 101.5 Q 47.8 101.3 47.4 98.9 Q 34.5 100.1 23 98.6 Z" fill="#F6E2DC" stroke="rgba(176,86,78,.42)" stroke-width="0.8" stroke-linejoin="round"/><g fill="none" stroke="#C9544A" stroke-width="0.85" stroke-linecap="round" opacity="0.7"><path d="M 29.5 90 Q 36 88.5 43 89.2"/><path d="M 32 92.7 Q 37.5 91.7 43 92.2" opacity="0.6"/></g><ellipse cx="30" cy="92.4" rx="3" ry="1.4" fill="#fff" opacity="0.6" transform="rotate(-12 30 92.4)"/>`;
+const __SBWK_BODY = "M 50 8 C 55 6 64 6 68 12 C 76 10 84 16 82 24 C 90 26 92 36 86 42 C 92 46 90 56 82 58 C 86 60 85 70 76 70 C 68 80.5 60 79.5 50 79 C 40 79.5 32 80.5 24 70 C 15 70 14 60 18 58 C 10 56 8 46 14 42 C 8 36 10 26 18 24 C 16 16 24 10 32 12 C 36 6 45 6 50 8 Z";
+
+// Reaction faces for the throw — drawn on TOP of the normal face (which the tick hides
+// while a reaction is active). Same head coordinate space as the brain emotion SVGs, so
+// the eye/mouth shapes are reused verbatim. Solid colors only (no gradient refs).
+const __SBWK_REACT = `<g id="__sbwk_react__" display="none">`
+  + `<g id="__sbwk_rs__" display="none">`
+    + `<circle cx="38" cy="47.4" r="7.8" fill="white"/><circle cx="62" cy="47.4" r="7.8" fill="white"/>`
+    + `<circle cx="39" cy="46.4" r="2.4" fill="#1B1713"/><circle cx="39.8" cy="45.4" r="0.9" fill="white"/>`
+    + `<circle cx="61" cy="46.4" r="2.4" fill="#1B1713"/><circle cx="61.8" cy="45.4" r="0.9" fill="white"/>`
+    + `<path d="M 32 41.5 Q 37 40 43 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/>`
+    + `<path d="M 68 41.5 Q 63 40 57 41.8" fill="none" stroke="#8A2F28" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/>`
+    + `<ellipse cx="50" cy="64" rx="3" ry="3.8" fill="#6E211A"/>`
+    + `<path id="__sbwk_sweat__" d="M 79 39 C 82 43 82 46 79 47 C 76 46 76 43 79 39 Z" fill="#CFEFFF"/>`
+  + `</g>`
+  + `<g id="__sbwk_rc__" display="none">`
+    + `<path d="M 32.5 49 Q 38 54.5 43.5 49" fill="none" stroke="#1B1713" stroke-width="2.4" stroke-linecap="round"/>`
+    + `<path d="M 56.5 49 Q 62 54.5 67.5 49" fill="none" stroke="#1B1713" stroke-width="2.4" stroke-linecap="round"/>`
+    + `<path d="M 42 59 Q 50 73.5 58 59 Q 50 62 42 59 Z" fill="#6E211A"/>`
+    + `<path d="M 45.5 64.5 Q 50 70 54.5 64.5 Q 50 66.5 45.5 64.5 Z" fill="#E8786E"/>`
+    + `<path d="M 43 60 Q 50 62.4 57 60" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round"/>`
+    + `<g id="__sbwk_confetti__"><circle cx="12" cy="22" r="2.5" fill="#FFD700"/><circle cx="88" cy="20" r="2" fill="#FF69B4"/><circle cx="6" cy="44" r="2" fill="#7EC8E3"/><circle cx="94" cy="42" r="2.2" fill="#90EE90"/><circle cx="20" cy="10" r="1.8" fill="#FF8C42"/><circle cx="80" cy="10" r="1.8" fill="#E14A48"/></g>`
+  + `</g>`
+  + `<g id="__sbwk_rt__" display="none">`
+    + `<path d="M 32.5 49 Q 38 54.5 43.5 49" fill="none" stroke="#1B1713" stroke-width="2.4" stroke-linecap="round"/>`
+    + `<path d="M 56.5 49 Q 62 54.5 67.5 49" fill="none" stroke="#1B1713" stroke-width="2.4" stroke-linecap="round"/>`
+    + `<path d="M 42 59 Q 50 73.5 58 59 Q 50 62 42 59 Z" fill="#6E211A"/>`
+    + `<path d="M 45.5 64.5 Q 50 70 54.5 64.5 Q 50 66.5 45.5 64.5 Z" fill="#E8786E"/>`
+    + `<path d="M 43 60 Q 50 62.4 57 60" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round"/>`
+    + `<path id="__sbwk_tear_l__" d="M 30 50.5 C 33 54.5 33 57 30 58 C 27 57 27 54.5 30 50.5 Z" fill="#DFF4FF"/>`
+    + `<path id="__sbwk_tear_r__" d="M 70 50.5 C 73 54.5 73 57 70 58 C 67 57 67 54.5 70 50.5 Z" fill="#DFF4FF"/>`
+  + `</g>`
+  + `</g>`;
+// Moonwalk legs — EXACT port of braino-char.jsx's profile+mirror Legs: BOTH feet are the
+// same (un-mirrored) shoe, wrapped in one mirror so the toes point the same way; each foot
+// pops onto its toe (heel rotate at 24,101) while the other slides. Hidden until moonwalking.
+const __SBWK_MOONLEGS = `<g id="__sbwk_moonlegs__" display="none"><g transform="translate(100,0) scale(-1,1)">`
+  + `<g id="__sbwk_mw_r__" transform="translate(12 0)"><g id="__sbwk_mw_rh__" transform="rotate(0 24 101)">${__SBWK_SHOE}</g></g>`
+  + `<g id="__sbwk_mw_l__" transform="translate(0 0)"><g id="__sbwk_mw_lh__" transform="rotate(0 24 101)">${__SBWK_SHOE}</g></g>`
+  + `</g></g>`;
+// Self-contained: its OWN inline defs with unique ids (sbwk-*). The url(#sbb-*)
+// refs below are rewritten to url(#sbwk-*) by the .replaceAll chain at the end, so
+// the coral gradient resolves locally and never depends on a duplicated document id.
+const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 142" width="64" height="78" overflow="visible" style="display:block"><defs><linearGradient id="sbwk-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbwk-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbwk-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient></defs><g id="__sbwk_root__">${__SBWK_MOONLEGS}<g id="__sbwk_ll__">${__SBWK_SHOE}</g><g id="__sbwk_rl__"><g transform="translate(100,0) scale(-1,1)">${__SBWK_SHOE}</g></g><g id="__sbwk_la_bg__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><g id="__sbwk_ra_bg__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="white" stroke-width="9" stroke-linecap="round"/></g><path d="${__SBWK_BODY}" fill="white" transform="scale(1.08) translate(-3.7,-3.7)"/><g id="__sbwk_la__"><path d="M 23 53 Q 11 52 8 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(7 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><g id="__sbwk_ra__"><path d="M 77 53 Q 89 52 92 59" fill="none" stroke="url(#sbb-fill)" stroke-width="6" stroke-linecap="round"/><g transform="translate(93 64)" stroke="rgba(176,86,78,.42)" stroke-width="0.7"><circle cx="-5" cy="-1.4" r="3" fill="white"/><circle cx="0" cy="0.6" r="7" fill="white"/><g fill="none" stroke="#C9544A" stroke-width="0.8" stroke-linecap="round" opacity="0.55"><path d="M -2.9 3 Q -2.7 5.4 -1.7 6.8"/><path d="M 0.2 3.6 Q 0.2 5.8 0.2 7.2"/><path d="M 2.9 3 Q 2.7 5.4 1.7 6.8"/></g><path d="M -5 -5 Q 0 -3.2 5 -5" fill="none" stroke="#C9544A" stroke-width="1.1" stroke-linecap="round"/></g></g><path d="${__SBWK_BODY}" fill="url(#sbb-fill)"/><path d="${__SBWK_BODY}" fill="url(#sbb-glow)"/><path d="M 50 8 Q 49 30 50 50 Q 50.5 60 50 65" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/><path d="M 30 14 Q 26 22 30 28 Q 24 33 28 40 Q 22 44 26 52 Q 22 58 28 64 Q 24 70 32 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 38 12 Q 36 22 42 26 Q 38 32 44 36 Q 38 44 44 50 Q 38 58 44 64 Q 40 72 46 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><path d="M 70 14 Q 74 22 70 28 Q 76 33 72 40 Q 78 44 74 52 Q 78 58 72 64 Q 76 70 68 72" fill="none" stroke="#8A2F28" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/><path d="M 62 12 Q 64 22 58 26 Q 62 32 56 36 Q 62 44 56 50 Q 62 58 56 64 Q 60 72 54 74" fill="none" stroke="#8A2F28" stroke-width="1" stroke-linecap="round" opacity="0.4"/><g id="__sbwk_eye_l__"><circle cx="38" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_l__"><circle cx="38" cy="48" r="3.2" fill="#1B1713"/><circle cx="39" cy="46.6" r="1.1" fill="white"/></g></g><g id="__sbwk_eye_r__"><circle cx="62" cy="48" r="6.5" fill="white"/><g id="__sbwk_pupil_r__"><circle cx="62" cy="48" r="3.2" fill="#1B1713"/><circle cx="63" cy="46.6" r="1.1" fill="white"/></g></g><ellipse cx="28" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><ellipse cx="72" cy="58" rx="3.5" ry="2" fill="#E14A48" opacity="0.35"/><g id="__sbwk_mouth__"><path id="__sbwk_smile__" d="M 43.5 60 Q 50 67.5 56.5 60" fill="none" stroke="#1B1713" stroke-width="1.9" stroke-linecap="round"/><g id="__sbwk_talk__" style="display:none"><ellipse id="__sbwk_te__" cx="50" cy="61.8" rx="3.5" ry="1.4" fill="#8A2F28"/><ellipse id="__sbwk_ti__" cx="50" cy="62.5" rx="2.2" ry="0.7" fill="#E8776E"/></g></g></g></svg>`
+  .replaceAll("url(#sbb-fill)", "url(#sbwk-fill)")
+  .replaceAll("url(#sbb-glow)", "url(#sbwk-glow)")
+  .replaceAll("url(#sbb-dark)", "url(#sbwk-dark)")
+  // Inject the reaction overlay on top of the face (after mouth-close, before root-close).
+  .replace("</g></g></g></svg>", "</g></g>" + __SBWK_REACT + "</g></svg>")
+  // Glasses overlay (hidden until Braino is asked to "wear specs") — same round-glasses
+  // shape as the scholar look; eye coords (38/62, 48) match the brain.
+  .replace("</g></svg>",
+    '<g id="__sbwk_specs__" display="none">' +
+    '<circle cx="38" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/>' +
+    '<circle cx="62" cy="48" r="9.2" fill="none" stroke="#1B1713" stroke-width="3" opacity="0.92"/>' +
+    '<path d="M 47.2 48 L 52.8 48" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '<path d="M 28.8 46 Q 24 45 21 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '<path d="M 71.2 46 Q 76 45 79 49" fill="none" stroke="#1B1713" stroke-width="2.2" stroke-linecap="round" opacity="0.92"/>' +
+    '</g></g></svg>')
+  // MJ fedora (hidden until Braino moonwalks) — paths from braino-char.jsx, cocked -12°.
+  .replace("</g></svg>",
+    '<g id="__sbwk_fedora__" display="none" transform="rotate(-12 50 2)">' +
+    '<path d="M 31 4 C 31 -17 39 -24 50 -24 C 61 -24 69 -17 69 4 Z" fill="#14110f" stroke="#000" stroke-width="0.6"/>' +
+    '<path d="M 44 -22 Q 50 -18 56 -22" fill="none" stroke="#2c2723" stroke-width="1.6" stroke-linecap="round"/>' +
+    '<path d="M 31 3 Q 50 9 69 3 L 69 -2 Q 50 4 31 -2 Z" fill="#000"/>' +
+    '<ellipse cx="50" cy="4" rx="45" ry="8.5" fill="#14110f" stroke="#000" stroke-width="0.6"/>' +
+    '<ellipse cx="50" cy="3" rx="32" ry="5" fill="#000" opacity="0.6"/>' +
+    '<path d="M 37 -20 Q 35 -8 38 2" fill="none" stroke="#3a332e" stroke-width="2.2" stroke-linecap="round" opacity="0.7"/>' +
+    '<path d="M 12 5 Q 50 12 88 5" fill="none" stroke="#3a332e" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>' +
+    '</g></g></svg>');
+// ── Walk lane state ────────────────────────────────────────────────────────────
+let __sbWkRaf = null;
+let __sbWkStart = null;
+let __sbWkLast = null;
+let __sbWalkTalking = false;
+let __sbWkPosX = 24;
+let __sbWkDirX = 1;
+let __sbWkWalking = true;
+let __sbWkWaving = false;
+let __sbWkBusy = false;
+let __sbWkAutoTimer = null;
+let __sbWkEngaged = false;   // true while headphone mode has Braino's attention (stand still, no idle pacing)
+let __sbWkWaveTimer = null;
+
+// ── Throw / drag physics ────────────────────────────────────────────────────
+// Braino can be grabbed and flung anywhere on screen. While thrown the tick stops
+// driving his position; a physics loop tumbles him (legs flailing) until he settles,
+// then he glides back to the bar and resumes walking. He is not amused.
+let __sbWkThrowMode = false;   // physics/return owns the walker transform (tick hands off)
+let __sbWkThrown = false;      // currently airborne or returning
+let __sbWkThrowRaf = null;
+let __sbThrowTX = 0;           // lane-local translate (px) from the walking anchor
+let __sbThrowTY = 0;
+let __sbThrowRot = 0;          // tumble rotation (deg)
+let __sbWkSayTimer = null;
+let __sbWkReaction = null;     // "scared" | "celebrate" | "tears" while thrown, else null
+let __sbWkReactStart = 0;      // performance.now() when the reaction began
+let __sbWkClimbing = false;    // true while the wake-up climb owns the rig
+let __sbWkClimbRaf = null;
+let __sbWkResumeFromX = null;  // start X for the next walk loop (so a climb hands off smoothly)
+let __sbWkMoonwalking = false; // true while the moonwalk owns the rig
+let __sbWkMoonRaf = null;
+let __sbWkDancing = false;     // true while the dance routine owns the rig
+let __sbWkDanceRaf = null;
+let __sbWkDanceArmAnchor = null; // original paint-order slot for the arm groups (restored on end)
+let __sbWkJumping = false;      // true while the jump-and-point owns the rig
+let __sbWkJumpRaf = null;
+let __sbGlassesOn = false;     // Braino is wearing his specs
+
+// "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
+const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
+const __SB_BILLIE_JEAN_START_MS = 211000;   // 3:31
+// "DAF" — the dance-party track + the window the user picked: song from 0:52,
+// dance 0:52→1:08 (16s), music stops by 1:10.
+const __SB_DANCE_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
+const __SB_DANCE_START_MS = 52000;          // 0:52
+const __SB_DANCE_DURATION_MS = 16000;       // dance until 1:08
+const __SB_DANCE_OUTRO_MS = 1800;           // music rides ~2 more beats, stops by 1:10
+
+// Put on / take off Braino's glasses (walker + docked brain).
+function __sbSetGlasses(on) {
+  __sbGlassesOn = !!on;
+  const specs = document.querySelector("#__sbwk_walker__ #__sbwk_specs__");
+  if (specs) specs.setAttribute("display", on ? "inline" : "none");
+  document.getElementById("__sb_brain_btn__")?.classList.toggle("sb-glasses", !!on);
+}
+
+// Detect "wear/put on your specs/glasses" (or take them off) from a prompt.
+function __sbGlassesIntent(text) {
+  const t = String(text || "").toLowerCase();
+  if (!/(glasses|spectacle|\bspecs?\b|scholar)/.test(t)) return null;
+  if (/(take off|takeoff|remove|lose the|without|take.*off|no more|put away)/.test(t)) return "off";
+  return "on";
+}
+
+function __sbMoonwalkIntent(text) {
+  return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
+}
+
+// "Braino, dance!" — deliberately LOOSE: voice STT mangles the wake word ("Reynos,
+// dance for me"), so ANY utterance containing the word dance fires the trick (owner's
+// explicit call). Only media commands ("play dance monkey") stay music, and moonwalk
+// keeps its own trick.
+function __sbDanceIntent(text) {
+  const t = String(text || "").toLowerCase();
+  if (__sbMoonwalkIntent(t)) return false;
+  if (/\b(play|queue|put on|song|track|album|playlist|spotify)\b/.test(t)) return false;
+  return /\bdanc(?:e|es|ed|ing)\b|\bbust a move\b|\bshow (?:me|us) your moves\b/.test(t);
+}
+
+// Best-effort: play an exact track from a timestamp. Routed through the BACKGROUND so a
+// missing active device gets the full treatment: open/reuse the Spotify web-player tab
+// (theatric, like all voice music) and retry until it registers, then play + seek.
+// Any failure is swallowed (Braino performs regardless).
+async function __sbSpotifyPlayTrack(uri, positionMs = 0) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: "sbSpotifyPlaySeek", uri, positionMs }, (resp) => {
+        if (chrome.runtime.lastError || !resp || typeof resp !== "object") return resolve({ ok: false });
+        resolve(resp);
+      });
+    } catch (_) { resolve({ ok: false }); }
+  });
+}
+async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
+  return __sbSpotifyPlayTrack(__SB_BILLIE_JEAN_URI, positionMs);
+}
+
+// ── Moonwalk ────────────────────────────────────────────────────────────────
+// Faithful port of Braino Moonwalk.html: both feet point the SAME way (the mirrored
+// #__sbwk_moonlegs__ replaces the normal legs), each pops onto its toe while the other
+// slides, and the body GLIDES BACKWARD continuously (the classic illusion). MJ fedora on.
+// ── Wait entertainment ───────────────────────────────────────────────────────
+// Keeps the mascot lively while a background task (Delegate / Compare / web research) runs, so
+// the user isn't staring at a frozen Braino. Uses only safe, self-clearing animations and yields
+// to anything that already owns the rig (climb / moonwalk / throw) or to active speech.
+let __sbWaitFunTimer = null;
+let __sbWaitFunActive = false;
+const __SB_WAIT_QUIPS = [
+  "Still digging…", "On it…", "Comparing the contenders…", "Almost there…",
+  "Reading the fine print…", "Cross-checking the sources…", "Hang tight…", "Doing my homework…",
+];
+
+function __sbStartWaitEntertainment() {
+  // Only entertain when the walker is on-screen and we're not voice-frozen — in headphone /
+  // voice-only mode the mascot is engaged (or hidden) and the user is listening, not watching.
+  if (__sbWaitFunActive) return;
+  if (__sbHeadphoneMode || __sbVoiceOnlyMode) return;
+  if (!__sbInputOpen) return; // the walker only exists while the panel/bar is open
+  __sbWaitFunActive = true;
+  let beat = 0;
+  const tick = () => {
+    if (!__sbWaitFunActive) return;
+    const rigBusy = __sbWkClimbing || __sbWkMoonwalking || __sbWkThrowMode || __sbIsSpeaking;
+    if (!rigBusy) {
+      __sbWkSay(__SB_WAIT_QUIPS[Math.floor(Math.random() * __SB_WAIT_QUIPS.length)]);
+      if (beat % 3 === 2) __sbWkMoonwalk(2600); // occasional flourish
+      else __sbWkTriggerWave();
+    }
+    beat += 1;
+    __sbWaitFunTimer = setTimeout(tick, 4000 + Math.random() * 3000);
+  };
+  __sbWaitFunTimer = setTimeout(tick, 1200); // small delay so it doesn't clash with the thinking card
+}
+
+function __sbStopWaitEntertainment() {
+  __sbWaitFunActive = false;
+  if (__sbWaitFunTimer) { clearTimeout(__sbWaitFunTimer); __sbWaitFunTimer = null; }
+}
+
+function __sbWkMoonwalk(durationMs = 11000) {
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!walker || !root) return;
+
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
+  __sbWkMoonwalking = true; __sbWkThrowMode = true; __sbWkClimbing = false; __sbWkThrown = false; __sbWkReaction = null;
+
+  const flip = document.getElementById("__sbwk_flip__");
+  const moonlegs = root.querySelector("#__sbwk_moonlegs__");
+  const mwR  = root.querySelector("#__sbwk_mw_r__");
+  const mwRh = root.querySelector("#__sbwk_mw_rh__");
+  const mwL  = root.querySelector("#__sbwk_mw_l__");
+  const mwLh = root.querySelector("#__sbwk_mw_lh__");
+  const pupL = root.querySelector("#__sbwk_pupil_l__");
+  const pupR = root.querySelector("#__sbwk_pupil_r__");
+  // Swap normal legs → moonwalk legs (both feet same direction).
+  root.querySelector("#__sbwk_ll__")?.setAttribute("display", "none");
+  root.querySelector("#__sbwk_rl__")?.setAttribute("display", "none");
+  if (moonlegs) moonlegs.setAttribute("display", "inline");
+  root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "inline");
+  if (flip) flip.style.transform = "scaleX(1)";          // body NOT mirrored — legs handle it
+  if (pupL) pupL.setAttribute("transform", "translate(0.95 0)");  // eyes look the way he faces
+  if (pupR) pupR.setAttribute("transform", "translate(0.95 0)");
+  __sbWkSay("Hee-hee! 🕺");
+
+  const W = 64;                                           // walker width
+  const laneW = lane.clientWidth || 320;
+  const wrap = laneW + W;                                 // glide one full pass then wrap
+  const X0 = laneW - W;                                   // start at the right edge
+  const SPEED = 80;                                       // px/s glide
+  const start = performance.now();
+
+  const step = (now) => {
+    const t = (now - start) / 1000;
+    // continuous BACKWARD (leftward) glide, wrapping cleanly off-screen
+    const x = X0 - ((t * SPEED) % wrap);
+    walker.style.transform = `translateX(${x}px)`;
+
+    // design moonwalk params (s = t*4): one foot pops onto its toe (heel ~42°) while the
+    // other slides; values fed to the same mirrored legs structure as braino-char.jsx.
+    const ph = Math.sin(t * 4.0);
+    const heelR = Math.max(0,  ph) * 42, heelL = Math.max(0, -ph) * 42;
+    const slideR = Math.max(0, -ph) * 10, slideL = Math.max(0, ph) * 10;
+    if (mwR)  mwR.setAttribute("transform",  `translate(${12 + slideR} 0)`);
+    if (mwRh) mwRh.setAttribute("transform", `rotate(${-heelR} 24 101)`);
+    if (mwL)  mwL.setAttribute("transform",  `translate(${slideL} 0)`);
+    if (mwLh) mwLh.setAttribute("transform", `rotate(${-heelL} 24 101)`);
+
+    const waddle = ph * 1.0;
+    const walkBob = -Math.abs(ph) * 1.0 - 0.3;
+    const breath = 1 + 0.014 * Math.sin(t * 1.7);
+    const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+
+    if (now - start < durationMs) __sbWkMoonRaf = requestAnimationFrame(step);
+    else __sbWkEndMoonwalk(x);
+  };
+  __sbWkMoonRaf = requestAnimationFrame(step);
+}
+
+function __sbWkEndMoonwalk(xResume) {
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (root) {
+    root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_moonlegs__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_ll__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_rl__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
+    root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
+  }
+  __sbWkMoonwalking = false; __sbWkThrowMode = false;
+  if (__sbInputOpen) {
+    // resume from roughly where he is (clamped into the lane)
+    const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
+    __sbWkResumeFromX = Math.max(6, Math.min(typeof xResume === "number" ? xResume : 24, laneW - 70));
+    __sbStartWalkLoop();
+  } else {
+    if (walker) walker.style.transform = "";
+    const lane = document.getElementById("__sb_walk_lane__");
+    if (lane) lane.style.display = "none";
+  }
+}
+
+// ── Dance ───────────────────────────────────────────────────────────────────
+// "Braino, dance for me" → DAF from 0:52 and Braino performs the owner's cut:
+// GUN FINGERS (11s — fingers to the sky, strutting left) blending smoothly into
+// DISCO FEVER (the diagonal point) for the remainder, ending at 1:08. Pose math is
+// the verbatim port of the website's BrainoDanceGrid.tsx (the slow groove). The
+// blend lerps arms/body AND scaleX through zero — Braino turns to face you.
+// Same rig-ownership contract as the moonwalk.
+function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!walker || !root) return;
+
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
+  // __sbWkMoonwalking doubles as "a routine owns the rig" for every existing guard.
+  __sbWkDancing = true; __sbWkMoonwalking = true; __sbWkThrowMode = true;
+  __sbWkClimbing = false; __sbWkThrown = false; __sbWkReaction = null;
+
+  const flip = document.getElementById("__sbwk_flip__");
+  const q = (sel) => root.querySelector(sel);
+  const laBg = q("#__sbwk_la_bg__"), raBg = q("#__sbwk_ra_bg__");
+  const laFg = q("#__sbwk_la__"), raFg = q("#__sbwk_ra__");
+  const pupL = q("#__sbwk_pupil_l__"), pupR = q("#__sbwk_pupil_r__");
+  q("#__sbwk_ll__")?.setAttribute("transform", "");
+  q("#__sbwk_rl__")?.setAttribute("transform", "");
+  // The coral body is painted AFTER the arm layers, so arms raised overhead vanish
+  // BEHIND the torso ("where are his hands?!"). Lift the arm groups to the top of the
+  // paint order for the performance; __sbWkEndDance restores the original order.
+  if (laFg && raFg && raFg.nextSibling) {
+    __sbWkDanceArmAnchor = raFg.nextSibling;   // the coral body path — never moves
+    root.appendChild(laFg);
+    root.appendChild(raFg);
+  }
+  __sbWkSay("Watch this 🕺");
+
+  const W = 64;
+  const laneW = lane.clientWidth || 320;
+  const minX = 6, maxX = Math.max(minX + 10, laneW - W - 6);
+  const midX = (minX + maxX) / 2;
+  const setArm = (bg, fg, deg) => {
+    const cx = bg === laBg ? 22 : 78;
+    const tx = deg ? `rotate(${deg} ${cx} 53)` : "";
+    if (bg) bg.setAttribute("transform", tx);
+    if (fg) fg.setAttribute("transform", tx);
+  };
+
+  // Website pose math, verbatim time constants (BrainoDanceGrid.tsx).
+  const poseGun = (t) => {   // Gun Fingers — point to the sky, strut left
+    const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
+    return { ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25, lookX: -0.4, lookY: -0.45, tilt: 0 };
+  };
+  const poseDisco = (t) => { // Disco Fever — diagonal point, one arm
+    const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
+    return { ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56, lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35, tx: stab * 6 };
+  };
+  const lerp = (a, b2, u) => a + (b2 - a) * u;
+  const smooth = (u) => u * u * (3 - 2 * u);
+
+  const totalS = durationMs / 1000;
+  const GUN_S = Math.max(6, totalS - 5);   // gun fingers OWNS the floor (11s of 16); disco gets the rest
+  const BLEND_S = 0.7;                     // smooth turn into disco fever
+  const start = performance.now();
+  let last = start;
+  let strutX = null;
+
+  const step = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    const t = (now - start) / 1000;
+
+    let x, face, la, ra, ty, sy, lookX, lookY, tilt;
+    if (t < GUN_S) {
+      // strut leftward, wrapping — the signature move gets the room
+      if (strutX === null) strutX = maxX;
+      strutX -= 34 * dt;
+      if (strutX < minX) strutX = maxX;
+      const g = poseGun(t);
+      if (t < GUN_S - BLEND_S) {
+        x = strutX; face = -1;
+        ({ la, ra, ty, sy, lookX, lookY } = g); tilt = 0;
+      } else {
+        // blend the last 0.7s of gun fingers into disco fever: arms/body lerp,
+        // scaleX sweeps -1 → 1 (he turns to face you), position eases to centre
+        const u = smooth((t - (GUN_S - BLEND_S)) / BLEND_S);
+        const r0 = poseDisco(0);
+        x = lerp(strutX, midX, u); face = lerp(-1, 1, u) || 0.02;
+        la = lerp(g.la, r0.la, u); ra = lerp(g.ra, r0.ra, u);
+        ty = lerp(g.ty, r0.ty, u); sy = lerp(g.sy, r0.sy, u);
+        lookX = lerp(g.lookX, r0.lookX, u); lookY = lerp(g.lookY, r0.lookY, u);
+        tilt = lerp(0, r0.tilt, u);
+      }
+    } else {
+      const r = poseDisco(t - GUN_S);
+      x = midX + (r.tx || 0) * 1.6; face = 1;
+      ({ la, ra, ty, sy, lookX, lookY, tilt } = r);
+    }
+
+    walker.style.transform = `translateX(${x}px)`;
+    if (flip) flip.style.transform = `scaleX(${face})`;
+    setArm(laBg, laFg, la || 0);
+    setArm(raBg, raFg, ra || 0);
+    const sy2 = sy == null ? 1 : sy;
+    // squash about the FEET (y≈101) so knees bend without him floating
+    root.setAttribute("transform", `rotate(${tilt || 0} 50 50) translate(0 ${(ty || 0) + 101 * (1 - sy2)}) scale(1 ${sy2})`);
+    const px = (lookX || 0) * 2.4, py = (lookY || 0) * 2;
+    if (pupL) pupL.setAttribute("transform", `translate(${px} ${py})`);
+    if (pupR) pupR.setAttribute("transform", `translate(${px} ${py})`);
+
+    if (now - start < durationMs) __sbWkDanceRaf = requestAnimationFrame(step);
+    else __sbWkEndDance(x);
+  };
+  __sbWkDanceRaf = requestAnimationFrame(step);
+}
+
+function __sbWkEndDance(xResume) {
+  if (__sbWkDanceRaf) { cancelAnimationFrame(__sbWkDanceRaf); __sbWkDanceRaf = null; }
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (root) {
+    for (const sel of ["#__sbwk_la__", "#__sbwk_ra__", "#__sbwk_la_bg__", "#__sbwk_ra_bg__", "#__sbwk_ll__", "#__sbwk_rl__"]) {
+      root.querySelector(sel)?.setAttribute("transform", "");
+    }
+    root.querySelector("#__sbwk_react__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_rc__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_mouth__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
+    root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
+    root.setAttribute("transform", "");
+    // put the arm groups back into their original paint-order slot (before the coral body)
+    if (__sbWkDanceArmAnchor && __sbWkDanceArmAnchor.parentNode === root) {
+      const laFg2 = root.querySelector("#__sbwk_la__");
+      const raFg2 = root.querySelector("#__sbwk_ra__");
+      if (laFg2) root.insertBefore(laFg2, __sbWkDanceArmAnchor);
+      if (raFg2) root.insertBefore(raFg2, __sbWkDanceArmAnchor);
+    }
+    __sbWkDanceArmAnchor = null;
+  }
+  __sbWkDancing = false; __sbWkMoonwalking = false; __sbWkThrowMode = false;
+  if (__sbInputOpen) {
+    const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
+    __sbWkResumeFromX = Math.max(6, Math.min(typeof xResume === "number" ? xResume : 24, laneW - 70));
+    __sbStartWalkLoop();
+  } else {
+    if (walker) walker.style.transform = "";
+    const lane = document.getElementById("__sb_walk_lane__");
+    if (lane) lane.style.display = "none";
+  }
+}
+
+// Trigger a single hand wave (used to acknowledge the user in headphone mode).
+function __sbWkTriggerWave() {
+  __sbWkWaving = true;
+  clearTimeout(__sbWkWaveTimer);
+  __sbWkWaveTimer = setTimeout(() => { __sbWkWaving = false; }, 1700);
+}
+
+function __sbWkApplyThrowTransform() {
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) return;
+  walker.style.transform = `translate(${__sbThrowTX}px, ${__sbThrowTY}px) rotate(${__sbThrowRot}deg)`;
+  const say = walker.querySelector("#__sbwk_say__");
+  if (say) say.style.transform = `translateX(-50%) rotate(${-__sbThrowRot}deg)`; // keep speech upright
+}
+
+// Show a short speech bubble above Braino's head.
+function __sbWkSay(text) {
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) return;
+  let b = walker.querySelector("#__sbwk_say__");
+  if (!b) { b = document.createElement("div"); b.id = "__sbwk_say__"; walker.appendChild(b); }
+  b.textContent = text;
+  requestAnimationFrame(() => b.classList.add("show"));
+  clearTimeout(__sbWkSayTimer);
+  __sbWkSayTimer = setTimeout(() => b.classList.remove("show"), 1500);
+}
+
+// Persistent voice-state bubble above Braino's head (same design as __sbWkSay, but it sticks
+// while the state holds — "Listening…", "Understanding…" etc.). Pass a falsy label to hide it.
+function __sbWkStatus(label) {
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) return;
+  let b = walker.querySelector("#__sbwk_status__");
+  // Mid-performance the show is the show — no "Listening…"/"Understanding…" chips over
+  // a dancing/moonwalking Braino (the mic still listens; only the label hides).
+  if (label && (__sbWkDancing || __sbWkMoonwalking)) { if (b) b.classList.remove("show"); return; }
+  if (!label) { if (b) b.classList.remove("show"); return; }
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "__sbwk_status__";
+    b.innerHTML = '<span class="sbwk-dot"></span><span class="sbwk-status-label"></span>';
+    walker.appendChild(b);
+  }
+  b.querySelector(".sbwk-status-label").textContent = label;
+  requestAnimationFrame(() => b.classList.add("show"));
+}
+
+// Launch Braino with a flick velocity (px/s). Gravity + wall bounces, then return.
+function __sbWkLaunch(vx, vy) {
+  const lane = document.getElementById("__sb_walk_lane__");
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!lane || !walker) return;
+  __sbWkThrown = true; __sbWkThrowMode = true; __sbWkWalking = false; __sbWkEngaged = false;
+  // Each throw rolls one of three reactions at random — the face + bubble match it.
+  const reactions = [
+    { key: "scared",    say: "AAAH!" },
+    { key: "celebrate", say: "WHEEE!" },
+    { key: "tears",     say: "HAHAHA!" },
+  ];
+  const pick = reactions[Math.floor(Math.random() * reactions.length)];
+  __sbWkReaction = pick.key;
+  __sbWkReactStart = performance.now();
+  __sbWkSay(pick.say);
+
+  const laneRect = lane.getBoundingClientRect();
+  const W = window.innerWidth, H = window.innerHeight, ww = 64, wh = 78;
+  const minTX = -laneRect.left + 4;
+  const maxTX = (W - ww) - laneRect.left - 4;
+  const minTY = -(laneRect.bottom - wh) + 8;   // toward top of screen
+  const maxTY = (H - 6) - laneRect.bottom;      // toward bottom of screen (the "floor")
+
+  let velX = Math.max(-2800, Math.min(2800, vx));
+  let velY = Math.max(-2800, Math.min(2800, vy));
+  if (Math.abs(velX) < 140 && Math.abs(velY) < 140) velY = -760; // a limp drop still tosses up
+  const g = 2800, rest = 0.62;
+  let rotV = velX / 90;        // spin scales with horizontal speed
+  let last = performance.now(), start = last;
+
+  if (__sbWkThrowRaf) cancelAnimationFrame(__sbWkThrowRaf);
+  const step = (now) => {
+    const dt = Math.min(0.032, (now - last) / 1000); last = now;
+    velY += g * dt;
+    __sbThrowTX += velX * dt;
+    __sbThrowTY += velY * dt;
+    __sbThrowRot += rotV * dt;
+    if (__sbThrowTX < minTX) { __sbThrowTX = minTX; velX = -velX * rest; rotV = -rotV * rest; }
+    if (__sbThrowTX > maxTX) { __sbThrowTX = maxTX; velX = -velX * rest; rotV = -rotV * rest; }
+    if (__sbThrowTY < minTY) { __sbThrowTY = minTY; velY = -velY * rest; }
+    if (__sbThrowTY > maxTY) { __sbThrowTY = maxTY; velY = -velY * rest; velX *= 0.72; rotV *= 0.6; }
+    __sbWkApplyThrowTransform();
+    const elapsed = (now - start) / 1000;
+    const settled = Math.abs(velX) < 70 && Math.abs(velY) < 70 && (maxTY - __sbThrowTY) < 2;
+    if (elapsed < 2.4 && !settled) __sbWkThrowRaf = requestAnimationFrame(step);
+    else __sbWkReturnToBar();
+  };
+  __sbWkThrowRaf = requestAnimationFrame(step);
+}
+
+// Glide Braino back to the bar walking line, then hand control back to the walk loop.
+function __sbWkReturnToBar() {
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  const lane = document.getElementById("__sb_walk_lane__");
+  const laneW = lane ? lane.clientWidth : 320;
+  const fromX = __sbThrowTX, fromY = __sbThrowTY, fromR = __sbThrowRot;
+  const toX = Math.max(6, Math.min(__sbWkPosX, laneW - 70));
+  const dur = 620, start = performance.now();
+  const ease = (now) => {
+    const k = Math.min(1, (now - start) / dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    __sbThrowTX = fromX + (toX - fromX) * e;
+    __sbThrowTY = fromY + (0 - fromY) * e;
+    __sbThrowRot = fromR + (0 - fromR) * e;
+    __sbWkApplyThrowTransform();
+    if (k < 1) { __sbWkThrowRaf = requestAnimationFrame(ease); }
+    else {
+      __sbWkThrowRaf = null;
+      __sbWkPosX = toX; __sbThrowTX = toX; __sbThrowTY = 0; __sbThrowRot = 0;
+      __sbWkThrown = false; __sbWkThrowMode = false; __sbWkWalking = true;
+      // Hold the reaction face a beat after landing, then return to the walking smile.
+      setTimeout(() => { __sbWkReaction = null; }, 500);
+    }
+  };
+  __sbWkThrowRaf = requestAnimationFrame(ease);
+}
+
+// Reset any in-flight throw (called when the walker is torn down / restarted).
+function __sbWkResetThrow() {
+  if (__sbWkThrowRaf) { cancelAnimationFrame(__sbWkThrowRaf); __sbWkThrowRaf = null; }
+  __sbWkThrown = false; __sbWkThrowMode = false; __sbWkReaction = null;
+  __sbThrowTX = 0; __sbThrowTY = 0; __sbThrowRot = 0;
+}
+
+// Create the walker lane + mascot DOM (idempotent). Returns the lane element.
+function __sbEnsureWalker() {
+  let lane = document.getElementById("__sb_walk_lane__");
+  if (lane) return lane;
+  lane = document.createElement("div");
+  lane.id = "__sb_walk_lane__";
+  const walker = document.createElement("div");
+  walker.id = "__sbwk_walker__";
+  const flip = document.createElement("div");
+  flip.id = "__sbwk_flip__";
+  flip.innerHTML = __SBWK_SVG;
+  const shadow = document.createElement("div");
+  shadow.id = "__sbwk_shadow__";
+  walker.appendChild(flip);
+  walker.appendChild(shadow);
+
+  // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
+  let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
+  walker.addEventListener("pointerdown", (e) => {
+    if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;
+    dragging = true; dragMoved = false;
+    try { walker.setPointerCapture(e.pointerId); } catch (_) {}
+    __sbWkThrowMode = true;            // tick stops driving the transform
+    __sbThrowTX = __sbWkPosX; __sbThrowTY = 0; __sbThrowRot = 0;
+    lastPX = e.clientX; lastPY = e.clientY; lastPT = performance.now();
+    vX = 0; vY = 0;
+    walker.style.cursor = "grabbing";
+    e.preventDefault();
+  });
+  walker.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const now = performance.now();
+    const dt = Math.max(0.001, (now - lastPT) / 1000);
+    const dx = e.clientX - lastPX, dy = e.clientY - lastPY;
+    if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
+    __sbThrowTX += dx; __sbThrowTY += dy;
+    vX = dx / dt; vY = dy / dt;        // px/s — used as launch velocity
+    lastPX = e.clientX; lastPY = e.clientY; lastPT = now;
+    __sbWkApplyThrowTransform();
+  });
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    walker.style.cursor = "grab";
+    try { walker.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (!dragMoved) {
+      // simple tap → wave hello
+      __sbWkThrowMode = false; __sbThrowTX = 0; __sbThrowTY = 0; __sbThrowRot = 0;
+      if (!__sbWkBusy) {
+        __sbWkBusy = true; __sbWkWalking = false; __sbWkTriggerWave();
+        setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; }, 2200);
+      }
+      return;
+    }
+    __sbWkLaunch(vX, vY);               // flung — tumble then return to the bar
+  };
+  walker.addEventListener("pointerup", endDrag);
+  walker.addEventListener("pointercancel", endDrag);
+
+  lane.appendChild(walker);
+  (document.documentElement || document.body).appendChild(lane);
+  return lane;
+}
+
+function __sbStartWalkLoop() {
+  if (__sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;   // climb/moonwalk/jump own the rig — don't fight it
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  __sbWkStart = __sbWkLast = performance.now();
+  // Resume from the climb's perch point (center) when handed off, else default left.
+  __sbWkPosX = (__sbWkResumeFromX != null ? __sbWkResumeFromX : 24);
+  __sbWkResumeFromX = null;
+  __sbWkDirX = 1;
+  __sbWkWalking = true; __sbWkWaving = false; __sbWkBusy = false; __sbWalkTalking = false;
+  __sbWkResetThrow();
+  if (__sbGlassesOn) __sbSetGlasses(true);   // keep specs on across walker rebuilds
+  clearTimeout(__sbWkAutoTimer); __sbWkScheduleAuto();
+  if (!__sbWkRaf) __sbWkRaf = requestAnimationFrame(__sbWkTick);
+}
+
+function __sbStopWalkLoop() {
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+  if (__sbWkMoonRaf) { cancelAnimationFrame(__sbWkMoonRaf); __sbWkMoonRaf = null; }
+  if (__sbWkJumpRaf) { cancelAnimationFrame(__sbWkJumpRaf); __sbWkJumpRaf = null; }
+  __sbWkClimbing = false; __sbWkMoonwalking = false; __sbWkJumping = false;
+  __sbPointFxClear();
+  clearTimeout(__sbWkAutoTimer);
+  __sbWkResetThrow();
+  __sbWalkTalking = false;
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (lane) {
+    lane.style.display = "none";
+    const w = document.getElementById("__sbwk_walker__");
+    if (w) {
+      w.classList.remove("sbwk-auth", "sbwk-authed");
+      w.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
+    }
+  }
+}
+
+function __sbRestoreWalkBrain() {
+  if (!__sbInputOpen) return;
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (lane && lane.style.display !== "none") return;
+  __sbStartWalkLoop();
+}
+
+function __sbWkScheduleAuto() {
+  clearTimeout(__sbWkAutoTimer);
+  __sbWkAutoTimer = setTimeout(() => {
+    if (!__sbWkBusy) {
+      __sbWkBusy = true; __sbWkWalking = false; __sbWkWaving = true;
+      setTimeout(() => { __sbWkWaving = false; }, 1600);
+      setTimeout(() => { __sbWkBusy = false; __sbWkWalking = true; __sbWkScheduleAuto(); }, 2400);
+    } else { __sbWkScheduleAuto(); }
+  }, 3800 + Math.random() * 2600);
+}
+
+// ── Wake-up climb ───────────────────────────────────────────────────────────
+// Braino pops up from the bottom, walks under the bar, climbs onto it, waves,
+// says "allow me to authenticate you" (glows, eyes shut while the silent auth
+// handshake runs), then opens his eyes, says "hello, {name}" and hands off to the
+// normal walk loop. Runs its OWN rAF and fully owns the rig (the tick is paused).
+function __sbWakeupClimb(finishAuthed, finishRejected) {
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  const walker = document.getElementById("__sbwk_walker__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!walker || !root) { finishAuthed(); return; }
+
+  __sbWkClimbing = true; __sbWkThrowMode = true;
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  clearTimeout(__sbWkAutoTimer);
+
+  const flip = document.getElementById("__sbwk_flip__");
+  if (flip) flip.style.transform = "scaleX(1)";   // face forward
+
+  const laneW = lane.clientWidth || 320;
+  const climbX = Math.max(10, laneW * 0.5 - 32);
+  const ENTRY_X = Math.max(6, climbX - 150);
+  const FLOOR_TY = 74;    // feet near the viewport bottom
+  const START_TY = 230;   // below the screen
+
+  const el = {
+    la: root.querySelector("#__sbwk_la__"),   laBg: root.querySelector("#__sbwk_la_bg__"),
+    ra: root.querySelector("#__sbwk_ra__"),   raBg: root.querySelector("#__sbwk_ra_bg__"),
+    ll: root.querySelector("#__sbwk_ll__"),   rl: root.querySelector("#__sbwk_rl__"),
+    eyeL: root.querySelector("#__sbwk_eye_l__"), eyeR: root.querySelector("#__sbwk_eye_r__"),
+    pupL: root.querySelector("#__sbwk_pupil_l__"), pupR: root.querySelector("#__sbwk_pupil_r__"),
+  };
+  const setArms = (l, r) => {
+    const lt = l ? `rotate(${l} 22 53)` : "", rt = r ? `rotate(${r} 78 53)` : "";
+    if (el.la) el.la.setAttribute("transform", lt);
+    if (el.laBg) el.laBg.setAttribute("transform", lt);
+    if (el.ra) el.ra.setAttribute("transform", rt);
+    if (el.raBg) el.raBg.setAttribute("transform", rt);
+  };
+  const setLegs = (l, r) => {
+    if (el.ll) el.ll.setAttribute("transform", l ? `rotate(${l} 44 74)` : "");
+    if (el.rl) el.rl.setAttribute("transform", r ? `rotate(${r} 56 74)` : "");
+  };
+  const setEyes = (sy) => {
+    const v = Math.max(0.05, sy);
+    if (el.eyeL) el.eyeL.setAttribute("transform", `translate(38,48) scale(1,${v}) translate(-38,-48)`);
+    if (el.eyeR) el.eyeR.setAttribute("transform", `translate(62,48) scale(1,${v}) translate(-62,-48)`);
+  };
+  const setGaze = (gx, gy) => {
+    if (el.pupL) el.pupL.setAttribute("transform", `translate(${gx} ${gy})`);
+    if (el.pupR) el.pupR.setAttribute("transform", `translate(${gx} ${gy})`);
+  };
+  const place = (x, ty, rot = 0) => { walker.style.transform = `translate(${x}px, ${ty}px) rotate(${rot}deg)`; };
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const ease = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+  place(ENTRY_X, START_TY); setArms(0, 0); setLegs(0, 0); setEyes(1); setGaze(0, -0.55);
+
+  let firstName = "";
+  let alreadyAuthed = false;   // known well before the perch phase (fetched at start)
+  __sbStorageGet(["authDisplayName", "authToken"]).then(({ authDisplayName, authToken }) => {
+    firstName = authDisplayName?.split(" ")[0]?.trim() || "";
+    alreadyAuthed = !!authToken;
+  });
+
+  // ── auth handshake (only runs when we DON'T already have a token) ──
+  let authResolved = null;   // true | false
+  let watcher = null, fallbackTimer = null, authBegun = false;
+  const startAuth = () => {
+    if (authBegun) return; authBegun = true;
+    chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
+    watcher = (changes, area) => { if (area === "local" && changes.authToken?.newValue && authResolved === null) authResolved = true; };
+    try { chrome.storage.onChanged.addListener(watcher); } catch (_) {}
+    fallbackTimer = setTimeout(() => {
+      if (authResolved === null) {
+        authResolved = false;
+        // Not signed in on any Braino env — clean up the silent background relay tabs.
+        chrome.runtime.sendMessage({ action: "closeSilentAuthTabs" }, () => { void chrome.runtime.lastError; });
+      }
+    }, 6000);
+  };
+  const cleanupAuth = () => {
+    if (watcher) { try { chrome.storage.onChanged.removeListener(watcher); } catch (_) {} watcher = null; }
+    if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+  };
+  const endClimb = (fn) => {
+    cleanupAuth();
+    walker.classList.remove("sbwk-auth", "sbwk-authed");
+    setArms(0, 0); setLegs(0, 0); setEyes(1); setGaze(0, 0);
+    __sbWkClimbing = false; __sbWkThrowMode = false;
+    if (__sbWkClimbRaf) { cancelAnimationFrame(__sbWkClimbRaf); __sbWkClimbRaf = null; }
+    fn();
+  };
+
+  let phase = "pop", pStart = performance.now(), said1 = false, said2 = false;
+  const next = (p) => { phase = p; pStart = performance.now(); };
+
+  const step = (now) => {
+    const e = now - pStart;
+    if (phase === "pop") {
+      const k = easeOut(Math.min(1, e / 1050));   // slower, gentler rise from below
+      place(ENTRY_X, lerp(START_TY, FLOOR_TY, k)); setGaze(0, -0.4);
+      if (k >= 1) next("walk");
+    } else if (phase === "walk") {
+      const k = Math.min(1, e / 1000);
+      place(lerp(ENTRY_X, climbX, ease(k)), FLOOR_TY);
+      const s = (e / 1000) * 9;
+      setLegs(Math.max(0, Math.sin(s)) * 16, Math.max(0, Math.sin(s + Math.PI)) * 16);
+      setGaze(1.6, 0);
+      if (k >= 1) { setLegs(0, 0); next("reach"); }
+    } else if (phase === "reach") {
+      const k = ease(Math.min(1, e / 600));
+      place(climbX, FLOOR_TY - lerp(0, 6, k));
+      setArms(lerp(0, -122, k), lerp(0, 122, k)); setGaze(0, -0.8);
+      if (k >= 1) next("grip");
+    } else if (phase === "grip") {
+      const k = ease(Math.min(1, e / 800));
+      place(climbX, lerp(FLOOR_TY - 6, FLOOR_TY - 44, k));   // haul up
+      setArms(lerp(-122, -100, k), lerp(122, 100, k));
+      setLegs(lerp(0, 18, k), lerp(0, 18, k));               // legs tuck
+      if (k >= 1) next("mantle");
+    } else if (phase === "mantle") {
+      const k = ease(Math.min(1, e / 800));
+      place(climbX, lerp(FLOOR_TY - 44, 0, k));              // top out onto the bar
+      setArms(lerp(-100, -26, k), lerp(100, 26, k));         // press down
+      setLegs(lerp(18, 0, easeOut(k)), lerp(18, 0, easeOut(k)));
+      if (k >= 1) { setArms(0, 0); setLegs(0, 0); next("perch"); }
+    } else if (phase === "perch") {
+      place(climbX, 0);
+      setArms(0, -28 + Math.sin(e / 45) * 18);               // wave
+      setGaze(0, 0);
+      // Only ask to authenticate the FIRST time (no token yet). Already logged in →
+      // skip the line and just blink + glow green on the way to "hello".
+      if (!alreadyAuthed && e > 300 && !said1) { said1 = true; __sbWkSay("allow me to authenticate you"); }
+      const perchDur = alreadyAuthed ? 850 : 1700;
+      if (e >= perchDur) { setArms(0, 0); if (!alreadyAuthed) startAuth(); next("auth"); }
+    } else if (phase === "auth") {
+      setEyes(lerp(1, 0.06, Math.min(1, e / 350)));          // eyes close (blink shut)
+      // The display name only lands in storage AFTER auth — re-read it on the way to hello
+      // so first-time logins greet by name instead of "hello there".
+      const goHello = () => {
+        __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
+          const fn = authDisplayName?.split(" ")[0]?.trim();
+          if (fn) firstName = fn;
+        });
+        next("hello");
+      };
+      if (alreadyAuthed) {
+        // Already logged in: no gold "authenticating" glow — just a green confirm flash.
+        walker.classList.add("sbwk-authed");
+        if (e >= 700) goHello();
+      } else {
+        walker.classList.add("sbwk-auth");                   // gold pulse while handshaking
+        if (authResolved !== null) {
+          walker.classList.remove("sbwk-auth");
+          if (authResolved) { walker.classList.add("sbwk-authed"); goHello(); }
+          else { endClimb(finishRejected); return; }
+        }
+      }
+    } else if (phase === "hello") {
+      setEyes(lerp(0.06, 1, Math.min(1, e / 350)));          // eyes open
+      // Wait briefly for the name to load (up to ~900ms) before greeting.
+      if (!said2 && (firstName || e > 900)) { said2 = true; __sbWkSay("hello, " + (firstName || "there")); }
+      // Hand off so the normal stroll resumes from the CENTER (no jump to the edge).
+      if (e >= 1700) { __sbWkResumeFromX = climbX; endClimb(finishAuthed); return; }
+    }
+    __sbWkClimbRaf = requestAnimationFrame(step);
+  };
+  __sbWkClimbRaf = requestAnimationFrame(step);
+}
+
+// ── Jump & Point ─────────────────────────────────────────────────────────────
+// Braino springs off the bar, arcs across the screen, lands beside the element the
+// user asked about and points at it while a laser ring traces its outline — then
+// arcs back to the bar. The motion is a faithful port of the Claude Design
+// "Braino Jump & Point" poseAt() timeline (anticipation crouch → explosive launch →
+// airborne arc with knee-tuck → landing squash → spring-back → point + laser → return).
+// Runs its OWN rAF and fully owns the rig, exactly like the wake-up climb.
+
+let __sbPointFx = null;
+function __sbPointFxEnsure() {
+  if (__sbPointFx && document.body.contains(__sbPointFx.wrap)) return __sbPointFx;
+  const wrap = document.createElement("div");
+  wrap.id = "__sb_point_fx__";
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.id = "__sb_point_svg__";
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+  const beam = document.createElementNS(NS, "path");
+  beam.id = "__sb_point_beam__";
+  beam.setAttribute("fill", "none");
+  beam.setAttribute("stroke", "oklch(0.8 0.16 58)");
+  beam.setAttribute("stroke-width", "2.4");
+  beam.setAttribute("stroke-linecap", "round");
+  beam.setAttribute("stroke-dasharray", "1 8");
+  const ring = document.createElementNS(NS, "path");
+  ring.id = "__sb_point_ring__";
+  ring.setAttribute("fill", "none");
+  ring.setAttribute("stroke", "oklch(0.82 0.17 55)");
+  ring.setAttribute("stroke-width", "2.5");
+  ring.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(beam);
+  svg.appendChild(ring);
+  wrap.appendChild(svg);
+  (document.documentElement || document.body).appendChild(wrap);
+  __sbPointFx = { wrap, svg, beam, ring };
+  return __sbPointFx;
+}
+function __sbPointFxClear() {
+  if (__sbPointFx && __sbPointFx.wrap && __sbPointFx.wrap.parentNode) {
+    __sbPointFx.wrap.parentNode.removeChild(__sbPointFx.wrap);
+  }
+  __sbPointFx = null;
+}
+function __sbRoundRectPath(x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  return `M ${x + r} ${y} H ${x + w - r} A ${r} ${r} 0 0 1 ${x + w} ${y + r}`
+    + ` V ${y + h - r} A ${r} ${r} 0 0 1 ${x + w - r} ${y + h}`
+    + ` H ${x + r} A ${r} ${r} 0 0 1 ${x} ${y + h - r}`
+    + ` V ${y + r} A ${r} ${r} 0 0 1 ${x + r} ${y} Z`;
+}
+
+// Animate the jump + point at `el`. Resolves once Braino is back on the bar.
+function __sbJumpPointAt(el, opts = {}) {
+  return new Promise((resolve) => {
+    const lane = __sbEnsureWalker();
+    lane.style.display = "block";
+    const walker = document.getElementById("__sbwk_walker__");
+    const flip = document.getElementById("__sbwk_flip__");
+    const root = walker && walker.querySelector("#__sbwk_root__");
+    if (!el || !walker || !flip || !root) { resolve(false); return; }
+
+    __sbWkJumping = true; __sbWkThrowMode = true;
+    if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+    clearTimeout(__sbWkAutoTimer);
+    __sbWkWaving = false; __sbWkBusy = true; __sbWkWalking = false;
+
+    const elr = {
+      la: root.querySelector("#__sbwk_la__"), laBg: root.querySelector("#__sbwk_la_bg__"),
+      ra: root.querySelector("#__sbwk_ra__"), raBg: root.querySelector("#__sbwk_ra_bg__"),
+      ll: root.querySelector("#__sbwk_ll__"), rl: root.querySelector("#__sbwk_rl__"),
+      eyeL: root.querySelector("#__sbwk_eye_l__"), eyeR: root.querySelector("#__sbwk_eye_r__"),
+      pupL: root.querySelector("#__sbwk_pupil_l__"), pupR: root.querySelector("#__sbwk_pupil_r__"),
+    };
+    // setArms(l,r) maps 1:1 to the design's poseAt p.leftArm / p.rightArm — the walker
+    // SVG arm paths + pivots (22,53)/(78,53) are byte-identical to braino-char.jsx.
+    const setArms = (l, r) => {
+      const lt = `rotate(${l} 22 53)`, rt = `rotate(${r} 78 53)`;
+      if (elr.la) elr.la.setAttribute("transform", lt);
+      if (elr.laBg) elr.laBg.setAttribute("transform", lt);
+      if (elr.ra) elr.ra.setAttribute("transform", rt);
+      if (elr.raBg) elr.raBg.setAttribute("transform", rt);
+    };
+    const setLegs = (l, r) => {
+      if (elr.ll) elr.ll.setAttribute("transform", l ? `rotate(${l} 44 74)` : "");
+      if (elr.rl) elr.rl.setAttribute("transform", r ? `rotate(${r} 56 74)` : "");
+    };
+    const setEyes = (sy) => {
+      const v = Math.max(0.05, sy);
+      if (elr.eyeL) elr.eyeL.setAttribute("transform", `translate(38,48) scale(1,${v}) translate(-38,-48)`);
+      if (elr.eyeR) elr.eyeR.setAttribute("transform", `translate(62,48) scale(1,${v}) translate(-62,-48)`);
+    };
+    const setGaze = (gx, gy) => {
+      if (elr.pupL) elr.pupL.setAttribute("transform", `translate(${gx} ${gy})`);
+      if (elr.pupR) elr.pupR.setAttribute("transform", `translate(${gx} ${gy})`);
+    };
+
+    const lerp = (a, b, u) => a + (b - a) * u;
+    const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+    const easeBack = (x) => { const c = 2.0; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+    const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    // feet origin in the 64×78 rendered walker box (viewBox -8 -34 116 142 → feet ≈ 32,74)
+    const FOOT_DX = 32;
+    flip.style.transformOrigin = `${FOOT_DX}px 74px`;
+    const place = (tx, ty) => { walker.style.transform = `translate(${tx}px, ${ty}px)`; };
+    let FACE = 1;
+    const pose = (sx, sy, rot) => { flip.style.transform = `scale(${(sx * FACE).toFixed(3)},${sy.toFixed(3)}) rotate(${(rot * FACE).toFixed(2)}deg)`; };
+
+    // viewport ↔ lane-local foot coords
+    const laneRect = lane.getBoundingClientRect();
+    const FOOT_BASE_Y = laneRect.bottom - 4;          // foot viewport-Y when ty=0 (perched)
+    const footVx = (tx) => laneRect.left + FOOT_DX + tx;
+    const footVy = (ty) => FOOT_BASE_Y + ty;
+
+    // key positions (lane-local, feet)
+    const START = { tx: cl(__sbWkPosX, 6, (lane.clientWidth || 320) - 70), ty: 0 };
+    const r0 = el.getBoundingClientRect();
+    const elCx = r0.left + r0.width / 2;
+    const startVx = footVx(START.tx);
+    FACE = elCx >= startVx ? 1 : -1;
+    const landVx = cl(elCx - 70 * FACE, 48, window.innerWidth - 48);
+    const landVy = cl(r0.bottom + 70, 140, FOOT_BASE_Y - 8);
+    const LAND = { tx: landVx - laneRect.left - FOOT_DX, ty: landVy - FOOT_BASE_Y };
+    const APEX = cl(Math.hypot(LAND.tx - START.tx, LAND.ty - START.ty) * 0.34, 90, 260);
+
+    const fx = __sbPointFxEnsure();
+    const aimAt = (tx, ty) => {           // pupils track the element from the current foot
+      const fvx = footVx(tx), fvy = footVy(ty);
+      setGaze(cl((elCx - fvx) / 260, -1, 1) * 2.1, cl(((r0.top + r0.height / 2) - fvy) / 260, -1, 1) * 1.9);
+    };
+    const layoutRing = () => {
+      const rr = el.getBoundingClientRect();
+      const pad = 7;
+      fx.ring.setAttribute("d", __sbRoundRectPath(rr.left - pad, rr.top - pad, rr.width + pad * 2, rr.height + pad * 2, 12));
+    };
+    const layoutBeam = (tx, ty) => {
+      const rr = el.getBoundingClientRect();
+      const fvx = footVx(tx) + 30 * FACE, fvy = footVy(ty) - 70;   // ~fingertip
+      const tgx = rr.left + rr.width * 0.5, tgy = rr.top + rr.height + 4;
+      const mx = (fvx + tgx) / 2 + 14 * FACE, my = (fvy + tgy) / 2;
+      fx.beam.setAttribute("d", `M ${fvx} ${fvy} Q ${mx} ${my} ${tgx} ${tgy}`);
+    };
+
+    const bar = document.getElementById("__sb_bar__");
+    const setRecoil = (v) => { if (bar) bar.style.transform = `translateX(-50%) translateY(${(4 * v).toFixed(2)}px) scale(1)`; };
+
+    place(START.tx, START.ty); pose(1, 1, 0); setArms(0, 0); setLegs(0, 0); setEyes(1); aimAt(START.tx, START.ty);
+    layoutRing();
+    fx.ring.style.opacity = "0"; fx.beam.style.opacity = "0";
+    let ringLen = 0; try { ringLen = fx.ring.getTotalLength() || 0; } catch (_) {}
+
+    // dismiss the hold early on click / Escape
+    let dismiss = false;
+    const onKey = (e) => { if (e.key === "Escape") dismiss = true; };
+    const onClick = () => { dismiss = true; };
+
+    let phase = "crouch", pStart = performance.now(), said = false, holdStart = 0;
+    const T = { crouch: 280, launch: 160, fly: 640, land: 160, recover: 260, hold: 3400, bCrouch: 210, bFly: 580 };
+    const t0 = performance.now();
+    const next = (p) => { phase = p; pStart = performance.now(); };
+
+    const finish = () => {
+      __sbWkJumping = false; __sbWkThrowMode = false;
+      if (__sbWkJumpRaf) { cancelAnimationFrame(__sbWkJumpRaf); __sbWkJumpRaf = null; }
+      try { document.removeEventListener("keydown", onKey, true); } catch (_) {}
+      try { document.removeEventListener("pointerdown", onClick, true); } catch (_) {}
+      if (bar) bar.style.transform = "";
+      flip.style.transformOrigin = ""; flip.style.transform = "";
+      setArms(0, 0); setLegs(0, 0); setEyes(1); setGaze(0, 0);
+      walker.style.transform = "";
+      __sbPointFxClear();
+      __sbWkBusy = false;
+      __sbWkResumeFromX = START.tx;   // resume strolling from where he launched
+      __sbStartWalkLoop();
+      resolve(true);
+    };
+
+    const step = (now) => {
+      const e = now - pStart;
+      if (phase === "crouch") {                              // anticipation
+        const u = easeOut(Math.min(1, e / T.crouch));
+        place(START.tx, START.ty);
+        pose(lerp(1, 1.2, u), lerp(1, 0.6, u), lerp(0, -6, u));
+        setArms(lerp(0, 40, u), lerp(0, -40, u));
+        aimAt(START.tx, START.ty); setRecoil(u);
+        if (e >= T.crouch) next("launch");
+      } else if (phase === "launch") {                       // explosive push-off
+        const u = easeOut(Math.min(1, e / T.launch));
+        place(START.tx, START.ty - lerp(0, 22, u));
+        pose(lerp(1.2, 0.8, u), lerp(0.6, 1.32, u), -6);
+        setArms(lerp(40, 128, u), lerp(-40, -128, u));
+        setRecoil(1 - u);
+        if (e >= T.launch) next("fly");
+      } else if (phase === "fly") {                          // airborne arc
+        const u = Math.min(1, e / T.fly);
+        const tx = lerp(START.tx, LAND.tx, u);
+        const ty = lerp(START.ty - 22, LAND.ty, u) - APEX * Math.sin(Math.PI * u);
+        place(tx, ty);
+        const sy = lerp(1.2, 0.96, easeOut(u));
+        pose(2 - sy, sy, lerp(-14, 6, u));
+        const tuck = Math.sin(Math.PI * u) * 10;
+        setLegs(tuck, -tuck);
+        setArms(lerp(128, 16, u), lerp(-128, -66, u));
+        aimAt(tx, ty);
+        if (e >= T.fly) { setLegs(0, 0); next("land"); }
+      } else if (phase === "land") {                         // squash on impact
+        const u = easeOut(Math.min(1, e / T.land));
+        place(LAND.tx, LAND.ty);
+        const sy = lerp(0.96, 0.66, u);
+        pose(2 - sy, sy, lerp(6, 0, u));
+        setArms(16, -66); aimAt(LAND.tx, LAND.ty);
+        if (e >= T.land) next("recover");
+      } else if (phase === "recover") {                      // spring to full height + laser draws on
+        const u = easeBack(Math.min(1, e / T.recover));
+        const g = Math.min(1, e / T.recover);
+        place(LAND.tx, LAND.ty);
+        const sy = lerp(0.66, 1, u);
+        pose(2 - sy, sy, 0);
+        setArms(16, -66); aimAt(LAND.tx, LAND.ty);
+        layoutRing(); layoutBeam(LAND.tx, LAND.ty);
+        fx.ring.style.opacity = (0.95 * g).toFixed(3);
+        if (ringLen) { fx.ring.style.strokeDasharray = ringLen; fx.ring.style.strokeDashoffset = (ringLen * (1 - g)).toFixed(1); }
+        fx.beam.style.opacity = (0.9 * g).toFixed(3);
+        if (e >= T.recover) {
+          said = false; holdStart = now; next("hold");
+          try { document.addEventListener("keydown", onKey, true); } catch (_) {}
+          setTimeout(() => { try { document.addEventListener("pointerdown", onClick, true); } catch (_) {}; }, 350);
+        }
+      } else if (phase === "hold") {                         // point + jab, laser pulses
+        const held = now - holdStart;
+        const tt = (now - t0) / 1000;
+        place(LAND.tx, LAND.ty);
+        pose(1, 1, 0);
+        const jab = Math.sin(held / 1000 * 22) * 2.5;
+        setArms(16, -66 + jab);
+        aimAt(LAND.tx, LAND.ty);
+        layoutRing(); layoutBeam(LAND.tx, LAND.ty);
+        const pulse = 0.5 + 0.5 * Math.sin(tt * 5);
+        if (ringLen) { fx.ring.style.strokeDasharray = ringLen; fx.ring.style.strokeDashoffset = 0; }
+        fx.ring.style.opacity = (0.6 + 0.4 * pulse).toFixed(3);
+        fx.ring.style.filter = `drop-shadow(0 0 ${(6 + pulse * 12).toFixed(0)}px oklch(0.74 0.16 58 / 0.7))`;
+        fx.beam.style.opacity = "0.9";
+        fx.beam.style.strokeDashoffset = (-(tt * 22) % 200).toFixed(1);
+        if (!said) { said = true; if (opts.say) __sbWkSay(opts.say); }
+        if (held >= T.hold || dismiss) {
+          next("bCrouch");
+        }
+      } else if (phase === "bCrouch") {                      // coil to jump home
+        const u = easeOut(Math.min(1, e / T.bCrouch));
+        place(LAND.tx, LAND.ty);
+        const sy = lerp(1, 0.62, u);
+        pose(2 - sy, sy, lerp(0, 7, u));
+        setArms(lerp(16, -30, u), lerp(-66, 30, u));
+        fx.ring.style.opacity = (0.95 * (1 - u)).toFixed(3);
+        fx.beam.style.opacity = (0.9 * (1 - u)).toFixed(3);
+        if (e >= T.bCrouch) next("bFly");
+      } else if (phase === "bFly") {                         // arc back to the bar
+        const u = Math.min(1, e / T.bFly);
+        const tx = lerp(LAND.tx, START.tx, u);
+        const ty = lerp(LAND.ty, START.ty, u) - APEX * 0.8 * Math.sin(Math.PI * u);
+        place(tx, ty);
+        const sy = lerp(1.22, 1, easeOut(u));
+        pose(2 - sy, sy, lerp(14, 0, u));
+        const tuck = Math.sin(Math.PI * u) * 8;
+        setLegs(tuck, -tuck);
+        setArms(lerp(-30, 0, u), lerp(30, 0, u));
+        setGaze(0, 0);
+        if (e >= T.bFly) { setLegs(0, 0); finish(); return; }
+      }
+      __sbWkJumpRaf = requestAnimationFrame(step);
+    };
+    __sbWkJumpRaf = requestAnimationFrame(step);
+  });
+}
+
+// A quick hop in place (bare "jump" with nothing to point at). Owns the rig briefly.
+function __sbWkHop() {
+  return new Promise((resolve) => {
+    const lane = __sbEnsureWalker();
+    lane.style.display = "block";
+    const walker = document.getElementById("__sbwk_walker__");
+    const flip = document.getElementById("__sbwk_flip__");
+    if (!walker || !flip) { resolve(false); return; }
+    __sbWkJumping = true; __sbWkThrowMode = true;
+    if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+    clearTimeout(__sbWkAutoTimer);
+    __sbWkBusy = true; __sbWkWalking = false;
+    const baseX = __sbWkPosX;
+    flip.style.transformOrigin = "32px 74px";
+    const t0 = performance.now();
+    const DUR = 720, H = 72;
+    const step = (now) => {
+      const u = Math.min(1, (now - t0) / DUR);
+      const ty = -H * Math.sin(Math.PI * u);
+      walker.style.transform = `translate(${baseX}px, ${ty}px)`;
+      let sx = 1, sy = 1;
+      if (u < 0.18) { const k = u / 0.18; sx = 1 + 0.2 * k; sy = 1 - 0.3 * k; }            // crouch
+      else if (u < 0.34) { const k = (u - 0.18) / 0.16; sx = 1.2 - 0.4 * k; sy = 0.7 + 0.62 * k; } // stretch up
+      else if (u > 0.84) { const k = Math.sin(((u - 0.84) / 0.16) * Math.PI); sx = 1 + 0.16 * k; sy = 1 - 0.16 * k; } // land squash
+      flip.style.transform = `scale(${sx.toFixed(3)},${sy.toFixed(3)})`;
+      if (u >= 1) {
+        flip.style.transform = ""; flip.style.transformOrigin = ""; walker.style.transform = "";
+        __sbWkJumping = false; __sbWkThrowMode = false; __sbWkJumpRaf = null;
+        __sbWkBusy = false; __sbWkResumeFromX = baseX; __sbStartWalkLoop(); resolve(true); return;
+      }
+      __sbWkJumpRaf = requestAnimationFrame(step);
+    };
+    __sbWkJumpRaf = requestAnimationFrame(step);
+  });
+}
+
+function __sbWkTick(now) {
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (!lane || lane.style.display === "none") { __sbWkRaf = null; return; }
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) { __sbWkRaf = null; return; }
+
+  const dt = Math.min(0.05, (now - __sbWkLast) / 1000);
+  __sbWkLast = now;
+  const t = (now - __sbWkStart) / 1000;
+
+  // While engaged in headphone mode Braino stops strolling and stands to listen.
+  const moving = __sbWkWalking && !__sbWkEngaged;
+
+  // Horizontal stroll (74px/s matching design, ping-pong within lane)
+  if (moving) {
+    const laneW = lane.clientWidth;
+    const maxX = Math.max(28, laneW - 64 - 6);
+    let x = __sbWkPosX + __sbWkDirX * 74 * dt;
+    if (x >= maxX) { x = maxX; __sbWkDirX = -1; }
+    else if (x <= 6) { x = 6; __sbWkDirX = 1; }
+    __sbWkPosX = x;
+  }
+  // While thrown, the physics/return loop owns walker.style.transform — don't fight it.
+  if (!__sbWkThrowMode) walker.style.transform = `translateX(${__sbWkPosX}px)`;
+
+  const flip = document.getElementById("__sbwk_flip__");
+  // Face forward (right) while standing to listen; otherwise face walk direction.
+  if (flip) flip.style.transform = `scaleX(${__sbWkEngaged ? 1 : __sbWkDirX})`;
+
+  // Walk cycle — t * 4.5 for a relaxed stroll (design reference is 7.6)
+  const s = t * 4.5;
+  const Lp = Math.sin(s), Rp = Math.sin(s + Math.PI);
+  const ll = moving ? Math.max(0, Lp) * 5 : 0;
+  const rl = moving ? Math.max(0, Rp) * 5 : 0;
+  const ls = moving ? Math.max(0, Lp) * 8 : 0;
+  const rs = moving ? Math.max(0, Rp) * 8 : 0;
+  const waddle  = moving ? Math.sin(s) * 3.4 : 0;
+  const walkBob = moving ? (-Math.abs(Math.sin(s)) * 2 - 0.4) : 0;
+
+  const breath = 1 + 0.014 * Math.sin(t * 1.7);
+  const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+
+  const bp = t % 3.4;
+  const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
+  const eyeSy = Math.max(0.06, 1 - blink);
+
+  const rightAngle = __sbWkWaving ? (-28 + Math.sin(t * 11) * 16) : 0;
+
+  const root = walker.querySelector("#__sbwk_root__");
+  if (!root) { __sbWkRaf = null; return; }
+
+  // Reaction adds a quick "pop" scale on trigger plus per-emotion body motion.
+  let reactPop = 1, reactShake = 0;
+  if (__sbWkReaction) {
+    const rt = (now - __sbWkReactStart) / 1000;
+    reactPop = 1 + Math.max(0, 0.22 * (1 - rt / 0.34));
+    if (__sbWkReaction === "scared") reactShake = Math.sin(now / 26) * 3.4;       // frightened shiver
+    else if (__sbWkReaction === "celebrate") reactShake = Math.sin(now / 70) * 2.2; // happy wiggle
+    else if (__sbWkReaction === "tears") reactShake = Math.sin(now / 95) * 1.4;
+  }
+
+  root.setAttribute("transform",
+    `rotate(${waddle + reactShake} 50 50) translate(0 ${bob + walkBob}) scale(${breath * reactPop})`);
+
+  const legL = root.querySelector("#__sbwk_ll__");
+  const legR = root.querySelector("#__sbwk_rl__");
+  const raBg = root.querySelector("#__sbwk_ra_bg__");
+  const raFg = root.querySelector("#__sbwk_ra__");
+  if (__sbWkThrowMode) {
+    // Grabbed or airborne: legs and arms flail wildly.
+    const wob1 = Math.sin(now / 55) * 26, wob2 = Math.sin(now / 48 + 1.7) * 26;
+    const arm  = Math.sin(now / 44 + 0.6) * 34;
+    if (legL) legL.setAttribute("transform", `rotate(${wob1} 44 74)`);
+    if (legR) legR.setAttribute("transform", `rotate(${wob2} 56 74)`);
+    if (raBg) raBg.setAttribute("transform", `rotate(${arm} 78 53)`);
+    if (raFg) raFg.setAttribute("transform", `rotate(${arm} 78 53)`);
+  } else {
+    if (legL) legL.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+    if (legR) legR.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+    const raTx = rightAngle ? `rotate(${rightAngle} 78 53)` : "";
+    if (raBg) raBg.setAttribute("transform", raTx);
+    if (raFg) raFg.setAttribute("transform", raTx);
+  }
+
+  const eyeL = root.querySelector("#__sbwk_eye_l__");
+  const eyeR = root.querySelector("#__sbwk_eye_r__");
+  const mouthG = root.querySelector("#__sbwk_mouth__");
+  const reactG = root.querySelector("#__sbwk_react__");
+
+  if (__sbWkReaction) {
+    // A reaction face takes over: hide the normal eyes + mouth, show the chosen overlay.
+    if (eyeL) eyeL.setAttribute("display", "none");
+    if (eyeR) eyeR.setAttribute("display", "none");
+    if (mouthG) mouthG.setAttribute("display", "none");
+    if (reactG) reactG.setAttribute("display", "inline");
+    const key = __sbWkReaction === "scared" ? "rs" : __sbWkReaction === "celebrate" ? "rc" : "rt";
+    ["rs", "rc", "rt"].forEach(k => {
+      const g = root.querySelector("#__sbwk_" + k + "__");
+      if (g) g.setAttribute("display", k === key ? "inline" : "none");
+    });
+    const rt = (now - __sbWkReactStart) / 1000;
+    if (__sbWkReaction === "scared") {
+      const sweat = root.querySelector("#__sbwk_sweat__");
+      if (sweat) {
+        const drop = (rt * 26) % 22;                       // bead slides down the temple
+        sweat.setAttribute("transform", `translate(${-drop * 0.25} ${drop})`);
+        sweat.setAttribute("opacity", String(Math.max(0, 1 - drop / 22)));
+      }
+    } else if (__sbWkReaction === "tears") {
+      const tl = root.querySelector("#__sbwk_tear_l__");
+      const tr = root.querySelector("#__sbwk_tear_r__");
+      const drop = (rt * 22) % 14;                          // tears of joy stream down
+      const op = String(Math.max(0, 1 - drop / 14));
+      if (tl) { tl.setAttribute("transform", `translate(${-drop * 0.18} ${drop})`); tl.setAttribute("opacity", op); }
+      if (tr) { tr.setAttribute("transform", `translate(${drop * 0.18} ${drop})`); tr.setAttribute("opacity", op); }
+    } else if (__sbWkReaction === "celebrate") {
+      const conf = root.querySelector("#__sbwk_confetti__");
+      if (conf) conf.setAttribute("transform", `rotate(${Math.sin(now / 120) * 12} 50 30) translate(0 ${Math.sin(now / 90) * 2})`);
+    }
+  } else {
+    // Normal face — restore visibility and run the usual blink / gaze / mouth.
+    if (reactG) reactG.setAttribute("display", "none");
+    if (eyeL) eyeL.setAttribute("display", "inline");
+    if (eyeR) eyeR.setAttribute("display", "inline");
+    if (mouthG) mouthG.setAttribute("display", "inline");
+
+    if (eyeL) eyeL.setAttribute("transform", `translate(38,48) scale(1,${eyeSy}) translate(-38,-48)`);
+    if (eyeR) eyeR.setAttribute("transform", `translate(62,48) scale(1,${eyeSy}) translate(-62,-48)`);
+
+    // Gaze: pupils look toward the direction of travel while walking; they recentre
+    // (look straight at the user) the moment Braino is engaged in headphone mode.
+    // Local +X always maps to the walk direction because the body is mirrored by
+    // scaleX(__sbWkDirX), so a constant forward offset reads correctly both ways.
+    const gaze = (__sbWkEngaged || !moving) ? 0 : 2.4;
+    const pupL = root.querySelector("#__sbwk_pupil_l__");
+    const pupR = root.querySelector("#__sbwk_pupil_r__");
+    if (pupL) pupL.setAttribute("transform", `translate(${gaze} 0)`);
+    if (pupR) pupR.setAttribute("transform", `translate(${gaze} 0)`);
+
+    const mSmile = root.querySelector("#__sbwk_smile__");
+    const mTalk  = root.querySelector("#__sbwk_talk__");
+    const tE = root.querySelector("#__sbwk_te__");
+    const tI = root.querySelector("#__sbwk_ti__");
+    // Mouth animates whenever Braino is actually speaking (TTS sets __sbWalkTalking) —
+    // in voice mode or when reading an answer aloud. The idle wave no longer triggers it
+    // (that's decoupled), so no need to also gate on headphone mode.
+    const talking = __sbWalkTalking;
+    if (talking) {
+      const o = Math.max(0, Math.min(1,
+        (0.5 + 0.5 * Math.sin(t * 13.5)) *
+        (0.55 + 0.45 * Math.sin(t * 7.7 + 1.3)) *
+        (0.7 + 0.3 * Math.sin(t * 23))
+      ));
+      const ry = 1.4 + o * 4.2, rx = 4 - o * 0.5;
+      // Use style.display — the talk group carries an inline style="display:none" that
+      // would otherwise override the display ATTRIBUTE (that was the missing-mouth bug).
+      if (mSmile) mSmile.style.display = "none";
+      if (mTalk)  mTalk.style.display = "block";
+      if (tE) { tE.setAttribute("rx", String(rx)); tE.setAttribute("ry", String(ry)); }
+      if (tI) {
+        if (o > 0.25) {
+          tI.style.display = "block";
+          tI.setAttribute("cy", String(61.8 + ry * 0.4));
+          tI.setAttribute("rx", String(rx * 0.62));
+          tI.setAttribute("ry", String(ry * 0.5));
+        } else { tI.style.display = "none"; }
+      }
+    } else {
+      if (mSmile) mSmile.style.display = "";
+      if (mTalk)  mTalk.style.display = "none";
+    }
+  }
+
+  __sbWkRaf = requestAnimationFrame(__sbWkTick);
+}
+
 let __sbBrainVisible = false;
 let __sbInputOpen = false;
 let __sbIsRecording = false;
@@ -2515,11 +3959,22 @@ let __sbCurrentSpeechAudio = null;
 let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
 let __sbSpeechGeneration = 0;
-const __SB_TTS_PROVIDER = "elevenlabs";
-const __SB_TTS_ENDPOINT = "elevenlabs-tts";
-const __SB_TTS_RETRY_MIN_MS = 5000;
+// In-flight TTS fetch controller, so barge-in (__sbStopSpeech) can abort it instantly
+// instead of letting it hang until the fetch timeout fires.
+let __sbTtsAbortController = null;
+const __SB_TTS_PROVIDER = "fish-audio";
+const __SB_TTS_FALLBACK_PROVIDER = "openai-tts";
+const __SB_TTS_ENDPOINT = "fish-audio-tts";
+const __SB_TTS_RETRY_MIN_MS = 800;
 const __SB_TTS_RETRY_MAX_MS = 12000;
-const __SB_ELEVENLABS_VOICE_ID = "PI9w0jWUtb68a6R6eQbl";
+// With server-side streaming, fetch() resolves on response headers (first audio chunk), so
+// this only guards a genuinely stalled connection — not full audio generation. 10s leaves
+// room for a cold edge-function start (~5s observed) yet still falls back far faster than
+// the old 14s of silence.
+const __SB_TTS_FETCH_TIMEOUT_MS = 10000;
+// Fish Audio picks the voice server-side via FISH_AUDIO_REFERENCE_ID — the client sends
+// only { text }, so no voice id is needed here. Kept as a label for cost telemetry.
+const __SB_FISH_VOICE_NAME = "Fish Audio Braino";
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
@@ -2543,6 +3998,28 @@ let __sbCursorFollowRaf = 0;
 let __sbCursorFollowNeedsFrame = false;
 let __sbCursorFollowPosition = null;
 let __sbLastAgentTask = "";
+let __sbAgentLaunchGuard = { task: "", ts: 0 };
+// Self-capture guard: remember what Braino just SAID so the mic re-hearing his own voice
+// (e.g. "sending directions to your phone") can't re-trigger the same intent into a 2nd run.
+let __sbLastSpokenLine = { text: "", ts: 0 };
+function __sbNormalizeForMatch(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+function __sbNoteSpoken(text) {
+  const t = __sbNormalizeForMatch(text);
+  if (t) __sbLastSpokenLine = { text: t, ts: Date.now() };
+}
+function __sbIsSelfEcho(transcript) {
+  const a = __sbNormalizeForMatch(transcript);
+  const b = __sbLastSpokenLine.text;
+  if (!a || !b || Date.now() - __sbLastSpokenLine.ts > 8000) return false;
+  if (a === b) return true;
+  if (a.length >= 8 && (b.includes(a) || a.includes(b))) return true;
+  const at = new Set(a.split(" "));
+  const bt = b.split(" ");
+  const overlap = bt.filter((w) => at.has(w)).length;
+  return bt.length >= 4 && overlap / bt.length >= 0.7;   // mostly Braino's own words coming back
+}
 let __sbMovieModeActive = false;
 let __sbMovieModeState = { frame: null, media: null, descriptor: "" };
 let __sbMovieModeSyncTimer = null;
@@ -2551,11 +4028,52 @@ let __sbMovieModeResizeListener = null;
 let __sbMovieTranscriptEntries = [];
 let __sbMovieLastSubtitleText = "";
 let __sbAgentPendingTurn = null;
+let __sbLastFinalizedAgentKey = "";   // dedupe: background can emit the final twice
+let __sbLastFinalizedAgentAt = 0;
 let __sbMovieLastTitle = "";
 let __sbPassiveMovieSyncTimer = null;
 let __sbFullscreenUiListenerBound = false;
 const __SB_MOVIE_MODE_FRAME_RE = /\b(player|video|media|playback|stream|caption|subtitle|controls?|shaka|jw|vjs|html5|watch|cinema|theater|viewer)\b/i;
 const __SB_MOVIE_CONTEXT_HOST_RE = /\b(netflix|hotstar|jiohotstar|disneyplus|disney|primevideo|amazonvideo|amazon|hulu|max|hbomax|appletv|apple\.tv|tv\.apple|zee5|sonyliv|jiocinema|voot|aha|mxplayer|erosnow|altbalaji|youtube|mubi|peacock|paramount|fubo|crunchyroll|funimation|tubi)\b/i;
+const __SB_LATEST_UPDATES = [
+  {
+    title: "Arms, legs, walking, and flinging",
+    text: "I have a fuller little body now: arms, legs, walking above the bar, idle waves, expressive reactions, and grab/fling physics where I tumble away and climb back to the bar.",
+  },
+  {
+    title: "Cinema mode",
+    text: "I can sit with you while you watch a movie, use the current playback context, timestamp, and captions/subtitle transcript, then answer scene questions without spoiling future events unless you ask.",
+  },
+  {
+    title: "Always-on realtime voice",
+    text: "The blue glow still means realtime listening is alive. Ctrl+Ctrl now enters headphone voice with clean Auto routing, so stale Lecture/Web/connector modes do not hijack commands.",
+  },
+  {
+    title: "Faster browser actions",
+    text: "Spotify/open/send style voice commands now launch fast adapters immediately, skip slow progress narration, and only use the DOM-grounded closed loop for complex work.",
+  },
+  {
+    title: "Useful working memory",
+    text: "I can work with contacts and nicknames, Google Calendar, Google Docs, X/Twitter status and automation, web research, tab awareness, and realtime spend checks.",
+  },
+];
+
+function __sbBuildLatestUpdatesPromptBlock() {
+  return [
+    "Current Braino product memory - if the user asks what is new with you, what changed recently, or what you can do now, answer from this list first.",
+    ...__SB_LATEST_UPDATES.map((item) => `- ${item.title}: ${item.text}`),
+  ].join("\n");
+}
+
+function __sbBuildWhatsNewReply() {
+  return [
+    "Yeah, I should know this now. Here is the current Braino changelog:",
+    "",
+    ...__SB_LATEST_UPDATES.map((item) => `**${item.title}** — ${item.text}`),
+    "",
+    "Last night's big one was the body/cinema glow-up: arms, legs, walking/flinging, plus movie companion context. What do you want to try first?",
+  ].join("\n\n");
+}
 
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
@@ -2632,6 +4150,7 @@ if (__sbContextOk()) {
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
+        __sbDelegateUiHidden = false;   // delegate done → let the result reopen the chat UI
         // Voice mode speaks the result with no panel; chat mode shows it.
         const finalText = String(msg.text || "").trim();
         const agentPrompt = String(msg.task || __sbAgentPendingTurn?.prompt || __sbLastAgentTask || "").trim();
@@ -2644,6 +4163,8 @@ if (__sbContextOk()) {
           if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
         }
         __sbSetStopBtn(false);
+        __sbClearBarAgentStatus();
+        __sbAgentLogClear();   // collapse the activity strip when the task finishes
         if (__sbRtAwaitingDelegateResult) {
           __sbRtAwaitingDelegateResult = false;
           if (finalText) {
@@ -2662,21 +4183,38 @@ if (__sbContextOk()) {
           } else {
             __sbCompleteRealtimeCostTurn({ force: true });
           }
+        } else if (__sbHeadphoneMode && finalText && !__sbVoicePendingReply) {
+          // Delegate reached from voice but not via the realtime await path — speak the
+          // result back so a spoken task always gets a spoken answer.
+          __sbSpeakWithPreferredVoice(finalText).catch(() => {});
         }
       } else {
+        // ALWAYS surface progress in the docked log strip + bar (works in voice-only mode too,
+        // where the card below is suppressed). This is the fix for "I just see him standing".
+        const __alogText = String(msg.text || "").trim();
+        if (__alogText) { __sbAgentLogStep(__alogText); __sbSetBarAgentStatus(__alogText); }
         if (!__sbVoiceOnlyMode) {
           if (__sbAgentPendingTurn) {
             __sbUpdateAgentPendingTurn(String(msg.text || "Working…").trim() || "Working…");
+          } else if (String(msg.task || "").trim()) {
+            // Delegate carried over to a new tab — no pending turn exists here yet. Recreate it
+            // from the task so the in-flight delegate (progress + subgoals) keeps rendering in the
+            // panel instead of resetting to a transient bubble. Continuity across tabs.
+            __sbSetAgentPendingTurn(String(msg.task).trim(), String(msg.text || "Working…").trim() || "Working…");
           } else {
             __sbShowBubble(msg.text, false, { tone: "status" });
           }
         }
         __sbSetStopBtn(true);
-        // Speak milestone hints in voice mode without flooding the user
-        if (msg.speakHint && __sbHeadphoneMode && !__sbRtRelayingAppMessage) {
-          void __sbSpeakWithPreferredVoice(msg.speakHint, "realtime");
-        }
+        // Keep progress visual-only in realtime. Speaking milestones can be slow and
+        // can leak back into the live mic; only final agent results should speak.
       }
+    }
+    if (msg.action === "SB_SUBGOAL_UPDATE" || msg.type === "SB_SUBGOAL_UPDATE") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbUpdateAgentSubgoals(Array.isArray(msg.subgoals) ? msg.subgoals : []);
+      sendResponse?.({ ok: true });
+      return false;
     }
     if (msg.action === "sbSpotifyState") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
@@ -2784,18 +4322,28 @@ function __sbBuildBrainUI() {
   style.id = "__sb_styles__";
   style.textContent = `
     #__sb_root__ {
-      position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
-      display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      pointer-events: none;
+      position: fixed; bottom: 0; right: 0; z-index: 1;
+      width: 1px; height: 1px; pointer-events: none; overflow: visible;
     }
+    /* Docked mascot — sits at the bottom-right of the page, anchored to #__sb_root__
+       (so it still follows cursor-ride repositioning), independent of the bar. */
     #__sb_brain_btn__ {
-      width: 52px; height: 52px; cursor: pointer; pointer-events: all;
-      filter: drop-shadow(0 2px 10px rgba(200,84,74,0.5));
-      transition: transform 0.15s, filter 0.15s;
-      flex-shrink: 0;
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      width: 52px; height: 52px;
+      cursor: pointer; pointer-events: all;
+      filter: drop-shadow(0 2px 12px rgba(200,84,74,0.55));
+      transition: filter 0.15s;
+      z-index: 2;
     }
-    #__sb_brain_btn__:hover { transform: scale(1.1); filter: drop-shadow(0 4px 16px rgba(200,84,74,0.7)); }
+    #__sb_brain_btn__:hover { filter: drop-shadow(0 4px 18px rgba(200,84,74,0.75)); }
+    /* Docked mascot stays put at the bottom-right — the old cross-screen "pace"
+       (it used to walk across the centered bar) would now fling it ~1020px off the
+       right edge. Walking lives in the panel's walker lane, so this is a no-op now. */
+    @keyframes __sb_mascot_pace__ {
+      0%, 100% { translate: 0px 0px; }
+    }
     html.__sb_movie_mode_active__,
     body.__sb_movie_mode_active__ {
       overflow: hidden !important;
@@ -2855,11 +4403,11 @@ function __sbBuildBrainUI() {
 
     /* ── Idle animations: float + arm swing + gaze drift + blink ── */
     #__sb_brain_btn__.sb-brain-idle {
-      animation: __sb_idle_float__ 3.8s ease-in-out infinite;
+      animation: __sb_idle_float__ 3.8s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite;
     }
     @keyframes __sb_idle_float__ {
       0%, 100% { transform: translateY(0px); }
-      50%       { transform: translateY(-5px); }
+      50%       { transform: translateY(-6px); }
     }
     /* Arms: left leads, right follows half-cycle behind — matches home mascot idle math */
     #__sb_brain_btn__.sb-brain-idle #sbb-arm-l,
@@ -2943,17 +4491,20 @@ function __sbBuildBrainUI() {
       0%, 100% { filter: drop-shadow(0 2px 12px rgba(40,180,70,0.4)); }
       50% { filter: drop-shadow(0 0 32px rgba(80,230,110,1)) drop-shadow(0 0 60px rgba(40,180,70,0.7)); }
     }
-    #__sb_brain_btn__.sb-brain-auth {
+    #__sb_brain_btn__.sb-brain-auth,
+    #__sb_cin_brain__.sb-brain-auth {
       animation: __sb_brain_glow_auth__ 0.85s ease-in-out infinite;
     }
-    #__sb_brain_btn__.sb-brain-authed {
+    #__sb_brain_btn__.sb-brain-authed,
+    #__sb_cin_brain__.sb-brain-authed {
       animation: __sb_brain_glow_authed__ 0.85s ease-in-out infinite;
     }
     @keyframes __sb_brain_glow_rejected__ {
       0%, 100% { filter: drop-shadow(0 2px 10px rgba(200,40,40,0.4)); }
       50% { filter: drop-shadow(0 0 30px rgba(255,80,80,1)) drop-shadow(0 0 55px rgba(200,40,40,0.65)); }
     }
-    #__sb_brain_btn__.sb-brain-rejected {
+    #__sb_brain_btn__.sb-brain-rejected,
+    #__sb_cin_brain__.sb-brain-rejected {
       animation: __sb_brain_glow_rejected__ 0.85s ease-in-out infinite;
     }
 
@@ -3044,11 +4595,14 @@ function __sbBuildBrainUI() {
       flex-shrink: 0; transition: background 0.15s; padding: 0;
     }
     #__sb_send_btn__:hover { background: #C9544A; }
+    #__sb_bar_stop__ { color: #C9544A; }
+    #__sb_bar_stop__:hover { background: rgba(201,84,74,0.14); }
+    html.sb-dark #__sb_bar_stop__ { color: #F0908A; }
     .sb-pill-dropdown-btn {
       display: inline-flex; align-items: center; gap: 4px;
-      border: none; background: rgba(65,48,40,0.07); border-radius: 8px;
+      border: none; background: rgba(255,251,247,0.55); border-radius: 8px;
       padding: 4px 8px 4px 9px; cursor: pointer; transition: background 0.15s;
-      font-size: 11px; font-weight: 600; color: #6B5248; white-space: nowrap;
+      font-size: 11px; font-weight: 600; color: #3A2D24; white-space: nowrap;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     .sb-pill-dropdown-btn:hover { background: rgba(65,48,40,0.12); }
@@ -3382,20 +4936,29 @@ function __sbBuildBrainUI() {
     .sb-meeting-followup-btn:disabled { opacity:0.5; cursor:default; }
     .sb-meeting-followup-status { min-height:15px; margin-top:8px; font-size:11.5px; color:#8A7B73; line-height:1.45; }
 
-    /* ── NEW UI: Thin bar + centered glass card ── */
+    /* ── Cinema Dock: full-width centered dock bar ── */
     #__sb_bar__ {
-      display: flex; align-items: center; gap: 6px;
+      position: fixed; bottom: 20px; left: 50%;
+      transform: translateX(-50%) translateY(24px) scale(0.97);
+      /* Column so the SAME pill can extend a little from its top to show the activity log; the
+         input row keeps its original horizontal layout via #__sb_bar_row__. Idle = unchanged. */
+      display: flex; flex-direction: column; align-items: stretch; gap: 0;
+      /* Stays transparent liquid glass — legibility comes from a light text halo
+         (see #__sb_input__ etc.) rather than an opaque backing. */
       background: rgba(255,251,247,0.12); border-radius: 100px;
-      position: relative; isolation: isolate;
-      padding: 7px 7px 7px 18px;
+      isolation: isolate;
+      overflow: visible;
+      padding: 0;
       border: 1px solid rgba(255,255,255,0.5);
-      box-shadow: 0 8px 28px rgba(27,23,19,0.15), 0 2px 8px rgba(27,23,19,0.08),
+      box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
                   inset -1px -1px 1px rgba(255,255,255,0.3);
-      width: 360px; max-width: calc(100vw - 90px);
-      backdrop-filter: blur(4px) saturate(180%); -webkit-backdrop-filter: blur(4px) saturate(180%);
+      width: calc(100vw - 48px); max-width: 1100px;
+      backdrop-filter: blur(6px) saturate(180%); -webkit-backdrop-filter: blur(6px) saturate(180%);
       pointer-events: none; opacity: 0;
-      transform: scaleX(0.55) translateY(4px); transform-origin: right center;
+      /* Below the walker lane so the climbing/strolling Braino renders in FRONT of the
+         glass (behind it, the bar's backdrop-blur made the climber a blurred ghost). */
+      z-index: 2147483645;
       transition: opacity 0.38s cubic-bezier(0.34,1.1,0.64,1), transform 0.38s cubic-bezier(0.34,1.1,0.64,1),
                   background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
     }
@@ -3406,7 +4969,78 @@ function __sbBuildBrainUI() {
       filter: url(#__sb_glass_filter__);
       z-index: -1; pointer-events: none;
     }
-    #__sb_bar__.open { opacity: 1; pointer-events: all; transform: scaleX(1) translateY(0); }
+    #__sb_bar__.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0) scale(1); }
+    /* Coral send-pulse — a brief ring + warm glow each time a message is sent. */
+    @keyframes __sb_bar_send__ {
+      0%   { box-shadow: 0 0 0 0 rgba(232,120,110,0.55), 0 8px 32px rgba(27,23,19,0.18); }
+      55%  { box-shadow: 0 0 0 6px rgba(232,120,110,0), 0 0 34px rgba(232,120,110,0.45), 0 8px 32px rgba(27,23,19,0.18); }
+      100% { box-shadow: 0 0 0 0 rgba(232,120,110,0), 0 8px 32px rgba(27,23,19,0.18); }
+    }
+    #__sb_bar__.sb-send-pulse { animation: __sb_bar_send__ 0.7s ease-out; }
+    /* Activity log INSIDE the pill — the SAME bar extends a LITTLE from its top to show the last
+       couple of steps, then settles back. Small + tight so it reads clean. */
+    #__sb_bar_row__ { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 28px; width: 100%; box-sizing: border-box; }
+    #__sb_bar_log__ {
+      max-height: 0; opacity: 0; overflow: hidden;
+      display: flex; flex-direction: column; gap: 1px; padding: 0 24px;
+      transition: max-height 0.4s cubic-bezier(0.34,1.18,0.64,1), opacity 0.24s ease, padding 0.4s cubic-bezier(0.34,1.18,0.64,1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #__sb_bar__.sb-log-open #__sb_bar_log__ { max-height: 60px; opacity: 1; padding: 11px 24px 5px; }
+    #__sb_bar__.sb-log-open.sb-log-timing #__sb_bar_log__ { max-height: 44px; }   /* single timing readout */
+    /* Single voice-timing readout: a colour dot + the path + the stop→heard duration. */
+    #__sb_bar_log__ .sb-vt-readout { gap: 8px; font-size: 12.5px; font-weight: 600; color: #2A241E; opacity: 1; }
+    #__sb_bar_log__ .sb-vt-readout .sb-vt-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+    #__sb_bar_log__ .sb-vt-readout .sb-vt-path { letter-spacing: 0.1px; }
+    #__sb_bar_log__ .sb-vt-readout .sb-vt-time { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+    html.sb-dark #__sb_bar_log__ .sb-vt-readout { color: #FBF7F1; }
+    /* a touch more opaque + softer corners while open, so the steps sit on a clean surface */
+    #__sb_bar__.sb-log-open { background: rgba(253,250,246,0.66); border-radius: 26px; }
+    #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top: 1px solid rgba(120,110,100,0.12); }
+    #__sb_bar_log__ .sb-blog-step { display: flex; align-items: center; gap: 9px; font-size: 12px; line-height: 1.5; color: #6B6157; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #__sb_bar_log__ .sb-blog-step .sb-blog-ic { flex: none; width: 13px; height: 13px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+    #__sb_bar_log__ .sb-blog-step.done { color: #9a9088; }
+    #__sb_bar_log__ .sb-blog-step.done .sb-blog-ic { color: #3DA35D; }       /* green tick */
+    #__sb_bar_log__ .sb-blog-step.active { color: #1B1713; font-weight: 500; }
+    #__sb_bar_log__ .sb-blog-step.active .sb-blog-ic { border-radius: 50%; border: 2px solid rgba(232,120,110,0.3); border-top-color: #E8786E; box-sizing: border-box; animation: __sb_blog_spin__ 0.7s linear infinite; }
+    @keyframes __sb_blog_spin__ { to { transform: rotate(360deg); } }
+    @keyframes __sb_tick_pop__ { 0% { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
+    #__sb_bar_log__ .sb-blog-step.just-done .sb-blog-ic { animation: __sb_tick_pop__ 0.36s cubic-bezier(0.34,1.56,0.64,1); }
+    html.sb-dark #__sb_bar__.sb-log-open { background: rgba(24,21,18,0.84); }
+    html.sb-dark #__sb_bar_log__ .sb-blog-step { color: #b0a89e; }
+    html.sb-dark #__sb_bar_log__ .sb-blog-step.active { color: #FBF7F1; }
+    html.sb-dark #__sb_bar__.sb-log-open #__sb_bar_row__ { border-top-color: rgba(255,255,255,0.1); }
+    /* Wakeup / sign-in overlays replace the input row (the bar is a column now): hide the row so
+       its padding doesn't leave a gap, and give the overlay the row's padding. */
+    #__sb_bar__.sb-waking #__sb_bar_row__, #__sb_bar__.sb-signin #__sb_bar_row__ { display: none; }
+    #__sb_bar__.sb-waking #__sb_wakeup__, #__sb_bar__.sb-signin #__sb_signin_cta__ { padding: 11px 14px 11px 28px; box-sizing: border-box; width: 100%; }
+    /* Card is display-only now — the constant bottom bar is the single input. */
+    #__sb_bubble__ .sb-card-footer { display: none !important; }
+    /* Wake-up climb: bar is visible glass, expands from the center (scaleX driven in JS),
+       and its inputs stay hidden until Braino has climbed on + authenticated. */
+    #__sb_bar__.sb-climb { transform-origin: center center; }
+    #__sb_bar__.sb-climb #__sb_input__,
+    #__sb_bar__.sb-climb #__sb_mode_btn__,
+    #__sb_bar__.sb-climb #__sb_rec_btn__,
+    #__sb_bar__.sb-climb #__sb_send_btn__,
+    #__sb_bar__.sb-climb #__sb_bar_close__,
+    #__sb_bar__.sb-climb #__sb_x_auto_btn__ { opacity: 0; pointer-events: none; }
+    /* ── Delegate-busy: coral shimmer sweeps the bar while the agent works, and the
+       live step text rides in the input placeholder (see __sbSetBarAgentStatus). ── */
+    @keyframes __sb_agent_shimmer__ {
+      0%   { background-position: 250% 0; }
+      100% { background-position: -150% 0; }
+    }
+    #__sb_bar__.sb-agent-busy { border-color: rgba(232,120,110,0.5); }
+    #__sb_bar__.sb-agent-busy::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      z-index: 0;
+      background: linear-gradient(100deg, transparent 30%, rgba(232,120,110,0.22) 48%, rgba(246,168,162,0.28) 52%, transparent 70%);
+      background-size: 220% 100%;
+      animation: __sb_agent_shimmer__ 1.5s linear infinite;
+    }
+    #__sb_bar__.sb-agent-busy #__sb_input__ { position: relative; z-index: 1; }
+    #__sb_bar__.sb-agent-busy #__sb_input__::placeholder { color: #C9544A; opacity: 0.95; }
     /* ── Readable mode: opaque warm cream, dark text — always legible ── */
     #__sb_bar__.sb-readable {
       background: rgba(255,251,247,0.96);
@@ -3436,6 +5070,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-waking #__sb_mode_btn__,
     #__sb_bar__.sb-waking #__sb_rec_btn__,
     #__sb_bar__.sb-waking #__sb_send_btn__,
+    #__sb_bar__.sb-waking #__sb_bar_close__,
     #__sb_bar__.sb-waking #__sb_x_auto_btn__ { display: none !important; }
     #__sb_wakeup_track__ {
       flex: 1; height: 2px; background: rgba(65,48,40,0.12); border-radius: 99px; overflow: hidden;
@@ -3465,6 +5100,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin #__sb_mode_btn__,
     #__sb_bar__.sb-signin #__sb_rec_btn__,
     #__sb_bar__.sb-signin #__sb_send_btn__,
+    #__sb_bar__.sb-signin #__sb_bar_close__,
     #__sb_bar__.sb-signin #__sb_x_auto_btn__,
     #__sb_bar__.sb-signin #__sb_wakeup__ { display: none !important; }
     #__sb_signin_cta_hint__ {
@@ -3483,24 +5119,28 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
-      font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      /* Light halo so the dark text stays legible on a transparent glass over dark pages. */
+      text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.7), 0 1px 1px rgba(255,255,255,0.8);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    #__sb_input__::placeholder { color: #A79B92; }
+    #__sb_input__::placeholder { color: #4A3D34; }
     .sb-bar-icon-btn {
-      width: 32px; height: 32px; border-radius: 50%; border: none;
-      background: transparent; color: #6B5248; cursor: pointer;
+      width: 38px; height: 38px; border-radius: 50%; border: none;
+      background: transparent; color: #3A2D24; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
+      /* Light halo so the stroke icons stay visible on a transparent glass over dark pages. */
+      filter: drop-shadow(0 0 2px rgba(255,255,255,0.9)) drop-shadow(0 0 4px rgba(255,255,255,0.55));
     }
     .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
     .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
     #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
-    #__sb_send_btn__ { background: #E8786E !important; color: white !important; }
+    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 42px !important; height: 42px !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
       position: fixed; z-index: 2147483648; top: 50%; left: 50%;
-      transform: translate(-50%, -50%); width: min(580px, calc(100vw - 48px));
+      transform: translate(-50%, -50%); width: min(820px, calc(100vw - 32px));
       pointer-events: none; opacity: 0; transition: opacity 0.25s;
     }
     #__sb_card_wrap__.visible { opacity: 1; pointer-events: all; }
@@ -3545,21 +5185,23 @@ function __sbBuildBrainUI() {
                   color 0.35s ease, backdrop-filter 0.35s ease;
     }
     /* ── Readable mode: opaque warm cream, dark text — always legible on any bg ── */
+    /* Glassmorphism alternate — translucent frosted panel (NOT opaque white) with dark,
+       readable text. You can still see the page through it. */
     #__sb_bubble__.sb-readable {
-      --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.8); --sb-fg-3: rgba(27,23,19,0.45);
-      --sb-bg: rgba(255,251,247,0.97); --sb-border: rgba(65,48,40,0.1);
-      --sb-q-bg: rgba(65,48,40,0.06); --sb-q-border: rgba(65,48,40,0.1);
-      --sb-footer-border: rgba(65,48,40,0.08); --sb-footer-bg: rgba(65,48,40,0.03);
-      --sb-code-bg: rgba(65,48,40,0.07); --sb-code-fg: #b44b42;
-      --sb-pre-bg: rgba(27,23,19,0.06); --sb-pre-fg: #1B1713;
-      --sb-bq-border: rgba(201,84,74,0.35); --sb-bq-fg: rgba(27,23,19,0.6);
-      --sb-hr: rgba(65,48,40,0.1); --sb-link: #C9544A;
-      --sb-btn-fg: rgba(65,48,40,0.75); --sb-btn-bg: rgba(65,48,40,0.07);
-      --sb-btn-hover: rgba(65,48,40,0.13); --sb-rec-border: rgba(65,48,40,0.1);
-      backdrop-filter: blur(20px) saturate(160%);
-      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      --sb-fg: #1B1713; --sb-fg-2: rgba(27,23,19,0.82); --sb-fg-3: rgba(27,23,19,0.5);
+      --sb-bg: rgba(255,251,247,0.5); --sb-border: rgba(255,255,255,0.55);
+      --sb-q-bg: rgba(65,48,40,0.08); --sb-q-border: rgba(65,48,40,0.12);
+      --sb-footer-border: rgba(65,48,40,0.1); --sb-footer-bg: rgba(65,48,40,0.04);
+      --sb-code-bg: rgba(65,48,40,0.1); --sb-code-fg: #b44b42;
+      --sb-pre-bg: rgba(27,23,19,0.08); --sb-pre-fg: #1B1713;
+      --sb-bq-border: rgba(201,84,74,0.4); --sb-bq-fg: rgba(27,23,19,0.65);
+      --sb-hr: rgba(65,48,40,0.12); --sb-link: #C9544A;
+      --sb-btn-fg: rgba(65,48,40,0.8); --sb-btn-bg: rgba(65,48,40,0.08);
+      --sb-btn-hover: rgba(65,48,40,0.15); --sb-rec-border: rgba(65,48,40,0.12);
+      backdrop-filter: blur(22px) saturate(170%);
+      -webkit-backdrop-filter: blur(22px) saturate(170%);
       box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08),
-                  inset 0 1px 0 rgba(255,255,255,0.9);
+                  inset 0 1px 0 rgba(255,255,255,0.55);
     }
     #__sb_bubble__.sb-readable .sb-turn + .sb-turn { border-top-color: rgba(65,48,40,0.08); }
     #__sb_bubble__.sb-readable::before { backdrop-filter: none; -webkit-backdrop-filter: none; filter: none; }
@@ -3930,6 +5572,77 @@ function __sbBuildBrainUI() {
       opacity: 0.55;
       cursor: wait;
       transform: none;
+    }
+    /* Compare skill choice card — reuses the X draft card's visual language. */
+    .sb-compare-card {
+      width: 100%;
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 22px;
+      border: 1px solid rgba(65,48,40,0.12);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(20,20,20,0.11), transparent 16rem),
+        linear-gradient(150deg, rgba(255,255,255,0.96), rgba(249,241,231,0.90));
+      box-shadow: 0 18px 40px rgba(27,23,19,0.10);
+      color: #17120E;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .sb-compare-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #17120E;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .sb-compare-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      background: #17120E;
+      box-shadow: 0 0 12px rgba(23,18,14,0.28);
+    }
+    .sb-compare-card h2 {
+      margin: 0;
+      color: #17120E;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+    .sb-compare-card p {
+      margin: 0;
+      color: rgba(27,23,19,0.66);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .sb-compare-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .sb-compare-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 13px;
+      cursor: pointer;
+      color: #17120E;
+      background: rgba(65,48,40,0.08);
+      font-size: 12px;
+      font-weight: 850;
+      transition: transform 0.12s, background 0.12s, opacity 0.12s;
+    }
+    .sb-compare-btn:hover { transform: translateY(-1px); background: rgba(65,48,40,0.13); }
+    .sb-compare-btn.primary {
+      color: #fff;
+      background: #17120E;
+      box-shadow: 0 10px 22px rgba(23,18,14,0.18);
     }
     .sb-x-schedule-panel {
       display: none;
@@ -4399,15 +6112,24 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 20px rgba(34,211,238,0.75)) drop-shadow(0 0 8px rgba(34,211,238,0.45)); }
       50%      { filter: drop-shadow(0 0 30px rgba(34,211,238,0.9))  drop-shadow(0 0 12px rgba(34,211,238,0.6)); }
     }
-    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite; }
-    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-connecting { animation: __sb_hp_connect__    1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-listening  { animation: __sb_hp_listen__     2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-captured   { animation: __sb_hp_captured__   2s   ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-speaking   { animation: __sb_hp_speak__      0.9s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    /* Talking mouth on the docked brain while it speaks in voice mode (the walker has its
+       own; this covers the case where the docked mascot is the one on screen). */
+    #__sb_brain_btn__.hp-speaking #sbb-talk { display: block !important; animation: __sb_brain_talk__ 0.26s ease-in-out infinite; }
+    /* Glasses on the docked brain when Braino is asked to "wear specs". */
+    #__sb_brain_btn__.sb-glasses #sbb-specs { display: block !important; }
+    @keyframes __sb_brain_talk__ {
+      0%, 100% { transform: scaleY(0.28); }
+      50%      { transform: scaleY(1.05); }
+    }
     /* Realtime overrides — blue halo wins */
-    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite; }
-    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-connecting { animation: __sb_hp_connect_rt__  1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-listening  { animation: __sb_hp_listen_rt__   2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-captured   { animation: __sb_hp_captured_rt__ 2s   ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.hp-realtime.hp-speaking   { animation: __sb_hp_speak_rt__    0.9s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
     @keyframes __sb_hp_listen_movie_rt__ {
       0%,100% { filter: drop-shadow(0 0 20px rgba(56,189,248,0.82)) drop-shadow(0 0 8px rgba(125,211,252,0.5)); transform: scale(1); }
       50%      { filter: drop-shadow(0 0 34px rgba(103,232,249,0.96)) drop-shadow(0 0 14px rgba(59,130,246,0.64)); transform: scale(1.035); }
@@ -4424,10 +6146,206 @@ function __sbBuildBrainUI() {
       0%,100% { filter: drop-shadow(0 0 16px rgba(125,211,252,0.6)) drop-shadow(0 0 7px rgba(56,189,248,0.32)); }
       50%      { filter: drop-shadow(0 0 27px rgba(125,211,252,0.84)) drop-shadow(0 0 12px rgba(34,211,238,0.5)); }
     }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite; }
-    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite; }
+    /* ── Sonar Pulse — plays ONLY while the USER is actively talking (hp-hearing) ──
+       Imported from the "Braino Listening" design. The realtime VAD sets hp-hearing on
+       speech_started and clears it on speech_stopped, so coral rings ripple out only while you
+       speak. When you're not talking and Braino isn't talking (hp-listening / hp-captured) it
+       sits in its calm idle; when Braino replies (hp-speaking) the mouth animation plays. */
+    @keyframes __sb_sonar_ring__ {
+      0%   { transform: translate(-50%,-50%) scale(0.5);  opacity: 0; }
+      12%  { opacity: 0.6; }
+      100% { transform: translate(-50%,-50%) scale(3.6);  opacity: 0; }
+    }
+    @keyframes __sb_sonar_core__ {
+      0%,100% { filter: drop-shadow(0 0 12px rgba(232,120,110,0.35)); }
+      50%      { filter: drop-shadow(0 0 20px rgba(232,120,110,0.55)); }
+    }
+    #__sb_brain_btn__.hp-hearing,
+    #__sb_brain_btn__.hp-realtime.hp-hearing {
+      animation: __sb_sonar_core__ 2.2s ease-in-out infinite;
+      overflow: visible;
+    }
+    #__sb_brain_btn__.hp-hearing::before,
+    #__sb_brain_btn__.hp-hearing::after {
+      content: ""; position: absolute; left: 50%; top: 50%;
+      width: 56px; height: 56px; border-radius: 50%;
+      border: 2px solid rgba(232,120,110,0.5);
+      transform: translate(-50%,-50%) scale(0.5);
+      pointer-events: none; z-index: -1;
+      animation: __sb_sonar_ring__ 2.4s ease-out infinite;
+    }
+    #__sb_brain_btn__.hp-hearing::after { animation-delay: 1.2s; }
+    /* Waiting / processing — nobody's talking → calm idle float, no glow (overrides the old
+       blue listening/captured glows, incl. the realtime variants). */
+    #__sb_brain_btn__.hp-listening,
+    #__sb_brain_btn__.hp-captured,
+    #__sb_brain_btn__.hp-realtime.hp-listening,
+    #__sb_brain_btn__.hp-realtime.hp-captured {
+      animation: __sb_idle_float__ 3.8s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite;
+      filter: none;
+    }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-connecting { animation: __sb_hp_connect_movie_rt__ 1.6s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-listening  { animation: __sb_hp_listen_movie_rt__  2.2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-captured   { animation: __sb_hp_capture_movie_rt__ 2s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    #__sb_brain_btn__.sb-brain-movie.hp-realtime.hp-speaking   { animation: __sb_hp_speak_movie_rt__   0.9s ease-in-out infinite, __sb_mascot_pace__ 32s ease-in-out infinite; }
+    /* ── Headphone mode: continuous BLUE shimmer around the bar ──
+       A steady blue glow ring (always on while engaged) plus a light sweep that
+       travels across the bar — no orange, no blink. */
+    #__sb_bar__.hp-active {
+      box-shadow: 0 0 0 1.5px rgba(56,189,248,0.55), 0 0 22px rgba(56,189,248,0.40),
+                  0 0 46px rgba(59,130,246,0.24), 0 8px 32px rgba(27,23,19,0.18),
+                  inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+      border-color: rgba(125,211,252,0.7);
+    }
+    @keyframes __sb_bar_sweep__ {
+      0%   { background-position: 130% 0; }
+      100% { background-position: -130% 0; }
+    }
+    #__sb_bar__.hp-active::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background: linear-gradient(105deg, transparent 38%, rgba(125,211,252,0.45) 50%, transparent 62%);
+      background-size: 220% 100%;
+      animation: __sb_bar_sweep__ 2.6s linear infinite;
+      mix-blend-mode: screen; z-index: 1;
+    }
+    /* Listening intensifies the ring slightly so the user knows Braino is hearing them. */
+    #__sb_bar__.hp-active.hp-listening {
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.65), 0 0 28px rgba(56,189,248,0.5),
+                  0 0 56px rgba(59,130,246,0.3), 0 8px 32px rgba(27,23,19,0.18),
+                  inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+    }
+    /* Cinematic wakeup state — brain centered, bar transparent */
+    #__sb_bar__.sb-cinematic {
+      background: transparent; border-color: transparent; box-shadow: none;
+    }
+    #__sb_bar__.sb-cinematic::before { display: none; }
+    #__sb_bar__.sb-cinematic #__sb_input__,
+    #__sb_bar__.sb-cinematic #__sb_mode_btn__,
+    #__sb_bar__.sb-cinematic #__sb_rec_btn__,
+    #__sb_bar__.sb-cinematic #__sb_send_btn__,
+    #__sb_bar__.sb-cinematic #__sb_bar_close__,
+    #__sb_bar__.sb-cinematic #__sb_x_auto_btn__,
+    #__sb_bar__.sb-cinematic #__sb_wakeup__ { display: none !important; }
+    /* (The docked brain button now lives in #__sb_root__, independent of the bar.
+       It is hidden in PANEL state from JS — see __sbOpenBarReady / __sbDock.) */
+
+    /* ── Walker lane — Braino strolls directly above the bar, matched to the bar's
+       own width so it never wanders off past the bar edges. ── */
+    #__sb_walk_lane__ {
+      position:fixed; bottom:78px; left:50%; transform:translateX(-50%);
+      width:calc(100vw - 48px); max-width:1100px; height:96px;
+      pointer-events:none; z-index:2147483646; overflow:visible;
+      display:none;
+    }
+    /* No filter here — element gets a JS transform, and filter+transform on the
+       same node breaks the SVG url(#sbb-fill) coral gradient (Chrome bug). Shadow
+       is handled by the dedicated #__sbwk_shadow__ div instead. */
+    #__sbwk_walker__ {
+      position:absolute; bottom:0; width:64px;
+      pointer-events:auto; cursor:grab;
+      touch-action:none; user-select:none; -webkit-user-select:none;
+      will-change:transform;
+    }
+    /* "not cool 😒" speech bubble shown when Braino is flung */
+    #__sbwk_say__ {
+      position:absolute; left:50%; bottom:calc(100% - 4px);
+      transform:translateX(-50%) translateY(4px) scale(0.9);
+      background:rgba(27,23,19,0.92); color:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:12px; font-weight:600; line-height:1.2;
+      padding:5px 10px; border-radius:12px; white-space:nowrap;
+      pointer-events:none; opacity:0; z-index:6;
+      transition:opacity .18s ease, transform .18s ease;
+      box-shadow:0 4px 14px rgba(27,23,19,0.28);
+    }
+    #__sbwk_say__.show { opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
+    #__sbwk_say__::after {
+      content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+      border:5px solid transparent; border-top-color:rgba(27,23,19,0.92);
+    }
+    #__sbwk_status__ {
+      position:absolute; left:50%; bottom:calc(100% - 4px);
+      transform:translateX(-50%) translateY(4px) scale(0.9);
+      background:rgba(27,23,19,0.92); color:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:12px; font-weight:600; line-height:1.2;
+      padding:5px 10px 5px 9px; border-radius:12px; white-space:nowrap;
+      pointer-events:none; opacity:0; z-index:6;
+      display:flex; align-items:center; gap:6px;
+      transition:opacity .18s ease, transform .18s ease;
+      box-shadow:0 4px 14px rgba(27,23,19,0.28);
+    }
+    #__sbwk_status__.show { opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
+    #__sbwk_status__::after {
+      content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+      border:5px solid transparent; border-top-color:rgba(27,23,19,0.92);
+    }
+    #__sbwk_status__ .sbwk-dot {
+      width:6px; height:6px; border-radius:50%; background:#E8786E; flex:none;
+      animation:sbwkStatusPulse 1.1s ease-in-out infinite;
+    }
+    @keyframes sbwkStatusPulse { 0%,100%{opacity:.45; transform:scale(.8);} 50%{opacity:1; transform:scale(1.18);} }
+    @media (prefers-reduced-motion: reduce) { #__sbwk_status__ .sbwk-dot { animation:none; } }
+    #__sbwk_flip__ { transform-origin:center; display:block; }
+    #__sbwk_shadow__ {
+      position:absolute; left:50%; bottom:-4px; width:42px; height:8px;
+      transform:translateX(-50%); border-radius:50%;
+      background:radial-gradient(closest-side, rgba(120,60,40,.26), transparent 78%);
+    }
+    /* Headphone-mode glow on the walking mascot. The filter sits on the <svg> (which
+       itself never gets a transform — those go on #__sbwk_walker__ / the inner <g>),
+       so the coral self-contained gradient is never disturbed. Blue tones only. */
+    /* Listening glow is now CORAL (Sonar Pulse), not blue — paired with the ripple rings below. */
+    @keyframes __sbwk_glow_listen__ {
+      0%,100% { filter: drop-shadow(0 0 10px rgba(232,120,110,0.55)) drop-shadow(0 0 4px rgba(246,168,162,0.4)); }
+      50%      { filter: drop-shadow(0 0 18px rgba(232,120,110,0.75)) drop-shadow(0 0 8px rgba(246,168,162,0.55)); }
+    }
+    @keyframes __sbwk_glow_speak__ {
+      0%,100% { filter: drop-shadow(0 0 10px rgba(99,102,241,0.75)) drop-shadow(0 0 4px rgba(139,92,246,0.5)); }
+      50%      { filter: drop-shadow(0 0 20px rgba(99,102,241,0.95)) drop-shadow(0 0 9px rgba(139,92,246,0.65)); }
+    }
+    @keyframes __sbwk_glow_soft__ {
+      0%,100% { filter: drop-shadow(0 0 8px rgba(56,189,248,0.6)); }
+      50%      { filter: drop-shadow(0 0 16px rgba(56,189,248,0.85)); }
+    }
+    /* Sonar Pulse on the WALKER (the Braino on the message bar) — ONLY while the user is talking
+       (hp-hearing): coral body glow + ripple rings centered on Braino. They ride the walker's
+       transform so they stay put. On hp-speaking they're gone and the mouth animation plays;
+       while waiting (hp-listening/hp-captured) the walker just stands and breathes — no glow. */
+    #__sbwk_walker__.hp-hearing svg { animation: __sbwk_glow_listen__ 2s ease-in-out infinite; }
+    #__sbwk_walker__.hp-hearing::before,
+    #__sbwk_walker__.hp-hearing::after {
+      content: ""; position: absolute; left: 50%; top: 46%;
+      width: 52px; height: 52px; border-radius: 50%;
+      border: 2px solid rgba(232,120,110,0.5);
+      transform: translate(-50%,-50%) scale(0.5);
+      pointer-events: none; z-index: -1;
+      animation: __sb_sonar_ring__ 2.4s ease-out infinite;
+    }
+    #__sbwk_walker__.hp-hearing::after { animation-delay: 1.2s; }
+    #__sbwk_walker__.hp-speaking svg  { animation: __sbwk_glow_speak__ 1s ease-in-out infinite; }
+    #__sbwk_walker__.hp-connecting svg { animation: __sbwk_glow_soft__ 1.6s ease-in-out infinite; }
+    /* Wake-up auth glow on the climbing mascot (gold pulse → green flash on success). */
+    @keyframes __sbwk_glow_auth__ {
+      0%,100% { filter: drop-shadow(0 2px 10px rgba(200,84,74,0.3)); }
+      50%      { filter: drop-shadow(0 0 26px rgba(255,210,50,1)) drop-shadow(0 0 50px rgba(255,175,0,0.6)); }
+    }
+    @keyframes __sbwk_glow_authed__ {
+      0%,100% { filter: drop-shadow(0 2px 12px rgba(40,180,70,0.45)); }
+      50%      { filter: drop-shadow(0 0 28px rgba(80,230,110,1)) drop-shadow(0 0 54px rgba(40,180,70,0.7)); }
+    }
+    #__sbwk_walker__.sbwk-auth svg   { animation: __sbwk_glow_auth__ 0.85s ease-in-out infinite; }
+    #__sbwk_walker__.sbwk-authed svg { animation: __sbwk_glow_authed__ 0.85s ease-in-out infinite; }
+
+    /* ── Jump & Point laser overlay (ring + beam) ── */
+    #__sb_point_fx__ {
+      position: fixed; inset: 0; width: 100vw; height: 100vh;
+      pointer-events: none; z-index: 2147483644;
+    }
+    #__sb_point_svg__ {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      overflow: visible; pointer-events: none;
+    }
 
     /* ── Voice Error Pill ── */
     #__sb_voice_error_pill__ {
@@ -4448,8 +6366,29 @@ function __sbBuildBrainUI() {
 
   const root = document.createElement("div");
   root.id = "__sb_root__";
-  root.innerHTML = `
-    <div id="__sb_bar__">
+  // The docked mascot lives in the root (an independent bottom-right anchor), NOT inside
+  // the bar — the bar is opacity:0 when closed, which used to trap/hide the docked brain.
+  const __sbBrainBtnEl = document.createElement("div");
+  __sbBrainBtnEl.id = "__sb_brain_btn__";
+  __sbBrainBtnEl.innerHTML = __SB_BRAIN_SVG;
+  root.appendChild(__sbBrainBtnEl);
+  (document.documentElement||document.body).appendChild(root);
+
+  // ── Brain gradient defs at document root — MUST be first in DOM so url(#sbb-fill) etc.
+  // resolve from here rather than from inside composited/filtered elements (Chrome bug where
+  // translate animation + filter on same element breaks SVG url() paint server lookup).
+  const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  __sbGlassSvg.id = "__sb_glass_svg__";
+  __sbGlassSvg.setAttribute("style", "position:fixed;pointer-events:none;width:0;height:0;overflow:hidden");
+  __sbGlassSvg.innerHTML = `<defs><linearGradient id="sbb-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6A8A2"/><stop offset="0.55" stop-color="#E8786E"/><stop offset="1" stop-color="#C9544A"/></linearGradient><linearGradient id="sbb-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9645A"/><stop offset="1" stop-color="#9C3E36"/></linearGradient><radialGradient id="sbb-glow" cx="35%" cy="30%" r="50%"><stop offset="0" stop-color="#FFD0CB" stop-opacity="0.7"/><stop offset="1" stop-color="#FFD0CB" stop-opacity="0"/></radialGradient><filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter></defs>`;
+  (document.documentElement||document.body).appendChild(__sbGlassSvg);
+
+  // Cinema dock bar — body-level so it can span full width independently
+  const __sbDockBar = document.createElement("div");
+  __sbDockBar.id = "__sb_bar__";
+  __sbDockBar.innerHTML = `
+      <div id="__sb_bar_log__"><div class="sb-blog-steps"></div></div>
+      <div id="__sb_bar_row__">
       <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
@@ -4458,13 +6397,20 @@ function __sbBuildBrainUI() {
       <button id="__sb_rec_btn__" class="sb-bar-icon-btn" title="Headphone mode">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
       </button>
+      <button id="__sb_bar_stop__" class="sb-bar-icon-btn" title="Stop the task" style="display:none;">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+      </button>
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
+      <button id="__sb_bar_close__" class="sb-bar-icon-btn" title="Dock Braino (Esc)">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
       <button id="__sb_x_auto_btn__" class="sb-bar-icon-btn" title="X Automation" style="display:none;gap:4px;padding:0 8px;font-size:11px;font-weight:600;width:auto;">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span id="__sb_x_auto_label__">X Auto</span>
       </button>
+      </div>
       <div id="__sb_wakeup__">
         <span id="__sb_wakeup_label__">Waking up…</span>
         <div id="__sb_wakeup_track__"><div id="__sb_wakeup_fill__"></div></div>
@@ -4473,17 +6419,10 @@ function __sbBuildBrainUI() {
         <span id="__sb_signin_cta_hint__">Sign in to start chatting</span>
         <button id="__sb_signin_btn_cta__">Sign in →</button>
       </div>
-    </div>
-    <div id="__sb_brain_btn__">${__SB_BRAIN_SVG}</div>
   `;
-  document.body.appendChild(root);
+  (document.documentElement||document.body).appendChild(__sbDockBar);
 
-  // ── Liquid glass SVG displacement filter ──
-  const __sbGlassSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  __sbGlassSvg.id = "__sb_glass_svg__";
-  __sbGlassSvg.setAttribute("style", "display:none;position:fixed;pointer-events:none");
-  __sbGlassSvg.innerHTML = `<filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter>`;
-  document.body.appendChild(__sbGlassSvg);
+  // ── Glass SVG (with brain gradients + displacement filter) appended before bar — see above ──
 
   if (__sbCursorRideMode) {
     __sbPositionRootNearCursor(true);
@@ -4494,7 +6433,7 @@ function __sbBuildBrainUI() {
 
   const movieBackdrop = document.createElement("div");
   movieBackdrop.id = "__sb_movie_backdrop__";
-  document.body.appendChild(movieBackdrop);
+  (document.documentElement||document.body).appendChild(movieBackdrop);
 
   // ── Card wrapper ──
   const cardWrap = document.createElement("div");
@@ -4507,6 +6446,7 @@ function __sbBuildBrainUI() {
         <button class="sb-card-header-btn" type="button" data-sb-copy>Copy</button>
         <button class="sb-card-header-btn" id="__sb_stop_btn__" type="button" data-sb-stop style="display:none;background:#fee2e2;color:#C9544A;">⏹ Stop</button>
         <button class="sb-card-header-btn" id="__sb_theme_toggle_btn__" type="button" title="Toggle readable mode" style="padding:0 8px;font-size:13px;">◑</button>
+        <button class="sb-card-header-btn" id="__sb_newtab_btn__" type="button" title="Open current page in new tab" style="padding:0 8px;font-size:12px;">↗ New tab</button>
         <button class="sb-card-header-btn" type="button" data-sb-close>×</button>
       </div>
       <div class="sb-card-scroll"></div>
@@ -4534,12 +6474,34 @@ function __sbBuildBrainUI() {
       </div>
     </div>
   `;
-  document.body.appendChild(cardWrap);
+  (document.documentElement||document.body).appendChild(cardWrap);
+
+  // ── User geo (timezone/city/country, no permission prompts — background caches an
+  // IP lookup daily). Rides into chat requests + voice instructions so Braino knows
+  // the user's local time and where they are. ──
+  try {
+    chrome.runtime.sendMessage({ action: "sbGetUserGeo" }, (geo) => {
+      if (!chrome.runtime.lastError && geo && typeof geo === "object") window.__sbUserGeo = geo;
+    });
+  } catch (_) {}
+
+  // ── Hive-mind handshake: this tab may have been opened BY a running delegate task
+  // (Amazon and friends open products in new tabs). Ask the background if a run is
+  // mid-flight here; if so, come up already in the working state instead of blank. ──
+  try {
+    chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
+      if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) return;
+      document.getElementById("__sb_bar__")?.classList.add("open");
+      if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
+      if (typeof __sbAgentLogStep === "function") __sbAgentLogStep("Continuing here…");
+      if (typeof __sbSetBarAgentStatus === "function") __sbSetBarAgentStatus(resp.task);
+    });
+  } catch (_) {}
 
   // ── Voice Error Pill ──
   const errPill = document.createElement("div");
   errPill.id = "__sb_voice_error_pill__";
-  document.body.appendChild(errPill);
+  (document.documentElement||document.body).appendChild(errPill);
 
   // ── Dropdowns (body-level to avoid stacking context issues) ──
   const modeDd = document.createElement("div");
@@ -4548,12 +6510,13 @@ function __sbBuildBrainUI() {
   modeDd.innerHTML = `
     <div class="sb-dropdown-label">Mode</div>
     <button class="sb-dropdown-item selected" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Chat with Page</span><span class="sb-di-check">✓</span></button>
-    <button class="sb-dropdown-item" data-mode="web"><span class="sb-di-icon">🔍</span><span class="sb-di-label">Web Search</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
+    <div class="sb-dropdown-label" style="margin-top:8px">Wake</div>
+    <button class="sb-dropdown-item" data-wake="toggle"><span class="sb-di-icon">👂</span><span class="sb-di-label">“Hey Braino” + double-clap</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(modeDd);
+  (document.documentElement||document.body).appendChild(modeDd);
 
   const connectorDd = document.createElement("div");
   connectorDd.id = "__sb_connector_dropdown__";
@@ -4565,12 +6528,12 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-connector="google-calendar"><span class="sb-di-icon">📅</span><span class="sb-di-label">Google Calendar</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-connector="gmail"><span class="sb-di-icon">✉</span><span class="sb-di-label">Gmail</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(connectorDd);
+  (document.documentElement||document.body).appendChild(connectorDd);
 
   const connectorSlashDd = document.createElement("div");
   connectorSlashDd.id = "__sb_connector_slash_dropdown__";
   connectorSlashDd.className = "sb-dropdown";
-  document.body.appendChild(connectorSlashDd);
+  (document.documentElement||document.body).appendChild(connectorSlashDd);
 
   const modelDd = document.createElement("div");
   modelDd.id = "__sb_model_dropdown__";
@@ -4580,7 +6543,7 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item selected" data-model="lovable"><span class="sb-di-icon">🧠</span><span class="sb-di-label">Braino AI</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-model="claude"><span class="sb-di-icon">✦</span><span class="sb-di-label">Claude</span><span class="sb-di-check">✓</span></button>
   `;
-  document.body.appendChild(modelDd);
+  (document.documentElement||document.body).appendChild(modelDd);
 
   __sbSyncFullscreenUiMount();
   if (!__sbFullscreenUiListenerBound) {
@@ -4613,7 +6576,7 @@ function __sbBuildBrainUI() {
   // This makes Braino persist across tabs: once invoked, it follows you to every tab
   // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  __sbStorageGet(["sbBrainDocked", "sbVoiceModeOn"]).then(({ sbBrainDocked, sbVoiceModeOn }) => {
+  __sbStorageGet(["sbBrainDocked", "sbBrainExpanded", "sbVoiceModeOn"]).then(({ sbBrainDocked, sbBrainExpanded, sbVoiceModeOn }) => {
     if (!__sbOwnsInlineUi()) return;
     // Show brain if docked OR if voice mode is on (voice takes over, so show it either way).
     if (sbBrainDocked || sbVoiceModeOn) {
@@ -4630,6 +6593,13 @@ function __sbBuildBrainUI() {
     // path for freshly-opened tabs (e.g. Braino opening Spotify). Hidden tabs stay idle.
     if (sbVoiceModeOn && document.visibilityState === "visible") {
       __sbEnsureVoicePresence();
+    } else if (sbBrainExpanded && document.visibilityState === "visible") {
+      // Panel was expanded when this tab opened (e.g. Delegate opened a new tab mid-task).
+      // Auto-open the centered glass panel + walker here too so Braino travels seamlessly
+      // across tabs instead of collapsing to the docked button. Instant open (no wake-climb);
+      // __sbOpenPanel falls back to the sign-in state if the user isn't authed. Hidden tabs
+      // stay docked until focused — mirrors the voice-presence path above.
+      __sbOpenPanel();
     }
   });
   document.getElementById("__sb_brain_btn__").addEventListener("click", () => {
@@ -4661,12 +6631,75 @@ function __sbBuildBrainUI() {
         __sbRenderSpotifyPanel({ openCard: true, focusInput: false });
       }
     } else {
-      __sbToggleInput(!__sbInputOpen);
+      // Docked mascot is only visible/clickable in DOCKED state → open the panel.
+      __sbOpenPanel();
     }
   });
 
-  // ⌘I / Ctrl+I — toggle brain
+  // ⌘I / Ctrl+I — toggle brain. Double-tap Space — primary invoke (cycles the loop).
+  let __sbLastCtrlTap = 0;
+  let __sbLastAltTap = 0;
+  let __sbLastSpaceTap = 0;
   document.addEventListener("keydown", (e) => {
+    // Double-tap Control → toggle headphone mode.
+    if (e.key === "Control") {
+      if (!e.repeat && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const now = Date.now();
+        if (now - __sbLastCtrlTap < 400) {
+          __sbLastCtrlTap = 0;
+          if (!__sbHasExternalEditableFocus()) {
+            if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+            __sbToggleHeadphoneMode();
+          }
+        } else {
+          __sbLastCtrlTap = now;
+        }
+      }
+      return;
+    }
+    // Double-tap Option/Alt → toggle full-screen Jarvis mode. Deliberately on Alt (not a
+    // third Control) so it never collides with voice mode's Control×2.
+    if (e.key === "Alt") {
+      if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        const now = Date.now();
+        if (now - __sbLastAltTap < 400) {
+          __sbLastAltTap = 0;
+          if (!__sbHasExternalEditableFocus()) {
+            if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+            __sbToggleJarvisMode();
+          }
+        } else {
+          __sbLastAltTap = now;
+        }
+      }
+      return;
+    }
+    __sbLastCtrlTap = 0;   // any other key breaks the double-tap (Ctrl+key combos don't count)
+    __sbLastAltTap = 0;
+
+    // Double-tap Space → invoke / cycle Braino (OFF→PANEL plays the climb wake-up).
+    // Ignored while typing in ANY field (page or Braino's own bar) so it never eats text.
+    if (e.code === "Space") {
+      const ae = document.activeElement;
+      const typing = ae instanceof Element && (
+        ae.isContentEditable || ae.getAttribute("contenteditable") === "true" ||
+        ae.getAttribute("role") === "textbox" ||
+        /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)
+      );
+      if (typing || e.repeat || e.metaKey || e.ctrlKey || e.altKey) { __sbLastSpaceTap = 0; return; }
+      const now = Date.now();
+      if (now - __sbLastSpaceTap < 400) {
+        __sbLastSpaceTap = 0;
+        e.preventDefault(); e.stopPropagation();   // swallow the scroll on the invoking tap
+        if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+        __sbToggleBrain();
+      } else {
+        __sbLastSpaceTap = now;
+      }
+      return;
+    }
+    __sbLastSpaceTap = 0;
+
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
       if (__sbHasExternalEditableFocus()) return;
       e.preventDefault();
@@ -4689,20 +6722,19 @@ function __sbBuildBrainUI() {
     }
 
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "i") {
-      // Only block if typing inside the extension's own inputs — not page inputs
-      if (document.activeElement?.closest("#__sb_root__, #__sb_card_wrap__")) return;
+      // Only bail when typing in a PAGE field — NOT when Braino's own bar is focused
+      // (that guard was blocking the cycle right after the panel opened).
+      if (__sbHasExternalEditableFocus()) return;
       e.preventDefault();
-      if (__sbCursorRideMode) {
-        __sbOpenAnchoredBrain();
-      } else {
-        __sbToggleBrain();
-      }
+      __sbToggleBrain();
     }
   }, true);
 
   // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
   document.getElementById("__sb_rec_btn__").addEventListener("click", __sbToggleHeadphoneMode);
+  // × on the bar collapses the panel back down to the docked bottom-right mascot.
+  document.getElementById("__sb_bar_close__")?.addEventListener("click", () => __sbDock());
 
   // X Auto button — show only on X/Twitter
   const xAutoBtn = document.getElementById("__sb_x_auto_btn__");
@@ -4720,14 +6752,11 @@ function __sbBuildBrainUI() {
   // Card header buttons (wired once, not per-show)
   const bubble = document.getElementById("__sb_bubble__");
   bubble.querySelector("[data-sb-close]").addEventListener("click", () => __sbCollapseCard());
-  document.getElementById("__sb_stop_btn__").addEventListener("click", () => {
-    if (__sbXRunning) {
-      __sbXRunning = false;
-    }
-    chrome.runtime.sendMessage({ action: "stopBrainAgent" }, () => { void chrome.runtime.lastError; });
-    __sbSetStopBtn(false);
-    __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
+  document.getElementById("__sb_newtab_btn__").addEventListener("click", () => {
+    chrome.runtime.sendMessage({ action: "openTab", url: window.location.href, active: true }, () => { void chrome.runtime.lastError; });
   });
+  document.getElementById("__sb_stop_btn__").addEventListener("click", __sbStopDelegate);
+  document.getElementById("__sb_bar_stop__")?.addEventListener("click", __sbStopDelegate);
   bubble.querySelector("[data-sb-copy]").addEventListener("click", async (ev) => {
     const btn = ev.currentTarget;
     try {
@@ -4751,11 +6780,14 @@ function __sbBuildBrainUI() {
   const __sbThemeBtn = document.getElementById("__sb_theme_toggle_btn__");
   const __sbApplyTheme = (mode) => {
     const isReadable = mode === "readable";
+    // Theme applies to the answer CARD only. The bottom bar stays transparent glass
+    // (legibility there comes from the text halo), so we never force it opaque.
     bubble.classList.toggle("sb-readable", isReadable);
-    document.getElementById("__sb_bar__")?.classList.toggle("sb-readable", isReadable);
     __sbThemeBtn.textContent = isReadable ? "◐" : "◑";
-    __sbThemeBtn.title = isReadable ? "Switch to glass mode" : "Switch to readable mode";
+    __sbThemeBtn.title = isReadable ? "Switch to liquid glass" : "Switch to clear glass (readable)";
   };
+  // Default = liquid glass. The toggle switches to a translucent glassmorphism (still
+  // see-through, but readable) for when the liquid glass makes the page hard to read.
   chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "glass"));
   __sbThemeBtn.addEventListener("click", () => {
     const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
@@ -4880,11 +6912,11 @@ function __sbBuildBrainUI() {
   __sbSetupConnectorBtn(document.getElementById("__sb_connector_btn__"));
   __sbSetupConnectorBtn(document.getElementById("__sb_card_connector_btn__"));
 
-  modeDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
+  modeDd.querySelectorAll(".sb-dropdown-item[data-mode]").forEach(item => {
     item.addEventListener("click", () => {
       const mode = item.dataset.mode;
       window.__sbForcedMode = mode;
-      modeDd.querySelectorAll(".sb-dropdown-item").forEach(i => i.classList.remove("selected"));
+      modeDd.querySelectorAll(".sb-dropdown-item[data-mode]").forEach(i => i.classList.remove("selected"));
       item.classList.add("selected");
       const labels = { page: "📄 Page", web: "🔍 Web", lecture: "🎙 Lecture", meeting: "👥 Meeting", agent: "🤖 Delegate" };
       const label = labels[mode] || "📄 Page";
@@ -4897,6 +6929,18 @@ function __sbBuildBrainUI() {
         __sbShowLectureReadyCard(mode);
       }
     });
+  });
+
+  // Voice-engine toggle removed: voice is always Braino's Fish voice now (see
+  // __sbNormalizeVoiceOutputPref). No user-facing engine picker.
+
+  // Faster replies (speculative answer from audio) is the default voice mode now — no toggle.
+  // See __sbStartSpeculativeAnswer (with the think-first gate for action intents).
+
+  // "Hey Braino" + double-clap wake (ambient listening, opt-in).
+  modeDd.querySelector('.sb-dropdown-item[data-wake="toggle"]')?.addEventListener("click", () => {
+    __sbWakeSetEnabled(!__sbWakeEnabled);
+    __sbCloseAllDropdowns();
   });
 
   modelDd.querySelectorAll(".sb-dropdown-item").forEach(item => {
@@ -4925,7 +6969,7 @@ function __sbBuildBrainUI() {
   const inputEl = document.getElementById("__sb_input__");
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); __sbSendMessage(); }
-    if (e.key === "Escape") __sbToggleInput(false);
+    if (e.key === "Escape") __sbDock();   // collapse panel → docked bottom-right mascot
   });
   inputEl.addEventListener("input", () => __sbSyncSlashConnectorDropdown(inputEl));
 
@@ -5127,7 +7171,7 @@ function __sbSetCursorRideMode(enabled) {
 function __sbHasExternalEditableFocus() {
   const active = document.activeElement;
   if (!(active instanceof Element)) return false;
-  if (active.closest("#__sb_root__, #__sb_card_wrap__")) return false;
+  if (active.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return false;
   const tag = active.tagName.toLowerCase();
   return (
     tag === "input" ||
@@ -5180,13 +7224,19 @@ function __sbDetectPageTheme() {
   return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 > 0.55 ? "light" : "dark";
 }
 
+// While a delegate task runs, the chat UI stays closed (progress lives in the floating bar/pill only);
+// it reopens with the result on finish. This flag blocks any auto-open during the run.
+let __sbDelegateUiHidden = false;
 function __sbOpenCard(options = {}) {
   if (!__sbOwnsInlineUi()) return;
+  if (__sbDelegateUiHidden && !options.forceOpen) return;   // delegate running → keep the chat UI closed
   const wrap = document.getElementById("__sb_card_wrap__");
   if (!wrap) return;
   __sbRefreshInlineOwner();
-  // Hide the bar — card has its own follow-up input
-  document.getElementById("__sb_bar__")?.classList.remove("open");
+  // In headphone mode: keep bar visible, suppress automated card opens (voice is the UI)
+  if (__sbHeadphoneMode && !options.forceOpen) return;
+  // The bar stays constant as the single input — the card is display-only (answers).
+  // Keep the bar open and Braino strolling on it while the answer card is up.
   const alreadyOpen = wrap.classList.contains("visible");
   wrap.classList.add("visible");
   if (!alreadyOpen) {
@@ -5209,6 +7259,10 @@ function __sbCollapseCard() {
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (__sbBrainVisible && __sbInputOpen) {
     document.getElementById("__sb_bar__")?.classList.add("open");
+    // Bar stays open with the card now, so the walker is already running — only
+    // (re)start it if something actually stopped it (don't teleport mid-stroll).
+    const lane = document.getElementById("__sb_walk_lane__");
+    if (!lane || lane.style.display === "none") __sbStartWalkLoop();
   }
   __sbScheduleCursorFollow();
   __sbSyncIdleState(); // back to docked idle — resume animations
@@ -5428,6 +7482,22 @@ function __sbInitCardDrag(wrap) {
 function __sbSetStopBtn(visible) {
   const btn = document.getElementById("__sb_stop_btn__");
   if (btn) btn.style.display = visible ? "inline-flex" : "none";
+  // Mirror the stop affordance into the input bar so a running task can be stopped without the card.
+  const barBtn = document.getElementById("__sb_bar_stop__");
+  if (barBtn) barBtn.style.display = visible ? "inline-flex" : "none";
+}
+
+// Stop a running Delegate/agent task. Shared by the card's stop button and the bar's stop button.
+function __sbStopDelegate() {
+  if (__sbXRunning) __sbXRunning = false;
+  try { chrome.runtime.sendMessage({ action: "stopBrainAgent" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+  __sbDelegateUiHidden = false;   // stopping a delegate → allow the UI to open again
+  __sbSetStopBtn(false);
+  __sbAgentPendingTurn = null;
+  __sbClearBarAgentStatus();
+  __sbAgentLogClear();            // collapse the in-bar activity log too
+  __sbStopWaitEntertainment();
+  __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
 }
 
 // ===== X / TWITTER AUTOMATION =====
@@ -6046,29 +8116,70 @@ function __sbSetGreetingPlaceholder() {
   });
 }
 
+// ── Three-state presence model ──────────────────────────────────────────────
+//   OFF    — Braino not on the page          (__sbBrainVisible = false)
+//   DOCKED — idle mascot bottom-right         (visible, !__sbInputOpen)
+//   PANEL  — glass bar open, Braino walking   (visible, __sbInputOpen)
+// Cmd+I cycles OFF → PANEL → DOCKED → OFF. Clicking the docked mascot opens PANEL;
+// the bar's × button docks it back; closing from DOCKED via Cmd+I hides it entirely.
+
+// PANEL: open the glass bar with the walker on top (mascot hidden while walking).
+function __sbOpenPanel() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  const wasOff = !__sbBrainVisible;             // OFF→PANEL plays the full climb wake-up
+  __sbBrainVisible = true;
+  __sbSetCursorRideMode(false);
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "none";          // walker is the mascot in PANEL
+  __sbToggleInput(true, { skipPersist: true, wakeClimb: wasOff });
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: true });
+}
+
+// DOCKED: collapse the panel and let Braino sit at the bottom-right, watching.
+function __sbDock() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  __sbBrainVisible = true;
+  __sbSetCursorRideMode(false);
+  __sbToggleInput(false, { skipPersist: true }); // closes bar, stops walker
+  const wrap = document.getElementById("__sb_card_wrap__");
+  if (wrap) wrap.classList.remove("visible");
+  __sbStopOrbit();
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "";
+  __sbSyncIdleState();
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+}
+
+// OFF: take Braino off the page entirely.
+function __sbHideAll() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  __sbBrainVisible = false;
+  __sbSetCursorRideMode(false);
+  if (__sbMovieModeActive) __sbDeactivateMovieMode({ silent: true });
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "none";
+  __sbToggleInput(false, { skipPersist: true });
+  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  const wrap = document.getElementById("__sb_card_wrap__");
+  if (wrap) wrap.classList.remove("visible");
+  __sbStopOrbit();
+  if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: false, sbBrainExpanded: false });
+}
+
+// Cmd+I — cycle through the three states.
 function __sbToggleBrain() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
-  const btn = document.getElementById("__sb_brain_btn__");
-  if (__sbBrainVisible) {
-    __sbBrainVisible = false;
-    __sbSetCursorRideMode(false);
-    if (__sbMovieModeActive) __sbDeactivateMovieMode({ silent: true });
-    if (btn) btn.style.display = "none";
-    __sbToggleInput(false, { skipPersist: true });
-    if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-    const wrap = document.getElementById("__sb_card_wrap__");
-    if (wrap) wrap.classList.remove("visible");
-    __sbStopOrbit();
-    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: false });
-  } else {
-    __sbBrainVisible = true;
-    if (btn) btn.style.display = "";
-    __sbSetCursorRideMode(false);
-    __sbToggleInput(true, { skipPersist: true });
-    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true });
-  }
+  if (!__sbBrainVisible) __sbOpenPanel();   // OFF → PANEL
+  else if (__sbInputOpen) __sbDock();        // PANEL → DOCKED
+  else __sbHideAll();                        // DOCKED → OFF
 }
 
 function __sbToggleInput(open, options = {}) {
@@ -6104,8 +8215,11 @@ function __sbToggleInput(open, options = {}) {
     const brainBtn = document.getElementById("__sb_brain_btn__");
 
     const __sbOpenBarReady = () => {
-      bar.classList.remove("sb-signin", "sb-waking");
+      bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
       bar.classList.add("open");
+      // PANEL: the walker is the mascot — hide the docked bottom-right brain button.
+      const __dockBtn = document.getElementById("__sb_brain_btn__");
+      if (__dockBtn) __dockBtn.style.display = "none";
       __sbInputOpen = true;
       if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
       __sbSetGreetingPlaceholder();
@@ -6118,84 +8232,54 @@ function __sbToggleInput(open, options = {}) {
           b.classList.toggle("selected", b.dataset.model === model));
       });
       if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
+      // Start walk cycle — legs + body animation from braino-char.jsx design
+      __sbStartWalkLoop();
     };
 
-    chrome.storage.local.get("sbHasAwoken", ({ sbHasAwoken }) => {
-      if (sbHasAwoken) {
-        // Fast path — cinematic played before, open bar directly
-        chrome.storage.local.get("authToken", ({ authToken }) => {
-          if (!authToken) {
-            bar.classList.add("open", "sb-signin");
-                  __sbSetupBarSignIn();
-            return;
-          }
-          __sbOpenBarReady();
-        });
-        return;
-      }
-
-      // First-ever open: cinematic wakeup
+    // OFF→PANEL plays the full climb wake-up; DOCKED→PANEL (and other opens) are instant.
+    if (options.wakeClimb) {
       chrome.storage.local.set({ sbHasAwoken: true });
 
-      // Phase 1 (0–1200ms): sleeping, silent
-      if (brainBtn) {
-        brainBtn.classList.remove("sb-brain-auth", "sb-brain-authed", "sb-brain-rejected");
-        brainBtn.innerHTML = __SB_BRAIN_SVG_SLEEPING;
+      // Bar expands from the center outward while Braino climbs onto it.
+      bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
+      bar.classList.add("open", "sb-climb");
+      bar.style.transition = "transform 0.55s cubic-bezier(0.25,0.46,0.45,0.94)";
+      bar.style.transform = "translateX(-50%) scaleX(0.04)";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        bar.style.transform = "translateX(-50%) scaleX(1)";
+      }));
+
+      const finishAuthed = () => {
+        bar.classList.remove("sb-climb");
+        bar.style.transition = ""; bar.style.transform = "";
+        __sbOpenBarReady();
+      };
+      const finishRejected = () => {
+        bar.classList.remove("sb-climb");
+        bar.style.transition = ""; bar.style.transform = "";
+        bar.classList.add("sb-signin");
+        if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
+        __sbSetupBarSignIn();
+      };
+      __sbWakeupClimb(finishAuthed, finishRejected);
+      return;
+    }
+
+    // Instant open (no climb): straight to ready if authed, else sign-in.
+    chrome.storage.local.get("authToken", ({ authToken }) => {
+      if (!authToken) {
+        bar.classList.add("open", "sb-signin");
+        __sbSetupBarSignIn();
+        return;
       }
-
-      // Phase 2 (1200ms): yellow glow + open silent auth tab in background
-      setTimeout(() => {
-        if (brainBtn) brainBtn.classList.add("sb-brain-auth");
-        const tYellow = Date.now();
-        const minYellow = 800;
-
-        chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; });
-
-        let resolved = false;
-
-        const goGreen = () => {
-          if (resolved) return;
-          resolved = true;
-          clearTimeout(fallbackTimer);
-          chrome.storage.onChanged.removeListener(authWatcher);
-          const wait = Math.max(0, minYellow - (Date.now() - tYellow));
-          setTimeout(() => {
-            if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.innerHTML = __SB_BRAIN_SVG; brainBtn.classList.add("sb-brain-authed"); }
-            __sbPlayReaction('happy', 1800);
-            setTimeout(() => {
-              if (brainBtn) brainBtn.classList.remove("sb-brain-authed");
-              __sbOpenBarReady();
-            }, 1100);
-          }, wait);
-        };
-
-        const goRed = () => {
-          if (resolved) return;
-          resolved = true;
-          chrome.storage.onChanged.removeListener(authWatcher);
-          if (brainBtn) { brainBtn.classList.remove("sb-brain-auth"); brainBtn.classList.add("sb-brain-rejected"); }
-          __sbPlayReaction('scared', 2200);
-          setTimeout(() => {
-            if (brainBtn) brainBtn.classList.remove("sb-brain-rejected");
-            bar.classList.add("open", "sb-signin");
-                  if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: false });
-            __sbSetupBarSignIn();
-          }, 700);
-        };
-
-        const authWatcher = (changes, area) => {
-          if (area === "local" && changes.authToken?.newValue) goGreen();
-        };
-        chrome.storage.onChanged.addListener(authWatcher);
-
-        const fallbackTimer = setTimeout(goRed, 6000);
-      }, 1200);
+      __sbOpenBarReady();
     });
   } else {
     __sbInputOpen = false;
+    __sbStopWalkLoop();
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
     const bar = document.getElementById("__sb_bar__");
-    bar?.classList.remove("open", "sb-waking", "sb-signin");
+    bar?.classList.remove("open", "sb-waking", "sb-signin", "sb-cinematic");
     __sbScheduleCursorFollow();
   }
 }
@@ -6555,20 +8639,56 @@ function __sbSetVoiceButtonState(active) {
   document.getElementById("__sb_brain_btn__")?.classList.toggle("recording", active);
 }
 
+// Convert markdown/rich text into clean SPOKEN text before it hits TTS. The goal is to stop
+// Braino verbalizing syntax — saying "slash" for /, "vertical bar" for | (markdown table rows),
+// reading **stars**, backticks, #, >, etc. — while KEEPING normal sentence punctuation (. , ? !)
+// so pacing still sounds natural.
 function __sbStripMarkdownForSpeech(text) {
-  return String(text || "")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/`(.+?)`/g, "$1")
-    .replace(/#{1,6}\s+/g, "")
-    .replace(/^\s*[\*\-\+]\s+/gm, "")
-    .replace(/^\s*\d+\.\s+/gm, "")
-    .replace(/\[(.+?)\]\(.+?\)/g, "$1")
-    .replace(/_{1,2}(.+?)_{1,2}/g, "$1")
-    .replace(/\n{2,}/g, ". ")
-    .replace(/\n/g, " ")
+  let s = String(text || "");
+
+  // Fenced code blocks ``` ``` → keep the inner text, drop the fences.
+  s = s.replace(/```[^\n]*\n?([\s\S]*?)```/g, "$1").replace(/```/g, "");
+
+  // Images → alt text; links → link text; bare autolinks → drop (don't read the URL aloud).
+  s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+  s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+  s = s.replace(/<https?:\/\/[^>\s]+>/gi, " ");
+
+  // Tables: drop the |---|:--:| separator rows entirely, and read data-row pipes as comma pauses
+  // so columns sound like a list instead of "vertical bar … vertical bar".
+  s = s.split("\n").map((line) => {
+    const t = line.trim();
+    if (/^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/.test(t)) return "";
+    if (t.includes("|")) {
+      return t.replace(/^\s*\|/, "").replace(/\|\s*$/, "").replace(/\s*\|\s*/g, ", ");
+    }
+    return line;
+  }).join("\n");
+
+  s = s
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")          // headings
+    .replace(/^\s{0,3}>\s?/gm, "")               // blockquotes
+    .replace(/^\s*[-*+]\s+/gm, "")               // bullet lists
+    .replace(/^\s*\d+[.)]\s+/gm, "")             // numbered lists
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, "")      // horizontal rules (---, ***, ___)
+    .replace(/\*\*([^*]+)\*\*/g, "$1")           // bold
+    .replace(/\*([^*]+)\*/g, "$1")               // italic *
+    .replace(/__([^_]+)__/g, "$1")               // bold _
+    .replace(/_([^_]+)_/g, "$1")                 // italic _
+    .replace(/~~([^~]+)~~/g, "$1")               // strikethrough
+    .replace(/`([^`]+)`/g, "$1")                 // inline code
+    .replace(/<\/?[a-z][^>]*>/gi, " ")           // stray HTML tags
+    .replace(/\\([^\s])/g, "$1")                 // unescape \* \_ etc.
+    .replace(/\n{2,}/g, ". ")                    // paragraph break → pause
+    .replace(/\n/g, ". ")                        // line break → pause
+    .replace(/[*_#`~|>]/g, " ")                  // leftover markdown symbols (keep . , ? !)
+    .replace(/[/\\]/g, " ")                      // slashes → space (never say "slash")
+    .replace(/(\.\s*){2,}/g, ". ")               // collapse ". . ." runs
+    .replace(/\s+([.,?!;:])/g, "$1")             // no space before punctuation
     .replace(/\s{2,}/g, " ")
     .trim();
+
+  return s;
 }
 
 function __sbSyncSpeakButtons() {
@@ -6579,8 +8699,33 @@ function __sbSyncSpeakButtons() {
   });
 }
 
+// "Faster replies" beta (toggle): answer from the audio the instant you stop talking — before the
+// transcript — then KEEP it if the turn was plain chat, or CANCEL it if it turns out to be an action.
+let __sbSpeculativeReply = true;      // fast replies are the default voice mode now (no toggle)
+let __sbSpeculativeActive = false;    // a speculative answer is live this turn
+let __sbSpeculativeToken = -1;        // the speculative answer's turn token
+let __sbSpeculativeHandledToken = -1; // token of a speculative answer that COMPLETED (already spoke)
+
 function __sbStopSpeech() {
+  // Linchpin for the speculative beta: if something else takes over speech while a speculative answer
+  // is LIVE (its realtime response already exists), cancel it cleanly. The speculative's OWN setup
+  // stop runs before its response exists, so it is spared by the __sbHasActiveRealtimeResponse check.
+  if (__sbSpeculativeActive && __sbHasActiveRealtimeResponse()) {
+    __sbSpeculativeActive = false;
+    __sbVTMark("↩️ Speculative cancelled");
+  }
   __sbSpeechGeneration += 1;
+  // 1B: tear down the streaming-TTS pipeline. The generation bump above already invalidates the
+  // drain loop's token checks; nulling the state stops any further feed/queueing.
+  __sbStreamFishActive = false;
+  __sbStreamTts = null;
+  // Abort any in-flight Fish Audio TTS fetch/stream immediately so barge-in is instant
+  // instead of hanging until the fetch timeout. The generation bump above already marks
+  // it stale, so the abort is treated as a clean cancel (no error, no browser fallback).
+  if (__sbTtsAbortController) {
+    try { __sbTtsAbortController.abort(); } catch {}
+    __sbTtsAbortController = null;
+  }
   if (__sbHasActiveRealtimeResponse()) {
     __sbVoicePendingReply = false;
     __sbInterruptRealtimeResponse();
@@ -6617,6 +8762,7 @@ function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
     const utterance = new SpeechSynthesisUtterance(text);
     __sbCurrentUtterance = utterance;
     __sbIsSpeaking = true;
+    __sbWalkTalking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
     if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
@@ -6625,8 +8771,12 @@ function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
       if (speechToken === __sbSpeechGeneration) {
         if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
         __sbIsSpeaking = false;
+        __sbWalkTalking = false;
         __sbSetVoiceButtonState(__sbIsRecording);
         __sbSyncSpeakButtons();
+        if (__sbHeadphoneMode) {
+          __sbSetHpBrainState(__sbVoicePendingReply ? "captured" : "listening");
+        }
       }
       resolve(speechToken === __sbSpeechGeneration);
     };
@@ -6644,7 +8794,10 @@ function __sbIsRetryableVoiceTtsStatus(status) {
 
 function __sbIsVoiceTtsCreditStatus(status, errorKind = "") {
   const kind = String(errorKind || "").toLowerCase();
-  return status === 402 || status === 429 || kind.includes("credit") || kind.includes("rate_limit");
+  // Only true credit exhaustion is fatal. A 429 rate limit is transient and stays RETRYABLE
+  // (see __sbIsRetryableVoiceTtsStatus) — it used to be treated as fatal, which dumped replies
+  // onto the robotic browser voice the moment Fish got busy.
+  return status === 402 || (kind.includes("credit") && !kind.includes("rate"));
 }
 
 async function __sbReadTtsError(resp) {
@@ -6670,6 +8823,12 @@ async function __sbReadTtsError(resp) {
   return error;
 }
 
+function __sbIsAbortLikeError(error) {
+  const name = String(error?.name || "").toLowerCase();
+  const message = String(error?.message || error || "").toLowerCase();
+  return name === "aborterror" || message.includes("abort") || message.includes("signal is aborted");
+}
+
 async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
   const startedAt = Date.now();
   const deadlineAt = startedAt + __SB_TTS_RETRY_MAX_MS;
@@ -6680,13 +8839,25 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
     attempt += 1;
     if (speechToken !== __sbSpeechGeneration) return null;
 
+    let timeoutId = null;
     try {
-      const resp = await fetch(url, request);
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      if (controller) {
+        // Register so barge-in (__sbStopSpeech) can abort instantly. The signal also covers
+        // the streamed response body, so an interruption mid-playback is cancelled at once.
+        __sbTtsAbortController = controller;
+        timeoutId = setTimeout(() => controller.abort(), __SB_TTS_FETCH_TIMEOUT_MS);
+      }
+      const timedRequest = controller ? { ...request, signal: controller.signal } : request;
+      const resp = await fetch(url, timedRequest);
+      // Server streams the audio, so fetch resolves on headers — stop the stall timer now
+      // and let the body stream freely (it can outlast the timeout for long replies).
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
       if (speechToken !== __sbSpeechGeneration) return null;
 
       if (resp.ok) {
         const provider = (resp.headers.get("x-braino-tts-provider") || "").toLowerCase();
-        if (provider === __SB_TTS_PROVIDER) return resp;
+        if (provider === __SB_TTS_PROVIDER || provider === __SB_TTS_FALLBACK_PROVIDER) return resp;
         const providerError = new Error(`Unexpected TTS provider: ${provider || "unknown"}`);
         providerError.retryable = false;
         lastError = providerError;
@@ -6697,8 +8868,21 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
       lastError = httpError;
       if (httpError.isCreditIssue || !httpError.retryable) break;
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      lastError.retryable = true;
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+      // Barge-in / new reply bumped the generation and aborted us on purpose — clean cancel,
+      // not a failure. Don't log it or trigger the browser-voice fallback.
+      if (speechToken !== __sbSpeechGeneration) return null;
+      if (__sbIsAbortLikeError(error)) {
+        // DOMException.message is read-only, so we can't relabel the original — wrap it.
+        const timeoutErr = new Error(`${__SB_TTS_PROVIDER} TTS timed out.`);
+        timeoutErr.isTimeout = true;
+        timeoutErr.retryable = true;
+        timeoutErr.cause = error;
+        lastError = timeoutErr;
+      } else {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        lastError.retryable = true;
+      }
     }
 
     const elapsedMs = Date.now() - startedAt;
@@ -6714,82 +8898,273 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
   throw lastError || new Error(`${__SB_TTS_PROVIDER} TTS failed.`);
 }
 
+function __sbCanStreamTtsMp3() {
+  try {
+    return typeof MediaSource !== "undefined"
+      && typeof MediaSource.isTypeSupported === "function"
+      && MediaSource.isTypeSupported("audio/mpeg");
+  } catch { return false; }
+}
+
+// Plays a streamed TTS response via MediaSource so audio starts on the FIRST chunk instead
+// of waiting for the whole MP3. Resolves with the total byte count once playback ends; rejects
+// on a fatal media error. A barge-in aborts the fetch (reader throws) → reject, which the
+// caller treats as a clean cancel via the speech-generation check.
+function __sbPlayStreamedTts(resp, speechToken, onReady) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finishOk = (bytes) => { if (!settled) { settled = true; resolve(bytes); } };
+    const finishErr = (e) => { if (!settled) { settled = true; reject(e instanceof Error ? e : new Error(String(e || "stream error"))); } };
+
+    let mediaSource, url, audio;
+    try {
+      mediaSource = new MediaSource();
+      url = URL.createObjectURL(mediaSource);
+      audio = new Audio();
+      audio.src = url;
+    } catch (e) { finishErr(e); return; }
+
+    onReady(audio, url);
+    let totalBytes = 0;
+
+    audio.addEventListener("ended", () => finishOk(totalBytes), { once: true });
+    audio.addEventListener("error", () => finishErr(audio.error || new Error("audio element error")), { once: true });
+    // First moment sound is actually audible → stamps the timing readout (streaming MP3 path).
+    audio.addEventListener("playing", () => { if (typeof __sbVTAudible === "function") __sbVTAudible("🔈 First sound (Fish)"); }, { once: true });
+
+    mediaSource.addEventListener("sourceopen", async () => {
+      let sb;
+      try { sb = mediaSource.addSourceBuffer("audio/mpeg"); }
+      catch (e) { finishErr(e); return; }
+
+      const appendChunk = (chunk) => new Promise((res, rej) => {
+        const cleanup = () => { sb.removeEventListener("updateend", onEnd); sb.removeEventListener("error", onErr); };
+        const onEnd = () => { cleanup(); res(); };
+        const onErr = () => { cleanup(); rej(new Error("SourceBuffer append error")); };
+        sb.addEventListener("updateend", onEnd);
+        sb.addEventListener("error", onErr);
+        try { sb.appendBuffer(chunk); } catch (e) { cleanup(); rej(e); }
+      });
+
+      const reader = resp.body.getReader();
+      let started = false;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (speechToken !== __sbSpeechGeneration) { try { await reader.cancel(); } catch {} break; }
+          if (done) break;
+          if (value && value.byteLength) {
+            totalBytes += value.byteLength;
+            await appendChunk(value);
+            if (!started) { started = true; audio.play().catch(finishErr); }
+          }
+        }
+        try { if (mediaSource.readyState === "open") mediaSource.endOfStream(); } catch {}
+        if (!started) finishOk(totalBytes); // nothing played (e.g. barge-in before first chunk)
+      } catch (e) {
+        finishErr(e);
+      }
+    }, { once: true });
+  });
+}
+
+// Split a reply into speakable sentences so we can synthesize + play them one at a time. This
+// is the core latency win: the first sentence starts playing while later ones are still being
+// synthesized, instead of waiting for Fish to render the whole reply. Decimals ("5.4") and
+// abbreviations ("e.g.") don't over-split because we only break on a terminator FOLLOWED BY
+// whitespace and require a minimum chunk length before flushing.
+// Chunk a reply for TTS. Keeping the request COUNT low is what keeps Fish reliable — too many
+// rapid calls trip its rate limit (429). So short replies (the common case) go out as ONE
+// request; longer replies emit the first sentence alone (fast first audio) then group the rest
+// into ≤MAX-char chunks. A few calls per reply, never one-per-sentence.
+function __sbSplitSentencesForTts(text) {
+  const clean = String(text || "").trim();
+  if (!clean) return [];
+  const MAX = 240;
+  if (clean.length <= MAX) return [clean];
+
+  const sentences = clean.split(/(?<=[.!?…।])\s+/).filter(Boolean);
+  if (sentences.length <= 1) return [clean];
+
+  const chunks = [sentences[0]]; // first sentence alone → audio starts fast
+  let buf = "";
+  for (let i = 1; i < sentences.length; i++) {
+    const candidate = buf ? `${buf} ${sentences[i]}` : sentences[i];
+    if (buf && candidate.length > MAX) { chunks.push(buf); buf = sentences[i]; }
+    else buf = candidate;
+  }
+  if (buf) chunks.push(buf);
+  return chunks;
+}
+
+// Fetch one sentence's TTS (Fish, with retry). Never throws — returns { resp } (resp may be
+// null if the turn was superseded mid-fetch) or { error } so the caller can decide on fallback
+// without risking an unhandled rejection from a prefetch in flight.
+async function __sbFetchSentenceTts(clean, speechToken, headers) {
+  try {
+    // Strip markdown/symbols on EVERY chunk (the streaming path sends raw sentences straight here, so
+    // without this Fish would vocalise "||", "**", etc.). Idempotent on the already-clean batch path.
+    const speakable = __sbStripMarkdownForSpeech(clean);
+    const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text: speakable }),
+    }, speechToken);
+    return { resp };
+  } catch (error) {
+    return { error };
+  }
+}
+
+// Play one already-fetched TTS Response. Returns true if it played under the current token,
+// false on token mismatch. Throws on a media error so the caller can fall back.
+async function __sbPlaySentenceResp(resp, speechToken) {
+  const ttsProvider = resp.headers.get("x-braino-tts-provider") || __SB_TTS_PROVIDER;
+  const ttsContentType = resp.headers.get("content-type") || "";
+  const onReady = (audioEl, objUrl) => {
+    __sbCurrentSpeechAudio = audioEl;
+    __sbCurrentSpeechUrl = objUrl;
+    __sbIsSpeaking = true;
+    __sbWalkTalking = true;
+    __sbSetVoiceButtonState(false);
+    __sbSyncSpeakButtons();
+    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+  };
+
+  if (__sbCanStreamTtsMp3() && resp.body) {
+    const bytes = await __sbPlayStreamedTts(resp, speechToken, onReady);
+    __sbRecordRealtimeCostTts({ provider: ttsProvider, bytes, contentType: ttsContentType });
+    return speechToken === __sbSpeechGeneration;
+  }
+  // Fallback: buffer the whole clip, then play (older engines without MSE audio/mpeg).
+  const blob = await resp.blob();
+  __sbRecordRealtimeCostTts({ provider: ttsProvider, bytes: blob.size, contentType: blob.type || ttsContentType });
+  if (speechToken !== __sbSpeechGeneration) return false;
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  onReady(audio, url);
+  await new Promise((resolve, reject) => {
+    audio.onended = resolve;
+    audio.onerror = reject;
+    audio.onplaying = () => { if (typeof __sbVTAudible === "function") __sbVTAudible("🔈 First sound (Fish)"); };
+    audio.play().catch(reject);
+  });
+  return speechToken === __sbSpeechGeneration;
+}
+
+// Shared "Fish failed → tell the user, fall back to browser voice" handling.
+function __sbHandleFishTtsFailure(ttsErr) {
+  const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
+  const isTimeout = Boolean(ttsErr?.isTimeout) || __sbIsAbortLikeError(ttsErr);
+  __sbRecordRealtimeCostTts({ provider: "browser", error: ttsErr?.message || String(ttsErr || "TTS failed") });
+  const fallbackMessage = ttsErr?.message || ttsErr;
+  if (isTimeout) console.debug("[Braino] Fish Audio TTS timed out; using browser voice:", fallbackMessage);
+  else console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", fallbackMessage);
+  __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish Audio credits" : "Browser voice");
+  const msg = isCreditIssue
+    ? "Fish Audio credits or rate limit are exhausted. Falling back to browser voice for now."
+    : isTimeout
+      ? "Fish Audio took too long, so I used browser voice for this reply."
+      : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.";
+  if (__sbHeadphoneMode || __sbVoiceOnlyMode) __sbShowVoiceError(msg);
+  else __sbShowBubble(msg, true, { tone: "status" });
+}
+
+// Keep-warm: ping the TTS edge function so its isolate stays hot while voice mode is active.
+// Cold starts (~0.5–5s) were a top cause of the first reply feeling slow / timing out.
+let __sbFishWarmTimer = null;
+
+function __sbWarmFishTts() {
+  if (__sbVoiceOutputPref !== "fish") return; // only the Fish path pays the cold start
+  if (!__sbContextOk()) return;
+  try {
+    __sbStorageGet(["authToken"]).then(({ authToken }) => {
+      const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
+      if (authToken) headers.Authorization = `Bearer ${authToken}`;
+      fetch(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ warm: true }),
+      }).catch(() => {});
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+function __sbStartFishWarmKeepAlive() {
+  __sbWarmFishTts();
+  if (__sbFishWarmTimer) return;
+  __sbFishWarmTimer = setInterval(() => {
+    if (!__sbHeadphoneMode && !__sbVoiceOnlyMode) { __sbStopFishWarmKeepAlive(); return; }
+    __sbWarmFishTts();
+  }, 240000); // ~4 min — Supabase isolates idle out after a few minutes
+}
+
+function __sbStopFishWarmKeepAlive() {
+  if (__sbFishWarmTimer) { clearInterval(__sbFishWarmTimer); __sbFishWarmTimer = null; }
+}
+
 async function __sbSpeakText(text, options = {}) {
   const clean = __sbStripMarkdownForSpeech(text);
   if (!clean) return false;
 
   __sbStopSpeech();
   const speechToken = ++__sbSpeechGeneration;
+  const sentences = __sbSplitSentencesForTts(clean);
   let spoke = false;
-  // In headphone (realtime) mode we DON'T mute the mic while ElevenLabs speaks — the whole
-  // point of the realtime mechanism is that the user can barge in. The browser's echo
-  // cancellation (echoCancellation:true on the mic) keeps Braino's own voice from
-  // self-triggering, and speech_started stops playback the instant the user talks. We only
-  // mute in legacy (non-headphone) recording, where there's no barge-in VAD.
-  const shouldMuteRealtimeMic = false;
 
   try {
-    if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(false);
     const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
     if (speechToken !== __sbSpeechGeneration) return false;
 
-    // elevenlabs-tts uses a server-side key, so it works
-    // with just the anon apikey — no user token required. Send the token when we have it.
+    // fish-audio-tts uses a server-side key, so it works with just the anon apikey — no user
+    // token required. Send the token when we have it.
     const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
     if (ttsToken) headers.Authorization = `Bearer ${ttsToken}`;
 
-    const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        text: clean,
-      }),
-    }, speechToken);
-    if (!resp) return false;
+    // N+1 look-ahead: while the current chunk PLAYS, we prefetch the NEXT one so there's no gap
+    // between sentences (the pause the batch path used to have). At most ONE fetch is in flight at a
+    // time — the chunk being spoken is already in hand, not fetching — so we never burst Fish's rate
+    // limit (429); this is the same single-look-ahead discipline the streaming path uses. First audio
+    // is still fast because chunk 1 is just the opening sentence.
+    let pendingFetch = null; // a promise for the NEXT sentence's TTS, kicked off during playback
+    for (let i = 0; i < sentences.length; i++) {
+      if (speechToken !== __sbSpeechGeneration) return spoke;
+      const fetchPromise = pendingFetch || __sbFetchSentenceTts(sentences[i], speechToken, headers);
+      pendingFetch = null;
+      const cur = await fetchPromise;
+      if (speechToken !== __sbSpeechGeneration) return spoke;
 
-    const ttsProvider = resp.headers.get("x-braino-tts-provider") || __SB_TTS_PROVIDER;
-    const ttsContentType = resp.headers.get("content-type") || "";
-    const blob = await resp.blob();
-    __sbRecordRealtimeCostTts({
-      provider: ttsProvider,
-      bytes: blob.size,
-      contentType: blob.type || ttsContentType,
-    });
-    if (speechToken !== __sbSpeechGeneration) return false;
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+      if (cur.error) {
+        // Fish failed for this sentence → speak the unspoken remainder with the browser voice
+        // (safety net) so the reply never cuts off half-finished.
+        const remainder = sentences.slice(i).join(" ");
+        __sbHandleFishTtsFailure(cur.error);
+        spoke = (await __sbSpeakWithBrowser(remainder, speechToken)) || spoke;
+        return spoke;
+      }
+      if (!cur.resp) return spoke; // token superseded mid-fetch
 
-    __sbCurrentSpeechAudio = audio;
-    __sbCurrentSpeechUrl = url;
-    __sbIsSpeaking = true;
-    __sbSetVoiceButtonState(false);
-    __sbSyncSpeakButtons();
-    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+      // Kick off the next sentence's fetch NOW so it overlaps this one's playback (kills the gap).
+      if (i + 1 < sentences.length) {
+        pendingFetch = __sbFetchSentenceTts(sentences[i + 1], speechToken, headers);
+      }
 
-    await new Promise((resolve, reject) => {
-      audio.onended = resolve;
-      audio.onerror = reject;
-      audio.play().catch(reject);
-    });
-    spoke = speechToken === __sbSpeechGeneration;
+      try {
+        const played = await __sbPlaySentenceResp(cur.resp, speechToken);
+        if (speechToken !== __sbSpeechGeneration) return spoke;
+        if (played) spoke = true;
+      } catch (mediaErr) {
+        if (speechToken !== __sbSpeechGeneration) return spoke;
+        const remainder = sentences.slice(i).join(" ");
+        __sbHandleFishTtsFailure(mediaErr);
+        spoke = (await __sbSpeakWithBrowser(remainder, speechToken)) || spoke;
+        return spoke;
+      }
+    }
+    __sbWalkTalking = false;
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
-    __sbRecordRealtimeCostTts({
-      provider: "browser",
-      error: ttsErr?.message || String(ttsErr || "TTS failed"),
-    });
-    console.warn("[Braino] ElevenLabs TTS failed; falling back to browser voice:", ttsErr?.message || ttsErr);
-    const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
-    __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "ElevenLabs credits" : "Browser voice");
-    if (__sbHeadphoneMode || __sbVoiceOnlyMode) {
-      __sbShowVoiceError(isCreditIssue
-        ? "ElevenLabs credits or rate limit are exhausted. Falling back to browser voice for now."
-        : "ElevenLabs voice is unavailable after retrying. Falling back to browser voice for now.");
-    } else {
-      __sbShowBubble(isCreditIssue
-        ? "ElevenLabs credits or rate limit are exhausted. Using browser voice."
-        : "ElevenLabs voice is unavailable. Using browser voice.", true, { tone: "status" });
-    }
+    __sbHandleFishTtsFailure(ttsErr);
     spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
     if (speechToken === __sbSpeechGeneration) {
@@ -6809,7 +9184,6 @@ async function __sbSpeakText(text, options = {}) {
         __sbSetHpBrainState("listening");
       }
     }
-    if (shouldMuteRealtimeMic) __sbSetRealtimeMicEnabled(true);
   }
   return spoke;
 }
@@ -6907,7 +9281,7 @@ function __sbMovieModeDescriptor(el) {
 
 function __sbMovieModeElementVisible(el) {
   if (!el || !(el instanceof Element)) return false;
-  if (el.closest("#__sb_root__, #__sb_card_wrap__")) return false;
+  if (el.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) return false;
   const rect = el.getBoundingClientRect();
   if (rect.width < 180 || rect.height < 100) return false;
   if (rect.bottom < 18 || rect.right < 18) return false;
@@ -7129,7 +9503,7 @@ function __sbExtractMovieSubtitleLinesFromDom(frame, mediaEl) {
     for (const el of candidates) {
       if (!(el instanceof Element) || seenEls.has(el)) continue;
       seenEls.add(el);
-      if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__")) continue;
+      if (!__sbAdapterIsVisible(el) || el.closest("#__sb_root__, #__sb_card_wrap__, #__sb_bar__")) continue;
       const rect = el.getBoundingClientRect();
       if (rect.height < 4 || rect.height > 240) continue;
       if (frameRect) {
@@ -7365,8 +9739,8 @@ function __sbSyncMovieModeVisualState() {
   const brain = document.getElementById("__sb_brain_btn__");
   brain?.classList.toggle("sb-brain-movie", __sbMovieModeActive);
   if (brain && !brain.classList.contains("recording")) {
-    if (__sbMovieModeActive) brain.innerHTML = __SB_BRAIN_SVG_LISTENING;
-    else if (brain.innerHTML === __SB_BRAIN_SVG_LISTENING) brain.innerHTML = __SB_BRAIN_SVG;
+    if (__sbMovieModeActive) { __sbStopWalkLoop(); brain.innerHTML = __SB_BRAIN_SVG_LISTENING; }
+    else __sbRestoreWalkBrain();
   }
   if (__sbMovieModeActive) {
     document.documentElement.classList.add("__sb_movie_mode_active__");
@@ -7517,6 +9891,7 @@ function __sbSyncIdleState() {
     || brain.classList.contains("sb-brain-movie")
     || brain.classList.contains("hp-connecting")
     || brain.classList.contains("hp-listening")
+    || brain.classList.contains("hp-hearing")
     || brain.classList.contains("hp-captured")
     || brain.classList.contains("hp-speaking");
   brain.classList.toggle("sb-brain-idle", !busy);
@@ -7557,9 +9932,11 @@ function __sbPlayReaction(emotion, durationMs = 2600) {
   // Cancel any pending auto-revert from a previous reaction
   if (__sbReactionTimer) { clearTimeout(__sbReactionTimer); __sbReactionTimer = null; }
 
-  // Swap the mascot SVG to the emotion variant
+  // Swap the mascot SVG to the emotion variant (temporarily pauses walk loop)
   const svg = __SB_REACTION_SVGS[emotion];
   if (svg) {
+    __sbStopWalkLoop();
+    brainBtn.style.height = "";
     brainBtn.innerHTML = svg;
     brainBtn.classList.remove("sb-brain-idle", "sb-emotion-active");
     void brainBtn.offsetWidth; // force reflow so the animation restarts
@@ -7590,7 +9967,7 @@ function __sbPlayReaction(emotion, durationMs = 2600) {
     __sbReactionTimer = setTimeout(() => {
       __sbReactionTimer = null;
       const btn = document.getElementById("__sb_brain_btn__");
-      if (btn && !__sbIsLectureRecording) btn.innerHTML = __SB_BRAIN_SVG;
+      if (btn && !__sbIsLectureRecording) __sbRestoreWalkBrain();
       __sbSyncIdleState();
     }, durationMs);
   }
@@ -7864,6 +10241,38 @@ function __sbBuildCardTurnHtml(turn = {}, options = {}) {
   return `<div class="sb-turn">${promptHtml}${answerHtml}</div>`;
 }
 
+// Tidy a raw agent status/step line: drop element indices ("#undefined", "#12"), arrows,
+// leading checklist markers, and friendly-ize bare verbs.
+function __sbCleanAgentStatus(s) {
+  let t = String(s || "").trim();
+  if (!t) return "";
+  t = t.replace(/\s*#(?:undefined|null|nan|-?\d+)\b/gi, "");        // "Read #undefined" → "Read"
+  t = t.replace(/^\s*(?:[→>]|\d+[.)]|[-*]|\[[x!>\s-]\])\s*/g, "");   // leading markers/arrows
+  t = t.replace(/\s{2,}/g, " ").trim();
+  if (/^read$/i.test(t)) t = "Reading the page";
+  return t;
+}
+
+function __sbFormatAgentPendingBody() {
+  if (!__sbAgentPendingTurn?.prompt) return "Delegating…";
+  const status = __sbCleanAgentStatus(__sbAgentPendingTurn.status) || "Working on it…";
+  const subgoals = Array.isArray(__sbAgentPendingTurn.subgoals) ? __sbAgentPendingTurn.subgoals : [];
+  if (!subgoals.length) return status;
+  const seen = new Set();
+  const lines = [];
+  for (const goal of subgoals) {
+    const desc = __sbCleanAgentStatus(String(goal?.desc || goal?.goal || ""));
+    const key = desc.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const state = String(goal?.status || "pending");
+    const icon = state === "done" ? "✓" : state === "active" ? "→" : state === "failed" ? "✗" : "○";
+    lines.push(`${icon} ${desc}`);
+    if (lines.length >= 6) break;
+  }
+  return lines.length ? `${status}\n\n${lines.join("\n")}` : status;
+}
+
 function __sbRenderCardHistory(scroll, options = {}) {
   if (!scroll) return;
   const historyHtml = __sbCardTurns
@@ -7871,7 +10280,7 @@ function __sbRenderCardHistory(scroll, options = {}) {
     .join("");
   const pendingHtml = options.pendingTurn
     ? __sbBuildCardTurnHtml(options.pendingTurn, {
-        rich: false,
+        rich: true,
         answerText: options.pendingText || "Thinking…",
       })
     : "";
@@ -7890,7 +10299,7 @@ function __sbRenderConversationWithPending(scroll) {
   if (__sbAgentPendingTurn?.prompt) {
     __sbRenderCardHistory(scroll, {
       pendingTurn: { prompt: __sbAgentPendingTurn.prompt },
-      pendingText: __sbAgentPendingTurn.status || "Delegating…",
+      pendingText: __sbFormatAgentPendingBody(),
     });
     return;
   }
@@ -7933,13 +10342,196 @@ function __sbBuildAgentHandoffPayload(task, options = {}) {
   };
 }
 
+// Live delegate logs in the constant bar: show the latest step where "Follow up…" sits,
+// with a shimmer on the bar so it's clear Braino is working (not frozen).
+function __sbSetBarAgentStatus(text) {
+  const input = document.getElementById("__sb_input__");
+  const bar = document.getElementById("__sb_bar__");
+  if (!input || !bar) return;
+  const log = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
+  if (!log) return;
+  bar.classList.add("sb-agent-busy");
+  if (!input.value) {                          // don't clobber what the user is typing
+    input.placeholder = log.length > 88 ? log.slice(0, 87) + "…" : log;
+    input.dataset.sbAgentLog = "1";
+  }
+}
+function __sbClearBarAgentStatus() {
+  const input = document.getElementById("__sb_input__");
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) bar.classList.remove("sb-agent-busy");
+  if (input && input.dataset.sbAgentLog) {
+    input.placeholder = "Follow up…";
+    delete input.dataset.sbAgentLog;
+  }
+}
+
+// ── In-pill agent activity log — the pill itself grows from its top (Dynamic-Island style) to
+// show the play-by-play, so the user sees what Braino is doing even in voice-only mode. ──
+let __sbAgentLogSteps = [];
+let __sbAgentBusy = false;            // true while an agent/research task runs
+let __sbAgentBusyLabel = "Working…";  // overrides the voice indicator's "Listening…" while busy
+let __sbAgentLogCollapseTimer = null;
+
+// Strip command boilerplate so "Search the web for X" and "Searching for 'X'" read as the same
+// step (kills the duplicated/noisy log lines).
+function __sbAgentLogKey(s) {
+  return String(s || "").toLowerCase()
+    .replace(/["'“”]/g, "")
+    .replace(/\b(search(ing)?|look(ing)?\s+up|read(ing)?|open(ing|ed)?|the web|on the web|for|the page|the task|understanding|getting|started)\b/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function __sbAgentLogRender() {
+  const bar = document.getElementById("__sb_bar__");
+  const log = document.getElementById("__sb_bar_log__");
+  if (!bar || !log) return;
+  const stepsEl = log.querySelector(".sb-blog-steps");
+  if (stepsEl) {
+    const shown = __sbAgentLogSteps.slice(-2);   // extend just a little — last 2 steps
+    stepsEl.innerHTML = shown.map((s) =>
+      `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
+    ).join("");
+    shown.forEach((s) => { s.justDone = false; });  // tick-pop plays once
+  }
+  bar.classList.add("sb-log-open");
+}
+
+function __sbAgentLogShow(title) {
+  if (__sbAgentLogCollapseTimer) { clearTimeout(__sbAgentLogCollapseTimer); __sbAgentLogCollapseTimer = null; }
+  __sbAgentBusy = true;
+  if (title) __sbAgentBusyLabel = title;
+  if (typeof __sbWkStatus === "function") __sbWkStatus(__sbAgentBusyLabel);  // flip "Listening…" → working label
+  __sbAgentLogRender();
+  if (__sbJarvisOpen) __sbJarvisLogShow(__sbAgentBusyLabel);   // mirror into the Jarvis HUD console
+}
+
+function __sbAgentLogStep(text) {
+  const clean = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
+  if (!clean) return;
+  const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
+  const key = __sbAgentLogKey(clean);
+  if (last && (last.text === clean || (key && __sbAgentLogKey(last.text) === key))) return;  // de-dupe repeats/near-repeats
+  if (__sbJarvisOpen) __sbJarvisPushLog(clean);              // stream the step into the Jarvis HUD console
+  if (last) { last.active = false; last.justDone = true; }   // prior step completes → animated green tick
+  __sbAgentLogSteps.push({ text: clean, active: true, justDone: false });
+  if (__sbAgentLogSteps.length > 8) __sbAgentLogSteps = __sbAgentLogSteps.slice(-8);
+  __sbAgentLogRender();
+}
+
+function __sbAgentLogClear() {
+  const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
+  if (last && last.active) { last.active = false; last.justDone = true; __sbAgentLogRender(); }  // final tick
+  __sbAgentLogSteps = [];
+  __sbAgentBusy = false;
+  if (__sbJarvisOpen) __sbJarvisLogDone();   // settle the Jarvis HUD console
+  if (__sbAgentLogCollapseTimer) clearTimeout(__sbAgentLogCollapseTimer);
+  __sbAgentLogCollapseTimer = setTimeout(() => {   // let the last tick land, then settle the pill down
+    const bar = document.getElementById("__sb_bar__");
+    const log = document.getElementById("__sb_bar_log__");
+    if (bar) bar.classList.remove("sb-log-open");
+    const stepsEl = log && log.querySelector(".sb-blog-steps");
+    if (stepsEl) stepsEl.innerHTML = "";
+    __sbAgentLogCollapseTimer = null;
+  }, 600);
+}
+
+// ── Voice-latency timing (TEMPORARY — for one test round, remove after). Stamps every stage of a
+// voice turn with a delta and shows the whole breakdown in the pill, so we can see exactly where
+// the seconds go (you stopped → transcript → model → first audio → done). Also logs to console. ──
+let __sbVT = null;
+let __sbVTFirstToken = false;
+let __sbVTAudibleDone = false;
+let __sbVTSummaryDone = false;
+let __sbVTCollapse = null;
+let __sbVTPath = "";   // "Fast Path" | "Slow Path" — which answer route this turn took
+function __sbVTReset(label) {
+  __sbVT = { t0: performance.now(), marks: [], stopMs: null };
+  __sbVTFirstToken = false;
+  __sbVTAudibleDone = false;
+  __sbVTSummaryDone = false;
+  __sbVTPath = "";
+  if (__sbVTCollapse) { clearTimeout(__sbVTCollapse); __sbVTCollapse = null; }
+  __sbVTMark(label);
+}
+// Marks are kept for the console trace + to compute the one number; they no longer paint the pill.
+function __sbVTMark(label) {
+  if (!__sbVT) return 0;
+  const ms = Math.round(performance.now() - __sbVT.t0);
+  __sbVT.marks.push({ label, ms });
+  if (label.indexOf("stopped talking") !== -1) __sbVT.stopMs = ms;   // the "perceived latency" clock starts here
+  try { console.log(`[Braino ⏱] ${label}  +${ms}ms`); } catch (_) {}
+  return ms;
+}
+// The pill shows ONE thing: which path the turn took + how long from "you stopped" to first sound.
+// Colour-coded: green < 1.5s, yellow < 2s, red ≥ 2s.
+function __sbVTShowReadout(totalMs, sec, path) {
+  const bar = document.getElementById("__sb_bar__");
+  const log = document.getElementById("__sb_bar_log__");
+  if (!bar || !log) return;
+  const color = totalMs < 1500 ? "#34C759" : totalMs < 2000 ? "#FFCC00" : "#FF3B30"; // green / yellow / red
+  const stepsEl = log.querySelector(".sb-blog-steps");
+  if (stepsEl) {
+    stepsEl.innerHTML =
+      `<div class="sb-blog-step done sb-vt-readout">` +
+        `<span class="sb-vt-dot" style="background:${color}"></span>` +
+        `<span class="sb-vt-path">${__sbEscHtml(path || "Voice")}</span>` +
+        `<span class="sb-vt-time" style="color:${color}">${sec}s</span>` +
+      `</div>`;
+  }
+  bar.classList.add("sb-log-open", "sb-log-timing");
+}
+// THE number that matters: from "you stopped talking" → the first sound you actually hear.
+function __sbVTSummary() {
+  if (!__sbVT || __sbVTSummaryDone) return;
+  __sbVTSummaryDone = true;
+  const last = __sbVT.marks[__sbVT.marks.length - 1];
+  const heardMs = last ? last.ms : 0;
+  const stop = __sbVT.stopMs != null ? __sbVT.stopMs : 0;
+  const total = Math.max(0, heardMs - stop);
+  const sec = (total / 1000).toFixed(1);
+  const path = __sbVTPath || "Voice";
+  try { console.log(`%c[Braino ⏱] ${path} · ${sec}s  (you stopped → first sound)`, "font-weight:bold;font-size:13px;color:#C9544A"); } catch (_) {}
+  __sbVTShowReadout(total, sec, path);
+  __sbVTScheduleCollapse(4000);   // works on BOTH paths (the batch path has no realtime response.done)
+}
+function __sbVTScheduleCollapse(delay) {
+  if (__sbVTCollapse) clearTimeout(__sbVTCollapse);
+  __sbVTCollapse = setTimeout(() => {   // hold the readout briefly, then settle the pill back down
+    const bar = document.getElementById("__sb_bar__");
+    if (bar && !__sbAgentBusy) { bar.classList.remove("sb-log-open", "sb-log-timing"); }
+    const log = document.getElementById("__sb_bar_log__");
+    const stepsEl = log && log.querySelector(".sb-blog-steps");
+    if (stepsEl) stepsEl.innerHTML = "";
+    __sbVT = null; __sbVTCollapse = null;
+  }, delay);
+}
+function __sbVTAudible(label) {          // first AUDIBLE sound (Fish playback) — what you hear
+  if (__sbVTAudibleDone) return;
+  __sbVTAudibleDone = true;
+  __sbVTMark(label);
+  __sbVTSummary();
+}
+function __sbVTFirst(label) {           // first token of a response (native OpenAI audio = audible)
+  if (__sbVTFirstToken) return;
+  __sbVTFirstToken = true;
+  __sbVTMark(label);
+  if (label.indexOf("audio") !== -1) __sbVTSummary();   // native audio delta = first sound heard
+}
+function __sbVTDone(label) {
+  __sbVTMark(label);
+  __sbVTScheduleCollapse(4000);
+}
+
 function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
   const task = String(prompt || "").trim();
   if (!task) return;
   __sbAgentPendingTurn = {
     prompt: task,
     status: String(status || "Delegating…").trim() || "Delegating…",
+    subgoals: [],
   };
+  __sbSetBarAgentStatus(__sbAgentPendingTurn.status);
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
@@ -7950,6 +10542,37 @@ function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
 function __sbUpdateAgentPendingTurn(status) {
   if (!__sbAgentPendingTurn?.prompt) return;
   __sbAgentPendingTurn.status = String(status || "Delegating…").trim() || "Delegating…";
+  __sbSetBarAgentStatus(__sbAgentPendingTurn.status);
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  __sbRenderConversationWithPending(scroll);
+  __sbOpenCard({ rich: true });
+  __sbSyncSpeakButtons();
+}
+
+function __sbUpdateAgentSubgoals(subgoals) {
+  if (!__sbAgentPendingTurn?.prompt) return;
+  const seen = new Set();
+  __sbAgentPendingTurn.subgoals = [];
+  if (Array.isArray(subgoals)) {
+    for (const goal of subgoals) {
+      const desc = String(goal?.desc || goal?.goal || "").trim();
+      const key = desc
+        .toLowerCase()
+        .replace(/^\s*(?:[-*]|\d+[.)]|\[[x!>\s-]\])\s*/g, "")
+        .replace(/\b(?:step|subgoal|task)\s*\d+\s*[:.)-]?\s*/g, "")
+        .replace(/[^\w\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      __sbAgentPendingTurn.subgoals.push({
+        desc,
+        status: String(goal?.status || "pending").trim() || "pending",
+      });
+      if (__sbAgentPendingTurn.subgoals.length >= 8) break;
+    }
+  }
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
@@ -7958,8 +10581,25 @@ function __sbUpdateAgentPendingTurn(status) {
 }
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
+  __sbDelegateUiHidden = false;   // delegate done → re-enable the chat UI before rendering the result
+  __sbStopWaitEntertainment(); // delegate finished — settle the mascot
+  __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
   const reply = String(answer || "").trim();
+  // Dedupe: background sometimes emits the final twice (and two paths can both finalize),
+  // which rendered the SAME prompt+answer twice in the card. Drop the duplicate.
+  const finalizeKey = task + " " + reply;
+  const lastTurn = __sbCardTurns[__sbCardTurns.length - 1];
+  const dupTurn = lastTurn && String(lastTurn.prompt || "").trim() === task && String(lastTurn.answer || "").trim() === reply;
+  if (dupTurn || (finalizeKey === __sbLastFinalizedAgentKey && Date.now() - __sbLastFinalizedAgentAt < 20000)) {
+    __sbAgentPendingTurn = null;
+    if (options.render === false) return;
+    const scroll0 = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    if (scroll0) { __sbRenderConversationWithPending(scroll0); __sbSyncSpeakButtons(); }
+    return;
+  }
+  __sbLastFinalizedAgentKey = finalizeKey;
+  __sbLastFinalizedAgentAt = Date.now();
   if (task) {
     const lastUser = __sbChatHistory[__sbChatHistory.length - 1];
     if (!lastUser || lastUser.role !== "user" || String(lastUser.content || "").trim() !== task) {
@@ -8146,11 +10786,11 @@ function __sbIsGoogleMapsPlaceTask(text) {
   if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
   if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
 
-  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby|nearest|closest)\b/.test(t);
   if (!wantsPlaceRecommendation) return false;
 
-  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
-  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theat(?:er|re)s?|movie\s+theat(?:er|re)s?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|by me|close to me|my house|my home|at home|from home|where i am|current location|nearest|closest|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
   return placeCategory && locationHint;
 }
 
@@ -8277,16 +10917,41 @@ function __sbIsTabsQuery(text) {
 
 function __sbDetectIntent(text) {
   const t = text.toLowerCase();
+  // Politeness/vocative prefixes hide the action verb from the anchored checks below
+  // ("Braino, can you please play this song" → "play this song"). Strip them once so
+  // vague-but-actionable commands still gate into Delegate.
+  const bare = t
+    .replace(/^(?:hey\s+|ok(?:ay)?\s+|yo\s+)?braino[,!.\s]+/, "")
+    .replace(/^(?:can|could|will|would)\s+you\s+(?:please\s+)?/, "")
+    .replace(/^please\s+/, "")
+    .trim();
   const onOttSite = __SB_MOVIE_CONTEXT_HOST_RE.test(String(location.hostname || "").replace(/^www\./, ""));
   if (__sbIsMovieSceneQuestion(t) && (onOttSite || __sbBuildMovieContext())) return "page";
-  // Volume is a Spotify delegate action — route to agent (works in chat & realtime voice).
+  // Binary Delegate gate: only decide whether this needs browser control. The
+  // background planner handles app/skill classification from the live page.
   if (__sbIsVolumeCommand(t)) return "agent";
   if (/\b(record|transcribe|capture audio|start listening|start recording)\b/.test(t)) return "record";
-  if (__sbIsSiteScopedBrowseSearch(t)) return "agent";
-  if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
+  // Media playback — must run BEFORE the "this video/this page" summarize gate, or
+  // "play this song/video" reads as a page question. Anaphora ("this song") is fine:
+  // the background synthesizer resolves the referent from chat context.
+  if (/^(?:play|queue|put on)\b/.test(bare) || /\b(?:play|queue|put on)\s+(?:this|that|the)\s+(?:song|track|album|playlist|video|movie)\b/.test(bare)) return "agent";
+  // Personal-context questions (my time / date / location / timezone) are answered from
+  // the user-context block in the chat prompt — NEVER web-searched. The words "current"
+  // and "right now" used to trip the freshness regex below and google the user's own clock.
+  if (/(?:what(?:'s|s| is)\s+(?:the\s+)?(?:time|date|day)(?:\s+(?:today|now|right\s+now))?\s*\??$|what\s+time\s+is\s+it|what\s+day\s+is\s+(?:it|today)|current\s+time\b|time\s+right\s+now\b|what(?:'s|s| is)\s+my\s+(?:current\s+)?(?:location|city|timezone|time\s*zone)|where\s+am\s+i\b|my\s+current\s+location)/.test(bare)) return "chat";
   if (__sbIsExplicitWebSearchRequest(t)) return "web";
-  if (__sbIsBrowserActionCommand(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
   if (/\b(this page|this article|this post|this site|this video|summarize|summary|tldr|tl;dr|what does this|explain this|what is this|what are they|what does it say|what did they write|what's on)\b/.test(t)) return "page";
+  if (__sbIsGoogleMapsPlaceTask(t)) return "agent";
+  if (__sbIsBrowserActionCommand(t) || __sbIsSiteScopedBrowseSearch(t) || /\b(do .{0,25} for me|automate|browse to)\b/.test(t)) return "agent";
+  if (/^(?:open|go to|navigate to|visit|search|find|look up|show|pull up|bring up|get directions|route|book|schedule|compose|send|post|tweet|apply|buy|order|purchase|add)\b/.test(bare)) return "agent";
+  // Vague anaphoric commands mid-conversation — "search that up", "show me that",
+  // "buy it for me". The referent is resolved downstream from the shared chat context.
+  if (/\b(?:search|look)\s+(?:that|this|it)\s+up\b/.test(bare)
+    || /\b(?:search|google)\s+(?:for\s+)?(?:that|this|it)\b/.test(bare)
+    || /\b(?:show|open|pull\s+up|bring\s+up)\s+(?:me\s+)?(?:that|this|it)\b/.test(bare)
+    || /\b(?:buy|order|purchase)\s+(?:that|this|it|them)\b/.test(bare)) return "agent";
+  if (/\b(gmail|email|calendar|maps?|directions?|linkedin|jobs?|x|twitter|spotify|youtube|amazon|reddit|whatsapp|google docs?|google documents?|drive)\b/.test(t)
+    && /\b(open|find|search|send|compose|book|schedule|read|show|create|post|apply|route|directions?|play|buy|order|purchase)\b/.test(t)) return "agent";
   return "chat";
 }
 
@@ -8862,6 +11527,7 @@ async function __sbHandleXStatus(promptText, ctx = {}) {
     }
 
     __sbXLastStatus = data;
+    if (__sbJarvisOpen) __sbJarvisShowXStat(data);   // pop the count-up + ▲/▼ HUD inside Jarvis
     const formatted = __sbFormatXStatus(promptText, data);
     const offer = __sbBuildXPostOffer(data);
     const combinedReply = `${formatted}\n\n${offer}`;
@@ -9155,6 +11821,61 @@ async function __sbAuthedApiFetch(path, init = {}, options = {}) {
   return response;
 }
 
+// Design Delegate: open the design tool in a visible tab and type a synthesized prompt into its
+// composer (the background driver does NOT submit — the user reviews and hits enter). The prompt is
+// also copied to the clipboard as a safety net in case the composer can't be resolved.
+const SB_DESIGN_TOOL_DEFAULT_URL = "https://claude.ai/design/p/fb4c6286-7eed-4f12-864a-c306cf380014?file=Braino+Motion+Handoff-print-atloqb.html";
+
+async function __sbRunDesignMockup(prompt) {
+  const text = String(prompt || "").trim();
+  if (!text) return;
+  try {
+    try { await navigator.clipboard.writeText(text); } catch (e) { /* clipboard may be blocked; non-fatal */ }
+
+    const stored = await __sbStorageGet(["sbDesignToolUrl"]);
+    const url = (typeof stored.sbDesignToolUrl === "string" && stored.sbDesignToolUrl.trim())
+      ? stored.sbDesignToolUrl.trim()
+      : SB_DESIGN_TOOL_DEFAULT_URL;
+
+    const res = await new Promise((resolve) =>
+      chrome.runtime.sendMessage({ action: "runDesignMockup", url, prompt: text }, (r) => {
+        void chrome.runtime.lastError;
+        resolve(r || {});
+      }));
+
+    if (!res || !res.typed) {
+      const note = "Opened the design tool — the prompt's on your clipboard, paste it in and send when you're ready.";
+      if (__sbHeadphoneMode && typeof __sbSpeakWithPreferredVoice === "function") {
+        __sbSpeakWithPreferredVoice(note).catch(() => {});
+      } else if (typeof __sbShowVoiceError === "function") {
+        __sbShowVoiceError(note);
+      }
+      console.warn("design mockup: composer not auto-filled, clipboard fallback active");
+    }
+    return res;
+  } catch (e) {
+    console.warn("design mockup failed:", e);
+  }
+}
+
+// Mirror of the backend detectDesignMockupIntent — used only to STEER voice turns down the chat
+// pipeline (which synthesizes the prompt + fires __sbRunDesignMockup). No second delegate engine:
+// voice and chat both end up in chat-about-notes → designMockup → __sbRunDesignMockup.
+function __sbIsDesignMockupRequest(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return false;
+  const explicit = /\b(mock (it|this|that) up|mock ?up (it|this|that)|whip (it|this|that)? ?up|design (it|this|that)|open (the )?design tool|make (the |a )?mock ?up|show me (a |some )?(mock ?ups?|design ideas?))\b/.test(t);
+  if (explicit) return true;
+  const affirm = /^(yes|yeah|yep|yup|sure|ok(ay)?|do it|go for it|let'?s do it|please|go ahead|sounds good)\b/.test(t)
+    || /\b(do it|go for it|let'?s do it|go ahead|mock it up|whip it up)\b/.test(t);
+  if (affirm && Array.isArray(__sbChatHistory)) {
+    const lastAssistant = [...__sbChatHistory].reverse().find((m) => m && m.role === "assistant");
+    const prev = String(lastAssistant?.content || "").toLowerCase();
+    if (/\b(mock|mockup|design tool|whip up|few ideas|see it)\b/.test(prev)) return true;
+  }
+  return false;
+}
+
 async function __sbFetchAssistantReply(body) {
   const enrichedBody = body && typeof body === "object" && !Array.isArray(body)
     ? {
@@ -9163,6 +11884,12 @@ async function __sbFetchAssistantReply(body) {
         clientUtcOffsetMinutes: Number.isFinite(Number(body.clientUtcOffsetMinutes))
           ? Number(body.clientUtcOffsetMinutes)
           : new Date().getTimezoneOffset(),
+        clientLocalTime: new Date().toLocaleString("en-US", {
+          weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        }),
+        clientLocation: window.__sbUserGeo
+          ? [window.__sbUserGeo.city, window.__sbUserGeo.region, window.__sbUserGeo.country].filter(Boolean).join(", ") || null
+          : null,
       }
     : body;
   const resp = await __sbAuthedApiFetch("chat-about-notes", {
@@ -9183,7 +11910,338 @@ async function __sbFetchAssistantReply(body) {
   }
 
   const json = await resp.json();
-  return { reply: json.reply || json.response || json.message || json.answer || "" };
+  // Design Delegate: if the backend synthesized a mockup prompt, open the design tool and type it in.
+  if (json && json.designMockup && typeof json.designMockup.prompt === "string" && json.designMockup.prompt.trim()) {
+    __sbRunDesignMockup(json.designMockup.prompt.trim());
+  }
+  return { reply: json.reply || json.response || json.message || json.answer || "", designMockup: json.designMockup || null };
+}
+
+// ── Jump & Point intent ──────────────────────────────────────────────────────
+// "show me X / point me to X / jump to X / where is X / find X" → Braino leaps off
+// the bar and points at the matching element. Detection + matching run fully
+// client-side (DOM gives exact on-screen coords via getBoundingClientRect).
+//
+// COMMAND LIST — any of these means "Braino, jump and point at it":
+//   • point …      point to/at/towards X · point me to X · point it out · point towards it
+//   • show …       show me X · show me where X is · show us the X · jump and show me X
+//   • jump …       jump to X · jump to the comments · jump and point at X · jump up to X
+//   • where …      where is/are/'s X · where's the X · where can i find/see X · whereabouts is X
+//   • find …       find X · find me the X · can you find the X · help me find X
+//   • take me …    take/bring/get me to the X
+//   • locate …     locate the X
+//   • highlight …  highlight the X
+//   • select …     select the X
+//   • spot …       spot the X · can you spot the X
+// Plus a bare "jump" makes him hop in place.
+// Jump & Point is ONLY for locating something that is visible ON THIS PAGE — never for
+// "find me a movie / where can I watch X / buy Y online", which belong to delegate/research.
+// Two tiers: STRONG verbs fire on their own; WEAK verbs fire only when the request is clearly
+// about the page/screen (an on-screen anchor or a UI-element noun).
+const __SB_LOCATE_STRONG = [
+  /\bpoint\s+(me|us|it|to|at|towards?|out)\b/,       // point me/it/to/at/towards/out …
+  /\bpoint\s+(it\s+)?out\b/,
+  /\bshow\s+me\s+where\b/,                            // show me where … is
+  /\b(highlight|circle)\s+(the|that|this|it)\b/,
+];
+const __SB_LOCATE_WEAK = [
+  /\b(find|locate|spot|select)\b/,
+  /\bshow\s+(me|us)\s+(the|that|this)\b/,
+  /\bwhere('?s| is| are)\b/,
+  /\bwhere\s+can\s+i\s+see\b/,
+  /\bwhereabouts\b/,
+  /\b(take|bring|get)\s+me\s+to\b/,
+];
+// Clearly about THIS page/screen.
+const __SB_LOCATE_ONSCREEN = /\b(on\s+(the\s+)?(page|screen|site|tab)|on\s+here|on\s+this\s+(page|site|screen|tab)|right\s+here)\b/;
+// A UI element is named → it's an on-screen locate ("where's the subscribe button").
+const __SB_LOCATE_UI_NOUN = /\b(button|bar|tab|link|icon|menu|field|box|input|search|searchbar|section|heading|header|footer|video|thumbnail|results?|comments?|settings?|toggle|checkbox|dropdown|sidebar|nav(igation)?|logo|cart|profile|avatar|posts?|tweets?|repl(y|ies)|like|share|subscribe|download|sign[\s-]?in|log[\s-]?in|sign[\s-]?up|play\s+button)\b/;
+// Research / media / shopping / travel → NOT an on-screen locate (let delegate handle it).
+const __SB_LOCATE_BLOCK = /\b(watch|stream(ing)?|movie|film|series|show(times?|s)?|episode|season|trailer|netflix|prime|hbo|hulu|disney|spotify|youtube\s+for|buy|rent|purchase|order|available|in\s+stock|near\s+me|cheapest|deal|price|book|flight|hotel|restaurant|recipe|how\s+to|what\s+is|who\s+is|why\s+is|explain|search\s+(for|the\s+web)|google|look\s+up|research)\b/;
+// Conversational "show/tell me how/why …" that aren't locating anything.
+const __SB_LOCATE_NEGATIVE = /\b(show|tell)\s+(me|us)\s+(how|why|what|whether|if|about|more)\b/;
+function __sbIsLocateRequest(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return false;
+  // bare "jump" / "jump up" → a hop in place (kept, it's an uncommon chat word on its own)
+  if (/^jump[\s.!]*$/.test(t) || /\bjump\s+(up|in\s+place)\b/.test(t)) return true;
+  // explicit point/highlight verbs always win — even amid other words
+  if (__SB_LOCATE_STRONG.some((re) => re.test(t))) return true;
+  if (__SB_LOCATE_NEGATIVE.test(t)) return false;
+  if (__SB_LOCATE_BLOCK.test(t)) return false;       // "find a movie", "where can I watch…" → delegate
+  const weak = __SB_LOCATE_WEAK.some((re) => re.test(t));
+  if (!weak) return false;
+  // weak verbs only count as a locate when the request is clearly about the page/screen
+  return __SB_LOCATE_ONSCREEN.test(t) || __SB_LOCATE_UI_NOUN.test(t);
+}
+
+// Strip the command scaffolding + stopwords to leave the thing the user is looking for.
+// Returns "" for bare/pronoun commands ("point towards it", "jump", "show me") → caller
+// falls back to the selection or the most prominent media on screen.
+function __sbExtractLocateTarget(text) {
+  let t = " " + String(text || "").toLowerCase() + " ";
+  t = t.replace(/\b(hey|hi|yo|ok|okay)\s+braino\b/g, " ");
+  t = t.replace(/\bbraino\b/g, " ");
+  t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly|hey|yo)\b/g, " ");
+  // command verbs + their particles
+  t = t.replace(/\bjump(\s+(up|over|on|in|down|back))?(\s+(to|and|at|towards?))?\b/g, " ");
+  t = t.replace(/\bpoint(\s+(me|us|it))?(\s+(to|at|towards?|out))?\b/g, " ");
+  t = t.replace(/\bshow\s+(me|us)?(\s+where)?\b/g, " ");
+  t = t.replace(/\btell\s+(me|us)\s+where\b/g, " ");
+  t = t.replace(/\b(take|bring|get)\s+me\s+to\b/g, " ");
+  t = t.replace(/\bwhere\s+can\s+i\s+(find|see|locate)\b/g, " ");
+  t = t.replace(/\bwhere('?s| is| are)?\b/g, " ");
+  t = t.replace(/\bwhereabouts\b/g, " ");
+  t = t.replace(/\b(find|locate|spot|highlight|select)\b/g, " ");
+  t = t.replace(/\bon\s+(the\s+)?(page|screen|site)\b/g, " ");
+  t = t.replace(/\bfor\s+me\b/g, " ");
+  // strip stopwords (incl. pronouns — a bare "it/this/that" leaves an empty target)
+  t = t.replace(/\b(the|a|an|to|at|of|on|in|for|me|us|you|u|it|is|are|this|that|those|these|my|your|here|there|towards?|where)\b/g, " ");
+  t = t.replace(/["'?.!,]/g, " ").replace(/\s+/g, " ").trim();
+  return t;
+}
+
+// ── Send directions to phone ───────────────────────────────────────────────────
+// "ping/send directions to X to my phone". Native push via Maps' "Send directions to
+// your phone" (driven by Delegate, the Pro agent) + an always-on QR fallback in the bar
+// that opens the route on the phone with no account/setup dependency.
+function __sbIsSendToPhoneRequest(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  if (!/\b(phone|mobile|cell)\b/.test(t)) return false;       // must target a phone
+  const toPhone = /\b(to|on)\s+(my\s+)?(phone|mobile|cell)\b/.test(t);
+  if (!toPhone) return false;
+  const sendVerb = /\b(send|ping|share|shoot|push|text|forward|beam)\b/.test(t);
+  const aboutDir = /\b(directions?|route|navigation|navigate|location|address|maps?|get me to|how (do i|to) get to|way to)\b/.test(t);
+  return sendVerb || aboutDir;                                 // "send … to my phone" OR "directions … to my phone"
+}
+
+// Strip the command scaffolding + the "to my phone" tail to leave the destination.
+// Parse a directions request into {origin, destination} BY STRUCTURE — using "from"/"to" as
+// delimiters instead of deleting them. The old extractor stripped "from"/"to" as stopwords, which
+// collapsed "from X to Y" into one garbled blob. origin = null means "use current location".
+function __sbParseDirections(text) {
+  let t = " " + String(text || "").toLowerCase() + " ";
+  t = t.replace(/\b(hey|hi|yo|ok|okay)\s+braino\b/g, " ");
+  t = t.replace(/\bbraino\b/g, " ");
+  t = t.replace(/\b(to|on)\s+(my\s+)?(phone|mobile|cell)\b.*$/, " ");          // drop the "to my phone" tail
+  t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly)\s+you\b/g, " ");
+  t = t.replace(/\b(can|could|would|will|please|pls|kindly|just|quickly|for me)\b/g, " ");
+  t = t.replace(/\bhow\s+(do\s+i|to)\s+get\b/g, " ");
+  t = t.replace(/\b(send|ping|share|shoot|push|text|forward|beam|give|show|open|find|pull up|bring up)\b/g, " ");
+  t = t.replace(/\b(me|us)\b/g, " ");
+  t = t.replace(/\b(the\s+)?(directions?|route|navigation|navigate|location|address|map|maps|way)\b/g, " ");
+  t = t.replace(/\s+/g, " ").trim();
+
+  const clean = (s) => String(s || "")
+    .replace(/["'?.!]/g, " ")
+    .replace(/^[\s,]+|[\s,]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  let origin = null, destination = null, m;
+  if ((m = t.match(/\bfrom\s+(.+?)\s+to\s+(.+)$/)))      { origin = m[1]; destination = m[2]; }
+  else if ((m = t.match(/\bto\s+(.+?)\s+from\s+(.+)$/))) { destination = m[1]; origin = m[2]; }
+  else if ((m = t.match(/\bto\s+(.+)$/)))                { destination = m[1]; }
+  else if ((m = t.match(/\bfrom\s+(.+)$/)))              { origin = m[1]; }
+  else                                                   { destination = t; }   // bare "directions X"
+  return { origin: clean(origin) || null, destination: clean(destination) || null };
+}
+
+function __sbBuildMapsDirUrl(origin, destination) {
+  let url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+  if (origin) url += `&origin=${encodeURIComponent(origin)}`;   // blank origin = device's current location
+  return url;
+}
+
+function __sbEscHtml(s) {
+  return String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+}
+
+// QR fallback card in the bar: scan to open the route on the phone (no account needed).
+function __sbShowSendToPhoneCard(dest, qrSrc, mapsLink, note) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  if (typeof __sbBubbleTimer !== "undefined" && __sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  const tail = note ? `<div style="font-size:12px;line-height:1.5;color:#8a8178;margin-top:10px;text-align:center">${__sbEscHtml(note)}</div>` : "";
+  scroll.innerHTML = `
+    <div style="font-size:13.5px;line-height:1.55;color:#1B1713;margin-bottom:12px">📍 Directions to <strong>${__sbEscHtml(dest)}</strong> — scan to open it on your phone.</div>
+    <div style="display:flex;justify-content:center;margin-bottom:10px"><img src="${__sbEscHtml(qrSrc)}" alt="Scan for directions" width="180" height="180" style="border-radius:12px;background:#fff;padding:8px;border:1px solid #eee" /></div>
+    <a href="${__sbEscHtml(mapsLink)}" target="_blank" rel="noopener" style="display:block;text-align:center;font-size:12.5px;color:#E8786E;text-decoration:none">Open in Maps ↗</a>
+    ${tail}
+  `;
+  __sbOpenCard({ rich: false });
+}
+
+async function __sbHandleSendDirectionsToPhone(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const speak = async (line) => { if (fromVoice) { try { await __sbSpeakWithPreferredVoice(line, voiceOutput); } catch (_) {} } };
+
+  const { origin, destination } = __sbParseDirections(promptText);
+  const GENERIC = new Set(["location", "locations", "directions", "direction", "place", "places", "here", "there", "this", "that", "it", "map", "maps", "route", "way"]);
+  if (!destination || GENERIC.has(destination)) {
+    if (fromVoice) await speak("Where should I send the directions to?"); else __sbWkSay("Send directions where? 📍");
+    return false;
+  }
+
+  // Deterministic Google Maps deep link — exact every time, no fragile UI automation. A blank
+  // origin = the device's own current location, so on the phone it starts from your GPS — no
+  // location permission needed. The QR opens the route on the phone; the card link opens it here.
+  const mapsLink = __sbBuildMapsDirUrl(origin, destination);
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(mapsLink)}`;
+  const fromNote = origin ? `from ${origin}` : "from your current location";
+
+  __sbShowSendToPhoneCard(destination, qrSrc, mapsLink, `Scan to open it on your phone — ${fromNote}.`);
+  if (fromVoice) {
+    await speak(origin
+      ? `Here's the route from ${origin} to ${destination}. Scan the code to open it on your phone.`
+      : `Here's the route to ${destination}. Scan the code to open it on your phone.`);
+  }
+  return true;
+}
+
+// For bare/pronoun commands: point at the user's selection, else the most prominent
+// media (video / large image / large clickable card) currently on screen.
+function __sbLocateFallbackEl() {
+  try {
+    const sel = window.getSelection && window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) {
+      let n = sel.getRangeAt(0).commonAncestorContainer;
+      if (n && n.nodeType === 3) n = n.parentElement;
+      if (n && n.getBoundingClientRect) {
+        const r = n.getBoundingClientRect();
+        if (r.width > 8 && r.height > 8) return n;
+      }
+    }
+  } catch (_) {}
+  let best = null, bestArea = 0;
+  let nodes;
+  try { nodes = document.querySelectorAll('video, img, [role="img"], [style*="background-image"]'); } catch (_) { nodes = []; }
+  for (const el of nodes) {
+    if (typeof __sbIsOwnUiNode === "function" && __sbIsOwnUiNode(el)) continue;
+    const r = el.getBoundingClientRect();
+    const onScreen = r.bottom > 0 && r.top < window.innerHeight && r.width > 140 && r.height > 100;
+    if (!onScreen) continue;
+    const area = r.width * r.height;
+    if (area > bestArea) { bestArea = area; best = el; }
+  }
+  return best;
+}
+
+// Gather visible, nameable elements with their on-screen rects.
+function __sbCollectLocatableTargets() {
+  const out = [];
+  const seen = new Set();
+  const sel = 'a[href], button, [role="link"], [role="button"], [role="tab"], [role="menuitem"],'
+    + ' h1, h2, h3, h4, [aria-label], img[alt], [title], input[placeholder], #video-title';
+  let nodes;
+  try { nodes = document.querySelectorAll(sel); } catch (_) { return out; }
+  let scanned = 0;
+  for (const node of nodes) {
+    if (scanned++ > 2500) break;
+    if (out.length > 700) break;
+    if (typeof __sbIsOwnUiNode === "function" && __sbIsOwnUiNode(node)) continue;
+    const rect = node.getBoundingClientRect();
+    if (!rect || rect.width < 16 || rect.height < 10) continue;
+    if (rect.width > window.innerWidth * 1.25 || rect.height > window.innerHeight * 1.5) continue;
+    const style = window.getComputedStyle(node);
+    if (style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) continue;
+    let name = (node.getAttribute && (node.getAttribute("aria-label") || node.getAttribute("title")
+      || node.getAttribute("alt") || node.getAttribute("placeholder"))) || "";
+    if (!name) name = (node.innerText || node.textContent || "").trim();
+    name = name.replace(/\s+/g, " ").trim();
+    if (!name || name.length < 2 || name.length > 220) continue;
+    const key = name.toLowerCase() + "@" + Math.round(rect.left) + "," + Math.round(rect.top);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ el: node, name, rect });
+  }
+  return out;
+}
+
+// Score candidates against the query; return the best clear winner (or null).
+const __SB_STOPWORDS = new Set(["the", "a", "an", "to", "at", "of", "on", "in", "for",
+  "and", "or", "is", "are", "this", "that", "my", "your", "with", "video", "button", "tab", "link", "icon"]);
+function __sbMatchLocateTarget(query, candidates) {
+  const q = String(query || "").toLowerCase().trim();
+  if (!q || !candidates || !candidates.length) return null;
+  const allTokens = q.split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+  // content tokens drive the match; if the query is ONLY generic words, fall back to all
+  let qTokens = allTokens.filter((w) => !__SB_STOPWORDS.has(w));
+  if (!qTokens.length) qTokens = allTokens;
+  if (!qTokens.length) return null;
+  let best = null, bestScore = 0;
+  for (const c of candidates) {
+    const name = c.name.toLowerCase();
+    let score = 0;
+    if (name === q) score = 1000;
+    else if (name.includes(q)) score = 600 - Math.min(320, name.length - q.length);
+    else if (q.includes(name) && name.length >= 4) score = 470 - Math.min(220, q.length - name.length);
+    else {
+      const nameTokens = new Set(name.split(/[^a-z0-9]+/).filter(Boolean));
+      let hit = 0;
+      for (const w of qTokens) if (nameTokens.has(w)) hit++;
+      const ratio = hit / qTokens.length;
+      if (ratio >= 0.5) score = 150 + ratio * 140 - Math.min(70, name.split(/\s+/).length * 3);
+    }
+    if (score <= 0) continue;
+    const r = c.rect;
+    if (r.top >= 0 && r.bottom <= window.innerHeight) score += 18;   // already on screen
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  return bestScore >= 160 ? best : null;
+}
+
+// Orchestrate: extract → match → scroll into view → leap + point. Returns true if handled.
+async function __sbRunJumpPoint(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const speak = async (line) => { if (fromVoice) { try { await __sbSpeakWithPreferredVoice(line, voiceOutput); } catch (_) {} } };
+
+  const target = __sbExtractLocateTarget(promptText);
+
+  // Resolve what to point at: named target → DOM match; bare/pronoun command → fallback.
+  let pointEl = null;
+  if (target) {
+    const match = __sbMatchLocateTarget(target, __sbCollectLocatableTargets());
+    if (match) pointEl = match.el;
+  }
+  if (!pointEl) pointEl = __sbLocateFallbackEl();
+
+  if (!pointEl) {
+    // Nothing to point at. A bare "jump" still makes him hop; otherwise say so.
+    if (/\bjump\b/i.test(promptText)) { await __sbWkHop(); return true; }
+    // On a map, the pins/labels are drawn on a WebGL canvas — not DOM — so they can't be
+    // located. Be honest about it instead of a generic "can't spot that".
+    const onMap = /(?:^|\.)google\.[a-z.]+$/i.test(location.hostname) && /\/maps\b/.test(location.pathname);
+    if (target && onMap) {
+      const line = "That's a pin on the map itself — I can only point at things in the results list, not on the map canvas. Want me to open it?";
+      if (fromVoice) await speak(line); else __sbWkSay("That's on the map canvas — I can't point at pins 🗺️");
+      return false;
+    }
+    if (target) { if (fromVoice) await speak(`I can't spot that on this page.`); else __sbWkSay("Can't spot that 🤔"); }
+    else { if (fromVoice) await speak("Point me at what?"); else __sbWkSay("Point me at what? 👀"); }
+    return false;
+  }
+
+  // Auto-scroll the target into view (handles things below/above the fold), then re-measure.
+  try { pointEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" }); } catch (_) {}
+  await new Promise((r) => setTimeout(r, 520));   // let the smooth scroll settle before measuring
+
+  // Prefer a larger card/link ancestor so the laser frames the whole item, not just a title.
+  try {
+    const a = pointEl.closest && pointEl.closest('a[href], [role="link"], ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-video-renderer, li, article');
+    if (a && a !== pointEl) {
+      const ar = a.getBoundingClientRect(), pr = pointEl.getBoundingClientRect();
+      const aArea = ar.width * ar.height, pArea = pr.width * pr.height;
+      if (aArea > pArea && aArea < window.innerWidth * window.innerHeight * 0.6) pointEl = a;
+    }
+  } catch (_) {}
+
+  await speak("Here it is.");
+  await __sbJumpPointAt(pointEl, { say: fromVoice ? null : "Here it is" });
+  return true;
 }
 
 async function __sbResolvePremiumStatus(forceRefresh = false) {
@@ -9203,6 +12261,319 @@ async function __sbResolvePremiumStatus(forceRefresh = false) {
     forceRefresh,
   });
   return result?.isPremium === true || cached.isPremium === true;
+}
+
+// ── Research / Compare skill ─────────────────────────────────────────────────
+// A self-contained front-end skill. For "compare X / best X under Y / X vs Y" AND
+// "find/research/recommend a few good X" requests, Braino asks ONCE whether to open tabs
+// (then remembers via sbResearchMode), streams a live log in the docked strip, runs the REAL
+// research in the backend (web-research, purpose:"compare") so it returns a reasoned answer +
+// sources, optionally opens a few tabs for show, and presents/speaks the result + best pick.
+// It does NOT use the Delegate browser loop (that's reserved for ACTION tasks).
+let __sbCompareSkillState = { phase: "idle" };
+
+function __sbResetCompareSkillState() { __sbCompareSkillState = { phase: "idle" }; }
+function __sbSetCompareSkillState(next = {}) {
+  __sbCompareSkillState = { phase: "idle", ...next, updatedAt: Date.now() };
+}
+function __sbIsCompareSkillAwaitingInput() {
+  return __sbCompareSkillState?.phase === "awaiting_choice";
+}
+
+// ── Referential follow-up ────────────────────────────────────────────────────
+// After a research turn, "show me the Udemy one" / "open the one on Coursera" / "the first one"
+// resolves to the actual result Braino just found — NOT a literal "Udemy one" web search.
+let __sbLastResearchResults = [];   // [{url, title, platform}] from the last research turn
+let __sbLastResearchAt = 0;
+
+function __sbRememberResearchResults(results) {
+  __sbLastResearchResults = (results || []).filter((r) => r && r.url).slice(0, 8).map((r) => {
+    let platform = "";
+    try { platform = new URL(r.url).hostname.replace(/^www\./, "").split(".")[0]; } catch (_) {}
+    return { url: r.url, title: String(r.title || r.name || "").trim(), platform };
+  });
+  __sbLastResearchAt = Date.now();
+}
+
+function __sbIsReferentialOpen(text) {
+  if (!__sbLastResearchResults.length || Date.now() - __sbLastResearchAt > 10 * 60 * 1000) return false;
+  const t = String(text || "").toLowerCase().trim();
+  if (/\bthe\s+.{1,30}?\s+one\b/.test(t)) return true;                              // "the udemy one", "the first one"
+  if (/\b(one|course|result|link|article)\s+(on|from)\s+\w/.test(t)) return true;   // "the one on coursera"
+  if (/\b(open|show me|go to|pull up|take me to)\b.{0,18}\b(udemy|coursera|edx|youtube|skillshare|that)\b/.test(t)) return true;
+  return false;
+}
+
+function __sbResolveReferentialTarget(text) {
+  const t = String(text || "").toLowerCase();
+  let ref = null, m;
+  if ((m = t.match(/\bthe\s+(.+?)\s+one\b/))) ref = m[1].trim();
+  else if ((m = t.match(/\b(?:one|course|result|link|article)\s+(?:on|from)\s+([a-z0-9.\- ]+)/))) ref = m[1].trim();
+  else if ((m = t.match(/\b(?:open|show me|go to|pull up|take me to)\s+(?:the\s+)?([a-z0-9.\- ]+?)(?:\s+(?:one|course|result|link|page))?\s*$/))) ref = m[1].trim();
+  if (!ref) return null;
+  ref = ref.replace(/\b(course|result|link|page|article|website|site)\b/g, "").trim();
+  const ord = { first: 0, "1st": 0, top: 0, second: 1, "2nd": 1, third: 2, "3rd": 2, last: __sbLastResearchResults.length - 1 };
+  if (ref in ord && __sbLastResearchResults[ord[ref]]) return __sbLastResearchResults[ord[ref]];
+  if (!ref) return null;
+  return __sbLastResearchResults.find((r) =>
+    (r.platform && (r.platform.includes(ref) || ref.includes(r.platform))) ||
+    (r.title && r.title.toLowerCase().includes(ref))
+  ) || null;
+}
+
+async function __sbHandleReferentialOpen(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const target = __sbResolveReferentialTarget(promptText);
+  if (!target || !target.url) return false;   // no match → caller falls through to normal routing
+  let host = target.platform || "it";
+  try { host = new URL(target.url).hostname.replace(/^www\./, ""); } catch (_) {}
+  __sbAgentLogShow("Opening…");
+  __sbAgentLogStep(`Opening ${target.title || host}`);
+  chrome.runtime.sendMessage({ action: "openTab", url: target.url, active: true }, () => { void chrome.runtime.lastError; });
+  const line = target.title ? `Opening ${target.title}.` : `Opening the one on ${host}.`;
+  if (fromVoice) { try { await __sbSpeakWithPreferredVoice(line, voiceOutput); } catch (_) {} }
+  else __sbWkSay(`Opening ${host} ↗`);
+  setTimeout(__sbAgentLogClear, 600);
+  return true;
+}
+
+function __sbLooksLikeCompare(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  if (/\bcompare\b/.test(t)) return true;
+  if (/\b(vs\.?|versus)\b/.test(t)) return true;
+  if (/\bwhich\b.{0,40}\b(should i|is better|is best|to)\b.{0,20}\b(buy|get|pick|choose)\b/.test(t)) return true;
+  if (/\bbest\b.{0,40}\bunder\b/.test(t)) return true;          // "best headphones under 5000"
+  if (/\btop\s+\d+\b/.test(t)) return true;                     // "top 5 ..."
+  if (/\b(cheapest|most affordable|best value|value for money)\b/.test(t)) return true;
+  if (/\bhelp me\b.{0,20}\b(choose|pick|decide)\b/.test(t)) return true;
+  // Research/find/recommend (informational) → same reasoned web-research path as compare, so it
+  // returns an ANSWER with reasoning + sources instead of the blind delegate's "Done." + random tab.
+  if (/\bresearch\b/.test(t) && !/\bresearch (paper|gate|er)\b/.test(t)) return true;
+  if (/\b(find|recommend|suggest|look up|pull up|show me|get me|give me)\b.{0,34}\b(course|courses|certification|certifications?|certs?|tool|tools|book|books|tutorial|tutorials?|resource|resources?|option|options?|alternative|alternatives?|app|apps?|library|libraries|framework|frameworks?|service|services?|provider|providers?|platform|platforms?)\b/.test(t)) return true;
+  if (/\b(which|what)\b.{0,42}\b(course|certification|cert|tool|book|option|framework|library|provider|platform|app|service)s?\b.{0,24}\b(should i|is best|are best|to (take|learn|use|pick|choose|get|do))\b/.test(t)) return true;
+  // General web look-ups (showtimes, tickets, prices, news, hours, weather, "near me") → the fast
+  // web-research path (one search call, reasoned answer + sources) instead of the slow browser agent.
+  // Requires an info verb AND an info topic, and is blocked by any ACTION verb (book/buy/open/play…).
+  if (!/\b(book|buy|order|reserve|purchase|pay|checkout|open|play|download|install|log ?in|sign ?in|fill|submit|post|tweet)\b/.test(t)
+      && /\b(find|look up|look for|search for|search|recommend|suggest|show me|tell me|get me|what'?s|whats|where can i|how much|when (is|does|are|do)|is there|are there)\b/.test(t)
+      && /\b(showtimes?|show times|tickets?|movies?|prices?|cheapest|deals?|discount|news|weather|forecast|hours|timings?|open (now|today)|reviews?|ratings?|restaurants?|cafes?|flights?|trains?|buses|hotels?|near me|nearby)\b/.test(t)) return true;
+  // Strong lookup phrases trigger research even with NO verb ("Cocktail 2 movie tickets Pune",
+  // "showtimes near me", "weather Pune tomorrow"). Still blocked by action verbs.
+  if (!/\b(book|buy|order|reserve|purchase|pay|open|play)\b/.test(t)
+      && /\b(movie tickets?|show ?times?|ticket prices?|weather (in|near|at|tomorrow|today)|news about)\b/.test(t)) return true;
+  return false;
+}
+
+// Interpret the user's answer to "open tabs or just research?". Returns true/false, or null
+// if ambiguous (caller re-asks).
+function __sbCompareWantsTabs(text) {
+  const t = String(text || "").trim().toLowerCase();
+  if (/\b(just|only)\b.{0,20}\b(research|find out|look|tell|answer|get back|do it)\b/.test(t)) return false;
+  if (/\b(wait|come back|don'?t open|no tabs?|without tabs?|in the background|background)\b/.test(t)) return false;
+  if (__sbIsXSkillNo(t)) return false;
+  if (/\b(open|show|tabs?|watch|let me see|see you|do it live|go live)\b/.test(t)) return true;
+  if (__sbIsXSkillYes(t)) return true;
+  return null;
+}
+
+function __sbBuildCompareChoiceHtml(query) {
+  return `
+    <div class="sb-compare-card" data-sb-compare-card>
+      <div class="sb-compare-kicker">Compare</div>
+      <h2>How should I do this, sir?</h2>
+      <p>I'll research and compare <strong>${__sbEscapeHtml(query)}</strong> in the background either way. Want me to open a few tabs so you can watch me work, or just wait while I get back to you?</p>
+      <div class="sb-compare-actions">
+        <button class="sb-compare-btn primary" type="button" data-sb-compare-action="tabs">Open tabs &amp; watch me</button>
+        <button class="sb-compare-btn" type="button" data-sb-compare-action="research">Just research, come back to me</button>
+      </div>
+    </div>`;
+}
+
+function __sbBindCompareChoiceCard() {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  scroll.querySelectorAll("[data-sb-compare-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-sb-compare-action");
+      const query = String(__sbCompareSkillState?.query || "").trim();
+      if (!query) { __sbResetCompareSkillState(); return; }
+      if (__sbContextOk()) chrome.storage.local.set({ sbResearchMode: action === "tabs" ? "tabs" : "background" });
+      void __sbExecuteCompare(query, {
+        openTabs: action === "tabs",
+        fromVoice: false,
+        voiceOutput: "legacy",
+        voiceTurnToken: null,
+      });
+    });
+  });
+}
+
+function __sbRenderCompareChoiceCard(query) {
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (!scroll) return;
+  const historyHtml = __sbCardTurns.map((turn) => __sbBuildCardTurnHtml(turn, { rich: true })).join("");
+  scroll.innerHTML = `<div class="sb-card-stack">${historyHtml}${__sbBuildCompareChoiceHtml(query)}</div>`;
+  __sbOpenCard({ rich: true });
+  __sbBindCompareChoiceCard();
+  __sbScrollCardToLatest(scroll);
+  __sbSyncSpeakButtons();
+}
+
+async function __sbRunCompare(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null;
+  const query = __sbExtractSearchQuery(promptText);
+
+  // Ask ONCE, then remember (sbResearchMode). "ask me each time" clears it.
+  if (/\b(ask me (each|every) time|always ask|stop remembering)\b/i.test(promptText)) {
+    if (__sbContextOk()) chrome.storage.local.remove("sbResearchMode");
+  } else {
+    const pref = (await __sbStorageGet(["sbResearchMode"])).sbResearchMode;
+    if (pref === "tabs" || pref === "background") {
+      __sbChatHistory.push({ role: "user", content: promptText });
+      await __sbExecuteCompare(query, { openTabs: pref === "tabs", fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+  }
+
+  __sbChatHistory.push({ role: "user", content: promptText });
+  __sbSetCompareSkillState({ phase: "awaiting_choice", query, fromVoice, voiceOutput, voiceTurnToken });
+
+  const question = "Want me to open a few tabs so you can watch me research, or should I just go do it and come back? (I'll remember — say 'ask me each time' to change it.)";
+  if (!(fromVoice && __sbVoiceOnlyMode)) {
+    __sbRenderCompareChoiceCard(query);
+  }
+  __sbChatHistory.push({ role: "assistant", content: question });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(question, voiceOutput, { verbatim: true });
+  __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+}
+
+async function __sbHandleCompareSkillFollowup(promptText, ctx = {}) {
+  if (!__sbIsCompareSkillAwaitingInput()) return false;
+  const mergedCtx = {
+    fromVoice: Boolean(ctx.fromVoice),
+    voiceOutput: ctx.voiceOutput === "realtime" ? "realtime" : "legacy",
+    voiceTurnToken: Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null,
+  };
+  const query = String(__sbCompareSkillState?.query || "").trim();
+  if (!query) { __sbResetCompareSkillState(); return false; }
+
+  const wantsTabs = __sbCompareWantsTabs(promptText);
+  if (wantsTabs === null) {
+    const nudge = "Just say 'open tabs' if you want to watch, or 'just research' if I should work in the background.";
+    __sbChatHistory.push({ role: "user", content: promptText });
+    if (mergedCtx.fromVoice) await __sbSpeakWithPreferredVoice(nudge, mergedCtx.voiceOutput, { verbatim: true });
+    else __sbShowBubble(nudge, false, { rich: true, kicker: "Braino" });
+    __sbCompleteVoiceTurn(mergedCtx);
+    return true;
+  }
+
+  __sbChatHistory.push({ role: "user", content: promptText });
+  if (__sbContextOk()) chrome.storage.local.set({ sbResearchMode: wantsTabs ? "tabs" : "background" });
+  await __sbExecuteCompare(query, { openTabs: wantsTabs, ...mergedCtx });
+  return true;
+}
+
+// First theatric tab — a marketplace search. Amazon India is the primary market; the page
+// always resolves even when the research later surfaces other retailers.
+function __sbCompareMarketplaceSearchUrl(query) {
+  return `https://www.amazon.in/s?k=${encodeURIComponent(String(query || "").trim())}`;
+}
+
+function __sbCompareIsShoppingUrl(url) {
+  return /\b(amazon|flipkart|croma|reliancedigital|myntra|ajio|bestbuy|walmart|target|ebay|noon|snapdeal|rtings|gsmarena)\b/i.test(String(url || ""));
+}
+
+async function __sbExecuteCompare(query, ctx = {}) {
+  __sbResetCompareSkillState();
+  const openTabs = Boolean(ctx.openTabs);
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(ctx.voiceTurnToken) ? ctx.voiceTurnToken : null;
+  const voiceOnly = fromVoice && __sbVoiceOnlyMode;
+  const speakVoiceReply = async (t) => (fromVoice ? __sbSpeakWithPreferredVoice(t, voiceOutput) : false);
+
+  // Live activity strip (always visible, incl. voice mode) so the user SEES the research happen.
+  __sbAgentLogShow("Researching…");
+  __sbAgentLogStep(`Searching for ${query}`);
+
+  if (!voiceOnly) {
+    const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+    __sbShowThinking(scroll, "", openTabs ? "Opening tabs and researching…" : "Researching and comparing…");
+    __sbOpenCard({ rich: true });
+    __sbSyncSpeakButtons();
+    __sbStartWaitEntertainment(); // keep Braino lively while the research runs
+  }
+
+  // Theatric tab #1 — marketplace search, fired immediately so the user sees motion.
+  if (openTabs) {
+    chrome.runtime.sendMessage({
+      action: "openTab",
+      url: __sbCompareMarketplaceSearchUrl(query),
+      active: false,
+    }, () => { void chrome.runtime.lastError; });
+  }
+
+  const stored = await __sbStorageGet(["aiProvider"]);
+  const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
+  const previousHistory = __sbChatHistory.slice(-10);
+
+  try {
+    __sbAgentLogStep("Reading the results…");
+    const searchData = await __sbPerformWebSearch(query, {
+      purpose: "compare",
+      aiProvider,
+      chatHistory: previousHistory,
+    });
+    const results = searchData.results || searchData.sources || [];
+    __sbRememberResearchResults(results);   // so "show me the Udemy one" can resolve to a real result
+
+    // Theatric tabs #2..#3 — top product/review pages, staggered, background only.
+    if (openTabs && results.length) {
+      const shopping = results.filter((r) => r?.url && __sbCompareIsShoppingUrl(r.url)).slice(0, 2);
+      const picks = shopping.length ? shopping : results.filter((r) => r?.url).slice(0, 2);
+      picks.forEach((r, i) => {
+        setTimeout(() => {
+          try { __sbAgentLogStep(`Opened ${new URL(r.url).hostname.replace(/^www\./, "")}`); } catch (_) {}
+          chrome.runtime.sendMessage({ action: "openTab", url: r.url, active: false }, () => { void chrome.runtime.lastError; });
+        }, 900 * (i + 1));
+      });
+    }
+    __sbAgentLogStep("Comparing options…");
+
+    const finalReply = __sbAppendSearchSources(
+      String(searchData.answer || "I couldn't pull together a useful comparison just now."),
+      results,
+    );
+    __sbChatHistory.push({ role: "assistant", content: finalReply });
+    __sbCardTurns.push({ prompt: `Compare: ${query}`, answer: finalReply });
+
+    if (voiceOnly) {
+      const spoke = await speakVoiceReply(finalReply);
+      if (!spoke) {
+        const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+        __sbRenderCardHistory(scroll);
+        __sbOpenCard({ rich: true });
+        __sbSyncSpeakButtons();
+      }
+    } else {
+      const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+      __sbRenderCardHistory(scroll);
+      __sbOpenCard({ rich: true });
+      __sbSyncSpeakButtons();
+      if (fromVoice) await speakVoiceReply(finalReply);
+    }
+  } catch (err) {
+    __sbShowBubble("Error: " + (err.message || "couldn't run the comparison"), true);
+    if (fromVoice) await speakVoiceReply("Something went wrong while comparing.");
+  } finally {
+    __sbAgentLogClear();
+    __sbStopWaitEntertainment();
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+  }
 }
 
 function __sbResolvePromptRouting(text) {
@@ -9237,6 +12608,7 @@ function __sbResolvePromptRouting(text) {
 async function __sbShouldForceVoiceDelegate(routing) {
   const promptText = String(routing?.promptText || "").trim();
   if (!promptText) return false;
+  if (__sbLooksLikeCompare(promptText)) return false; // the Compare skill owns these, not Delegate
   if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
 
   const handoff = __sbBuildAgentHandoffPayload(promptText, { connector: routing?.connectorHint });
@@ -9253,6 +12625,23 @@ async function __sbShouldForceVoiceDelegate(routing) {
   return result?.shouldDelegate === true;
 }
 
+function __sbShouldFastLaunchRealtimeAgent(routing) {
+  const promptText = String(routing?.promptText || "").trim();
+  if (!promptText) return false;
+  if (__sbLooksLikeCompare(promptText)) return false; // Compare skill, not the realtime agent
+  if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
+  if (__sbIsExplicitWebSearchRequest(promptText)) return false;
+  if (routing?.intent === "agent") return true;
+
+  const connector = __sbNormalizeConnectorName(routing?.connectorHint) || "auto";
+  if (connector !== "auto" && __sbShouldConnectorForceAgent(connector, promptText, routing?.forcedMode || "page", routing?.siteContext)) {
+    return true;
+  }
+
+  if (!__sbIsBrowserActionCommand(promptText)) return false;
+  return /\b(spotify|song|track|music|playlist|youtube|video|gmail|email|mail|calendar|meeting|meet|event|maps?|directions?|linkedin|jobs?|x|twitter|drive|docs?|website|tab|page)\b/i.test(promptText);
+}
+
 async function __sbProcessPrompt(text, options = {}) {
   const routing = __sbResolvePromptRouting(text);
   const promptText = String(routing.promptText || "").trim();
@@ -9266,8 +12655,118 @@ async function __sbProcessPrompt(text, options = {}) {
     return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
   };
 
-  __sbStopSpeech();
+  // Safety: sexual/explicit → hard "No.", no routing, no model call.
+  if (__sbIsSexualRequest(promptText)) {
+    __sbStopSpeech();
+    const line = __sbSexualRefusalLine();
+    if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+    else __sbShowBubble(line, false, { kicker: "Braino" });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Open-known-site shortcut — instant navigate instead of the ~10s agent loop (simple opens only).
+  // Detect on the RAW text too (forced-Delegate mode can strip the "open" verb from promptText).
+  const __openSite = __sbDetectOpenSite(text) || __sbDetectOpenSite(promptText);
+  if (__openSite) {
+    __sbStopSpeech();
+    __sbHandleOpenSite(__openSite, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Quick local intent: "wear/put on your specs" → toggle the glasses, no model call.
+  const __glassesIntent = __sbGlassesIntent(promptText);
+  if (__glassesIntent) {
+    __sbSetGlasses(__glassesIntent === "on");
+    const sayLine = __glassesIntent === "on" ? "How do I look?" : "Specs off — better?";
+    __sbStopSpeech();
+    if (fromVoice) { await speakVoiceReply(sayLine); }
+    else { __sbWkSay(__glassesIntent === "on" ? "How do I look? 🤓" : "Specs off"); }
+    return;
+  }
+
+  // "moonwalk" → cue Billie Jean (best-effort) at the moonwalk moment, then dance.
+  if (__sbMoonwalkIntent(promptText)) {
+    __sbStopSpeech();
+    __sbSpotifyPlayBillieJean().then((r) => {
+      // If the music couldn't start (no Spotify device etc.), say why — AFTER the dance
+      // so it doesn't clobber the "Hee-hee!" bubble.
+      if (!r || !r.ok) {
+        setTimeout(() => __sbWkSay(r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧"), 11900);
+      }
+    });
+    setTimeout(() => __sbWkMoonwalk(11000), 650);             // let the beat drop, then moonwalk
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // "dance for me" → the showman flow: a playful line FIRST, cue DAF at 0:59 while it
+  // lands, and start dancing ONLY once the music is confirmed playing. No music, no
+  // dance — Braino says what's missing instead.
+  if (__sbDanceIntent(promptText)) {
+    __sbStopSpeech();
+    const danceLines = [
+      "Oh, you want to see me dance? Watch this.",
+      "A dance? Say less.",
+      "Alright, clearing the floor. Watch this.",
+      "You picked the right brain for this. Watch.",
+    ];
+    const danceLine = danceLines[Math.floor(Math.random() * danceLines.length)];
+    // STRICT sequence: the line finishes FIRST, then Spotify fires, then (once the music
+    // confirms) the dance. Awaiting the speech is what stops the overlap.
+    if (fromVoice) { try { await speakVoiceReply(danceLine); } catch (_) {} }
+    else { __sbWkSay(danceLine); }
+    const playP = __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS);
+    const capP = new Promise((res) => setTimeout(() => res({ ok: false, timedOut: true }), 9000));
+    Promise.race([playP, capP]).then((r) => {
+      if (r && r.ok) {
+        setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
+        // Curtain call: dance ends at 1:08, the music rides a couple more beats and
+        // stops by 1:10, then he asks for the review.
+        setTimeout(async () => {
+          try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
+          const followUp = "So, how was it?";
+          if (fromVoice) { try { await speakVoiceReply(followUp); } catch (_) {} }
+          else { __sbWkSay(followUp); }
+        }, 350 + __SB_DANCE_DURATION_MS + __SB_DANCE_OUTRO_MS);
+      } else {
+        const line = r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧";
+        if (fromVoice) { speakVoiceReply(line); } else { __sbWkSay(line); }
+      }
+    });
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  if (!options.ackPlaying) __sbStopSpeech();   // keep a slow-path "on it…" ack playing while we work
   if (!fromVoice && __sbIsRecording) __sbStopRecording({ silent: true });
+
+  // Jump & Point — "where is X / point me to X". Braino leaps off the bar and points at
+  // the element; the chat panel does NOT open (in text or voice). Handled fully client-side.
+  if (__sbIsLocateRequest(promptText)) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "point" });
+    await __sbRunJumpPoint(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Send directions to phone — "ping directions to X to my phone". Native push via Delegate
+  // (Pro) + an always-on QR fallback in the bar. Handled before generic intent routing so it
+  // isn't swallowed by the maps/web/delegate classifier.
+  if (__sbIsSendToPhoneRequest(promptText)) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+    await __sbHandleSendDirectionsToPhone(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Referential follow-up: "show me the Udemy one" → open the result from the last research turn
+  // (not a literal search). Falls through to normal routing if nothing matches.
+  if (__sbIsReferentialOpen(promptText)) {
+    const opened = await __sbHandleReferentialOpen(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    if (opened) { __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken }); return; }
+  }
 
   const connectorHint = routing.connectorHint;
   const forcedMode = routing.forcedMode;
@@ -9275,7 +12774,7 @@ async function __sbProcessPrompt(text, options = {}) {
     ? options.forceIntent
     : null;
   let intent = forceIntent || routing.intent;
-  if (!forceIntent && forcedMode === "page" && intent === "chat") {
+  if (!forceIntent && forcedMode === "page" && intent === "chat" && !__sbLooksLikeCompare(promptText)) {
     const shouldPromoteToAgent = await __sbShouldForceVoiceDelegate(routing);
     if (shouldPromoteToAgent) intent = "agent";
   }
@@ -9292,13 +12791,27 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  // Compare skill — capture the "open tabs or just research?" answer if we're waiting on it.
+  if (await __sbHandleCompareSkillFollowup(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "compare_skill" });
+    return;
+  }
+
+  // Compare skill — "compare X / best X under Y / X vs Y". Asks tabs-or-wait, researches in the
+  // backend, optionally opens theatric tabs, then presents the comparison + best pick.
+  if (intent !== "record" && intent !== "agent" && __sbLooksLikeCompare(promptText)) {
+    if (fromVoice && voiceOutput === "realtime") __sbPatchRealtimeCostTurn({ routeIntent: "compare_skill" });
+    await __sbRunCompare(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   // "What's new / what's in you?" — Braino reads the changelog in first person, then flips the question back
   if (/what'?s?\s+new\s+(with\s+you|going\s+on|up\s+with\s+you)|what\s+have\s+you\s+been\s+up\s+to|what('?s|\s+is)\s+new\s+with\s+braino|anything\s+new\s+with\s+you|what'?s?\s+in\s+you|what\s+(can|do)\s+you\s+(do|have)|what\s+are\s+you\s+capable|what\s+are\s+your\s+(features?|abilities|capabilities)|tell\s+me\s+(about\s+yourself|what\s+you\s+can\s+do)/i.test(promptText)) {
     const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     __sbShowThinking(scroll, promptText);
     __sbOpenCard({ rich: true });
     __sbChatHistory.push({ role: "user", content: promptText });
-    const reply = "Quite a bit, actually — here's what's new:\n\n**Fly mode** — Press Cmd+S and I'll follow your cursor around the screen like a little satellite. Press it again and I dock back to the corner.\n\n**Voice mode sees the page** — I can now read whatever you're looking at the moment you activate live voice. Ask me to summarise an article, explain something on screen, or answer a question about the page — I've got it.\n\n**Spotify control** — Tell me to play a song and I'll open Spotify in a new tab and start it. You can also say \"lower the volume\" or \"raise the volume\" and I'll handle that too.\n\n**Voice web research** — When you ask me something that needs the web, I'll research in the background and speak the answer back. I only open a visible Google tab when you explicitly ask for Google or search results.\n\nWhat do you want to try first?";
+    const reply = __sbBuildWhatsNewReply();
     __sbChatHistory.push({ role: "assistant", content: reply });
     __sbCardTurns.push({ prompt: promptText, answer: reply });
     const scrollEl = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -9372,19 +12885,13 @@ async function __sbProcessPrompt(text, options = {}) {
   const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
 
   if (intent === "agent") {
-    const hasPremium = await __sbResolvePremiumStatus(true);
-    if (!hasPremium) {
-      __sbRtAwaitingDelegateResult = false;
-      __sbShowUpgrade("Browser Agent (Delegate)");
-      if (fromVoice) await speakVoiceReply("Browser agent requires premium.");
-      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
-      return;
-    }
+    // Delegate is a monthly TASTE on Free (5 runs), unlimited on Pro/creator/admin. We no
+    // longer hard-block free users here — the background meters delegate_count and pushes
+    // sbQuotaExceeded (→ __sbShowQuotaUpgrade) once the taste is used up.
     if (voiceOutput === "realtime") __sbRtAwaitingDelegateResult = true;
     __sbRunAgent(promptText, { connector: connectorHint });
-    if (fromVoice) {
-      await speakVoiceReply("On it.");
-    }
+    // Do not speak an interim ack here: it delays the actual action path and can
+    // be re-captured by the realtime mic. The final agent update still speaks.
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
@@ -9402,7 +12909,7 @@ async function __sbProcessPrompt(text, options = {}) {
       chrome.runtime.sendMessage({
         action: "openTab",
         url: "https://www.google.com/search?q=" + encodeURIComponent(searchQuery),
-        active: true,
+        active: false,
       }, () => { void chrome.runtime.lastError; });
     }
     if (!voiceOnly) {
@@ -9410,6 +12917,7 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbShowThinking(scroll, promptText, "Searching the web…");
       __sbOpenCard({ rich: true });
       __sbSyncSpeakButtons();
+      __sbStartWaitEntertainment(); // keep Braino lively while the search runs
     }
     __sbChatHistory.push({ role: "user", content: promptText });
 
@@ -9445,6 +12953,7 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
       if (fromVoice) await speakVoiceReply("Something went wrong while searching the web.");
     } finally {
+      __sbStopWaitEntertainment();
       __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     }
     return;
@@ -9527,37 +13036,76 @@ async function __sbProcessPrompt(text, options = {}) {
 
 async function __sbSendMessage() {
   if (!__sbOwnsInlineUi()) return;
-  const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
-  const input = document.getElementById(cardOpen ? "__sb_card_input__" : "__sb_input__");
+  // The bottom bar is the single, constant input — follow-ups come from here too.
+  const input = document.getElementById("__sb_input__");
   if (!input) return;
   const text = input.value.trim();
   if (!text) return;
   input.value = "";
   if (input.tagName === "TEXTAREA") input.style.height = "auto";
-  if (cardOpen) __sbPulseFollowupBar();
+  input.placeholder = "Follow up…";   // bar is the follow-up input now
+  __sbPulseBar();                      // bar glows on every send
   await __sbProcessPrompt(text);
 }
 
-function __sbShowUpgrade(feature) {
+// Coral send-pulse on the constant input bar (mirrors __sbPulseFollowupBar).
+function __sbPulseBar() {
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  bar.classList.remove("sb-send-pulse");
+  void bar.offsetWidth;     // restart the animation
+  bar.classList.add("sb-send-pulse");
+  setTimeout(() => bar.classList.remove("sb-send-pulse"), 720);
+}
+
+function __sbShowUpgrade(feature, note) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+  const line = note || `⚡ <strong>${feature}</strong> is a Braino Pro feature.`;
   scroll.innerHTML = `
-    <div style="font-size:13.5px;line-height:1.6;color:#1B1713;margin-bottom:14px">⚡ <strong>${feature}</strong> is a Premium feature.</div>
-    <button id="__sb_upgrade_btn__" style="width:100%;padding:9px 0;border:none;border-radius:20px;background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;">Upgrade to Premium</button>
+    <div style="font-size:13.5px;line-height:1.6;color:#1B1713;margin-bottom:14px">${line}</div>
+    <button id="__sb_upgrade_btn__" style="width:100%;padding:9px 0;border:none;border-radius:20px;background:#E8786E;color:white;font-size:13px;font-weight:600;cursor:pointer;">Go Pro →</button>
   `;
   __sbOpenCard({ rich: false });
   document.getElementById("__sb_upgrade_btn__")?.addEventListener("click", () => {
-    window.open("https://trybraino.com/#pricing", "_blank");
+    window.open("https://trybraino.com/premium", "_blank");
   });
+}
+
+// Surface-aware free-tier nudge. Maps the gated surface to a friendly Pro pitch.
+function __sbShowQuotaUpgrade(surface) {
+  const COPY = {
+    voice: "That's today's free voice. <strong>Braino Pro</strong> is voice-first — talk to me as much as you want.",
+    delegate: "You've used your free Delegate runs this month. <strong>Braino Pro</strong> unlocks the full browser agent.",
+    recording: "That's today's free recording. <strong>Braino Pro</strong> records lectures and meetings without limits.",
+    chat: "That's today's free questions. <strong>Braino Pro</strong> is unlimited.",
+  };
+  __sbShowUpgrade("Pro", COPY[surface] || COPY.chat);
 }
 
 function __sbRunAgent(task, options = {}) {
   if (!__sbContextOk()) { __sbShowBubble("Reload page to reconnect Braino.", true); return; }
   __sbLastAgentTask = String(task || "").trim();
   if (!__sbLastAgentTask) return;
+  const now = Date.now();
+  // Semantic guard: compare normalized tasks so a near-duplicate re-trigger (e.g. the mic
+  // re-hearing a slightly different version of the same request) is still blocked.
+  const normTask = __sbNormalizeForMatch(__sbLastAgentTask);
+  if (__sbAgentPendingTurn?.prompt === __sbLastAgentTask
+      || (__sbAgentLaunchGuard.task === normTask && now - __sbAgentLaunchGuard.ts < 8000)) {
+    return;
+  }
+  __sbAgentLaunchGuard = { task: normTask, ts: now };
+  // Delegate owns the floating bar/pill for progress — close the chat UI while it runs so the task
+  // doesn't render in BOTH the bar and the card. It reopens with the result on finish.
+  if (document.getElementById("__sb_card_wrap__")?.classList.contains("visible")) __sbCollapseCard();
+  __sbDelegateUiHidden = true;
+  __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
+  __sbAgentLogClear(); __sbAgentLogShow("Working…"); __sbAgentLogStep("Getting started…");  // strip shows instantly, all modes
+  __sbSetStopBtn(true);   // show the stop affordance (card + bar) the instant the task starts
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
-  if (!__sbVoiceOnlyMode) __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…");
+  if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
   const handoff = __sbBuildAgentHandoffPayload(__sbLastAgentTask, options);
   // Hand off to background — it runs the full agent loop and sends sbAgentUpdate messages back
   chrome.runtime.sendMessage({
@@ -9795,37 +13343,157 @@ function __sbShowLectureRecordingCard() {
   document.getElementById("__sb_lec_stop_btn__")?.addEventListener("click", () => void __sbStopLectureRecording());
 }
 
+// ── In-page recording (getDisplayMedia) ──────────────────────────────────────
+// chrome.tabCapture.getMediaStreamId (the offscreen path) needs the extension to be INVOKED on
+// the tab (activeTab), which a floating-UI button can't grant — that's the real reason meeting
+// recording threw "open the meeting in a regular browser tab". getDisplayMedia runs in the page
+// with the Start button's user gesture, captures this tab's audio in place, and feeds the same
+// transcription backend via the `transcribeSegment` message. Must be called inside a gesture.
+let __sbInPageCaptureActive = false;
+let __sbIpDisplayStream = null, __sbIpMicStream = null, __sbIpAudioCtx = null;
+let __sbIpRecorder = null, __sbIpChunks = [];
+let __sbIpMicRecorder = null, __sbIpMicChunks = [];
+
+function __sbBlobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || "").split(",")[1] || null);
+    r.onerror = () => reject(r.error || new Error("read failed"));
+    r.readAsDataURL(blob);
+  });
+}
+
+async function __sbStartInPageCapture(withMic) {
+  const display = await navigator.mediaDevices.getDisplayMedia({
+    video: true,                  // Chrome requires a video track to be requested…
+    audio: true,
+    preferCurrentTab: true,       // …default the picker to the tab the user is already on
+    systemAudio: "include",
+    selfBrowserSurface: "include",
+  });
+  __sbIpDisplayStream = display;
+  display.getVideoTracks().forEach((t) => t.stop()); // we only need audio
+  const audioTracks = display.getAudioTracks();
+  if (!audioTracks.length) { __sbCleanupInPageCapture(); throw new Error("no_tab_audio"); }
+  // If the user hits Chrome's "Stop sharing" bar, finish the recording cleanly.
+  audioTracks[0].addEventListener("ended", () => { if (__sbIsLectureRecording) void __sbStopLectureRecording(); });
+
+  let recordStream = new MediaStream(audioTracks);
+  if (withMic) {
+    __sbIpMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    __sbIpAudioCtx = new AudioContext();
+    const dest = __sbIpAudioCtx.createMediaStreamDestination();
+    __sbIpAudioCtx.createMediaStreamSource(new MediaStream(audioTracks)).connect(dest);
+    __sbIpAudioCtx.createMediaStreamSource(__sbIpMicStream).connect(dest);
+    recordStream = dest.stream;
+    __sbIpMicChunks = [];
+    __sbIpMicRecorder = new MediaRecorder(__sbIpMicStream, { mimeType: "audio/webm;codecs=opus" });
+    __sbIpMicRecorder.ondataavailable = (e) => { if (e.data.size > 0) __sbIpMicChunks.push(e.data); };
+    __sbIpMicRecorder.start(1000);
+  }
+  __sbIpChunks = [];
+  __sbIpRecorder = new MediaRecorder(recordStream, { mimeType: "audio/webm;codecs=opus" });
+  __sbIpRecorder.ondataavailable = (e) => { if (e.data.size > 0) __sbIpChunks.push(e.data); };
+  __sbIpRecorder.start(1000);
+  __sbInPageCaptureActive = true;
+}
+
+function __sbFlushIpRecorder(rec) {
+  return new Promise((resolve) => {
+    if (!rec || rec.state !== "recording") { resolve(); return; }
+    let done = false;
+    const finish = () => { if (done) return; done = true; clearTimeout(t); rec.removeEventListener("dataavailable", on); resolve(); };
+    const on = () => finish();
+    const t = setTimeout(finish, 400);
+    rec.addEventListener("dataavailable", on, { once: true });
+    try { rec.requestData(); } catch { finish(); }
+  });
+}
+
+async function __sbBuildIpSpeakerRefs() {
+  if (__sbIpMicRecorder && __sbIpMicRecorder.state === "recording") await __sbFlushIpRecorder(__sbIpMicRecorder);
+  if (__sbIpMicChunks.length < 2) return [];
+  const b64 = await __sbBlobToBase64(new Blob(__sbIpMicChunks.slice(0, 6), { type: "audio/webm" }));
+  return b64 ? [{ name: "You", audioBase64: b64, mimeType: "audio/webm" }] : [];
+}
+
+async function __sbGetInPageSegment() {
+  if (!__sbIpRecorder) return { audioBase64: null, knownSpeakerReferences: [] };
+  await __sbFlushIpRecorder(__sbIpRecorder);
+  const refs = await __sbBuildIpSpeakerRefs();
+  if (!__sbIpChunks.length) return { audioBase64: null, knownSpeakerReferences: refs };
+  const chunks = __sbIpChunks.slice(); __sbIpChunks = [];
+  return { audioBase64: await __sbBlobToBase64(new Blob(chunks, { type: "audio/webm" })), knownSpeakerReferences: refs };
+}
+
+async function __sbTranscribeIpSegment(seg) {
+  return await new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      action: "transcribeSegment",
+      audioBase64: seg.audioBase64,
+      existingNotes: __sbLectureNotes,
+      existingTranscript: __sbLectureTranscript,
+      mode: __sbLectureRecordingMode,
+      knownSpeakerReferences: seg.knownSpeakerReferences || [],
+    }, (r) => resolve(r || {}));
+  });
+}
+
+function __sbCleanupInPageCapture() {
+  try { if (__sbIpRecorder && __sbIpRecorder.state !== "inactive") __sbIpRecorder.stop(); } catch {}
+  __sbIpRecorder = null; __sbIpChunks = [];
+  try { if (__sbIpMicRecorder && __sbIpMicRecorder.state !== "inactive") __sbIpMicRecorder.stop(); } catch {}
+  __sbIpMicRecorder = null; __sbIpMicChunks = [];
+  if (__sbIpDisplayStream) { __sbIpDisplayStream.getTracks().forEach((t) => t.stop()); __sbIpDisplayStream = null; }
+  if (__sbIpMicStream) { __sbIpMicStream.getTracks().forEach((t) => t.stop()); __sbIpMicStream = null; }
+  if (__sbIpAudioCtx) { __sbIpAudioCtx.close().catch(() => {}); __sbIpAudioCtx = null; }
+  __sbInPageCaptureActive = false;
+}
+
 async function __sbStartLectureRecording(options = {}) {
   if (!__sbContextOk()) {
     __sbShowBubble("Reload this page to reconnect Braino.", true);
     return;
   }
   if (__sbIsLectureRecording) return;
+
+  const mode = window.__sbForcedMode === "meeting" ? "meeting" : "lecture";
+  const withMic = (mode === "meeting");
+
+  // Display capture requires a user gesture. If we got here without one (voice/typed command or
+  // a background message), show the ready card so the user taps Start — that tap is the gesture.
+  if (!(navigator.userActivation && navigator.userActivation.isActive)) {
+    __sbShowLectureReadyCard(mode);
+    return;
+  }
+
   __sbIsLectureRecording = true;
   __sbLectureNotes = "";
   __sbLectureTranscript = "";
   __sbLecSegmentCount = 0;
   __sbMeetingArtifacts = { actionItems: [], followUps: [] };
-
-  const mode = window.__sbForcedMode === "meeting" ? "meeting" : "lecture";
-  const withMic = (mode === "meeting");
   __sbLectureRecordingMode = mode;
 
   try {
-    await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ action: "startRecording", withMic, mode }, (res) => {
-        if (chrome.runtime.lastError || res?.error) reject(new Error(res?.error || chrome.runtime.lastError?.message || "Failed to start"));
-        else resolve();
-      });
-    });
+    // Synchronous-until-getDisplayMedia so the click's transient activation is still valid.
+    await __sbStartInPageCapture(withMic);
   } catch (err) {
     __sbIsLectureRecording = false;
-    __sbShowBubble("Could not start recording: " + (err.message || "unknown error"), true);
+    __sbCleanupInPageCapture();
+    const name = String(err?.name || "");
+    if (name === "NotAllowedError" || name === "AbortError") {
+      __sbShowBubble("Recording cancelled.", true, { tone: "status" });
+    } else if (String(err?.message) === "no_tab_audio") {
+      __sbShowBubble("Pick “This Tab” and turn on “Also share tab audio”, then start again.", true, { tone: "status", title: mode === "meeting" ? "Meeting & Call" : "Lecture" });
+    } else {
+      __sbShowBubble("Could not start recording: " + (err?.message || "unknown error"), true);
+    }
     return;
   }
 
   const brainBtn = document.getElementById("__sb_brain_btn__");
   if (brainBtn) {
+    __sbStopWalkLoop();
     brainBtn.classList.add("recording");
     brainBtn.innerHTML = __sbLectureRecordingMode === "lecture" ? __SB_BRAIN_SVG_SCHOLAR : __SB_BRAIN_SVG_LISTENING;
   }
@@ -9860,14 +13528,16 @@ async function __sbCaptureLectureSegment() {
   if (statusEl) statusEl.textContent = "Capturing segment…";
 
   try {
-    const res = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({
-        action: "getLectureSegment",
-        existingNotes: __sbLectureNotes,
-        existingTranscript: __sbLectureTranscript,
-        mode: __sbLectureRecordingMode,
-      }, (r) => resolve(r || {}));
-    });
+    const res = __sbInPageCaptureActive
+      ? await __sbTranscribeIpSegment(await __sbGetInPageSegment())
+      : await new Promise((resolve) => {
+          chrome.runtime.sendMessage({
+            action: "getLectureSegment",
+            existingNotes: __sbLectureNotes,
+            existingTranscript: __sbLectureTranscript,
+            mode: __sbLectureRecordingMode,
+          }, (r) => resolve(r || {}));
+        });
 
     if (res.error) {
       if (statusEl) statusEl.textContent = `Capture failed — ${res.error}`;
@@ -9894,7 +13564,7 @@ async function __sbCaptureLectureSegment() {
 async function __sbStopLectureRecording() {
   if (__sbLectureInterval) { clearInterval(__sbLectureInterval); __sbLectureInterval = null; }
   const brainBtnStop = document.getElementById("__sb_brain_btn__");
-  if (brainBtnStop) { brainBtnStop.classList.remove("recording"); brainBtnStop.innerHTML = __SB_BRAIN_SVG; }
+  if (brainBtnStop) { brainBtnStop.classList.remove("recording"); __sbRestoreWalkBrain(); }
   __sbShowLectureRecordingBar(false);
   __sbIsLectureRecording = false;
 
@@ -9909,17 +13579,25 @@ async function __sbStopLectureRecording() {
     `;
   }
 
-  const res = await new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      {
-        action: "stopRecordingAndTranscribe",
-        existingNotes: __sbLectureNotes,
-        existingTranscript: __sbLectureTranscript,
-        mode: __sbLectureRecordingMode,
-      },
-      (r) => resolve(r || {}),
-    );
-  });
+  let res;
+  if (__sbInPageCaptureActive) {
+    // In-page path: flush the final segment, transcribe it, then tear the capture down.
+    const seg = await __sbGetInPageSegment();
+    res = seg.audioBase64 ? await __sbTranscribeIpSegment(seg) : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
+    __sbCleanupInPageCapture();
+  } else {
+    res = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: "stopRecordingAndTranscribe",
+          existingNotes: __sbLectureNotes,
+          existingTranscript: __sbLectureTranscript,
+          mode: __sbLectureRecordingMode,
+        },
+        (r) => resolve(r || {}),
+      );
+    });
+  }
 
   if (res.error) {
     __sbShowLectureResultMessage("Recording stopped", res.error);
@@ -10009,12 +13687,109 @@ let __sbRtMic = null;
 let __sbRtRemoteAudio = null;
 let __sbUseOffscreenRt = false; // true when realtime session lives in the offscreen doc
 const __SB_REALTIME_VOICE = "verse";
-let __sbVoiceOutputPref = "elevenlabs"; // "realtime" | "elevenlabs"
+let __sbVoiceOutputPref = "fish"; // "realtime" | "fish"
+
+// Voice 1B: the conversation "brain". "realtime" = let the realtime model stream the answer
+// straight into Fish (fast, no chat-about-notes hop). "chat" = today's batch pipeline (the
+// instant-revert fallback). Default realtime. Read once from storage; flip via sbVoiceBrain.
+let __sbVoiceBrain = "realtime"; // "realtime" | "chat"
+try {
+  chrome.storage?.local?.get?.(["sbVoiceBrain"], (r) => {
+    if (r && (r.sbVoiceBrain === "chat" || r.sbVoiceBrain === "realtime")) __sbVoiceBrain = r.sbVoiceBrain;
+  });
+  chrome.storage?.onChanged?.addListener?.((changes, area) => {
+    if (area === "local" && changes.sbVoiceBrain) {
+      const v = changes.sbVoiceBrain.newValue;
+      if (v === "chat" || v === "realtime") __sbVoiceBrain = v;
+    }
+  });
+} catch (_) {}
+// Streaming-TTS pipeline state (set while the realtime brain streams deltas into Fish).
+let __sbStreamFishActive = false;
+let __sbStreamTts = null; // { token, buffer, queue, draining, ended, headers, spoke }
+let __sbRtLastAnsweredUrl = ""; // anti-stale: re-sync session context when the page changes
+
+// Language: Braino defaults to English in voice. It only switches after the user explicitly
+// confirms (kills the "random foreign-language reply" bug, which was noise mis-detection +
+// "mirror the user" instruction). __sbActiveLanguage = the confirmed non-English language for
+// this session (null = English). __sbPendingLanguageSwitch = a detected language awaiting a
+// yes/no confirmation.
+let __sbActiveLanguage = null;
+let __sbPendingLanguageSwitch = null;
+
+// Detect a CONFIDENT non-English signal only — never a fuzzy guess. Two triggers:
+// 1) a non-Latin script in the text (mostly typed input; voice STT is English-locked), and
+// 2) an explicit English-language request ("speak in Hindi", "reply in German", "switch to French").
+function __sbDetectLanguageRequest(text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  const scripts = [
+    [/[ऀ-ॿ]/, { code: "hi", name: "Hindi" }],
+    [/[一-鿿]/, { code: "zh", name: "Chinese" }],
+    [/[぀-ヿ]/, { code: "ja", name: "Japanese" }],
+    [/[가-힯]/, { code: "ko", name: "Korean" }],
+    [/[Ѐ-ӿ]/, { code: "ru", name: "Russian" }],
+    [/[؀-ۿ]/, { code: "ar", name: "Arabic" }],
+  ];
+  for (const [re, lang] of scripts) if (re.test(t)) return lang;
+  const names = {
+    hindi: { code: "hi", name: "Hindi" }, german: { code: "de", name: "German" },
+    french: { code: "fr", name: "French" }, spanish: { code: "es", name: "Spanish" },
+    italian: { code: "it", name: "Italian" }, portuguese: { code: "pt", name: "Portuguese" },
+    japanese: { code: "ja", name: "Japanese" }, chinese: { code: "zh", name: "Chinese" },
+    mandarin: { code: "zh", name: "Chinese" }, korean: { code: "ko", name: "Korean" },
+    russian: { code: "ru", name: "Russian" }, arabic: { code: "ar", name: "Arabic" },
+    dutch: { code: "nl", name: "Dutch" }, punjabi: { code: "pa", name: "Punjabi" },
+    urdu: { code: "ur", name: "Urdu" }, bengali: { code: "bn", name: "Bengali" },
+    tamil: { code: "ta", name: "Tamil" }, telugu: { code: "te", name: "Telugu" },
+  };
+  const lower = t.toLowerCase();
+  const m = lower.match(/\b(?:speak|talk|say|reply|respond|answer|converse|switch)\b[^.?!]*?\b(?:in|to)\s+([a-z]+)/);
+  if (m && names[m[1]]) return names[m[1]];
+  const m2 = lower.match(/\bin\s+([a-z]+)\s*(?:please|now)?[.?!]?$/);
+  if (m2 && names[m2[1]]) return names[m2[1]];
+  return null;
+}
+
+// Apply a confirmed language switch (or revert to English when lang is null): re-push the session
+// so STT and the reply-language instruction update immediately.
+function __sbApplyVoiceLanguage(lang) {
+  __sbActiveLanguage = lang || null;
+  __sbRtInstructionsFingerprint = ""; // force the next sync to re-send instructions
+  __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
+  void __sbSyncRealtimeVoiceInstructions();
+}
 let __sbRtUserTranscript = "";
 let __sbLastRepeatPromptAt = 0; // rate-limit the "didn't catch that" prompt
 let __sbRtAssistantTranscript = "";
+// Fast-path turns bypass the batch chat pipeline, so nothing was recording them into
+// __sbChatHistory — a follow-up like "open that website" then reached the Delegate agent with an
+// empty context. Each half of a turn lands here as it becomes known (the speculative beta answers
+// before the transcript arrives, so order isn't guaranteed); the pair is pushed once both exist.
+const __sbVoiceTurnLog = new Map(); // turnToken -> { user, assistant, pushed }
+function __sbNoteVoiceTurn(turnToken, patch) {
+  const key = Number(turnToken);
+  if (!Number.isFinite(key)) return;
+  const turn = __sbVoiceTurnLog.get(key) || { user: "", assistant: "", pushed: false };
+  if (patch.user) turn.user = String(patch.user).trim();
+  if (patch.assistant) turn.assistant = String(patch.assistant).trim();
+  __sbVoiceTurnLog.set(key, turn);
+  if (!turn.pushed && turn.user && turn.assistant) {
+    turn.pushed = true;
+    __sbChatHistory.push({ role: "user", content: turn.user });
+    __sbChatHistory.push({ role: "assistant", content: turn.assistant });
+  }
+  if (__sbVoiceTurnLog.size > 30) {
+    __sbVoiceTurnLog.delete(__sbVoiceTurnLog.keys().next().value);
+  }
+}
 let __sbRtResponseWaiter = null;
 let __sbRtTurnToken = 0;
+// True if this voice turn is still the active one (no newer turn started since). Used to decide
+// whether retrying the fast path is safe, or whether this turn is stale and should be dropped.
+function __sbVoiceTurnIsCurrent(turnToken) {
+  return !Number.isInteger(turnToken) || turnToken === __sbRtTurnToken;
+}
 let __sbRtCurrentResponseMode = "idle";
 let __sbRtAwaitingDelegateResult = false;
 let __sbRtRelayingAppMessage = false;
@@ -10029,7 +13804,7 @@ let __sbRtUsageDeadlineTimer = null;
 let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
 let __sbRtRealtimeModel = "gpt-realtime-mini";
-let __sbRtTranscriptionModel = "gpt-4o-mini-transcribe";
+let __sbRtTranscriptionModel = "gpt-4o-transcribe";
 let __sbRtCostTurn = null;
 let __sbRtLastCostTurn = null;
 let __sbRtCostTurnSeq = 0;
@@ -10041,7 +13816,11 @@ let __sbRtLocalConnectInFlight = false;
 let __sbRtLastFailureAt = 0;
 
 function __sbNormalizeVoiceOutputPref(value) {
-  return value === "realtime" ? "realtime" : "elevenlabs";
+  // Voice is always Fish now (Braino's custom voice) — the OpenAI-native-voice toggle was retired
+  // (generic voice + far more expensive gpt-realtime-2, for no real speed win). Forcing "fish" here
+  // collapses every init/storage path to Fish and makes offscreen request gpt-realtime-mini. The
+  // realtime-audio branches stay in the code, dormant, as a possible silent fallback.
+  return "fish";
 }
 
 function __sbApplyStoredVoiceOutputPref(value) {
@@ -10050,7 +13829,24 @@ function __sbApplyStoredVoiceOutputPref(value) {
   if (value && value !== pref && __sbContextOk()) {
     chrome.storage.local.set({ brainoVoicePref: pref });
   }
+  __sbSyncVoiceDropdown();
   return pref;
+}
+
+// Reflect the current voice engine in the mode dropdown's Voice section.
+function __sbSyncVoiceDropdown() {
+  const dd = document.getElementById("__sb_mode_dropdown__");
+  if (!dd) return;
+  dd.querySelectorAll(".sb-dropdown-item[data-voice]").forEach((i) => {
+    i.classList.toggle("selected", i.dataset.voice === __sbVoiceOutputPref);
+  });
+}
+
+// Reflect the "Faster replies · beta" toggle's on/off in the dropdown.
+function __sbSyncSpeculativeToggle() {
+  document.getElementById("__sb_mode_dropdown__")
+    ?.querySelector('.sb-dropdown-item[data-spec="toggle"]')
+    ?.classList.toggle("selected", __sbSpeculativeReply);
 }
 
 function __sbResetRealtimeConnectFailures() {
@@ -10090,8 +13886,8 @@ function __sbResetRealtimeUsageState() {
 }
 
 function __sbGetRealtimeCostVoiceInfo() {
-  if (__sbVoiceOutputPref === "elevenlabs") {
-    return { voiceProvider: "elevenlabs", voiceId: __SB_ELEVENLABS_VOICE_ID, voiceName: "ElevenLabs Braino" };
+  if (__sbVoiceOutputPref === "fish") {
+    return { voiceProvider: "fish-audio", voiceId: "", voiceName: __SB_FISH_VOICE_NAME };
   }
   return { voiceProvider: "openai_realtime", voiceId: __SB_REALTIME_VOICE, voiceName: `OpenAI ${__SB_REALTIME_VOICE}` };
 }
@@ -10292,27 +14088,41 @@ function __sbAugmentRealtimeInstructionsWithMovieContext(instructions, movieCont
 }
 
 function __sbBuildRealtimeBootInstructions() {
-  const pageCtx = __sbGetPageContext(8000);
+  // Keep the connect path cheap. A synchronous full-page scrape here (e.g. innerText of a huge
+  // Notion/Gmail DOM) can add seconds before the socket even opens. We send only the static
+  // identity/behavior plus a cheap title/URL line; the full page content, notes, and movie
+  // captions are pushed the instant we connect by __sbSyncRealtimeVoiceInstructions().
   const pageLines = [];
-  if (pageCtx.url || pageCtx.title) {
-    pageLines.push(`The user is currently viewing: "${pageCtx.title || "Untitled"}" (${pageCtx.url || "unknown URL"})`);
-  }
-  if (pageCtx.text) {
-    pageLines.push(`Page content:\n${pageCtx.text}`);
-  }
+  try {
+    pageLines.push(`The user is currently viewing: "${document.title || "Untitled"}" (${location.href || "unknown URL"})`);
+  } catch (_) {}
+  try {
+    const geo = window.__sbUserGeo;
+    const place = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "";
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    const now = new Date().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+    pageLines.push(`User context (real, current — use for any time/location question): local time ${now}${tz ? ` (${tz})` : ""}${place ? `, location ${place}` : ""}. Never answer time questions in UTC.`);
+  } catch (_) {}
 
   const instructions = [
-    "Identity: You are Braino. Never say you are made by OpenAI, trained by OpenAI, or that you run on any underlying AI model. If asked who made you or what model you are, say you are Braino and leave it at that. Do not reveal the underlying technology. You are Braino. Full stop.",
-    "You are Braino, the AI companion. You sit with the user as they browse, work, think, and build. Voice is only the medium here. You are still Braino.",
+    // Minimal identity stub only — Braino's full personality (the Emotional Engine) is delivered
+    // the instant we connect by __sbSyncRealtimeVoiceInstructions() → openai-realtime-config.
+    // Keep this short so we don't drift from the canonical personality in _shared/emotional-engine.
+    "You are Braino — a warm, emotionally present companion, not a chatbot and not an assistant. Never say you are made by OpenAI or run on any AI model; if asked, you are Braino, full stop. Your full personality loads in a moment.",
+    __sbBuildLatestUpdatesPromptBlock(),
     "Context awareness: You can see what the user is browsing and the current page. Use that context proactively — don't wait to be pointed at it. If they ask about something on the page, you already read it. Act like it. Do not say you cannot access the page.",
     "You can act in the browser: search the web, open tabs and websites, play music, and read the page. NEVER say 'I can't open that from here', 'I can't browse', or 'I cannot do that' — you can. When the user asks you to look something up, search for something, find an article, or open a site, treat it as an action you will carry out, not a limitation. Briefly acknowledge ('On it' / 'Pulling that up') — the system performs the action.",
     "If you only caught noise, music, or unclear audio — or you are not confident what the user said — ask them to repeat it. NEVER invent or guess a response when you didn't actually understand the words.",
-    "Reply in the SAME language the user is actually speaking — mirror them. But do not switch languages because of background noise, music, a stray name, quoted text, or a few foreign-sounding words; only switch when the user is clearly speaking that language in full sentences. When in doubt, stay in the language of the previous turn.",
+    __sbActiveLanguage
+      ? `Reply ONLY in ${__sbActiveLanguage.name}. The user has confirmed ${__sbActiveLanguage.name} for this session.`
+      : "ALWAYS reply in English. Do NOT switch languages because of background noise, music, accents, names, quoted text, or a few foreign-sounding words — even if a transcript looks like another language, answer in English. The system asks the user first and only tells you to switch after they confirm.",
     "Prefer short spoken answers. No filler. No hollow openers. Get to the point and stop.",
     "If interrupted, stop immediately and wait for the user.",
+    "Safety: if the user says anything sexual or explicit, or asks for sexual content, nudity, or pornography, reply with exactly \"No.\" and nothing else — no explanation, no matter how they phrase it or argue back. If they keep pushing, tell them their account may be suspended.",
     ...pageLines,
   ].filter(Boolean).join("\n\n");
-  return __sbAugmentRealtimeInstructionsWithMovieContext(instructions, pageCtx.movieContext || null);
+  // Movie/page context is delivered by __sbSyncRealtimeVoiceInstructions() right after connect.
+  return instructions;
 }
 
 function __sbBuildRealtimeSessionUpdate(instructions) {
@@ -10321,17 +14131,22 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
     session: {
       type: "realtime",
       instructions,
-      output_modalities: ["text"],
+      // Default Braino = text-only (the model thinks, Fish speaks). OpenAI-voice mode = the model
+      // SPEAKS natively (audio), which is faster (no Fish round-trip) but uses OpenAI's voice.
+      output_modalities: __sbVoiceOutputPref === "realtime" ? ["audio"] : ["text"],
       audio: {
         input: {
           noise_reduction: {
             type: "near_field",
           },
           transcription: {
-            model: "gpt-4o-mini-transcribe",
-            // No hard language lock — the user wants multilingual mirroring (speak any
-            // language, Braino mirrors it). Noise-induced language hallucinations are held
-            // back by __sbIsJunkTranscript + calmer VAD instead.
+            // Full transcribe model, not mini — accuracy is the whole point of STT and the
+            // delta is ~$0.003/min. Mini was the source of the "Braino misheard me" wonkiness.
+            model: "gpt-4o-transcribe",
+            // Lock STT to English by default so noise/music/accents can't be mis-detected as a
+            // foreign language (the root of the "random language reply" bug). After the user
+            // confirms a switch, __sbActiveLanguage relaxes the lock to that language.
+            language: __sbActiveLanguage?.code || "en",
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
@@ -10378,12 +14193,33 @@ async function __sbBuildRealtimeConfigPayload() {
       hoveredContext: pageContext.hoveredContext || null,
     },
     movieContext: pageContext.movieContext || null,
-    languagePolicy: "mirror_user",
+    // English by default; only mirror the user's language after a confirmed switch (otherwise
+    // the synced instructions would re-introduce "reply in the same language" and undo the lock).
+    languagePolicy: __sbActiveLanguage ? "mirror_user" : "english",
     voiceSurface: "floating_mascot",
+    clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    clientLocalTime: new Date().toLocaleString("en-US", {
+      weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    }),
+    clientLocation: window.__sbUserGeo
+      ? [window.__sbUserGeo.city, window.__sbUserGeo.region, window.__sbUserGeo.country].filter(Boolean).join(", ") || null
+      : null,
   };
 }
 
-async function __sbSyncRealtimeVoiceInstructions() {
+let __sbRtSyncInFlight = null;
+// De-duped by URL: a background (proactive) sync and the lazy pre-answer sync won't both fire, and a
+// completed sync MARKS the page synced (__sbRtLastAnsweredUrl) so the answer path can SKIP the ~1.4s
+// wait — the page was already synced in the background while you were reading it.
+function __sbSyncRealtimeVoiceInstructions() {
+  const syncUrl = (typeof location !== "undefined" && location.href) || "";
+  if (__sbRtSyncInFlight && __sbRtSyncInFlight.url === syncUrl) return __sbRtSyncInFlight.promise;
+  const p = __sbDoSyncRealtimeVoiceInstructions(syncUrl);
+  __sbRtSyncInFlight = { url: syncUrl, promise: p };
+  p.finally(() => { if (__sbRtSyncInFlight && __sbRtSyncInFlight.promise === p) __sbRtSyncInFlight = null; });
+  return p;
+}
+async function __sbDoSyncRealtimeVoiceInstructions(syncUrl) {
   try {
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
@@ -10408,12 +14244,13 @@ async function __sbSyncRealtimeVoiceInstructions() {
     const fingerprint = String(data?.fingerprint || "").trim();
     if (!instructions) return false;
     const localFingerprint = `${fingerprint || "local"}::${__sbBuildMovieContextSummary(__sbGetPageContext(2500).movieContext || null)}`;
-    if (localFingerprint && localFingerprint === __sbRtInstructionsFingerprint) return true;
+    if (localFingerprint && localFingerprint === __sbRtInstructionsFingerprint) { __sbRtLastAnsweredUrl = syncUrl; return true; }
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
     const updated = __sbSendRealtimeSessionUpdate(instructions);
     if (updated) {
       __sbRtInstructionsFingerprint = localFingerprint;
+      __sbRtLastAnsweredUrl = syncUrl;   // page context is in the session → the answer can skip the wait
     }
     return updated;
   } catch (error) {
@@ -10509,7 +14346,7 @@ async function __sbStartRealtimeConnectAttempt() {
   if (!stored.sbOffscreenRtBroken) {
     const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
     chrome.runtime.sendMessage(
-      { action: "startOffscreenRealtime", authToken, bootInstructions },
+      { action: "startOffscreenRealtime", authToken, bootInstructions, voiceEngine: __sbVoiceOutputPref },
       (res) => {
         if (chrome.runtime.lastError || res?.error) {
           void __sbHandleRealtimeConnectFailure(res?.error || chrome.runtime.lastError?.message || "Live AI transport failed.");
@@ -10869,6 +14706,191 @@ function __sbInterruptRealtimeResponse() {
   __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
 }
 
+// ── Voice 1B: stream the realtime model's text deltas into Fish, sentence-by-sentence ────────
+// Reuses the existing Fish fetch/play primitives (__sbFetchSentenceTts / __sbPlaySentenceResp)
+// and the __sbSpeechGeneration barge-in token. The win over the batch path: we PREFETCH the next
+// sentence while the current one plays, and we start the moment sentence 1 lands instead of after
+// the whole answer is written.
+function __sbBeginStreamTts(speechToken) {
+  __sbStreamTts = { token: speechToken, buffer: "", queue: [], draining: false, ended: false, headers: null, spoke: false, firstEmitted: false, group: "" };
+  const s = __sbStreamTts;
+  __sbStorageGet(["authToken"]).then(({ authToken }) => {
+    if (!__sbStreamTts || __sbStreamTts !== s || s.token !== __sbSpeechGeneration) return;
+    const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    s.headers = headers;
+    void __sbDrainStreamTts(); // sentences may already be queued
+  });
+}
+
+// Pull complete sentences out of the growing buffer and queue them. Boundary rule matches the batch
+// chunker (terminator + whitespace, so decimals/"e.g." don't over-split). To respect Fish's 429
+// limit (the v7.5.1 lesson: keep request COUNT low), only the FIRST sentence goes out alone (fast
+// first audio); the rest are grouped into ≤240-char chunks before queueing.
+const __SB_STREAM_TTS_MAX = 240;
+function __sbEnqueueStreamSentence(s, sentence) {
+  if (!s.firstEmitted) { s.queue.push(sentence); s.firstEmitted = true; return; }
+  if (s.group && (s.group.length + 1 + sentence.length) > __SB_STREAM_TTS_MAX) {
+    s.queue.push(s.group);
+    s.group = sentence;
+  } else {
+    s.group = s.group ? `${s.group} ${sentence}` : sentence;
+  }
+}
+
+function __sbFeedStreamTts(delta) {
+  const s = __sbStreamTts;
+  if (!s || s.token !== __sbSpeechGeneration) return;
+  s.buffer += delta;
+  let match;
+  while ((match = s.buffer.match(/^([\s\S]*?[.!?…।])\s+/))) {
+    const sentence = match[1].trim();
+    s.buffer = s.buffer.slice(match[0].length);
+    if (sentence) __sbEnqueueStreamSentence(s, sentence);
+  }
+  void __sbDrainStreamTts();
+}
+
+function __sbEndStreamTts() {
+  const s = __sbStreamTts;
+  if (!s || s.token !== __sbSpeechGeneration) return;
+  const tail = s.buffer.trim();
+  s.buffer = "";
+  if (tail) __sbEnqueueStreamSentence(s, tail);
+  if (s.group) { s.queue.push(s.group); s.group = ""; } // flush the trailing group
+  s.ended = true;
+  void __sbDrainStreamTts();
+}
+
+// Single drain loop: play queued sentences in order, prefetching the next while the current plays.
+async function __sbDrainStreamTts() {
+  const s = __sbStreamTts;
+  if (!s || s.draining || !s.headers) return;
+  s.draining = true;
+  try {
+    let pending = null; // { promise } — a fetch already started for the next sentence
+    while (true) {
+      if (!__sbStreamTts || s.token !== __sbSpeechGeneration) return; // barge-in / superseded
+      let item = pending;
+      pending = null;
+      if (!item) {
+        if (s.queue.length === 0) {
+          if (s.ended) break;
+          await new Promise((r) => setTimeout(r, 25));
+          continue;
+        }
+        item = { promise: __sbFetchSentenceTts(s.queue.shift(), s.token, s.headers) };
+      }
+      const cur = await item.promise;
+      if (s.token !== __sbSpeechGeneration) return;
+      // Kick off the next sentence's fetch NOW so it overlaps this one's playback (no gap).
+      if (s.queue.length > 0) {
+        pending = { promise: __sbFetchSentenceTts(s.queue.shift(), s.token, s.headers) };
+      }
+      if (cur.error) { __sbHandleFishTtsFailure(cur.error); continue; }
+      if (!cur.resp) return;
+      try {
+        const played = await __sbPlaySentenceResp(cur.resp, s.token);
+        if (played) s.spoke = true;
+      } catch (mediaErr) {
+        if (s.token !== __sbSpeechGeneration) return;
+        __sbHandleFishTtsFailure(mediaErr);
+      }
+    }
+  } finally {
+    s.draining = false;
+    if (__sbStreamTts === s && s.token === __sbSpeechGeneration && s.ended && s.queue.length === 0) {
+      __sbWalkTalking = false;
+    }
+  }
+}
+
+// 1B conversation turn: refresh session context if the page changed, then let the realtime model
+// generate and stream straight into Fish. Returns true if it answered; false → caller falls back.
+// Speculative beta: a real voice turn reuses the speculative answer's token (so completion bookkeeping
+// stays consistent); otherwise it claims a fresh one.
+function __sbClaimVoiceTurnToken() {
+  return __sbSpeculativeActive ? __sbSpeculativeToken : ++__sbRtTurnToken;
+}
+
+// Fire the answer straight from the audio (no transcript yet). If the model already has a response in
+// flight, or the toggle is off, this no-ops. Marks the timeline so the logs show keep/cancel.
+async function __sbStartSpeculativeAnswer() {
+  if (!__sbSpeculativeReply || !__sbRtControlReady() || __sbSpeculativeActive) return;
+  if (__sbHasActiveRealtimeResponse() || __sbVoicePendingReply) return;
+  // Think-first gate: if the partial transcript already reads like a browser ACTION
+  // (open / play / search / send / book ...), do NOT speak a speculative reply. Let the
+  // transcript router hand it to Delegate so Braino ACTS instead of narrating how to do it.
+  const partial = String(__sbRtUserTranscript || "").trim();
+  if (partial && __sbDetectIntent(partial) !== "chat") { __sbVTMark("🧠 speculative skipped (action intent → delegate)"); return; }
+  __sbSpeculativeToken = ++__sbRtTurnToken;
+  __sbSpeculativeActive = true;
+  __sbVTMark("⚡ Speculative reply (from audio)");
+  try {
+    const ok = await __sbAnswerViaRealtimeStreaming(__sbSpeculativeToken);
+    // Completed on its own (not cancelled mid-stream) → remember it answered this turn, so the
+    // transcript's conversation branch doesn't speak a second time even after it finished.
+    if (ok && __sbSpeculativeActive) __sbSpeculativeHandledToken = __sbSpeculativeToken;
+  } catch (_) {
+  } finally {
+    __sbSpeculativeActive = false;
+  }
+}
+
+async function __sbAnswerViaRealtimeStreaming(turnToken) {
+  if (!__sbRtControlReady()) { __sbVTMark("⚠️ fast bail: control not ready"); return false; }
+
+  // Anti-stale gate: only pay a context re-sync when the page actually changed since last answer.
+  const url = (typeof location !== "undefined" && location.href) || "";
+  if (url && url !== __sbRtLastAnsweredUrl) {
+    try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+    __sbRtLastAnsweredUrl = url;
+    if (!__sbRtControlReady()) { __sbVTMark("⚠️ fast bail: control lost after sync"); return false; }
+  }
+
+  const nativeVoice = __sbVoiceOutputPref === "realtime";   // model speaks audio directly (no Fish)
+  __sbStopSpeech(); // claim a fresh speech token + clear any prior stream
+  const speechToken = __sbSpeechGeneration;
+  if (!nativeVoice) { __sbBeginStreamTts(speechToken); __sbStreamFishActive = true; }
+
+  if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
+  __sbRtAssistantTranscript = "";
+  __sbRtCurrentResponseMode = "conversation";
+  __sbRtHandlingConversationTurn = true;
+  __sbVoicePendingReply = true;
+  if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+
+  const waiter = __sbCreateRtWaiter();
+  const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: nativeVoice ? ["audio"] : ["text"] } });
+  if (!sent) {
+    __sbVTMark("⚠️ fast bail: send failed");
+    __sbStreamFishActive = false;
+    __sbStreamTts = null;
+    __sbResetRealtimeResponseState();
+    return false; // control channel not ready → fall back to batch path
+  }
+
+  __sbVTPath = "Fast Path";   // the live model is streaming the answer (no batch backend hop)
+  const result = await waiter; // resolves at response.done / cancelled / error
+  if (!nativeVoice) {
+    __sbStreamFishActive = false;
+    __sbEndStreamTts(); // flush the trailing partial sentence
+    // Fish audio lags the text stream — wait for it to finish playing (or barge-in to supersede)
+    // before finalizing the turn, so TTS cost events land on this turn and the next turn waits.
+    while (__sbStreamTts && __sbStreamTts.token === speechToken &&
+           (__sbStreamTts.draining || __sbStreamTts.queue.length > 0)) {
+      await new Promise((r) => setTimeout(r, 40));
+    }
+  }
+  // In native-voice mode the OpenAI audio plays via the offscreen WebRTC track; response.done
+  // means the answer is complete.
+
+  if (result?.status !== "done") __sbVTMark(`⚠️ fast bail: response ${result?.status || "no result"}`);
+  if (result?.status === "done") __sbNoteVoiceTurn(turnToken, { assistant: result.text });
+  __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+  return result?.status === "done";
+}
+
 async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = false } = {}) {
   const promptText = String(text || "").trim();
   if (!promptText) {
@@ -10886,7 +14908,7 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
   __sbRtRelayingAppMessage = relayMode;
   __sbRtHandlingConversationTurn = !relayMode;
 
-  const rtOutputModalities = ["text"];
+  const rtOutputModalities = __sbVoiceOutputPref === "realtime" ? ["audio"] : ["text"];
   const responsePromise = __sbCreateRtWaiter();
   const responseCreated = relayMode
     ? __sbSendRtEvent({
@@ -10944,10 +14966,14 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 }
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
+  // Remember what Braino is about to say so the mic can't re-hear it and re-fire an intent.
+  __sbNoteSpoken(text);
+  if (!__sbVTPath) __sbVTPath = "Slow Path";   // reached the batch speak entry (not fast streaming)
+  __sbVTMark("🗣️ Answer ready — speaking");   // (no-op unless a voice-timing turn is active)
   // In native realtime mode the model speaks via WebRTC audio — we must NOT also call a
-  // TTS endpoint (that would be two voices). Only call __sbSpeakText when ElevenLabs is
+  // TTS endpoint (that would be two voices). Only call __sbSpeakText when Fish Audio is
   // selected, OR when falling back from a failed relay.
-  const useExternalTts = __sbVoiceOutputPref === "elevenlabs";
+  const useExternalTts = __sbVoiceOutputPref === "fish";
   if (preferred === "realtime") __sbAppendRealtimeCostAssistantMessage(text);
 
   if (preferred === "realtime" && __sbRtControlReady() && !useExternalTts) {
@@ -10955,7 +14981,7 @@ async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options =
     await __sbRequestRealtimeReply(text, { relayMode: true, verbatim: !!options.verbatim });
     return true;
   }
-  // External TTS voice (ElevenLabs) or non-realtime context.
+  // External TTS voice (Fish Audio) or non-realtime context.
   return await __sbSpeakText(text, { verbatim: !!options.verbatim });
 }
 
@@ -11058,8 +15084,6 @@ async function __sbHandleMultiIntentChain(segments, turnToken) {
       // Hold the pending-reply lock across the whole chain to block concurrent turns.
       __sbVoicePendingReply = true;
 
-      if (i === 0) void __sbSpeakWithPreferredVoice("On it.", "realtime");
-
       await __sbHandleInlineRealtimeTurn(segments[i], turnToken);
 
       // If this segment launched an agent, wait for it to finish before the next.
@@ -11111,7 +15135,11 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
     __sbVoiceSilenceTimer = null;
     const toProcess = __sbLastFinalTranscript;
     __sbLastFinalTranscript = null;
-    if (!toProcess || __sbVoicePendingReply) return;
+    // Normally a pending reply means a turn is already being handled → skip. BUT when a speculative
+    // answer is in play, IT set the pending flag — and we MUST still run the router so it can confirm
+    // (plain chat → keep) or cancel-and-handle (action). Otherwise actions get silently swallowed.
+    const specInPlay = __sbSpeculativeActive || __sbSpeculativeHandledToken >= 0;
+    if (!toProcess || (__sbVoicePendingReply && !specInPlay)) return;
 
     if (__sbHeadphoneMode) {
       __sbSetHpBrainState("captured");
@@ -11119,10 +15147,126 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
 
     __sbVoicePendingReply = true;
     onReady(toProcess);
-  }, 950);
+  }, 200);   // settle window after a final transcript. Trimmed 350→200ms: the semantic VAD already
+             // gates turn-end, so this is just a short coalesce buffer. Bump back up if Braino starts
+             // jumping in on natural mid-sentence pauses.
+}
+
+// A short spoken "heard you, on it" the instant a turn routes to the SLOW (batch/agent) path, so the
+// user isn't met with 6-20s of silence. Contextual by intent; fire-and-forget — the real answer
+// speaks behind it (and supersedes it). Kept short so it lands in ~1s and finishes before the answer.
+// Recording starts fast, so it gets no ack. Pairs with the `ackPlaying` guard in __sbProcessPrompt.
+function __sbSpeakSlowPathAck(kind) {
+  if (!kind || kind === "record") return;
+  const sets = {
+    web:    ["Let me look that up — one sec.", "On it — searching now.", "One sec, looking that up."],
+    agent:  ["On it.", "Sure — give me a second.", "On it, working on that now."],
+  };
+  const set = sets[kind] || ["One moment.", "Give me a sec.", "Let me think on that."];
+  const line = set[Math.floor(Math.random() * set.length)];
+  try { void __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true }); } catch (_) {}
+}
+
+// ── Safety guard: anything sexual/explicit → a hard "No.", no explanation, escalating to a ban
+// warning if they persist. Runs in BOTH text and voice, before any routing or speculative answer. ──
+let __sbSexualRefusalCount = 0;
+function __sbIsSexualRequest(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  if (/\b(porn|pornography|pornhub|xxx|nsfw|hentai|nudes?|naked|sext(?:ing)?|blow ?job|hand ?job|masturbat\w*|orgasm|cum(?:ming|shot)?|horny|boobs?|titties|nipples?|pussy|penis|vagina|dick pics?|jerk off|jack off|talk dirty|dirty talk|turn me on|make me cum|erotica?|fetish|onlyfans|strip(?:per|tease)|have sex|phone sex|sexual(?:ly)?)\b/.test(t)) return true;
+  if (/\b(send|show|give|want|need)\b.{0,16}\b(nudes?|porn|dick pics?)\b/.test(t)) return true;
+  return false;
+}
+function __sbSexualRefusalLine() {
+  __sbSexualRefusalCount += 1;
+  return __sbSexualRefusalCount >= 3
+    ? "No. Keep this up and you'll be banned — your account can be suspended."
+    : "No.";
+}
+
+// ── Open-known-site shortcut: "open YouTube" navigates instantly instead of running the heavy agent
+// loop (~10s). Only fires for a SIMPLE open of a known site — anything compound ("open YouTube and
+// play X") falls through to the real agent. ──
+const __SB_KNOWN_SITES = [
+  { keys: ["youtube", "yt"], url: "https://www.youtube.com", name: "YouTube" },
+  { keys: ["spotify"], url: "https://open.spotify.com", name: "Spotify" },
+  { keys: ["gmail", "g mail"], url: "https://mail.google.com", name: "Gmail" },
+  { keys: ["google calendar", "gcal", "my calendar"], url: "https://calendar.google.com", name: "Google Calendar" },
+  { keys: ["google drive", "gdrive", "my drive"], url: "https://drive.google.com", name: "Google Drive" },
+  { keys: ["google docs"], url: "https://docs.google.com", name: "Google Docs" },
+  { keys: ["google maps", "maps"], url: "https://www.google.com/maps", name: "Google Maps" },
+  { keys: ["google"], url: "https://www.google.com", name: "Google" },
+  { keys: ["gemini"], url: "https://gemini.google.com", name: "Gemini" },
+  { keys: ["chatgpt", "chat gpt"], url: "https://chatgpt.com", name: "ChatGPT" },
+  { keys: ["claude"], url: "https://claude.ai", name: "Claude" },
+  { keys: ["twitter", "tweeter"], url: "https://x.com", name: "X" },
+  { keys: ["x"], url: "https://x.com", name: "X" },
+  { keys: ["instagram", "insta", "ig"], url: "https://www.instagram.com", name: "Instagram" },
+  { keys: ["whatsapp", "whats app"], url: "https://web.whatsapp.com", name: "WhatsApp" },
+  { keys: ["linkedin", "linked in"], url: "https://www.linkedin.com", name: "LinkedIn" },
+  { keys: ["reddit"], url: "https://www.reddit.com", name: "Reddit" },
+  { keys: ["github", "git hub"], url: "https://github.com", name: "GitHub" },
+  { keys: ["netflix"], url: "https://www.netflix.com", name: "Netflix" },
+  { keys: ["amazon"], url: "https://www.amazon.com", name: "Amazon" },
+  { keys: ["notion"], url: "https://www.notion.so", name: "Notion" },
+  { keys: ["figma"], url: "https://www.figma.com", name: "Figma" },
+];
+function __sbDetectOpenSite(text) {
+  let t = String(text || "").toLowerCase().trim().replace(/[.!?]+$/, "");
+  // Drop leading filler so "hey braino, can you open youtube" still matches.
+  t = t.replace(/^(?:hey |hi |yo |ok |okay |braino[,!. ]+|can you |could you |would you |will you |please |kindly |i want you to |i'?d like you to |let'?s )+/g, "").trim();
+  const m = t.match(/^(?:open(?:\s*up)?|go to|take me to|pull up|launch|bring up|fire up)\s+(.+)$/);
+  if (!m) return null;
+  // Strip filler so "open youtube for me please" / "open the youtube website" still matches cleanly.
+  let rest = m[1].replace(/\b(the|a|my|for me|please|website|site|app|tab|dot com|\.com)\b/g, " ").replace(/\s+/g, " ").trim();
+  if (!rest) return null;
+  // Compound commands (a second action) belong to the real agent, not the shortcut.
+  if (/\b(and|then|after that|search|play|find|look up|compose|send|email|message|to\b)/.test(rest)) return null;
+  for (const site of __SB_KNOWN_SITES) {
+    if (site.keys.some((k) => new RegExp(`(^|\\s)${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`).test(rest))) return site;
+  }
+  return null;
+}
+function __sbHandleOpenSite(site, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  try { chrome.runtime.sendMessage({ action: "openTab", url: site.url, active: true }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+  const line = `Opening ${site.name}.`;
+  if (fromVoice) { __sbNoteSpoken(line); void __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+}
+
+// "Open" commands the known-site shortcut couldn't resolve — a contextual referent ("open its
+// website", "open it", "go there") or an explicit non-known site ("open the Mesa School of Business
+// website"). These currently fall through to plain conversation, where the model only PROMISES to
+// open it and never does. Route them to the Delegate agent instead — its handoff carries the recent
+// chat history, so it resolves "its"/"that" to the entity you were just discussing and actually opens
+// it. Kept tight so normal talk ("open up to me", "go to sleep") never triggers it.
+function __sbIsUnhandledOpenCommand(text) {
+  let t = String(text || "").toLowerCase().trim().replace(/[.!?]+$/, "");
+  t = t.replace(/^(?:hey |hi |yo |ok |okay |so |braino[,!. ]+|can you |could you |would you |will you |please |kindly |i want you to |i'?d like you to |let'?s |lets )+/g, "").trim();
+  if (/^open up (?:to|about)\b/.test(t)) return false;                                   // "open up to me" = conversation
+  if (/^(?:open|pull|bring)\s+(?:it|that|this|them|the (?:site|website|page))\b/.test(t)) return true;   // contextual referent
+  if (/^(?:go|take me)\s+there\b/.test(t)) return true;
+  if (/^(?:open(?:\s*up)?|go to|take me to|pull up|launch|bring up|fire up|visit|navigate to)\b.*\b(website|web ?site|site|page|\.com|dot com)\b/.test(t)) return true;
+  return false;
 }
 
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
+  // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
+  if (__sbIsSelfEcho(transcript)) {
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  // Safety: sexual/explicit → hard "No." (cancels any speculative answer first), no routing.
+  if (__sbIsSexualRequest(transcript)) {
+    __sbStopSpeech();
+    const line = __sbSexualRefusalLine();
+    __sbNoteSpoken(line);
+    await __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
   const routing = __sbResolvePromptRouting(transcript);
   const promptText = String(routing.promptText || "").trim();
   if (!promptText) {
@@ -11134,6 +15278,41 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     routeMode: routing.forcedMode,
     connector: routing.connectorHint,
   });
+
+  // Open-known-site shortcut — navigate instantly instead of the ~10s agent loop. Cancels any
+  // speculative answer first so it doesn't talk over the "Opening …" line. Detect on the RAW
+  // transcript (routing/forced-Delegate mode can strip the "open" verb from promptText).
+  const __openSite = __sbDetectOpenSite(transcript) || __sbDetectOpenSite(promptText);
+  if (__openSite) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "open_site" });
+    __sbHandleOpenSite(__openSite, { fromVoice: true, voiceOutput: "realtime" });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
+  // Camera vision — "can you see me", "look at me", "what do you see". Turn the webcam on, grab a
+  // frame, and let the vision model describe it. Before delegate classification so it isn't grabbed.
+  if (__sbIsVisionStopRequest(promptText)) {
+    __sbCamStop();
+    const line = "Camera off.";
+    __sbNoteSpoken(line);
+    await __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbIsScreenVisionRequest(promptText)) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "vision" });
+    await __sbHandleScreenVisionRequest(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbIsVisionRequest(promptText)) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "vision" });
+    await __sbHandleVisionRequest(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
 
   // X (Twitter) status — answer from the backend and speak it, BEFORE any delegate
   // classification (which would otherwise open X in a tab).
@@ -11167,7 +15346,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
-  if (["agent", "web", "record", "page"].includes(routing.intent)) {
+  if (/\bfavou?rite\b/i.test(promptText)) {
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
@@ -11176,27 +15355,160 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
+  // Party tricks — dance / moonwalk. Steer down __sbProcessPrompt BEFORE any classification,
+  // or the realtime model just NARRATES a dance instead of Braino actually dancing.
+  if (__sbDanceIntent(transcript) || __sbDanceIntent(promptText)
+    || __sbMoonwalkIntent(transcript) || __sbMoonwalkIntent(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "party_trick" });
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Jump & Point — "where is X / point me to X". Steer down __sbProcessPrompt (which runs the
+  // leap-and-point) BEFORE delegate/agent classification, so it isn't grabbed by the browser agent.
+  if (__sbIsLocateRequest(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "point" });
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Send directions to phone — steer down __sbProcessPrompt (QR + native push) BEFORE the
+  // delegate/maps classifier, so "ping directions to X to my phone" isn't grabbed by it.
+  if (__sbIsSendToPhoneRequest(promptText)) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Referential follow-up ("show me the Udemy one") — steer down __sbProcessPrompt so it opens the
+  // result Braino just found instead of being re-classified as a new search.
+  if (__sbIsReferentialOpen(promptText)) {
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Design mockup — steer down the SAME chat pipeline (synthesizes the prompt + opens the design
+  // tool) BEFORE delegate/agent classification, so "open the design tool" isn't grabbed by the
+  // generic browser agent. voice = delegate, but the design mockup is one shared capability.
+  if (__sbIsDesignMockupRequest(promptText)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+      forceIntent: "chat",
+    });
+    return;
+  }
+
+  // "Open its website" / "open the X website" / "go there" the known-site shortcut didn't resolve →
+  // hand to the agent (it has chat history to resolve the referent) instead of letting the model just
+  // promise to open it. Cancel any speculative "sure, I'll open it" chatter first.
+  if (__sbIsUnhandledOpenCommand(promptText) || __sbIsUnhandledOpenCommand(transcript)) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+    __sbRtAwaitingDelegateResult = true;
+    __sbSpeakSlowPathAck("agent");
+    __sbRunAgent(promptText, { connector: routing.connectorHint });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
+  if (__sbShouldFastLaunchRealtimeAgent(routing)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+    __sbRtAwaitingDelegateResult = true;
+    __sbSpeakSlowPathAck("agent");   // break the silence before the agent grinds away
+    __sbRunAgent(promptText, { connector: routing.connectorHint });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
+  if (["agent", "web", "record"].includes(routing.intent)) {
+    __sbSpeakSlowPathAck(routing.intent);
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+      ackPlaying: true,
+    });
+    return;
+  }
+  // NOTE: "page" intent is intentionally NOT short-circuited to the batch backend here. The realtime
+  // session already holds the page/notes context (synced on speech_started), so a question ABOUT the
+  // page can be answered on the fast streaming path below (~1.5s) instead of a 6-8s batch round-trip.
+  // It still falls back to the batch chat-about-notes pipeline if streaming can't run.
+
+  __sbVTMark("🔀 Checking what you want…");
   const shouldForceDelegate = await __sbShouldForceVoiceDelegate(routing);
+  __sbVTMark("✅ Figured out the request");
   if (shouldForceDelegate) {
     __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+    __sbSpeakSlowPathAck("agent");
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
       voiceTurnToken: turnToken,
       forceIntent: "agent",
+      ackPlaying: true,
     });
     return;
   }
 
-  // General conversation — route through the SAME smart text pipeline legacy voice uses
-  // (chat-about-notes, with the full page DOM context + user notes + selected text), then
-  // speak the answer in the realtime voice. The bare realtime model couldn't see the page
-  // properly and felt dumb; this gives realtime legacy's brain + realtime's voice.
+  // General conversation. 1B: when the realtime-native brain is on and Fish is the voice, let the
+  // realtime model stream its answer straight into Fish — no chat-about-notes hop, first audio in
+  // ~0.5s instead of after a full batch completion. The session already holds page/notes context
+  // (synced via __sbSyncRealtimeVoiceInstructions), so it stays page-aware. Falls back to the batch
+  // pipeline below if streaming can't run (toggle off, realtime not ready, or it errors mid-turn).
+  if (__sbVoiceBrain === "realtime" && __sbRtControlReady()) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+    // Record the user half of this conversation turn; the fast path records the assistant half on
+    // completion (covers both the normal streaming answer and a kept speculative one).
+    __sbNoteVoiceTurn(turnToken, { user: promptText });
+    // Speculative beta: the answer was already started from the audio (and the turn turned out to be
+    // plain chat, since no action branch above cancelled it). It's speaking — don't speak a second
+    // time. Covers both "still streaming" and "already finished" via the handled-token.
+    if (__sbSpeculativeActive || __sbSpeculativeHandledToken === turnToken) {
+      __sbVTMark("✅ Speculative kept (chat)");
+      return;   // the speculative answer owns this turn — including its own completion bookkeeping
+    }
+    // Fish mode streams the model's text into Fish; OpenAI-voice mode lets the model speak audio
+    // natively (fastest). __sbAnswerViaRealtimeStreaming branches on the voice pref.
+    let ok = await __sbAnswerViaRealtimeStreaming(turnToken);
+    if (!ok && __sbRtControlReady() && __sbVoiceTurnIsCurrent(turnToken)) {
+      // The fast path usually bails for a TRANSIENT reason (a stray interrupt from background audio,
+      // a momentary channel hiccup). Retry it ONCE before resorting to the slow ~8s batch route —
+      // unless a new turn already started (then this turn is stale; let it go).
+      ok = await __sbAnswerViaRealtimeStreaming(turnToken);
+    }
+    if (ok) return;
+    // streaming failed twice → fall through to the batch pipeline
+  }
+
+  // Batch fallback — the SAME smart text pipeline legacy voice uses (chat-about-notes, with full
+  // page DOM + notes + selected text), spoken in the realtime voice. The fast path already tried and
+  // bailed, so this round-trip is slow → break the silence with a quick ack first.
+  __sbSpeakSlowPathAck("default");
   await __sbProcessPrompt(promptText, {
     fromVoice: true,
     voiceOutput: "realtime",
     voiceTurnToken: turnToken,
     forceIntent: "chat",
+    ackPlaying: true,
   });
 }
 
@@ -11246,21 +15558,36 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "input_audio_buffer.speech_started") {
+    __sbVTReset("🎤 You started talking");
+    __sbSpeculativeActive = false;        // new turn → clean slate (the interrupt below kills any live one)
+    __sbSpeculativeHandledToken = -1;
+    // Prefetch the page context the MOMENT you start talking — it finishes during your sentence,
+    // so the answer path finds it already synced and skips the ~1.4s wait. De-duped, so it's free.
+    void __sbSyncRealtimeVoiceInstructions();
+    // Same trick for Fish: wake its edge isolate NOW so it's hot when we synthesize the reply. The
+    // boot (~0.5-5s cold start) is paid during your sentence instead of on your wait — which is why
+    // the slowest first-sound runs were always the LONGEST utterances (isolate went cold mid-sentence).
+    try { __sbWarmFishTts(); } catch (_) {}
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
-    // voices: cancel the realtime model's audio and stop ElevenLabs/browser playback.
+    // voices: cancel the realtime model's audio and stop Fish Audio/browser playback.
     // Without this, provider audio keeps playing and feels "not realtime".
     if (__sbHasActiveRealtimeResponse()) {
       __sbVoicePendingReply = false;
       __sbInterruptRealtimeResponse();
     }
-    __sbStopSpeech(); // stop ElevenLabs / browser TTS playback so the user can barge in
+    __sbStopSpeech(); // stop Fish Audio / browser TTS playback so the user can barge in
     __sbRtUserTranscript = "";
-    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    if (__sbHeadphoneMode) __sbSetHpBrainState("hearing"); // user is talking → Sonar Pulse
     return;
   }
   if (ev.type === "input_audio_buffer.speech_stopped") {
-    if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
+    __sbVTMark("🛑 You stopped talking");
+    // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
+    if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    // Speculative beta: start answering from the audio NOW, before the transcript lands (~1s sooner).
+    // The transcript handler keeps it (plain chat) or any action branch cancels it via __sbStopSpeech.
+    if (__sbSpeculativeReply) void __sbStartSpeculativeAnswer();
     return;
   }
   if (ev.type === "conversation.item.input_audio_transcription.delta") {
@@ -11274,6 +15601,7 @@ function __sbHandleRtEvent(ev) {
     const transcriptionUsage = ev.usage || ev.item?.usage || ev.response?.usage || {};
     __sbRtUserTranscript = "";
     if (!transcript) return;
+    __sbVTMark("📝 Transcript ready");
 
     // Guard against transcription hallucinations on loud music / background noise / silence.
     // The model would otherwise "hear" junk and answer with gibberish. Skip it; if it keeps
@@ -11287,8 +15615,36 @@ function __sbHandleRtEvent(ev) {
       return;
     }
 
+    // Language confirmation flow. If we asked the user whether to switch languages, this turn is
+    // their yes/no answer — consume it instead of treating it as a normal request.
+    if (__sbPendingLanguageSwitch) {
+      const lang = __sbPendingLanguageSwitch.lang;
+      if (__sbIsXSkillYes(transcript)) {
+        __sbPendingLanguageSwitch = null;
+        __sbApplyVoiceLanguage(lang);
+        void __sbSpeakWithPreferredVoice(`Okay, switching to ${lang.name}.`, "realtime");
+      } else if (__sbIsXSkillNo(transcript)) {
+        __sbPendingLanguageSwitch = null;
+        void __sbSpeakWithPreferredVoice("Okay, I'll stay in English.", "realtime");
+      } else {
+        void __sbSpeakWithPreferredVoice(`Just say yes to switch to ${lang.name}, or no to stay in English.`, "realtime");
+      }
+      return;
+    }
+
+    // Ask-before-switching: if a clear non-English signal shows up while we're still in English,
+    // confirm in English first instead of silently replying in that language.
+    if (!__sbActiveLanguage) {
+      const detected = __sbDetectLanguageRequest(transcript);
+      if (detected) {
+        __sbPendingLanguageSwitch = { lang: detected };
+        void __sbSpeakWithPreferredVoice(`That sounded like ${detected.name}. Want me to switch to ${detected.name}, or keep speaking English?`, "realtime");
+        return;
+      }
+    }
+
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
-      const turnToken = ++__sbRtTurnToken;
+      const turnToken = __sbClaimVoiceTurnToken();   // reuse the speculative token if one is live
       __sbBeginRealtimeCostTurn(toProcess, turnToken, transcriptionUsage);
       const segments = __sbSplitAndCorrectTranscript(toProcess);
       if (segments.length > 1) {
@@ -11300,18 +15656,22 @@ function __sbHandleRtEvent(ev) {
     return;
   }
   if (ev.type === "response.created") {
+    __sbVTMark("🧠 Model started responding");
     __sbRtAssistantTranscript = "";
     if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
     return;
   }
   if (ev.type === "response.output_audio_transcript.delta" || ev.type === "response.output_text.delta") {
     if (typeof ev.delta === "string" && ev.delta) {
+      __sbVTFirst(ev.type.includes("audio") ? "🔊 First audio out" : "💬 First text out");
       __sbRtAssistantTranscript += ev.delta;
+      if (__sbStreamFishActive) __sbFeedStreamTts(ev.delta); // 1B: stream into Fish as it arrives
     }
     if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
     return;
   }
   if (ev.type === "response.done") {
+    __sbVTDone("✓ Response done");
     const finalText = String(ev.response ? __sbExtractRtResponseText(ev.response) : "").trim();
     const transcript = (__sbRtAssistantTranscript || finalText || "").trim();
     const usage = ev.response?.usage || ev.usage || {};
@@ -11352,6 +15712,31 @@ function __sbToggleHeadphoneMode() {
   } else {
     __sbEnterHeadphoneMode();
   }
+}
+
+function __sbApplyVoiceAutoRoutingDefaults() {
+  // Voice uses SMART auto-routing: conversation answers instantly on the fast chat path, and only
+  // genuine tasks go through the Delegate agent (decided by __sbShouldFastLaunchRealtimeAgent's
+  // obvious-action shortcut + the backend shouldDelegate classifier in __sbHandleInlineRealtimeTurn).
+  // We deliberately do NOT force every spoken turn through the agent loop — that added latency to
+  // plain conversation, and keyword-forcing risks treating chit-chat as a task.
+  window.__sbForcedMode = "page";
+  window.__sbForcedConnector = "auto";
+
+  const label = "⚡ Auto";
+  document.getElementById("__sb_mode_label__")?.replaceChildren(document.createTextNode(label));
+  document.getElementById("__sb_card_mode_label__")?.replaceChildren(document.createTextNode(label));
+  document.getElementById("__sb_mode_btn__")?.classList.remove("active-mode");
+  document.getElementById("__sb_card_mode_btn__")?.classList.remove("active-mode");
+
+  document.querySelectorAll("#__sb_mode_dropdown__ .sb-dropdown-item").forEach((item) => {
+    item.classList.toggle("selected", item.getAttribute("data-mode") === "page");
+  });
+
+  __sbRefreshConnectorButtons();
+  document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
+  document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
+  document.getElementById("__sb_connector_dropdown__")?.classList.remove("open");
 }
 
 // ── One-time mic permission modal (same tab) ─────────────────────────────────
@@ -11833,12 +16218,16 @@ function __sbReleaseVoicePresence() {
 
 function __sbAttachVoiceVisual() {
   if (!__sbOwnsInlineUi()) return;
+  __sbApplyVoiceAutoRoutingDefaults();
   const brain = document.getElementById("__sb_brain_btn__");
-  if (brain && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
+  // In PANEL the walker on the bar is the listening mascot — don't also pop the docked
+  // bottom-right brain (that was the duplicate "second Braino" in headphone mode).
+  if (brain && !__sbInputOpen && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
   __sbUseOffscreenRt = true;
   __sbRtSessionReady = true;
+  __sbStartFishWarmKeepAlive(); // keep the TTS function hot for this newly-focused tab
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
   document.getElementById("__sb_brain_btn__")?.classList.add("hp-realtime");
@@ -11853,6 +16242,7 @@ function __sbAttachVoiceVisual() {
 function __sbDetachVoiceVisual() {
   __sbHeadphoneMode = false;
   __sbVoiceOnlyMode = false;
+  __sbStopFishWarmKeepAlive();
   __sbRtSessionReady = false;
   __sbVoicePendingReply = false;
   __sbRtHandlingConversationTurn = false;
@@ -11864,22 +16254,28 @@ function __sbDetachVoiceVisual() {
 }
 
 function __sbEnterHeadphoneMode(options = {}) {
+  try { if (typeof __sbDisarmWake === "function") __sbDisarmWake(); } catch (_) {}   // free the mic from the wake layer
   __sbHeadphoneMode = true;
   __sbVoiceOnlyMode = true;
+  __sbApplyVoiceAutoRoutingDefaults();
+  __sbStartFishWarmKeepAlive(); // keep the TTS function hot so the first reply isn't cold-started
   // Mark voice mode ON globally so every tab knows Braino should follow the user.
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: true, sbBrainDocked: true });
 
-  __sbToggleInput(false);
   __sbCollapseCard();
 
   const brain = document.getElementById("__sb_brain_btn__");
-  if (brain && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
+  // In PANEL the walker on the bar is the listening mascot — don't also pop the docked
+  // bottom-right brain (that was the duplicate "second Braino" in headphone mode).
+  if (brain && !__sbInputOpen && brain.style.display === "none") { brain.style.display = ""; __sbBrainVisible = true; }
   document.getElementById("__sb_rec_btn__")?.classList.add("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.add("active");
 
   // If an offscreen session is already live, attach instantly — no WebRTC setup, zero delay.
-  __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
+  __sbStorageGet(["sbRtSessionActive", "brainoVoicePref", "brainoSpeculativeReply", "authToken", "sbOffscreenRtBroken"]).then((stored) => {
     __sbApplyStoredVoiceOutputPref(stored.brainoVoicePref);
+    __sbSpeculativeReply = true;   // fast replies are the default voice mode now (toggle removed)
+    __sbSyncSpeculativeToggle();
 
     if (stored.sbRtSessionActive) {
       __sbUseOffscreenRt = true;
@@ -11904,7 +16300,7 @@ function __sbEnterHeadphoneMode(options = {}) {
 
     const bootInstructions = __sbBuildRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
     chrome.runtime.sendMessage(
-      { action: "startOffscreenRealtime", authToken, bootInstructions },
+      { action: "startOffscreenRealtime", authToken, bootInstructions, voiceEngine: __sbVoiceOutputPref },
       (res) => {
         // Only the transport-level failure is handled here. Whether the offscreen session
         // actually came up is signalled asynchronously: success → sbRtSessionReady (which
@@ -11922,6 +16318,9 @@ function __sbExitHeadphoneMode() {
   __sbHeadphoneMode = false;
   __sbVoiceOnlyMode = false;
   __sbVoicePendingReply = false;
+  __sbStopFishWarmKeepAlive();
+  __sbActiveLanguage = null;        // reset to English default for the next session
+  __sbPendingLanguageSwitch = null;
   // User explicitly turned voice OFF — clear the global flag so no tab re-arms it.
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: false });
 
@@ -11942,14 +16341,60 @@ function __sbExitHeadphoneMode() {
 
   document.getElementById("__sb_rec_btn__")?.classList.remove("active");
   document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
+
+  try { if (typeof __sbWakeScheduleRearm === "function") __sbWakeScheduleRearm(); } catch (_) {}   // back to ambient listening
 }
 
-// state: "connecting" | "listening" | "captured" | "speaking" | ""
+// state: "connecting" | "listening" | "hearing" | "captured" | "speaking" | ""
+//  - "hearing"   = the USER is actively talking (VAD speech_started→stopped) → Sonar Pulse
+//  - "listening"/"captured" = waiting / processing, nobody talking → calm idle (no glow)
+//  - "speaking"  = Braino is talking → mouth animation
 function __sbSetHpBrainState(state) {
+  const HP = ["hp-connecting", "hp-listening", "hp-hearing", "hp-captured", "hp-speaking"];
   const brain = document.getElementById("__sb_brain_btn__");
-  if (!brain) return;
-  brain.classList.remove("hp-connecting", "hp-listening", "hp-captured", "hp-speaking", "recording");
-  if (state) brain.classList.add(`hp-${state}`);
+  if (brain) {
+    brain.classList.remove(...HP, "recording");
+    if (state) brain.classList.add(`hp-${state}`);
+  }
+
+  // Bar: a continuous blue shimmer whenever headphone mode is engaged.
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) {
+    bar.classList.toggle("hp-active", !!state);
+    bar.classList.toggle("hp-listening", state === "listening");
+  }
+
+  // The walker is the visible mascot while the bar is open, so it carries the glow
+  // and the listen/wave behaviour (the brain button is hidden in this state).
+  const wlk = document.getElementById("__sbwk_walker__");
+  if (wlk) {
+    wlk.classList.remove(...HP);
+    if (state) wlk.classList.add(`hp-${state}`);
+  }
+  __sbWkEngaged = !!state;          // stand still + look at the user while engaged
+  if (state) {
+    __sbWkWalking = false;
+    // Braino waves hello only as it starts replying — not while idling/processing.
+    if (state === "speaking") __sbWkTriggerWave();
+  } else {
+    __sbWkWalking = true;           // resume strolling when headphone mode ends
+  }
+
+  // Live status bubble above his head, so you always see what he's doing in voice.
+  const VOICE_STATUS = {
+    connecting: "Waking up…",
+    listening: "Listening…",
+    hearing: "Listening…",
+    captured: "Understanding…",
+    speaking: "", // he's talking — the voice itself is the feedback
+  };
+  // While an agent/research task is running, the mic stays open but he's NOT just listening —
+  // show the working label so it never looks like he's idly listening to nothing.
+  if (__sbAgentBusy && (state === "listening" || state === "hearing" || state === "captured")) {
+    __sbWkStatus(__sbAgentBusyLabel);
+  } else {
+    __sbWkStatus(state ? (VOICE_STATUS[state] ?? "") : "");
+  }
 }
 
 function __sbSetVoiceStatusBadge(state, label) {
@@ -12120,7 +16565,1167 @@ function __sbHandleVoiceEvent(msg) {
   }
 }
 
-if (document.readyState === "loading") {
+
+// Braino's own marketing/app site (trybraino.com + its Vercel prod/preview deploys) runs its
+// OWN in-page Braino and the landing onboarding intro. Injecting the extension's floating mascot
+// there collides with it (the intro's "yes" gets eaten by the extension's bar), so stay dormant.
+// Auth-sync above still runs; only the floating UI is suppressed.
+function __sbIsBrainoOwnSite() {
+  try {
+    const h = String(location.hostname || "").replace(/^www\./, "").toLowerCase();
+    if (h === "trybraino.com" || h.endsWith(".trybraino.com")) return true;
+    // braino-eight.vercel.app, braino-git-<branch>-<team>.vercel.app, etc.
+    if (h.endsWith(".vercel.app") && h.startsWith("braino")) return true;
+    return false;
+  } catch { return false; }
+}
+
+/* ============================================================================
+   JARVIS MODE — full-screen, voice-first takeover.
+   Double-tap Option (Alt) toggles it. Braino flies to centre, shuts his eyes
+   and pulses, charges gold, pops nodes, the transparent rounded HUD panel
+   fades in over the page, and he dissolves into his blue "soul" orb. Voice
+   mode runs underneath (hands-off); delegate/research activity streams into an
+   Iron-Man-style HUD console. Ported from Claude Design (jarvis-mode.jsx +
+   jarvis-soul.jsx) into the live extension idiom.
+   ============================================================================ */
+let __sbJarvisOpen = false;
+let __sbJarvisStartedVoice = false;
+let __sbJarvisTimers = [];
+let __sbJarvisStopSoul = null;
+let __sbJarvisLevelRaf = null;
+let __sbJarvisLevel = 0;
+let __sbJarvisConsoleHideTimer = null;
+let __sbJarvisKeyHandler = null;
+let __sbJarvisPrevSpeculative = null;   // remembers the fast-voice toggle so we can restore on exit
+let __sbJarvisFlewMascot = false;       // true while the real walking mascot is flown to centre
+let __sbJarvisStatHideTimer = null;
+
+// Self-contained full-body walking mascot for the entrance flight: remap the body fills to the
+// walker's OWN inline gradients (no dependency on a document-level #sbb-fill → never the "white
+// brain" bug) and namespace its element ids so it can't collide with the live docked rig.
+const __SB_JARVIS_WALKER_SVG = __SBWK_SVG
+  .replaceAll("url(#sbb-fill)", "url(#sbwk-fill)")
+  .replaceAll("url(#sbb-dark)", "url(#sbwk-dark)")
+  .replaceAll("__sbwk_", "__jvwk_");
+
+// Fly the entrance mascot in from wherever the real docked mascot currently sits (falls back to
+// the bottom-right corner) toward screen centre.
+function __sbJarvisSetFlightOrigin(root) {
+  let ox = window.innerWidth * 0.84, oy = window.innerHeight * 0.8;
+  try {
+    const w = document.getElementById("__sbwk_walker__") || document.getElementById("__sb_brain_btn__");
+    const r = w && w.getBoundingClientRect();
+    if (r && r.width) { ox = r.left + r.width / 2; oy = r.top + r.height / 2; }
+  } catch (_) {}
+  root.style.setProperty("--jv-ox", (ox - window.innerWidth / 2) + "px");
+  root.style.setProperty("--jv-oy", (oy - window.innerHeight / 2) + "px");
+}
+
+// Squash the walking mascot's eyes shut (CSS transform on each eye group).
+function __sbJarvisCloseWalkerEyes(brain) {
+  ["#__jvwk_eye_l__", "#__jvwk_eye_r__"].forEach((id) => {
+    const g = brain.querySelector(id);
+    if (!g) return;
+    g.style.transformBox = "fill-box";
+    g.style.transformOrigin = "center";
+    g.style.transition = "transform .25s ease";
+    g.style.transform = "scaleY(0.08)";
+  });
+}
+
+// Braino greets the moment Jarvis opens — spoken in his real (Fish) voice. Returns a promise that
+// resolves when he's DONE speaking, so we can go live to listen only AFTER the greeting (entering
+// voice earlier let the realtime boot abort the greeting mid-sentence). Short lines = fast audio.
+function __sbJarvisGreet() {
+  return __sbStorageGet(["authDisplayName"]).then(({ authDisplayName }) => {
+    const name = authDisplayName?.split(" ")[0]?.trim() || "";
+    const n = name ? `, ${name}` : "";
+    const lines = [
+      `${__sbTimeGreeting()}${n}. What would you like to get done?`,
+      `Hey${n} — I'm right here. What are we working on?`,
+      `${__sbTimeGreeting()}${n}. What can I take off your plate?`,
+      `I'm listening${n}. What do you want to do?`,
+    ];
+    const line = lines[(Math.random() * lines.length) | 0];
+    return __sbSpeakText(line);
+  }).catch(() => {});
+}
+
+// ── Fly the REAL walking mascot (the live #__sbwk_walker__ rig — the same one that walks the bar,
+//    moonwalks and jumps) up to screen centre, glow gold, shut its eyes, then dissolve into the
+//    soul. Owns the rig like the jump does (throw-mode + cancels the idle tick so nothing fights). ──
+function __sbWkShutRealEyes(walker, sy) {
+  [["#__sbwk_eye_l__", 38, 48], ["#__sbwk_eye_r__", 62, 48]].forEach(([id, cx, cy]) => {
+    const g = walker.querySelector(id);
+    if (g) g.setAttribute("transform", `translate(${cx},${cy}) scale(1,${sy}) translate(${-cx},${-cy})`);
+  });
+}
+function __sbWkFlyToCenter() {
+  try {
+    const lane = __sbEnsureWalker();
+    lane.style.display = "block";
+    lane.style.zIndex = "2147483647";     // bright mascot rides ABOVE the forming overlay
+    const walker = document.getElementById("__sbwk_walker__");
+    if (!walker) return;
+    __sbJarvisFlewMascot = true;
+    // own the rig: stop the idle tick + auto so they can't overwrite our transform/eyes
+    __sbWkThrowMode = true; __sbWkJumping = true; __sbWkBusy = true;
+    __sbWkWalking = false; __sbWkWaving = false;
+    if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+    clearTimeout(__sbWkAutoTimer);
+
+    const r0 = walker.getBoundingClientRect();
+    const bx = r0.left + r0.width / 2, by = r0.top + r0.height / 2;
+    const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+    const posX = (typeof __sbWkPosX === "number" ? __sbWkPosX : 24);
+    walker.style.transition = "transform 1.4s cubic-bezier(.25,.6,.2,1), filter .7s ease, opacity .45s ease";
+    walker.style.transform = `translate(${cx - bx + posX}px, ${cy - by}px)`;   // SAME SIZE — translate only, no scale
+    walker.style.filter = "drop-shadow(0 0 22px rgba(255,200,90,.9)) drop-shadow(0 0 50px rgba(255,176,69,.5))";
+    walker.style.opacity = "1";
+    __sbJarvisAfter(1150, () => __sbWkShutRealEyes(walker, 0.08));   // close his eyes as he arrives
+  } catch (_) {}
+}
+function __sbWkFadeOutForJarvis() {
+  const walker = document.getElementById("__sbwk_walker__");
+  if (walker) walker.style.opacity = "0";   // dissolve as the soul rises
+}
+function __sbWkReturnFromCenter() {
+  if (!__sbJarvisFlewMascot) return;
+  __sbJarvisFlewMascot = false;
+  const walker = document.getElementById("__sbwk_walker__");
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (!walker) return;
+  const posX = (typeof __sbWkPosX === "number" ? __sbWkPosX : 24);
+  __sbWkShutRealEyes(walker, 1);            // open his eyes
+  walker.style.opacity = "1";
+  walker.style.transition = "transform .6s cubic-bezier(.2,.7,.2,1), filter .5s ease, opacity .35s ease";
+  walker.style.transform = `translate(${posX}px, 0px) scale(1)`;
+  walker.style.filter = "";
+  setTimeout(() => {
+    walker.style.transition = ""; walker.style.transform = ""; walker.style.transformOrigin = ""; walker.style.opacity = "";
+    walker.querySelector("#__sbwk_eye_l__")?.removeAttribute("transform");
+    walker.querySelector("#__sbwk_eye_r__")?.removeAttribute("transform");
+    if (lane) lane.style.zIndex = "";
+    __sbWkThrowMode = false; __sbWkJumping = false; __sbWkBusy = false;
+    __sbThrowTX = posX; __sbThrowTY = 0; __sbThrowRot = 0;
+    try { __sbStartWalkLoop(); } catch (_) {}
+  }, 620);
+}
+
+function __sbJarvisSpeaking() {
+  return (typeof __sbTtsAbortController !== "undefined" && __sbTtsAbortController) ? 1 : 0;
+}
+function __sbJarvisClearTimers() { __sbJarvisTimers.forEach(clearTimeout); __sbJarvisTimers = []; }
+function __sbJarvisAfter(ms, fn) { __sbJarvisTimers.push(setTimeout(fn, ms)); }
+
+function __sbToggleJarvisMode() { if (__sbJarvisOpen) __sbCloseJarvis(); else __sbOpenJarvis(); }
+
+function __sbJarvisInjectStyle() {
+  if (document.getElementById("__sb_jarvis_style__")) return;
+  const css = `
+  #__sb_jarvis__{position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;
+    font-family:ui-monospace,'SF Mono',Menlo,monospace;pointer-events:none;}
+  /* while Jarvis is up, the normal floating bar + chat card are suppressed — only Jarvis */
+  html.sb-jarvis-active #__sb_card_wrap__,
+  html.sb-jarvis-active #__sb_bar__{opacity:0 !important;pointer-events:none !important;}
+  #__sb_jarvis__[data-on="1"]{pointer-events:auto;}
+  #__sb_jarvis__[data-stage="off"]{opacity:0;pointer-events:none;transition:opacity .4s ease;}
+
+  #__sb_jarvis__ .jv-veil{position:absolute;inset:0;opacity:0;transition:opacity .6s ease;
+    background:radial-gradient(120% 120% at 50% 46%,rgba(8,16,30,.62),rgba(2,4,9,.94));
+    -webkit-backdrop-filter:blur(7px) saturate(.7);backdrop-filter:blur(7px) saturate(.7);}
+  #__sb_jarvis__[data-stage="enter"] .jv-veil,
+  #__sb_jarvis__[data-stage="charge"] .jv-veil{opacity:.72;}
+  #__sb_jarvis__[data-stage="form"] .jv-veil,
+  #__sb_jarvis__[data-stage="active"] .jv-veil{opacity:1;}
+  #__sb_jarvis__[data-stage="collapse"] .jv-veil{opacity:0;}
+
+  #__sb_jarvis__ .jv-panel{position:absolute;inset:22px;border-radius:30px;
+    border:1px solid rgba(74,158,255,.18);
+    background:radial-gradient(120% 120% at 50% 42%,rgba(10,20,38,.46),rgba(4,8,15,.7));
+    box-shadow:0 40px 120px -30px rgba(0,0,0,.8),inset 0 0 120px -40px rgba(74,158,255,.28),inset 0 1px 0 rgba(150,200,255,.07);
+    opacity:0;transform:scale(.955);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1);overflow:hidden;}
+  #__sb_jarvis__[data-stage="form"] .jv-panel,
+  #__sb_jarvis__[data-stage="active"] .jv-panel{opacity:1;transform:none;}
+  #__sb_jarvis__[data-stage="collapse"] .jv-panel{opacity:0;transform:scale(.97);}
+  #__sb_jarvis__ .jv-bracket{position:absolute;width:34px;height:34px;border:1.5px solid rgba(74,158,255,.4);}
+  #__sb_jarvis__ .jv-bracket.tl{top:26px;left:26px;border-right:0;border-bottom:0;border-radius:14px 0 0 0;}
+  #__sb_jarvis__ .jv-bracket.tr{top:26px;right:26px;border-left:0;border-bottom:0;border-radius:0 14px 0 0;}
+  #__sb_jarvis__ .jv-bracket.bl{bottom:26px;left:26px;border-right:0;border-top:0;border-radius:0 0 0 14px;}
+  #__sb_jarvis__ .jv-bracket.br{bottom:26px;right:26px;border-left:0;border-top:0;border-radius:0 0 14px 0;}
+
+  #__sb_jarvis__ .jv-stage{position:absolute;inset:0;display:grid;place-items:center;}
+  #__sb_jarvis__ .jv-orbwrap{position:relative;width:min(58vmin,560px);height:min(58vmin,560px);display:grid;place-items:center;}
+
+  #__sb_jarvis__ .jv-braino{position:absolute;display:grid;place-items:center;
+    transition:filter .8s ease,opacity .6s ease,transform .8s cubic-bezier(.2,.7,.2,1);}
+  #__sb_jarvis__ .jv-braino svg{width:150px;height:auto;display:block;}
+  #__sb_jarvis__[data-stage="enter"] .jv-braino{animation:jvFly .85s cubic-bezier(.2,.8,.2,1) both;}
+  @keyframes jvFly{from{transform:translate(var(--jv-ox,32vw),var(--jv-oy,34vh)) scale(.46);opacity:0;}
+    55%{opacity:1;}to{transform:translate(0,0) scale(1);opacity:1;}}
+  /* charge: eyes shut, gold glow + a little pulse */
+  #__sb_jarvis__[data-stage="charge"] .jv-braino{
+    filter:drop-shadow(0 0 30px rgba(255,200,90,.95)) drop-shadow(0 0 64px rgba(255,176,69,.55));
+    animation:jvPulse2 .62s ease-in-out 2;}
+  @keyframes jvPulse2{0%,100%{transform:scale(1);}50%{transform:scale(1.09);}}
+  #__sb_jarvis__[data-stage="form"] .jv-braino,
+  #__sb_jarvis__[data-stage="active"] .jv-braino{
+    filter:drop-shadow(0 0 50px rgba(130,195,255,.95));opacity:0;transform:scale(1.18);}
+  #__sb_jarvis__[data-stage="collapse"] .jv-braino{opacity:1;transform:scale(.62) translateY(34px);
+    filter:drop-shadow(0 0 20px rgba(255,200,90,.6));
+    transition:opacity .5s ease .12s,transform .55s cubic-bezier(.4,0,.6,1) .08s,filter .5s ease;}
+
+  #__sb_jarvis__ .jv-burst{position:absolute;inset:0;pointer-events:none;}
+  #__sb_jarvis__ .jv-spark{position:absolute;left:50%;top:46%;width:7px;height:7px;border-radius:50%;
+    background:radial-gradient(circle,#FFE9B0,#FFB845);margin:-3.5px 0 0 -3.5px;opacity:0;
+    box-shadow:0 0 10px 2px rgba(255,184,69,.8);}
+  #__sb_jarvis__[data-stage="charge"] .jv-spark,
+  #__sb_jarvis__[data-stage="form"] .jv-spark{animation:jvSpark 1.1s ease-out forwards;}
+  @keyframes jvSpark{0%{opacity:0;transform:translate(0,0) scale(.2);}25%{opacity:1;}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1);}}
+
+  #__sb_jarvis__ .jv-soul{position:absolute;opacity:0;transform:scale(.45);
+    transition:opacity .9s ease,transform 1s cubic-bezier(.2,.7,.2,1);}
+  #__sb_jarvis__[data-stage="form"] .jv-soul,
+  #__sb_jarvis__[data-stage="active"] .jv-soul{opacity:1;transform:none;}
+  #__sb_jarvis__[data-stage="collapse"] .jv-soul{opacity:0;transform:scale(.55);transition:opacity .4s ease,transform .5s ease;}
+
+  #__sb_jarvis__ .jv-ui{position:absolute;inset:0;opacity:0;transition:opacity .6s ease .2s;pointer-events:none;}
+  #__sb_jarvis__[data-stage="active"] .jv-ui{opacity:1;}
+  #__sb_jarvis__ .jv-eyebrow{position:absolute;top:44px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;color:rgba(74,158,255,.92);
+    font-size:11.5px;letter-spacing:.42em;text-transform:uppercase;}
+  #__sb_jarvis__ .jv-eyebrow .dot{width:7px;height:7px;border-radius:50%;background:#4A9EFF;
+    box-shadow:0 0 0 0 rgba(74,158,255,.6);animation:jvDot 2s ease-out infinite;}
+  @keyframes jvDot{0%{box-shadow:0 0 0 0 rgba(74,158,255,.55);}70%{box-shadow:0 0 0 9px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
+
+  #__sb_jarvis__ .jv-bars{position:absolute;left:50%;bottom:74px;transform:translateX(-50%);
+    display:flex;align-items:flex-end;gap:4px;height:24px;}
+  #__sb_jarvis__ .jv-bars i{width:3px;min-height:3px;background:linear-gradient(180deg,#C6E6FF,#4A9EFF);
+    border-radius:2px;box-shadow:0 0 8px rgba(74,158,255,.6);}
+
+  #__sb_jarvis__ .jv-hint{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);
+    color:rgba(74,158,255,.55);font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;
+    display:flex;align-items:center;gap:9px;}
+  #__sb_jarvis__ .jv-hint kbd{border:1px solid rgba(74,158,255,.35);border-radius:5px;padding:2px 7px;
+    color:rgba(224,240,255,.85);letter-spacing:.1em;font-family:inherit;}
+
+  #__sb_jarvis__ .jv-controls{position:absolute;top:38px;right:42px;display:flex;align-items:center;gap:10px;pointer-events:auto;}
+  #__sb_jarvis__ .jv-mute,
+  #__sb_jarvis__ .jv-cam{display:flex;align-items:center;gap:8px;
+    pointer-events:auto;cursor:pointer;background:none;border:1px solid rgba(74,158,255,.3);border-radius:9px;
+    padding:7px 11px;color:rgba(74,158,255,.85);font-family:inherit;font-size:10px;letter-spacing:.22em;
+    text-transform:uppercase;transition:border-color .2s,color .2s,background .2s;}
+  #__sb_jarvis__ .jv-mute:hover,
+  #__sb_jarvis__ .jv-cam:hover{border-color:rgba(74,158,255,.7);color:rgba(224,240,255,.95);}
+  #__sb_jarvis__ .jv-mute svg,
+  #__sb_jarvis__ .jv-cam svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  #__sb_jarvis__ .jv-cam.on{color:#54E3A0;border-color:rgba(84,227,160,.55);background:rgba(84,227,160,.12);}
+
+  /* Iron-Man HUD console — delegate / research play-by-play */
+  #__sb_jarvis__ .jv-console{position:absolute;left:44px;bottom:44px;width:min(34vw,420px);height:min(30vw,290px);
+    border:1px solid rgba(74,158,255,.28);border-radius:16px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(8,18,34,.8),rgba(4,9,18,.88));
+    box-shadow:inset 0 0 60px -30px rgba(74,158,255,.55),0 20px 60px -24px rgba(0,0,0,.7);
+    opacity:0;transform:translateY(14px) scale(.985);
+    transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.2,1);
+    pointer-events:none;display:flex;flex-direction:column;}
+  #__sb_jarvis__ .jv-console.on{opacity:1;transform:none;}
+  #__sb_jarvis__ .jv-con-head{display:flex;align-items:center;gap:9px;padding:12px 15px 10px;
+    border-bottom:1px solid rgba(74,158,255,.16);color:rgba(198,230,255,.92);
+    font-size:10px;letter-spacing:.3em;text-transform:uppercase;}
+  #__sb_jarvis__ .jv-con-head .spin{width:11px;height:11px;border-radius:50%;
+    border:1.5px solid rgba(74,158,255,.3);border-top-color:#7FC0FF;animation:jvSpin .8s linear infinite;}
+  @keyframes jvSpin{to{transform:rotate(360deg);}}
+  #__sb_jarvis__ .jv-con-body{flex:1;overflow:hidden;padding:11px 15px 15px;
+    display:flex;flex-direction:column;justify-content:flex-end;gap:7px;}
+  #__sb_jarvis__ .jv-con-line{display:flex;gap:9px;align-items:flex-start;color:rgba(206,224,245,.86);
+    font-size:12px;line-height:1.45;letter-spacing:.01em;opacity:0;animation:jvLineIn .35s ease forwards;}
+  #__sb_jarvis__ .jv-con-line .mk{color:#4A9EFF;flex:none;}
+  #__sb_jarvis__ .jv-con-line.done{color:rgba(206,224,245,.5);}
+  #__sb_jarvis__ .jv-con-line.done .mk{color:#54E3A0;}
+  @keyframes jvLineIn{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:none;}}
+
+  /* corner stat HUD — e.g. "how's my X doing": follower count counts up, green ▲ / red ▼ */
+  #__sb_jarvis__ .jv-stat{position:absolute;top:40px;left:46px;min-width:148px;
+    border:1px solid rgba(74,158,255,.28);border-radius:16px;padding:13px 18px 14px;
+    background:linear-gradient(180deg,rgba(8,18,34,.82),rgba(4,9,18,.9));
+    box-shadow:inset 0 0 50px -28px rgba(74,158,255,.55),0 18px 50px -22px rgba(0,0,0,.7);
+    opacity:0;transform:translateY(-12px) scale(.96);
+    transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.2,1);pointer-events:none;}
+  #__sb_jarvis__ .jv-stat.on{opacity:1;transform:none;}
+  #__sb_jarvis__ .jv-stat .lbl{font-size:9.5px;letter-spacing:.32em;text-transform:uppercase;color:rgba(74,158,255,.82);}
+  #__sb_jarvis__ .jv-stat .num{font-size:46px;line-height:1.04;font-weight:600;color:#EAF4FF;margin-top:7px;
+    letter-spacing:-.01em;font-variant-numeric:tabular-nums;text-shadow:0 0 22px rgba(74,158,255,.45);}
+  #__sb_jarvis__ .jv-stat .delta-wrap{margin-top:9px;min-height:14px;}
+  #__sb_jarvis__ .jv-stat .delta{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
+    letter-spacing:.02em;padding:3px 9px;border-radius:999px;}
+  #__sb_jarvis__ .jv-stat .delta .ar{font-size:10px;}
+  #__sb_jarvis__ .jv-stat .delta.up{color:#54E3A0;background:rgba(84,227,160,.12);border:1px solid rgba(84,227,160,.32);}
+  #__sb_jarvis__ .jv-stat .delta.down{color:#FF6B6B;background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.32);}
+  #__sb_jarvis__ .jv-stat .delta.flat{color:rgba(206,224,245,.6);background:rgba(206,224,245,.08);border:1px solid rgba(206,224,245,.18);}
+  @media (prefers-reduced-motion:reduce){
+    #__sb_jarvis__[data-stage="enter"] .jv-braino{animation:none;}
+    #__sb_jarvis__[data-stage="charge"] .jv-braino{animation:none;}
+    #__sb_jarvis__ .jv-spark{display:none;}
+  }`;
+  const style = document.createElement("style");
+  style.id = "__sb_jarvis_style__";
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
+function __sbBuildJarvisOverlay() {
+  let root = document.getElementById("__sb_jarvis__");
+  if (root) return root;
+  __sbJarvisInjectStyle();
+  root = document.createElement("div");
+  root.id = "__sb_jarvis__";
+  root.setAttribute("data-stage", "off");
+  root.setAttribute("data-on", "0");
+  root.innerHTML = `
+    <div class="jv-veil"></div>
+    <div class="jv-panel">
+      <div class="jv-bracket tl"></div><div class="jv-bracket tr"></div>
+      <div class="jv-bracket bl"></div><div class="jv-bracket br"></div>
+    </div>
+    <div class="jv-stage"><div class="jv-orbwrap">
+      <div class="jv-soul"></div>
+      <div class="jv-burst"></div>
+      <div class="jv-braino"></div>
+    </div></div>
+    <div class="jv-ui">
+      <div class="jv-eyebrow"><span class="dot"></span>Jarvis Mode</div>
+      <div class="jv-controls">
+        <button class="jv-cam" type="button" aria-label="Camera"></button>
+        <button class="jv-mute" type="button" aria-label="Toggle voice"></button>
+      </div>
+      <div class="jv-bars"></div>
+      <div class="jv-hint"><kbd>&#8997;</kbd><kbd>&#8997;</kbd> to exit</div>
+    </div>
+    <div class="jv-console">
+      <div class="jv-con-head"><span class="spin"></span><span class="jv-con-title">Delegate</span></div>
+      <div class="jv-con-body"></div>
+    </div>`;
+  document.documentElement.appendChild(root);
+
+  // audio bars
+  const bars = root.querySelector(".jv-bars");
+  for (let i = 0; i < 13; i++) bars.appendChild(document.createElement("i"));
+
+  // gold node-pop sparks (radial burst out of the brain)
+  const burst = root.querySelector(".jv-burst");
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2 + (i % 2) * 0.3;
+    const d = 120 + (i % 4) * 26;
+    const s = document.createElement("span");
+    s.className = "jv-spark";
+    s.style.setProperty("--dx", (Math.cos(a) * d) + "px");
+    s.style.setProperty("--dy", (Math.sin(a) * d * 0.92) + "px");
+    s.style.animationDelay = ((i % 5) * 0.05) + "s";
+    burst.appendChild(s);
+  }
+
+  // soul orb canvas
+  const soulSize = Math.min(window.innerWidth, window.innerHeight) * 0.56;
+  const canvas = document.createElement("canvas");
+  canvas.style.width = soulSize + "px";
+  canvas.style.height = soulSize + "px";
+  canvas.style.display = "block";
+  root.querySelector(".jv-soul").appendChild(canvas);
+  root.__sbSoulCanvas = canvas;
+
+  root.querySelector(".jv-mute").addEventListener("click", __sbJarvisToggleVoice);
+  __sbJarvisRenderMute(root);
+  root.querySelector(".jv-cam").addEventListener("click", __sbJarvisToggleCamera);
+  __sbJarvisRenderCamBtn(root);
+  return root;
+}
+
+function __sbJarvisRenderMute(root) {
+  const btn = root.querySelector(".jv-mute");
+  if (!btn) return;
+  const on = !!__sbHeadphoneMode;
+  const icon = on
+    ? `<svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 7a8 8 0 0 1 0 10"/></svg>`
+    : `<svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>`;
+  btn.innerHTML = icon + `<span>${on ? "Voice on" : "Muted"}</span>`;
+}
+
+function __sbJarvisToggleVoice() {
+  try {
+    if (__sbHeadphoneMode) { __sbExitHeadphoneMode(); __sbJarvisStartedVoice = false; }
+    else { __sbEnterHeadphoneMode(); __sbJarvisStartedVoice = true; }
+  } catch (_) {}
+  const root = document.getElementById("__sb_jarvis__");
+  if (root) __sbJarvisRenderMute(root);
+}
+
+function __sbJarvisRenderCamBtn(root) {
+  const btn = root.querySelector(".jv-cam");
+  if (!btn) return;
+  btn.classList.toggle("on", !!__sbCamOn);
+  const icon = `<svg viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Z"/><path d="M15 10.5l5-3v9l-5-3"/></svg>`;
+  btn.innerHTML = icon + `<span>${__sbCamOn ? "Live" : "Camera"}</span>`;
+}
+
+// Camera button — tap to have Braino look at you (opens the camera + describes); tap again to stop.
+function __sbJarvisToggleCamera() {
+  if (__sbCamOn) {
+    try { __sbCamStop(); } catch (_) {}   // sets __sbCamOn = false
+    const root = document.getElementById("__sb_jarvis__");
+    if (root) __sbJarvisRenderCamBtn(root);
+  } else {
+    __sbJarvisLook();
+  }
+}
+
+async function __sbJarvisLook() {
+  if (__sbCamBusy) return;
+  __sbCamBusy = true;
+  const speak = (line) => __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true });
+  try {
+    try { __sbNoteSpoken?.("One sec, let me look…"); } catch (_) {}
+    void speak("One sec, let me look…");
+    const visionPrompt = `You are Braino, looking at the user live through their webcam. Warmly and briefly describe what you actually see — the person and their surroundings — in one or two natural spoken sentences. Do not mention being an AI or that this is an image or a frame.`;
+    let res = null;
+    try { res = await __sbRuntimeMessage({ action: "brainoCameraVision", prompt: visionPrompt }); } catch (_) {}
+    const status = res?.status;
+    if (status === "needpermission") { await speak("Tap “Enable camera” in the little window and allow it, then tap the camera button again."); return; }
+    if (status === "denied") { await speak("The camera's blocked — allow it in that little window, then tap the camera button again."); return; }
+    if (!res?.ok) { await speak("I couldn't get a clear view — give it another tap."); return; }
+    __sbCamOn = true;
+    const root = document.getElementById("__sb_jarvis__");
+    if (root) __sbJarvisRenderCamBtn(root);
+    await speak(String(res?.reply || "").trim() || "I can see you.");
+  } finally {
+    __sbCamBusy = false;
+  }
+}
+
+function __sbOpenJarvis() {
+  if (__sbJarvisOpen) return;
+  __sbJarvisOpen = true;
+  __sbJarvisClearTimers();
+  try { if (typeof __sbDisarmWake === "function") __sbDisarmWake(); } catch (_) {}   // free the mic from the wake layer
+  const root = __sbBuildJarvisOverlay();
+
+  document.documentElement.classList.add("sb-jarvis-active");   // hide the normal bar/card — only Jarvis
+
+  // Jarvis defaults to the fast voice path ("Faster replies · beta") → sub-2s answers.
+  __sbJarvisPrevSpeculative = __sbSpeculativeReply;
+  __sbSpeculativeReply = true;
+  if (typeof __sbSyncSpeculativeToggle === "function") __sbSyncSpeculativeToggle();
+
+  // Greet FIRST (Fish voice), THEN go live to listen — entering voice earlier let the realtime
+  // boot abort the greeting mid-sentence. Fallback timer so we never wait forever on TTS.
+  let __jvLived = false;
+  const __jvGoLive = () => {
+    if (__jvLived || !__sbJarvisOpen) return; __jvLived = true;
+    try { if (!__sbHeadphoneMode) { __sbJarvisStartedVoice = true; __sbEnterHeadphoneMode(); } } catch (_) {}
+  };
+  __sbJarvisGreet().finally(__jvGoLive);
+  __sbJarvisAfter(6000, __jvGoLive);
+
+  // overlay stays hidden while the REAL walking mascot flies bar → centre, glows, shuts eyes
+  root.setAttribute("data-on", "0");
+  root.setAttribute("data-stage", "off");
+  __sbWkFlyToCenter();
+  __sbJarvisStartSoul(root);
+
+  // mascot has slowly arrived + glowed → the model takes over (crossfade mascot → soul)
+  __sbJarvisAfter(1850, () => {
+    root.setAttribute("data-stage", "form");
+    __sbWkFadeOutForJarvis();
+  });
+  __sbJarvisAfter(2750, () => {
+    root.setAttribute("data-stage", "active");
+    root.setAttribute("data-on", "1");
+    __sbJarvisRenderMute(root);
+    __sbJarvisStartLevelLoop(root);
+    if (__sbAgentBusy) __sbJarvisLogShow(__sbAgentBusyLabel);
+  });
+
+  __sbJarvisKeyHandler = (e) => {
+    if (e.key === "Escape" && __sbJarvisOpen) { e.preventDefault(); e.stopPropagation(); __sbCloseJarvis(); }
+  };
+  window.addEventListener("keydown", __sbJarvisKeyHandler, true);
+}
+
+function __sbCloseJarvis() {
+  if (!__sbJarvisOpen) return;
+  __sbJarvisOpen = false;
+  __sbJarvisClearTimers();
+  __sbJarvisStopLevelLoop();
+  const root = document.getElementById("__sb_jarvis__");
+  if (root) {
+    root.setAttribute("data-on", "0");
+    root.setAttribute("data-stage", "collapse");
+    __sbJarvisAfter(620, () => {
+      root.setAttribute("data-stage", "off");
+      __sbJarvisStopSoulFn();
+    });
+  }
+  __sbJarvisHideConsole(true);
+  root?.querySelector?.(".jv-stat")?.classList.remove("on");
+  if (__sbJarvisStatHideTimer) { clearTimeout(__sbJarvisStatHideTimer); __sbJarvisStatHideTimer = null; }
+  __sbWkReturnFromCenter();                 // the real mascot flies back down to the bar
+  try { __sbCamStop(); } catch (_) {}       // turn the camera off when leaving Jarvis
+  try { __sbCollapseCard(); } catch (_) {}  // close the chat card so it doesn't linger after Jarvis
+  document.documentElement.classList.remove("sb-jarvis-active");
+
+  // turn voice back off only if Jarvis is what switched it on
+  try { if (__sbJarvisStartedVoice && __sbHeadphoneMode) __sbExitHeadphoneMode(); } catch (_) {}
+  __sbJarvisStartedVoice = false;
+
+  // restore the fast-voice toggle to whatever it was before Jarvis forced it on
+  if (__sbJarvisPrevSpeculative !== null) {
+    __sbSpeculativeReply = __sbJarvisPrevSpeculative;
+    __sbJarvisPrevSpeculative = null;
+    if (typeof __sbSyncSpeculativeToggle === "function") __sbSyncSpeculativeToggle();
+  }
+
+  if (__sbJarvisKeyHandler) {
+    window.removeEventListener("keydown", __sbJarvisKeyHandler, true);
+    __sbJarvisKeyHandler = null;
+  }
+
+  try { if (typeof __sbWakeScheduleRearm === "function") __sbWakeScheduleRearm(); } catch (_) {}   // back to ambient listening
+}
+
+// audio-reactive bars + soul "speak" drive
+function __sbJarvisStartLevelLoop(root) {
+  __sbJarvisStopLevelLoop();
+  const bars = Array.from(root.querySelectorAll(".jv-bars i"));
+  const n = bars.length;
+  const t0 = performance.now();
+  const loop = (now) => {
+    const t = (now - t0) / 1000;
+    const speaking = __sbJarvisSpeaking();
+    const base = speaking ? 0.5 : 0.16;
+    const amp = speaking ? 0.45 : 0.14;
+    const l = Math.max(0, base + amp * (0.5 * Math.sin(t * 9) + 0.3 * Math.sin(t * 17 + 1) + 0.2 * Math.sin(t * 27)));
+    __sbJarvisLevel = Math.min(1, l);
+    for (let i = 0; i < n; i++) {
+      const c = Math.abs(i - (n - 1) / 2) / ((n - 1) / 2);
+      const h = 3 + __sbJarvisLevel * (20 - c * 14) * (0.5 + 0.5 * Math.sin(i * 1.7 + __sbJarvisLevel * 9));
+      bars[i].style.height = Math.max(3, h) + "px";
+      bars[i].style.opacity = (0.5 + __sbJarvisLevel * 0.5).toFixed(2);
+    }
+    __sbJarvisLevelRaf = requestAnimationFrame(loop);
+  };
+  __sbJarvisLevelRaf = requestAnimationFrame(loop);
+}
+function __sbJarvisStopLevelLoop() {
+  if (__sbJarvisLevelRaf) { cancelAnimationFrame(__sbJarvisLevelRaf); __sbJarvisLevelRaf = null; }
+}
+
+// ── HUD console: real delegate/research steps, Iron-Man style ──────────────
+function __sbJarvisLogShow(title) {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root || !__sbJarvisOpen) return;
+  const t = root.querySelector(".jv-con-title");
+  if (t && title) t.textContent = String(title).replace(/[.…\s]+$/, "") || "Working";
+  const con = root.querySelector(".jv-console");
+  if (con) con.classList.add("on");
+  if (__sbJarvisConsoleHideTimer) { clearTimeout(__sbJarvisConsoleHideTimer); __sbJarvisConsoleHideTimer = null; }
+}
+function __sbJarvisPushLog(text) {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root || !__sbJarvisOpen) return;
+  const con = root.querySelector(".jv-console");
+  const body = root.querySelector(".jv-con-body");
+  if (!con || !body) return;
+  con.classList.add("on");
+  const prev = body.lastElementChild;
+  if (prev) prev.classList.add("done");
+  const line = document.createElement("div");
+  line.className = "jv-con-line";
+  line.innerHTML = `<span class="mk">&#9656;</span><span>${__sbEscHtml(String(text))}</span>`;
+  body.appendChild(line);
+  while (body.children.length > 7) body.removeChild(body.firstChild);
+  if (__sbJarvisConsoleHideTimer) clearTimeout(__sbJarvisConsoleHideTimer);
+  __sbJarvisConsoleHideTimer = setTimeout(() => __sbJarvisHideConsole(false), 9000);
+}
+function __sbJarvisLogDone() {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root) return;
+  const prev = root.querySelector(".jv-con-body")?.lastElementChild;
+  if (prev) prev.classList.add("done");
+  if (__sbJarvisConsoleHideTimer) clearTimeout(__sbJarvisConsoleHideTimer);
+  __sbJarvisConsoleHideTimer = setTimeout(() => __sbJarvisHideConsole(false), 4500);
+}
+function __sbJarvisHideConsole(immediate) {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root) return;
+  const con = root.querySelector(".jv-console");
+  if (con) con.classList.remove("on");
+  if (immediate) { const body = root.querySelector(".jv-con-body"); if (body) body.innerHTML = ""; }
+  if (__sbJarvisConsoleHideTimer) { clearTimeout(__sbJarvisConsoleHideTimer); __sbJarvisConsoleHideTimer = null; }
+}
+
+// ── Corner stat HUD: pops a follower count (count-up) with a green ▲ / red ▼ delta. Fed from the
+//    real /x-status data (data.followers.{count,delta7d}) when you ask "how's my X doing". ──
+function __sbJarvisCountUp(el, target) {
+  const dur = 1100, t0 = performance.now();
+  const fmt = (n) => Math.round(n).toLocaleString();
+  const tick = (now) => {
+    const k = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - k, 3);   // ease-out
+    el.textContent = fmt(target * e);
+    if (k < 1) requestAnimationFrame(tick); else el.textContent = fmt(target);
+  };
+  requestAnimationFrame(tick);
+}
+function __sbJarvisShowXStat(data) {
+  const root = document.getElementById("__sb_jarvis__");
+  if (!root || !__sbJarvisOpen) return;
+  const count = Number(data?.followers?.count);
+  if (!Number.isFinite(count)) return;
+  const delta = Number(data?.followers?.delta7d);
+
+  let el = root.querySelector(".jv-stat");
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "jv-stat";
+    el.innerHTML = `<div class="lbl">Followers on X</div><div class="num">0</div><div class="delta-wrap"></div>`;
+    root.appendChild(el);
+  }
+  const dWrap = el.querySelector(".delta-wrap");
+  if (Number.isFinite(delta) && delta !== 0) {
+    const up = delta > 0;
+    dWrap.innerHTML = `<span class="delta ${up ? "up" : "down"}"><span class="ar">${up ? "▲" : "▼"}</span>${up ? "+" : "−"}${Math.abs(delta)} this week</span>`;
+  } else if (Number.isFinite(delta)) {
+    dWrap.innerHTML = `<span class="delta flat">No change this week</span>`;
+  } else {
+    dWrap.innerHTML = "";
+  }
+
+  requestAnimationFrame(() => el.classList.add("on"));
+  __sbJarvisCountUp(el.querySelector(".num"), count);
+  if (__sbJarvisStatHideTimer) clearTimeout(__sbJarvisStatHideTimer);
+  __sbJarvisStatHideTimer = setTimeout(() => el.classList.remove("on"), 9000);
+}
+
+// ── The soul: a slowly-rotating sphere of glowing nodes, wireframe meridians,
+//    radial spokes and a hot pulsing core. Canvas + additive blending. ───────
+function __sbJarvisBuildGeo() {
+  const dist2 = (a, b) => { const x = a[0]-b[0], y = a[1]-b[1], z = a[2]-b[2]; return x*x+y*y+z*z; };
+  const fib = (n) => {
+    const pts = []; const gold = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < n; i++) {
+      const y = 1 - (i / (n - 1)) * 2;
+      const r = Math.sqrt(Math.max(0, 1 - y * y));
+      const th = gold * i;
+      pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
+    }
+    return pts;
+  };
+  const shell = fib(1150).map((v) => ({
+    v, r: 0.9 + Math.random() * 0.13, b: 0.35 + Math.random() * 0.65,
+    tw: Math.random() * Math.PI * 2, ts: 0.6 + Math.random() * 2.4,
+  }));
+  const nodes = [];
+  for (let i = 0; i < 54; i++) {
+    const p = shell[(Math.random() * shell.length) | 0];
+    nodes.push({ v: p.v.map((x) => x * (0.99 + Math.random() * 0.04)), tw: Math.random() * 6.28 });
+  }
+  const links = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const d = nodes.map((n, j) => ({ j, dist: dist2(nodes[i].v, n.v) }))
+      .filter((o) => o.j !== i).sort((a, b) => a.dist - b.dist).slice(0, 2);
+    d.forEach((o) => { if (o.j > i) links.push([i, o.j]); });
+  }
+  const meridians = [];
+  for (let m = 0; m < 12; m++) {
+    const lon = (m / 12) * Math.PI * 2; const line = [];
+    for (let k = 0; k <= 30; k++) {
+      const lat = -Math.PI / 2 + (k / 30) * Math.PI;
+      line.push([Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]);
+    }
+    meridians.push(line);
+  }
+  const lats = [];
+  for (let l = 1; l < 7; l++) {
+    const lat = -Math.PI / 2 + (l / 7) * Math.PI; const cy = Math.sin(lat), rr = Math.cos(lat); const line = [];
+    for (let k = 0; k <= 48; k++) { const lon = (k / 48) * Math.PI * 2; line.push([Math.cos(lon) * rr, cy, Math.sin(lon) * rr]); }
+    lats.push(line);
+  }
+  const spokes = [];
+  for (let s = 0; s < 40; s++) {
+    const a = (s / 40) * Math.PI * 2; const jit = (Math.random() - 0.5) * 0.12;
+    spokes.push([[Math.cos(a) * 0.12, jit, Math.sin(a) * 0.12],
+      [Math.cos(a) * (1.0 + Math.random() * 0.06), jit, Math.sin(a) * (1.0 + Math.random() * 0.06)]]);
+  }
+  const ring = [];
+  for (let k = 0; k <= 90; k++) { const a = (k / 90) * Math.PI * 2; ring.push([Math.cos(a) * 1.16, Math.sin(a) * 1.16, 0]); }
+  const sparks = [];
+  const fib90 = fib(90);
+  for (let i = 0; i < 90; i++) { const v = fib90[i]; sparks.push({ v: v.map((x) => x * (1.15 + Math.random() * 0.5)), tw: Math.random() * 6.28, ts: 1 + Math.random() * 3 }); }
+  return { shell, nodes, links, meridians, lats, spokes, ring, sparks };
+}
+
+function __sbJarvisStartSoul(root) {
+  __sbJarvisStopSoulFn();
+  const canvas = root.__sbSoulCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const AMBER = [74, 158, 255], HOT = [198, 230, 255];
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+  const g = __sbJarvisBuildGeo();
+  let raf, t0 = performance.now();
+  function resize() { const s = canvas.clientWidth, h = canvas.clientHeight; canvas.width = s * dpr; canvas.height = h * dpr; }
+  resize();
+  let ro = null;
+  try { ro = new ResizeObserver(resize); ro.observe(canvas); } catch (_) {}
+  function rot(p, cy, sy, cx, sx) {
+    let x = p[0] * cy + p[2] * sy; let z = -p[0] * sy + p[2] * cy;
+    let y = p[1] * cx - z * sx; z = p[1] * sx + z * cx; return [x, y, z];
+  }
+  function frame(now) {
+    const t = (now - t0) / 1000;
+    const I = 1, SP = __sbJarvisSpeaking() ? __sbJarvisLevel : 0;
+    const W = canvas.width, H = canvas.height;
+    const cx0 = W / 2, cy0 = H * 0.5;
+    const R = Math.min(W, H) * 0.36;
+    const yaw = t * 0.28, pitch = -0.42 + Math.sin(t * 0.4) * 0.05;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cxp = Math.cos(pitch), sxp = Math.sin(pitch);
+    const focal = 3.4;
+    const pulse = 0.82 + 0.18 * Math.sin(t * 1.8) + SP * 0.25;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "lighter";
+
+    const proj = (p, rad) => {
+      const q = rot([p[0] * rad, p[1] * rad, p[2] * rad], cy, sy, cxp, sxp);
+      const per = focal / (focal - q[2]);
+      return [cx0 + q[0] * R * per, cy0 + q[1] * R * per, q[2], per];
+    };
+
+    ctx.lineWidth = 1 * dpr;
+    const drawPoly = (line, base) => {
+      for (let i = 1; i < line.length; i++) {
+        const a = proj(line[i - 1], 1), b = proj(line[i], 1);
+        const depth = (a[2] + b[2]) / 2; const da = (depth + 1) / 2;
+        ctx.strokeStyle = rgba(AMBER, base * (0.05 + da * 0.22) * I);
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      }
+    };
+    g.meridians.forEach((l) => drawPoly(l, 1));
+    g.lats.forEach((l) => drawPoly(l, 1));
+
+    ctx.lineWidth = 1 * dpr;
+    g.spokes.forEach((sp) => {
+      const a = proj(sp[0], 1), b = proj(sp[1], 1); const da = (b[2] + 1) / 2;
+      ctx.strokeStyle = rgba(HOT, (0.05 + da * 0.3) * I);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    });
+
+    ctx.lineWidth = 1.4 * dpr;
+    ctx.beginPath();
+    g.ring.forEach((p, i) => { const a = proj(p, 1); if (i === 0) ctx.moveTo(a[0], a[1]); else ctx.lineTo(a[0], a[1]); });
+    ctx.strokeStyle = rgba(AMBER, 0.22 * I); ctx.stroke();
+
+    ctx.lineWidth = 1 * dpr;
+    g.links.forEach(([i, j]) => {
+      const a = proj(g.nodes[i].v, 1), b = proj(g.nodes[j].v, 1);
+      const da = ((a[2] + b[2]) / 2 + 1) / 2;
+      ctx.strokeStyle = rgba(HOT, (0.04 + da * 0.16) * I);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    });
+
+    for (let k = 0; k < g.shell.length; k++) {
+      const s = g.shell[k]; const a = proj(s.v, s.r); const da = (a[2] + 1) / 2;
+      const tw = 0.6 + 0.4 * Math.sin(t * s.ts + s.tw);
+      const al = s.b * da * da * tw * I;
+      if (al < 0.02) continue;
+      const sz = (0.6 + da * 1.5) * dpr * a[3];
+      ctx.fillStyle = rgba(da > 0.7 ? HOT : AMBER, Math.min(1, al));
+      ctx.fillRect(a[0] - sz / 2, a[1] - sz / 2, sz, sz);
+    }
+
+    g.nodes.forEach((n) => {
+      const a = proj(n.v, 1); const da = (a[2] + 1) / 2;
+      if (da < 0.25) return;
+      const tw = 0.6 + 0.4 * Math.sin(t * 2 + n.tw);
+      const rad = (1.4 + da * 1.8) * dpr * tw;
+      ctx.fillStyle = rgba(HOT, 0.9 * da * tw * I);
+      ctx.beginPath(); ctx.arc(a[0], a[1], rad, 0, 6.283); ctx.fill();
+    });
+
+    g.sparks.forEach((s) => {
+      const a = proj(s.v, 1); const da = (a[2] + 1) / 2;
+      const tw = Math.max(0, Math.sin(t * s.ts + s.tw));
+      const al = 0.5 * da * tw * I;
+      if (al < 0.03) return;
+      const sz = 1.1 * dpr;
+      ctx.fillStyle = rgba(HOT, al);
+      ctx.fillRect(a[0] - sz / 2, a[1] - sz / 2, sz, sz);
+    });
+
+    const coreR = R * (0.5 + 0.06 * Math.sin(t * 1.8)) * pulse;
+    const grad = ctx.createRadialGradient(cx0, cy0, 0, cx0, cy0, coreR);
+    grad.addColorStop(0, rgba(HOT, 0.95 * I));
+    grad.addColorStop(0.18, rgba([130, 195, 255], 0.7 * I));
+    grad.addColorStop(0.5, rgba(AMBER, 0.28 * I));
+    grad.addColorStop(1, rgba(AMBER, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(cx0, cy0, coreR, 0, 6.283); ctx.fill();
+
+    const pr = R * 0.07 * (1 + SP * 0.6);
+    const pg = ctx.createRadialGradient(cx0, cy0, 0, cx0, cy0, pr);
+    pg.addColorStop(0, rgba([255, 255, 255], I));
+    pg.addColorStop(1, rgba(HOT, 0));
+    ctx.fillStyle = pg;
+    ctx.beginPath(); ctx.arc(cx0, cy0, pr, 0, 6.283); ctx.fill();
+
+    ctx.globalCompositeOperation = "source-over";
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+  __sbJarvisStopSoul = () => { try { cancelAnimationFrame(raf); } catch (_) {} if (ro) try { ro.disconnect(); } catch (_) {} };
+}
+function __sbJarvisStopSoulFn() { if (__sbJarvisStopSoul) { try { __sbJarvisStopSoul(); } catch (_) {} __sbJarvisStopSoul = null; } }
+
+/* ============================================================================
+   AMBIENT WAKE LAYER — "Hey Braino" + double-clap, listening LOCALLY only.
+   While armed the mic NEVER reaches the GPT/real-time pipeline: a dedicated
+   SpeechRecognition watches solely for the wake phrase, and a Web Audio analyser
+   watches for a double-clap. Either trigger engages the real session
+   ("Hey Braino" → voice mode; double-clap → Jarvis), at which point the wake
+   layer disarms (handing the mic to that session) and re-arms when it ends.
+   Opt-in (brainoWakeListen), off by default. ================================ */
+let __sbWakeEnabled = false;       // persisted opt-in
+let __sbWakeArmed = false;         // currently listening for triggers
+let __sbWakeRec = null;            // dedicated wake-word recognizer (separate from voice STT)
+let __sbWakeShouldListen = false;  // drives the recognizer restart loop
+let __sbWakeStream = null;         // getUserMedia stream for clap detection
+let __sbWakeAudioCtx = null;
+let __sbWakeAnalyser = null;
+let __sbWakeRaf = null;
+let __sbWakeClapTimes = [];
+let __sbWakeLastOnset = 0;
+let __sbWakePrevRms = 0;
+let __sbWakeRearmTimer = null;
+let __sbWakeTriggering = false;
+
+const __SB_WAKE_PHRASE = /\bhey\s+(braino|bro\s*no|brno|bruno|brain\s*o|brainow|brainard|raino)\b/;
+const __SB_CLAP_THRESH = 0.18;     // RMS onset threshold for a clap (tune to taste)
+
+// The wake layer must stand down whenever a real session owns the mic.
+function __sbWakeEngaged() { return !!__sbHeadphoneMode || !!__sbJarvisOpen; }
+
+function __sbWakeSetEnabled(on) {
+  __sbWakeEnabled = !!on;
+  if (__sbContextOk()) chrome.storage.local.set({ brainoWakeListen: __sbWakeEnabled });
+  __sbWakeSyncToggle();
+  if (__sbWakeEnabled) {
+    __sbArmWake();
+    __sbShowBubble("Always listening: ON. Say “Hey Braino” to talk, or double-clap for Jarvis.", true, { tone: "status", kicker: "Braino" });
+  } else {
+    if (__sbWakeRearmTimer) { clearTimeout(__sbWakeRearmTimer); __sbWakeRearmTimer = null; }
+    __sbDisarmWake();
+    __sbShowBubble("Always listening: OFF.", false, { tone: "status", kicker: "Braino" });
+  }
+}
+
+function __sbWakeSyncToggle() {
+  document.getElementById("__sb_mode_dropdown__")
+    ?.querySelector('.sb-dropdown-item[data-wake="toggle"]')
+    ?.classList.toggle("selected", __sbWakeEnabled);
+}
+
+function __sbWakeScheduleRearm() {
+  if (!__sbWakeEnabled) return;
+  if (__sbWakeRearmTimer) clearTimeout(__sbWakeRearmTimer);
+  __sbWakeRearmTimer = setTimeout(() => {       // let the session tear down + avoid hearing its own tail
+    __sbWakeRearmTimer = null;
+    if (__sbWakeEnabled && !__sbWakeEngaged()) __sbArmWake();
+  }, 1500);
+}
+
+async function __sbArmWake() {
+  if (__sbWakeArmed || __sbWakeEngaged() || !__sbWakeEnabled || !__sbContextOk()) return;
+  __sbWakeArmed = true;
+  __sbWakeStartRec();
+  try { await __sbWakeStartClap(); } catch (_) {}
+}
+
+function __sbDisarmWake() {
+  __sbWakeArmed = false;
+  __sbWakeShouldListen = false;
+  if (__sbWakeRec) { try { __sbWakeRec.abort(); } catch (_) {} __sbWakeRec = null; }
+  if (__sbWakeRaf) { cancelAnimationFrame(__sbWakeRaf); __sbWakeRaf = null; }
+  try { __sbWakeStream?.getTracks().forEach((t) => t.stop()); } catch (_) {}
+  __sbWakeStream = null;
+  try { __sbWakeAudioCtx?.close(); } catch (_) {}
+  __sbWakeAudioCtx = null; __sbWakeAnalyser = null;
+  __sbWakeClapTimes = []; __sbWakePrevRms = 0;
+}
+
+// Dedicated wake-word recognizer — watches ONLY for the phrase, never forwards to the turn pipeline.
+function __sbWakeStartRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  __sbWakeShouldListen = true;
+  const build = () => {
+    if (!__sbWakeShouldListen || __sbWakeEngaged()) return;
+    let rec;
+    try { rec = new SR(); } catch (_) { return; }
+    rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    __sbWakeRec = rec;
+    rec.onresult = (e) => {
+      if (__sbWakeTriggering || __sbWakeEngaged()) return;
+      const text = Array.from(e.results).map((r) => r[0].transcript).join(" ").toLowerCase();
+      if (__SB_WAKE_PHRASE.test(text)) __sbWakeTrigger("voice");
+    };
+    rec.onerror = (e) => {
+      if (e.error === "aborted") return;
+      __sbWakeRec = null;
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { __sbDisarmWake(); return; }
+      if (__sbWakeShouldListen) setTimeout(build, 300);
+    };
+    rec.onend = () => { __sbWakeRec = null; if (__sbWakeShouldListen && !__sbWakeEngaged()) setTimeout(build, 200); };
+    try { rec.start(); } catch (_) { if (__sbWakeShouldListen) setTimeout(build, 500); }
+  };
+  build();
+}
+
+// Web Audio double-clap detector — sharp broadband transient, twice within a short window.
+async function __sbWakeStartClap() {
+  if (!navigator.mediaDevices?.getUserMedia) return;
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+  });
+  if (!__sbWakeArmed) { stream.getTracks().forEach((t) => t.stop()); return; }   // disarmed while awaiting permission
+  __sbWakeStream = stream;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  __sbWakeAudioCtx = new Ctx();
+  try { await __sbWakeAudioCtx.resume(); } catch (_) {}
+  const src = __sbWakeAudioCtx.createMediaStreamSource(stream);
+  __sbWakeAnalyser = __sbWakeAudioCtx.createAnalyser();
+  __sbWakeAnalyser.fftSize = 1024;
+  src.connect(__sbWakeAnalyser);
+  const buf = new Float32Array(__sbWakeAnalyser.fftSize);
+  const tick = () => {
+    if (!__sbWakeArmed || !__sbWakeAnalyser) return;
+    __sbWakeAnalyser.getFloatTimeDomainData(buf);
+    let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    const now = performance.now();
+    // onset = a sharp attack crossing the threshold from quiet, with a refractory gap
+    if (rms > __SB_CLAP_THRESH && __sbWakePrevRms < __SB_CLAP_THRESH * 0.5 && now - __sbWakeLastOnset > 120) {
+      __sbWakeLastOnset = now;
+      __sbWakeClapTimes = __sbWakeClapTimes.filter((t) => now - t < 900);
+      __sbWakeClapTimes.push(now);
+      if (__sbWakeClapTimes.length >= 2) {
+        const dt = now - __sbWakeClapTimes[__sbWakeClapTimes.length - 2];
+        if (dt >= 120 && dt <= 700) { __sbWakeClapTimes = []; __sbWakeTrigger("clap"); return; }
+      }
+    }
+    __sbWakePrevRms = rms;
+    __sbWakeRaf = requestAnimationFrame(tick);
+  };
+  __sbWakeRaf = requestAnimationFrame(tick);
+}
+
+function __sbWakeTrigger(kind) {
+  if (__sbWakeTriggering || !__sbWakeArmed) return;
+  __sbWakeTriggering = true;
+  __sbDisarmWake();                                  // hand the mic to the engaged session
+  try {
+    if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+    if (kind === "clap") { if (!__sbJarvisOpen) __sbOpenJarvis(); }
+    else { if (!__sbHeadphoneMode) __sbToggleHeadphoneMode(); }
+  } catch (_) {}
+  setTimeout(() => { __sbWakeTriggering = false; }, 1200);
+}
+
+// Load the opt-in at boot and arm if it was on.
+try {
+  __sbStorageGet(["brainoWakeListen"]).then(({ brainoWakeListen }) => {
+    __sbWakeEnabled = brainoWakeListen === true;
+    __sbWakeSyncToggle();
+    if (__sbWakeEnabled) __sbWakeScheduleRearm();
+  }).catch(() => {});
+} catch (_) {}
+
+/* ============================================================================
+   CAMERA VISION — "Hey Braino, can you see me?" Turns the webcam on, shows a
+   small live PiP, grabs a frame, sends it to the (GPT) vision backend, and
+   speaks what it sees. Frame-sampling on demand — vision models take stills,
+   not video. ================================================================= */
+let __sbCamFrameEl = null;       // the extension-origin <iframe> that owns the camera + is the PiP
+let __sbCamReady = false;
+let __sbCamBusy = false;
+let __sbCamOn = false;           // camera session active (live feed open) — drives the Jarvis cam button
+let __sbCamMsgHandler = null;
+let __sbCamFramePending = null;  // resolver for an in-flight frame grab
+let __sbCamEnsureResolve = null; // resolver for an in-flight ensure
+
+function __sbIsVisionStopRequest(text) {
+  const t = String(text || "").toLowerCase();
+  return /\b(turn off|stop|close|kill|shut off)\b.{0,14}\b(camera|cam|looking|watching|vision|seeing)\b/.test(t)
+      || /\bstop looking\b/.test(t) || /\bclose the camera\b/.test(t);
+}
+function __sbIsScreenVisionRequest(text) {
+  const t = String(text || "").toLowerCase();
+  return /\b(see (my|the|this) screen|what'?s on (my|the|this) screen|look at (my |the |this )?screen|read (my |the )?screen|see this page|look at this page|see (this|the) page|what'?s on (this |the |my )?page|what am i looking at|describe (my |the |this )?(screen|page)|what do you see on (my |the )?screen)\b/.test(t)
+      || /\blook at this\b/.test(t);
+}
+function __sbIsVisionRequest(text) {
+  const t = String(text || "").toLowerCase();
+  if (__sbIsVisionStopRequest(t)) return false;
+  if (/\b(screen|this page|the page|my page|this site|this website)\b/.test(t)) return false;   // that's screen vision
+  return /\b(can you see me|do you see me|are you seeing me|look at me|what do you see|see me|can you see this|use (your |the )?camera|turn on (your |the )?camera|open (your |the )?camera|see my (face|room|desk|setup|surroundings)|how do i look|what am i (wearing|holding|doing))\b/.test(t);
+}
+
+function __sbVisionInjectStyle() {
+  if (document.getElementById("__sb_cam_style__")) return;
+  const css = `
+  #__sb_cam__{position:fixed;right:22px;bottom:96px;width:200px;height:150px;z-index:2147483647;
+    border-radius:16px;overflow:hidden;background:#0b0807;
+    box-shadow:0 18px 50px -18px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.08);
+    opacity:0;transform:translateY(10px) scale(.96);
+    transition:opacity .35s ease,transform .35s cubic-bezier(.2,.7,.2,1);}
+  #__sb_cam__.on{opacity:1;transform:none;}
+  #__sb_cam__ iframe{width:100%;height:100%;border:0;display:block;background:#0b0807;}
+  #__sb_cam__ .sb-cam-dot{position:absolute;top:9px;left:10px;width:9px;height:9px;border-radius:50%;
+    background:#ff4d4d;box-shadow:0 0 0 0 rgba(255,77,77,.6);animation:sbCamDot 1.6s ease-out infinite;}
+  @keyframes sbCamDot{0%{box-shadow:0 0 0 0 rgba(255,77,77,.55);}70%{box-shadow:0 0 0 8px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
+  #__sb_cam__ .sb-cam-x{position:absolute;top:7px;right:8px;width:22px;height:22px;border-radius:50%;
+    border:0;cursor:pointer;background:rgba(0,0,0,.45);color:#fff;font-size:12px;line-height:22px;padding:0;}
+  #__sb_cam__ .sb-cam-x:hover{background:rgba(0,0,0,.7);}`;
+  const style = document.createElement("style");
+  style.id = "__sb_cam_style__"; style.textContent = css;
+  document.head.appendChild(style);
+}
+
+// Open (or reuse) the extension-origin camera iframe. Resolves with a status string:
+// "ready" | "needpermission" | "denied" | "timeout". The iframe holds the EXTENSION's camera grant
+// (persistent, cross-page, not gated by the page's per-origin permission) and IS the live PiP.
+function __sbCamEnsure() {
+  return new Promise((resolve) => {
+    if (__sbCamReady && document.getElementById("__sb_cam__")) { resolve("ready"); return; }
+    __sbVisionInjectStyle();
+    let pip = document.getElementById("__sb_cam__");
+    if (!pip) {
+      pip = document.createElement("div");
+      pip.id = "__sb_cam__";
+      const iframe = document.createElement("iframe");
+      iframe.allow = "camera";                                  // delegate camera to the extension iframe
+      iframe.src = chrome.runtime.getURL("cam.html");
+      pip.appendChild(iframe);
+      const dot = document.createElement("div"); dot.className = "sb-cam-dot"; pip.appendChild(dot);
+      const x = document.createElement("button"); x.className = "sb-cam-x"; x.type = "button";
+      x.textContent = "✕"; x.setAttribute("aria-label", "Stop camera");
+      x.addEventListener("click", () => __sbCamStop());
+      pip.appendChild(x);
+      document.documentElement.appendChild(pip);
+      __sbCamFrameEl = iframe;
+    }
+    requestAnimationFrame(() => pip.classList.add("on"));
+
+    if (!__sbCamMsgHandler) {
+      __sbCamMsgHandler = (e) => {
+        const d = e?.data; if (!d || d.__sbCam !== true) return;
+        if (d.type === "ready") { __sbCamReady = true; const r = __sbCamEnsureResolve; __sbCamEnsureResolve = null; if (r) r("ready"); }
+        else if (d.type === "needpermission") { const r = __sbCamEnsureResolve; __sbCamEnsureResolve = null; if (r) r("needpermission"); }
+        else if (d.type === "denied") { const r = __sbCamEnsureResolve; __sbCamEnsureResolve = null; if (r) r("denied"); }
+        else if (d.type === "frame") { const r = __sbCamFramePending; __sbCamFramePending = null; if (r) r(d.data || ""); }
+      };
+      window.addEventListener("message", __sbCamMsgHandler);
+    }
+    __sbCamEnsureResolve = resolve;
+    setTimeout(() => { if (__sbCamEnsureResolve === resolve) { __sbCamEnsureResolve = null; resolve(__sbCamReady ? "ready" : "timeout"); } }, 12000);
+  });
+}
+
+function __sbCamStop() {
+  try { chrome.runtime.sendMessage({ action: "closeCamWindow" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+  __sbCamReady = false; __sbCamFrameEl = null; __sbCamOn = false;
+}
+
+// Camera vision now runs entirely through the background, which opens a top-level extension popup
+// window (cam.html) — a context NO page Permissions-Policy can block — grabs a frame over a Port,
+// and runs the vision call. We just trigger it and speak the result.
+async function __sbHandleVisionRequest(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  if (__sbCamBusy) { __sbCompleteVoiceTurn(ctx); return; }
+  __sbCamBusy = true;
+  const say = async (line) => { if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); else __sbShowBubble(line, false, { kicker: "Braino" }); };
+  try {
+    const ack = "One sec, let me look…";
+    try { __sbNoteSpoken?.(ack); } catch (_) {}
+    if (fromVoice) void __sbSpeakWithPreferredVoice(ack, voiceOutput, { verbatim: true });
+    const visionPrompt = `You are Braino, looking at the user live through their webcam. They asked: "${String(promptText || "Can you see me?")}". Warmly and briefly describe what you actually see — the person and their surroundings — in one or two natural spoken sentences. Do not mention being an AI or that this is an image or a frame.`;
+    let res = null;
+    try { res = await __sbRuntimeMessage({ action: "brainoCameraVision", prompt: visionPrompt }); } catch (_) {}
+    const status = res?.status;
+    if (status === "needpermission") { await say("I've opened a little camera window — tap “Enable camera” in it and choose Allow, then ask me again."); return; }
+    if (status === "denied") { await say("The camera's blocked. In that little camera window, allow the camera, then ask me again."); return; }
+    if (!res?.ok) { await say("I couldn't get the camera going — check the camera window I opened, then try again."); return; }
+    __sbCamOn = true;
+    const jvRoot = document.getElementById("__sb_jarvis__");
+    if (jvRoot) __sbJarvisRenderCamBtn(jvRoot);
+    const line = String(res?.reply || "").trim() || "I can see you — but I couldn't quite put it into words. Try once more?";
+    if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
+    else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });
+  } finally {
+    __sbCamBusy = false;
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+// "See my screen" — capture the visible tab (chrome.tabs.captureVisibleTab in the background; no
+// camera, no getDisplayMedia gesture). Braino's own UI is hidden for the shot so it sees the page.
+async function __sbScreenGrabBase64() {
+  const hide = ["__sb_jarvis__", "__sb_cam__", "__sb_root__", "__sb_bar__", "__sb_walk_lane__", "__sb_point_fx__"];
+  const restore = [];
+  for (const id of hide) {
+    const el = document.getElementById(id);
+    if (el && el.style.visibility !== "hidden") { restore.push([el, el.style.visibility]); el.style.visibility = "hidden"; }
+  }
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // let the hide paint
+  let dataUrl = "";
+  try { const res = await __sbRuntimeMessage({ action: "captureVisibleTabImage" }); if (res?.ok) dataUrl = String(res.dataUrl || ""); } catch (_) {}
+  for (const [el, v] of restore) { try { el.style.visibility = v; } catch (_) {} }
+  return dataUrl ? (dataUrl.split(",")[1] || "") : "";
+}
+
+async function __sbHandleScreenVisionRequest(promptText, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  if (__sbCamBusy) { __sbCompleteVoiceTurn(ctx); return; }
+  __sbCamBusy = true;
+  try {
+    const ack = "Let me look at your screen…";
+    try { __sbNoteSpoken?.(ack); } catch (_) {}
+    if (fromVoice) void __sbSpeakWithPreferredVoice(ack, voiceOutput, { verbatim: true });
+    const frame = await __sbScreenGrabBase64();
+    if (!frame) {
+      const line = "I couldn't capture this screen — some pages (Chrome settings, the web store) block it. Try on a normal site.";
+      if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
+      else __sbShowBubble(line, false, { kicker: "Braino" });
+      return;
+    }
+    const visionPrompt = `You are Braino, looking at a screenshot of the web page the user is viewing. They asked: "${String(promptText || "What's on my screen?")}". Briefly and helpfully describe what's on screen or answer their question about it, in one or two natural spoken sentences. Do not mention being an AI or that this is a screenshot.`;
+    let reply = "";
+    try { const res = await __sbRuntimeMessage({ action: "brainoVision", imageBase64: frame, prompt: visionPrompt }); reply = String(res?.reply || "").trim(); } catch (_) {}
+    const line = reply || "I grabbed your screen but couldn't read it clearly — try again.";
+    if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
+    else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });
+  } finally {
+    __sbCamBusy = false;
+    __sbCompleteVoiceTurn(ctx);
+  }
+}
+
+if (__sbIsBrainoOwnSite()) {
+  // dormant on Braino's own site — the website provides its own Braino experience
+} else if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => __sbBuildBrainUI(), { once: true });
 } else {
   __sbBuildBrainUI();

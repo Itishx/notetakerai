@@ -2,6 +2,16 @@
 // Also handles SpeechRecognition for voice mode (mic access works here, not in side panel)
 // Phase 2: hosts the realtime WebRTC session so voice follows across tabs.
 
+// ── Production error hygiene: keep uncaught noise out of chrome://extensions ──
+window.addEventListener("error", (e) => {
+  console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+  e.preventDefault();
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+
 // ===== REALTIME VOICE SESSION (extension-global) =====
 const RT_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const RT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
@@ -11,7 +21,7 @@ let rtDc = null;
 let rtMic = null;
 let rtRemoteAudio = null;
 
-async function startRealtimeSession({ authToken, bootInstructions }) {
+async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }) {
   stopRealtimeSession();
 
   try {
@@ -23,12 +33,13 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
     rtPc = pc;
     rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
 
-    // Keep the remote track attached for WebRTC compatibility, but never play OpenAI audio.
-    // Braino's primary audible voice is ElevenLabs from the content script.
+    // Default Braino = mute OpenAI's audio (the model is text-only; Fish Audio is the voice).
+    // OpenAI-voice mode (voiceEngine === "realtime") = PLAY the model's native audio (faster, no Fish).
+    const playOpenAiVoice = voiceEngine === "realtime";
     rtRemoteAudio = new Audio();
     rtRemoteAudio.autoplay = true;
-    rtRemoteAudio.muted = true;
-    rtRemoteAudio.volume = 0;
+    rtRemoteAudio.muted = !playOpenAiVoice;
+    rtRemoteAudio.volume = playOpenAiVoice ? 1 : 0;
     document.body.appendChild(rtRemoteAudio);
     pc.ontrack = (ev) => {
       rtRemoteAudio.srcObject = ev.streams[0] || new MediaStream([ev.track]);
@@ -62,12 +73,16 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    // Per-mode model: OpenAI-voice mode uses gpt-realtime-2; Default Braino uses gpt-realtime-mini.
+    // The backend validates this against an allowlist (falls back to env).
+    const requestedModel = voiceEngine === "realtime" ? "gpt-realtime-2" : "gpt-realtime-mini";
     const res = await fetch(`${RT_API_BASE}/openai-realtime-call`, {
       method: "POST",
       headers: {
         "Content-Type": "application/sdp",
         apikey: RT_ANON_KEY,
         Authorization: `Bearer ${authToken}`,
+        "X-Braino-Realtime-Model": requestedModel,
       },
       body: offer.sdp || "",
     });
@@ -281,6 +296,37 @@ function cleanupCaptureResources() {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "offscreen") return;
+
+  if (message.action === "grabCameraFrame") {
+    (async () => {
+      let stream = null, v = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false,
+        });
+        v = document.createElement("video");
+        v.muted = true; v.playsInline = true; v.srcObject = stream;
+        v.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0;";
+        document.body.appendChild(v);
+        await new Promise((res) => { v.onloadedmetadata = () => res(); setTimeout(res, 1500); });
+        try { await v.play(); } catch (_) {}
+        await new Promise((res) => setTimeout(res, 350));   // let the sensor expose
+        const vw = v.videoWidth || 640, vh = v.videoHeight || 480;
+        const w = Math.min(1024, vw), h = Math.round(w * (vh / vw));
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(v, 0, 0, w, h);
+        const data = c.toDataURL("image/png").split(",")[1] || "";
+        sendResponse({ frame: data });
+      } catch (e) {
+        const n = e?.name || "";
+        sendResponse({ needpermission: (n === "NotAllowedError" || n === "SecurityError" || n === "PermissionDeniedError"), error: n });
+      } finally {
+        try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+        try { v && v.remove(); } catch (_) {}
+      }
+    })();
+    return true;
+  }
 
   if (message.action === "startVoiceListening") {
     voiceListening = true;

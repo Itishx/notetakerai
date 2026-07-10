@@ -209,7 +209,7 @@ export default function RealtimeCosts() {
             <GuideCard
               number="03"
               title="Watch for red flags"
-              text='If "OpenAI voice out" is above zero while ElevenLabs is selected, OpenAI is speaking too. That is the expensive path.'
+              text='If "OpenAI voice out" is above zero while Fish Audio is selected, OpenAI is speaking too. That is the expensive path.'
             />
           </section>
 
@@ -271,7 +271,7 @@ export default function RealtimeCosts() {
 
           {payload.totals.audioOutputWarningCount > 0 && (
             <div className="rtc-warning">
-              <strong>Red flag:</strong> OpenAI audio output tokens were logged in {payload.totals.audioOutputWarningCount} turn(s). If ElevenLabs voice is selected, those should be 0 because ElevenLabs should be the only speaker.
+              <strong>Red flag:</strong> OpenAI audio output tokens were logged in {payload.totals.audioOutputWarningCount} turn(s). If Fish Audio voice is selected, those should be 0 because Fish Audio should be the only speaker.
             </div>
           )}
 
@@ -444,20 +444,20 @@ function TurnCard({ turn }: { turn: RealtimeCostTurn }) {
       </div>
 
       <p className="rtc-token-note">
-        Kid version: tokens are tiny pieces of words or sound. More tokens means more money. The "OpenAI voice out" box should stay at 0 when ElevenLabs is speaking.
+        Kid version: tokens are tiny pieces of words or sound. More tokens means more money. The "OpenAI voice out" box should stay at 0 when Fish Audio is speaking.
       </p>
       <div className="rtc-token-grid">
         <TokenBox label="Text in" value={turn.tokens.realtimeInputText} help="Typed context sent to Realtime." />
         <TokenBox label="Voice in" value={turn.tokens.realtimeInputAudio} help="Your microphone audio." />
         <TokenBox label="Text out" value={turn.tokens.realtimeOutputText} help="Realtime text Braino produced." />
-        <TokenBox label="OpenAI voice out" value={turn.tokens.realtimeOutputAudio} help="Should be 0 with ElevenLabs." danger={turn.tokens.realtimeOutputAudio > 0} />
+        <TokenBox label="OpenAI voice out" value={turn.tokens.realtimeOutputAudio} help="Should be 0 with Fish Audio." danger={turn.tokens.realtimeOutputAudio > 0} />
         <TokenBox label="Saved tokens" value={`${formatTokens(turn.tokens.realtimeCachedText)} / ${formatTokens(turn.tokens.realtimeCachedAudio)}`} help="Discounted cached text/audio." />
         <TokenBox label="Transcribe audio" value={turn.tokens.transcriptionInputAudio} help="Audio counted by speech-to-text." />
       </div>
 
       {turn.warnings.openAiAudioOutputTokens && (
         <div className="rtc-warning rtc-warning-compact">
-          OpenAI audio output tokens were billed on this turn. ElevenLabs mode should keep this at 0.
+          OpenAI audio output tokens were billed on this turn. Fish Audio mode should keep this at 0.
         </div>
       )}
 

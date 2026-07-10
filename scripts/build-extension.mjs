@@ -11,11 +11,15 @@ const SRC = path.join(ROOT, "extension");
 const DIST = path.join(ROOT, "dist-extension");
 const ZIP_PATHS = [
   path.join(ROOT, "public", "braino-extension.zip"),
+  path.join(ROOT, "public", "braino-preview.zip"),
   path.join(ROOT, "dist", "braino-extension.zip"),
+  path.join(ROOT, "dist", "braino-preview.zip"),
+  path.join(ROOT, "braino-extension.zip"),
+  path.join(ROOT, "braino-dist-extension.zip"),
 ];
 
 // JS files to minify (simple whitespace removal, no obfuscation — Chrome flags obfuscated code as malware)
-const JS_FILES = ["popup.js", "background.js", "offscreen.js", "content.js", "braino-popup.js", "mic-permission.js"];
+const JS_FILES = ["popup.js", "background.js", "offscreen.js", "content.js", "braino-popup.js", "mic-permission.js", "cam.js"];
 
 // Files/folders to copy as-is
 const COPY_FILES = [
@@ -24,12 +28,13 @@ const COPY_FILES = [
   "sidepanel.html",
   "offscreen.html",
   "mic-permission.html",
+  "cam.html",
   "popup.html",
   "styles.css",
   "icon48.png",
   "icon128.png",
 ];
-const COPY_DIRS = ["fonts"];
+const COPY_DIRS = ["fonts", "lib"];
 
 // ── Clean & recreate dist ──────────────────────────────────────────────────
 syncExtensionAssets();

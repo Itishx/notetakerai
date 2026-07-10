@@ -1,17 +1,22 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import "./home.css";
 import Navbar from "@/components/Navbar";
+import SiteFooter from "@/components/SiteFooter";
+import { EditorialHero, Section, Eyebrow, EdTitle } from "@/lib/editorial";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 
-// ── Design tokens — matches site ───────────────────────────────
+// ── Design tokens ──────────────────────────────────────────────
+// The editorial shell (hero, pricing cards, section headers) rides on the
+// --sb-* tokens so light/dark flips for free. These coral constants are kept
+// ONLY for the dark cinematic brain-builder band + its SVG neurons, where a
+// fixed dark palette is intentional.
 const wrap: React.CSSProperties = { maxWidth: 1240, margin: "0 auto", padding: "0 32px" };
 const CORAL       = "#E8786E";
 const CORAL_LIGHT = "#F6A8A2";
-const CORAL_DEEP  = "#C9544A";
-const FONT_SANS   = "'NeueHaas', 'Neue Haas Grotesk Display', 'Helvetica Neue', Arial, sans-serif";
 const FONT_MONO   = "'JetBrains Mono', monospace";
 
 // ── Pricing data ───────────────────────────────────────────────
@@ -43,7 +48,7 @@ const VOICE_OPTIONS = [
 ] as const;
 
 const DELEGATE_OPTIONS = [
-  { tasks: null, price: 10, label: "Unlimited", sub: "No cap — above Premium's 150" },
+  { tasks: null, price: 10, label: "Unlimited", sub: "No cap. Above Premium's 150." },
 ];
 
 const INTEGRATIONS_LIST = [
@@ -196,7 +201,7 @@ function IntelModalContent({ current, onSave, onFree }: {
 
   return (
     <div>
-      {/* Premium baseline — already included */}
+      {/* Premium baseline (already included) */}
       <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(76,175,125,0.07)", border: "1px solid rgba(76,175,125,0.18)", marginBottom: 20 }}>
         <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--sb-ok)", marginBottom: 8 }}>Included with Premium</div>
         {["Advanced AI (Claude Sonnet)", "500 queries / month", "Persistent memory"].map((item, i) => (
@@ -263,7 +268,7 @@ function IntelModalContent({ current, onSave, onFree }: {
       <ModalFooter
         onFree={() => { onSave({ tier: "advanced", price: 0 }); onFree(); }}
         onAdd={() => { onSave({ tier, queriesPerMonth: m.queries, price: m.price }); onFree(); }}
-        addLabel={`Add ${m.queries.toLocaleString()} queries — +$${m.price}/mo`}
+        addLabel={`Add ${m.queries.toLocaleString()} queries, +$${m.price}/mo`}
         addDisabled={false}
       />
     </div>
@@ -285,7 +290,7 @@ function VoiceModalContent({ current, onSave, onFree }: {
         <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>⚡</span>
         <div>
           <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13.5, color: CORAL, marginBottom: 3 }}>Premium feature</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--sb-ink-3)", lineHeight: 1.45 }}>Voice requires Premium. <strong style={{ color: "var(--sb-ink-2)" }}>1 hr / month is already included</strong> — prices below are extra on top of that.</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--sb-ink-3)", lineHeight: 1.45 }}>Voice requires Premium. <strong style={{ color: "var(--sb-ink-2)" }}>1 hr / month is already included.</strong> Prices below are extra on top of that.</div>
         </div>
       </div>
 
@@ -329,8 +334,8 @@ function VoiceModalContent({ current, onSave, onFree }: {
           else if (selected) { onSave({ hours: selected.hours, price: selected.price }); onFree(); }
         }}
         addLabel={
-          showCustom && customHrs && Number(customHrs) > 0 ? `Add ${customHrs} hrs total — +$${customPrice}/mo` :
-          selected ? `Add ${selected.label} — +$${selected.price}/mo` : "Select an option above"
+          showCustom && customHrs && Number(customHrs) > 0 ? `Add ${customHrs} hrs total, +$${customPrice}/mo` :
+          selected ? `Add ${selected.label}, +$${selected.price}/mo` : "Select an option above"
         }
         addDisabled={!selected && !(showCustom && Number(customHrs) > 0)}
       />
@@ -364,7 +369,7 @@ function DelegateModalContent({ current, onSave, onFree }: {
       >
         <div style={{ textAlign: "left" }}>
           <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: "var(--sb-ink)", marginBottom: 2 }}>Unlimited tasks</div>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: "var(--sb-ink-3)" }}>No cap — above Premium's 150</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: "var(--sb-ink-3)" }}>No cap. Above Premium's 150.</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontFamily: "'Instrument Serif', serif", fontSize: 20, color: unlimitedOn ? CORAL : "var(--sb-ink-3)" }}>+${opt.price}/mo</span>
@@ -377,7 +382,7 @@ function DelegateModalContent({ current, onSave, onFree }: {
       <ModalFooter
         onFree={() => { onSave({ tasks: 150, price: 0 }); onFree(); }}
         onAdd={() => { onSave({ tasks: opt.tasks, price: opt.price }); onFree(); }}
-        addLabel={unlimitedOn ? `Add Unlimited tasks — +$${opt.price}/mo` : "Enable Unlimited above"}
+        addLabel={unlimitedOn ? `Add Unlimited tasks, +$${opt.price}/mo` : "Enable Unlimited above"}
         addDisabled={!unlimitedOn}
       />
     </div>
@@ -431,7 +436,7 @@ function IntegrationsModalContent({ connected, onToggle, onDone }: {
         onMouseEnter={e => (e.currentTarget.style.opacity = "0.82")}
         onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
       >
-        {connected.length > 0 ? `Done — ${connected.length} connected` : "Skip for now"}
+        {connected.length > 0 ? `Done, ${connected.length} connected` : "Skip for now"}
       </button>
     </div>
   );
@@ -464,7 +469,7 @@ function XModalContent({ currentAuto, currentMgmt, onSaveAuto, onSaveMgmt, onClo
 
   return (
     <div>
-      <FreeBlock items={["93 auto-replies / month — preview", "Persona-matched voice and tone", "3-hour sessions · 1 reply / min"]} />
+      <FreeBlock items={["93 auto-replies / month (preview)", "Persona-matched voice and tone", "3-hour sessions · 1 reply / min"]} />
 
       {/* ── X Automation ────────────────────────────────────── */}
       <div style={{ marginBottom: 16 }}>
@@ -552,7 +557,7 @@ function XModalContent({ currentAuto, currentMgmt, onSaveAuto, onSaveMgmt, onClo
         <button onClick={handleAdd}
           disabled={!autoOn && !mgmtOn}
           style={{ flex: 2, padding: "11px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: (!autoOn && !mgmtOn) ? "var(--sb-ink-4)" : "var(--sb-on-ink)", background: (!autoOn && !mgmtOn) ? "var(--sb-line)" : "var(--sb-ink)", border: "none", cursor: (!autoOn && !mgmtOn) ? "default" : "pointer", transition: "opacity .15s" }}>
-          {!autoOn && !mgmtOn ? "Enable a feature above" : `Add X — $${combinedPrice}/mo`}
+          {!autoOn && !mgmtOn ? "Enable a feature above" : `Add X, $${combinedPrice}/mo`}
         </button>
       </div>
     </div>
@@ -793,7 +798,7 @@ function BrainScene({
       {/* Ambient center glow */}
       <ellipse cx="450" cy="318" rx="170" ry="150" fill="url(#bsc-center-glow)"/>
 
-      {/* Axons + nodes — all unified coral */}
+      {/* Axons + nodes (all unified coral) */}
       {MODULES.map((mod, i) => {
         const isSaved   = saved.has(mod.key);
         const isHovered = hoveredNode === i;
@@ -864,12 +869,12 @@ function BrainScene({
         );
       })}
 
-      {/* Brain mascot — glow layer */}
+      {/* Brain mascot: glow layer */}
       <image href="/favicon.svg" x="325" y="193" width="250" height="250"
         filter="url(#bsc-brain-halo)" opacity="0.6"
         style={{ transformOrigin: "50% 50%", transformBox: "fill-box" as React.CSSProperties["transformBox"], animation: "sbOrbBreathe 3.2s ease-in-out infinite" }}
       />
-      {/* Brain mascot — sharp layer */}
+      {/* Brain mascot: sharp layer */}
       <image href="/favicon.svg" x="325" y="193" width="250" height="250"
         style={{ transformOrigin: "50% 50%", transformBox: "fill-box" as React.CSSProperties["transformBox"], animation: "sbOrbBreathe 3.2s ease-in-out infinite" }}
       />
@@ -901,7 +906,7 @@ export default function BuildYourBraino() {
     return () => window.removeEventListener("resize", handler);
   }, []);
 
-  // Hide the global floating mascot — it conflicts with the brain visualization
+  // Hide the global floating mascot (it conflicts with the brain visualization)
   useEffect(() => {
     const el = document.getElementById("sb-brain-mascot-wrapper");
     if (el) el.style.display = "none";
@@ -929,7 +934,7 @@ export default function BuildYourBraino() {
   const hasSaved = saved.size > 0;
 
   const modalTitle = activeModal !== null
-    ? (activeModal === 4 ? "X — Automation & Management" : activeModal === 5 ? "Basics" : activeModal === 6 ? "Music" : activeModal === 7 ? "Entertainment" : MODULES[activeModal].label)
+    ? (activeModal === 4 ? "X Automation & Management" : activeModal === 5 ? "Basics" : activeModal === 6 ? "Music" : activeModal === 7 ? "Entertainment" : MODULES[activeModal].label)
     : "";
   const modalLobe = activeModal !== null ? MODULES[activeModal]?.lobe ?? "" : "";
 
@@ -945,34 +950,41 @@ export default function BuildYourBraino() {
         .byb-chips::-webkit-scrollbar { display: none; }
       `}</style>
 
+      {/* ── HERO ──────────────────────────────────────────────── */}
+      <EditorialHero
+        eyebrow="Build Yours"
+        title={<>One brain, built <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>your way.</em></>}
+        dek="Start with Premium, then tune every lobe. Add exactly what you need and nothing you don't."
+      />
+
       {/* ── PRICING TIERS ─────────────────────────────────────── */}
-      <section style={{ padding: isMobile ? "64px 0 48px" : "80px 0 72px", background: "var(--sb-bg)", borderBottom: "1px solid var(--sb-line)" }}>
+      <Section tone="2" pad={isMobile ? "48px 0" : "20px 0 80px"} style={{ borderBottom: "1px solid var(--sb-line)" }}>
         <div style={{ ...wrap, padding: isMobile ? "0 16px" : "0 32px" }}>
           <div style={{ textAlign: "center", marginBottom: isMobile ? 36 : 52 }}>
-            <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: `${CORAL_LIGHT}60`, marginBottom: 14 }}>Plans</div>
-            <h2 style={{ fontFamily: FONT_SANS, fontWeight: 700, fontSize: isMobile ? 32 : 48, lineHeight: 1, letterSpacing: "-0.025em", color: "var(--sb-ink)", margin: 0 }}>
+            <Eyebrow>Plans</Eyebrow>
+            <EdTitle size={isMobile ? "34px" : "clamp(32px,4.4vw,52px)"} style={{ marginTop: 14 }}>
               Start free. Upgrade when ready.
-            </h2>
+            </EdTitle>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: isMobile ? 14 : 20, alignItems: "start" }}>
 
             {/* FREE */}
-            <div style={{ padding: "28px 24px 24px", borderRadius: 20, border: "1px solid var(--sb-line)", background: "var(--sb-bg)" }}>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-4)", marginBottom: 10 }}>Free</div>
-              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$0<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
+            <div style={{ padding: "28px 24px 24px", borderRadius: 24, border: "1px solid var(--sb-line-2)", background: "var(--sb-panel-2)" }}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 10 }}>Free</div>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 44, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$0<span style={{ fontSize: 15, color: "var(--sb-ink-3)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
               {[
-                "10 chat questions / day",
+                "10 chats a day",
                 "Standard AI (GPT-mini)",
                 "Session memory only",
                 "Basic integrations",
                 "25 delegate tasks / mo",
-                { text: "Voice — Premium only", locked: true },
+                { text: "Voice is Premium only", locked: true },
               ].map((item, i) => {
                 const isObj = typeof item === "object";
                 return (
                   <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
-                    <span style={{ color: isObj ? "var(--sb-ink-4)" : "var(--sb-ok)", marginTop: 1, flexShrink: 0 }}>
+                    <span style={{ color: isObj ? "var(--sb-ink-4)" : "var(--sb-accent-deep)", marginTop: 1, flexShrink: 0 }}>
                       {isObj
                         ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                         : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
@@ -984,20 +996,20 @@ export default function BuildYourBraino() {
                   </div>
                 );
               })}
-              <Link to="/" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "11px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", border: "1px solid var(--sb-line)", textDecoration: "none", transition: "all .15s" }}
-                onMouseEnter={e => { e.currentTarget.style.color = "var(--sb-ink)"; e.currentTarget.style.borderColor = "var(--sb-line-2)"; }}
-                onMouseLeave={e => { e.currentTarget.style.color = "var(--sb-ink-3)"; e.currentTarget.style.borderColor = "var(--sb-line)"; }}>
+              <Link to="/" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "12px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 14, color: "var(--sb-ink)", border: "1px solid var(--sb-line)", textDecoration: "none", transition: "all .15s" }}
+                onMouseEnter={e => { e.currentTarget.style.background = "var(--sb-panel)"; e.currentTarget.style.borderColor = "var(--sb-line-2)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "var(--sb-line)"; }}>
                 Continue free
               </Link>
             </div>
 
-            {/* PREMIUM */}
-            <div style={{ padding: "28px 24px 24px", borderRadius: 20, border: `1.5px solid ${CORAL}`, background: `${CORAL}08`, position: "relative" }}>
-              <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: CORAL, color: "#fff", fontFamily: FONT_MONO, fontSize: 9.5, letterSpacing: "0.12em", padding: "4px 14px", borderRadius: 999, whiteSpace: "nowrap" }}>
-                MOST POPULAR
+            {/* PREMIUM (highlighted) */}
+            <div style={{ padding: "28px 24px 24px", borderRadius: 24, background: "#14110E", color: "#FBF7F1", position: "relative", outline: "2px solid var(--sb-accent)", outlineOffset: 0, boxShadow: "0 0 0 1px var(--sb-accent), 0 12px 50px rgba(226,125,57,0.35)" }}>
+              <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: "var(--sb-accent)", color: "#FBF7F1", fontFamily: FONT_MONO, fontSize: 9.5, letterSpacing: "0.12em", padding: "5px 14px", borderRadius: 999, whiteSpace: "nowrap", textTransform: "uppercase" }}>
+                Most Popular
               </div>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: CORAL, marginBottom: 10 }}>Premium</div>
-              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$30<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-accent-2)", marginBottom: 10 }}>Premium</div>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 44, color: "#FBF7F1", lineHeight: 1, marginBottom: 20 }}>$30<span style={{ fontSize: 15, color: "rgba(251,247,241,0.5)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
               {[
                 "Advanced AI (Claude Sonnet)",
                 "500 AI queries / month",
@@ -1009,25 +1021,25 @@ export default function BuildYourBraino() {
                 "X auto-replies preview",
               ].map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
-                  <span style={{ color: CORAL, marginTop: 1, flexShrink: 0 }}>
+                  <span style={{ color: "var(--sb-accent-2)", marginTop: 1, flexShrink: 0 }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
                   </span>
-                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-2)", lineHeight: 1.4 }}>{item}</span>
+                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "rgba(251,247,241,0.9)", lineHeight: 1.4 }}>{item}</span>
                 </div>
               ))}
-              <Link to="/auth?redirect=/premium" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "12px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 13.5, fontWeight: 500, background: CORAL, color: "#fff", textDecoration: "none", transition: "opacity .15s" }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-                onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
-                Get Premium →
+              <Link to="/auth?redirect=/premium" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "13px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 600, background: "#FBF7F1", color: "#1B1713", textDecoration: "none", transition: "transform .15s, opacity .15s" }}
+                onMouseEnter={e => (e.currentTarget.style.transform = "translateY(-1px)")}
+                onMouseLeave={e => (e.currentTarget.style.transform = "")}>
+                Get Premium
               </Link>
             </div>
 
             {/* CUSTOM */}
-            <div style={{ padding: "28px 24px 24px", borderRadius: 20, border: "1px solid var(--sb-line)", background: "var(--sb-bg)" }}>
-              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-4)", marginBottom: 10 }}>Custom</div>
-              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 38, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$30+<span style={{ fontSize: 16, color: "var(--sb-ink-4)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
-              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", lineHeight: 1.6, marginBottom: 18 }}>
-                Starts at $30 (Premium included) — then add exactly what you need on top.
+            <div style={{ padding: "28px 24px 24px", borderRadius: 24, border: "1px solid var(--sb-line-2)", background: "var(--sb-panel-2)" }}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--sb-ink-3)", marginBottom: 10 }}>Custom</div>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 44, color: "var(--sb-ink)", lineHeight: 1, marginBottom: 20 }}>$30+<span style={{ fontSize: 15, color: "var(--sb-ink-3)", fontFamily: "'Inter', sans-serif" }}> / mo</span></div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-2)", lineHeight: 1.6, marginBottom: 18 }}>
+                Starts at $30 with Premium built in, then add exactly what you need on top.
               </div>
               {[
                 "Set your own AI query limit",
@@ -1037,21 +1049,21 @@ export default function BuildYourBraino() {
                 "Fine-tune every module",
               ].map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
-                  <span style={{ color: "var(--sb-ink-4)", marginTop: 1, flexShrink: 0 }}>
+                  <span style={{ color: "var(--sb-accent-deep)", marginTop: 1, flexShrink: 0 }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12l4 4L19 6"/></svg>
                   </span>
-                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", lineHeight: 1.4 }}>{item}</span>
+                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-2)", lineHeight: 1.4 }}>{item}</span>
                 </div>
               ))}
-              <a href="#brain-builder" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "11px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "var(--sb-ink-3)", border: "1px solid var(--sb-line)", textDecoration: "none", transition: "all .15s" }}
-                onMouseEnter={e => { e.currentTarget.style.color = "var(--sb-ink)"; e.currentTarget.style.borderColor = "var(--sb-line-2)"; }}
-                onMouseLeave={e => { e.currentTarget.style.color = "var(--sb-ink-3)"; e.currentTarget.style.borderColor = "var(--sb-line)"; }}>
+              <a href="#brain-builder" style={{ display: "block", textAlign: "center", marginTop: 24, padding: "12px 0", borderRadius: 999, fontFamily: "'Inter', sans-serif", fontSize: 14, color: "var(--sb-ink)", border: "1px solid var(--sb-line)", textDecoration: "none", transition: "all .15s" }}
+                onMouseEnter={e => { e.currentTarget.style.background = "var(--sb-panel)"; e.currentTarget.style.borderColor = "var(--sb-line-2)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "var(--sb-line)"; }}>
                 Configure below ↓
               </a>
             </div>
           </div>
         </div>
-      </section>
+      </Section>
 
       {/* ── BRAIN SECTION (full page) ─────────────────────────── */}
       <section id="brain-builder" style={{
@@ -1065,11 +1077,11 @@ export default function BuildYourBraino() {
           <div style={{ fontFamily: FONT_MONO, fontSize: isMobile ? 10 : 11, letterSpacing: "0.2em", textTransform: "uppercase", color: `${CORAL_LIGHT}70`, marginBottom: 16 }}>
             Customize · Configure · Build
           </div>
-          <h1 style={{ fontFamily: FONT_SANS, fontWeight: 700, fontSize: isMobile ? "38px" : "clamp(48px, 7vw, 96px)", lineHeight: 0.94, letterSpacing: "-0.03em", color: "#fff", marginBottom: 14 }}>
-            Build Your Braino.
-          </h1>
-          <p style={{ fontFamily: "'Inter', sans-serif", fontSize: isMobile ? 14 : "clamp(14px, 1.5vw, 17px)", color: `${CORAL_LIGHT}70`, marginBottom: isMobile ? 24 : 52, lineHeight: 1.55 }}>
-            Customize every lobe. Configure beyond Premium — click any node to tune it.
+          <h2 style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontWeight: 400, fontSize: isMobile ? "44px" : "clamp(48px, 7vw, 92px)", lineHeight: 0.98, letterSpacing: "-0.03em", color: "#fff", marginBottom: 14 }}>
+            Build your <em style={{ color: CORAL_LIGHT, fontStyle: "italic" }}>Braino.</em>
+          </h2>
+          <p style={{ fontFamily: "'Newsreader', Georgia, serif", fontSize: isMobile ? 16 : "clamp(16px, 1.6vw, 20px)", color: `${CORAL_LIGHT}80`, marginBottom: isMobile ? 24 : 52, lineHeight: 1.55 }}>
+            Tune every lobe. Go beyond Premium. Click any node to configure it.
           </p>
 
           <div style={isMobile ? { overflowX: "auto", overflowY: "visible", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16 } : {}}>
@@ -1087,7 +1099,7 @@ export default function BuildYourBraino() {
           <div style={{ marginTop: 28, minHeight: 26 }}>
             {saved.size === 0 ? (
               <span style={{ fontFamily: FONT_MONO, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: `${CORAL_LIGHT}38` }}>
-                No lobes configured yet — click a node above
+                No lobes configured yet. Click a node above.
               </span>
             ) : (
               <div style={{ display: "inline-flex", alignItems: "center", gap: 14 }}>
@@ -1098,7 +1110,7 @@ export default function BuildYourBraino() {
             )}
           </div>
 
-          {/* Build It CTA — appears once any module is saved */}
+          {/* Build It CTA (appears once any module is saved) */}
           {hasSaved && (
             <div style={{ marginTop: 28, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               {/* Price breakdown */}
@@ -1127,7 +1139,7 @@ export default function BuildYourBraino() {
                 onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
                 onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
               >
-                Build It — {paidTotal > 0 ? `$${30 + paidTotal}` : "$30"} / mo →
+                Build it, {paidTotal > 0 ? `$${30 + paidTotal}` : "$30"} / mo →
               </Link>
             </div>
           )}
@@ -1144,7 +1156,7 @@ export default function BuildYourBraino() {
           boxShadow: "0 8px 40px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.18)",
           maxWidth: "calc(100vw - 32px)", minWidth: 0,
         }}>
-          {/* Scrollable chips — single row, no wrap */}
+          {/* Scrollable chips (single row, no wrap) */}
           <div className="byb-chips" style={{ display: "flex", gap: 5, overflowX: "auto", flexShrink: 1, minWidth: 0, scrollbarWidth: "none" }}>
             {MODULES.filter(m => saved.has(m.key)).map(m => {
               const priceMap: Record<ModuleKey, number> = {
@@ -1206,9 +1218,9 @@ export default function BuildYourBraino() {
                 {activeModal === 1 && "Set how much voice time you want each month."}
                 {activeModal === 2 && "Control how many tasks Braino can run on your behalf."}
                 {activeModal === 3 && "Connect the apps you already use every day."}
-                {activeModal === 4 && "Auto-replies and full account management — pick what you need."}
+                {activeModal === 4 && "Auto-replies and full account management. Pick what you need."}
                 {activeModal === 5 && "Tell Braino who you are so every interaction is personalised from day one."}
-                {activeModal === 6 && "Set your music preferences — connect Spotify or go quiet."}
+                {activeModal === 6 && "Set your music preferences. Connect Spotify or go quiet."}
                 {activeModal === 7 && "Enable entertainment modes like Movie Mode for a richer experience."}
               </DialogDescription>
             </DialogHeader>
@@ -1263,6 +1275,8 @@ export default function BuildYourBraino() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SiteFooter />
     </div>
   );
 }

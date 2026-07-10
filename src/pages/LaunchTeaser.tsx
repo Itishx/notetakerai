@@ -117,7 +117,7 @@ const SCENES: Scene[] = [
   },
 ];
 
-const LAUNCH_VIDEO_CSS = `
+export const LAUNCH_VIDEO_CSS = `
   body.sb-launch-video {
     background: #050505;
   }
@@ -1225,7 +1225,7 @@ function TabVisual() {
   );
 }
 
-function ChatVisual() {
+export function ChatVisual() {
   return (
     <BrowserWindow title="techcrunch.com - Why pricing is hard">
       <div style={{ position: "relative", background: "#faf9f7", minHeight: 420, display: "grid", gridTemplateColumns: "1.1fr 0.9fr" }}>
@@ -1253,7 +1253,7 @@ function ChatVisual() {
   );
 }
 
-function AudioVisual() {
+export function AudioVisual() {
   return (
     <BrowserWindow title="youtube.com — Lecture 14: Distributed Systems">
       <div style={{ position: "relative", background: "#0f0f0f", minHeight: 420 }}>
@@ -1295,7 +1295,7 @@ function AudioVisual() {
   );
 }
 
-function MeetingsVisual() {
+export function MeetingsVisual() {
   return (
     <BrowserWindow title="braino.ai / meeting memory">
       <div className="lv-meeting-grid">
@@ -1340,7 +1340,7 @@ function MeetingsVisual() {
   );
 }
 
-function AgentVisual() {
+export function AgentVisual() {
   return (
     <BrowserWindow compact title="braino.ai / agent mode">
       <div className="lv-agent-grid">

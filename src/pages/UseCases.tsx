@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import "./home.css";
 import Navbar from "@/components/Navbar";
+import SiteFooter from "@/components/SiteFooter";
 import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
+import { Eyebrow, Section, EditorialHero, EdTitle, EdDek, heroCta, ChromeIcon } from "@/lib/editorial";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -26,7 +28,7 @@ export const CHAT: Feature = {
   tagline: "Ask anything about what's on screen",
   chips: ["Summarise", "Explain docs", "LeetCode", "Code review", "Research synthesis", "Extract data"],
   heading: "Read anything.\nUnderstand everything.",
-  description: "Open Braino on any URL — article, PDF, GitHub diff, research paper, product page — and talk to it. Ask questions, get summaries, extract data, or get a second opinion. No copying, no switching tabs.",
+  description: "Open Braino on any URL (article, PDF, GitHub diff, research paper, product page) and talk to it. Ask questions, get summaries, pull data, or get a second opinion. No copying, no switching tabs.",
   useCases: [
     { label: "Summarise long articles & research papers instantly", who: "Researchers · analysts" },
     { label: "Explain complex documentation step by step", who: "Developers · students" },
@@ -44,7 +46,7 @@ export const RECORD: Feature = {
   tagline: "Turn any audio into structured notes",
   chips: ["Lectures", "Podcasts", "Language learning", "Training videos", "Content repurposing"],
   heading: "Listen once.\nRemember forever.",
-  description: "Record audio from any browser tab — lectures, podcasts, training videos — and get clean, structured notes back. Headings, key terms, summaries. Ready to sync to Notion.",
+  description: "Record audio from any browser tab (lectures, podcasts, training videos) and get clean, structured notes back. Headings, key terms, summaries. Ready to sync to Notion.",
   useCases: [
     { label: "Online course notes with headings & glossary", who: "Students · self-learners" },
     { label: "Podcast key-takeaway summaries", who: "Professionals · curious minds" },
@@ -62,7 +64,7 @@ export const MEETINGS: Feature = {
   tagline: "Auto-notes for every call you join",
   chips: ["Zoom", "Google Meet", "Teams", "Action items", "Follow-up emails", "Decision log"],
   heading: "Every meeting.\nPerfectly captured.",
-  description: "Join any video call and Braino quietly records, transcribes, and structures everything. Action items, decisions, and follow-up emails are drafted the moment the call ends — without you lifting a finger.",
+  description: "Join any video call and Braino quietly records, transcribes, and structures everything. Action items, decisions, and follow-up emails are drafted the moment the call ends, without you lifting a finger.",
   useCases: [
     { label: "Auto-transcribe Zoom, Meet & Teams calls in real time", who: "Everyone" },
     { label: "Extract action items and decisions automatically", who: "Managers · teams" },
@@ -80,7 +82,7 @@ export const DELEGATE: Feature = {
   tagline: "Describe it. Braino does it.",
   chips: ["Email drafts", "Form filling", "Job applications", "Product research", "Calendar events"],
   heading: "Say what you want.\nWatch it happen.",
-  description: "Braino can operate your browser for you. Email drafts, form filling, job applications, product research, calendar events — describe the task in plain English and Braino handles all the clicking.",
+  description: "Braino can operate your browser for you. Email drafts, form filling, job applications, product research, calendar events. Describe the task in plain English and Braino handles all the clicking.",
   useCases: [
     { label: "Draft & send Gmail replies in a single sentence", who: "Everyone" },
     { label: "Auto-fill repetitive job application forms", who: "Job seekers" },
@@ -568,52 +570,24 @@ export default function UseCases() {
       <Navbar />
 
       {/* Hero */}
-      <section style={{ padding: "148px 0 72px" }}>
-        <div style={wrap}>
-          <div style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 11,
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            color: "var(--sb-ink-3)",
-            marginBottom: 20,
-          }}>
-            <span style={{
-              width: 6, height: 6, borderRadius: "50%",
-              background: "var(--sb-accent)",
-              boxShadow: "0 0 12px var(--sb-accent)",
-              display: "inline-block",
-            }}/>
-            Braino For
-          </div>
-          <h1 style={{
-            fontFamily: "'Instrument Serif', serif",
-            fontWeight: 400,
-            fontSize: "clamp(48px, 7vw, 86px)",
-            lineHeight: 1.0,
-            margin: "0 0 22px",
-            letterSpacing: "-0.025em",
-          }}>
-            Everything you<br/>can do with{" "}
-            <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Braino.</em>
-          </h1>
-          <p style={{
-            fontSize: 18,
-            color: "var(--sb-ink-2)",
-            maxWidth: 520,
-            lineHeight: 1.6,
-            margin: 0,
-          }}>
-            Four features. Open each one to see every workflow it unlocks — from students and researchers to engineers and entire teams.
-          </p>
-        </div>
-      </section>
+      <EditorialHero
+        eyebrow="Braino for"
+        title={<>Everything you can do with <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>Braino.</em></>}
+        dek="Four things Braino does. Open each one to see every workflow it unlocks, for students, researchers, engineers, and whole teams."
+      />
 
       {/* Accordions */}
-      <section style={{ padding: "0 0 110px" }}>
+      <Section tone="1" pad="10px 0 110px">
+        <div style={{ ...wrap, textAlign: "center", marginBottom: 44 }}>
+          <Eyebrow>The four features</Eyebrow>
+          <EdTitle style={{ margin: "14px 0 14px", fontSize: "clamp(32px,4.4vw,52px)" }}>
+            Pick one. See what it does.
+          </EdTitle>
+          <EdDek style={{ maxWidth: 600, margin: "0 auto" }}>
+            Every feature, every real-world job it handles, in one tap.
+          </EdDek>
+        </div>
+
         <div style={{ ...wrap, display: "flex", flexDirection: "column", gap: 10 }}>
 
           {/* 01 Chat with Page */}
@@ -622,7 +596,7 @@ export default function UseCases() {
           {/* 02 Record & Capture */}
           <FeatureAccordion feature={RECORD} isOpen={openId === "record"} onToggle={() => toggle("record")}/>
 
-          {/* Meetings — stems from Record */}
+          {/* Meetings, stems from Record */}
           <div style={{ display: "flex", alignItems: "stretch", gap: 0 }}>
             {/* Visual connector */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 48, flexShrink: 0, paddingTop: 4 }}>
@@ -645,10 +619,10 @@ export default function UseCases() {
           <FeatureAccordion feature={DELEGATE} isOpen={openId === "delegate"} onToggle={() => toggle("delegate")}/>
 
         </div>
-      </section>
+      </Section>
 
       {/* CTA */}
-      <section style={{ padding: "20px 0 110px" }}>
+      <Section tone="2" pad="20px 0 110px">
         <div style={wrap}>
           <div style={{
             background: "#14110E",
@@ -685,50 +659,31 @@ export default function UseCases() {
               Ready to try it?
             </h2>
             <p style={{
-              color: "rgba(251,247,241,0.6)",
-              maxWidth: 440,
+              fontFamily: "'Newsreader', Georgia, serif",
+              color: "rgba(251,247,241,0.62)",
+              maxWidth: 460,
               margin: "0 auto 36px",
-              fontSize: 16.5,
+              fontSize: 20,
               position: "relative",
               zIndex: 1,
               lineHeight: 1.55,
             }}>
-              Install Braino, sign in, and every workflow above is available in 30 seconds.
+              Install Braino, sign in, and every workflow above is yours in 30 seconds.
             </p>
             <a
               href={EXTENSION_DOWNLOAD_URL}
               download
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                padding: "14px 28px", borderRadius: 999,
-                fontSize: 14.5, fontWeight: 500,
-                background: "#FBF7F1", color: "#1B1713",
-                textDecoration: "none",
-                transition: "transform .15s",
-                position: "relative", zIndex: 1,
-              }}
+              style={{ ...heroCta, background: "#FBF7F1", color: "#1B1713", boxShadow: "none", position: "relative", zIndex: 1 }}
               onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; }}
               onMouseLeave={e => { e.currentTarget.style.transform = ""; }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/>
-              </svg>
-              Add to Chrome — it's free
+              <ChromeIcon /> Add Braino to Chrome, free
             </a>
           </div>
         </div>
-      </section>
+      </Section>
 
-      {/* Footer */}
-      <footer style={{ padding: "48px 0", borderTop: "1px solid var(--sb-line-2)" }}>
-        <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Link to="/" style={{ display: "flex", alignItems: "baseline", textDecoration: "none" }}>
-            <span style={{ fontFamily: "'TNR','Times New Roman',serif", fontStyle: "italic", fontWeight: 400, fontSize: 18, color: "var(--sb-ink)" }}>side</span>
-            <span style={{ fontFamily: "'BeVietnam',sans-serif", fontWeight: 800, fontSize: 18, color: "var(--sb-ink)", letterSpacing: "-0.03em" }}>brain</span>
-          </Link>
-          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--sb-ink-3)" }}>© 2026 SideBrain · Beta</div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

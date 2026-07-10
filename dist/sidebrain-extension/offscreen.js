@@ -2,6 +2,16 @@
 // Also handles SpeechRecognition for voice mode (mic access works here, not in side panel)
 // Phase 2: hosts the realtime WebRTC session so voice follows across tabs.
 
+// ── Production error hygiene: keep uncaught noise out of chrome://extensions ──
+window.addEventListener("error", (e) => {
+  console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+  e.preventDefault();
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+
 // ===== REALTIME VOICE SESSION (extension-global) =====
 const RT_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
 const RT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
@@ -11,7 +21,7 @@ let rtDc = null;
 let rtMic = null;
 let rtRemoteAudio = null;
 
-async function startRealtimeSession({ authToken, bootInstructions }) {
+async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }) {
   stopRealtimeSession();
 
   try {
@@ -23,12 +33,13 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
     rtPc = pc;
     rtMic.getTracks().forEach((t) => pc.addTrack(t, rtMic));
 
-    // Keep the remote track attached for WebRTC compatibility, but never play OpenAI audio.
-    // Braino's primary audible voice is ElevenLabs from the content script.
+    // Default Braino = mute OpenAI's audio (the model is text-only; Fish Audio is the voice).
+    // OpenAI-voice mode (voiceEngine === "realtime") = PLAY the model's native audio (faster, no Fish).
+    const playOpenAiVoice = voiceEngine === "realtime";
     rtRemoteAudio = new Audio();
     rtRemoteAudio.autoplay = true;
-    rtRemoteAudio.muted = true;
-    rtRemoteAudio.volume = 0;
+    rtRemoteAudio.muted = !playOpenAiVoice;
+    rtRemoteAudio.volume = playOpenAiVoice ? 1 : 0;
     document.body.appendChild(rtRemoteAudio);
     pc.ontrack = (ev) => {
       rtRemoteAudio.srcObject = ev.streams[0] || new MediaStream([ev.track]);
@@ -62,12 +73,16 @@ async function startRealtimeSession({ authToken, bootInstructions }) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    // Per-mode model: OpenAI-voice mode uses gpt-realtime-2; Default Braino uses gpt-realtime-mini.
+    // The backend validates this against an allowlist (falls back to env).
+    const requestedModel = voiceEngine === "realtime" ? "gpt-realtime-2" : "gpt-realtime-mini";
     const res = await fetch(`${RT_API_BASE}/openai-realtime-call`, {
       method: "POST",
       headers: {
         "Content-Type": "application/sdp",
         apikey: RT_ANON_KEY,
         Authorization: `Bearer ${authToken}`,
+        "X-Braino-Realtime-Model": requestedModel,
       },
       body: offer.sdp || "",
     });
@@ -183,9 +198,135 @@ let mediaRecorder = null;
 let audioChunks = [];
 let audioContext = null;
 let micStream = null;
+let tabStream = null;
+let micRecorder = null;
+let micChunks = [];
+let playbackAudio = null;
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || null);
+    reader.onerror = () => reject(reader.error || new Error("Failed to read audio blob"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function flushRecorder(recorder) {
+  if (!recorder || recorder.state !== "recording") return;
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      recorder.removeEventListener("dataavailable", onDataAvailable);
+      resolve();
+    };
+    const onDataAvailable = () => finish();
+    const timer = setTimeout(finish, 300);
+    recorder.addEventListener("dataavailable", onDataAvailable, { once: true });
+    try {
+      recorder.requestData();
+    } catch (_) {
+      finish();
+    }
+  });
+}
+
+async function buildKnownSpeakerReferences() {
+  if (micRecorder && micRecorder.state === "recording") {
+    await flushRecorder(micRecorder);
+  }
+  if (!micChunks.length) return [];
+  const referenceChunks = micChunks.slice(0, 6);
+  if (referenceChunks.length < 2) return [];
+  const audioBase64 = await blobToBase64(new Blob(referenceChunks, { type: "audio/webm" }));
+  if (!audioBase64) return [];
+  return [{ name: "You", audioBase64, mimeType: "audio/webm" }];
+}
+
+async function getSegmentPayload() {
+  if (!mediaRecorder) return { audioBase64: null, knownSpeakerReferences: [] };
+  await flushRecorder(mediaRecorder);
+  if (audioChunks.length === 0) {
+    return {
+      audioBase64: null,
+      knownSpeakerReferences: await buildKnownSpeakerReferences(),
+    };
+  }
+  const chunksToProcess = audioChunks.slice();
+  audioChunks = [];
+  return {
+    audioBase64: await blobToBase64(new Blob(chunksToProcess, { type: "audio/webm" })),
+    knownSpeakerReferences: await buildKnownSpeakerReferences(),
+  };
+}
+
+function cleanupCaptureResources() {
+  if (mediaRecorder?.stream) {
+    mediaRecorder.stream.getTracks().forEach((t) => t.stop());
+  }
+  mediaRecorder = null;
+  audioChunks = [];
+  if (micRecorder) {
+    try { if (micRecorder.state !== "inactive") micRecorder.stop(); } catch (_) {}
+    micRecorder = null;
+  }
+  micChunks = [];
+  if (micStream) {
+    micStream.getTracks().forEach((t) => t.stop());
+    micStream = null;
+  }
+  if (tabStream) {
+    tabStream.getTracks().forEach((t) => t.stop());
+    tabStream = null;
+  }
+  if (audioContext) {
+    audioContext.close().catch(() => {});
+    audioContext = null;
+  }
+  if (playbackAudio) {
+    try { playbackAudio.pause(); } catch (_) {}
+    playbackAudio.srcObject = null;
+    playbackAudio.remove();
+    playbackAudio = null;
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "offscreen") return;
+
+  if (message.action === "grabCameraFrame") {
+    (async () => {
+      let stream = null, v = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false,
+        });
+        v = document.createElement("video");
+        v.muted = true; v.playsInline = true; v.srcObject = stream;
+        v.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0;";
+        document.body.appendChild(v);
+        await new Promise((res) => { v.onloadedmetadata = () => res(); setTimeout(res, 1500); });
+        try { await v.play(); } catch (_) {}
+        await new Promise((res) => setTimeout(res, 350));   // let the sensor expose
+        const vw = v.videoWidth || 640, vh = v.videoHeight || 480;
+        const w = Math.min(1024, vw), h = Math.round(w * (vh / vw));
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(v, 0, 0, w, h);
+        const data = c.toDataURL("image/png").split(",")[1] || "";
+        sendResponse({ frame: data });
+      } catch (e) {
+        const n = e?.name || "";
+        sendResponse({ needpermission: (n === "NotAllowedError" || n === "SecurityError" || n === "PermissionDeniedError"), error: n });
+      } finally {
+        try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+        try { v && v.remove(); } catch (_) {}
+      }
+    })();
+    return true;
+  }
 
   if (message.action === "startVoiceListening") {
     voiceListening = true;
@@ -233,29 +374,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "stopCapture") {
     stopCapture()
-      .then((base64) => sendResponse({ audioBase64: base64 }))
+      .then((payload) => sendResponse(payload))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
 
   if (message.action === "getSegment") {
-    if (!mediaRecorder || audioChunks.length === 0) {
-      sendResponse({ audioBase64: null });
-      return true;
-    }
-    const chunksToProcess = audioChunks.slice();
-    audioChunks = [];
-    const blob = new Blob(chunksToProcess, { type: "audio/webm" });
-    const reader = new FileReader();
-    reader.onload = () => sendResponse({ audioBase64: reader.result.split(",")[1] });
-    reader.onerror = () => sendResponse({ audioBase64: null });
-    reader.readAsDataURL(blob);
+    getSegmentPayload()
+      .then((payload) => sendResponse(payload))
+      .catch(() => sendResponse({ audioBase64: null, knownSpeakerReferences: [] }));
     return true;
   }
 });
 
 async function startCapture(streamId, withMic) {
-  const tabStream = await navigator.mediaDevices.getUserMedia({
+  cleanupCaptureResources();
+
+  tabStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       mandatory: {
         chromeMediaSource: "tab",
@@ -265,11 +400,11 @@ async function startCapture(streamId, withMic) {
   });
 
   // Play the tab audio back so the user can still hear it
-  const audio = document.createElement("audio");
-  audio.srcObject = tabStream;
-  audio.autoplay = true;
-  audio.id = "playback";
-  document.body.appendChild(audio);
+  playbackAudio = document.createElement("audio");
+  playbackAudio.srcObject = tabStream;
+  playbackAudio.autoplay = true;
+  playbackAudio.id = "playback";
+  document.body.appendChild(playbackAudio);
 
   let recordStream = tabStream;
 
@@ -282,9 +417,17 @@ async function startCapture(streamId, withMic) {
       audioContext.createMediaStreamSource(tabStream).connect(dest);
       audioContext.createMediaStreamSource(micStream).connect(dest);
       recordStream = dest.stream;
+
+      micChunks = [];
+      micRecorder = new MediaRecorder(micStream, { mimeType: "audio/webm;codecs=opus" });
+      micRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) micChunks.push(e.data);
+      };
+      micRecorder.start(1000);
     } catch (e) {
-      console.warn("Mic access denied, recording tab audio only:", e.message);
-      // Fall back to tab-only
+      cleanupCaptureResources();
+      const message = e?.message || "Microphone access failed";
+      throw new Error(`Couldn't access your microphone for Meeting mode. ${message}`);
     }
   }
 
@@ -306,28 +449,18 @@ async function stopCapture() {
     }
 
     mediaRecorder.onstop = () => {
-      const blob = new Blob(audioChunks, { type: "audio/webm" });
-      mediaRecorder.stream.getTracks().forEach((t) => t.stop());
-      mediaRecorder = null;
-      audioChunks = [];
-
-      // Stop mic if active
-      if (micStream) {
-        micStream.getTracks().forEach((t) => t.stop());
-        micStream = null;
-      }
-      if (audioContext) {
-        audioContext.close().catch(() => {});
-        audioContext = null;
-      }
-
-      // Remove playback element
-      const playback = document.getElementById("playback");
-      if (playback) playback.remove();
-
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(",")[1]);
-      reader.readAsDataURL(blob);
+      (async () => {
+        const mixedChunks = audioChunks.slice();
+        const audioBase64 = mixedChunks.length
+          ? await blobToBase64(new Blob(mixedChunks, { type: "audio/webm" }))
+          : null;
+        const knownSpeakerReferences = await buildKnownSpeakerReferences();
+        cleanupCaptureResources();
+        resolve({ audioBase64, knownSpeakerReferences });
+      })().catch((error) => {
+        cleanupCaptureResources();
+        reject(error);
+      });
     };
 
     mediaRecorder.stop();

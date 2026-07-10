@@ -6,11 +6,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const EXTENSION_SRC = path.join(ROOT, "extension");
 const PUBLIC_EXTENSION_DIR = path.join(ROOT, "public", "sidebrain-extension");
+const DIST_EXTENSION_DIR = path.join(ROOT, "dist", "sidebrain-extension");
 
 const EXTENSION_FILES = [
   "background.js",
   "braino-popup.html",
   "braino-popup.js",
+  "cam.html",
+  "cam.js",
   "content.js",
   "icon128.png",
   "icon48.png",
@@ -24,7 +27,7 @@ const EXTENSION_FILES = [
   "styles.css",
 ];
 
-const EXTENSION_DIRS = ["fonts"];
+const EXTENSION_DIRS = ["fonts", "lib"];
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -56,21 +59,24 @@ export function syncExtensionAssets() {
     throw new Error(`Missing extension source directory: ${EXTENSION_SRC}`);
   }
 
-  // Public unpacked extension mirror
-  fs.rmSync(PUBLIC_EXTENSION_DIR, { recursive: true, force: true });
-  ensureDir(PUBLIC_EXTENSION_DIR);
+  // Public/dist unpacked extension mirrors.
+  for (const mirrorDir of [PUBLIC_EXTENSION_DIR, DIST_EXTENSION_DIR]) {
+    fs.rmSync(mirrorDir, { recursive: true, force: true });
+    ensureDir(mirrorDir);
 
-  for (const file of EXTENSION_FILES) {
-    copyFile(EXTENSION_SRC, PUBLIC_EXTENSION_DIR, file);
-  }
+    for (const file of EXTENSION_FILES) {
+      copyFile(EXTENSION_SRC, mirrorDir, file);
+    }
 
-  for (const dir of EXTENSION_DIRS) {
-    copyDirContents(path.join(EXTENSION_SRC, dir), path.join(PUBLIC_EXTENSION_DIR, dir));
+    for (const dir of EXTENSION_DIRS) {
+      copyDirContents(path.join(EXTENSION_SRC, dir), path.join(mirrorDir, dir));
+    }
   }
 
   console.log("Synced extension assets:");
   console.log(`  source:   ${path.relative(ROOT, EXTENSION_SRC)}`);
   console.log(`  public:   ${path.relative(ROOT, PUBLIC_EXTENSION_DIR)}`);
+  console.log(`  dist:     ${path.relative(ROOT, DIST_EXTENSION_DIR)}`);
 }
 
 const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

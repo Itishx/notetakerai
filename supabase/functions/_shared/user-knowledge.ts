@@ -5,7 +5,16 @@ type UserKnowledgeOptions = {
   includeContacts?: boolean;
   memoryNoteLimit?: number;
   contactLimit?: number;
+  // Memory Engine (auto-remembered facts from braino_memories):
+  includeMemories?: boolean;     // default true — load + inject ranked memories
+  currentMessage?: string;       // the latest user message, used to rank which memories are relevant
 };
+
+import type { PersonalitySettings } from "./emotional-engine/types.ts";
+import type { Memory } from "./memory-engine/types.ts";
+import { selectRelevantMemories } from "./memory-engine/retrieve.ts";
+import { renderMemoryBlock } from "./memory-engine/render.ts";
+import { getTierLimits } from "./memory-engine/tiers.ts";
 
 type XPersonaContext = {
   display_name: string | null;
@@ -22,6 +31,12 @@ export type UserKnowledge = {
   contacts: string[];
   xPersona: XPersonaContext;
   combinedContext: string;
+  // Emotional Engine toggles (dad jokes, pushback…). Raw/partial — braino-prompt sanitizes it
+  // via resolvePersonalitySettings. null when the user has never set any (engine uses defaults).
+  personalitySettings: Partial<PersonalitySettings> | null;
+  // Memory Engine flags, surfaced so the capture path (chat-about-notes) can gate + size limits.
+  isPremium: boolean;
+  memoryEnabled: boolean;
 };
 
 export async function loadUserKnowledge(
@@ -33,10 +48,11 @@ export async function loadUserKnowledge(
   const includeXPersona = options.includeXPersona ?? true;
   const includeXContentSource = options.includeXContentSource ?? false;
   const includeContacts = options.includeContacts ?? true;
+  const includeMemories = options.includeMemories ?? true;
   const memoryNoteLimit = options.memoryNoteLimit ?? 12;
   const contactLimit = options.contactLimit ?? 8;
 
-  const [profileContext, memoryResult, xPersonaResult, contactsResult] = await Promise.all([
+  const [profileContext, memoryResult, xPersonaResult, contactsResult, personalitySettings, profileFlags, memoryRowsResult] = await Promise.all([
     loadProfileContext(supabase, userId),
     includeMemoryNotes
       ? supabase
@@ -61,6 +77,18 @@ export async function loadUserKnowledge(
           .eq("user_id", userId)
           .order("updated_at", { ascending: false })
           .limit(contactLimit)
+      : Promise.resolve({ data: [], error: null }),
+    loadPersonalitySettings(supabase, userId),
+    loadProfileFlags(supabase, userId),
+    includeMemories
+      ? supabase
+          .from("braino_memories")
+          .select("id,content,category,salience,status,last_used_at,updated_at,created_at")
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .order("salience", { ascending: false })
+          .order("updated_at", { ascending: false })
+          .limit(150)
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -102,7 +130,19 @@ export async function loadUserKnowledge(
       )
     : [];
 
-  const combinedContext = buildUserKnowledgeContext({
+  // Memory Engine: rank the auto-remembered facts for this turn and render the top slice.
+  const memoryRows: Memory[] = Array.isArray(memoryRowsResult?.data) ? (memoryRowsResult.data as Memory[]) : [];
+  const memoryBlock = memoryRows.length
+    ? renderMemoryBlock(
+        selectRelevantMemories(
+          memoryRows,
+          String(options.currentMessage || ""),
+          getTierLimits(profileFlags.isPremium).injectCount,
+        ),
+      )
+    : "";
+
+  const baseContext = buildUserKnowledgeContext({
     displayName: profileContext.displayName,
     overallMemory: profileContext.overallMemory,
     memoryNotes,
@@ -110,6 +150,7 @@ export async function loadUserKnowledge(
     xPersona,
     includeXContentSource,
   });
+  const combinedContext = [baseContext, memoryBlock].filter(Boolean).join("\n\n");
 
   return {
     displayName: profileContext.displayName,
@@ -118,7 +159,53 @@ export async function loadUserKnowledge(
     contacts,
     xPersona,
     combinedContext,
+    personalitySettings,
+    isPremium: profileFlags.isPremium,
+    memoryEnabled: profileFlags.memoryEnabled,
   };
+}
+
+// Reads is_premium + memory_enabled from profiles for the Memory Engine. Own try/catch so a
+// not-yet-deployed column never breaks user knowledge (defaults: free tier, memory on).
+async function loadProfileFlags(
+  supabase: any,
+  userId: string,
+): Promise<{ isPremium: boolean; memoryEnabled: boolean }> {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("is_premium,memory_enabled")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) return { isPremium: false, memoryEnabled: true };
+    return {
+      isPremium: data?.is_premium === true,
+      memoryEnabled: data?.memory_enabled !== false,
+    };
+  } catch {
+    return { isPremium: false, memoryEnabled: true };
+  }
+}
+
+// Reads the user's Emotional Engine toggles from profiles.personality_settings (jsonb).
+// Its own try/catch so a not-yet-deployed column never breaks the rest of user knowledge —
+// it just returns null and the engine falls back to DEFAULT_PERSONALITY_SETTINGS.
+async function loadPersonalitySettings(
+  supabase: any,
+  userId: string,
+): Promise<Partial<PersonalitySettings> | null> {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("personality_settings")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) return null;
+    const raw = data?.personality_settings;
+    return raw && typeof raw === "object" ? (raw as Partial<PersonalitySettings>) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function buildUserKnowledgeContext(input: {

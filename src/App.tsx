@@ -7,8 +7,9 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useState } from "react";
 import SplashScreen from "@/components/SplashScreen";
-import BrainMascot from "@/components/BrainMascot";
+import BrainoWalker from "@/components/BrainoWalker";
 import PreLaunch from "./pages/PreLaunch.tsx";
+import Home from "./pages/Home.tsx";
 import LaunchTeaser from "./pages/LaunchTeaser.tsx";
 import WaitlistDashboard from "./pages/WaitlistDashboard.tsx";
 import Index from "./pages/Index.tsx";
@@ -20,7 +21,6 @@ import ExtensionAuth from "./pages/ExtensionAuth.tsx";
 import Premium from "./pages/Premium.tsx";
 import BrowserAgent from "./pages/BrowserAgent.tsx";
 import Delegate from "./pages/Delegate.tsx";
-import Compare from "./pages/Compare.tsx";
 import RemoteAgent from "./pages/RemoteAgent.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import BuildPlan from "./pages/BuildPlan.tsx";
@@ -33,13 +33,14 @@ import Automations from "./pages/Automations.tsx";
 import Integrations from "./pages/Integrations.tsx";
 import ConnectorsVault from "./pages/ConnectorsVault.tsx";
 import Changelog from "./pages/Changelog.tsx";
+import StraightTalk from "./pages/StraightTalk.tsx";
+import WhyTheWait from "./pages/WhyTheWait.tsx";
 import BrainoLive from "./pages/BrainoLive.tsx";
 import Playground from "./pages/Playground.tsx";
 import BuildYourBraino from "./pages/BuildYourBraino.tsx";
 import RealtimeCosts from "./pages/RealtimeCosts.tsx";
 import SkillsTracker from "./pages/SkillsTracker.tsx";
 import BrainoChat from "./pages/BrainoChat.tsx";
-import ProfileGrid from "./pages/ProfileGrid.tsx";
 import BrainoLaunchShort from "./pages/BrainoLaunchShort.tsx";
 import Interns from "./pages/Interns.tsx";
 import Team from "./pages/Team.tsx";
@@ -50,15 +51,17 @@ const queryClient = new QueryClient();
 
 function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashDone: () => void }) {
   const location = useLocation();
-  const hideMascot = location.pathname === "/chat" || location.pathname === "/home";
+  // The walking Braino shows everywhere except the dedicated chat page; the "/" landing
+  // hides it via PreLaunch's `body.sb-prelaunch #sb-brain-mascot-wrapper{display:none}` rule.
+  const hideMascot = location.pathname === "/chat";
 
   return (
     <>
       {!splashDone && <SplashScreen onDone={onSplashDone} />}
-      <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainMascot />}</div>
+      <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainoWalker />}</div>
       <Routes>
-        <Route path="/" element={<PreLaunch />} />
-        <Route path="/home" element={<ProfileGrid />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/prelaunch" element={<PreLaunch />} />
         <Route path="/home-classic" element={<Index />} />
         <Route path="/teaser" element={<LaunchTeaser />} />
         <Route path="/waitlist-admin" element={<WaitlistDashboard />} />
@@ -70,7 +73,6 @@ function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashD
         <Route path="/premium" element={<Premium />} />
         <Route path="/browser-agent" element={<BrowserAgent />} />
         <Route path="/delegate" element={<Delegate />} />
-        <Route path="/compare" element={<Compare />} />
         <Route path="/remote-agent" element={<RemoteAgent />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/build-plan" element={<BuildPlan />} />
@@ -83,6 +85,8 @@ function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashD
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/connectors-vault" element={<ConnectorsVault />} />
         <Route path="/changelog" element={<Changelog />} />
+        <Route path="/straight-talk" element={<StraightTalk />} />
+        <Route path="/why-the-wait" element={<WhyTheWait />} />
         <Route path="/live" element={<BrainoLive />} />
         <Route path="/playground" element={<Playground />} />
         <Route path="/build-braino" element={<BuildYourBraino />} />

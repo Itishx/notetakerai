@@ -11,7 +11,6 @@ const NAV_LINKS = [
   { href: "/integrations", label: "Integrations" },
   { href: "/skills", label: "Skills" },
   { href: "/delegate", label: "Delegate" },
-  { href: "/compare", label: "vs Claude" },
   { href: "/premium", label: "Pricing" },
   { href: "/build-braino", label: "Build Yours" },
 ];
@@ -233,32 +232,11 @@ const Navbar = () => {
 
           <span style={{ width: 1, height: 16, background: "var(--sb-line-2)", margin: "0 2px", flexShrink: 0 }} />
 
-          {user ? (
-            <Link
-              to="/dashboard"
-              style={linkStyle("/dashboard")}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--sb-ink)")}
-              onMouseLeave={e => (e.currentTarget.style.color = pathname === "/dashboard" ? "var(--sb-ink)" : "var(--sb-ink-2)")}
-            >
-              Dashboard
-            </Link>
-          ) : (
-            <Link
-              to="/auth"
-              style={{ ...linkStyle("/auth"), fontSize: 13 }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--sb-ink)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "var(--sb-ink-2)")}
-            >
-              Sign in
-            </Link>
-          )}
-
-          <a
-            href={EXTENSION_DOWNLOAD_URL}
-            download
+          <Link
+            to={user ? "/dashboard" : "/auth"}
             style={{
               display: "inline-flex", alignItems: "center", gap: 5,
-              padding: "7px 14px", borderRadius: 999,
+              padding: "7px 16px", borderRadius: 999,
               fontSize: 13, fontWeight: 500,
               background: "var(--sb-ink)", color: "var(--sb-on-ink)",
               textDecoration: "none",
@@ -268,11 +246,8 @@ const Navbar = () => {
             onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.opacity = "0.85"; }}
             onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.opacity = "1"; }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9" /><path d="M12 7v10M7 12h10" />
-            </svg>
-            Install
-          </a>
+            {user ? "Dashboard" : "Get started"}
+          </Link>
         </div>
       </nav>
     </>

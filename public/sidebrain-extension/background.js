@@ -1,4 +1,49 @@
 // Background service worker for Braino (MV3)
+
+// ── Production error hygiene ─────────────────────────────────────────────────
+// chrome://extensions records uncaught exceptions/rejections and unchecked
+// runtime.lastError as red "Errors" for developer-mode installs (our zip flow).
+// Everything is caught here, logged quietly, and marked handled so the collector
+// stays empty. Real failures still reach the user via Braino's own UI paths.
+self.addEventListener("error", (e) => {
+  console.warn("[Braino] handled error:", e?.error?.message || e?.message || e);
+  e.preventDefault();
+});
+self.addEventListener("unhandledrejection", (e) => {
+  console.warn("[Braino] handled rejection:", e?.reason?.message || e?.reason || "");
+  e.preventDefault();
+});
+// Every callback passed to sendMessage reads runtime.lastError first — an answered
+// call whose peer vanished (closed tab, SW race) otherwise logs "Unchecked
+// runtime.lastError". No-callback calls return promises; rejections land above.
+for (const [obj, key] of [[chrome.runtime, "sendMessage"], [chrome.tabs, "sendMessage"]]) {
+  const orig = obj[key].bind(obj);
+  obj[key] = (...args) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      args[args.length - 1] = (...cbArgs) => {
+        void chrome.runtime.lastError;
+        try { cb(...cbArgs); } catch (err) { console.warn("[Braino] callback error:", err?.message || err); }
+      };
+    }
+    return orig(...args);
+  };
+}
+
+try {
+  importScripts(
+    "lib/elementMap.js",
+    "lib/models.js",
+    "lib/taskState.js",
+    "lib/recovery.js",
+    "lib/macroStore.js",
+    "lib/searchGuard.js",
+  );
+} catch (error) {
+  console.warn("[Braino][Delegate] helper import failed:", error);
+}
+
+const BG_CONTENT_SCRIPT_FILES = ["lib/elementMap.js", "content.js"];
 let isRecording = false;
 let bgRecordingMode = "lecture";
 let bgAgentShouldStop = false;
@@ -10,8 +55,15 @@ let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeMod
 // On install/update, clear the "offscreen is broken" flag so every client re-attempts the
 // global offscreen voice path once (now backed by a one-time mic-permission grant). If it
 // still can't work, the flag gets re-set and we quietly use the per-tab migration fallback.
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.storage.local.set({ sbOffscreenRtBroken: false });
+  // First-run funnel: on a FRESH install of the PUBLISHED build, open the homepage so a new user
+  // actually meets Braino. Gated on `update_url` (present only for Web Store builds) so loading the
+  // unpacked extension during development never opens a tab. Also skipped on update/reload.
+  const isStoreBuild = Boolean(chrome.runtime.getManifest().update_url);
+  if (details?.reason === "install" && isStoreBuild) {
+    chrome.tabs.create({ url: "https://trybraino.com/?installed=1" }, () => { void chrome.runtime.lastError; });
+  }
 });
 
 function doCapture(windowId, sendResponse) {
@@ -454,12 +506,17 @@ async function bgPerformRealWebSearch(query, options = {}) {
     if (!token) token = await bgRefreshAuthToken();
     if (!token) return { error: "Please sign in to Braino before using web research." };
 
+    const searchGeo = await bgGetUserGeo().catch(() => null);
     const researchBody = JSON.stringify({
       query: trimmedQuery,
       purpose: options.purpose || "answer",
       aiProvider: options.aiProvider,
       chatHistory: options.chatHistory,
       instructions: options.instructions,
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+      clientLocation: searchGeo
+        ? [searchGeo.city, searchGeo.region, searchGeo.country].filter(Boolean).join(", ") || null
+        : null,
     });
 
     const callResearch = (jwt) => fetch(`${BG_API_BASE}/web-research`, {
@@ -933,7 +990,7 @@ chrome.action.onClicked.addListener((tab) => {
 
       if (!allowInject) return;
 
-      chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }, () => {
+      chrome.scripting.executeScript({ target: { tabId: tab.id }, files: BG_CONTENT_SCRIPT_FILES }, () => {
         void chrome.runtime.lastError;
         chrome.tabs.sendMessage(tab.id, { action: "toggleSideBrainPanel" }, () => { void chrome.runtime.lastError; });
       });
@@ -950,7 +1007,7 @@ function bgSendMessageToTabWithInject(tabId, message, sendResponse) {
       return;
     }
 
-    chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+    chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
       if (chrome.runtime.lastError) {
         sendResponse?.({ ok: false, error: chrome.runtime.lastError.message });
         return;
@@ -1034,6 +1091,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "startRecording") {
     (async () => {
       const mode = bgNormalizeRecordingMode(message.mode);
+      // Free-tier gate: 5 min/day on Free, unlimited on Pro/creator/admin.
+      const recGate = await bgGateSurface("recording_seconds", { action: "precheck" });
+      if (!recGate.allowed) {
+        bgNotifyQuota(message.tabId || sender?.tab?.id || null, "recording", recGate);
+        sendResponse({ error: "FREE_LIMIT_RECORDING", quotaExceeded: true, surface: "recording" });
+        return;
+      }
       let targetTabId = message.tabId || sender?.tab?.id || null;
       let recovery = { tabId: targetTabId, moved: false, created: false };
 
@@ -1064,6 +1128,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       await startRecording(targetTabId, message.streamId, message.withMic, mode);
+      bgRecordingStartedAt = Date.now();
       sendResponse({
         success: true,
         tabId: targetTabId,
@@ -1074,6 +1139,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "stopRecording") {
+    bgConsumeRecordingSeconds();
     stopRecording()
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
@@ -1092,7 +1158,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "stopRecordingAndTranscribe") {
+    bgConsumeRecordingSeconds();
     bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode, message.existingTranscript || "")
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+  // In-page capture (getDisplayMedia) path: the content script records the audio itself and
+  // sends each segment's base64 here for the same transcription/notes pipeline as offscreen.
+  if (message.action === "transcribeSegment") {
+    bgTranscribeAudioChunk({
+      audioBase64: message.audioBase64 || null,
+      existingNotes: message.existingNotes || "",
+      existingTranscript: message.existingTranscript || "",
+      mode: bgNormalizeRecordingMode(message.mode),
+      knownSpeakerReferences: Array.isArray(message.knownSpeakerReferences) ? message.knownSpeakerReferences : [],
+    })
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -1102,6 +1183,78 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
+  }
+  if (message.action === "sbSpotifyPlaySeek") {
+    // Party-trick soundtrack: play an exact track from a timestamp. Direct play first
+    // (device already active = instant); otherwise open/reuse the web-player tab and
+    // poll until it registers (same theatric flow as voice music).
+    (async () => {
+      const uris = [String(message.uri || "")].filter(Boolean);
+      const positionMs = Number.isFinite(Number(message.positionMs)) ? Number(message.positionMs) : 0;
+      if (!uris.length) return { ok: false };
+      // Cold web players accept play-with-position but their first state sync can snap
+      // back to 0:00. VERIFIED-only correction: seek ONLY when progress proves the track
+      // restarted (a blind seek re-fired on top of a correct start and the song audibly
+      // played "twice"). Two passes to catch slow players; silence otherwise.
+      const ensureSeek = () => {
+        if (!(positionMs > 0)) return;
+        const checkOnce = async () => {
+          const st = await bgCallSpotifyFunction("spotify-player-state", {});
+          const prog = Number(st?.progressMs);
+          if (!Number.isFinite(prog)) return true;                 // can't verify — do NOT stutter
+          if (prog >= positionMs - 4000) return true;              // position took — leave it alone
+          await bgCallSpotifyFunction("spotify-playback", { action: "seek", positionMs });
+          return true;
+        };
+        setTimeout(() => { checkOnce().catch(() => {}); }, 700);
+        setTimeout(() => { checkOnce().catch(() => {}); }, 2200);
+      };
+      try {
+        const payload = { action: "play", uris };
+        if (positionMs > 0) payload.positionMs = positionMs;
+        await bgCallSpotifyFunction("spotify-playback", payload);
+        ensureSeek();
+        return { ok: true };
+      } catch (err) {
+        const msg = String(err?.message || "");
+        if (/sign\s?in|auth|connect/i.test(msg)) return { ok: false, reason: "signin" };
+        if (!/device|active|404/i.test(msg)) return { ok: false };
+      }
+      try {
+        // A NEVER-focused background tab is throttled so hard the web player never boots
+        // (no device registers → silence). So: an EXISTING player tab is reused quietly;
+        // a NEW tab opens focused just long enough to boot, then focus bounces back to
+        // the user's page — the dance doesn't start until this resolves.
+        const prevActive = await bgGetActiveTabId();
+        const existing = await bgFindSpotifyTab().catch(() => null);
+        await bgPlaySpotifyWithAutoOpen(uris, positionMs, { background: Boolean(existing) });
+        if (!existing && prevActive) { try { chrome.tabs.update(prevActive, { active: true }); } catch (_) {} }
+        ensureSeek();
+        return { ok: true };
+      } catch (_) { return { ok: false }; }
+    })().then(sendResponse).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (message.action === "sbSpotifyPause") {
+    // End of a party trick: the band stops when the show stops.
+    bgCallSpotifyFunction("spotify-playback", { action: "pause" })
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (message.action === "sbGetUserGeo") {
+    bgGetUserGeo().then((geo) => sendResponse(geo)).catch(() => sendResponse(null));
+    return true;
+  }
+  if (message.action === "sbAgentBootQuery") {
+    // Hive-mind handshake: a freshly injected content script asks whether a delegate
+    // run is mid-flight on (or adopting) its tab, so it can restore the working UI
+    // instead of booting blank and looking like Braino forgot what it was doing.
+    const bootTabId = sender?.tab?.id || null;
+    const bootTask = (bootTabId && bgAgentTaskByTab.get(bootTabId)) || "";
+    const runFresh = Boolean(bgDelegateRunInfo) && (Date.now() - bgDelegateRunInfo.at < 30000);
+    sendResponse({ task: bootTask, running: Boolean(bootTask) && runFresh });
+    return false;
   }
   if (message.action === "getStatus") {
     sendResponse({ isRecording });
@@ -1175,14 +1328,122 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "performWebSearch") {
-    bgPerformRealWebSearch(message.query, {
-      purpose: message.purpose,
-      aiProvider: message.aiProvider,
-      chatHistory: message.chatHistory,
-      instructions: message.instructions,
-    })
-      .then((result) => sendResponse(result))
-      .catch((e) => sendResponse({ error: e.message || "Web search failed." }));
+    (async () => {
+      // Free-tier gate: web search counts toward the daily question cap; unlimited on Pro/creator/admin.
+      const searchGate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
+      if (!searchGate.allowed) {
+        bgNotifyQuota(sender?.tab?.id || null, "chat", searchGate);
+        sendResponse({ error: "FREE_LIMIT_CHAT", quotaExceeded: true, surface: "chat" });
+        return;
+      }
+      const result = await bgPerformRealWebSearch(message.query, {
+        purpose: message.purpose,
+        aiProvider: message.aiProvider,
+        chatHistory: message.chatHistory,
+        instructions: message.instructions,
+      });
+      sendResponse(result);
+    })().catch((e) => sendResponse({ error: e.message || "Web search failed." }));
+    return true;
+  }
+  if (message.action === "captureVisibleTabImage") {
+    (async () => {
+      try {
+        const winId = sender?.tab?.windowId;
+        const opts = { format: "png" };   // png to match the vision backend's declared mime
+        const dataUrl = await new Promise((resolve, reject) => {
+          const cb = (url) => {
+            if (chrome.runtime.lastError || !url) reject(new Error(chrome.runtime.lastError?.message || "capture failed"));
+            else resolve(url);
+          };
+          if (typeof winId === "number") chrome.tabs.captureVisibleTab(winId, opts, cb);
+          else chrome.tabs.captureVisibleTab(opts, cb);
+        });
+        sendResponse({ ok: true, dataUrl });
+      } catch (e) { sendResponse({ ok: false, error: e?.message || "capture failed" }); }
+    })();
+    return true;
+  }
+  // The camera window pushes frames + status to us (the reliable window→worker direction).
+  if (message && message.sbCam === true) {
+    if (message.type === "frame" && message.data) {
+      bgLatestCamFrame = message.data; bgLatestCamFrameAt = Date.now(); bgCamPushStatus = "ready";
+      console.log("[BrainoCam] frame pushed, len=", message.data.length);
+    } else if (message.type === "status") {
+      bgCamPushStatus = message.status || "";
+      console.log("[BrainoCam] status pushed:", message.status);
+    }
+    return false;
+  }
+  if (message.action === "brainoCameraVision") {
+    (async () => {
+      console.log("[BrainoCam] brainoCameraVision requested");
+      const gate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
+      if (!gate.allowed) { console.log("[BrainoCam] gate blocked"); bgNotifyQuota(sender?.tab?.id || null, "chat", gate); sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true }); return; }
+      // ensure the camera window is open — it renders the live feed and pushes frames to us
+      let id = await bgFindCamWindow();
+      console.log("[BrainoCam] existing window id:", id);
+      if (id == null) {
+        bgLatestCamFrame = ""; bgLatestCamFrameAt = 0; bgCamPushStatus = "";
+        const pos = await bgCamWindowPos();
+        const win = await new Promise((r) => chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, (w) => r(chrome.runtime.lastError ? null : w)));
+        console.log("[BrainoCam] created window:", win && win.id, chrome.runtime.lastError && chrome.runtime.lastError.message);
+        if (!win) { sendResponse({ ok: false, status: "noframe" }); return; }
+      } else { try { chrome.windows.update(id, { focused: true }); } catch (_) {} }
+      // wait for a fresh pushed frame (granted) or a permission status
+      const startedAt = Date.now();
+      let frame = "";
+      while (Date.now() - startedAt < 9000) {
+        if (bgLatestCamFrame && (Date.now() - bgLatestCamFrameAt) < 4000) { frame = bgLatestCamFrame; break; }
+        if (bgCamPushStatus === "needpermission" || bgCamPushStatus === "denied") { console.log("[BrainoCam] permission status:", bgCamPushStatus); sendResponse({ ok: false, status: bgCamPushStatus }); return; }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      console.log("[BrainoCam] wait done. frame?", !!frame, "lastFrameAgeMs=", bgLatestCamFrameAt ? (Date.now() - bgLatestCamFrameAt) : "none", "status=", bgCamPushStatus);
+      if (!frame) { sendResponse({ ok: false, status: "noframe" }); return; }
+      const res = await bgChatFetch({
+        notes: "",
+        chatHistory: Array.isArray(message.chatHistory) ? message.chatHistory : [],
+        message: message.prompt || "Describe what you can see.",
+        visionMode: "describe",
+        imageBase64: frame,
+      });
+      const data = await res.json().catch(() => ({}));
+      console.log("[BrainoCam] vision res.ok=", res.ok, "status=", res.status, "reply?", !!(data && data.reply));
+      if (!res.ok) { sendResponse({ ok: false, status: "ready", error: `vision ${res.status}` }); return; }
+      sendResponse({ ok: true, status: "ready", reply: String(data?.reply || data?.response || "").trim() });
+    })().catch((e) => { console.log("[BrainoCam] threw:", e?.message); sendResponse({ ok: false, error: e?.message || "Camera vision failed." }); });
+    return true;
+  }
+  if (message.action === "closeCamWindow") {
+    (async () => {
+      let id = bgCamWindowId;
+      if (id == null) id = await bgFindCamWindow();
+      try { if (id != null) chrome.windows.remove(id, () => { void chrome.runtime.lastError; }); } catch (_) {}
+      bgCamWindowId = null;
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+  if (message.action === "brainoVision") {
+    (async () => {
+      // Vision counts toward the daily chat cap (unlimited on Pro/creator/admin).
+      const gate = await bgGateSurface("chat_count", { action: "consume", amount: 1 });
+      if (!gate.allowed) {
+        bgNotifyQuota(sender?.tab?.id || null, "chat", gate);
+        sendResponse({ ok: false, error: "FREE_LIMIT_CHAT", quotaExceeded: true });
+        return;
+      }
+      const res = await bgChatFetch({
+        notes: "",
+        chatHistory: Array.isArray(message.chatHistory) ? message.chatHistory : [],
+        message: message.prompt || "Describe what you can see.",
+        visionMode: "describe",
+        imageBase64: message.imageBase64 || "",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { sendResponse({ ok: false, error: `vision ${res.status}` }); return; }
+      sendResponse({ ok: true, reply: String(data?.reply || data?.response || "").trim() });
+    })().catch((e) => sendResponse({ ok: false, error: e?.message || "Vision failed." }));
     return true;
   }
   if (message.action === "generateXReply") {
@@ -1337,6 +1598,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: true, starting: true });
           return;
         }
+        // Free-tier gate: voice is a daily taste on Free, unlimited on Pro/creator/admin.
+        const voiceGate = await bgGateSurface("voice_seconds", { action: "precheck" });
+        if (!voiceGate.allowed) {
+          bgNotifyQuota(requesterTabId, "voice", voiceGate);
+          sendResponse({ ok: true, quotaExceeded: true, surface: "voice" });
+          return;
+        }
+        bgVoiceSessionStartedAt = Date.now();
         bgRtSessionStarting = true;
         // The offscreen document is invisible and cannot show a mic prompt. Make sure the
         // extension already holds microphone permission (granted once via a visible helper
@@ -1358,7 +1627,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // on fallback that thrashed the content-side presence listener. It's set in
         // offscreenRtReady once the global session is genuinely live.
         chrome.runtime.sendMessage(
-          { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions },
+          { target: "offscreen", action: "startRealtimeSession", authToken: message.authToken, bootInstructions: message.bootInstructions, voiceEngine: message.voiceEngine },
           (res) => {
             if (chrome.runtime.lastError || res?.error) {
               bgRtSessionStarting = false;
@@ -1412,6 +1681,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "offscreenRtDisconnected") {
     if (!bgVoiceModeOn) return false;
+    bgConsumeVoiceSeconds();
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
     bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
@@ -1435,6 +1705,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message.action === "stopOffscreenRealtime") {
+    bgConsumeVoiceSeconds();
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
     bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
@@ -1508,7 +1779,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         const picked = await bgPickIrrelevantTabs(String(message.instruction || ""), candidates);
         const candidateIds = new Set(candidates.map((c) => c.id));
-        const safeIds = [...new Set(picked)].filter((id) => candidateIds.has(id));
+        let safeIds = [...new Set(picked)].filter((id) => candidateIds.has(id));
+        // If the model closed nothing, fall back to clearing obvious junk so the feature never just
+        // says "everything's in use" when there's clutter sitting right there.
+        if (!safeIds.length) safeIds = bgFallbackClutterIds(candidates);
         const closedTitles = candidates.filter((c) => safeIds.includes(c.id)).map((c) => c.title || "(untitled)");
         if (safeIds.length) await chrome.tabs.remove(safeIds);
         sendResponse({ closed: closedTitles, closedCount: safeIds.length, keptCount: tabs.length - safeIds.length });
@@ -1537,8 +1811,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       bgAgentShouldStop = false;
+      const runClaim = bgTryClaimDelegateRun(recovery.tabId, task);
+      if (!runClaim.ok) {
+        sendResponse({ ok: true, duplicate: true, tabId: recovery.tabId, moved: recovery.moved, created: recovery.created });
+        return;
+      }
+      // Free-tier gate: Delegate is a monthly taste on Free, unlimited on Pro/creator/admin.
+      // Gated AFTER dedupe so a duplicate run never burns quota; release the claim if blocked.
+      const delegateGate = await bgGateSurface("delegate_count", { action: "consume", amount: 1 });
+      if (!delegateGate.allowed) {
+        bgReleaseDelegateRun(recovery.tabId, runClaim.token);
+        bgNotifyQuota(recovery.tabId, "delegate", delegateGate);
+        sendResponse({ ok: true, quotaExceeded: true, surface: "delegate", tabId: recovery.tabId });
+        return;
+      }
       void bgRunBrainAgent(recovery.tabId, task, connector, sharedContext).catch((error) => {
         bgBrainUpdate(recovery.tabId, "Agent error: " + (error?.message || error), true, { task });
+      }).finally(() => {
+        bgReleaseDelegateRun(recovery.tabId, runClaim.token);
       });
       sendResponse({ ok: true, tabId: recovery.tabId, moved: recovery.moved, created: recovery.created });
     })().catch((error) => {
@@ -1552,12 +1842,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === "openSilentAuthTab") {
-    const extId = chrome.runtime.id;
-    chrome.tabs.create({ url: `https://trybraino.com/auth/extension?ext=${extId}`, active: false }, (tab) => {
-      if (tab?.id) chrome.storage.local.set({ __sbAuthTabId: tab.id });
-    });
-    sendResponse({ ok: true });
+    (async () => {
+      // First try to authenticate from a Braino tab that's already open and signed in
+      // (production OR preview env). If we find a session there, storing it fires the
+      // content script's auth watcher (green) — no need to open an auth tab at all.
+      const existing = await bgScavengeAuthFromBrainoTabs();
+      if (existing?.access_token) { sendResponse({ ok: true, source: "existing-tab" }); return; }
+
+      // Otherwise open the /auth/extension relay page for each origin (production + preview)
+      // silently in the background. Whichever origin the user is signed into relays its session;
+      // storeAuthData then closes every tab we opened here.
+      const extId = chrome.runtime.id;
+      const openedTabIds = [];
+      for (const origin of BG_BRAINO_AUTH_ORIGINS) {
+        const tab = await new Promise((resolve) =>
+          chrome.tabs.create({ url: `${origin}/auth/extension?ext=${extId}`, active: false }, resolve));
+        if (tab?.id) openedTabIds.push(tab.id);
+      }
+      if (openedTabIds.length) await chrome.storage.local.set({ __sbAuthTabIds: openedTabIds });
+      sendResponse({ ok: true, source: "auth-tab" });
+    })();
     return true;
+  }
+  if (message.action === "closeSilentAuthTabs") {
+    bgCloseSilentAuthTabs();
+    sendResponse({ ok: true });
+    return false;
   }
   if (message.action === "openAuthTab") {
     const extId = chrome.runtime.id;
@@ -1572,38 +1882,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Pull token from extension storage
       let { authToken, authRefreshToken } = await chrome.storage.local.get(["authToken", "authRefreshToken"]);
 
-      // If no token in extension storage, try to grab it from any open trybraino.com tab
+      // If no token in extension storage, try to grab it from any open Braino tab —
+      // production (trybraino.com) or the preview env.
       if (!authToken && !authRefreshToken) {
-        try {
-          const tabs = await chrome.tabs.query({ url: "*://trybraino.com/*" });
-          if (tabs.length > 0) {
-            const results = await chrome.scripting.executeScript({
-              target: { tabId: tabs[0].id },
-              func: () => {
-                try {
-                  const raw = localStorage.getItem('sb-suwhgaxxdizowbyjlljj-auth-token');
-                  if (!raw) return null;
-                  const s = JSON.parse(raw);
-                  return s?.access_token ? s : null;
-                } catch { return null; }
-              }
-            });
-            const s = results?.[0]?.result;
-            if (s?.access_token) {
-              authToken = s.access_token;
-              authRefreshToken = s.refresh_token || null;
-              const authEmail = s.user?.email || null;
-              chrome.storage.local.set({
-                authToken,
-                authRefreshToken,
-                authEmail,
-                authUserId: s.user?.id || null,
-                authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
-                ...(bgIsInternalPremiumEmail(authEmail) ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
-              });
-            }
-          }
-        } catch {}
+        const s = await bgScavengeAuthFromBrainoTabs();
+        if (s?.access_token) {
+          authToken = s.access_token;
+          authRefreshToken = s.refresh_token || null;
+        }
       }
 
       if (!authToken && !authRefreshToken) { sendResponse({ authenticated: false }); return; }
@@ -1634,10 +1920,71 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "openTab") {
     const url = String(message.url || "").trim();
     if (url.startsWith("https://") || url.startsWith("http://")) {
-      chrome.tabs.create({ url, active: message.active !== false }, () => { void chrome.runtime.lastError; });
+      // Re-fire guard: the same URL requested again within 10s (mic echo, duplicate delegate run,
+      // repeated voice turn) focuses the tab we just opened instead of stacking identical tabs.
+      for (const [u, entry] of bgRecentOpenedTabs) {
+        if (Date.now() - entry.ts > 60000) bgRecentOpenedTabs.delete(u);
+      }
+      const recent = bgRecentOpenedTabs.get(url);
+      if (recent && Date.now() - recent.ts < 10000) {
+        chrome.tabs.get(recent.tabId, (tab) => {
+          if (!chrome.runtime.lastError && tab?.id) {
+            if (message.active !== false) {
+              chrome.windows.update(tab.windowId, { focused: true }, () => { void chrome.runtime.lastError; });
+              chrome.tabs.update(tab.id, { active: true }, () => { void chrome.runtime.lastError; });
+            }
+            sendResponse({ ok: true, tabId: tab.id, reused: true });
+            return;
+          }
+          chrome.tabs.create({ url, active: message.active !== false }, (created) => {
+            void chrome.runtime.lastError;
+            if (created?.id) bgRecentOpenedTabs.set(url, { tabId: created.id, ts: Date.now() });
+            sendResponse({ ok: true, tabId: created?.id ?? null });
+          });
+        });
+        return true;
+      }
+      chrome.tabs.create({ url, active: message.active !== false }, (tab) => {
+        void chrome.runtime.lastError;
+        if (tab?.id) bgRecentOpenedTabs.set(url, { tabId: tab.id, ts: Date.now() });
+        sendResponse({ ok: true, tabId: tab?.id ?? null });
+      });
+      return true; // async sendResponse
     }
-    sendResponse({ ok: true });
+    sendResponse({ ok: false });
     return false;
+  }
+
+  // Design Delegate: open the design tool in a visible tab and TYPE a synthesized prompt into its
+  // composer (we deliberately do NOT submit — the user reviews and hits enter). Retries while the
+  // SPA loads; clipboard copy on the content side is the fallback if the composer never resolves.
+  if (message.action === "runDesignMockup") {
+    (async () => {
+      const url = String(message.url || "").trim();
+      const prompt = String(message.prompt || "");
+      if (!/^https?:\/\//.test(url) || !prompt) { sendResponse({ ok: false, typed: false }); return; }
+
+      const tab = await new Promise((res) =>
+        chrome.tabs.create({ url, active: true }, (t) => { void chrome.runtime.lastError; res(t); }));
+      const tabId = tab?.id;
+      if (!tabId) { sendResponse({ ok: false, typed: false }); return; }
+
+      await bgWaitForTabReady(tabId, 8000);
+      let typed = false;
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 700));
+        const res = await bgExecuteAgentAction(tabId, {
+          type: "type",
+          text: prompt,
+          submit: false, // user reviews and sends
+          selector: 'div[contenteditable="true"]',
+          targetText: "prompt",
+        });
+        if (res && res.success && !res.error) { typed = true; break; }
+      }
+      sendResponse({ ok: true, typed, tabId });
+    })();
+    return true;
   }
   if (message.action === "classifyBrainAgentTask") {
     (async () => {
@@ -1679,6 +2026,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (
     message.action === "agentAction" ||
+    message.action === "buildElementMap" ||
     message.action === "getAgentPageContext" ||
     message.action === "siteAdapterAction" ||
     message.action === "getSiteAdapterContext"
@@ -1701,7 +2049,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (chrome.runtime.lastError) {
             if (retrying) { sendResponse({ error: chrome.runtime.lastError.message }); return; }
             // Inject content script and retry once
-            chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+            chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
               if (chrome.runtime.lastError) { sendResponse({ error: chrome.runtime.lastError.message }); return; }
               setTimeout(() => sendToContentScript(true), 250);
             });
@@ -1739,6 +2087,82 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 const BG_SUPABASE_URL = "https://suwhgaxxdizowbyjlljj.supabase.co";
 const BG_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1d2hnYXh4ZGl6b3dieWpsbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQ5MTcsImV4cCI6MjA5NTg5MDkxN30.We3LVV8wezVwlna-lXdUeJlQCL-rkTvHxPMM_DMnK5o";
 const BG_API_BASE = "https://suwhgaxxdizowbyjlljj.supabase.co/functions/v1";
+
+// Supabase persists the signed-in session under this localStorage key on every Braino web origin.
+const BG_SUPABASE_AUTH_STORAGE_KEY = "sb-suwhgaxxdizowbyjlljj-auth-token";
+
+// Every Braino web origin the extension trusts for a signed-in session: production plus the
+// Vercel preview deploys. Being logged in on any of these authenticates the extension the same
+// as trybraino.com, so the preview env "goes through" even when trybraino.com isn't signed in.
+const BG_BRAINO_WEB_MATCHES = [
+  "*://trybraino.com/*",
+  "*://braino-eight.vercel.app/*",
+  "*://braino-git-cinemamode-itishs-projects.vercel.app/*",
+];
+
+// Origins whose /auth/extension page can relay a signed-in session back to the extension.
+// The silent auth check opens each of these so a user logged into production OR the preview
+// env authenticates, even when neither tab is currently open.
+const BG_BRAINO_AUTH_ORIGINS = [
+  "https://trybraino.com",
+  "https://braino-git-cinemamode-itishs-projects.vercel.app",
+];
+
+// Close any background /auth/extension relay tab(s) the extension opened for the silent auth
+// check — the legacy single id plus the array used when opening both production and preview.
+function bgCloseSilentAuthTabs() {
+  chrome.storage.local.get(["__sbAuthTabId", "__sbAuthTabIds"], ({ __sbAuthTabId, __sbAuthTabIds }) => {
+    const ids = [];
+    if (typeof __sbAuthTabId === "number") ids.push(__sbAuthTabId);
+    if (Array.isArray(__sbAuthTabIds)) ids.push(...__sbAuthTabIds.filter((id) => typeof id === "number"));
+    for (const id of ids) {
+      chrome.tabs.remove(id, () => { void chrome.runtime.lastError; });
+    }
+    if (ids.length) chrome.storage.local.remove(["__sbAuthTabId", "__sbAuthTabIds"]);
+  });
+}
+
+// Look through any open Braino web tab (production OR preview) for a signed-in Supabase session
+// and, if found, persist it into extension storage. Setting authToken fires storage.onChanged,
+// which the content script's auth watcher turns into the green "authenticated" state.
+// Returns the session object if one was found, else null.
+async function bgScavengeAuthFromBrainoTabs() {
+  try {
+    const tabs = await chrome.tabs.query({ url: BG_BRAINO_WEB_MATCHES });
+    for (const tab of tabs) {
+      if (!tab?.id) continue;
+      let results;
+      try {
+        results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          args: [BG_SUPABASE_AUTH_STORAGE_KEY],
+          func: (storageKey) => {
+            try {
+              const raw = localStorage.getItem(storageKey);
+              if (!raw) return null;
+              const s = JSON.parse(raw);
+              return s?.access_token ? s : null;
+            } catch { return null; }
+          },
+        });
+      } catch { continue; }
+      const s = results?.[0]?.result;
+      if (s?.access_token) {
+        const authEmail = s.user?.email || null;
+        await chrome.storage.local.set({
+          authToken: s.access_token,
+          authRefreshToken: s.refresh_token || null,
+          authEmail,
+          authUserId: s.user?.id || null,
+          authDisplayName: s.user?.user_metadata?.full_name || s.user?.user_metadata?.name || null,
+          ...(bgIsInternalPremiumEmail(authEmail) ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
+        });
+        return s;
+      }
+    }
+  } catch {}
+  return null;
+}
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 const BG_BRAINO_FAVORITE_SONG_URI = "spotify:track:6Hgh47WXVKtXN5zGOu0hjI";
 
@@ -1778,22 +2202,101 @@ function bgHostOf(url) {
   try { return new URL(url || "").hostname.replace(/^www\./, ""); } catch { return ""; }
 }
 
+// ── Camera vision: the camera lives in a top-level extension popup window (cam.html) — the only
+// context the page's Permissions-Policy can't block. STATELESS design: we find the window by URL
+// (never a remembered id, which dies with the service worker) and talk to it with one-shot messages,
+// so a worker restart can't lose the connection or spawn duplicate windows. ─────────────────────────
+let bgCamWindowId = null;
+let bgLatestCamFrame = "";       // most recent frame the camera window pushed us (window→SW = reliable)
+let bgLatestCamFrameAt = 0;
+let bgCamPushStatus = "";        // "ready" | "needpermission" | "denied"
+
+// One-shot message to the cam window. Resolves null if it isn't open / doesn't answer in time.
+function bgSendToCam(message, timeoutMs) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    try {
+      chrome.runtime.sendMessage(message, (resp) => { void chrome.runtime.lastError; finish(resp || null); });
+    } catch (_) { finish(null); return; }
+    setTimeout(() => finish(null), timeoutMs || 4000);
+  });
+}
+
+// Find an already-open camera window by its URL — robust across service-worker restarts.
+function bgFindCamWindow() {
+  return new Promise((resolve) => {
+    try {
+      chrome.windows.getAll({ populate: true, windowTypes: ["popup", "normal"] }, (wins) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        for (const w of (wins || [])) {
+          for (const t of (w.tabs || [])) {
+            const u = t.url || t.pendingUrl || "";
+            if (u.includes("cam.html")) { resolve(w.id); return; }
+          }
+        }
+        resolve(null);
+      });
+    } catch (_) { resolve(null); }
+  });
+}
+
+// Put the window on-screen, top-right of the current window (default placement can land it off a
+// multi-monitor desktop).
+async function bgCamWindowPos() {
+  const W = 340, H = 280;
+  try {
+    const cur = await new Promise((r) => chrome.windows.getCurrent({}, (w) => r(chrome.runtime.lastError ? null : w)));
+    if (cur && typeof cur.left === "number" && typeof cur.width === "number") {
+      return { width: W, height: H, left: Math.max(20, cur.left + cur.width - W - 36), top: Math.max(20, (cur.top || 0) + 96) };
+    }
+  } catch (_) {}
+  return { width: W, height: H, left: 140, top: 120 };
+}
+
+// Open the one-time grant window (visible, has a button → a real gesture so the prompt appears). Once
+// the user allows, the EXTENSION origin holds the camera grant and the offscreen doc inherits it —
+// exactly how the mic permission works.
+async function bgOpenCamGrantWindow() {
+  const existing = await bgFindCamWindow();
+  if (existing != null) { try { chrome.windows.update(existing, { focused: true }); } catch (_) {} return; }
+  const pos = await bgCamWindowPos();
+  chrome.windows.create({ url: chrome.runtime.getURL("cam.html"), type: "popup", focused: true, ...pos }, () => { void chrome.runtime.lastError; });
+}
+
+// Grab a single camera frame in the OFFSCREEN document — the same proven channel voice uses. Returns
+// { frame } | { needpermission: true } | { error }.
+async function bgOffscreenGrabCameraFrame() {
+  try { await ensureOffscreen(); } catch (_) {}
+  return await new Promise((resolve) => {
+    let done = false; const fin = (v) => { if (!done) { done = true; resolve(v); } };
+    try {
+      chrome.runtime.sendMessage({ target: "offscreen", action: "grabCameraFrame" }, (resp) => { void chrome.runtime.lastError; fin(resp || {}); });
+    } catch (_) { fin({}); return; }
+    setTimeout(() => fin({ error: "timeout" }), 8000);
+  });
+}
+
 // Ask the LLM which of the (already safety-filtered) candidate tabs to close.
 // Returns an array of tab IDs. Closes nothing if the response can't be parsed.
 async function bgPickIrrelevantTabs(instruction, candidates) {
   const numbered = candidates
-    .map((t, i) => `${i}. ${String(t.title || "(untitled)").slice(0, 80)} — ${t.host || "?"}`)
+    .map((t, i) => `${i}. ${String(t.title || "(untitled)").slice(0, 80)} — ${bgHostOf(t.url) || "?"}`)
     .join("\n");
   const prompt = [
-    "You help a user close irrelevant browser tabs.",
+    "You help a user tidy their browser tabs by closing the ones they don't need.",
     `User request: "${instruction || "close the tabs I don't need"}"`,
     "",
-    "Closable tabs (already excludes the active, pinned, and audio-playing tabs):",
+    "Closable tabs (the active, pinned, and audio-playing tabs are already excluded and SAFE):",
     numbered,
     "",
+    "Pick the clutter to close: new/blank tabs, duplicates, search-result pages, finished articles,",
+    "social/news the user has clearly moved on from, ads, trackers. KEEP things that look like active",
+    "work (docs, editors, dashboards, a logged-in app mid-task).",
+    "When the user says \"the tabs I don't need\" / \"clean up\" / \"close what I'm not using\", that IS",
+    "your instruction to actually close the clutter — don't refuse or return an empty list out of caution.",
+    "Only return [] if literally every listed tab looks like active work.",
     "Return ONLY a JSON array of the indices to close (e.g. [0,2,3]).",
-    "Keep tabs that look like active work; close clutter (duplicates, search-result pages, finished reading, ads, empty/new tabs).",
-    "If the user gave no specific criteria, be conservative. Never return every index unless the user explicitly asked to close all tabs.",
   ].join("\n");
 
   try {
@@ -1810,6 +2313,21 @@ async function bgPickIrrelevantTabs(instruction, candidates) {
   } catch {
     return [];
   }
+}
+
+// Deterministic safety net: if the LLM closes nothing (over-cautious or the chat call failed), still
+// clear the obvious junk — blank/new-tab pages and exact-duplicate URLs (keeping the first of each).
+function bgFallbackClutterIds(candidates) {
+  const junk = [];
+  const seenUrl = new Set();
+  for (const t of candidates) {
+    const url = String(t.url || "");
+    const blank = !url || url === "about:blank" || /^(chrome|edge|brave|about):\/\/(newtab|blank|new-tab-page|newtabpage)/i.test(url);
+    if (blank) { junk.push(t.id); continue; }
+    if (seenUrl.has(url)) { junk.push(t.id); continue; }
+    seenUrl.add(url);
+  }
+  return junk.filter((id) => id != null);
 }
 
 let bgXPersonaCache = null;
@@ -2237,7 +2755,7 @@ async function bgGetAgentPageContext(tabId) {
       chrome.tabs.sendMessage(tabId, { action: "getAgentPageContext" }, res => {
         if (chrome.runtime.lastError) {
           if (retrying) { resolve(empty); return; }
-          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+          chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
             if (chrome.runtime.lastError) { resolve(empty); return; }
             setTimeout(() => sendMsg(true), 250);
           });
@@ -2259,7 +2777,7 @@ async function bgGetSiteAdapterContext(tabId) {
       chrome.tabs.sendMessage(tabId, { action: "getSiteAdapterContext" }, res => {
         if (chrome.runtime.lastError) {
           if (retrying) { resolve(empty); return; }
-          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+          chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
             if (chrome.runtime.lastError) { resolve(empty); return; }
             setTimeout(() => sendMsg(true), 250);
           });
@@ -2304,7 +2822,7 @@ async function bgExecuteAgentAction(tabId, actionObj) {
       chrome.tabs.sendMessage(tabId, { action: "agentAction", ...actionObj }, res => {
         if (chrome.runtime.lastError) {
           if (retrying) { resolve({ error: chrome.runtime.lastError.message }); return; }
-          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+          chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
             if (chrome.runtime.lastError) { resolve({ error: chrome.runtime.lastError.message }); return; }
             setTimeout(() => sendToContent(true), 250);
           });
@@ -2325,7 +2843,7 @@ async function bgExecuteSiteAdapterAction(tabId, actionObj) {
       chrome.tabs.sendMessage(tabId, { action: "siteAdapterAction", ...actionObj }, res => {
         if (chrome.runtime.lastError) {
           if (retrying) { resolve({ error: chrome.runtime.lastError.message }); return; }
-          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+          chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
             if (chrome.runtime.lastError) { resolve({ error: chrome.runtime.lastError.message }); return; }
             setTimeout(() => sendToContent(true), 250);
           });
@@ -2356,6 +2874,58 @@ async function bgWaitForTabReady(tabId, maxMs = 5000) {
 const BG_SNAPSHOT_ACTIONS = new Set(["navigate", "click", "selectOption", "pressKey"]);
 const bgAgentTaskByTab = new Map();
 
+// ── Hive mind: the delegate loop follows child tabs. A mid-task click that opens a NEW
+// tab (Amazon loves target=_blank) used to strand the loop on the old tab while the real
+// flow continued in the child. onCreated marks the child for adoption; the loop switches
+// at its next safe point. Freshness-gated so a finished run can never adopt anything. ──
+let bgDelegateRunInfo = null;   // { tabId, at } — refreshed every loop iteration
+let bgDelegateAdoptTabId = null;
+chrome.tabs.onCreated.addListener((tab) => {
+  if (!bgDelegateRunInfo || !tab?.id || !tab.openerTabId) return;
+  if (tab.openerTabId !== bgDelegateRunInfo.tabId) return;
+  if (Date.now() - bgDelegateRunInfo.at > 30000) return;
+  bgDelegateAdoptTabId = tab.id;
+  // Seed the child's task mapping NOW so its freshly injected content script's boot
+  // handshake (sbAgentBootQuery) finds the run before the loop formally adopts the tab.
+  const parentTask = bgAgentTaskByTab.get(tab.openerTabId);
+  if (parentTask) bgAgentTaskByTab.set(tab.id, parentTask);
+});
+const bgActiveDelegateRunsByTab = new Map();
+// Same task claimed GLOBALLY, not just per tab — delegate runs move/create tabs, so a re-fired
+// task landed on a different tabId and slipped past the per-tab claim (the N-identical-tabs bug).
+const bgActiveDelegateRunsByTask = new Map();
+// URLs opened via the openTab message recently — lets a duplicate request reuse the tab.
+const bgRecentOpenedTabs = new Map();
+
+function bgDelegateTaskKey(task) {
+  return String(task || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function bgTryClaimDelegateRun(tabId, task) {
+  const key = bgDelegateTaskKey(task);
+  if (!tabId || !key) return { ok: true, token: `${Date.now()}:${Math.random()}` };
+  const active = bgActiveDelegateRunsByTab.get(tabId);
+  if (active?.key === key && Date.now() - active.startedAt < 120000) {
+    return { ok: false, duplicate: true, token: active.token };
+  }
+  const activeTask = bgActiveDelegateRunsByTask.get(key);
+  if (activeTask && Date.now() - activeTask.startedAt < 120000) {
+    return { ok: false, duplicate: true, token: activeTask.token };
+  }
+  const token = `${Date.now()}:${Math.random()}`;
+  bgActiveDelegateRunsByTab.set(tabId, { key, startedAt: Date.now(), token });
+  bgActiveDelegateRunsByTask.set(key, { startedAt: Date.now(), token });
+  return { ok: true, token };
+}
+
+function bgReleaseDelegateRun(tabId, token) {
+  const active = bgActiveDelegateRunsByTab.get(tabId);
+  if (active?.token === token) bgActiveDelegateRunsByTab.delete(tabId);
+  for (const [key, entry] of bgActiveDelegateRunsByTask) {
+    if (entry.token === token) bgActiveDelegateRunsByTask.delete(key);
+  }
+}
+
 function bgBrainUpdate(tabId, text, final = false, opts = {}) {
   void bgSendInlineUiMessage(tabId, {
     action: "sbAgentUpdate",
@@ -2375,7 +2945,7 @@ async function bgSendInlineUiMessage(tabId, message) {
       chrome.tabs.sendMessage(tabId, message, (res) => {
         if (chrome.runtime.lastError) {
           if (retrying) { resolve(null); return; }
-          chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
+          chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
             if (chrome.runtime.lastError) { resolve(null); return; }
             setTimeout(() => send(true), 250);
           });
@@ -2442,42 +3012,1182 @@ async function bgSaveAgentTask(tabId, task, result) {
   } catch (_) {}
 }
 
+// ── Delegate closed-loop agent (index + assertion based) ─────────────────────
+
+const BG_DELEGATE_BUDGET = { maxSteps: 40, maxMs: 120000, maxLLMUsd: 0.50 };
+const BG_DELEGATE_LONG_TASK_BUDGET = { maxSteps: 120, maxMs: 600000, maxLLMUsd: 3.00 };
+const BG_DELEGATE_TARGETED_ACTIONS = new Set(["click", "type", "selectOption", "downloadImage"]);
+const BG_DELEGATE_ACTIONS = new Set([
+  "navigate",
+  "click",
+  "type",
+  "pressKey",
+  "selectOption",
+  "read",
+  "scroll",
+  "wait",
+  "downloadImage",
+  "web_search",
+  "done",
+  "answer",
+  "clarify",
+]);
+
+function bgLooksLikeLongDelegateTask(task) {
+  const raw = String(task || "").toLowerCase();
+  if (!raw) return false;
+  const longWork = /\b(research|write|draft|create|make|compose|article|report|brief|document|google\s+docs?|google\s+documents?|docs?|linkedin|jobs?|postings?|compare|summari[sz]e|analy[sz]e)\b/.test(raw);
+  const multiStep = /\b(and then|then|after that|put it|turn it into|create|write|draft|read\s+(?:at least\s+)?\d+|read\s+(?:several|multiple|many)|best fit|google\s+doc|google\s+document)\b/.test(raw);
+  return Boolean(longWork && multiStep);
+}
+
+function bgDelegateBudgetForTask(task) {
+  return bgLooksLikeLongDelegateTask(task)
+    ? { ...BG_DELEGATE_LONG_TASK_BUDGET }
+    : { ...BG_DELEGATE_BUDGET };
+}
+
+function bgSafeJson(value) {
+  try { return JSON.stringify(value); } catch (_) { return "null"; }
+}
+
+function bgExtractJsonObject(raw) {
+  const text = String(raw || "").trim();
+  if (!text) throw new Error("Empty model response");
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1].trim() : text;
+  try { return JSON.parse(candidate); } catch (_) {}
+  const objectMatch = candidate.match(/\{[\s\S]*\}/);
+  if (!objectMatch) throw new Error("No JSON object found");
+  return JSON.parse(objectMatch[0]);
+}
+
+function bgValidateAssertion(expect) {
+  const assertion = expect || { assert: "none" };
+  const allowed = new Set(["element_exists", "element_gone", "url_contains", "value_equals", "text_present", "none"]);
+  if (!allowed.has(assertion.assert)) throw new Error(`Invalid assertion: ${assertion.assert}`);
+  if ((assertion.assert === "element_exists" || assertion.assert === "element_gone") && (!assertion.match || typeof assertion.match !== "object")) {
+    throw new Error(`${assertion.assert} requires match`);
+  }
+  if (assertion.assert === "url_contains" && typeof assertion.value !== "string") throw new Error("url_contains requires value");
+  if (assertion.assert === "value_equals" && !Number.isInteger(Number(assertion.index))) throw new Error("value_equals requires index");
+  if (assertion.assert === "text_present" && typeof assertion.value !== "string") throw new Error("text_present requires value");
+  return assertion;
+}
+
+function bgValidateDecision(rawDecision) {
+  const decision = rawDecision && typeof rawDecision === "object" ? rawDecision : {};
+  const action = decision.action && typeof decision.action === "object" ? decision.action : null;
+  if (!action || !BG_DELEGATE_ACTIONS.has(action.type)) throw new Error("Decision must contain one valid action");
+  BrainoRecovery?.validateNoSelectorAction?.(action);
+  for (const key of ["selector", "targetText", "targetTag"]) {
+    if (Object.prototype.hasOwnProperty.call(action, key) || Object.prototype.hasOwnProperty.call(decision, key)) {
+      throw new Error(`Selectors are forbidden in Delegate actions: ${key}`);
+    }
+  }
+  if (BG_DELEGATE_TARGETED_ACTIONS.has(action.type) && !Number.isInteger(Number(action.index))) {
+    throw new Error(`${action.type} requires numeric index`);
+  }
+  if (action.type === "navigate" && !/^https?:\/\//i.test(String(action.url || ""))) throw new Error("navigate requires http(s) url");
+  if (action.type === "type" && typeof action.text !== "string") throw new Error("type requires text");
+  if (action.type === "pressKey" && typeof action.key !== "string") throw new Error("pressKey requires key");
+  if (action.type === "selectOption" && typeof action.value !== "string") throw new Error("selectOption requires value");
+  if (action.type === "scroll" && !["up", "down"].includes(action.direction)) throw new Error("scroll requires direction up/down");
+  if (action.type === "wait") action.ms = Math.max(0, Math.min(5000, Number(action.ms || 1000)));
+  if (action.type === "downloadImage" && !["png", "jpeg", "webp"].includes(action.format)) throw new Error("downloadImage requires png/jpeg/webp");
+  if (action.type === "web_search" && typeof action.query !== "string") throw new Error("web_search requires query");
+  if (action.type === "answer" || action.type === "clarify") {
+    action.text = String(action.text || action.message || "").trim();
+    if (!action.text) throw new Error(`${action.type} requires text`);
+  }
+  return {
+    thought: String(decision.thought || "").slice(0, 400),
+    memory_update: decision.memory_update && typeof decision.memory_update === "object" ? decision.memory_update : undefined,
+    action,
+    expect: bgValidateAssertion(decision.expect || { assert: "none" }),
+    done_confidence: Math.max(0, Math.min(1, Number(decision.done_confidence || 0))),
+  };
+}
+
+function bgDelegateClarifyDecision(message, thought = "The model response was not valid Delegate JSON.") {
+  return bgValidateDecision({
+    thought,
+    action: {
+      type: "clarify",
+      text: message || "I had trouble reading the next browser step. Please say the task again or give me one more detail to continue.",
+    },
+    expect: { assert: "none" },
+    done_confidence: 0,
+  });
+}
+
+async function bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError }) {
+  const message = validationError
+    ? `${userPrompt}\n\nYour previous JSON failed validation: ${validationError}\nReturn corrected strict JSON only.`
+    : userPrompt;
+  const response = await bgChatFetch({
+    notes: systemPrompt,
+    message,
+    aiProvider: "openai",
+    delegateModel: model,
+    delegatePurpose: "delegate",
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Delegate model failed: ${response.status}`);
+  }
+  const data = await response.json();
+  return String(data.reply || data.response || "").trim();
+}
+
+function bgDelegateTodayText() {
+  return new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+// ── User geo/locale context — no permission prompts. Timezone comes from Intl (the SW
+// runs on the user's machine), coarse city/country from one cached IP lookup per day.
+// Powers local storefronts (amazon.in vs amazon.com), local-time answers, "where am I".
+let bgUserGeoCache = null;
+async function bgGetUserGeo() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  if (bgUserGeoCache && Date.now() - bgUserGeoCache.fetchedAt < 24 * 3600 * 1000) return bgUserGeoCache;
+  try {
+    const stored = await chrome.storage.local.get("sbUserGeo");
+    if (stored?.sbUserGeo?.fetchedAt && Date.now() - stored.sbUserGeo.fetchedAt < 24 * 3600 * 1000) {
+      bgUserGeoCache = stored.sbUserGeo;
+      return bgUserGeoCache;
+    }
+  } catch (_) {}
+  let geo = { country: "", countryCode: "", city: "", region: "", timeZone, fetchedAt: Date.now() };
+  try {
+    const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const j = await res.json();
+      geo = {
+        country: j.country_name || "",
+        countryCode: String(j.country_code || "").toUpperCase(),
+        city: j.city || "",
+        region: j.region || "",
+        timeZone: j.timezone || timeZone,
+        fetchedAt: Date.now(),
+      };
+    }
+  } catch (_) {}
+  bgUserGeoCache = geo;
+  try { chrome.storage.local.set({ sbUserGeo: geo }); } catch (_) {}
+  return geo;
+}
+function bgUserContextLine(geo) {
+  const now = new Date().toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  });
+  const place = [geo?.city, geo?.region, geo?.country].filter(Boolean).join(", ");
+  return `User's local time: ${now}${geo?.timeZone ? ` (${geo.timeZone})` : ""}${place ? `. User's location: ${place}` : ""}.`;
+}
+const BG_AMAZON_TLD_BY_COUNTRY = {
+  IN: "amazon.in", US: "amazon.com", GB: "amazon.co.uk", UK: "amazon.co.uk", DE: "amazon.de",
+  FR: "amazon.fr", IT: "amazon.it", ES: "amazon.es", CA: "amazon.ca", JP: "amazon.co.jp",
+  AU: "amazon.com.au", BR: "amazon.com.br", MX: "amazon.com.mx", NL: "amazon.nl", AE: "amazon.ae", SG: "amazon.sg",
+};
+// Deterministic storefront swap: a task/nav that names another country's Amazon gets the
+// user's local domain (amazon.com → amazon.in for an India user).
+function bgLocalizeStorefront(url, geo) {
+  try {
+    const u = new URL(String(url));
+    const host = u.hostname.replace(/^www\./, "");
+    const local = BG_AMAZON_TLD_BY_COUNTRY[geo?.countryCode || ""];
+    if (local && /^amazon\.[a-z.]+$/.test(host) && host !== local) {
+      u.hostname = "www." + local;
+      return u.toString();
+    }
+  } catch (_) {}
+  return String(url);
+}
+
+function bgSelectDelegateSkillsHeuristic(task) {
+  const raw = String(task || "").toLowerCase();
+  const skills = [];
+  if (/\b(calendar|meeting|meet|call|event|schedule|reschedule|cancel|invite|forward)\b/.test(raw)) skills.push("google-calendar");
+  if (/\b(maps?|directions?|route|near me|nearby|nearest|closest|restaurant|cafe|place|places|eta|distance|theat(?:er|re)s?|movie\s+theat(?:er|re)s?|cinemas?)\b/.test(raw)) skills.push("google-maps");
+  if (/\b(linkedin|jobs?|roles?|openings?|sdet|developer|engineer)\b/.test(raw)) skills.push("linkedin-jobs");
+  if (/\b(twitter|x\b|tweet|post|publish|followers?|mentions?)\b/.test(raw)) skills.push("x-growth-posting");
+  if (/\b(cost|spend|receipt|realtime|voice)\b/.test(raw)) skills.push("realtime-costs");
+  // Shopping: Amazon by name, or a buy/purchase ask with no other store named (Amazon is
+  // the default store). "order" alone is excluded — too food-delivery shaped.
+  if (/\b(amazon|add to cart|checkout)\b/.test(raw)
+    || (/\b(buy|purchase)\b/.test(raw) && !/\b(swiggy|zomato|uber\s*eats|doordash|instamart|blinkit|flipkart|food)\b/.test(raw))) skills.push("amazon-shopping");
+  return [...new Set(skills)].slice(0, 3);
+}
+
+function bgDelegateSkillGuide(skill, task) {
+  if (skill === "linkedin-jobs") return `
+SKILL linkedin-jobs:
+- Navigate to LinkedIn Jobs search for the requested role/location.
+- If a login wall appears, stop and ask the user to log in.
+- Read the visible result list first, then inspect 3-5 relevant job postings.
+- Store title, company, location, link, short description, key requirements, and Strong/Maybe/Weak fit facts.
+- Never apply, save, message, connect, or click Easy Apply without explicit confirmation.
+- Assertions: after search, expect job/result text; after opening a posting, expect detail text or a job title; after read, expect none.`;
+  if (skill === "google-maps") return `
+SKILL google-maps:
+- Open Google Maps visibly for search or directions unless the user explicitly says not to.
+- For "near me", "nearest", "closest", "my house", "home", or "where I am", assume the user's current/home context. Use a Maps query with "near me" or "My Location"; do not ask where they are.
+- Inspect visible results before recommending; do not invent ratings, hours, ETA, or open status.
+- For recommendations, return 3-5 visible options and one best pick.
+- For phone handoff, ask which result to send unless the user already selected exactly one.
+- Assertions: after Maps navigation, expect URL/text containing maps or visible result/location text.`;
+  if (skill === "google-calendar") return `
+SKILL google-calendar:
+- Use visible Calendar pages for create/edit flows when the user asked to book or create an event.
+- Resolve relative dates using today: ${bgDelegateTodayText()}.
+- Do not invent attendee emails. If only a name is provided, create without invite or ask for an email.
+- Cancel, reschedule, forward, invite, and send-update operations are destructive and require confirmation.
+- Assertions: after opening create form, expect title/event fields; after saving, expect visible saved event text.`;
+  if (skill === "x-growth-posting") return `
+SKILL x-growth-posting:
+- Draft first. Never post, schedule, or publish until the user confirms the visible draft.
+- Keep X posts under 280 characters and preserve the user's saved voice if available.
+- Posting is destructive; click Post/Tweet only after confirmation.
+- Assertions: after compose, expect textbox/post field; after draft typing, expect typed value or visible text.`;
+  if (skill === "realtime-costs") return `
+SKILL realtime-costs:
+- Answer from stored Braino realtime cost data when available.
+- Use exact dates for today/last 7 days. Do not invent costs.
+- Usually this should answer rather than operate the browser.`;
+  if (skill === "amazon-shopping") return `
+SKILL amazon-shopping (guided buying — the user stays in the loop):
+- DOMAIN: always use the user's LOCAL Amazon (see the user-context line: India → amazon.in, US → amazon.com). If you find yourself on another country's Amazon, navigate to the local one first.
+- PREREQUISITE: the user must already be signed in. If the header shows "Hello, sign in" or a Sign in prompt, STOP with {"type":"clarify","text":"You're not signed in to Amazon, so I can't shop for you yet. Sign in and ask me again."}. NEVER type credentials, even if they appear in context.
+- CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
+- BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
+- SEARCH ONCE: use the provided search query exactly one time. If the product is visible in the results, open it; if not, scroll once, then clarify. NEVER re-run reworded variations of the same search — a second near-identical query is forbidden.
+- Amazon re-renders after every click. After each click take {"type":"wait","ms":1000}, then re-read before acting again.
+- AMBIGUITY = ASK: if results show several plausible matches (editions, formats, bundles, sellers), scroll down ~600 once so options are visible, then {"type":"clarify","text":"Which one from this page do you want me to add to cart? I can see <top 2-3 options with price>."}. Never guess between editions. The user's next command continues the run on this same page.
+- MULTIPLE PRODUCTS ("buy X and Y"): strictly sequential — search X, add to cart, then search Y, add to cart. Go to cart only after all items are added.
+- PAYMENT BOUNDARY: never enter or select payment details, addresses, or place the final order. Advance to the payment-method step (open the UPI/QR view if offered) and finish with {"type":"answer","text":"Checkout is ready — finish the payment on your screen."}.
+- done only when the observed page proves the requested stage: item visibly in cart, or the checkout/payment page reached.`;
+  return "";
+}
+
+// The missing layer: turn a natural-language request into a real search PLAN — a concise
+// keyword query (what + where) + the surface to search + soft constraints to apply to the
+// RESULTS (not stuffed into the query). This is why "restaurants that serve dosa in the
+// morning in Mumbai" used to get dumped verbatim into Maps. Fail-open (returns null).
+async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
+  const raw = String(task || "").trim();
+  if (!raw) return null;
+  try {
+    const systemPrompt = [
+      "You convert a user's natural-language request into a clean search plan for a browser agent.",
+      "Return STRICT JSON only, no prose, no markdown:",
+      '{"resolvedTask":"the request rewritten as ONE self-contained instruction naming concrete targets","surface":"maps|web|none","searchQuery":"concise keyword query a savvy user would actually type","softConstraints":["preference to apply when RANKING results"],"directions":{"origin":"","destination":""}}',
+      "Rules:",
+      "- resolvedTask is the MOST IMPORTANT field. Vague mid-conversation asks (\"play this song\", \"show me that book on Amazon\", \"search that up\", \"buy it for me\") MUST be rewritten with the real entity taken from CONTEXT (e.g. 'Play the song Levitating by Dua Lipa on Spotify', 'Show the book The Subtle Art of Not Giving a F*ck by Mark Manson on Amazon'). Keep the user's verb and target site; never invent an entity the context does not support. If the request is already self-contained, return it unchanged. Never leave an unresolved 'this/that/it' in resolvedTask when CONTEXT names the referent.",
+      "- If CURRENT PAGE already shows the thing the user is referring to (e.g. they're on the product page and say 'buy it'), resolvedTask must say to CONTINUE on the current page rather than re-open or re-search (e.g. 'On the currently open Amazon page for <product>, add it to cart and proceed to checkout'). This applies ONLY when the current page genuinely matches the request (right site AND right content). If the current page is unrelated to the ask (e.g. a dashboard is open and they ask to buy something on Amazon), do NOT anchor to it — resolvedTask must direct the agent to the right site (e.g. 'Go to amazon.com, search for <product>, and buy it').",
+      "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
+      "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
+      "- searchQuery must name the RESOLVED entity too, never the pronoun ('The Subtle Art of Not Giving a F*ck book', not 'that book').",
+      "- searchQuery is what gets typed INTO a site's own search box. NEVER include the site name, 'Amazon', 'India', or any storefront/country words in it ('Atomic Habits book' — NOT 'Atomic Habits Amazon India'). The storefront choice belongs in resolvedTask only.",
+      "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
+      "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
+      "- For a DIRECTIONS/route/navigate request, fill directions.origin and directions.destination as separate places (e.g. 'from Laburnum Park, Pune to Malad West, Mumbai' → origin='Laburnum Park, Pune', destination='Malad West, Mumbai'). If the user gives only a destination, leave origin empty (current location). Otherwise leave both empty.",
+      "- Sites with country storefronts (Amazon etc.): resolvedTask must name the USER's local domain from USER CONTEXT (India → amazon.in, US → amazon.com, UK → amazon.co.uk), even if the user said 'amazon.com'.",
+    ].join("\n");
+    const geo = await bgGetUserGeo().catch(() => null);
+    const userPrompt = [
+      `REQUEST: ${raw}`,
+      pageInfo?.url ? `CURRENT PAGE: ${pageInfo.url}${pageInfo.title ? ` — ${pageInfo.title}` : ""}` : null,
+      `USER CONTEXT: ${bgUserContextLine(geo)}`,
+      `CONTEXT: ${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
+      "Return the JSON now.",
+    ].filter(Boolean).join("\n\n");
+    const reply = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+    });
+    const p = bgExtractJsonObject(reply);
+    // Deterministic scrub: a trailing "on amazon india"-style storefront tag in the query
+    // gets typed into the site's own search box and wrecks results. Strip it always
+    // (only the TRAILING form — "amazon rainforest facts" stays untouched).
+    const searchQuery = String(p.searchQuery || "").trim()
+      .replace(/\s+(?:on\s+)?(?:amazon|flipkart|ebay)(?:\.[a-z.]{2,6})?(?:\s+(?:india|usa?|uk|germany|japan))?\s*$/i, "")
+      .trim();
+    const resolvedTask = String(p.resolvedTask || "").trim().slice(0, 300);
+    if (!searchQuery && !resolvedTask) return null;
+    const surface = ["maps", "web", "none"].includes(p.surface) ? p.surface : "web";
+    const softConstraints = Array.isArray(p.softConstraints)
+      ? p.softConstraints.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 5)
+      : [];
+    const dir = p.directions && typeof p.directions === "object" ? p.directions : {};
+    const directions = {
+      origin: String(dir.origin || "").trim(),
+      destination: String(dir.destination || "").trim(),
+    };
+    return { surface, searchQuery, softConstraints, directions, resolvedTask };
+  } catch (error) {
+    console.warn("[Braino][Delegate] intent synth fallback:", error?.message || error);
+    return null;
+  }
+}
+
+async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, options = {}) {
+  const fallbackSkills = bgSelectDelegateSkillsHeuristic(task);
+  const fallback = {
+    goal: task,
+    subgoals: [{ id: "1", desc: task, status: "active" }],
+    skills: fallbackSkills,
+  };
+  try {
+    // Initial decompose stays on the FAST model (same speed as before). Re-planning
+    // (options.strong) — a rare event when the agent is stuck — uses the stronger brain.
+    const isReplan = Boolean(options.strong);
+    onProgress?.(isReplan ? "Rethinking the plan..." : "Understanding the task...");
+    const model = isReplan
+      ? (BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4")
+      : (BrainoModels?.MODELS?.STEP || "gpt-5.4-mini");
+    const stalledContext = isReplan && options.state
+      ? [
+          "The previous plan STALLED. Current run state:",
+          BrainoTaskState.renderTaskState(options.state),
+          "Produce a REVISED set of subgoals that avoids the stuck step and tries a genuinely different approach.",
+        ].join("\n")
+      : "";
+    const prompt = [
+      "Return strict JSON only.",
+      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping\"]}",
+      "Choose only skills that are relevant. Do not include selectors or CSS.",
+      `Task: ${task}`,
+      `Context:\n${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
+      stalledContext,
+    ].filter(Boolean).join("\n\n");
+    const reply = await bgCallDelegateModel({
+      systemPrompt: "You decompose browser tasks for Braino Delegate. Return strict JSON only.",
+      userPrompt: prompt,
+      model,
+    });
+    const parsed = bgExtractJsonObject(reply);
+    const skills = Array.isArray(parsed.skills) ? parsed.skills.filter((skill) => fallbackSkills.includes(skill) || [
+      "google-calendar",
+      "google-maps",
+      "linkedin-jobs",
+      "realtime-costs",
+      "x-growth-posting",
+      "amazon-shopping",
+    ].includes(skill)) : fallbackSkills;
+    return {
+      goal: String(parsed.goal || task).trim() || task,
+      subgoals: BrainoTaskState.normalizeSubgoals(parsed.subgoals, task),
+      skills: [...new Set(skills)].slice(0, 3),
+    };
+  } catch (error) {
+    console.warn("[Braino][Delegate] decompose fallback:", error?.message || error);
+    return fallback;
+  }
+}
+
+function bgBuildDelegateSystemPrompt(skills, lessons, geo = null) {
+  const skillText = (skills || []).map((skill) => bgDelegateSkillGuide(skill)).filter(Boolean).join("\n\n");
+  const lessonList = Array.isArray(lessons) ? lessons.filter(Boolean).slice(0, 8) : [];
+  const lessonText = lessonList.length
+    ? `\nLEARNED FROM PAST RUNS ON THIS SITE (apply if relevant):\n${lessonList.map((l) => `- ${l}`).join("\n")}\n`
+    : "";
+  return `You are Braino Delegate, a closed-loop browser agent.
+Return ONLY strict JSON. No prose. No markdown fences.
+
+Decision shape:
+{"thought":"1-2 short sentences","memory_update":{"facts":[{"key":"...","value":"..."}],"current_subgoal":"...","subgoal_complete":false},"action":ACTION,"expect":ASSERTION,"done_confidence":0}
+
+Actions:
+{"type":"navigate","url":"https://..."}
+{"type":"click","index":1}
+{"type":"type","index":1,"text":"...","submit":false}
+{"type":"pressKey","key":"Enter"}
+{"type":"selectOption","index":1,"value":"..."}
+{"type":"read","index":1}
+{"type":"read"}
+{"type":"scroll","direction":"down","amount":600}
+{"type":"wait","ms":1000}
+{"type":"downloadImage","index":1,"format":"png"}
+{"type":"web_search","query":"..."}
+{"type":"done"}
+{"type":"answer","text":"..."}
+{"type":"clarify","text":"..."}
+
+Assertions:
+{"assert":"element_exists","match":{"role":"textbox","name":"To"}}
+{"assert":"element_gone","match":{"role":"button","name":"Loading"}}
+{"assert":"url_contains","value":"calendar"}
+{"assert":"value_equals","index":1,"value":"..."}
+{"assert":"text_present","value":"..."}
+{"assert":"none"}
+
+Rules:
+- Return exactly one action per turn.
+- Never output selector, targetText, targetTag, XPath, or CSS. Target live elements only by index.
+- Use the observation as ground truth. If the needed element is absent, scroll, wait, read, or clarify.
+- Every non-read/browser action needs an assertion that can be checked against the next observation.
+- Do not claim done until the task is complete in observed state.
+- If recent history shows the same action was repeated or skipped, change tactic immediately. Do not repeat the same subgoal wording with punctuation-only changes.
+- INFORMATIONAL tasks (find / show / list / look up / recommend / "what/which/where" + info, restaurants, places, products, facts): the goal is to REPORT, not to keep browsing. The moment the observation already shows usable results, take {"type":"read"} to capture them and then immediately return {"type":"answer","text":"<the findings: top picks with the key details>"}. This finishes the task.
+- Do NOT run another web_search or navigate to a "broader"/reworded query once usable results are already visible — one good search is enough. A second nearly-identical query is forbidden; read what you already have and answer.
+- Prefer {"type":"answer"} to finish informational tasks. Reserve {"type":"done"} for ACTION tasks (send / book / buy / save / submit) where the live page itself proves completion. Never loop trying to "prove" an informational task is done — answering IS done.
+- If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
+- For other high-risk final actions not clearly requested by the user, clarify before acting.
+- For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location", read the visible results once, and answer with the top options — do not keep re-searching.
+- Today is ${bgDelegateTodayText()}. ${geo ? bgUserContextLine(geo) : ""}
+- Use the user's LOCAL storefront for country-specific sites: ${geo?.countryCode && BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode] ? `Amazon = ${BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode]}` : "match the Amazon domain to the user's location"}. If you land on another country's storefront, navigate to the local one.
+
+Useful URL shortcuts:
+- Gmail inbox: https://mail.google.com/mail/u/0/#inbox
+- Gmail compose with prefill: https://mail.google.com/mail/?view=cm&to=TO&su=SUBJECT&body=BODY
+- Google Calendar create event: https://calendar.google.com/calendar/r/eventedit?text=TITLE&dates=YYYYMMDDTHHMMSS/YYYYMMDDTHHMMSS
+- LinkedIn Jobs: https://www.linkedin.com/jobs/search/?keywords=ROLE&location=CITY
+- Google Maps search: https://www.google.com/maps/search/QUERY
+- Google Maps directions: https://www.google.com/maps/dir/ORIGIN/DESTINATION
+${lessonText}
+${skillText}`;
+}
+
+async function bgDecideNextAction({ task, state, observationText, skills, lessons, phase, stuckCount, validationError }) {
+  const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
+  const decideGeo = await bgGetUserGeo().catch(() => null);
+  const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons, decideGeo);
+  const synth = state?.synth || null;
+  // Once searches have run, the hint lists them so the model doesn't repeat one — while
+  // keeping the canonical query available for any REMAINING search (a multi-site task
+  // still needs it) and saying plainly that fresh searches stay allowed. A blanket
+  // "searching is forbidden" here once stranded a run that still had to reach Amazon.
+  const priorSearches = Array.isArray(state?.searchesDone) ? state.searchesDone : [];
+  const userPrompt = [
+    `TASK: ${task}`,
+    synth?.searchQuery
+      ? (priorSearches.length
+        ? `Searches already run this task: ${priorSearches.map((s) => `"${s.query}" on ${s.host}`).join("; ")}. Do not repeat any of them. For any REMAINING search this task needs, use the query "${synth.searchQuery}" on the right site — fresh sites and different products are fine. If you are already on the right product page, act on it (e.g. Add to Cart) instead of searching.`
+        : `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.`)
+      : null,
+    synth?.softConstraints?.length ? `APPLY THESE PREFERENCES by reading and RANKING the results (not by adding them to the query): ${synth.softConstraints.join("; ")}.` : null,
+    "STATE:",
+    BrainoTaskState.renderTaskState(state),
+    "OBSERVATION:",
+    observationText || "(empty observation)",
+    "Return the next Decision JSON now.",
+  ].filter(Boolean).join("\n\n");
+  let reply = await bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError });
+  try {
+    return { decision: bgValidateDecision(bgExtractJsonObject(reply)), model };
+  } catch (firstError) {
+    try {
+      reply = await bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError: firstError.message || String(firstError) });
+      return { decision: bgValidateDecision(bgExtractJsonObject(reply)), model };
+    } catch (secondError) {
+      console.warn("[Braino][Delegate] decision JSON fallback:", {
+        firstError: firstError?.message || String(firstError),
+        secondError: secondError?.message || String(secondError),
+        replyPreview: String(reply || "").slice(0, 240),
+      });
+      return {
+        decision: bgDelegateClarifyDecision(
+          "I hit a malformed model response while choosing the next browser step. Please retry the command; I will keep the page state and continue from the live DOM.",
+        ),
+        model,
+      };
+    }
+  }
+}
+
+// Lowercased, whitespace-collapsed string match used to compare element identity.
+function bgNormalizeForMatch(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+// B1 — metacognition: before accepting a "done", confirm against the LIVE page with the
+// stronger model. Fail-open (returns complete:true on any error) so a genuinely-finished
+// task is never trapped, and the caller caps how many times this can run.
+async function bgVerifyDelegateDone({ task, state, tabId }) {
+  try {
+    const obs = await bgBuildElementObservation(tabId, task);
+    const systemPrompt =
+      "You verify whether a browser task is TRULY complete from the live page. " +
+      "Return ONLY strict JSON: {\"complete\":true|false,\"reason\":\"short\"}. " +
+      "Be strict: complete=true only if the observed page proves the goal was achieved " +
+      "(e.g. the email shows as sent, the event shows as saved, the requested data is visible). " +
+      "If it merely looks ready but not done, return false. No prose, no markdown.";
+    const userPrompt = [
+      `TASK: ${task}`,
+      "STATE:",
+      BrainoTaskState.renderTaskState(state),
+      "OBSERVATION:",
+      obs.serialized || "(empty observation)",
+      "Is the task complete in the observed state? Strict JSON only.",
+    ].join("\n\n");
+    const reply = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4",
+    });
+    const parsed = bgExtractJsonObject(reply);
+    return { complete: parsed?.complete !== false, reason: String(parsed?.reason || "").slice(0, 200) };
+  } catch (_) {
+    return { complete: true, reason: "verifier unavailable" };
+  }
+}
+
+// C1 — reflection memory: after a run, extract 1-3 durable, site-specific lessons and persist
+// them per-origin so future runs start smarter. Best-effort and fire-and-forget; never blocks
+// the user's result.
+async function bgReflectAndStoreLessons({ task, state, origin, outcome }) {
+  try {
+    if (!origin || origin === "unknown" || !BrainoMacroStore?.recordLessons) return;
+    const systemPrompt =
+      "You extract durable lessons for a browser agent from one task attempt on a website. " +
+      "Return ONLY strict JSON: {\"lessons\":[\"short imperative tip\"]}. " +
+      "0-3 concise, REUSABLE, site-specific tips (navigation quirks, where a control lives, a modal/banner that appears, a faster path). " +
+      "No secrets, no one-off values (names, emails, dates), no prose, no markdown.";
+    const userPrompt = [
+      `SITE: ${origin}`,
+      `TASK: ${task}`,
+      `OUTCOME: ${outcome || "unknown"}`,
+      "RUN STATE:",
+      BrainoTaskState.renderTaskState(state),
+      "Return strict JSON only.",
+    ].join("\n\n");
+    const reply = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4",
+    });
+    const parsed = bgExtractJsonObject(reply);
+    const lessons = Array.isArray(parsed?.lessons) ? parsed.lessons : [];
+    if (lessons.length) await BrainoMacroStore.recordLessons(origin, lessons);
+  } catch (_) {
+    // reflection is best-effort; ignore failures
+  }
+}
+
+async function bgBuildElementObservation(tabId, keywords = "") {
+  const empty = {
+    map: { url: "", title: "", scroll: { x: 0, y: 0, maxX: 0, maxY: 0, atTop: true, atBottom: true }, elements: [] },
+    serialized: "",
+  };
+  if (!tabId) return empty;
+  return new Promise((resolve) => {
+    function send(retrying) {
+      chrome.tabs.sendMessage(tabId, { action: "buildElementMap", keywords, cap: 120 }, (res) => {
+        if (chrome.runtime.lastError) {
+          if (retrying) { resolve(empty); return; }
+          chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
+            if (chrome.runtime.lastError) { resolve(empty); return; }
+            setTimeout(() => send(true), 250);
+          });
+          return;
+        }
+        resolve(res || empty);
+      });
+    }
+    send(false);
+  });
+}
+
+function bgDescribeDelegateAction(action, obs) {
+  if (!action) return "Working";
+  if (action.type === "click" || action.type === "type" || action.type === "selectOption" || action.type === "downloadImage" || action.type === "read") {
+    const el = obs?.elements?.find((item) => Number(item.index) === Number(action.index));
+    const label = el?.name || el?.role || `#${action.index}`;
+    if (action.type === "type") return `Type into ${label}`;
+    if (action.type === "selectOption") return `Select ${action.value} in ${label}`;
+    if (action.type === "downloadImage") return `Download image ${label}`;
+    if (action.type === "read") return `Read ${label}`;
+    return `Click ${label}`;
+  }
+  if (action.type === "navigate") return `Open ${action.url}`;
+  if (action.type === "web_search") return `Search the web for ${action.query}`;
+  if (action.type === "scroll") return `Scroll ${action.direction}`;
+  if (action.type === "wait") return `Wait ${action.ms || 1000}ms`;
+  return action.type;
+}
+
+function bgCanonicalDelegateUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch (_) {
+    return raw.replace(/#.*$/, "").replace(/\/$/, "");
+  }
+}
+
+function bgIsRepeatedDelegateNavigate(action, state, obs) {
+  if (action?.type !== "navigate") return false;
+  const target = bgCanonicalDelegateUrl(action.url);
+  if (!target) return false;
+  const current = bgCanonicalDelegateUrl(obs?.url || "");
+  if (current && current === target) return true;
+  return state.history.slice(-5).some((item) => item?.ok && item?.action?.type === "navigate" && bgCanonicalDelegateUrl(item.action.url) === target);
+}
+
+function bgDelegateActionFingerprint(action) {
+  if (!action?.type) return "";
+  const type = String(action.type);
+  if (type === "navigate") return `${type}:${bgCanonicalDelegateUrl(action.url)}`;
+  if (type === "web_search") return `${type}:${String(action.query || "").toLowerCase().replace(/\s+/g, " ").trim()}`;
+  if (type === "click" || type === "downloadImage") return `${type}:${Number(action.index)}`;
+  if (type === "type") return `${type}:${Number(action.index)}:${String(action.text || "").slice(0, 120)}`;
+  if (type === "selectOption") return `${type}:${Number(action.index)}:${String(action.value || "").toLowerCase()}`;
+  if (type === "pressKey") return `${type}:${String(action.key || "").toLowerCase()}`;
+  if (type === "scroll") return `${type}:${String(action.direction || "")}`;
+  if (type === "wait") return `${type}:${Math.round(Number(action.ms || 1000) / 500) * 500}`;
+  if (type === "read") return `${type}:${Number.isInteger(Number(action.index)) ? Number(action.index) : "main"}`;
+  return type;
+}
+
+function bgIsRepeatedDelegateAction(action, state) {
+  const fingerprint = bgDelegateActionFingerprint(action);
+  if (!fingerprint || ["done", "answer", "clarify"].includes(action?.type)) return false;
+  const recent = state.history.slice(action?.type === "scroll" || action?.type === "wait" || action?.type === "read" ? -5 : -3);
+  const repeats = recent.filter((item) => bgDelegateActionFingerprint(item?.action) === fingerprint);
+  const limit = action?.type === "scroll" || action?.type === "wait" || action?.type === "read" ? 4 : 2;
+  return repeats.length >= limit;
+}
+
+async function bgExecuteDelegateAction(tabId, action, state) {
+  if (action.type === "web_search") {
+    const searchData = await bgPerformRealWebSearch(action.query, { purpose: "delegate" });
+    const resultsText = searchData.results
+      ? searchData.results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.snippet}`).join("\n\n")
+      : searchData.error || "No results.";
+    const text = searchData.answer ? `${searchData.answer}\n\n${resultsText}` : resultsText;
+    state.facts.push({ key: `web_search:${action.query}`.slice(0, 80), value: text.slice(0, 2000), source: "web_search" });
+    return { success: !searchData.error, text, error: searchData.error || null };
+  }
+  if (action.type === "wait") {
+    await bgDelay(Math.max(0, Math.min(5000, Number(action.ms || 1000))));
+    return { success: true };
+  }
+  const result = await bgExecuteAgentAction(tabId, action);
+  if (!result?.error && action.type === "navigate") {
+    await bgWaitForTabReady(tabId, 8000);
+    await bgDelay(700);
+  } else if (!result?.error && ["click", "type", "selectOption", "pressKey", "scroll"].includes(action.type)) {
+    await bgDelay(450);
+  }
+  if (action.type === "read" && result?.text) {
+    state.facts.push({ key: `read:${state.facts.length + 1}`, value: String(result.text).slice(0, 2000), source: "page" });
+  }
+  return result || { error: "No response from action execution" };
+}
+
+async function bgReadMany(targets, options = {}) {
+  const urls = (Array.isArray(targets) ? targets : [])
+    .map((target) => typeof target === "string" ? target : target?.url)
+    .map((url) => String(url || "").trim())
+    .filter((url) => /^https?:\/\//i.test(url))
+    .slice(0, Math.max(1, Number(options.limit || 5)));
+  if (!urls.length) return [];
+  const concurrency = Math.max(1, Math.min(3, Number(options.concurrency || 3)));
+  const originalTabId = options.focusTabId || await bgGetActiveTabId();
+  const results = [];
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < urls.length) {
+      const url = urls[cursor++];
+      let tab = null;
+      try {
+        tab = await new Promise((resolve) => chrome.tabs.create({ url, active: false }, resolve));
+        if (!tab?.id) throw new Error("Could not open background tab");
+        await bgWaitForTabReady(tab.id, 10000);
+        await new Promise((resolve) => {
+          chrome.scripting.executeScript({ target: { tabId: tab.id }, files: BG_CONTENT_SCRIPT_FILES }, () => resolve());
+        });
+        const obs = await bgBuildElementObservation(tab.id, options.keywords || "");
+        const read = await bgExecuteAgentAction(tab.id, { type: "read" });
+        const text = String(read?.text || obs.serialized || "").slice(0, Number(options.maxChars || 3500));
+        results.push({ url, ok: !read?.error, text, title: obs.map?.title || "" });
+        if (options.state && text) {
+          options.state.facts.push({ key: `read_many:${results.length}`, value: `${url}\n${text}`.slice(0, 2200), source: "readMany" });
+        }
+      } catch (error) {
+        results.push({ url, ok: false, error: error?.message || String(error) });
+      } finally {
+        if (tab?.id) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, () => worker()));
+  if (originalTabId) {
+    try { await chrome.tabs.update(originalTabId, { active: true }); } catch (_) {}
+  }
+  return results;
+}
+
+async function bgApplyDelegateRecovery({ tabId, errorInfo, state, onProgress }) {
+  const type = errorInfo?.type || "UNKNOWN";
+  if (type === "AUTH_WALL") {
+    return { terminal: true, message: "I hit a login wall. Please log in on this page, then ask me to continue." };
+  }
+  if (type === "CAPTCHA") {
+    return { terminal: true, message: "I hit a human verification step. I will not try to solve it; please take over from here." };
+  }
+  if (type === "RATE_LIMIT") {
+    onProgress?.("Rate limited. Waiting briefly...");
+    await bgDelay(1500);
+    state.stuckCount += 1;
+    return { terminal: false };
+  }
+  if (type === "ELEMENT_NOT_FOUND" || type === "STALE_ELEMENT") {
+    // Reasoning-based recovery: instead of a blind scroll, record a precise failure analysis
+    // as a fact and escalate. The next decision (now on the stronger model, since stuckCount
+    // crosses the escalation threshold) reasons over this and picks a DIFFERENT approach.
+    onProgress?.("That step didn't land — rethinking the approach...");
+    state.facts.push({
+      key: `recovery:${state.facts.length + 1}`,
+      value: `Last action failed (${type}): ${errorInfo?.detail || "target not found"}. The element may have moved, be off-screen, or the chosen index was wrong. Try a DIFFERENT element, scroll to reveal it, or read the page first — do not repeat the same action.`,
+      source: "recovery",
+    });
+    state.facts = state.facts.slice(-30);
+    state.stuckCount += 1;
+    return { terminal: false };
+  }
+  if (type === "NAV_TIMEOUT") {
+    onProgress?.("Waiting for navigation to settle...");
+    await bgDelay(2000);
+    state.stuckCount += 1;
+    return { terminal: false };
+  }
+  // Unknown / assertion failures: surface the reason so the escalated next step can adapt.
+  if (errorInfo?.detail) {
+    state.facts.push({
+      key: `recovery:${state.facts.length + 1}`,
+      value: `Last step failed (${type}): ${errorInfo.detail}. Change tactic on the next step.`,
+      source: "recovery",
+    });
+    state.facts = state.facts.slice(-30);
+  }
+  state.stuckCount += 1;
+  return { terminal: false };
+}
+
+async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress }) {
+  if (!macro?.steps?.length) return { ok: false, reason: "No macro steps" };
+  onProgress?.("Replaying learned shortcut...");
+  let obs = (await bgBuildElementObservation(tabId, task)).map;
+  const filledSteps = BrainoMacroStore.fillMacro(macro, task, obs);
+  for (let i = 0; i < filledSteps.length; i++) {
+    const step = filledSteps[i];
+    if (BG_DELEGATE_TARGETED_ACTIONS.has(step.action.type) && !Number.isInteger(Number(step.action.index))) {
+      await BrainoMacroStore.demote(macro.key);
+      return { ok: false, reason: "Macro target could not be resolved" };
+    }
+    onProgress?.(`Replay: ${bgDescribeDelegateAction(step.action, obs)}`);
+    const decision = { action: step.action, expect: step.expect || { assert: "none" }, thought: "Replay macro" };
+    const result = await bgExecuteDelegateAction(tabId, step.action, state);
+    const newObs = (await bgBuildElementObservation(tabId, task)).map;
+    const verdict = BrainoRecovery.verifyAssertion(step.expect || { assert: "none" }, newObs);
+    BrainoTaskState.commitHistory(state, decision, result, verdict);
+    if (result?.error || !verdict.ok) {
+      await BrainoMacroStore.demote(macro.key);
+      return { ok: false, reason: result?.error || verdict.reason || "Macro checkpoint failed", obs: newObs };
+    }
+    obs = newObs;
+  }
+  return { ok: true, message: "Done.", origin };
+}
+
+// Record "this search executed" when a URL proves its results page is up. The mark lives
+// in state.searchesDone (never evicted — the facts list caps at 30 and was scrolling
+// marks out on long runs) plus a copy in facts for model visibility. Idempotent.
+function bgRecordSearchDone(state, url) {
+  if (typeof BrainoSearchGuard === "undefined" || !BrainoSearchGuard || !state) return;
+  if (!Array.isArray(state.searchesDone)) state.searchesDone = [];
+  const mark = BrainoSearchGuard.shouldMark({
+    newUrl: url,
+    synthQuery: state.synth?.searchQuery,
+    searchesDone: state.searchesDone,
+  });
+  if (!mark) return;
+  state.searchesDone.push(mark);
+  state.facts.push({ key: `search_done:${mark.host}`, value: mark.query, source: "runtime" });
+  state.facts = state.facts.slice(-30);
+}
+
+async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false, synth: passedSynth = null }) {
+  let currentTabId = tabId;
+  bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+  bgDelegateAdoptTabId = null;
+  const startedAt = Date.now();
+  const budget = bgDelegateBudgetForTask(task);
+  let llmUsd = 0;
+  let prevObs = null;
+  let verifyCount = 0;
+  let replanCount = 0;
+  const observationSnapshots = [];
+  const initialObs = await bgBuildElementObservation(currentTabId, task);
+  const origin = BrainoMacroStore?.originFromUrl?.(initialObs.map.url) || "unknown";
+  // C1 — load durable lessons learned on this site in past runs (local storage, instant).
+  let lessons = await (BrainoMacroStore?.getLessons?.(origin) || Promise.resolve([])).catch(() => []);
+  const state = BrainoTaskState.createTaskState(task, currentTabId);
+  // Un-evictable record of executed searches ({host, query}) — the facts list caps at 30
+  // entries and long runs were scrolling search_done marks out, silently re-arming repeats.
+  state.searchesDone = [];
+  const macro = await BrainoMacroStore.lookup(task, origin);
+  if (macro) {
+    const replay = await bgRunMacroReplay({ tabId: currentTabId, task, state, macro, origin, onProgress });
+    if (replay.ok) {
+      onFinal?.(replay.message || "Done.");
+      return { ok: true, message: replay.message || "Done.", state, macroReplay: true };
+    }
+    onProgress?.("Shortcut drifted. Falling back to live page reading...");
+    prevObs = replay.obs || prevObs;
+  }
+
+  // Understand intent → form a real search query + constraints BEFORE any search runs,
+  // so we never paste the user's sentence verbatim into Maps/web. Reuse the one the caller
+  // already computed (bgRunBrainAgent does it before its fast path) so it isn't called twice.
+  const synth = passedSynth
+    || await bgSynthesizeIntent(task, sharedContext, { url: initialObs.map?.url, title: initialObs.map?.title }).catch(() => null);
+  state.synth = synth;
+  // Vague mid-conversation asks ("play this song", "buy that book") arrive as the literal
+  // utterance; synthesis resolves the referent from chat context. From here on, the
+  // RESOLVED task is the task — decomposition, every per-step decision, and done-verification
+  // all steer by the concrete target instead of a pronoun.
+  if (synth?.resolvedTask && bgNormalizeForMatch(synth.resolvedTask) !== bgNormalizeForMatch(task)) {
+    task = synth.resolvedTask;
+    onProgress?.(`Understood: ${task}`);
+  }
+  if (!passedSynth && synth?.searchQuery) onProgress?.(`Searching for "${synth.searchQuery}"`);
+
+  const decomp = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress);
+  state.goal = decomp.goal || task;
+  BrainoTaskState.setSubgoals(state, decomp.subgoals);
+  await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+
+  const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
+  if (fastActions?.length) {
+    for (const fast of fastActions) {
+      onProgress?.(fast.description || bgDescribeDelegateAction(fast, prevObs));
+      const result = await bgExecuteDelegateAction(currentTabId, fast, state);
+      const newObs = (await bgBuildElementObservation(currentTabId, task)).map;
+      const expect = fast.type === "navigate" ? { assert: "url_contains", value: new URL(fast.url).hostname.replace(/^www\./, "") } : { assert: "none" };
+      const verdict = BrainoRecovery.verifyAssertion(expect, newObs);
+      BrainoTaskState.commitHistory(state, { action: fast, expect, thought: "Fast path" }, result, verdict);
+      prevObs = newObs;
+      if (result?.error) break;
+      if (!fast.continueAfter) {
+        const msg = "Done.";
+        onFinal?.(msg);
+        return { ok: true, message: msg, state };
+      }
+    }
+  }
+
+  for (let step = 0; step < budget.maxSteps; step++) {
+    bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+    if (bgAgentShouldStop || (shouldStop && await shouldStop())) {
+      const msg = "Task stopped.";
+      onFinal?.(msg);
+      return { ok: false, message: msg, state };
+    }
+    if (!BrainoModels.withinBudget(budget, { steps: step, elapsedMs: Date.now() - startedAt, llmUsd })) {
+      const minutes = Math.max(1, Math.round(budget.maxMs / 60000));
+      const msg = `I hit Delegate's safety budget (${budget.maxSteps} steps / about ${minutes} min) before finishing. I stopped instead of looping blindly.`;
+      onFinal?.(msg);
+      return { ok: false, message: msg, state };
+    }
+
+    // B2 — adaptive re-planning: when genuinely stuck, revise the whole plan with the stronger
+    // model instead of grinding the original one. Rare and capped, so the hot path stays fast.
+    if (state.stuckCount >= 3 && replanCount < 2) {
+      replanCount += 1;
+      const replan = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress, { strong: true, state });
+      llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+      if (replan?.subgoals?.length) {
+        BrainoTaskState.setSubgoals(state, replan.subgoals);
+        if (Array.isArray(replan.skills) && replan.skills.length) {
+          decomp.skills = [...new Set([...(decomp.skills || []), ...replan.skills])].slice(0, 3);
+        }
+        state.stuckCount = 1; // give the revised plan a fresh chance without dropping escalation entirely
+        await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+      }
+    }
+
+    const activeKeywords = state.subgoals.find((goal) => goal.status === "active")?.desc || task;
+    const obsResult = await bgBuildElementObservation(currentTabId, activeKeywords);
+    let obs = obsResult.map;
+    // The results page may have finished loading AFTER the previous step's re-observe
+    // (typing + Enter navigates on a race the fixed 450ms delay loses) — every iteration
+    // starts by checking whether the CURRENT page proves a search executed, BEFORE the
+    // decision is made, so the model's search hint is never one step stale. Idempotent.
+    bgRecordSearchDone(state, obs?.url);
+    const obsPayload = prevObs && BrainoElementMap?.diffElementMap
+      ? BrainoElementMap.diffElementMap(prevObs, obs, { keywords: activeKeywords })   // Change B: anchor stable controls
+      : (obsResult.serialized || BrainoElementMap.serializeElementMap(obs, { keywords: activeKeywords }));
+    let decision;
+    let model;
+    try {
+      const picked = await bgDecideNextAction({
+        task,
+        state,
+        observationText: obsPayload,
+        skills: decomp.skills,
+        lessons,
+        phase: state.stuckCount >= 2 ? "escalate" : "step",
+        stuckCount: state.stuckCount,
+      });
+      decision = picked.decision;
+      model = picked.model;
+      llmUsd += BrainoModels?.estimateModelCost?.(model) || 0.002;
+    } catch (error) {
+      const msg = `Delegate model error: ${error?.message || error}`;
+      onFinal?.(msg);
+      return { ok: false, message: msg, state };
+    }
+
+    BrainoTaskState.mergeMemoryUpdate(state, decision.memory_update, "model");
+    await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+
+    const action = decision.action;
+    if (action.type === "done") {
+      // B1 — metacognition: confirm completion against the live page before claiming success.
+      // Capped at 2 checks; fail-open so a genuinely-finished task is never trapped.
+      if (verifyCount < 2) {
+        verifyCount += 1;
+        onProgress?.("Double-checking the result...");
+        const verify = await bgVerifyDelegateDone({ task, state, tabId: currentTabId });
+        llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+        if (verify && verify.complete === false) {
+          const note = `Self-check: not done yet — ${verify.reason || "the page does not yet prove the task is complete"}.`;
+          state.facts.push({ key: `self_check:${state.facts.length + 1}`, value: note, source: "verifier" });
+          state.facts = state.facts.slice(-30);
+          BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note }, { ok: false, reason: note });
+          onProgress?.("Not done yet — continuing...");
+          prevObs = (await bgBuildElementObservation(currentTabId, task)).map;
+          continue;
+        }
+      }
+      BrainoTaskState.markActiveSubgoalDone(state);
+      await BrainoMacroStore.record(state, origin, observationSnapshots).catch(() => null);
+      bgReflectAndStoreLessons({ task, state, origin, outcome: "success" }); // fire-and-forget; never blocks
+      const msg = "Done.";
+      onFinal?.(msg);
+      return { ok: true, message: msg, state };
+    }
+    if (action.type === "answer" || action.type === "clarify") {
+      const msg = action.text || "I need more information to continue.";
+      onFinal?.(msg);
+      return { ok: action.type === "answer", message: msg, state };
+    }
+    if (bgIsRepeatedDelegateNavigate(action, state, obs)) {
+      const note = `Already at ${action.url}; skipped repeated navigation.`;
+      state.facts.push({ key: `navigation_skipped:${state.facts.length + 1}`, value: note, source: "runtime" });
+      BrainoTaskState.commitHistory(state, decision, { success: true, skipped: true, note }, { ok: false, reason: note });
+      onProgress?.("Already on that page; reading current state instead...");
+      prevObs = obs;
+      continue;
+    }
+    if (bgIsRepeatedDelegateAction(action, state)) {
+      const note = `Repeated ${action.type} without clear progress; forcing a different tactic.`;
+      state.facts.push({ key: `loop_guard:${state.facts.length + 1}`, value: note, source: "runtime" });
+      state.facts = state.facts.slice(-30);
+      state.stuckCount = Math.max(state.stuckCount, 2);
+      BrainoTaskState.commitHistory(state, decision, { error: note, skipped: true }, { ok: false, reason: note });
+      await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+      onProgress?.("I noticed a repeated step, so I’m switching tactics...");
+      prevObs = obs;
+      continue;
+    }
+    // Search cap: an informational task should search once, read the results, and answer.
+    // After 2 searches, stop searching — force a read so the next turn has content to answer from.
+    const isSearchAction = action.type === "web_search"
+      || (action.type === "navigate" && /\/(maps\/)?search[/?]|[?&](q|query)=/i.test(String(action.url || "")));
+    if (isSearchAction) {
+      state.searchCount = (state.searchCount || 0) + 1;
+      if (state.searchCount > 2) {
+        const note = "Enough searching — usable results are available. Read what's on the page and ANSWER with the top options instead of searching again.";
+        state.facts.push({ key: `search_cap:${state.facts.length + 1}`, value: note, source: "runtime" });
+        state.facts = state.facts.slice(-30);
+        BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note }, { ok: false, reason: note });
+        onProgress?.("Enough searching — reading the results to answer...");
+        await bgExecuteDelegateAction(currentTabId, { type: "read" }, state).catch(() => {});
+        prevObs = (await bgBuildElementObservation(currentTabId, task)).map;
+        continue;
+      }
+    }
+    // D2 — staleness guard: a targeted action's index came from an observation that is now
+    // 2-5s old (model latency), during which the page may have shifted. Re-read and confirm
+    // the target still has the same role+name before acting, so we never click the wrong row.
+    // (Re-observing is cheap vs the model call, so the hot path stays fast; it also realigns
+    // the content-script registry that execution resolves against.)
+    if (BG_DELEGATE_TARGETED_ACTIONS.has(action.type)) {
+      const intended = (obs.elements || []).find((el) => Number(el.index) === Number(action.index));
+      const fresh = (await bgBuildElementObservation(currentTabId, task)).map;
+      const current = (fresh.elements || []).find((el) => Number(el.index) === Number(action.index));
+      const sameRole = intended && current && bgNormalizeForMatch(intended.role) === bgNormalizeForMatch(current.role);
+      const n1 = bgNormalizeForMatch(intended?.name);
+      const n2 = bgNormalizeForMatch(current?.name);
+      // Lenient on name (dynamic labels/counters shouldn't false-trip); strict on role + identity.
+      const sameName = n1 === n2 || (!!n1 && !!n2 && (n1.includes(n2) || n2.includes(n1)));
+      const sameTarget = Boolean(intended && current && sameRole && sameName);
+      if (!sameTarget) {
+        const note = `The page shifted before I could act on element [${action.index}] (${intended?.role || "?"} "${(intended?.name || "").slice(0, 60)}"). Re-reading and re-deciding instead of clicking the wrong thing.`;
+        state.facts.push({ key: `stale_guard:${state.facts.length + 1}`, value: note, source: "runtime" });
+        state.facts = state.facts.slice(-30);
+        BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note }, { ok: false, reason: note });
+        onProgress?.("Page shifted — re-reading before acting...");
+        prevObs = fresh;
+        continue;
+      }
+      obs = fresh; // act against the confirmed-fresh observation (matches the content registry)
+    }
+
+    // ── Redundant-search guard: pure logic in lib/searchGuard.js (unit-tested in
+    // tests/search-guard.test.mjs). Blocks ONLY: re-typing the query while on that
+    // thing's product page, or the identical query re-run on a site whose results
+    // already loaded. Navigation and everything else always passes. ──
+    const guardVerdict = (typeof BrainoSearchGuard !== "undefined" && BrainoSearchGuard)
+      ? BrainoSearchGuard.evaluate({ action, pageUrl: obs?.url, synthQuery: state.synth?.searchQuery, searchesDone: state.searchesDone })
+      : { blocked: false };
+    if (guardVerdict.blocked) {
+      state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: guardVerdict.note, source: "runtime" });
+      state.facts = state.facts.slice(-30);
+      BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: guardVerdict.note }, { ok: false, reason: guardVerdict.note });
+      onProgress?.("Already there — skipping a repeat search...");
+      prevObs = obs;
+      continue;
+    }
+
+    observationSnapshots.push(obs);
+    onProgress?.(bgDescribeDelegateAction(action, obs));
+    const result = await bgExecuteDelegateAction(currentTabId, action, state);
+    if (bgDelegateAdoptTabId && bgDelegateAdoptTabId !== currentTabId) {
+      // The click spawned a child tab — the task lives there now. Adoption beats the
+      // active-tab check below (a background-opened child is NOT the active tab yet).
+      const adopted = bgDelegateAdoptTabId;
+      bgDelegateAdoptTabId = null;
+      onProgress?.("Following the new tab...");
+      try { chrome.tabs.update(adopted, { active: true }); } catch (_) {}
+      await bgWaitForTabReady(adopted, 8000);
+      currentTabId = adopted;
+      state.focusTabId = currentTabId;
+      bgAgentTaskByTab.set(currentTabId, task);
+      chrome.storage.local.set({ activeTabId: currentTabId });
+      bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+    } else {
+      const latestActiveTabId = await bgGetActiveTabId();
+      if (latestActiveTabId && latestActiveTabId !== currentTabId) {
+        currentTabId = latestActiveTabId;
+        state.focusTabId = currentTabId;
+        bgAgentTaskByTab.set(currentTabId, task);
+        chrome.storage.local.set({ activeTabId: currentTabId });
+      }
+    }
+    const newObs = (await bgBuildElementObservation(currentTabId, task)).map;
+    // Post-action check too (the per-iteration check at the loop top catches races that
+    // resolve later): a search is done ONLY when its results page is actually up.
+    if (!result?.error) bgRecordSearchDone(state, newObs?.url);
+    const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);
+    BrainoTaskState.commitHistory(state, decision, result, verdict);
+    await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+
+    if (!result?.error && verdict.ok) {
+      prevObs = newObs;
+      continue;
+    }
+
+    const errorInfo = BrainoRecovery.classifyError(result, verdict, newObs);
+    const recovery = await bgApplyDelegateRecovery({ tabId: currentTabId, errorInfo, state, onProgress });
+    if (recovery.terminal) {
+      bgReflectAndStoreLessons({ task, state, origin, outcome: `stopped: ${errorInfo?.type || "blocked"}` }); // fire-and-forget
+      onFinal?.(recovery.message);
+      return { ok: false, message: recovery.message, state, errorInfo };
+    }
+    prevObs = newObs;
+  }
+
+  bgReflectAndStoreLessons({ task, state, origin, outcome: "hit step limit" }); // fire-and-forget
+  const msg = `I reached the Delegate step limit (${budget.maxSteps}) before finishing. I stopped cleanly rather than guessing.`;
+  onFinal?.(msg);
+  return { ok: false, message: msg, state };
+}
+
 async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
   let currentTabId = tabId;
-  const MAX_STEPS = bgIsLinkedInJobsTask(task) ? 18 : 10;
+  const originTabId = tabId;
   const history = [];
   const conversationContext = bgBuildAgentConversationContext({
     ...sharedContext,
     connector: connectorHint,
   });
   bgAgentTaskByTab.set(currentTabId, task);
+  bgAgentShouldStop = false;
+  let finalMessage = "Done.";
 
-  bgBrainUpdate(currentTabId, "Planning…", false, { task });
+  const onProgress = async (description) => {
+    bgBrainUpdate(currentTabId, `→ ${description}`, false, { task, speakHint: description });
+  };
+  const sendFinalUpdate = async (targetTabId, message, extra = {}) => {
+    const finalTabId = targetTabId || currentTabId || originTabId;
+    if (finalTabId) {
+      bgAgentTaskByTab.set(finalTabId, task);
+      bgBrainUpdate(finalTabId, message, true, { task, keepLectureCard: extra.keepLectureCard === true });
+      bgSaveAgentTask(finalTabId, task, message);
+    }
+    if (originTabId && originTabId !== finalTabId) {
+      bgAgentTaskByTab.set(originTabId, task);
+      bgBrainUpdate(originTabId, message, true, { task, keepLectureCard: extra.keepLectureCard === true });
+      bgSaveAgentTask(originTabId, task, message);
+    }
+  };
+  const finish = async (message, ok = true, extra = {}) => {
+    finalMessage = message || finalMessage;
+    await sendFinalUpdate(extra.tabId || currentTabId, finalMessage, extra);
+    return { ok, message: finalMessage, history, ...extra };
+  };
 
-  // Fast path — no AI needed
-  const fastActions = bgTryFastPath(task, []);
-  if (fastActions) {
-    const shouldContinueAfterFastPath = fastActions.some(action => action.continueAfter);
+  // Understand intent → form the search query BEFORE the very first navigation, so the
+  // fast path never opens Maps/web with the user's raw sentence (then re-correct later).
+  const pageInfo = await new Promise((resolve) => {
+    try { chrome.tabs.get(currentTabId, (tab) => resolve(chrome.runtime.lastError ? null : { url: tab?.url, title: tab?.title })); }
+    catch { resolve(null); }
+  });
+  const userGeo = await bgGetUserGeo().catch(() => null);
+  const synth = await bgSynthesizeIntent(task, conversationContext, pageInfo).catch(() => null);
+  // Steer the fast path and everything after it by the context-resolved task, not the
+  // literal utterance ("show me that book on Amazon" → the actual title).
+  if (synth?.resolvedTask && bgNormalizeForMatch(synth.resolvedTask) !== bgNormalizeForMatch(task)) {
+    task = synth.resolvedTask;
+    await onProgress(`Understood: ${task}`);
+  }
+  if (synth?.searchQuery) await onProgress(`Searching for "${synth.searchQuery}"`);
+
+  let skipDelegateFastPath = false;
+  const fastActions = bgTryFastPath(task, [], synth, userGeo);
+  if (fastActions?.length) {
+    const shouldContinueAfterFastPath = fastActions.some((action) => action.continueAfter);
     for (const action of fastActions) {
-      bgBrainUpdate(currentTabId, `→ ${action.description}`, false, { task });
+      await onProgress(action.description || bgDescribeDelegateAction(action));
       let result = { success: true };
-      let snapshot = null;
       if (action.type === "navigate") {
-        await new Promise(r => chrome.tabs.update(currentTabId, { url: action.url }, () => setTimeout(r, 2000)));
+        await new Promise((resolve) => chrome.tabs.update(currentTabId, { url: action.url }, () => setTimeout(resolve, 500)));
         await bgWaitForTabReady(currentTabId, 5000);
       } else {
-        result = await bgExecuteAgentAction(currentTabId, action);
+        result = await bgExecuteDelegateAction(currentTabId, action, { facts: [] });
       }
-      if (shouldContinueAfterFastPath) {
-        snapshot = await bgGetPageSnapshot(currentTabId);
-        history.push({ ...action, result, snapshot });
-      }
+      history.push({ action, result, ok: !result?.error, ts: Date.now(), thought: "Fast path" });
+      if (result?.error) return finish(`Step failed: ${result.error}`, false);
     }
-    if (!shouldContinueAfterFastPath) {
-      bgBrainUpdate(currentTabId, "Done!", true, { task });
-      bgSaveAgentTask(currentTabId, task, "Done.");
-      return;
-    }
+    if (!shouldContinueAfterFastPath) return finish("Done.");
+    skipDelegateFastPath = true;
   }
 
   try {
@@ -2486,21 +4196,13 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
       task,
       sharedContext: conversationContext,
       history,
-      onProgress: async (description) => {
-        bgBrainUpdate(currentTabId, `→ ${description}`, false, { task, speakHint: description });
-      },
+      onProgress,
     });
     if (openableResult?.message) {
-      bgBrainUpdate(currentTabId, openableResult.message, true, {
-        task,
-        keepLectureCard: openableResult.keepLectureCard === true,
-      });
-      bgSaveAgentTask(currentTabId, task, openableResult.message);
-      return;
+      return finish(openableResult.message, true, { keepLectureCard: openableResult.keepLectureCard === true });
     }
-  } catch (e) {
-    bgBrainUpdate(currentTabId, "Open task error: " + (e.message || e), true, { task });
-    return;
+  } catch (error) {
+    return finish(`Open task error: ${error?.message || error}`, false);
   }
 
   try {
@@ -2509,94 +4211,29 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
       task,
       connectorHint,
       history,
-      onProgress: async (description) => {
-        bgBrainUpdate(currentTabId, `→ ${description}`, false, { task, speakHint: description });
-      },
+      onProgress,
       shouldStop: () => bgAgentShouldStop,
     });
-    if (adapterMessage) {
-      bgBrainUpdate(currentTabId, adapterMessage, true, { task });
-      bgSaveAgentTask(currentTabId, task, adapterMessage);
-      return;
-    }
-  } catch (e) {
-    bgBrainUpdate(currentTabId, "Adapter error: " + (e.message || e), true, { task });
-    return;
+    if (adapterMessage) return finish(adapterMessage, true);
+  } catch (error) {
+    return finish(`Adapter error: ${error?.message || error}`, false);
   }
 
-  for (let step = 0; step < MAX_STEPS; step++) {
-    if (bgAgentShouldStop) {
-      bgBrainUpdate(currentTabId, "Task stopped.", true, { task });
-      return;
-    }
-    const pageInfo = await bgGetAgentPageContext(currentTabId);
-
-    let actions;
-    try {
-      actions = await bgCallAgentStep(task, pageInfo, history, null, conversationContext);
-    } catch (e) {
-      bgBrainUpdate(currentTabId, "Agent error: " + (e.message || e), true, { task });
-      return;
-    }
-
-    for (const action of actions) {
-      if (action.type === "done" || action.type === "answer") {
-        bgBrainUpdate(currentTabId, action.message || "Done!", true, { task });
-        bgSaveAgentTask(currentTabId, task, action.message || "Done.");
-        return;
-      }
-      if (action.type === "clarify") {
-        bgBrainUpdate(currentTabId, action.message || "Need more info.", true, { task });
-        bgSaveAgentTask(currentTabId, task, action.message || "Needs clarification.");
-        return;
-      }
-
-      if (action.type === "web_search") {
-        bgBrainUpdate(currentTabId, `Searching: "${action.query}"…`, false, { task });
-        const searchData = await bgPerformRealWebSearch(action.query, {
-          purpose: "delegate",
-          chatHistory: conversationContext.chatHistory,
-        });
-        const resultsText = searchData.results
-          ? searchData.results.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet}`).join("\n\n")
-          : searchData.error || "No results.";
-        const researchText = searchData.answer
-          ? `${searchData.answer}\n\nSource details:\n${resultsText}`
-          : resultsText;
-        history.push({ type: "web_search", query: action.query, description: action.description || `Search: "${action.query}"`, result: { success: !searchData.error, text: researchText } });
-        continue;
-      }
-
-      bgBrainUpdate(currentTabId, `→ ${action.description || action.type}`, false, { task });
-
-      const result = await bgExecuteAgentAction(currentTabId, action);
-
-      const latestActiveTabId = await bgGetActiveTabId();
-      if (latestActiveTabId && latestActiveTabId !== currentTabId) {
-        currentTabId = latestActiveTabId;
-        bgAgentTaskByTab.set(currentTabId, task);
-        chrome.storage.local.set({ activeTabId: currentTabId });
-        bgBrainUpdate(currentTabId, "Continuing in the new tab…", false, { task });
-      }
-
-      let snapshot = null;
-      if (BG_SNAPSHOT_ACTIONS.has(action.type)) {
-        if (action.type === "navigate") await bgWaitForTabReady(currentTabId, 5000);
-        else await new Promise(r => setTimeout(r, 600));
-        snapshot = await bgGetPageSnapshot(currentTabId);
-      }
-
-      history.push({ ...action, result, snapshot });
-
-      if (result?.error && !result.error.includes("No response")) {
-        bgBrainUpdate(currentTabId, `Step failed: ${result.error}`, true, { task });
-        return;
-      }
-    }
-  }
-
-  bgBrainUpdate(currentTabId, "Reached max steps — task may need the full panel.", true, { task });
-  bgSaveAgentTask(currentTabId, task, "Reached max steps.");
+  bgBrainUpdate(currentTabId, "Reading the page...", false, { task });
+  const result = await bgRunDelegateLoop({
+    tabId: currentTabId,
+    task,
+    connectorHint,
+    sharedContext: conversationContext,
+    skipFastPath: skipDelegateFastPath,
+    synth,
+    onProgress,
+    onFinal: (message) => { finalMessage = message || finalMessage; },
+    shouldStop: () => bgAgentShouldStop,
+  });
+  const resultTabId = result?.state?.focusTabId || currentTabId;
+  await sendFinalUpdate(resultTabId, finalMessage);
+  return result;
 }
 
 async function bgUpdateRemoteCommand(id, token, patch) {
@@ -3139,11 +4776,17 @@ async function bgFetchSpotifyPlayerState() {
   }
 }
 
-async function bgPlaySpotifyWithAutoOpen(uris) {
+async function bgPlaySpotifyWithAutoOpen(uris, positionMs = null, opts = {}) {
   const payload = { action: "play", uris };
-  // Always open Spotify in a new visible tab (theatrics — shows Braino controlling the browser)
+  if (Number.isFinite(Number(positionMs)) && Number(positionMs) > 0) payload.positionMs = Number(positionMs);
+  // Reuse the web player when it already exists. Creating a new tab on every retry
+  // makes Delegate look broken and can register multiple devices.
+  // opts.background: open the player WITHOUT stealing focus — party tricks need the
+  // user watching Braino, not a Spotify tab (a hidden tab also pauses his rAF dance).
   try {
-    await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: true }, r));
+    const existing = await bgFindSpotifyTab();
+    if (existing?.id != null) { if (!opts.background) await new Promise(r => chrome.tabs.update(existing.id, { active: true }, r)); }
+    else await new Promise(r => chrome.tabs.create({ url: "https://open.spotify.com", active: !opts.background }, r));
   } catch (_) {}
   // Try immediately; if no active device yet, poll until web player registers
   for (let i = 0; i < 5; i++) {
@@ -3201,7 +4844,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   const explicitSpotifyMention = /\bspotify\b/.test(text);
   const explicitMusicIntent = /\b(?:song|track|music|playlist|album)\b/i.test(raw);
   const onSpotify = currentSite === "spotify" || normalizedConnector === "spotify" || explicitSpotifyMention;
-  const wantsGoogleDoc = /\bgoogle docs?\b|\bgdocs?\b|\bgoogle doc\b|\bgdoc\b|\bdocs?\.new\b|\bdocs?\b/.test(text);
+  const wantsGoogleDoc = /\bgoogle\s+(?:docs?|documents?)\b|\bgdocs?\b|\bgoogle doc\b|\bgdoc\b|\bdocs?\.new\b|\bdocs?\b/.test(text);
   const wantsGmail =
     currentSite === "gmail" ||
     normalizedConnector === "gmail" ||
@@ -3319,12 +4962,13 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   }
 
   const articlePatterns = [
-    /search for\s+(.+?)\s+and\s+(?:write|draft|make|create)\s+(?:about it\s+)?(?:(?:a|an)\s+)?(?:article|report|brief|google docs?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google docs?|docs?)?/i,
-    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+put\s+(?:it\s+)?(?:in|into)\s+(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)/i,
-    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+(?:write|draft|make|create|put|turn it into)\s+(?:(?:a|an)\s+)?(?:article|report|brief|google docs?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google docs?|docs?)?/i,
-    /write\s+an?\s+article\s+about\s+(.+?)\s+in\s+(?:a\s+)?google docs?/i,
-    /(?:create|make|draft|write)\s+(?:me\s+)?(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)\s+(?:about|on)\s+(.+)/i,
-    /(?:create|make|draft|write)\s+(?:me\s+)?(?:an?\s+)?(?:article|report|brief)\s+(?:about|on)\s+(.+?)\s+(?:in|as|inside)\s+(?:a\s+)?(?:google docs?|docs?|doc(?:ument)?)/i,
+    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+(?:then\s+)?(?:create|make|write|draft)\s+(?:me\s+)?(?:(?:a|an)\s+)?(?:google\s+)?(?:docs?|doc(?:ument)?)/i,
+    /search for\s+(.+?)\s+and\s+(?:then\s+)?(?:write|draft|make|create)\s+(?:about it\s+)?(?:(?:a|an)\s+)?(?:article|report|brief|google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?)?/i,
+    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+put\s+(?:it\s+)?(?:in|into)\s+(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)/i,
+    /research\s+(?:about\s+|on\s+)?(.+?)\s+and\s+(?:then\s+)?(?:write|draft|make|create|put|turn it into)\s+(?:(?:a|an)\s+)?(?:article|report|brief|google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)\s*(?:in|on|with)?\s*(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?)?/i,
+    /write\s+an?\s+article\s+about\s+(.+?)\s+in\s+(?:a\s+)?(?:google\s+docs?|google\s+documents?)/i,
+    /(?:create|make|draft|write)\s+(?:me\s+)?(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)\s+(?:about|on)\s+(.+)/i,
+    /(?:create|make|draft|write)\s+(?:me\s+)?(?:an?\s+)?(?:article|report|brief)\s+(?:about|on)\s+(.+?)\s+(?:in|as|inside)\s+(?:a\s+)?(?:google\s+docs?|google\s+documents?|docs?|doc(?:ument)?)/i,
   ];
 
   if (wantsGoogleDoc) {
@@ -3531,7 +5175,7 @@ function bgLooksLikeBrowserTask(task) {
   const strongImperative = /^(?:open|go to|navigate to|visit|search|find|look up|pull up|bring up|take me to|show me|create|make|draft|compose|send|reply|play|pause|resume|continue|next|skip|previous|prev|book|schedule|reschedule|cancel|forward|invite|join|buy|order|post|tweet|get directions|show directions|route|move|rename|delete|remove|archive|label|organize|organise)\b/i.test(raw);
   if (!strongImperative) return false;
 
-  const actionableTarget = /\b(gmail|email|google drive|drive|spotify|youtube|netflix|google docs?|docs?\.new|google sheets?|sheets?\.new|google slides?|slides?\.new|maps?|directions?|calendar|flight|flights|hotel|hotels|restaurant|restaurants|whatsapp|x|twitter|linkedin|amazon|reddit)\b/i.test(raw);
+  const actionableTarget = /\b(gmail|email|google drive|drive|spotify|youtube|netflix|google docs?|google documents?|docs?\.new|google sheets?|sheets?\.new|google slides?|slides?\.new|maps?|directions?|calendar|flight|flights|hotel|hotels|restaurant|restaurants|whatsapp|x|twitter|linkedin|amazon|reddit)\b/i.test(raw);
   return actionableTarget;
 }
 
@@ -4514,14 +6158,32 @@ function bgEncodeMapsPath(value) {
   return encodeURIComponent(String(value || "").trim()).replace(/%20/g, "+");
 }
 
+function bgIsPersonalMapsLocation(value) {
+  const text = String(value || "").toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  return /\b(my\s+)?(house|home|place|current location|location)\b/.test(text)
+    || /\b(where i am|where i'm at|near me|around me|by me|close to me)\b/.test(text);
+}
+
+function bgNormalizeMapsEndpoint(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+  return bgIsPersonalMapsLocation(raw) ? "My Location" : raw;
+}
+
 function bgCleanGoogleMapsQuery(value) {
   const raw = String(value || "").trim();
   const mealIntent = /\b(?:eat|eating|food|dinner|lunch|breakfast|brunch)\b/i.test(raw);
+  const wantsLocalAnchor = /\b(?:nearest|closest|nearby|near me|around me|by me|close to me|my house|my home|at home|from home|where i am|where i'm at|current location)\b/i.test(raw);
+  const hasExplicitNamedLocation = /\b(?:in|at|near|around)\s+(?!me\b|my\b|home\b|house\b|current\b)[a-z0-9][a-z0-9\s-]{1,40}/i.test(raw);
   let query = raw
     .replace(/\bnear me\b/gi, "__NEAR_ME__")
-    .replace(/\baround me\b/gi, "__AROUND_ME__");
+    .replace(/\baround me\b/gi, "__AROUND_ME__")
+    .replace(/\b(?:near|around|by|close to|to|from)\s+(?:my\s+)?(?:house|home|place|current location|location)\b/gi, "__NEAR_ME__")
+    .replace(/\b(?:my\s+)?(?:house|home|place|current location|location)\b/gi, "__NEAR_ME__")
+    .replace(/\bwhere\s+i(?:\s+am|'m\s+at)\b/gi, "__NEAR_ME__");
   query = query
     .replace(/[?!.,;:]+/g, " ")
+    .replace(/\bwhat(?:'s|\s+is)\b/gi, " ")
     .replace(/\b(?:braino|bino|brno|broani|broino)\b/gi, " ")
     .replace(/\b(?:can|could|would)\s+you\b/gi, " ")
     .replace(/\bon\s+(?:google\s+)?maps?\b/gi, " ")
@@ -4529,6 +6191,7 @@ function bgCleanGoogleMapsQuery(value) {
     .replace(/\bwhere\s+to\b/gi, " ")
     .replace(/\bi\s+(?:should|can|could|want\s+to|wanna)\s+(?:eat|go)\b/gi, " ")
     .replace(/\b(?:please|pls|for me|some|a few|the|an?)\b/gi, " ")
+    .replace(/\b(?:nearest|closest|nearby)\b/gi, " ")
     .replace(/\b(?:open|show|display|pull up|bring up|find|search(?: for)?|look for|look up|get|give|recommend|suggest)\b/gi, " ")
     .replace(/\b(?:google\s+)?maps?\b/gi, " ")
     .replace(/\b(?:eat|eating|food|places?)\b/gi, " ")
@@ -4537,6 +6200,9 @@ function bgCleanGoogleMapsQuery(value) {
     .replace(/__AROUND_ME__/g, "around me")
     .replace(/\s+/g, " ")
     .trim();
+  if (wantsLocalAnchor && !hasExplicitNamedLocation && !/\b(?:near me|around me)\b/i.test(query)) {
+    query = `${query} near me`.replace(/\s+/g, " ").trim();
+  }
   if (mealIntent && !/\b(?:restaurants?|cafes?|coffee|bars?|pubs?)\b/i.test(query)) {
     const mealKind = query.match(/\b(dinner|lunch|breakfast|brunch)\b/i)?.[1];
     query = mealKind
@@ -4556,15 +6222,15 @@ function bgLooksLikeGoogleMapsPlaceTask(task) {
   if (/\b(?:directions?|route|navigate)\b.+\b(?:from|to)\b/.test(t)) return true;
   if (/\b(how far|distance|eta|travel time)\b.+\b(from|to|between)\b/.test(t)) return true;
 
-  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby)\b/.test(t);
+  const wantsPlaceRecommendation = /\b(recommend|suggest|find|show|look for|search for|where should i|where can i|best|good|nearby|nearest|closest)\b/.test(t);
   if (!wantsPlaceRecommendation) return false;
 
-  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theatres?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
-  const locationHint = /\b(near me|nearby|around me|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
+  const placeCategory = /\b(restaurants?|cafes?|coffee|dinner|lunch|breakfast|brunch|food|eat|eating|places?|bars?|pubs?|hotels?|hospitals?|clinics?|pharmac(?:y|ies)|gyms?|parks?|theat(?:er|re)s?|movie\s+theat(?:er|re)s?|cinemas?|shops?|stores?|salons?|spas?)\b/.test(t);
+  const locationHint = /\b(near me|nearby|around me|by me|close to me|my house|my home|at home|from home|where i am|current location|nearest|closest|in\s+[a-z0-9][a-z0-9\s-]{1,40}|near\s+[a-z0-9][a-z0-9\s-]{1,40}|around\s+[a-z0-9][a-z0-9\s-]{1,40}|at\s+[a-z0-9][a-z0-9\s-]{1,40})\b/.test(t);
   return placeCategory && locationHint;
 }
 
-function bgBuildGoogleMapsFastPath(task) {
+function bgBuildGoogleMapsFastPath(task, synth = null) {
   const raw = String(task || "").trim();
   const t = raw.toLowerCase();
   if (!bgLooksLikeGoogleMapsPlaceTask(raw)) return null;
@@ -4580,8 +6246,8 @@ function bgBuildGoogleMapsFastPath(task) {
     const second = (directionsMatch[2] || directionsMatch[4] || "").trim();
     const isToFrom = /\bto\b.+\bfrom\b/i.test(raw) && !/\bfrom\b.+\bto\b/i.test(raw);
     const isHowFarFrom = /^how\s+far\s+is\b/i.test(raw);
-    const origin = (isToFrom || isHowFarFrom) ? second : first;
-    const destination = (isToFrom || isHowFarFrom) ? first : second;
+    const origin = bgNormalizeMapsEndpoint((isToFrom || isHowFarFrom) ? second : first);
+    const destination = bgNormalizeMapsEndpoint((isToFrom || isHowFarFrom) ? first : second);
     return [{
       type: "navigate",
       url: `https://www.google.com/maps/dir/${bgEncodeMapsPath(origin)}/${bgEncodeMapsPath(destination)}`,
@@ -4590,9 +6256,31 @@ function bgBuildGoogleMapsFastPath(task) {
     }];
   }
 
+  // Structured-directions fallback: if the regex missed but the understanding layer parsed a
+  // destination (and maybe an origin), use the deterministic deep link. Blank origin = current location.
+  if (synth?.directions?.destination) {
+    const dest = bgNormalizeMapsEndpoint(synth.directions.destination);
+    const org = synth.directions.origin ? bgNormalizeMapsEndpoint(synth.directions.origin) : "";
+    const url = org
+      ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(org)}&destination=${encodeURIComponent(dest)}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+    return [{
+      type: "navigate",
+      url,
+      description: org ? `Open Google Maps directions from "${org}" to "${dest}"` : `Open Google Maps directions to "${dest}"`,
+      continueAfter: true,
+    }];
+  }
+
   let query = "";
-  const mapsSearchMatch = raw.match(/(?:search|find|look up|show|open)\s+(.+?)\s+on\s+(?:google\s+)?maps/i);
-  if (mapsSearchMatch) query = mapsSearchMatch[1].trim();
+  // Prefer the synthesized keyword query (understood intent) over the user's raw sentence.
+  if (synth && synth.searchQuery && (synth.surface === "maps" || synth.surface === "none")) {
+    query = synth.searchQuery.trim();
+  }
+  if (!query) {
+    const mapsSearchMatch = raw.match(/(?:search|find|look up|show|open)\s+(.+?)\s+on\s+(?:google\s+)?maps/i);
+    if (mapsSearchMatch) query = mapsSearchMatch[1].trim();
+  }
   if (!query) query = bgCleanGoogleMapsQuery(raw);
   if (!query) return null;
 
@@ -4770,12 +6458,13 @@ FLOW:
 1. If not already on Google Maps results/directions for the task, navigate using:
    - Search: https://www.google.com/maps/search/QUERY+with+spaces+as+plus
    - Directions: https://www.google.com/maps/dir/ORIGIN/DESTINATION
-2. After navigation, wait 1200 and read the visible Maps page/results. Prefer reading main, [role="main"], [role="feed"], [aria-label*="Results"], or body text.
-3. Recommend only places/routes visible on the Maps page or clearly returned by the page. Do not invent ratings, hours, distance, or open status.
-4. For recommendation tasks, return 3-5 options when visible. Include name, area/address if visible, rating/open status if visible, and why it fits the user's constraints.
-5. Pick one best option and explain why in one sentence.
-6. End by asking: "Should I send {best pick} to your phone?"
-7. If the user explicitly asks to ping/send it and no phone channel is configured, say the handoff is not set up yet and provide the Google Maps URL. Never claim it was sent.
+2. For "near me", "nearest", "closest", "my house", "home", or "where I am", assume the user's current/home context. Use "near me" in search URLs or "My Location" in directions URLs; do not ask where they are.
+3. After navigation, wait 1200 and read the visible Maps page/results. Prefer reading main, [role="main"], [role="feed"], [aria-label*="Results"], or body text.
+4. Recommend only places/routes visible on the Maps page or clearly returned by the page. Do not invent ratings, hours, distance, or open status.
+5. For recommendation tasks, return 3-5 options when visible. Include name, area/address if visible, rating/open status if visible, and why it fits the user's constraints.
+6. Pick one best option and explain why in one sentence.
+7. End by asking: "Should I send {best pick} to your phone?"
+8. If the user explicitly asks to ping/send it and no phone channel is configured, say the handoff is not set up yet and provide the Google Maps URL. Never claim it was sent.
 
 FINAL MESSAGE FORMAT:
 ## Places I found on Google Maps
@@ -4787,28 +6476,36 @@ Should I send **Name** to your phone?
 `;
 }
 
-function bgTryFastPath(task, history) {
+function bgTryFastPath(task, history, synth = null, geo = null) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
+  // A task that OPENS a place and then does more ("Go to amazon.com, search for X, and
+  // buy it") must keep running after the navigate. Returning it as a bare open once
+  // turned a whole buy task into navigate + "Done." — only a PURE open may finish here.
+  const restAfterOpen = t.replace(/^(?:go to|open|navigate to|visit|new|create)\s+\S+/i, "");
+  const opensThenActs = /\b(search|find|buy|purchase|order|add|play|book|apply|send|post|compose|reply|write|draft|create|schedule|email|read|check(?:out)?|cart|watch|download|type|fill|look)\b/i.test(restAfterOpen);
   if (/^(?:open|go to)\s+gmail\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://mail.google.com/mail/u/0/#inbox", description: "Open Gmail" }];
+    return [{ type: "navigate", url: "https://mail.google.com/mail/u/0/#inbox", description: "Open Gmail", continueAfter: opensThenActs }];
   }
   if (/^(?:open|go to)\s+(?:google\s+)?drive\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://drive.google.com", description: "Open Google Drive" }];
+    return [{ type: "navigate", url: "https://drive.google.com", description: "Open Google Drive", continueAfter: opensThenActs }];
   }
   if (/^(?:open|go to)\s+(?:google\s+)?calendar\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://calendar.google.com/calendar/u/0/r", description: "Open Google Calendar" }];
+    return [{ type: "navigate", url: "https://calendar.google.com/calendar/u/0/r", description: "Open Google Calendar", continueAfter: opensThenActs }];
+  }
+  if (/^(?:open|go to)\s+spotify\b/i.test(task)) {
+    return [{ type: "navigate", url: "https://open.spotify.com", description: "Open Spotify", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google doc\b|^(?:new|open)\s+docs\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://docs.new", description: "Open a new Google Doc" }];
+    return [{ type: "navigate", url: "https://docs.new", description: "Open a new Google Doc", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google sheet\b|^(?:new|open)\s+sheets\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://sheets.new", description: "Open a new Google Sheet" }];
+    return [{ type: "navigate", url: "https://sheets.new", description: "Open a new Google Sheet", continueAfter: opensThenActs }];
   }
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
-    return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck" }];
+    return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck", continueAfter: opensThenActs }];
   }
-  const googleMapsFastPath = bgBuildGoogleMapsFastPath(task);
+  const googleMapsFastPath = bgBuildGoogleMapsFastPath(task, synth);
   if (googleMapsFastPath) return googleMapsFastPath;
   const mediumFastPath = bgBuildMediumFastPath(task);
   if (mediumFastPath) return mediumFastPath;
@@ -4816,8 +6513,9 @@ function bgTryFastPath(task, history) {
   if (linkedInJobsFastPath) return linkedInJobsFastPath;
   const gotoMatch = t.match(/^(?:go to|open|navigate to|visit)\s+(?:https?:\/\/)?([a-z0-9.\-]+\.[a-z]{2,}(?:\/\S*)?)/i);
   if (gotoMatch) {
-    const url = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
-    return [{ type: "navigate", url, description: `Navigate to ${url}` }];
+    const rawUrl = gotoMatch[1].startsWith("http") ? gotoMatch[1] : "https://" + gotoMatch[1];
+    const url = bgLocalizeStorefront(rawUrl, geo);
+    return [{ type: "navigate", url, description: `Navigate to ${url}`, continueAfter: opensThenActs }];
   }
   const ytMatch = t.match(/search\s+(.+?)\s+on\s+youtube/i) || t.match(/youtube\s+search\s+(.+)/i);
   if (ytMatch) {
@@ -4910,9 +6608,16 @@ Connect: click targetText="Connect" → click targetText="Send without a note"
 Message: navigate to profile → click targetText="Message" → type [aria-label*="Write a message"] → pressKey Enter`;
   if (/amazon\./.test(url)) return `
 ── AMAZON (you are here) ──
+Signed-in check FIRST: if the header greets "Hello, sign in", STOP and ask the user to sign in. Never type credentials.
 Search: type selector="#twotabsearchtextbox" → pressKey Enter
-  → click product title → click selector="#add-to-cart-button"
-Buy Now: selector="#buy-now-button"`;
+Open product: click the product title link in results
+Add to Cart (fallbacks, in order): selector="#add-to-cart-button" → selector="#add-to-cart-button-ubb" → targetText="Add to Cart"
+Dismiss add-on/protection popup: targetText="No Thanks" → selector="#attachSiNoCoverage input" → selector="#attach-close_sideSheet-link"
+Go to Cart (fallbacks): selector="#attach-sidesheet-view-cart-button input" → selector="#sw-gtc a" → selector="#nav-cart" → targetText="Go to Cart"
+Proceed to checkout (fallbacks): selector="input[name='proceedToRetailCheckout']" → selector="#sc-buy-box-ptc-button input" → targetText="Proceed to Buy"
+Buy Now (single-item express, only if user asked to buy just one thing): selector="#buy-now-button"
+Amazon re-renders after every click — wait 1000 between steps and re-read.
+Payment boundary: advance to the payment-method page (open UPI/QR if offered) and hand off — never fill payment or address fields, never place the final order.`;
   if (/web\.whatsapp\.com/.test(url)) return `
 ── WHATSAPP WEB (you are here) ──
 Send by contact name:
@@ -5332,7 +7037,7 @@ async function bgReplanWorkflow(task, completedSteps, remainingSteps, pageInfo, 
 
 // ─────────────────────────────────────────────────────────────────────────
 
-async function bgRunRemoteCommand(cmd, token) {
+async function bgRunRemoteCommandLegacy(cmd, token) {
   console.log("[BgRemoteAgent] Running command in background:", cmd.task);
   await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps: [] });
 
@@ -5532,6 +7237,68 @@ async function bgRunRemoteCommand(cmd, token) {
   await finish("error", "Ran out of steps. Check your desktop browser.");
 }
 
+async function bgRunRemoteCommand(cmd, token) {
+  console.log("[BgRemoteAgent] Running closed-loop command:", cmd.task);
+  const startedAt = Date.now();
+  const steps = [];
+  // The chat page smuggles its recent conversation in as a marker step (same pattern as the
+  // __meta duration step) so follow-up tasks ("open that website") arrive with context.
+  const contextStep = Array.isArray(cmd.steps) ? cmd.steps.find((s) => s && s.__context) : null;
+  const sharedContext = contextStep
+    ? { chatHistory: contextStep.chatHistory, lastUserPrompt: contextStep.lastUserPrompt, lastAssistantReply: contextStep.lastAssistantReply }
+    : {};
+  await bgUpdateRemoteCommand(cmd.id, token, { status: "running", steps });
+
+  const finish = async (status, result) => {
+    const durationMs = Date.now() - startedAt;
+    await bgUpdateRemoteCommand(cmd.id, token, { status, result, steps: [...steps, { __meta: true, durationMs }] });
+    chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+    chrome.runtime.sendMessage({ action: "remoteCommandComplete", cmdId: cmd.id, result }).catch(() => {});
+    console.log("[BgRemoteAgent] Closed-loop command finished:", status, result);
+  };
+
+  try {
+    const tabId = await bgGetActiveTabId();
+    if (!tabId) {
+      await finish("error", "Open a normal browser tab to use Delegate mode.");
+      return;
+    }
+    const history = [];
+    const adapterMessage = await bgTryHandleSiteAdapterTask({
+      tabId,
+      task: cmd.task,
+      history,
+      onProgress: async (description) => {
+        steps.push({ description: String(description || "Working"), ok: null });
+        bgUpdateRemoteCommand(cmd.id, token, { steps });
+      },
+      shouldStop: () => bgCheckStopped(cmd.id, token),
+    });
+    if (adapterMessage) {
+      steps.push({ description: adapterMessage, ok: true, final: true });
+      await finish("done", adapterMessage);
+      return;
+    }
+    const result = await bgRunDelegateLoop({
+      tabId,
+      task: cmd.task,
+      sharedContext,
+      onProgress: (description) => {
+        steps.push({ description: String(description || "Working"), ok: null });
+        bgUpdateRemoteCommand(cmd.id, token, { steps });
+      },
+      onFinal: (message) => {
+        if (message) steps.push({ description: message, ok: true, final: true });
+        bgUpdateRemoteCommand(cmd.id, token, { steps });
+      },
+      shouldStop: () => bgCheckStopped(cmd.id, token),
+    });
+    await finish(result.ok ? "done" : "error", result.message || (result.ok ? "Done." : "Delegate stopped."));
+  } catch (error) {
+    await finish("error", `Error: ${error?.message || error}`);
+  }
+}
+
 // --- realtime subscription (keeps worker alive + instant pickup) ---
 
 const BG_REALTIME_URL = BG_SUPABASE_URL.replace("https://", "wss://") + "/realtime/v1/websocket";
@@ -5715,6 +7482,65 @@ async function bgResolvePremiumStatus(options = {}) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Free-tier usage gate (V1 two-tier launch). Premium/creator/admin resolve to
+// unlimited LOCALLY via bgResolvePremiumStatus (internal-email + is_premium, which
+// also reflects access_grants) and are NEVER metered — no network dependency, so
+// the creator always passes even offline. Free users consult the server-
+// authoritative `check-and-consume` edge fn. Fails OPEN on any error so a hiccup
+// never breaks the product. Surfaces: voice_seconds, recording_seconds (daily,
+// precheck at start + consume at stop), delegate_count (monthly), chat_count (daily).
+// ─────────────────────────────────────────────────────────────────────────────
+const BG_USAGE_FN_URL = `${BG_SUPABASE_URL}/functions/v1/check-and-consume`;
+let bgVoiceSessionStartedAt = 0;
+let bgRecordingStartedAt = 0;
+
+async function bgGateSurface(surface, { action = "consume", amount = 1 } = {}) {
+  try {
+    const prem = await bgResolvePremiumStatus();
+    if (prem.isPremium) return { allowed: true, unlimited: true };
+    const { authToken } = await bgGetStorage(["authToken"]);
+    if (!authToken) return { allowed: true, unlimited: false, anon: true };
+    const res = await fetch(BG_USAGE_FN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: BG_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ surface, action, amount }),
+    });
+    if (!res.ok) return { allowed: true, degraded: true };
+    return await res.json();
+  } catch (_e) {
+    return { allowed: true, degraded: true };
+  }
+}
+
+// Tell a tab it hit a free-tier wall so the bar can show an upgrade nudge.
+function bgNotifyQuota(tabId, surface, info = {}) {
+  if (!tabId) return;
+  chrome.tabs.sendMessage(
+    tabId,
+    { action: "sbQuotaExceeded", surface, limit: info.limit ?? null },
+    () => { void chrome.runtime.lastError; },
+  );
+}
+
+function bgConsumeVoiceSeconds() {
+  if (!bgVoiceSessionStartedAt) return;
+  const secs = Math.round((Date.now() - bgVoiceSessionStartedAt) / 1000);
+  bgVoiceSessionStartedAt = 0;
+  if (secs > 0) void bgGateSurface("voice_seconds", { action: "consume", amount: secs });
+}
+
+function bgConsumeRecordingSeconds() {
+  if (!bgRecordingStartedAt) return;
+  const secs = Math.round((Date.now() - bgRecordingStartedAt) / 1000);
+  bgRecordingStartedAt = 0;
+  if (secs > 0) void bgGateSurface("recording_seconds", { action: "consume", amount: secs });
+}
+
 // --- polling ---
 
 async function bgPollRemoteCommands() {
@@ -5753,13 +7579,23 @@ async function bgPollRemoteCommands() {
     const rows = await res.json();
     const cmd = rows[0];
     if (!cmd) return;
-    if (cmd.id === data.remoteProcessingId) {
-      // Same command seen again — only skip if we picked it up recently (< 90s).
-      // If it's been longer, the previous attempt silently died; clear the lock and retry.
-      const elapsed = Date.now() - (data.remoteProcessingTime || 0);
-      if (elapsed < 90000) return;
-      console.log("[BgRemoteAgent] Clearing stale lock for:", cmd.id);
-      chrome.storage.local.remove(["remoteProcessingId", "remoteProcessingTime"]);
+
+    // Atomic claim: flip pending→running conditionally. The realtime kick, the 1-min alarm poll,
+    // and a long-running task used to race here (the old local "stale lock" self-cleared after 90s
+    // and re-ran a still-running command — the duplicate-tabs bug). If another consumer already
+    // claimed the row, this PATCH matches 0 rows and we skip.
+    const claimRes = await fetch(
+      `${BG_SUPABASE_URL}/rest/v1/agent_commands?id=eq.${cmd.id}&status=eq.pending`,
+      {
+        method: "PATCH",
+        headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ status: "running" }),
+      }
+    );
+    const claimed = claimRes.ok ? await claimRes.json() : [];
+    if (!Array.isArray(claimed) || claimed.length === 0) {
+      console.log("[BgRemoteAgent] Command already claimed elsewhere:", cmd.id);
+      return;
     }
 
     console.log("[BgRemoteAgent] Found command:", cmd.id, cmd.task);
@@ -5927,13 +7763,8 @@ function storeAuthData(data) {
     authUserId: data.userId,
     ...(isInternalPremium ? { isPremium: true, isPremiumCachedAt: Date.now() } : {}),
   });
-  // Auto-close the auth tab opened by the extension
-  chrome.storage.local.get("__sbAuthTabId", ({ __sbAuthTabId }) => {
-    if (typeof __sbAuthTabId === "number") {
-      chrome.tabs.remove(__sbAuthTabId, () => { void chrome.runtime.lastError; });
-      chrome.storage.local.remove("__sbAuthTabId");
-    }
-  });
+  // Auto-close the auth tab(s) opened by the extension.
+  bgCloseSilentAuthTabs();
   // Restart realtime with fresh credentials
   bgStartRealtime();
 }
@@ -6024,7 +7855,7 @@ chrome.windows.onRemoved.addListener((windowId) => {
 
 async function ensureOffscreenForRealtime() {
   // Realtime lives in the offscreen doc so the mic/session can follow tabs instantly.
-  // Any remote model audio is muted there; Braino's primary audible output is ElevenLabs.
+  // Any remote model audio is muted there; Braino's primary audible output is Fish Audio.
   // Close and recreate if needed so the global realtime host is definitely available.
   const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
   if (contexts.length > 0) {
