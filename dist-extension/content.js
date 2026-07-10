@@ -5024,21 +5024,23 @@ function __sbBuildBrainUI() {
     @keyframes __sb_blog_spin__ { to { transform: rotate(360deg); } }
     @keyframes __sb_tick_pop__ { 0% { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
     #__sb_bar_log__ .sb-blog-step.just-done .sb-blog-ic { animation: __sb_tick_pop__ 0.36s cubic-bezier(0.34,1.56,0.64,1); }
-    /* Delegate's live thinking — dimmed italic, Claude-style, above the action steps */
-    #__sb_bar_log__ .sb-blog-thought { display: flex; gap: 9px; font-size: 11.5px; line-height: 1.45; font-style: italic; color: #97897e; margin-bottom: 3px; }
-    #__sb_bar_log__ .sb-blog-thought .sb-blog-tic { flex: none; width: 13px; text-align: center; font-style: normal; opacity: 0.75; }
-    #__sb_bar_log__ .sb-blog-thought > span:last-child {
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-      /* live-thinking shimmer: a bright band sweeps the dimmed text (TextShimmer, vanilla) */
-      background-image: linear-gradient(90deg, rgba(0,0,0,0) 42%, #3b332c 50%, rgba(0,0,0,0) 58%), linear-gradient(#97897e, #97897e);
+    /* Delegate's live thinking — the island IS the thought: full width, editorial serif
+       (same reading voice as the website), no italics, TextShimmer sweep. */
+    #__sb_bar_log__ .sb-blog-thought {
+      display: block; font-style: normal;
+      font-family: 'Newsreader', 'Charter BT', Georgia, 'Times New Roman', serif;
+      font-size: 14px; line-height: 1.5; letter-spacing: 0.1px;
+    }
+    #__sb_bar_log__ .sb-blog-thought > span {
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+      background-image: linear-gradient(90deg, rgba(0,0,0,0) 42%, #2e281f 50%, rgba(0,0,0,0) 58%), linear-gradient(#8a7d72, #8a7d72);
       background-size: 250% 100%, auto; background-repeat: no-repeat, padding-box;
       -webkit-background-clip: text; background-clip: text; color: transparent;
-      animation: __sb_thought_shimmer__ 2.2s linear infinite;
+      animation: __sb_thought_shimmer__ 2.4s linear infinite;
     }
     @keyframes __sb_thought_shimmer__ { 0% { background-position: 100% center, 0 0; } 100% { background-position: -150% center, 0 0; } }
-    #__sb_bar__.sb-log-open.sb-log-thinking #__sb_bar_log__ { max-height: 104px; }
-    html.sb-dark #__sb_bar_log__ .sb-blog-thought { color: #8f867c; }
-    html.sb-dark #__sb_bar_log__ .sb-blog-thought > span:last-child {
+    #__sb_bar__.sb-log-open.sb-log-thinking #__sb_bar_log__ { max-height: 128px; }
+    html.sb-dark #__sb_bar_log__ .sb-blog-thought > span {
       background-image: linear-gradient(90deg, rgba(0,0,0,0) 42%, #f5efe8 50%, rgba(0,0,0,0) 58%), linear-gradient(#8f867c, #8f867c);
     }
     html.sb-dark #__sb_bar__.sb-log-open { background: rgba(24,21,18,0.84); }
@@ -10489,14 +10491,17 @@ function __sbAgentLogRender() {
   if (!bar || !log) return;
   const stepsEl = log.querySelector(".sb-blog-steps");
   if (stepsEl) {
-    const shown = __sbAgentLogSteps.slice(-2);   // extend just a little — last 2 steps
-    const thoughtRow = __sbAgentThought
-      ? `<div class="sb-blog-thought"><span class="sb-blog-tic">💭</span><span>${__sbEscHtml(__sbAgentThought)}</span></div>`
-      : "";
-    stepsEl.innerHTML = thoughtRow + shown.map((s) =>
-      `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
-    ).join("");
-    shown.forEach((s) => { s.justDone = false; });  // tick-pop plays once
+    if (__sbAgentThought) {
+      // The island IS the thinking. Steps (actions performed) ride the input-bar
+      // placeholder via __sbSetBarAgentStatus — no duplicate step rows here.
+      stepsEl.innerHTML = `<div class="sb-blog-thought"><span>${__sbEscHtml(__sbAgentThought)}</span></div>`;
+    } else {
+      const shown = __sbAgentLogSteps.slice(-2);   // extend just a little — last 2 steps
+      stepsEl.innerHTML = shown.map((s) =>
+        `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
+      ).join("");
+      shown.forEach((s) => { s.justDone = false; });  // tick-pop plays once
+    }
   }
   bar.classList.toggle("sb-log-thinking", Boolean(__sbAgentThought));
   bar.classList.add("sb-log-open");
@@ -10649,10 +10654,12 @@ function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
     subgoals: [],
   };
   __sbSetBarAgentStatus(__sbAgentPendingTurn.status);
+  // Delegate progress lives in the BAR (thinking island + placeholder steps). The glass
+  // card does NOT auto-open — the same info in three places read as clutter. It still
+  // re-renders quietly when the user opened it themselves; the FINAL result opens it.
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
-  __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
 }
 
@@ -10663,7 +10670,6 @@ function __sbUpdateAgentPendingTurn(status) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
-  __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
 }
 
