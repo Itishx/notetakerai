@@ -6266,6 +6266,24 @@ function __sbBuildBrainUI() {
       animation: __sb_bar_sweep__ 2.6s linear infinite;
       mix-blend-mode: screen; z-index: 1;
     }
+    /* ── Music-ambient glow: same sweep animation as the blue headphone ring, in warm
+       yellow — Braino noticing you're listening to music on YouTube, even while idle. ── */
+    #__sb_bar__.sb-music-ambient {
+      box-shadow: 0 0 0 1.5px rgba(250,204,21,0.55), 0 0 22px rgba(250,204,21,0.40),
+                  0 0 46px rgba(234,179,8,0.24), 0 8px 32px rgba(27,23,19,0.18),
+                  inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+      border-color: rgba(253,224,71,0.7);
+    }
+    #__sb_bar__.sb-music-ambient::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background: linear-gradient(105deg, transparent 38%, rgba(253,224,71,0.45) 50%, transparent 62%);
+      background-size: 220% 100%;
+      animation: __sb_bar_sweep__ 2.6s linear infinite;
+      mix-blend-mode: screen; z-index: 1;
+    }
+    /* Headphone mode (blue) always wins over the ambient music glow. */
+    #__sb_bar__.hp-active.sb-music-ambient { box-shadow: 0 0 0 1.5px rgba(56,189,248,0.55), 0 0 22px rgba(56,189,248,0.40), 0 0 46px rgba(59,130,246,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3); border-color: rgba(125,211,252,0.7); }
+    #__sb_bar__.hp-active.sb-music-ambient::after { background: linear-gradient(105deg, transparent 38%, rgba(125,211,252,0.45) 50%, transparent 62%); background-size: 220% 100%; }
     /* Listening intensifies the ring slightly so the user knows Braino is hearing them. */
     #__sb_bar__.hp-active.hp-listening {
       box-shadow: 0 0 0 2px rgba(59,130,246,0.65), 0 0 28px rgba(56,189,248,0.5),
@@ -6542,6 +6560,10 @@ function __sbBuildBrainUI() {
       if (!chrome.runtime.lastError && geo && typeof geo === "object") window.__sbUserGeo = geo;
     });
   } catch (_) {}
+
+  // Ambient music glow: notice when the user is playing MUSIC on YouTube (even while
+  // idle) and warm the bar yellow — same sweep as the blue headphone ring.
+  try { __sbStartMusicAmbientWatch(); } catch (_) {}
 
   // Swearing preference (dashboard → profiles.personality_settings.swearing → cached by
   // the background premium fetch). Gates Braino's salty phrasing in the love/advance reply.
@@ -7592,6 +7614,54 @@ const __sbXPoliticalTextPattern = /\b(election|elections|vote|voting|voter|ballo
 const __sbXBuilderPromptPattern = /\b(what(?:'s| is)?\s+(?:everyone|everybody|yall|you all|you)\s+building|what are you building|what(?:'re| are)\s+you building|drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links|website)|share\s+what\s+you(?:'re| are)\s+building|show\s+me\s+what\s+you(?:'re| are)\s+building|plug\s+your\s+(?:startup|product|app|tool|project)|builders?\s+drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links))\b/i;
 
 function __sbSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Is the user actively playing MUSIC on YouTube right now? Category comes from YouTube's
+// own microdata (<meta itemprop="genre" content="Music">) on watch pages; music.youtube.com
+// is always music. Gated on a <video> actually playing so a paused tab doesn't glow.
+function __sbIsPlayingYouTubeMusic() {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  const onYT = /(^|\.)youtube\.com$/.test(host);
+  const onYTMusic = /(^|\.)music\.youtube\.com$/.test(host);
+  if (!onYT && !onYTMusic) return false;
+  // something must actually be playing (not paused, has real playback)
+  let playing = false;
+  try {
+    for (const v of document.querySelectorAll("video")) {
+      if (!v.paused && !v.ended && v.currentTime > 0 && v.readyState >= 2) { playing = true; break; }
+    }
+  } catch (_) {}
+  if (!playing) return false;
+  if (onYTMusic) return true;   // YouTube Music is music by definition
+  // On youtube.com, trust the category microdata / genre meta.
+  try {
+    const genre = document.querySelector('meta[itemprop="genre"]')?.getAttribute("content")
+      || document.querySelector('meta[itemprop="genre"]')?.content || "";
+    if (/music/i.test(genre)) return true;
+    // Fallback: the watch page's category link text (ytd-metadata-row / "Category: Music").
+    const catLink = document.querySelector('#category ytd-metadata-row-renderer a, a[href*="/channel/UC-9-kyTW8ZkZNDHQJ6FgpwQ"]');
+    if (catLink && /music/i.test(catLink.textContent || "")) return true;
+  } catch (_) {}
+  return false;
+}
+
+let __sbMusicAmbientTimer = null;
+let __sbMusicAmbientOn = false;
+function __sbApplyMusicAmbient(on) {
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  // Never glow while Braino is actually busy (agent working) — that has its own state.
+  const suppress = bar.classList.contains("sb-agent-busy");
+  const want = on && !suppress;
+  if (want === __sbMusicAmbientOn) return;
+  __sbMusicAmbientOn = want;
+  bar.classList.toggle("sb-music-ambient", want);
+}
+function __sbStartMusicAmbientWatch() {
+  if (__sbMusicAmbientTimer) return;
+  const tick = () => { try { __sbApplyMusicAmbient(__sbIsPlayingYouTubeMusic()); } catch (_) {} };
+  tick();
+  __sbMusicAmbientTimer = setInterval(tick, 2500);   // cheap poll; YouTube is an SPA
+}
 
 function __sbIsOnX() {
   return /^(twitter|x)\.com$/.test(location.hostname);
