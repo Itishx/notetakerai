@@ -3206,11 +3206,16 @@ let __sbRoamDir = 1;                     // facing
 let __sbRoamPerchEl = null;              // the element he's headed to / sitting on
 let __sbRoamSitting = false;
 let __sbRoamNextWander = 0;
+let __sbRoamHoldUntil = 0;               // he lingers on the bar while the intro line shows
 let __sbRoamLaneCss = "";                // saved lane inline style, restored on exit
 let __sbRoamMouseX = -9999, __sbRoamMouseY = -9999;
 const __SB_ROAM_W = 64, __SB_ROAM_H = 78;   // walker box; feet ≈ bottom
+const __SB_ROAM_MARGIN = 10;                // never let any edge of him leave the viewport
 
 function __sbRoamOnMouse(e) { __sbRoamMouseX = e.clientX; __sbRoamMouseY = e.clientY; }
+// He must ALWAYS stay fully on screen — clamp the walker's top-left to the viewport.
+function __sbRoamClampX(x) { return Math.max(__SB_ROAM_MARGIN, Math.min(x, window.innerWidth - __SB_ROAM_W - __SB_ROAM_MARGIN)); }
+function __sbRoamClampY(y) { return Math.max(__SB_ROAM_MARGIN, Math.min(y, window.innerHeight - __SB_ROAM_H - __SB_ROAM_MARGIN)); }
 
 // Score every visible "ledge" and return the best perch as {el, footX, topY}. A good
 // perch is a wide, stable, horizontal top edge that frames content — never the logo,
@@ -3262,10 +3267,19 @@ function __sbRoamScorePerch() {
 
 function __sbRoamPickNewPerch() {
   const perch = __sbRoamScorePerch();
-  if (!perch) { __sbRoamNextWander = performance.now() + 3000; return; }
+  if (!perch) {
+    // No good ledge — just amble to a random on-screen spot so he never sits idle
+    // off-view. He always stays visible.
+    __sbRoamPerchEl = null;
+    __sbRoamTX = __sbRoamClampX(window.innerWidth * (0.2 + Math.random() * 0.6) - __SB_ROAM_W / 2);
+    __sbRoamTY = __sbRoamClampY(window.innerHeight * (0.3 + Math.random() * 0.5));
+    __sbRoamNextWander = performance.now() + 6000;
+    __sbRoamSitting = false;
+    return;
+  }
   __sbRoamPerchEl = perch.el;
-  __sbRoamTX = perch.footX - __SB_ROAM_W / 2;
-  __sbRoamTY = perch.topY - (__SB_ROAM_H - 6);   // feet on the edge
+  __sbRoamTX = __sbRoamClampX(perch.footX - __SB_ROAM_W / 2);
+  __sbRoamTY = __sbRoamClampY(perch.topY - (__SB_ROAM_H - 6));   // feet on the edge
   __sbRoamSitting = false;
 }
 
@@ -3317,33 +3331,44 @@ function __sbRoamTick(now) {
   const dt = Math.min(0.05, (now - __sbRoamLast) / 1000);
   __sbRoamLast = now;
 
-  // Keep the perch anchored as the page scrolls / reflows (re-measure its live rect).
+  // He lingers on the bar while the intro line ("Ah, I finally get to be off the bar")
+  // shows, then steps off. Until then, just idle at the start spot.
+  if (now < __sbRoamHoldUntil) {
+    walker.style.transform = `translate(${__sbRoamCX}px, ${__sbRoamCY}px)`;
+    __sbRoamApplyPose(now, false, false);
+    __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+    return;
+  }
+
+  // Keep the perch anchored as the page scrolls / reflows (re-measure its live rect),
+  // and NEVER follow it off-screen — clamp into the viewport.
   if (__sbRoamPerchEl && __sbRoamPerchEl.isConnected) {
     try {
       const r = __sbRoamPerchEl.getBoundingClientRect();
       if (r.width >= 60 && r.top > 40 && r.top < window.innerHeight - 60) {
         const frac = (r.left + r.width / 2) < window.innerWidth / 2 ? 0.78 : 0.22;
-        __sbRoamTX = r.left + r.width * frac - __SB_ROAM_W / 2;
-        __sbRoamTY = r.top - (__SB_ROAM_H - 6);
+        __sbRoamTX = __sbRoamClampX(r.left + r.width * frac - __SB_ROAM_W / 2);
+        __sbRoamTY = __sbRoamClampY(r.top - (__SB_ROAM_H - 6));
       } else { __sbRoamPerchEl = null; __sbRoamNextWander = 0; }   // scrolled away → wander
     } catch (_) { __sbRoamPerchEl = null; }
   }
 
-  // Anti-distraction: if the cursor comes close, hop aside a little and wait.
+  // Anti-distraction: if the cursor comes close, step aside a little (still on screen).
   const feetX = __sbRoamCX + __SB_ROAM_W / 2, feetY = __sbRoamCY + __SB_ROAM_H;
   const nearCursor = Math.hypot(feetX - __sbRoamMouseX, feetY - __sbRoamMouseY) < 120;
-  if (nearCursor) __sbRoamTX += (__sbRoamCX < __sbRoamMouseX ? -140 : 140);
+  if (nearCursor) __sbRoamTX = __sbRoamClampX(__sbRoamTX + (__sbRoamCX < __sbRoamMouseX ? -140 : 140));
 
-  // Move toward target: horizontal first, then settle vertically (reads like walk + hop).
+  // Move toward target at a believable WALKING pace — no teleporting, no flying off. He
+  // walks the diagonal (feet cycling); vertical change reads as a gentle climb.
   const dx = __sbRoamTX - __sbRoamCX, dy = __sbRoamTY - __sbRoamCY;
   const dist = Math.hypot(dx, dy);
-  const moving = dist > 4;
+  const moving = dist > 3;
   if (moving) {
     if (Math.abs(dx) > 2) __sbRoamDir = dx > 0 ? 1 : -1;
-    const speed = 260;                         // px/s roam pace
+    const speed = 135;                         // px/s — a stroll, not a dash
     const step = Math.min(dist, speed * dt);
-    __sbRoamCX += (dx / dist) * step;
-    __sbRoamCY += (dy / dist) * step;
+    __sbRoamCX = __sbRoamClampX(__sbRoamCX + (dx / dist) * step);
+    __sbRoamCY = __sbRoamClampY(__sbRoamCY + (dy / dist) * step);
     __sbRoamSitting = false;
   } else if (__sbRoamPerchEl) {
     __sbRoamSitting = true;
@@ -3351,11 +3376,9 @@ function __sbRoamTick(now) {
   walker.style.transform = `translate(${__sbRoamCX}px, ${__sbRoamCY}px)`;
   __sbRoamApplyPose(now, moving, __sbRoamSitting);
 
-  // Wander: once he's been sitting a while, pick a new ledge.
-  if (__sbRoamSitting && now > __sbRoamNextWander) {
+  // Wander: once he's been sitting a while, pick a new ledge (or amble to a random spot).
+  if ((__sbRoamSitting || !__sbRoamPerchEl) && now > __sbRoamNextWander) {
     __sbRoamNextWander = now + 9000 + Math.random() * 6000;
-    __sbRoamPickNewPerch();
-  } else if (!__sbRoamPerchEl && now > __sbRoamNextWander) {
     __sbRoamPickNewPerch();
   }
 
@@ -3375,15 +3398,23 @@ function __sbEnterRoamMode() {
   // Free the lane to the full viewport so the walker can be placed anywhere.
   __sbRoamLaneCss = lane.style.cssText;
   lane.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483646;overflow:visible;display:block;";
-  // Start from roughly where the bar is (bottom center), then leap to the first perch.
-  __sbRoamCX = window.innerWidth / 2 - __SB_ROAM_W / 2;
-  __sbRoamCY = window.innerHeight - 130;
+  // The lane ignores clicks (so the page underneath stays usable) but Braino himself is
+  // tappable — click him to call the bar back.
+  const wkEl = document.getElementById("__sbwk_walker__");
+  if (wkEl) wkEl.style.pointerEvents = "auto";
+  // Start right where the bar is (bottom center). He says his line, THEN steps off.
+  __sbRoamCX = __sbRoamClampX(window.innerWidth / 2 - __SB_ROAM_W / 2);
+  __sbRoamCY = __sbRoamClampY(window.innerHeight - 130);
   __sbRoamStart = __sbRoamLast = performance.now();
-  __sbRoamNextWander = 0;
+  __sbRoamNextWander = performance.now() + 1400;   // don't wander until he's off the bar
+  __sbRoamHoldUntil = performance.now() + 1400;     // linger while the line shows
   __sbRoamPerchEl = null; __sbRoamSitting = false;
   document.addEventListener("mousemove", __sbRoamOnMouse, true);
-  __sbWkSay?.("Roaming — Shift twice to call me back.");
-  __sbRoamPickNewPerch();
+  // The bar folds shut as he steps off it.
+  document.getElementById("__sb_bar__")?.classList.add("sb-bar-collapsed");
+  __sbWkSay?.("Ah, I finally get to be off the bar.");
+  // After the line, pick the first ledge and stroll to it.
+  setTimeout(() => { if (__sbRoamActive) __sbRoamPickNewPerch(); }, 1400);
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
 }
 function __sbExitRoamMode() {
@@ -3399,6 +3430,9 @@ function __sbExitRoamMode() {
   // Reset any dangling leg transforms, then resume the normal bar stroll.
   const root = walker && walker.querySelector("#__sbwk_root__");
   if (root) { root.querySelector("#__sbwk_ll__")?.setAttribute("transform", ""); root.querySelector("#__sbwk_rl__")?.setAttribute("transform", ""); }
+  // The bar unfolds back open.
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) { bar.classList.remove("sb-bar-collapsed"); bar.classList.add("open"); }
   __sbWkResumeFromX = 24;
   __sbStartWalkLoop?.();
 }
@@ -3421,6 +3455,8 @@ function __sbEnsureWalker() {
   // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
   let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
   walker.addEventListener("pointerdown", (e) => {
+    // In roam mode, tapping Braino calls him back: exit roam, the bar unfolds for text.
+    if (__sbRoamActive) { e.preventDefault(); __sbExitRoamMode(); return; }
     if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;
     dragging = true; dragMoved = false;
     try { walker.setPointerCapture(e.pointerId); } catch (_) {}
@@ -5231,6 +5267,13 @@ function __sbBuildBrainUI() {
       z-index: -1; pointer-events: none;
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0) scale(1); }
+    /* Roam mode: the bar folds shut horizontally (shorter and shorter) as Braino steps off
+       it. Ctrl (voice) or clicking Braino brings it back. */
+    #__sb_bar__.sb-bar-collapsed {
+      transform: translateX(-50%) translateY(0) scaleX(0.01) !important;
+      opacity: 0 !important; pointer-events: none !important;
+      transition: transform 0.55s cubic-bezier(0.5,0,0.2,1), opacity 0.4s ease 0.15s !important;
+    }
     /* Coral send-pulse — a brief ring + warm glow each time a message is sent. */
     @keyframes __sb_bar_send__ {
       0%   { box-shadow: 0 0 0 0 rgba(232,120,110,0.55), 0 8px 32px rgba(27,23,19,0.18); }
@@ -16332,6 +16375,8 @@ function __sbHandleRtEvent(ev) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function __sbToggleHeadphoneMode() {
+  // Ctrl (voice) while roaming calls Braino back to the bar first.
+  if (__sbRoamActive && typeof __sbExitRoamMode === "function") __sbExitRoamMode();
   if (__sbHeadphoneMode) {
     __sbExitHeadphoneMode();
   } else {
