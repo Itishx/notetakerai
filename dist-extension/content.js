@@ -2644,6 +2644,14 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
     '<ellipse cx="50" cy="3" rx="32" ry="5" fill="#000" opacity="0.6"/>' +
     '<path d="M 37 -20 Q 35 -8 38 2" fill="none" stroke="#3a332e" stroke-width="2.2" stroke-linecap="round" opacity="0.7"/>' +
     '<path d="M 12 5 Q 50 12 88 5" fill="none" stroke="#3a332e" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>' +
+    '</g></g></svg>')
+  // Headphones (hidden until music plays on YouTube) — a band over the head + two ear cups.
+  .replace("</g></svg>",
+    '<g id="__sbwk_headphones__" display="none">' +
+    '<path d="M 12 46 Q 12 6 50 6 Q 88 6 88 46" fill="none" stroke="#1B1713" stroke-width="4.4" stroke-linecap="round"/>' +
+    '<path d="M 12 46 Q 12 8 50 8 Q 88 8 88 46" fill="none" stroke="#3a332e" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>' +
+    '<rect x="6.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="8.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
+    '<rect x="82.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="84.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
     '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
@@ -7655,6 +7663,10 @@ function __sbApplyMusicAmbient(on) {
   if (want === __sbMusicAmbientOn) return;
   __sbMusicAmbientOn = want;
   bar.classList.toggle("sb-music-ambient", want);
+  // Braino puts headphones ON while the music plays (walker + docked brain).
+  const hp = document.querySelector("#__sbwk_walker__ #__sbwk_headphones__");
+  if (hp) hp.setAttribute("display", want ? "inline" : "none");
+  document.getElementById("__sb_brain_btn__")?.classList.toggle("sb-headphones", want);
 }
 function __sbStartMusicAmbientWatch() {
   if (__sbMusicAmbientTimer) return;
