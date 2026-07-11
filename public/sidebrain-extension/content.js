@@ -3190,6 +3190,219 @@ function __sbSyncWalkerLane() {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// ROAM MODE — Braino leaves the bar, wanders the real screen, and perches on
+// sensible page elements (the top edge of a video, a card, a thumbnail). DOM
+// rects give exact coordinates; a scorer picks a ledge that frames content
+// instead of obstructing it. Toggle: Shift×2. Seeds teach mode (directed roam).
+// ════════════════════════════════════════════════════════════════════════════
+let __sbRoamActive = false;
+let __sbRoamRaf = null;
+let __sbRoamLast = 0;
+let __sbRoamStart = 0;
+let __sbRoamCX = 0, __sbRoamCY = 0;      // current walker top-left (viewport px)
+let __sbRoamTX = 0, __sbRoamTY = 0;      // target walker top-left
+let __sbRoamDir = 1;                     // facing
+let __sbRoamPerchEl = null;              // the element he's headed to / sitting on
+let __sbRoamSitting = false;
+let __sbRoamNextWander = 0;
+let __sbRoamLaneCss = "";                // saved lane inline style, restored on exit
+let __sbRoamMouseX = -9999, __sbRoamMouseY = -9999;
+const __SB_ROAM_W = 64, __SB_ROAM_H = 78;   // walker box; feet ≈ bottom
+
+function __sbRoamOnMouse(e) { __sbRoamMouseX = e.clientX; __sbRoamMouseY = e.clientY; }
+
+// Score every visible "ledge" and return the best perch as {el, footX, topY}. A good
+// perch is a wide, stable, horizontal top edge that frames content — never the logo,
+// never what the user is reading/typing, never dead-center.
+function __sbRoamScorePerch() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const sel = 'video, img, [role="img"], article, section, header, aside, figure, '
+    + '[class*="card"], [class*="Card"], [class*="thumbnail"], [class*="thumb"], '
+    + '[class*="player"], [class*="banner"], [class*="hero"], [class*="poster"], h1, h2';
+  let best = null, bestScore = 0;
+  let nodes;
+  try { nodes = document.querySelectorAll(sel); } catch (_) { return null; }
+  let scanned = 0;
+  for (const el of nodes) {
+    if (scanned++ > 1200) break;
+    let r;
+    try { r = el.getBoundingClientRect(); } catch (_) { continue; }
+    if (!r || r.width < 90 || r.height < 44) continue;                 // big enough to sit on
+    if (r.top < 56 || r.top > vh - 110) continue;                     // top edge must be comfortably in view
+    if (r.left > vw - 60 || r.left + r.width < 60) continue;          // horizontally on screen
+    // hard avoids
+    const idc = ((el.id || "") + " " + (el.className || "")).toString().toLowerCase();
+    if (/logo|brand|masthead/.test(idc)) continue;                    // never obstruct the mark
+    const tag = String(el.tagName || "").toLowerCase();
+    if (["input", "textarea", "select", "button", "a"].includes(tag)) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === "hidden" || st.opacity === "0" || st.display === "none") continue;
+    // don't sit where the cursor is (the user is engaging there)
+    const footX0 = r.left + r.width * 0.5;
+    if (Math.hypot(footX0 - __sbRoamMouseX, r.top - __sbRoamMouseY) < 150) continue;
+
+    // score: wide is good, visual blocks (video/img/figure) are great, periphery beats
+    // center, a bit of randomness so he doesn't always pick the same ledge.
+    let score = Math.min(r.width, 420) / 4;
+    if (["video", "img", "figure"].includes(tag) || /player|poster|thumb|hero/.test(idc)) score += 90;
+    const cx = r.left + r.width / 2;
+    score += Math.abs(cx - vw / 2) / vw * 80;                         // reward off-center
+    score -= Math.abs(r.top - vh * 0.32) / vh * 30;                   // gently prefer upper-third ledges
+    score += Math.random() * 40;
+    if (score > bestScore) {
+      bestScore = score;
+      // sit toward one end of the ledge (not dead-center on the block) — reads intentional
+      const frac = cx < vw / 2 ? 0.78 : 0.22;
+      best = { el, footX: r.left + r.width * frac, topY: r.top };
+    }
+  }
+  return best;
+}
+
+function __sbRoamPickNewPerch() {
+  const perch = __sbRoamScorePerch();
+  if (!perch) { __sbRoamNextWander = performance.now() + 3000; return; }
+  __sbRoamPerchEl = perch.el;
+  __sbRoamTX = perch.footX - __SB_ROAM_W / 2;
+  __sbRoamTY = perch.topY - (__SB_ROAM_H - 6);   // feet on the edge
+  __sbRoamSitting = false;
+}
+
+function __sbRoamApplyPose(now, moving, sitting) {
+  const walker = document.getElementById("__sbwk_walker__");
+  const flip = document.getElementById("__sbwk_flip__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!root) return;
+  const t = (now - __sbRoamStart) / 1000;
+  const s = t * 4.5;
+  const Lp = Math.sin(s), Rp = Math.sin(s + Math.PI);
+  const breath = 1 + 0.014 * Math.sin(t * 1.7);
+  const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+  const bp = t % 3.4;
+  const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
+  const eyeSy = Math.max(0.06, 1 - blink);
+  if (flip) flip.style.transform = `scaleX(${__sbRoamDir})`;
+
+  const legL = root.querySelector("#__sbwk_ll__");
+  const legR = root.querySelector("#__sbwk_rl__");
+  const eyeL = root.querySelector("#__sbwk_eye_l__");
+  const eyeR = root.querySelector("#__sbwk_eye_r__");
+  if (sitting) {
+    // Perched: legs dangle forward over the edge, gentle sway + look around.
+    const sway = Math.sin(t * 1.4) * 6;
+    root.setAttribute("transform", `translate(0 ${bob + 4}) scale(${breath})`);
+    if (legL) legL.setAttribute("transform", `rotate(${52 + sway} 44 74)`);
+    if (legR) legR.setAttribute("transform", `rotate(${46 - sway} 56 74)`);
+  } else if (moving) {
+    const ll = Math.max(0, Lp) * 5, rl = Math.max(0, Rp) * 5;
+    const ls = Math.max(0, Lp) * 8, rs = Math.max(0, Rp) * 8;
+    const waddle = Math.sin(s) * 3.4, walkBob = -Math.abs(Math.sin(s)) * 2 - 0.4;
+    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+    if (legL) legL.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+    if (legR) legR.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+  } else {
+    root.setAttribute("transform", `translate(0 ${bob}) scale(${breath})`);
+    if (legL) legL.setAttribute("transform", "");
+    if (legR) legR.setAttribute("transform", "");
+  }
+  if (eyeL) eyeL.setAttribute("transform", `translate(38 48) scale(1 ${eyeSy}) translate(-38 -48)`);
+  if (eyeR) eyeR.setAttribute("transform", `translate(62 48) scale(1 ${eyeSy}) translate(-62 -48)`);
+}
+
+function __sbRoamTick(now) {
+  if (!__sbRoamActive) { __sbRoamRaf = null; return; }
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) { __sbRoamRaf = null; return; }
+  const dt = Math.min(0.05, (now - __sbRoamLast) / 1000);
+  __sbRoamLast = now;
+
+  // Keep the perch anchored as the page scrolls / reflows (re-measure its live rect).
+  if (__sbRoamPerchEl && __sbRoamPerchEl.isConnected) {
+    try {
+      const r = __sbRoamPerchEl.getBoundingClientRect();
+      if (r.width >= 60 && r.top > 40 && r.top < window.innerHeight - 60) {
+        const frac = (r.left + r.width / 2) < window.innerWidth / 2 ? 0.78 : 0.22;
+        __sbRoamTX = r.left + r.width * frac - __SB_ROAM_W / 2;
+        __sbRoamTY = r.top - (__SB_ROAM_H - 6);
+      } else { __sbRoamPerchEl = null; __sbRoamNextWander = 0; }   // scrolled away → wander
+    } catch (_) { __sbRoamPerchEl = null; }
+  }
+
+  // Anti-distraction: if the cursor comes close, hop aside a little and wait.
+  const feetX = __sbRoamCX + __SB_ROAM_W / 2, feetY = __sbRoamCY + __SB_ROAM_H;
+  const nearCursor = Math.hypot(feetX - __sbRoamMouseX, feetY - __sbRoamMouseY) < 120;
+  if (nearCursor) __sbRoamTX += (__sbRoamCX < __sbRoamMouseX ? -140 : 140);
+
+  // Move toward target: horizontal first, then settle vertically (reads like walk + hop).
+  const dx = __sbRoamTX - __sbRoamCX, dy = __sbRoamTY - __sbRoamCY;
+  const dist = Math.hypot(dx, dy);
+  const moving = dist > 4;
+  if (moving) {
+    if (Math.abs(dx) > 2) __sbRoamDir = dx > 0 ? 1 : -1;
+    const speed = 260;                         // px/s roam pace
+    const step = Math.min(dist, speed * dt);
+    __sbRoamCX += (dx / dist) * step;
+    __sbRoamCY += (dy / dist) * step;
+    __sbRoamSitting = false;
+  } else if (__sbRoamPerchEl) {
+    __sbRoamSitting = true;
+  }
+  walker.style.transform = `translate(${__sbRoamCX}px, ${__sbRoamCY}px)`;
+  __sbRoamApplyPose(now, moving, __sbRoamSitting);
+
+  // Wander: once he's been sitting a while, pick a new ledge.
+  if (__sbRoamSitting && now > __sbRoamNextWander) {
+    __sbRoamNextWander = now + 9000 + Math.random() * 6000;
+    __sbRoamPickNewPerch();
+  } else if (!__sbRoamPerchEl && now > __sbRoamNextWander) {
+    __sbRoamPickNewPerch();
+  }
+
+  __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+}
+
+function __sbToggleRoamMode() {
+  __sbRoamActive ? __sbExitRoamMode() : __sbEnterRoamMode();
+}
+function __sbEnterRoamMode() {
+  if (__sbRoamActive) return;
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  __sbRoamActive = true;
+  __sbStopWalkLoop?.();
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  // Free the lane to the full viewport so the walker can be placed anywhere.
+  __sbRoamLaneCss = lane.style.cssText;
+  lane.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483646;overflow:visible;display:block;";
+  // Start from roughly where the bar is (bottom center), then leap to the first perch.
+  __sbRoamCX = window.innerWidth / 2 - __SB_ROAM_W / 2;
+  __sbRoamCY = window.innerHeight - 130;
+  __sbRoamStart = __sbRoamLast = performance.now();
+  __sbRoamNextWander = 0;
+  __sbRoamPerchEl = null; __sbRoamSitting = false;
+  document.addEventListener("mousemove", __sbRoamOnMouse, true);
+  __sbWkSay?.("Roaming — Shift twice to call me back.");
+  __sbRoamPickNewPerch();
+  __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+}
+function __sbExitRoamMode() {
+  if (!__sbRoamActive) return;
+  __sbRoamActive = false;
+  if (__sbRoamRaf) { cancelAnimationFrame(__sbRoamRaf); __sbRoamRaf = null; }
+  document.removeEventListener("mousemove", __sbRoamOnMouse, true);
+  __sbRoamPerchEl = null;
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (lane) lane.style.cssText = __sbRoamLaneCss;   // restore the bar lane
+  const walker = document.getElementById("__sbwk_walker__");
+  if (walker) walker.style.transform = "";
+  // Reset any dangling leg transforms, then resume the normal bar stroll.
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (root) { root.querySelector("#__sbwk_ll__")?.setAttribute("transform", ""); root.querySelector("#__sbwk_rl__")?.setAttribute("transform", ""); }
+  __sbWkResumeFromX = 24;
+  __sbStartWalkLoop?.();
+}
+
 function __sbEnsureWalker() {
   let lane = document.getElementById("__sb_walk_lane__");
   if (lane) return lane;
@@ -3794,6 +4007,7 @@ function __sbWkHop() {
 }
 
 function __sbWkTick(now) {
+  if (__sbRoamActive) { __sbWkRaf = null; return; }   // roam mode owns the walker
   const lane = document.getElementById("__sb_walk_lane__");
   if (!lane || lane.style.display === "none") { __sbWkRaf = null; return; }
   const walker = document.getElementById("__sbwk_walker__");
@@ -6743,6 +6957,7 @@ function __sbBuildBrainUI() {
   // ⌘I / Ctrl+I — toggle brain. Double-tap Space — primary invoke (cycles the loop).
   let __sbLastCtrlTap = 0;
   let __sbLastAltTap = 0;
+  let __sbLastShiftTap = 0;
   let __sbLastSpaceTap = 0;
   document.addEventListener("keydown", (e) => {
     // Double-tap Control → toggle headphone mode.
@@ -6778,8 +6993,26 @@ function __sbBuildBrainUI() {
       }
       return;
     }
+    // Double-tap Shift → toggle Roam mode (Braino wanders the screen and perches on real
+    // page elements). Free chord — Ctrl×2 = voice, Alt×2 = Jarvis, Shift×2 = roam.
+    if (e.key === "Shift") {
+      if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const now = Date.now();
+        if (now - __sbLastShiftTap < 400) {
+          __sbLastShiftTap = 0;
+          if (!__sbHasExternalEditableFocus()) {
+            if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+            __sbToggleRoamMode();
+          }
+        } else {
+          __sbLastShiftTap = now;
+        }
+      }
+      return;
+    }
     __sbLastCtrlTap = 0;   // any other key breaks the double-tap (Ctrl+key combos don't count)
     __sbLastAltTap = 0;
+    __sbLastShiftTap = 0;
 
     // Double-tap Space → invoke / cycle Braino (OFF→PANEL plays the climb wake-up).
     // Ignored while typing in ANY field (page or Braino's own bar) so it never eats text.
