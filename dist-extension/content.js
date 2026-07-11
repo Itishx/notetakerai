@@ -2652,6 +2652,15 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
     '<path d="M 12 46 Q 12 8 50 8 Q 88 8 88 46" fill="none" stroke="#3a332e" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>' +
     '<rect x="6.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="8.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
     '<rect x="82.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="84.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
+    '</g></g></svg>')
+  // Voice-persona costume: golden comb-over (hidden until "talk like Trump"). Sits on the crown
+  // (y ≈ -7 → 32), well clear of the eyes (y 48). Toggled by __sbSetVoicePersonaCostume("trump").
+  .replace("</g></svg>",
+    '<g id="__sbwk_trump__" display="none">' +
+    '<path d="M 18 32 C 12 6 28 -8 50 -7 C 72 -8 88 7 82 32 C 77 19 67 12 57 14 C 66 8 58 1 50 2 C 42 1 34 8 43 14 C 33 12 23 19 18 32 Z" fill="#E8C45E" stroke="#C69A34" stroke-width="0.8"/>' +
+    '<path d="M 20 30 C 24 12 42 4 62 8 C 78 11 84 20 79 28 C 71 17 56 14 45 19 C 36 23 28 28 20 30 Z" fill="#F1D477"/>' +
+    '<path d="M 24 27 Q 46 12 76 22" fill="none" stroke="#D3AC44" stroke-width="1" stroke-linecap="round" opacity="0.65"/>' +
+    '<path d="M 23 31 Q 48 18 78 27" fill="none" stroke="#D3AC44" stroke-width="1" stroke-linecap="round" opacity="0.5"/>' +
     '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
@@ -2691,6 +2700,13 @@ let __sbWkDanceArmAnchor = null; // original paint-order slot for the arm groups
 let __sbWkJumping = false;      // true while the jump-and-point owns the rig
 let __sbWkJumpRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
+// ── Voice personas (multi-voice) ─────────────────────────────────────────────
+// Braino can put on another voice on command ("talk like Trump"). null = his own Fish voice
+// (the server picks it via FISH_AUDIO_REFERENCE_ID). When a persona is active its Fish
+// reference_id rides on every TTS request, its style steers replies, and it wears the look.
+let __sbActiveVoicePersona = null;   // persona key (e.g. "trump") or null for default Braino
+let __sbActiveVoiceRefId = "";       // Fish reference_id sent with TTS while a persona is on ("" = default)
+let __sbCurrentCostume = null;       // costume key currently worn (re-applied across walker rebuilds)
 
 // "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
 const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
@@ -3554,6 +3570,7 @@ function __sbStartWalkLoop() {
   __sbWkWalking = true; __sbWkWaving = false; __sbWkBusy = false; __sbWalkTalking = false;
   __sbWkResetThrow();
   if (__sbGlassesOn) __sbSetGlasses(true);   // keep specs on across walker rebuilds
+  if (__sbCurrentCostume) __sbSetVoicePersonaCostume(__sbCurrentCostume);   // keep the persona look on too
   clearTimeout(__sbWkAutoTimer); __sbWkScheduleAuto();
   if (!__sbWkRaf) __sbWkRaf = requestAnimationFrame(__sbWkTick);
 }
@@ -9500,10 +9517,15 @@ async function __sbFetchSentenceTts(clean, speechToken, headers) {
     // Strip markdown/symbols on EVERY chunk (the streaming path sends raw sentences straight here, so
     // without this Fish would vocalise "||", "**", etc.). Idempotent on the already-clean batch path.
     const speakable = __sbStripMarkdownForSpeech(clean);
+    // Multi-voice: when a persona is active, send its Fish reference_id so this line speaks in
+    // that voice. Empty → the server falls back to Braino's own voice (FISH_AUDIO_REFERENCE_ID).
+    // This is the ONE place all Fish audio flows through, so it swaps the voice everywhere.
+    const ttsBody = { text: speakable };
+    if (__sbActiveVoiceRefId) ttsBody.referenceId = __sbActiveVoiceRefId;
     const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ text: speakable }),
+      body: JSON.stringify(ttsBody),
     }, speechToken);
     return { resp };
   } catch (error) {
@@ -13270,6 +13292,164 @@ function __sbShouldFastLaunchRealtimeAgent(routing) {
   return /\b(spotify|song|track|music|playlist|youtube|video|gmail|email|mail|calendar|meeting|meet|event|maps?|directions?|linkedin|jobs?|x|twitter|drive|docs?|website|tab|page)\b/i.test(promptText);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// VOICE PERSONAS — Braino's multi-voice engine.
+// "Braino, talk like Donald Trump" → he puts on the look, switches to Trump's Fish voice,
+// and answers in the Tremendous style until told to be himself again. Adding a persona is
+// ONE entry here (name + Fish reference_id + style + intro lines). The voice swap is universal
+// (one ref-id injection in __sbFetchSentenceTts); the style rides chat replies (systemNotes)
+// and the streaming-voice instructions (__sbAugmentInstructionsWithPersona).
+// ═══════════════════════════════════════════════════════════════════════════════
+const __SB_VOICE_PERSONAS = {
+  trump: {
+    name: "Donald Trump",
+    aliases: ["donald trump", "trump", "donald"],
+    refId: "bcdb9d5cfcfc4c2cb2175849d38aca5b",
+    costume: "trump",
+    // "Tremendous Mode" — DELIVERY only. Facts stay correct; drops instantly for anything serious.
+    style: [
+      "Deliver this as a comedic impression of a bombastic American businessman — a SPEAKING STYLE only. Never make a political statement, never name real politicians, never take a real side.",
+      "Short, punchy sentences. Simple words. Repeat a key word, then escalate it (\"It's fast. So fast. Maybe the fastest ever\").",
+      "Superlatives everywhere: best, greatest, tremendous, incredible, like nobody's ever seen. Cite vague crowds (\"many people are saying\"). Punctuate with \"believe me\", \"frankly\", \"okay?\".",
+      "Flatter the user. Take a quick self-congratulatory detour, then snap back to the answer. End on a triumphant note.",
+      "HARD RULE: the FACTS in your answer stay 100% correct — only the delivery is bombastic. Useful first, funny second. Drop the act entirely for anything serious, sensitive, health, money, or bad news.",
+    ].join(" "),
+    enterLines: [
+      "Okay, here we go — I'm putting on the hair. Tremendous hair, believe me. What do you need? We're gonna do it, and it's gonna be beautiful.",
+      "You got it. Best voice, maybe the best anyone's ever heard. Tell me what you want — we do it fast, we do it great.",
+      "Alright, I'm here, and let me tell you, it's gonna be fantastic. What are we working on? Big things. Only big things.",
+    ],
+    exitLine: "Okay, that was tremendous. Back to being me.",
+  },
+  // To add another voice: obama: { name, aliases, refId: "<fish reference id>", costume: null, style, enterLines, exitLine }
+};
+
+function __sbResolveVoicePersonaKey(name) {
+  const t = String(name || "").toLowerCase().trim();
+  if (!t) return null;
+  // Word-boundary match so "trump" hits "talk like trump please" but NOT "in trumpet valley".
+  const hasWord = (a) => new RegExp("\\b" + a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").test(t);
+  for (const [key, p] of Object.entries(__SB_VOICE_PERSONAS)) {
+    if (key === t) return key;
+    if (Array.isArray(p.aliases) && p.aliases.some(hasWord)) return key;
+  }
+  return null;
+}
+
+// Given the persona directive match, recover the underlying TASK (if any). "explain this page
+// like Donald Trump" → "explain this page"; "talk like Trump" → "" (a pure voice switch).
+function __sbPersonaTaskRemainder(raw, matchStr, matchIndex) {
+  const rest = (raw.slice(0, matchIndex) + " " + raw.slice(matchIndex + matchStr.length)).trim();
+  // Strip politeness + a lone trigger verb; if nothing substantive is left, it was just "switch voices".
+  const probe = rest.toLowerCase()
+    .replace(/\b(hey|hi|hello|ok|okay|so|now|just|please|kindly|could you|can you|would you|will you|braino|for me|pretty please|um|uh|and|then)\b/g, " ")
+    .replace(/\b(talk|speak|sound|act|do|be|pretend|imitate|impersonate|channel|become|say something|reply|respond|answer)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+  return probe.length >= 3 ? rest : "";
+}
+
+// Detect a voice command. Returns { action:"set", key, remainder } | { action:"reset" } | null.
+// `remainder` is the underlying task with the persona phrase removed ("" = a pure voice switch).
+// "set" only fires when the named person maps to a KNOWN persona, so "like a pirate" / "as bullet
+// points" (no ref id) fall through to normal chat rather than half-activating.
+function __sbDetectVoicePersonaCommand(text) {
+  const raw = String(text || "").trim();
+  const t = raw.toLowerCase();
+  if (!t) return null;
+  // Exit — specific phrases only (never bare "stop", which is a voice barge-in). Checked FIRST so
+  // "be normal" / "be yourself" reset instead of being read as "be <someone>".
+  if (/\b(be (yourself|normal|you)( again)?|go back to (being )?(normal|yourself|you)|back to (being )?(normal|yourself|you)|your (own|normal|real) voice|normal voice|drop the (act|voice|impression|impersonation|character)|stop (the )?(voice|impression|impersonation|imitating|impersonating|acting|pretending)|stop acting like|act (normal|like yourself)|enough (with )?the (voice|impression|act))\b/.test(t)) {
+    return { action: "reset" };
+  }
+  // Enter — matched most-specific first. Group 1 captures the persona NAME; the full match span is
+  // stripped to recover the task. Covers: "in the voice of X", "in X's voice", "do an X impression",
+  // "imitate/channel X", "talk/speak/sound/act like X", "pretend to be X", "be X", and a trailing
+  // "... like/as X" so ANY task can carry the directive ("explain this page like Donald Trump").
+  const patterns = [
+    /\bin\s+(?:the\s+)?voice\s+of\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:in|with)\s+([a-z][a-z .'’-]{1,38}?)'?s\s+voice\b/,
+    /\b(?:sounding|talking|speaking|acting)\s+(?:like|as)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:do|give me)\s+(?:a|an|your)?\s*([a-z][a-z .'’-]{1,38}?)\s+(?:impression|impersonation)\b/,
+    /\b(?:imitate|impersonate|channel)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:talk|speak|sound|act)\s+(?:like|as)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:pretend\s+(?:to\s+be|you(?:'re| are)?)|become|be)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:like|as)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)\s*(?:please|now|thanks|thank you|ok|okay|for me)*\s*[.!?]*$/,
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    if (!m || !m[1]) continue;
+    const key = __sbResolveVoicePersonaKey(m[1]);
+    if (!key) continue;
+    const remainder = __sbPersonaTaskRemainder(raw, m[0], m.index);
+    return { action: "set", key, remainder };
+  }
+  return null;
+}
+
+// The active persona's style directive (or "") — prepended to chat context + voice instructions.
+function __sbPersonaStyleForPrompt() {
+  const p = __sbActiveVoicePersona ? __SB_VOICE_PERSONAS[__sbActiveVoicePersona] : null;
+  return p ? p.style : "";
+}
+
+// Show/hide the persona costume on the walker rig.
+function __sbSetVoicePersonaCostume(costume) {
+  __sbCurrentCostume = costume || null;
+  const root = document.querySelector("#__sbwk_walker__");
+  if (root) {
+    root.querySelector("#__sbwk_trump__")?.setAttribute("display", costume === "trump" ? "inline" : "none");
+  }
+}
+
+// Turn the persona ON without saying anything — used when the SAME utterance also carries a task
+// ("explain this page like Trump"): we flip the voice + style + look, then let the task run and
+// answer in-character. The persona STAYS on afterward until an explicit reset.
+function __sbActivateVoicePersonaSilently(key) {
+  const p = __SB_VOICE_PERSONAS[key];
+  if (!p) return;
+  __sbActiveVoicePersona = key;
+  __sbActiveVoiceRefId = p.refId || "";      // set BEFORE any speech → replies come out in the new voice
+  __sbRtInstructionsFingerprint = "";         // force the streaming-voice instructions to re-sync with the style
+  __sbSetVoicePersonaCostume(p.costume || null);
+  try { void __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+}
+
+async function __sbEnterVoicePersona(key, ctx = {}) {
+  const p = __SB_VOICE_PERSONAS[key];
+  if (!p) return;
+  __sbActivateVoicePersonaSilently(key);
+  const line = Array.isArray(p.enterLines) && p.enterLines.length
+    ? p.enterLines[Math.floor(Math.random() * p.enterLines.length)]
+    : `Okay — ${p.name} it is.`;
+  __sbStopSpeech();
+  __sbNoteSpoken(line);
+  if (ctx.fromVoice) {
+    try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+    await __sbSpeakWithPreferredVoice(line, ctx.voiceOutput || "legacy", { verbatim: true });
+  } else {
+    __sbShowBubble(line, false, { kicker: p.name });
+    void __sbSpeakText(line, { verbatim: true });   // let them HEAR the new voice, even from text chat
+  }
+}
+
+async function __sbExitVoicePersona(ctx = {}) {
+  const prev = __sbActiveVoicePersona ? __SB_VOICE_PERSONAS[__sbActiveVoicePersona] : null;
+  __sbActiveVoicePersona = null;
+  __sbActiveVoiceRefId = "";                  // cleared BEFORE speaking → the exit line is his own voice again
+  __sbRtInstructionsFingerprint = "";
+  __sbSetVoicePersonaCostume(null);
+  const line = prev?.exitLine || "Back to me.";
+  __sbStopSpeech();
+  __sbNoteSpoken(line);
+  if (ctx.fromVoice) {
+    try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+    await __sbSpeakWithPreferredVoice(line, ctx.voiceOutput || "legacy", { verbatim: true });
+  } else {
+    __sbShowBubble(line, false, { kicker: "Braino" });
+    void __sbSpeakText(line, { verbatim: true });
+  }
+}
+
 async function __sbProcessPrompt(text, options = {}) {
   const routing = __sbResolvePromptRouting(text);
   const promptText = String(routing.promptText || "").trim();
@@ -13300,6 +13480,33 @@ async function __sbProcessPrompt(text, options = {}) {
     const line = __sbSexualRefusalLine();
     if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
     else __sbShowBubble(line, false, { kicker: "Braino" });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Voice persona: "talk like Donald Trump" (pure switch) OR "explain this page like Donald Trump"
+  // (task + directive). A pure switch greets in-character; a task activates the voice + style + look
+  // SILENTLY, then runs the underlying task so the answer comes out in-character. Either way the
+  // persona STAYS on until an explicit reset ("be yourself" / "go back to being normal").
+  const __personaCmd = __sbDetectVoicePersonaCommand(promptText) || __sbDetectVoicePersonaCommand(text);
+  if (__personaCmd) {
+    if (__personaCmd.action === "reset") {
+      if (__sbActiveVoicePersona) {
+        await __sbExitVoicePersona({ fromVoice, voiceOutput });
+      } else {
+        const l = "I'm already just me.";
+        if (fromVoice) { __sbNoteSpoken(l); await speakVoiceReply(l); } else __sbWkSay("Already me 🙂");
+      }
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+    if (__personaCmd.remainder) {
+      // Task carried the directive → flip the persona on quietly and answer the task in-character.
+      __sbActivateVoicePersonaSilently(__personaCmd.key);
+      return await __sbProcessPrompt(__personaCmd.remainder, options);
+    }
+    // Pure "switch voices" → put on the look and greet in-character.
+    await __sbEnterVoicePersona(__personaCmd.key, { fromVoice, voiceOutput });
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
@@ -13625,6 +13832,9 @@ async function __sbProcessPrompt(text, options = {}) {
       const xCtx = __sbBuildXAutoContext(xPersona);
       systemNotes = systemNotes ? xCtx + "\n\n" + systemNotes : xCtx;
     }
+    // Active voice persona → steer the reply's DELIVERY (facts unchanged) so the words match the voice.
+    const __personaStyle = __sbPersonaStyleForPrompt();
+    if (__personaStyle) systemNotes = systemNotes ? __personaStyle + "\n\n" + systemNotes : __personaStyle;
 
     const body = {
       message: promptText,
@@ -14736,6 +14946,16 @@ function __sbAugmentRealtimeInstructionsWithMovieContext(instructions, movieCont
   return movieBlock ? `${base}\n\n${movieBlock}` : base;
 }
 
+// When a voice persona is active, append its style so the streamed voice CONTENT matches the voice.
+function __sbAugmentInstructionsWithPersona(instructions) {
+  const style = __sbPersonaStyleForPrompt();
+  if (!style) return instructions;
+  const p = __SB_VOICE_PERSONAS[__sbActiveVoicePersona];
+  const header = `PERFORMANCE MODE — you are doing a spoken impression of ${p?.name || "a character"} (a comedic voice, NOT the real person). ${style}`;
+  const base = String(instructions || "").trim();
+  return base ? `${base}\n\n${header}` : header;
+}
+
 function __sbBuildRealtimeBootInstructions() {
   // Keep the connect path cheap. A synchronous full-page scrape here (e.g. innerText of a huge
   // Notion/Gmail DOM) can add seconds before the socket even opens. We send only the static
@@ -14903,13 +15123,15 @@ async function __sbDoSyncRealtimeVoiceInstructions(syncUrl) {
     }
 
     const data = await resp.json().catch(() => ({}));
-    const instructions = __sbAugmentRealtimeInstructionsWithMovieContext(
-      String(data?.instructions || "").trim(),
-      __sbGetPageContext(2500).movieContext || null,
+    const instructions = __sbAugmentInstructionsWithPersona(
+      __sbAugmentRealtimeInstructionsWithMovieContext(
+        String(data?.instructions || "").trim(),
+        __sbGetPageContext(2500).movieContext || null,
+      ),
     );
     const fingerprint = String(data?.fingerprint || "").trim();
     if (!instructions) return false;
-    const localFingerprint = `${fingerprint || "local"}::${__sbBuildMovieContextSummary(__sbGetPageContext(2500).movieContext || null)}`;
+    const localFingerprint = `${fingerprint || "local"}::${__sbBuildMovieContextSummary(__sbGetPageContext(2500).movieContext || null)}::${__sbActiveVoicePersona || "self"}`;
     if (localFingerprint && localFingerprint === __sbRtInstructionsFingerprint) { __sbRtLastAnsweredUrl = syncUrl; return true; }
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
@@ -16070,6 +16292,20 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   if (__sbDanceIntent(transcript) || __sbDanceIntent(promptText)
     || __sbMoonwalkIntent(transcript) || __sbMoonwalkIntent(promptText)) {
     __sbPatchRealtimeCostTurn({ routeIntent: "party_trick" });
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Voice persona: "talk like Donald Trump" (switch) OR "explain this page like Donald Trump" (task +
+  // directive) — steer down __sbProcessPrompt (the shared persona engine) BEFORE any classification,
+  // so the streaming brain never grabs it. __sbProcessPrompt flips the voice/style/look and, if a task
+  // rode along, runs it in-character. No forceIntent: the stripped task routes naturally (chat/web/agent).
+  if (__sbDetectVoicePersonaCommand(promptText) || __sbDetectVoicePersonaCommand(transcript)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
