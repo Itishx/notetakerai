@@ -3399,9 +3399,11 @@ function __sbEnterRoamMode() {
   __sbRoamLaneCss = lane.style.cssText;
   lane.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483646;overflow:visible;display:block;";
   // The lane ignores clicks (so the page underneath stays usable) but Braino himself is
-  // tappable — click him to call the bar back.
+  // tappable — click him to call the bar back. Anchor him to TOP so translate(x,y) places
+  // his top-left in viewport coords (his CSS pins bottom:0, which would shove him off the
+  // bottom of the screen — the "Braino is nowhere" bug).
   const wkEl = document.getElementById("__sbwk_walker__");
-  if (wkEl) wkEl.style.pointerEvents = "auto";
+  if (wkEl) { wkEl.style.pointerEvents = "auto"; wkEl.style.top = "0"; wkEl.style.bottom = "auto"; }
   // Start right where the bar is (bottom center). He says his line, THEN steps off.
   __sbRoamCX = __sbRoamClampX(window.innerWidth / 2 - __SB_ROAM_W / 2);
   __sbRoamCY = __sbRoamClampY(window.innerHeight - 130);
@@ -3426,7 +3428,7 @@ function __sbExitRoamMode() {
   const lane = document.getElementById("__sb_walk_lane__");
   if (lane) lane.style.cssText = __sbRoamLaneCss;   // restore the bar lane
   const walker = document.getElementById("__sbwk_walker__");
-  if (walker) walker.style.transform = "";
+  if (walker) { walker.style.transform = ""; walker.style.top = ""; walker.style.bottom = ""; }
   // Reset any dangling leg transforms, then resume the normal bar stroll.
   const root = walker && walker.querySelector("#__sbwk_root__");
   if (root) { root.querySelector("#__sbwk_ll__")?.setAttribute("transform", ""); root.querySelector("#__sbwk_rl__")?.setAttribute("transform", ""); }
