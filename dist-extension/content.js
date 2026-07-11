@@ -2656,16 +2656,13 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
   // Voice-persona costume (hidden until "talk like Trump"): EXACT port of the Braino Trump
   // standalone design (accessory "trump" in braino-char) — thin swept golden canopy sitting low
   // on the head with a scalloped underside, draping longer down the RIGHT side, plus a pursed
-  // pout that replaces the smile. The red power tie stays (the reference only defines the head).
-  // The pout has its own id so the tick can hide it while the lip-sync mouth is animating.
+  // pout that replaces the smile. The pout is scaled up ~1.35x around the mouth and inked
+  // heavier than the reference because the walker paints at 64px wide (the reference was drawn
+  // for a 360px render, where the subtle coral-on-coral pout still reads). It has its own id so
+  // the tick can hide it while the lip-sync mouth is animating.
   // Toggled by __sbSetVoicePersonaCostume("trump"); re-applied across rebuilds via __sbCurrentCostume.
   .replace("</g></svg>",
     '<g id="__sbwk_trump__" display="none">' +
-    // ── red power tie + white collar on the chest (below the mouth, between the legs) ──
-    '<path d="M 44 64 L 50 74 L 56 64 L 59.5 66 L 50 81 L 40.5 66 Z" fill="#F4F3EF"/>' +
-    '<path d="M 47 64 L 53 64 L 52 68.5 L 48 68.5 Z" fill="#C21F1F"/>' +
-    '<path d="M 48 68.5 L 52 68.5 L 54 79 L 50 82.5 L 46 79 Z" fill="#D62B2B"/>' +
-    '<path d="M 48.6 68.5 L 51.4 68.5 L 50.8 73 L 49.2 73 Z" fill="#A81818" opacity="0.5"/>' +
     // ── thin swept canopy, low on the head; bigger + draping longer down the RIGHT side ──
     '<path d="M 12 17 C 12 9 20 4 38 4 C 60 1 82 2 87 12 C 90 19 88 27 82 31 C 81 26 80 22 78 19 C 76 22 70 22 67 19 C 65 22 59 23 57 18 C 55 22 48 22 46 18 C 44 22 38 22 36 18 C 34 21 27 22 25 18 C 22 22 13 21 12 17 Z" fill="#E7BB63" stroke="#C69640" stroke-width="1" stroke-linejoin="round"/>' +
     // ── lighter thin layer swept across the top and back to the right ──
@@ -2679,10 +2676,10 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
     // ── highlight sheen following the sweep ──
     '<path d="M 18 3 C 40 0 62 1 82 10" fill="none" stroke="#FBEBBE" stroke-width="1.1" stroke-linecap="round" opacity="0.8"/>' +
     // ── pursed pout — covers the default smile (hidden by the tick while lip-syncing) ──
-    '<g id="__sbwk_trump_pout__">' +
-    '<path d="M 43 60.4 C 45 58.7 48 58.6 50 59.4 C 52 58.6 55 58.7 57 60.4 C 55.5 63.9 50 65.1 44.5 63.9 C 43.5 62.8 42.6 61.6 43 60.4 Z" fill="#C96B6B" stroke="#9E4A4A" stroke-width="0.7" stroke-linejoin="round"/>' +
-    '<path d="M 44 61.1 Q 50 62.7 56 61.1" fill="none" stroke="#7E332B" stroke-width="0.8" stroke-linecap="round"/>' +
-    '<path d="M 47 60 Q 50 59.5 53 60" fill="none" stroke="#E79A9A" stroke-width="0.7" stroke-linecap="round" opacity="0.75"/>' +
+    '<g id="__sbwk_trump_pout__" transform="translate(50 62) scale(1.35) translate(-50 -62)">' +
+    '<path d="M 43 60.4 C 45 58.7 48 58.6 50 59.4 C 52 58.6 55 58.7 57 60.4 C 55.5 63.9 50 65.1 44.5 63.9 C 43.5 62.8 42.6 61.6 43 60.4 Z" fill="#C96B6B" stroke="#7E332B" stroke-width="1" stroke-linejoin="round"/>' +
+    '<path d="M 44 61.1 Q 50 62.7 56 61.1" fill="none" stroke="#6E2A24" stroke-width="1.1" stroke-linecap="round"/>' +
+    '<path d="M 47 60 Q 50 59.5 53 60" fill="none" stroke="#E79A9A" stroke-width="0.8" stroke-linecap="round" opacity="0.85"/>' +
     '</g>' +
     '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
