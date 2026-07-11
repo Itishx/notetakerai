@@ -3207,15 +3207,25 @@ let __sbRoamPerchEl = null;              // the element he's headed to / sitting
 let __sbRoamSitting = false;
 let __sbRoamNextWander = 0;
 let __sbRoamHoldUntil = 0;               // he lingers on the bar while the intro line shows
+let __sbRoamLaunched = false;            // the one-time jump-off has fired
+let __sbRoamLaunching = false;           // mid jump-off arc
+let __sbRoamLaunchT0 = 0;
+let __sbRoamLaunchFromX = 0, __sbRoamLaunchFromY = 0, __sbRoamLaunchToX = 0, __sbRoamLaunchToY = 0;
 let __sbRoamLaneCss = "";                // saved lane inline style, restored on exit
 let __sbRoamMouseX = -9999, __sbRoamMouseY = -9999;
 const __SB_ROAM_W = 64, __SB_ROAM_H = 78;   // walker box; feet ≈ bottom
-const __SB_ROAM_MARGIN = 10;                // never let any edge of him leave the viewport
+// The mascot SVG overflows its 64x78 box (arms/legs), and dangling legs hang below when
+// sitting — so keep generous margins so no part of him ever clips the viewport edge.
+const __SB_ROAM_MARGIN_X = 30;
+const __SB_ROAM_MARGIN_TOP = 20;
+const __SB_ROAM_MARGIN_BOTTOM = 46;
 
 function __sbRoamOnMouse(e) { __sbRoamMouseX = e.clientX; __sbRoamMouseY = e.clientY; }
 // He must ALWAYS stay fully on screen — clamp the walker's top-left to the viewport.
-function __sbRoamClampX(x) { return Math.max(__SB_ROAM_MARGIN, Math.min(x, window.innerWidth - __SB_ROAM_W - __SB_ROAM_MARGIN)); }
-function __sbRoamClampY(y) { return Math.max(__SB_ROAM_MARGIN, Math.min(y, window.innerHeight - __SB_ROAM_H - __SB_ROAM_MARGIN)); }
+function __sbRoamVW() { return document.documentElement.clientWidth || window.innerWidth; }
+function __sbRoamVH() { return document.documentElement.clientHeight || window.innerHeight; }
+function __sbRoamClampX(x) { return Math.max(__SB_ROAM_MARGIN_X, Math.min(x, __sbRoamVW() - __SB_ROAM_W - __SB_ROAM_MARGIN_X)); }
+function __sbRoamClampY(y) { return Math.max(__SB_ROAM_MARGIN_TOP, Math.min(y, __sbRoamVH() - __SB_ROAM_H - __SB_ROAM_MARGIN_BOTTOM)); }
 
 // Score every visible "ledge" and return the best perch as {el, footX, topY}. A good
 // perch is a wide, stable, horizontal top edge that frames content — never the logo,
@@ -3273,7 +3283,7 @@ function __sbRoamPickNewPerch() {
     __sbRoamPerchEl = null;
     __sbRoamTX = __sbRoamClampX(window.innerWidth * (0.2 + Math.random() * 0.6) - __SB_ROAM_W / 2);
     __sbRoamTY = __sbRoamClampY(window.innerHeight * (0.3 + Math.random() * 0.5));
-    __sbRoamNextWander = performance.now() + 6000;
+    __sbRoamNextWander = performance.now() + 60000;
     __sbRoamSitting = false;
     return;
   }
@@ -3303,11 +3313,12 @@ function __sbRoamApplyPose(now, moving, sitting) {
   const eyeL = root.querySelector("#__sbwk_eye_l__");
   const eyeR = root.querySelector("#__sbwk_eye_r__");
   if (sitting) {
-    // Perched: legs dangle forward over the edge, gentle sway + look around.
-    const sway = Math.sin(t * 1.4) * 6;
+    // Perched on an edge: both legs hang straight down and swing gently TOGETHER (like a
+    // kid sitting on a wall) — never crossed. Small in-phase sway.
+    const sway = Math.sin(t * 1.3) * 5;
     root.setAttribute("transform", `translate(0 ${bob + 4}) scale(${breath})`);
-    if (legL) legL.setAttribute("transform", `rotate(${52 + sway} 44 74)`);
-    if (legR) legR.setAttribute("transform", `rotate(${46 - sway} 56 74)`);
+    if (legL) legL.setAttribute("transform", `rotate(${30 + sway} 44 74)`);
+    if (legR) legR.setAttribute("transform", `rotate(${30 + sway} 56 74)`);
   } else if (moving) {
     const ll = Math.max(0, Lp) * 5, rl = Math.max(0, Rp) * 5;
     const ls = Math.max(0, Lp) * 8, rs = Math.max(0, Rp) * 8;
@@ -3338,6 +3349,34 @@ function __sbRoamTick(now) {
     __sbRoamApplyPose(now, false, false);
     __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
     return;
+  }
+
+  // JUMP OFF THE BAR — a real arc (crouch is implied by the launch), like the show-me
+  // leap. The bar begins its slow fold-shut exactly as he leaps. Fires once.
+  if (!__sbRoamLaunched) {
+    __sbRoamLaunched = true;
+    __sbRoamPickNewPerch();                       // sets TX/TY (first ledge)
+    __sbRoamLaunchFromX = __sbRoamCX; __sbRoamLaunchFromY = __sbRoamCY;
+    __sbRoamLaunchToX = __sbRoamTX; __sbRoamLaunchToY = __sbRoamTY;
+    __sbRoamLaunching = true; __sbRoamLaunchT0 = now;
+    document.getElementById("__sb_bar__")?.classList.add("sb-bar-collapsed");   // slow close
+  }
+  if (__sbRoamLaunching) {
+    const dur = 900;
+    let pr = (now - __sbRoamLaunchT0) / dur;
+    if (pr >= 1) {
+      __sbRoamLaunching = false;
+      __sbRoamCX = __sbRoamLaunchToX; __sbRoamCY = __sbRoamLaunchToY;
+    } else {
+      __sbRoamCX = __sbRoamLaunchFromX + (__sbRoamLaunchToX - __sbRoamLaunchFromX) * pr;
+      const flatY = __sbRoamLaunchFromY + (__sbRoamLaunchToY - __sbRoamLaunchFromY) * pr;
+      __sbRoamCY = flatY - 95 * Math.sin(Math.PI * pr);    // parabolic hop
+      __sbRoamDir = (__sbRoamLaunchToX >= __sbRoamLaunchFromX) ? 1 : -1;
+      walker.style.transform = `translate(${__sbRoamClampX(__sbRoamCX)}px, ${Math.max(__SB_ROAM_MARGIN_TOP, __sbRoamCY)}px)`;
+      __sbRoamApplyPose(now, true, false);
+      __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+      return;
+    }
   }
 
   // Keep the perch anchored as the page scrolls / reflows (re-measure its live rect),
@@ -3378,7 +3417,7 @@ function __sbRoamTick(now) {
 
   // Wander: once he's been sitting a while, pick a new ledge (or amble to a random spot).
   if ((__sbRoamSitting || !__sbRoamPerchEl) && now > __sbRoamNextWander) {
-    __sbRoamNextWander = now + 9000 + Math.random() * 6000;
+    __sbRoamNextWander = now + 60000 + Math.random() * 20000;
     __sbRoamPickNewPerch();
   }
 
@@ -3404,19 +3443,17 @@ function __sbEnterRoamMode() {
   // bottom of the screen — the "Braino is nowhere" bug).
   const wkEl = document.getElementById("__sbwk_walker__");
   if (wkEl) { wkEl.style.pointerEvents = "auto"; wkEl.style.top = "0"; wkEl.style.bottom = "auto"; }
-  // Start right where the bar is (bottom center). He says his line, THEN steps off.
-  __sbRoamCX = __sbRoamClampX(window.innerWidth / 2 - __SB_ROAM_W / 2);
-  __sbRoamCY = __sbRoamClampY(window.innerHeight - 130);
+  // Start right where the bar is (bottom center). Sequence: say line → JUMP off (arc) →
+  // bar slowly folds shut → walk around. The bar does NOT close yet — he's still on it.
+  __sbRoamCX = __sbRoamClampX(__sbRoamVW() / 2 - __SB_ROAM_W / 2);
+  __sbRoamCY = Math.max(__SB_ROAM_MARGIN_TOP, __sbRoamVH() - 118);   // on the bar, low on screen
   __sbRoamStart = __sbRoamLast = performance.now();
-  __sbRoamNextWander = performance.now() + 1400;   // don't wander until he's off the bar
-  __sbRoamHoldUntil = performance.now() + 1400;     // linger while the line shows
+  __sbRoamHoldUntil = performance.now() + 1500;     // linger on the bar while the line shows
+  __sbRoamNextWander = performance.now() + 62000;
   __sbRoamPerchEl = null; __sbRoamSitting = false;
+  __sbRoamLaunched = false; __sbRoamLaunching = false;
   document.addEventListener("mousemove", __sbRoamOnMouse, true);
-  // The bar folds shut as he steps off it.
-  document.getElementById("__sb_bar__")?.classList.add("sb-bar-collapsed");
   __sbWkSay?.("Ah, I finally get to be off the bar.");
-  // After the line, pick the first ledge and stroll to it.
-  setTimeout(() => { if (__sbRoamActive) __sbRoamPickNewPerch(); }, 1400);
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
 }
 function __sbExitRoamMode() {
@@ -5274,7 +5311,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-bar-collapsed {
       transform: translateX(-50%) translateY(0) scaleX(0.01) !important;
       opacity: 0 !important; pointer-events: none !important;
-      transition: transform 0.55s cubic-bezier(0.5,0,0.2,1), opacity 0.4s ease 0.15s !important;
+      transition: transform 1.25s cubic-bezier(0.65,0,0.35,1), opacity 0.9s ease 0.35s !important;
     }
     /* Coral send-pulse — a brief ring + warm glow each time a message is sent. */
     @keyframes __sb_bar_send__ {
