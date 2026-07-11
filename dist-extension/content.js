@@ -2653,11 +2653,12 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
     '<rect x="6.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="8.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
     '<rect x="82.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="84.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
     '</g></g></svg>')
-  // Voice-persona costume (hidden until "talk like Trump"): asymmetric golden comb-over with a low
-  // side part + front flip (NOT a symmetric cap), light squinty brows, and a red power tie. Hairline
-  // sits ~y26 so the forehead shows below it; face (eyes y48, mouth y60) stays clear. This is a
-  // caricature rendition until the exact Braino Trump.html design is imported. Toggled by
-  // __sbSetVoicePersonaCostume("trump"); re-applied across rebuilds via __sbCurrentCostume.
+  // Voice-persona costume (hidden until "talk like Trump"): EXACT port of the Braino Trump
+  // standalone design (accessory "trump" in braino-char) — thin swept golden canopy sitting low
+  // on the head with a scalloped underside, draping longer down the RIGHT side, plus a pursed
+  // pout that replaces the smile. The red power tie stays (the reference only defines the head).
+  // The pout has its own id so the tick can hide it while the lip-sync mouth is animating.
+  // Toggled by __sbSetVoicePersonaCostume("trump"); re-applied across rebuilds via __sbCurrentCostume.
   .replace("</g></svg>",
     '<g id="__sbwk_trump__" display="none">' +
     // ── red power tie + white collar on the chest (below the mouth, between the legs) ──
@@ -2665,16 +2666,24 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
     '<path d="M 47 64 L 53 64 L 52 68.5 L 48 68.5 Z" fill="#C21F1F"/>' +
     '<path d="M 48 68.5 L 52 68.5 L 54 79 L 50 82.5 L 46 79 Z" fill="#D62B2B"/>' +
     '<path d="M 48.6 68.5 L 51.4 68.5 L 50.8 73 L 49.2 73 Z" fill="#A81818" opacity="0.5"/>' +
-    // ── light squinty brows just above the eyes ──
-    '<path d="M 30.5 43 Q 38 40.3 45.5 43" fill="none" stroke="#CBA544" stroke-width="2.2" stroke-linecap="round"/>' +
-    '<path d="M 54.5 43 Q 62 40.3 69.5 43" fill="none" stroke="#CBA544" stroke-width="2.2" stroke-linecap="round"/>' +
-    // ── comb-over: bold golden mass, low part on the left, big lift/flip on the right ──
-    '<path d="M 16 31 C 9 3 30 -12 54 -10 C 76 -9 91 2 88 20 C 85 12 78 10 72 12 C 81 12 85 21 80 28 C 71 15 55 12 43 18 C 35 21 25 25 16 31 Z" fill="#E4BC50" stroke="#B8912E" stroke-width="0.9"/>' +
-    '<path d="M 22 25 C 30 7 51 2 71 9 C 81 12 85 18 80 25 C 72 13 54 11 42 18 C 34 21 28 24 22 25 Z" fill="#F1D06A"/>' +
-    '<path d="M 27 22 Q 42 12 62 12.5" fill="none" stroke="#A9852A" stroke-width="1.1" stroke-linecap="round" opacity="0.7"/>' +
-    '<path d="M 24 26 Q 49 12 79 21" fill="none" stroke="#C9A23C" stroke-width="1" stroke-linecap="round" opacity="0.6"/>' +
-    '<path d="M 23 30 Q 50 17 80 27" fill="none" stroke="#C9A23C" stroke-width="1" stroke-linecap="round" opacity="0.45"/>' +
-    '<path d="M 78 11.5 C 87 10.5 91 17 86 23.5" fill="none" stroke="#E4BC50" stroke-width="3.1" stroke-linecap="round"/>' +
+    // ── thin swept canopy, low on the head; bigger + draping longer down the RIGHT side ──
+    '<path d="M 12 17 C 12 9 20 4 38 4 C 60 1 82 2 87 12 C 90 19 88 27 82 31 C 81 26 80 22 78 19 C 76 22 70 22 67 19 C 65 22 59 23 57 18 C 55 22 48 22 46 18 C 44 22 38 22 36 18 C 34 21 27 22 25 18 C 22 22 13 21 12 17 Z" fill="#E7BB63" stroke="#C69640" stroke-width="1" stroke-linejoin="round"/>' +
+    // ── lighter thin layer swept across the top and back to the right ──
+    '<path d="M 13 14 C 14 7 34 3 56 5 C 74 6 84 12 84 20 C 84 25 82 28 79 29 C 82 22 80 15 70 13 C 58 11 40 14 24 19 C 18 21 12 18 13 14 Z" fill="#F5D584" stroke="#C69640" stroke-width="0.7" stroke-linejoin="round"/>' +
+    // ── strands sweeping right and down ──
+    '<g fill="none" stroke="#D8A94C" stroke-width="0.8" stroke-linecap="round" opacity="0.85">' +
+    '<path d="M 16 11 C 36 6 60 5 82 14"/>' +
+    '<path d="M 15 15 C 34 10 56 10 81 20"/>' +
+    '<path d="M 20 6 C 42 2 64 3 84 13"/>' +
+    '</g>' +
+    // ── highlight sheen following the sweep ──
+    '<path d="M 18 3 C 40 0 62 1 82 10" fill="none" stroke="#FBEBBE" stroke-width="1.1" stroke-linecap="round" opacity="0.8"/>' +
+    // ── pursed pout — covers the default smile (hidden by the tick while lip-syncing) ──
+    '<g id="__sbwk_trump_pout__">' +
+    '<path d="M 43 60.4 C 45 58.7 48 58.6 50 59.4 C 52 58.6 55 58.7 57 60.4 C 55.5 63.9 50 65.1 44.5 63.9 C 43.5 62.8 42.6 61.6 43 60.4 Z" fill="#C96B6B" stroke="#9E4A4A" stroke-width="0.7" stroke-linejoin="round"/>' +
+    '<path d="M 44 61.1 Q 50 62.7 56 61.1" fill="none" stroke="#7E332B" stroke-width="0.8" stroke-linecap="round"/>' +
+    '<path d="M 47 60 Q 50 59.5 53 60" fill="none" stroke="#E79A9A" stroke-width="0.7" stroke-linecap="round" opacity="0.75"/>' +
+    '</g>' +
     '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
@@ -4202,12 +4211,15 @@ function __sbWkTick(now) {
   const eyeR = root.querySelector("#__sbwk_eye_r__");
   const mouthG = root.querySelector("#__sbwk_mouth__");
   const reactG = root.querySelector("#__sbwk_react__");
+  // Trump pout paints OVER the mouth slot — it must yield to reaction faces and lip-sync.
+  const trumpPout = root.querySelector("#__sbwk_trump_pout__");
 
   if (__sbWkReaction) {
     // A reaction face takes over: hide the normal eyes + mouth, show the chosen overlay.
     if (eyeL) eyeL.setAttribute("display", "none");
     if (eyeR) eyeR.setAttribute("display", "none");
     if (mouthG) mouthG.setAttribute("display", "none");
+    if (trumpPout) trumpPout.style.display = "none";
     if (reactG) reactG.setAttribute("display", "inline");
     const key = __sbWkReaction === "scared" ? "rs" : __sbWkReaction === "celebrate" ? "rc" : "rt";
     ["rs", "rc", "rt"].forEach(k => {
@@ -4272,6 +4284,7 @@ function __sbWkTick(now) {
       // would otherwise override the display ATTRIBUTE (that was the missing-mouth bug).
       if (mSmile) mSmile.style.display = "none";
       if (mTalk)  mTalk.style.display = "block";
+      if (trumpPout) trumpPout.style.display = "none";
       if (tE) { tE.setAttribute("rx", String(rx)); tE.setAttribute("ry", String(ry)); }
       if (tI) {
         if (o > 0.25) {
@@ -4284,6 +4297,7 @@ function __sbWkTick(now) {
     } else {
       if (mSmile) mSmile.style.display = "";
       if (mTalk)  mTalk.style.display = "none";
+      if (trumpPout) trumpPout.style.display = "";
     }
   }
 
