@@ -7653,20 +7653,41 @@ function __sbIsPlayingYouTubeMusic() {
 }
 
 let __sbMusicAmbientTimer = null;
-let __sbMusicAmbientOn = false;
+let __sbMusicAmbientOn = false;      // headphones + glow currently applied
+let __sbMusicAmbientArming = false;  // mid intro sequence (said the line, about to gear up)
+function __sbSetMusicGear(on) {
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) bar.classList.toggle("sb-music-ambient", on);
+  // Braino puts headphones ON while the music plays (walker + docked brain).
+  const hp = document.querySelector("#__sbwk_walker__ #__sbwk_headphones__");
+  if (hp) hp.setAttribute("display", on ? "inline" : "none");
+  document.getElementById("__sb_brain_btn__")?.classList.toggle("sb-headphones", on);
+}
 function __sbApplyMusicAmbient(on) {
   const bar = document.getElementById("__sb_bar__");
   if (!bar) return;
-  // Never glow while Braino is actually busy (agent working) — that has its own state.
+  // Never fire while Braino is actually busy (agent working) — that has its own state.
   const suppress = bar.classList.contains("sb-agent-busy");
   const want = on && !suppress;
   if (want === __sbMusicAmbientOn) return;
-  __sbMusicAmbientOn = want;
-  bar.classList.toggle("sb-music-ambient", want);
-  // Braino puts headphones ON while the music plays (walker + docked brain).
-  const hp = document.querySelector("#__sbwk_walker__ #__sbwk_headphones__");
-  if (hp) hp.setAttribute("display", want ? "inline" : "none");
-  document.getElementById("__sb_brain_btn__")?.classList.toggle("sb-headphones", want);
+  if (want) {
+    // INTERACTIVE intro: he NOTICES first (speech bubble above his head, same design as
+    // the auth line), THEN puts the headphones on + the bar glows — beat, then gear.
+    if (__sbMusicAmbientArming) return;
+    __sbMusicAmbientArming = true;
+    __sbWkSay("Oh, listening to music? Let me put my headphones on. 🎧");
+    setTimeout(() => {
+      __sbMusicAmbientArming = false;
+      // Re-check it's still music + still idle before committing (song may have stopped).
+      if (!__sbIsPlayingYouTubeMusic() || document.getElementById("__sb_bar__")?.classList.contains("sb-agent-busy")) return;
+      __sbMusicAmbientOn = true;
+      __sbSetMusicGear(true);
+    }, 1250);
+  } else {
+    __sbMusicAmbientArming = false;
+    __sbMusicAmbientOn = false;
+    __sbSetMusicGear(false);
+  }
 }
 function __sbStartMusicAmbientWatch() {
   if (__sbMusicAmbientTimer) return;
