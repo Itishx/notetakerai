@@ -3196,6 +3196,7 @@ function __sbSyncWalkerLane() {
 // rects give exact coordinates; a scorer picks a ledge that frames content
 // instead of obstructing it. Toggle: Shift×2. Seeds teach mode (directed roam).
 // ════════════════════════════════════════════════════════════════════════════
+const __SB_ROAM_ENABLED = false;   // Roam (Shift×2) is parked — flip to true to re-enable
 let __sbRoamActive = false;
 let __sbRoamRaf = null;
 let __sbRoamLast = 0;
@@ -7075,10 +7076,11 @@ function __sbBuildBrainUI() {
       }
       return;
     }
-    // Double-tap Shift → toggle Roam mode (Braino wanders the screen and perches on real
-    // page elements). Free chord — Ctrl×2 = voice, Alt×2 = Jarvis, Shift×2 = roam.
+    // Double-tap Shift → Roam mode. PARKED for now: the perch/off-screen behaviour needs a
+    // rethink, so the trigger is disabled (set __SB_ROAM_ENABLED = true to bring it back).
+    // The code stays in place; it just doesn't activate.
     if (e.key === "Shift") {
-      if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (__SB_ROAM_ENABLED && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const now = Date.now();
         if (now - __sbLastShiftTap < 400) {
           __sbLastShiftTap = 0;
@@ -14389,11 +14391,12 @@ function __sbDetectLanguageRequest(text) {
     urdu: { code: "ur", name: "Urdu" }, bengali: { code: "bn", name: "Bengali" },
     tamil: { code: "ta", name: "Tamil" }, telugu: { code: "te", name: "Telugu" },
   };
+  // ONLY an explicit command verb switches ("speak/reply/switch ... in/to Hindi"). The old
+  // loose "...ends in 'in <language>'" fallback matched things like "in a Chinese restaurant"
+  // and was a false-positive machine — removed.
   const lower = t.toLowerCase();
   const m = lower.match(/\b(?:speak|talk|say|reply|respond|answer|converse|switch)\b[^.?!]*?\b(?:in|to)\s+([a-z]+)/);
   if (m && names[m[1]]) return names[m[1]];
-  const m2 = lower.match(/\bin\s+([a-z]+)\s*(?:please|now)?[.?!]?$/);
-  if (m2 && names[m2[1]]) return names[m2[1]];
   return null;
 }
 
@@ -16339,16 +16342,11 @@ function __sbHandleRtEvent(ev) {
       return;
     }
 
-    // Ask-before-switching: if a clear non-English signal shows up while we're still in English,
-    // confirm in English first instead of silently replying in that language.
-    if (!__sbActiveLanguage) {
-      const detected = __sbDetectLanguageRequest(transcript);
-      if (detected) {
-        __sbPendingLanguageSwitch = { lang: detected };
-        void __sbSpeakWithPreferredVoice(`That sounded like ${detected.name}. Want me to switch to ${detected.name}, or keep speaking English?`, "realtime");
-        return;
-      }
-    }
+    // NOTE: the old "that sounded like <language>, want to switch?" auto-detect is REMOVED
+    // from voice. With multiple people talking, cross-talk got mis-transcribed and Braino
+    // kept asking to switch languages ("sounds like Chinese") — it only ever misfired in
+    // front of people. Voice is hard-locked to English (see the language-policy instruction
+    // + language:"en" transcription). No auto-switching, no announcements.
 
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       const turnToken = __sbClaimVoiceTurnToken();   // reuse the speculative token if one is live
