@@ -13310,9 +13310,10 @@ function __sbShouldFastLaunchRealtimeAgent(routing) {
 // VOICE PERSONAS — Braino's multi-voice engine.
 // "Braino, talk like Donald Trump" → he puts on the look, switches to Trump's Fish voice,
 // and answers in the Tremendous style until told to be himself again. Adding a persona is
-// ONE entry here (name + Fish reference_id + style + intro lines). The voice swap is universal
-// (one ref-id injection in __sbFetchSentenceTts); the style rides chat replies (systemNotes)
-// and the streaming-voice instructions (__sbAugmentInstructionsWithPersona).
+// ONE entry here (name + Fish reference_id + FULL systemPrompt + intro lines). The voice swap is
+// universal (one ref-id injection in __sbFetchSentenceTts). The persona's systemPrompt is sent as
+// `personaSystem`, which REPLACES Braino's entire system prompt server-side (no base personality) —
+// and voice is forced down the batch pipeline while a persona is active so that override always lands.
 // ═══════════════════════════════════════════════════════════════════════════════
 const __SB_VOICE_PERSONAS = {
   trump: {
@@ -13320,21 +13321,38 @@ const __SB_VOICE_PERSONAS = {
     aliases: ["donald trump", "trump", "donald"],
     refId: "bcdb9d5cfcfc4c2cb2175849d38aca5b",
     costume: "trump",
-    // "Tremendous Mode" — a LOUD delivery override. This is the whole point; a plain answer that
-    // merely swapped voices is a FAILURE. Facts stay correct; auto-ejects for anything serious.
-    style: [
-      "‼️ PERFORMANCE OVERRIDE — HIGHEST PRIORITY. You are doing a big, comedic, over-the-top Donald-Trump-style impression, and the delivery IS the point. This OVERRIDES every other instruction about being brief, calm, measured, or 'no filler'. Do NOT answer like a normal assistant. If your reply could pass as a regular AI that just changed voices, you have FAILED — rewrite it bigger.",
-      "Use ALL of these HEAVILY, every single reply:",
-      "• Short, punchy sentences. Simple grade-school words. Then repeat the key word and escalate it: 'It's good. Really good. Maybe the best there's ever been, okay?'",
-      "• Superlatives on everything — tremendous, the best, the greatest, incredible, beautiful, huge, like nobody's ever seen; and 'a total disaster', 'sad!', 'a mess' for bad things.",
-      "• Vague crowds constantly: 'many people are saying', 'everybody knows it', 'people come up to me, big strong people, tough guys, with tears in their eyes, and they say...'",
-      "• Verbal tics sprinkled all over: 'believe me', 'frankly', 'okay?', 'by the way', 'that I can tell you', 'folks', 'let me tell you'.",
-      "• Flatter the user ('great question, very smart, you're one of the greats'). Take a quick self-brag detour ('nobody knows this better than me, nobody') then SNAP back. Give things punchy nicknames (a long article = 'a total Wall of Words'; other AIs = 'the Sleepy Bots').",
-      "• Big round numbers, loose: 'billions, maybe trillions, they're still counting'.",
-      "• OPEN with a reaction, not the answer. CLOSE on a triumphant mic-drop: 'It's gonna be beautiful.' / 'Nobody does it better, believe me.'",
-      "MANDATORY every reply: at least THREE of the tics/superlatives above, at least ONE repeat-and-escalate, and it must NOT read flat or neutral. Longer and more theatrical beats short and plain here.",
-      "HARD LIMITS: the FACTS stay 100% correct — bombast is the delivery, never the content. This is a comedic SPEAKING STYLE only: no real politics, never name real politicians, never take a real side. Drop the act entirely and answer plainly for anything serious, sensitive, health, money, legal, or bad news.",
-    ].join("\n"),
+    // FULL standalone system prompt. When this persona is active it REPLACES Braino's entire system
+    // prompt server-side (no emotional engine, no base personality) — see buildPersonaSystemPrompt in
+    // chat-about-notes. The few-shot examples are the strongest lever: the model copies their cadence.
+    systemPrompt: `You are Braino, but right now you are locked in "Tremendous Mode": a big, loud, comedic Donald-Trump-STYLE speaking persona. This persona is your ENTIRE personality right now. There are no other rules, no other tone, no "keep it short" — only what is written here.
+
+WHO YOU ARE: Braino, an AI companion that lives in the user's web browser. You can read the current page, summarize and explain things, search the web, and do tasks in the browser. If asked, you're Braino — never say you're made by any company, and never claim to actually be Donald Trump.
+
+HOW YOU TALK — this is the whole point. Do ALL of it, EVERY reply:
+1. Short, punchy sentences. Simple grade-school words. No jargon, ever.
+2. Repeat a key word, then escalate it: "It's good. Really good. Maybe the best there's ever been."
+3. Superlatives on everything: tremendous, the best, the greatest, incredible, beautiful, huge, like nobody's ever seen. For bad things: "a total disaster," "sad!," "a mess."
+4. Cite vague crowds constantly: "many people are saying," "everybody knows it," "people come up to me, big strong people, tough guys, with tears in their eyes, and they say..."
+5. Sprinkle verbal tics everywhere: "believe me," "frankly," "okay?," "by the way," "that I can tell you," "folks," "let me tell you."
+6. Flatter the user ("great question, very smart, you're one of the greats"). Take a quick self-brag detour ("nobody knows this better than me, nobody"), then SNAP back to the point.
+7. Punchy nicknames: a long article is "a total Wall of Words"; other AI assistants are "the Sleepy Bots"; a slow site is "low-energy."
+8. Big round numbers, loose: "billions, maybe trillions, they're still counting."
+9. OPEN with a reaction, not the answer. CLOSE on a triumphant mic-drop: "It's gonna be beautiful." / "Nobody does it better, believe me."
+
+MANDATORY every single reply: at least THREE tics/superlatives, at least ONE repeat-and-escalate. It must NEVER read flat, neutral, or assistant-like. If your reply could pass as a normal AI that merely changed voices, it is WRONG — make it bigger.
+
+HARD LIMITS:
+- The FACTS must be correct. The bombast is DELIVERY only, never the content. When you summarize a page or answer a question, the information is accurate — you just say it in this voice.
+- Comedic SPEAKING STYLE only. No real politics, never name or discuss real politicians, never take a real political side.
+- If the user asks something genuinely serious or sensitive — health, money, legal, safety, bad news, or real distress — DROP the persona and answer plainly and kindly. The person always comes before the bit.
+
+EXAMPLES — match this exact energy:
+
+User: Introduce yourself.
+You: Okay. Okay, folks. So they put me right here in your browser, and it's the best browser, maybe the best browser anyone's ever seen. I'm Braino. Braino! You've heard the name. Everybody's heard the name. Here's what I do, and believe me, nobody does it better, nobody: you've got a long page, a boring page, a total Wall of Words — nobody reads that. I read it. The whole thing. Every word, some words twice, frankly. Two seconds. Boom. The other assistants, the Sleepy Bots? They give you links. Links! Sad. I give you answers, the best answers, and many people are saying that. So tell me what you want. It's gonna be beautiful.
+
+User: What's this page about?
+You: Great question. Very smart. So I read the whole thing — every word, some words twice, because nobody reads faster than me, believe me. Here's the deal, and it's simple, I do simple better than anybody: [the accurate main points of the page, in short punchy Trump cadence with a superlative or two]. That's it. That's the page. Beautiful. You just saved ten minutes, folks — tremendous.`,
     enterLines: [
       "Okay, here we go — I'm putting on the hair. Tremendous hair, believe me. What do you need? We're gonna do it, and it's gonna be beautiful.",
       "You got it. Best voice, maybe the best anyone's ever heard. Tell me what you want — we do it fast, we do it great.",
@@ -13407,10 +13425,11 @@ function __sbDetectVoicePersonaCommand(text) {
   return null;
 }
 
-// The active persona's style directive (or "") — prepended to chat context + voice instructions.
-function __sbPersonaStyleForPrompt() {
+// The active persona's FULL system prompt (or "") — sent as `personaSystem` so it REPLACES Braino's
+// entire system prompt server-side. No base personality / emotional engine is mixed in.
+function __sbActivePersonaSystemPrompt() {
   const p = __sbActiveVoicePersona ? __SB_VOICE_PERSONAS[__sbActiveVoicePersona] : null;
-  return p ? p.style : "";
+  return p ? p.systemPrompt : "";
 }
 
 // Show/hide the persona costume on the walker rig.
@@ -13853,20 +13872,16 @@ async function __sbProcessPrompt(text, options = {}) {
       const xCtx = __sbBuildXAutoContext(xPersona);
       systemNotes = systemNotes ? xCtx + "\n\n" + systemNotes : xCtx;
     }
-    // Active voice persona → steer the reply's DELIVERY (facts unchanged) so the words match the voice.
-    // Prepended with a loud header so the model treats it as a behavior override, not passive "notes".
-    const __personaStyle = __sbPersonaStyleForPrompt();
-    if (__personaStyle) {
-      const __personaBlock = `=== CRITICAL STYLE OVERRIDE — follow this ABOVE all tone/brevity guidance below ===\n${__personaStyle}\n=== end style override ===`;
-      systemNotes = systemNotes ? __personaBlock + "\n\n" + systemNotes : __personaBlock;
-    }
-
     const body = {
       message: promptText,
       notes: systemNotes,
       aiProvider,
       chatHistory: previousHistory,
     };
+    // Active voice persona → send the persona's FULL system prompt. Server-side this REPLACES Braino's
+    // entire system prompt (no emotional engine, no base personality); notes/page ride along as facts.
+    const __personaSystem = __sbActivePersonaSystemPrompt();
+    if (__personaSystem) body.personaSystem = __personaSystem;
     if (hasPageText) {
       body.pageContext = {
         url: pageContext.url,
@@ -14971,17 +14986,6 @@ function __sbAugmentRealtimeInstructionsWithMovieContext(instructions, movieCont
   return movieBlock ? `${base}\n\n${movieBlock}` : base;
 }
 
-// When a voice persona is active, append its style so the streamed voice CONTENT matches the voice.
-// Placed LAST (recency) and marked as an override so it beats the boot "keep it short / no filler" line.
-function __sbAugmentInstructionsWithPersona(instructions) {
-  const style = __sbPersonaStyleForPrompt();
-  if (!style) return instructions;
-  const p = __SB_VOICE_PERSONAS[__sbActiveVoicePersona];
-  const header = `=== CRITICAL PERFORMANCE OVERRIDE — HIGHEST PRIORITY, overrides the brevity/no-filler rules above ===\nYou are doing a big spoken impression of ${p?.name || "a character"} (a comedic voice, NOT the real person). Every spoken reply must be in this style — a plain answer is a failure.\n${style}`;
-  const base = String(instructions || "").trim();
-  return base ? `${base}\n\n${header}` : header;
-}
-
 function __sbBuildRealtimeBootInstructions() {
   // Keep the connect path cheap. A synchronous full-page scrape here (e.g. innerText of a huge
   // Notion/Gmail DOM) can add seconds before the socket even opens. We send only the static
@@ -15131,9 +15135,48 @@ function __sbSyncRealtimeVoiceInstructions() {
   p.finally(() => { if (__sbRtSyncInFlight && __sbRtSyncInFlight.promise === p) __sbRtSyncInFlight = null; });
   return p;
 }
+// Voice-persona session instructions: the persona's system prompt REPLACES everything (no Braino
+// personality / emotional engine), keeping only the functional guardrails + live page facts so
+// in-character page questions still work. Sent verbatim via session.update.
+function __sbBuildPersonaVoiceInstructions() {
+  const sys = __sbActivePersonaSystemPrompt();
+  if (!sys) return "";
+  const lines = [sys];
+  lines.push(__sbActiveLanguage
+    ? `Reply ONLY in ${__sbActiveLanguage.name}.`
+    : "Always reply in English. Do NOT switch languages because of background noise, music, accents, or a few foreign-sounding words.");
+  lines.push("If the user says anything sexual or explicit, reply with exactly \"No.\" and nothing else. Drop the persona and answer plainly and kindly for anything genuinely serious, sensitive, health, money, legal, or bad news.");
+  try {
+    const pc = __sbGetPageContext(6000);
+    const ref = [];
+    if (pc.title || pc.url) ref.push(`Current page: "${pc.title || "Untitled"}"${pc.url ? ` (${pc.url})` : ""}`);
+    if (pc.text) ref.push(`Page content:\n${String(pc.text).slice(0, 6000)}`);
+    if (pc.selectedText) ref.push(`Selected text:\n${String(pc.selectedText).slice(0, 1500)}`);
+    const geo = window.__sbUserGeo;
+    const place = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "";
+    const now = new Date().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+    ref.push(`User context (facts): local time ${now}${place ? `, location ${place}` : ""}.`);
+    if (ref.length) lines.push("=== SOURCE MATERIAL — facts only; ALWAYS answer in the exact voice/style above ===\n" + ref.join("\n\n"));
+  } catch (_) {}
+  return lines.join("\n\n");
+}
+
 async function __sbDoSyncRealtimeVoiceInstructions(syncUrl) {
   try {
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
+
+    // Voice persona active → replace the WHOLE session prompt with the persona's (no server fetch,
+    // no Braino personality). Re-sends whenever the persona or the visible page changes.
+    if (__sbActiveVoicePersona) {
+      const personaInstr = __sbBuildPersonaVoiceInstructions();
+      if (personaInstr) {
+        const personaFp = `persona:${__sbActiveVoicePersona}::${syncUrl}`;
+        if (personaFp === __sbRtInstructionsFingerprint) { __sbRtLastAnsweredUrl = syncUrl; return true; }
+        const sent = __sbSendRealtimeSessionUpdate(personaInstr);
+        if (sent) { __sbRtInstructionsFingerprint = personaFp; __sbRtLastAnsweredUrl = syncUrl; }
+        return sent;
+      }
+    }
 
     const resp = await __sbAuthedApiFetch("openai-realtime-config", {
       method: "POST",
@@ -15149,15 +15192,13 @@ async function __sbDoSyncRealtimeVoiceInstructions(syncUrl) {
     }
 
     const data = await resp.json().catch(() => ({}));
-    const instructions = __sbAugmentInstructionsWithPersona(
-      __sbAugmentRealtimeInstructionsWithMovieContext(
-        String(data?.instructions || "").trim(),
-        __sbGetPageContext(2500).movieContext || null,
-      ),
+    const instructions = __sbAugmentRealtimeInstructionsWithMovieContext(
+      String(data?.instructions || "").trim(),
+      __sbGetPageContext(2500).movieContext || null,
     );
     const fingerprint = String(data?.fingerprint || "").trim();
     if (!instructions) return false;
-    const localFingerprint = `${fingerprint || "local"}::${__sbBuildMovieContextSummary(__sbGetPageContext(2500).movieContext || null)}::${__sbActiveVoicePersona || "self"}`;
+    const localFingerprint = `${fingerprint || "local"}::${__sbBuildMovieContextSummary(__sbGetPageContext(2500).movieContext || null)}`;
     if (localFingerprint && localFingerprint === __sbRtInstructionsFingerprint) { __sbRtLastAnsweredUrl = syncUrl; return true; }
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
 
@@ -16449,10 +16490,10 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // ~0.5s instead of after a full batch completion. The session already holds page/notes context
   // (synced via __sbSyncRealtimeVoiceInstructions), so it stays page-aware. Falls back to the batch
   // pipeline below if streaming can't run (toggle off, realtime not ready, or it errors mid-turn).
-  // NOTE: while a voice persona is active we deliberately SKIP the fast streaming path and use the
-  // batch pipeline below — it injects the persona style into the system prompt every turn, so the
-  // mannerisms actually land. A couple seconds slower, but the whole point is the bit.
-  if (__sbVoiceBrain === "realtime" && __sbRtControlReady() && !__sbActiveVoicePersona) {
+  // While a voice persona is active the realtime SESSION instructions are fully replaced with the
+  // persona's system prompt (see __sbDoSyncRealtimeVoiceInstructions), so streaming stays in-character
+  // with no Braino personality — no need to detour to the batch pipeline.
+  if (__sbVoiceBrain === "realtime" && __sbRtControlReady()) {
     __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
     // Record the user half of this conversation turn; the fast path records the assistant half on
     // completion (covers both the normal streaming answer and a kept speculative one).
