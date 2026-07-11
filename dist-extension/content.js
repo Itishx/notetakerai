@@ -2653,14 +2653,28 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
     '<rect x="6.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="8.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
     '<rect x="82.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="84.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
     '</g></g></svg>')
-  // Voice-persona costume: golden comb-over (hidden until "talk like Trump"). Sits on the crown
-  // (y ≈ -7 → 32), well clear of the eyes (y 48). Toggled by __sbSetVoicePersonaCostume("trump").
+  // Voice-persona costume (hidden until "talk like Trump"): asymmetric golden comb-over with a low
+  // side part + front flip (NOT a symmetric cap), light squinty brows, and a red power tie. Hairline
+  // sits ~y26 so the forehead shows below it; face (eyes y48, mouth y60) stays clear. This is a
+  // caricature rendition until the exact Braino Trump.html design is imported. Toggled by
+  // __sbSetVoicePersonaCostume("trump"); re-applied across rebuilds via __sbCurrentCostume.
   .replace("</g></svg>",
     '<g id="__sbwk_trump__" display="none">' +
-    '<path d="M 18 32 C 12 6 28 -8 50 -7 C 72 -8 88 7 82 32 C 77 19 67 12 57 14 C 66 8 58 1 50 2 C 42 1 34 8 43 14 C 33 12 23 19 18 32 Z" fill="#E8C45E" stroke="#C69A34" stroke-width="0.8"/>' +
-    '<path d="M 20 30 C 24 12 42 4 62 8 C 78 11 84 20 79 28 C 71 17 56 14 45 19 C 36 23 28 28 20 30 Z" fill="#F1D477"/>' +
-    '<path d="M 24 27 Q 46 12 76 22" fill="none" stroke="#D3AC44" stroke-width="1" stroke-linecap="round" opacity="0.65"/>' +
-    '<path d="M 23 31 Q 48 18 78 27" fill="none" stroke="#D3AC44" stroke-width="1" stroke-linecap="round" opacity="0.5"/>' +
+    // ── red power tie + white collar on the chest (below the mouth, between the legs) ──
+    '<path d="M 44 64 L 50 74 L 56 64 L 59.5 66 L 50 81 L 40.5 66 Z" fill="#F4F3EF"/>' +
+    '<path d="M 47 64 L 53 64 L 52 68.5 L 48 68.5 Z" fill="#C21F1F"/>' +
+    '<path d="M 48 68.5 L 52 68.5 L 54 79 L 50 82.5 L 46 79 Z" fill="#D62B2B"/>' +
+    '<path d="M 48.6 68.5 L 51.4 68.5 L 50.8 73 L 49.2 73 Z" fill="#A81818" opacity="0.5"/>' +
+    // ── light squinty brows just above the eyes ──
+    '<path d="M 30.5 43 Q 38 40.3 45.5 43" fill="none" stroke="#CBA544" stroke-width="2.2" stroke-linecap="round"/>' +
+    '<path d="M 54.5 43 Q 62 40.3 69.5 43" fill="none" stroke="#CBA544" stroke-width="2.2" stroke-linecap="round"/>' +
+    // ── comb-over: bold golden mass, low part on the left, big lift/flip on the right ──
+    '<path d="M 16 31 C 9 3 30 -12 54 -10 C 76 -9 91 2 88 20 C 85 12 78 10 72 12 C 81 12 85 21 80 28 C 71 15 55 12 43 18 C 35 21 25 25 16 31 Z" fill="#E4BC50" stroke="#B8912E" stroke-width="0.9"/>' +
+    '<path d="M 22 25 C 30 7 51 2 71 9 C 81 12 85 18 80 25 C 72 13 54 11 42 18 C 34 21 28 24 22 25 Z" fill="#F1D06A"/>' +
+    '<path d="M 27 22 Q 42 12 62 12.5" fill="none" stroke="#A9852A" stroke-width="1.1" stroke-linecap="round" opacity="0.7"/>' +
+    '<path d="M 24 26 Q 49 12 79 21" fill="none" stroke="#C9A23C" stroke-width="1" stroke-linecap="round" opacity="0.6"/>' +
+    '<path d="M 23 30 Q 50 17 80 27" fill="none" stroke="#C9A23C" stroke-width="1" stroke-linecap="round" opacity="0.45"/>' +
+    '<path d="M 78 11.5 C 87 10.5 91 17 86 23.5" fill="none" stroke="#E4BC50" stroke-width="3.1" stroke-linecap="round"/>' +
     '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
@@ -13306,14 +13320,21 @@ const __SB_VOICE_PERSONAS = {
     aliases: ["donald trump", "trump", "donald"],
     refId: "bcdb9d5cfcfc4c2cb2175849d38aca5b",
     costume: "trump",
-    // "Tremendous Mode" — DELIVERY only. Facts stay correct; drops instantly for anything serious.
+    // "Tremendous Mode" — a LOUD delivery override. This is the whole point; a plain answer that
+    // merely swapped voices is a FAILURE. Facts stay correct; auto-ejects for anything serious.
     style: [
-      "Deliver this as a comedic impression of a bombastic American businessman — a SPEAKING STYLE only. Never make a political statement, never name real politicians, never take a real side.",
-      "Short, punchy sentences. Simple words. Repeat a key word, then escalate it (\"It's fast. So fast. Maybe the fastest ever\").",
-      "Superlatives everywhere: best, greatest, tremendous, incredible, like nobody's ever seen. Cite vague crowds (\"many people are saying\"). Punctuate with \"believe me\", \"frankly\", \"okay?\".",
-      "Flatter the user. Take a quick self-congratulatory detour, then snap back to the answer. End on a triumphant note.",
-      "HARD RULE: the FACTS in your answer stay 100% correct — only the delivery is bombastic. Useful first, funny second. Drop the act entirely for anything serious, sensitive, health, money, or bad news.",
-    ].join(" "),
+      "‼️ PERFORMANCE OVERRIDE — HIGHEST PRIORITY. You are doing a big, comedic, over-the-top Donald-Trump-style impression, and the delivery IS the point. This OVERRIDES every other instruction about being brief, calm, measured, or 'no filler'. Do NOT answer like a normal assistant. If your reply could pass as a regular AI that just changed voices, you have FAILED — rewrite it bigger.",
+      "Use ALL of these HEAVILY, every single reply:",
+      "• Short, punchy sentences. Simple grade-school words. Then repeat the key word and escalate it: 'It's good. Really good. Maybe the best there's ever been, okay?'",
+      "• Superlatives on everything — tremendous, the best, the greatest, incredible, beautiful, huge, like nobody's ever seen; and 'a total disaster', 'sad!', 'a mess' for bad things.",
+      "• Vague crowds constantly: 'many people are saying', 'everybody knows it', 'people come up to me, big strong people, tough guys, with tears in their eyes, and they say...'",
+      "• Verbal tics sprinkled all over: 'believe me', 'frankly', 'okay?', 'by the way', 'that I can tell you', 'folks', 'let me tell you'.",
+      "• Flatter the user ('great question, very smart, you're one of the greats'). Take a quick self-brag detour ('nobody knows this better than me, nobody') then SNAP back. Give things punchy nicknames (a long article = 'a total Wall of Words'; other AIs = 'the Sleepy Bots').",
+      "• Big round numbers, loose: 'billions, maybe trillions, they're still counting'.",
+      "• OPEN with a reaction, not the answer. CLOSE on a triumphant mic-drop: 'It's gonna be beautiful.' / 'Nobody does it better, believe me.'",
+      "MANDATORY every reply: at least THREE of the tics/superlatives above, at least ONE repeat-and-escalate, and it must NOT read flat or neutral. Longer and more theatrical beats short and plain here.",
+      "HARD LIMITS: the FACTS stay 100% correct — bombast is the delivery, never the content. This is a comedic SPEAKING STYLE only: no real politics, never name real politicians, never take a real side. Drop the act entirely and answer plainly for anything serious, sensitive, health, money, legal, or bad news.",
+    ].join("\n"),
     enterLines: [
       "Okay, here we go — I'm putting on the hair. Tremendous hair, believe me. What do you need? We're gonna do it, and it's gonna be beautiful.",
       "You got it. Best voice, maybe the best anyone's ever heard. Tell me what you want — we do it fast, we do it great.",
@@ -13833,8 +13854,12 @@ async function __sbProcessPrompt(text, options = {}) {
       systemNotes = systemNotes ? xCtx + "\n\n" + systemNotes : xCtx;
     }
     // Active voice persona → steer the reply's DELIVERY (facts unchanged) so the words match the voice.
+    // Prepended with a loud header so the model treats it as a behavior override, not passive "notes".
     const __personaStyle = __sbPersonaStyleForPrompt();
-    if (__personaStyle) systemNotes = systemNotes ? __personaStyle + "\n\n" + systemNotes : __personaStyle;
+    if (__personaStyle) {
+      const __personaBlock = `=== CRITICAL STYLE OVERRIDE — follow this ABOVE all tone/brevity guidance below ===\n${__personaStyle}\n=== end style override ===`;
+      systemNotes = systemNotes ? __personaBlock + "\n\n" + systemNotes : __personaBlock;
+    }
 
     const body = {
       message: promptText,
@@ -14947,11 +14972,12 @@ function __sbAugmentRealtimeInstructionsWithMovieContext(instructions, movieCont
 }
 
 // When a voice persona is active, append its style so the streamed voice CONTENT matches the voice.
+// Placed LAST (recency) and marked as an override so it beats the boot "keep it short / no filler" line.
 function __sbAugmentInstructionsWithPersona(instructions) {
   const style = __sbPersonaStyleForPrompt();
   if (!style) return instructions;
   const p = __SB_VOICE_PERSONAS[__sbActiveVoicePersona];
-  const header = `PERFORMANCE MODE — you are doing a spoken impression of ${p?.name || "a character"} (a comedic voice, NOT the real person). ${style}`;
+  const header = `=== CRITICAL PERFORMANCE OVERRIDE — HIGHEST PRIORITY, overrides the brevity/no-filler rules above ===\nYou are doing a big spoken impression of ${p?.name || "a character"} (a comedic voice, NOT the real person). Every spoken reply must be in this style — a plain answer is a failure.\n${style}`;
   const base = String(instructions || "").trim();
   return base ? `${base}\n\n${header}` : header;
 }
@@ -15705,6 +15731,9 @@ function __sbClaimVoiceTurnToken() {
 // flight, or the toggle is off, this no-ops. Marks the timeline so the logs show keep/cancel.
 async function __sbStartSpeculativeAnswer() {
   if (!__sbSpeculativeReply || !__sbRtControlReady() || __sbSpeculativeActive) return;
+  // While a voice persona is active, DON'T speak a speculative answer from raw audio — it would
+  // skip the persona style injection and come out plain. Let the batch pipeline handle it in-character.
+  if (__sbActiveVoicePersona) return;
   if (__sbHasActiveRealtimeResponse() || __sbVoicePendingReply) return;
   // Think-first gate: if the partial transcript already reads like a browser ACTION
   // (open / play / search / send / book ...), do NOT speak a speculative reply. Let the
@@ -16420,7 +16449,10 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // ~0.5s instead of after a full batch completion. The session already holds page/notes context
   // (synced via __sbSyncRealtimeVoiceInstructions), so it stays page-aware. Falls back to the batch
   // pipeline below if streaming can't run (toggle off, realtime not ready, or it errors mid-turn).
-  if (__sbVoiceBrain === "realtime" && __sbRtControlReady()) {
+  // NOTE: while a voice persona is active we deliberately SKIP the fast streaming path and use the
+  // batch pipeline below — it injects the persona style into the system prompt every turn, so the
+  // mannerisms actually land. A couple seconds slower, but the whole point is the bit.
+  if (__sbVoiceBrain === "realtime" && __sbRtControlReady() && !__sbActiveVoicePersona) {
     __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
     // Record the user half of this conversation turn; the fast path records the assistant half on
     // completion (covers both the normal streaming answer and a kept speculative one).
