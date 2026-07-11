@@ -11,6 +11,7 @@ import BrainoWalker from "@/components/BrainoWalker";
 import PreLaunch from "./pages/PreLaunch.tsx";
 import Home from "./pages/Home.tsx";
 import LaunchTeaser from "./pages/LaunchTeaser.tsx";
+import LaunchIntro from "./pages/LaunchIntro.tsx";
 import WaitlistDashboard from "./pages/WaitlistDashboard.tsx";
 import Index from "./pages/Index.tsx";
 import UseCases from "./pages/UseCases.tsx";
@@ -61,6 +62,9 @@ function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashD
       <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainoWalker />}</div>
       <Routes>
         <Route path="/" element={<Home />} />
+        {/* Launch intro film — previewable now at /intro. On launch day, point "/" here
+            (or a gate that shows it once, then Home). See LaunchIntro.tsx header. */}
+        <Route path="/intro" element={<LaunchIntro />} />
         <Route path="/prelaunch" element={<PreLaunch />} />
         <Route path="/home-classic" element={<Index />} />
         <Route path="/teaser" element={<LaunchTeaser />} />
