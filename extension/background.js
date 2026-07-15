@@ -5050,6 +5050,11 @@ async function bgPushSpotifyPlaybackState(tabId, base = {}, options = {}) {
 function bgParseAdapterTask(task, siteContext, connectorHint) {
   const raw = String(task || "").trim();
   const text = raw.toLowerCase();
+  const assistantStrippedRaw = raw
+    .replace(/^\s*(?:(?:hey|hi|yo|okay|ok)\s+)?braino[:,]?\s*/i, "")
+    .replace(/^\s*(?:can|could|would)\s+you\s+(?:please\s+)?/i, "")
+    .replace(/^\s*please\s+/i, "")
+    .trim() || raw;
   const currentSite = siteContext?.site || "generic";
   const normalizedConnector = bgNormalizeConnectorHint(connectorHint) || "auto";
   const explicitSpotifyMention = /\bspotify\b/.test(text);
@@ -5060,7 +5065,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     currentSite === "gmail" ||
     normalizedConnector === "gmail" ||
     /\bgmail\b|\bemail\b|\bmail\b/.test(text);
-  const gmailShouldSend = /^\s*(?:can you\s+)?(?:please\s+)?send\b/i.test(raw);
+  const gmailShouldSend = /^\s*send\b/i.test(assistantStrippedRaw);
   const wantsGoogleDrive =
     currentSite === "google-drive" ||
     normalizedConnector === "google-drive" ||
@@ -5199,7 +5204,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     }
   }
 
-  const sendEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:about|subject)\s+(.+?)\s+(?:saying|that says|body)\s+(.+)$/i);
+  const sendEmailMatch = assistantStrippedRaw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:about|subject|with subject)\s+(.+?)\s+(?:saying|that says|with message|body|and body|and saying)\s+(.+)$/i);
   if (wantsGmail && sendEmailMatch) {
     return {
       adapter: "gmail",
@@ -5210,7 +5215,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const sendBodyNoSubjectMatch = raw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message|body)\s+(.+)$/i);
+  const sendBodyNoSubjectMatch = assistantStrippedRaw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message|body|and say|telling them|tell them)\s+(.+)$/i);
   if (wantsGmail && sendBodyNoSubjectMatch) {
     return {
       adapter: "gmail",
@@ -5221,7 +5226,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const namedEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(.+?)\s+an?\s+email(?:\s+(?:about|subject)\s+(.+?))?(?:\s+(?:saying|that says|with message|body)\s+(.+))?$/i);
+  const namedEmailMatch = assistantStrippedRaw.match(/(?:send|compose|draft|write)\s+(.+?)\s+an?\s+email(?:\s+(?:about|subject|with subject)\s+(.+?))?(?:\s+(?:saying|that says|with message|body|and say|telling them|tell them)\s+(.+))?$/i);
   if (wantsGmail && namedEmailMatch) {
     const recipient = namedEmailMatch[1].trim();
     const subject = namedEmailMatch[2]?.trim() || "";
@@ -5235,7 +5240,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const draftEmailMatch = raw.match(/(?:draft|compose|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message)\s+(.+)$/i);
+  const draftEmailMatch = assistantStrippedRaw.match(/(?:draft|compose|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message|and say|telling them|tell them)\s+(.+)$/i);
   if (wantsGmail && draftEmailMatch) {
     return {
       adapter: "gmail",
@@ -5246,7 +5251,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const simpleEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)$/i);
+  const simpleEmailMatch = assistantStrippedRaw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)$/i);
   if (wantsGmail && simpleEmailMatch) {
     return {
       adapter: "gmail",
@@ -5257,7 +5262,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const replyEmailMatch = raw.match(/reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
+  const replyEmailMatch = assistantStrippedRaw.match(/reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
   if (wantsGmail && replyEmailMatch) {
     return {
       adapter: "gmail",
@@ -5267,7 +5272,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const draftReplyMatch = raw.match(/draft\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
+  const draftReplyMatch = assistantStrippedRaw.match(/draft\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
   if (wantsGmail && draftReplyMatch) {
     return {
       adapter: "gmail",
@@ -5277,9 +5282,34 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
+  const replySpecificEmailMatch = assistantStrippedRaw.match(/(?:(draft|write|compose)\s+(?:a\s+)?reply|reply|respond)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+?)\s+(?:saying|with|that says|body|and say)\s+(.+)$/i);
+  if (wantsGmail && replySpecificEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "replyEmail",
+      query: replySpecificEmailMatch[2].trim(),
+      body: replySpecificEmailMatch[3].trim(),
+      send: !replySpecificEmailMatch[1],
+    };
+  }
+
+  const generatedReplyForEmailMatch = wantsGmail && (
+    assistantStrippedRaw.match(/\b(?:draft|write|compose|generate)\s+(?:a\s+)?(?:reply|response)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+)$/i) ||
+    assistantStrippedRaw.match(/\bwhat\s+should\s+i\s+(?:say|reply|respond)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+)$/i)
+  );
+  if (generatedReplyForEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "draftGeneratedReplyForEmail",
+      query: String(generatedReplyForEmailMatch[1] || "").trim(),
+      send: false,
+    };
+  }
+
   const generatedReplyMatch = wantsGmail && (
-    /\b(?:draft|write|compose|generate)\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?(?:email|message|thread)\b/i.test(raw) ||
-    /\b(?:write|draft)\s+what\s+i\s+should\s+(?:say|reply|respond)\b/i.test(raw)
+    /\b(?:draft|write|compose|generate)\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?(?:email|message|thread)\b/i.test(assistantStrippedRaw) ||
+    /\b(?:write|draft)\s+what\s+i\s+should\s+(?:say|reply|respond)\b/i.test(assistantStrippedRaw) ||
+    /\bwhat\s+(?:can|should)\s+i\s+(?:say|reply|respond)\b/i.test(assistantStrippedRaw)
   );
   if (generatedReplyMatch) {
     return {
@@ -5291,26 +5321,26 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
 
   const asksAboutCurrentGmailThread = wantsGmail && (
     (
-      /\b(?:currently\s+open|current|opened|this)\b.*\b(?:gmail|email|mail|message|thread)\b/i.test(raw) &&
-      /\b(?:read|summari[sz]e|explain|what|says?|contents?|about|reply|respond|say)\b/i.test(raw)
+      /\b(?:currently\s+open|current|opened|this)\b.*\b(?:gmail|email|mail|message|thread)\b/i.test(assistantStrippedRaw) &&
+      /\b(?:read|summari[sz]e|explain|what|says?|contents?|about|reply|respond|say)\b/i.test(assistantStrippedRaw)
     ) ||
     (
       currentSite === "gmail" &&
-      /\b(?:read|summari[sz]e|explain|what(?:'s| is)?(?:\s+in)?|what does\b.*\bsay|tell me\b.*\b(?:about|what)|what should i (?:say|reply)|help(?: me)? (?:reply|respond)|suggest(?: a)? reply)\b/i.test(raw) &&
-      /\b(?:email|mail|message|thread|this|it|reply|respond|say)\b/i.test(raw)
+      /\b(?:read|summari[sz]e|explain|what(?:'s| is)?(?:\s+in)?|what does\b.*\bsay|tell me\b.*\b(?:about|what)|what (?:can|should) i (?:say|reply|respond)|help(?: me)? (?:reply|respond)|suggest(?: a)? reply)\b/i.test(assistantStrippedRaw) &&
+      /\b(?:email|mail|message|thread|this|it|reply|respond|say)\b/i.test(assistantStrippedRaw)
     )
   );
   if (asksAboutCurrentGmailThread) {
     return {
       adapter: "gmail",
       intent: "readCurrentThread",
-      wantsReplyAdvice: /\b(?:reply|respond|what should i say|what should i reply|what to say|suggest(?: a)? reply|help(?: me)? (?:reply|respond))\b/i.test(raw),
+      wantsReplyAdvice: /\b(?:reply|respond|what (?:can|should) i say|what (?:can|should) i reply|what to say|suggest(?: a)? reply|help(?: me)? (?:reply|respond))\b/i.test(assistantStrippedRaw),
     };
   }
 
   const asksGmailInboxInsights = wantsGmail &&
-    !/\b(?:send|draft|compose|write)\s+(?:an?\s+)?email\b/i.test(raw) &&
-    /\b(?:inbox|emails?\s+(?:do\s+i\s+)?get|who\s+(?:emails|mails)|from\s+most|how\s+often|unsubscribe|newsletter|newsletters|triage|promotions?|senders?|what\s+emails)\b/i.test(raw);
+    !/\b(?:send|draft|compose|write)\s+(?:an?\s+)?email\b/i.test(assistantStrippedRaw) &&
+    /\b(?:inbox|emails?\s+(?:do\s+i\s+)?get|who\s+(?:emails|mails)|from\s+most|how\s+often|unsubscribe|newsletter|newsletters|triage|promotions?|senders?|what\s+emails)\b/i.test(assistantStrippedRaw);
   if (asksGmailInboxInsights) {
     return {
       adapter: "gmail",
@@ -5319,18 +5349,18 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   }
 
   const openEmailMatch =
-    raw.match(/\b(?:open|show|pull up|bring up)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message)(?:\s+(?:from|about|for)\s+(.+))?$/i) ||
-    raw.match(/\b(?:read|summari[sz]e|explain)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message)\s+(?:from|about|for)\s+(.+)$/i);
+    assistantStrippedRaw.match(/\b(?:open|show|pull up|bring up)\s+(?:the\s+)?(?:latest|last|first|recent)?\s*(?:gmail\s+)?(?:email|emails|mail|message|thread)(?:\s+(?:from|about|for|regarding|with|by|called|titled)\s+(.+))?$/i) ||
+    assistantStrippedRaw.match(/\b(?:read|summari[sz]e|explain)\s+(?:the\s+)?(?:latest|last|first|recent)?\s*(?:gmail\s+)?(?:email|emails|mail|message|thread)\s+(?:from|about|for|regarding|with|by|called|titled)\s+(.+)$/i);
   if (wantsGmail && openEmailMatch) {
     return {
       adapter: "gmail",
       intent: "openEmail",
       query: String(openEmailMatch[1] || "").trim(),
-      summarize: /\b(?:read|summari[sz]e|explain)\b/i.test(raw),
+      summarize: /\b(?:read|summari[sz]e|explain)\b/i.test(assistantStrippedRaw),
     };
   }
 
-  const gmailSearchMatch = raw.match(/(?:find|search|look for|open)\s+(?:emails?|mail)\s+(?:about|for|from)?\s+(.+)$/i);
+  const gmailSearchMatch = assistantStrippedRaw.match(/(?:find|search|look for|open)\s+(?:emails?|mail)\s+(?:about|for|from)?\s+(.+)$/i);
   if (wantsGmail && gmailSearchMatch) {
     return {
       adapter: "gmail",
@@ -5650,6 +5680,24 @@ async function bgBuildGmailGeneratedReply(task, thread) {
   }
 }
 
+function bgInferGmailSubject(body, task) {
+  const source = String(body || task || "")
+    .replace(/\s+/g, " ")
+    .replace(/^(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+.+?\s+(?:saying|that says|with message|body|and say|telling them|tell them)\s+/i, "")
+    .trim();
+  if (!source) return "Quick note";
+
+  const sentence = source.split(/[.!?]\s+/)[0] || source;
+  const words = sentence
+    .replace(/["“”]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8)
+    .join(" ");
+  if (!words) return "Quick note";
+  return words.length > 70 ? `${words.slice(0, 67).trim()}...` : words;
+}
+
 function bgNormalizeGmailSender(value) {
   return String(value || "Unknown sender").replace(/\s+/g, " ").trim() || "Unknown sender";
 }
@@ -5777,6 +5825,41 @@ async function bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResu
     },
   });
   return result?.tabId || tabId;
+}
+
+async function bgOpenGmailVisibleThread({ tabId, siteContext, query, history, onProgress, onResult }) {
+  const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
+  const trimmedQuery = String(query || "").trim();
+
+  if (trimmedQuery) {
+    await bgRunAdapterStep({
+      history,
+      description: `Search Gmail for "${trimmedQuery}"`,
+      type: "gmailSearch",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailSearch",
+        query: trimmedQuery,
+      }),
+    });
+    await bgDelay(1800);
+  }
+
+  const opened = await bgRunAdapterStep({
+    history,
+    description: trimmedQuery ? "Open the matching Gmail message" : "Open the first visible Gmail message",
+    type: "gmailOpenVisibleEmail",
+    onProgress,
+    onResult,
+    run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+      type: "gmailOpenVisibleEmail",
+      query: trimmedQuery,
+      limit: 80,
+    }),
+  });
+
+  return { gmailTabId, opened };
 }
 
 // Find the Spotify web-player tab (prefer the one actually playing audio).
@@ -6258,34 +6341,13 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   }
 
   if (parsed.adapter === "gmail" && parsed.intent === "openEmail") {
-    const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
-
-    if (parsed.query) {
-      await bgRunAdapterStep({
-        history,
-        description: `Search Gmail for "${parsed.query}"`,
-        type: "gmailSearch",
-        onProgress,
-        onResult,
-        run: () => bgExecuteSiteAdapterAction(gmailTabId, {
-          type: "gmailSearch",
-          query: parsed.query,
-        }),
-      });
-      await bgDelay(1500);
-    }
-
-    const opened = await bgRunAdapterStep({
+    const { opened } = await bgOpenGmailVisibleThread({
+      tabId,
+      siteContext,
+      query: parsed.query || "",
       history,
-      description: parsed.query ? `Open the matching Gmail message` : "Open the first visible Gmail message",
-      type: "gmailOpenVisibleEmail",
       onProgress,
       onResult,
-      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
-        type: "gmailOpenVisibleEmail",
-        query: parsed.query || "",
-        limit: 80,
-      }),
     });
 
     if (parsed.summarize) {
@@ -6329,6 +6391,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
     }
 
     const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
+    const subject = parsed.subject || (parsed.intent === "sendEmail" && parsed.body ? bgInferGmailSubject(parsed.body, task) : "");
 
     await bgRunAdapterStep({
       history,
@@ -6339,7 +6402,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       run: () => bgExecuteSiteAdapterAction(gmailTabId, {
         type: "gmailComposeHuman",
         to: recipientEmail,
-        subject: parsed.subject || "",
+        subject,
         body: parsed.body,
         send: parsed.intent === "sendEmail",
       }),
@@ -6353,6 +6416,62 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       return `Opened a Gmail draft to **${recipientLabel}**.`;
     }
     return `Drafted an email to **${recipientLabel}** in Gmail.`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "replyEmail") {
+    const { gmailTabId } = await bgOpenGmailVisibleThread({
+      tabId,
+      siteContext,
+      query: parsed.query || "",
+      history,
+      onProgress,
+      onResult,
+    });
+
+    await bgRunAdapterStep({
+      history,
+      description: parsed.send ? "Reply to the matching Gmail thread and send" : "Draft a reply in the matching Gmail thread",
+      type: "gmailReplyToCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailReplyToCurrentThread",
+        body: parsed.body,
+        send: !!parsed.send,
+      }),
+    });
+
+    return parsed.send
+      ? "Replied to the matching Gmail thread."
+      : "Drafted a reply in the matching Gmail thread.";
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "draftGeneratedReplyForEmail") {
+    const { gmailTabId, opened } = await bgOpenGmailVisibleThread({
+      tabId,
+      siteContext,
+      query: parsed.query || "",
+      history,
+      onProgress,
+      onResult,
+    });
+    const replyBody = await bgBuildGmailGeneratedReply(task, opened?.thread);
+    if (!replyBody) return "I opened the matching Gmail thread, but I could not draft a useful reply from the visible email body.";
+
+    await bgRunAdapterStep({
+      history,
+      description: "Draft a reply in the matching Gmail thread",
+      type: "gmailReplyToCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailReplyToCurrentThread",
+        body: replyBody,
+        send: false,
+      }),
+    });
+
+    return `Drafted this reply in Gmail:\n\n${replyBody}`;
   }
 
   if (parsed.adapter === "gmail" && parsed.intent === "draftGeneratedReplyCurrentThread") {
