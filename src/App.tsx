@@ -10,6 +10,7 @@ import SplashScreen from "@/components/SplashScreen";
 import BrainoWalker from "@/components/BrainoWalker";
 import PreLaunch from "./pages/PreLaunch.tsx";
 import Home from "./pages/Home.tsx";
+import LaunchIntro from "./pages/LaunchIntro.tsx";
 import LaunchTeaser from "./pages/LaunchTeaser.tsx";
 import WaitlistDashboard from "./pages/WaitlistDashboard.tsx";
 import Index from "./pages/Index.tsx";
@@ -49,18 +50,32 @@ import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-function AppShell({ splashDone, onSplashDone }: { splashDone: boolean; onSplashDone: () => void }) {
+function LandingGate({ introDone, onIntroDone }: { introDone: boolean; onIntroDone: () => void }) {
+  return introDone ? <Home /> : <LaunchIntro onFinish={onIntroDone} />;
+}
+
+function AppShell({
+  splashDone,
+  onSplashDone,
+  homeIntroDone,
+  onHomeIntroDone,
+}: {
+  splashDone: boolean;
+  onSplashDone: () => void;
+  homeIntroDone: boolean;
+  onHomeIntroDone: () => void;
+}) {
   const location = useLocation();
   // The walking Braino shows everywhere except the dedicated chat page; the "/" landing
   // hides it via PreLaunch's `body.sb-prelaunch #sb-brain-mascot-wrapper{display:none}` rule.
-  const hideMascot = location.pathname === "/chat";
+  const hideMascot = location.pathname === "/chat" || (location.pathname === "/" && !homeIntroDone);
 
   return (
     <>
       {!splashDone && <SplashScreen onDone={onSplashDone} />}
       <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainoWalker />}</div>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<LandingGate introDone={homeIntroDone} onIntroDone={onHomeIntroDone} />} />
         <Route path="/prelaunch" element={<PreLaunch />} />
         <Route path="/home-classic" element={<Index />} />
         <Route path="/teaser" element={<LaunchTeaser />} />
@@ -109,6 +124,7 @@ const App = () => {
     if (typeof window === "undefined") return false;
     return window.location.pathname === "/";
   });
+  const [homeIntroDone, setHomeIntroDone] = useState(false);
 
   return (
   <QueryClientProvider client={queryClient}>
@@ -118,7 +134,12 @@ const App = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <AppShell splashDone={splashDone} onSplashDone={() => setSplashDone(true)} />
+            <AppShell
+              splashDone={splashDone}
+              onSplashDone={() => setSplashDone(true)}
+              homeIntroDone={homeIntroDone}
+              onHomeIntroDone={() => setHomeIntroDone(true)}
+            />
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
