@@ -2171,7 +2171,7 @@ const BG_CAPABILITY_MANIFEST = {
   spotify:  ["playSong", "setVolume", "playbackControl", "addSongToPlaylist", "playSongFromPlaylist"],
   medium:   ["searchArticles"],
   twitter:  ["readFeed", "generateAndPost", "postTweet"],
-  gmail:    ["search", "draftEmail", "sendEmail", "replyCurrentThread"],
+  gmail:    ["search", "openEmail", "readCurrentThread", "readInboxSummary", "draftEmail", "sendEmail", "replyCurrentThread"],
   drive:    ["createDoc", "organize", "search", "createFolder", "rename", "move", "delete"],
   calendar: ["createEvent", "rescheduleEvent", "cancelEvent", "forwardEvent", "listEvents", "openNextMeet", "watchEvents"],
 };
@@ -3464,7 +3464,7 @@ Rules:
 
 Useful URL shortcuts:
 - Gmail inbox: https://mail.google.com/mail/u/0/#inbox
-- Gmail compose with prefill: https://mail.google.com/mail/?view=cm&to=TO&su=SUBJECT&body=BODY
+- Gmail compose: open the inbox, click the visible Compose button, then type recipient, subject, and body into Gmail's fields. Do not use Gmail prefill URLs unless the visible UI is unavailable.
 - Google Calendar create event: https://calendar.google.com/calendar/r/eventedit?text=TITLE&dates=YYYYMMDDTHHMMSS/YYYYMMDDTHHMMSS
 - LinkedIn Jobs: https://www.linkedin.com/jobs/search/?keywords=ROLE&location=CITY
 - Google Maps search: https://www.google.com/maps/search/QUERY
@@ -5060,6 +5060,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     currentSite === "gmail" ||
     normalizedConnector === "gmail" ||
     /\bgmail\b|\bemail\b|\bmail\b/.test(text);
+  const gmailShouldSend = /^\s*(?:can you\s+)?(?:please\s+)?send\b/i.test(raw);
   const wantsGoogleDrive =
     currentSite === "google-drive" ||
     normalizedConnector === "google-drive" ||
@@ -5202,10 +5203,21 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   if (wantsGmail && sendEmailMatch) {
     return {
       adapter: "gmail",
-      intent: /^(send)/i.test(raw.trim()) ? "sendEmail" : "draftEmail",
+      intent: gmailShouldSend ? "sendEmail" : "draftEmail",
       to: sendEmailMatch[1].trim(),
       subject: sendEmailMatch[2].trim(),
       body: sendEmailMatch[3].trim(),
+    };
+  }
+
+  const sendBodyNoSubjectMatch = raw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message|body)\s+(.+)$/i);
+  if (wantsGmail && sendBodyNoSubjectMatch) {
+    return {
+      adapter: "gmail",
+      intent: gmailShouldSend ? "sendEmail" : "draftEmail",
+      to: sendBodyNoSubjectMatch[1].trim(),
+      subject: "",
+      body: sendBodyNoSubjectMatch[2].trim(),
     };
   }
 
@@ -5216,7 +5228,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     const body = namedEmailMatch[3]?.trim() || "";
     return {
       adapter: "gmail",
-      intent: /^send\b/i.test(raw.trim()) && body ? "sendEmail" : "draftEmail",
+      intent: gmailShouldSend && body ? "sendEmail" : "draftEmail",
       to: recipient,
       subject,
       body,
@@ -5262,6 +5274,59 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
       intent: "replyCurrentThread",
       body: draftReplyMatch[1].trim(),
       send: false,
+    };
+  }
+
+  const generatedReplyMatch = wantsGmail && (
+    /\b(?:draft|write|compose|generate)\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?(?:email|message|thread)\b/i.test(raw) ||
+    /\b(?:write|draft)\s+what\s+i\s+should\s+(?:say|reply|respond)\b/i.test(raw)
+  );
+  if (generatedReplyMatch) {
+    return {
+      adapter: "gmail",
+      intent: "draftGeneratedReplyCurrentThread",
+      send: false,
+    };
+  }
+
+  const asksAboutCurrentGmailThread = wantsGmail && (
+    (
+      /\b(?:currently\s+open|current|opened|this)\b.*\b(?:gmail|email|mail|message|thread)\b/i.test(raw) &&
+      /\b(?:read|summari[sz]e|explain|what|says?|contents?|about|reply|respond|say)\b/i.test(raw)
+    ) ||
+    (
+      currentSite === "gmail" &&
+      /\b(?:read|summari[sz]e|explain|what(?:'s| is)?(?:\s+in)?|what does\b.*\bsay|tell me\b.*\b(?:about|what)|what should i (?:say|reply)|help(?: me)? (?:reply|respond)|suggest(?: a)? reply)\b/i.test(raw) &&
+      /\b(?:email|mail|message|thread|this|it|reply|respond|say)\b/i.test(raw)
+    )
+  );
+  if (asksAboutCurrentGmailThread) {
+    return {
+      adapter: "gmail",
+      intent: "readCurrentThread",
+      wantsReplyAdvice: /\b(?:reply|respond|what should i say|what should i reply|what to say|suggest(?: a)? reply|help(?: me)? (?:reply|respond))\b/i.test(raw),
+    };
+  }
+
+  const asksGmailInboxInsights = wantsGmail &&
+    !/\b(?:send|draft|compose|write)\s+(?:an?\s+)?email\b/i.test(raw) &&
+    /\b(?:inbox|emails?\s+(?:do\s+i\s+)?get|who\s+(?:emails|mails)|from\s+most|how\s+often|unsubscribe|newsletter|newsletters|triage|promotions?|senders?|what\s+emails)\b/i.test(raw);
+  if (asksGmailInboxInsights) {
+    return {
+      adapter: "gmail",
+      intent: "readInboxSummary",
+    };
+  }
+
+  const openEmailMatch =
+    raw.match(/\b(?:open|show|pull up|bring up)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message)(?:\s+(?:from|about|for)\s+(.+))?$/i) ||
+    raw.match(/\b(?:read|summari[sz]e|explain)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message)\s+(?:from|about|for)\s+(.+)$/i);
+  if (wantsGmail && openEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "openEmail",
+      query: String(openEmailMatch[1] || "").trim(),
+      summarize: /\b(?:read|summari[sz]e|explain)\b/i.test(raw),
     };
   }
 
@@ -5489,6 +5554,229 @@ async function bgRunAdapterStep({ history, description, type, run, onProgress, o
   if (onResult) await onResult({ description, type: type || "adapter", result });
   if (result?.error) throw new Error(result.error);
   return result;
+}
+
+function bgGmailThreadHasBody(thread) {
+  return Boolean(String(thread?.body || "").trim() || (Array.isArray(thread?.messages) && thread.messages.some((message) => String(message?.body || "").trim())));
+}
+
+function bgFormatGmailThreadForPrompt(thread) {
+  const from = thread?.from || {};
+  const sender = [from.name, from.email && from.email !== from.name ? `<${from.email}>` : ""].filter(Boolean).join(" ");
+  const messages = Array.isArray(thread?.messages) && thread.messages.length
+    ? thread.messages.map((message, index) => {
+        const msgFrom = message?.from ? [message.from.name, message.from.email && message.from.email !== message.from.name ? `<${message.from.email}>` : ""].filter(Boolean).join(" ") : "";
+        return [
+          `Message ${index + 1}:`,
+          msgFrom ? `From: ${msgFrom}` : "",
+          message?.date ? `Date: ${message.date}` : "",
+          `Body:\n${String(message?.body || "").trim()}`,
+        ].filter(Boolean).join("\n");
+      }).join("\n\n---\n\n")
+    : String(thread?.body || "").trim();
+  return [
+    thread?.subject ? `Subject: ${thread.subject}` : "",
+    sender ? `From: ${sender}` : "",
+    thread?.date ? `Date: ${thread.date}` : "",
+    messages ? `Extracted email text:\n${messages}` : "",
+  ].filter(Boolean).join("\n\n").slice(0, 12000);
+}
+
+function bgBuildGmailThreadFallbackAnswer(thread, wantsReplyAdvice) {
+  const subject = String(thread?.subject || "this email").trim();
+  const from = thread?.from?.name || thread?.from?.email || "the sender";
+  const body = String(thread?.body || thread?.messages?.[0]?.body || "").replace(/\s+/g, " ").trim();
+  const bodyPreview = body ? body.slice(0, 700) : "I could identify the thread, but the email body was not readable from Gmail.";
+  const reply = wantsReplyAdvice
+    ? "\n\nSuggested reply:\nThanks for the reminder. I’ll review this and confirm the payment if it’s expected on my side."
+    : "";
+  return `This email is from ${from} with the subject “${subject}”.\n\n${bodyPreview}${reply}`;
+}
+
+async function bgBuildGmailCurrentThreadAnswer(task, thread, parsed) {
+  const wantsReplyAdvice = Boolean(parsed?.wantsReplyAdvice);
+  if (!bgGmailThreadHasBody(thread)) {
+    return "I can see the Gmail thread, but I could not extract the message body. Open/expand the latest message in the thread and ask me again.";
+  }
+  try {
+    const systemPrompt = [
+      "You help the user understand the currently open Gmail email.",
+      "Use ONLY the extracted email text provided. Do not invent missing details.",
+      "Give a concise summary. If the user asks what to say or how to reply, include a short suggested reply.",
+      "If the email asks for payment, confirmation, login, or sensitive action, mention that the user should verify it is expected before acting.",
+    ].join("\n");
+    const userPrompt = [
+      `USER REQUEST: ${task}`,
+      wantsReplyAdvice ? "The user wants reply advice or wording." : "The user wants the email summarized.",
+      "CURRENT GMAIL THREAD:",
+      bgFormatGmailThreadForPrompt(thread),
+    ].join("\n\n");
+    const answer = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+    });
+    return String(answer || "").trim() || bgBuildGmailThreadFallbackAnswer(thread, wantsReplyAdvice);
+  } catch (_) {
+    return bgBuildGmailThreadFallbackAnswer(thread, wantsReplyAdvice);
+  }
+}
+
+async function bgBuildGmailGeneratedReply(task, thread) {
+  if (!bgGmailThreadHasBody(thread)) {
+    return "";
+  }
+  try {
+    const systemPrompt = [
+      "You draft replies to the currently open Gmail email.",
+      "Use ONLY the extracted email text. Do not invent commitments, facts, or private details.",
+      "Return only the reply body text. No markdown, no subject line, no explanation.",
+      "Keep it concise, natural, and safe. If the email requests payment, login, or sensitive action, say the user will verify first.",
+    ].join("\n");
+    const userPrompt = [
+      `USER REQUEST: ${task}`,
+      "CURRENT GMAIL THREAD:",
+      bgFormatGmailThreadForPrompt(thread),
+      "Draft the reply body now.",
+    ].join("\n\n");
+    const answer = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+    });
+    return String(answer || "").trim();
+  } catch (_) {
+    return "";
+  }
+}
+
+function bgNormalizeGmailSender(value) {
+  return String(value || "Unknown sender").replace(/\s+/g, " ").trim() || "Unknown sender";
+}
+
+async function bgRememberGmailInboxRows(rows) {
+  const visibleRows = Array.isArray(rows) ? rows : [];
+  let memory = {};
+  try {
+    const stored = await chrome.storage.local.get("sbGmailCompanionMemory");
+    memory = stored?.sbGmailCompanionMemory && typeof stored.sbGmailCompanionMemory === "object"
+      ? stored.sbGmailCompanionMemory
+      : {};
+  } catch (_) {}
+  const senders = memory.senders && typeof memory.senders === "object" ? memory.senders : {};
+  const now = Date.now();
+  for (const row of visibleRows) {
+    const key = bgNormalizeGmailSender(row?.email || row?.sender);
+    const current = senders[key] || {
+      label: row?.sender || key,
+      email: row?.email || "",
+      count: 0,
+      unread: 0,
+      unsubscribeLikely: 0,
+      firstSeenAt: now,
+      lastSeenAt: now,
+    };
+    current.label = row?.sender || current.label || key;
+    current.email = row?.email || current.email || "";
+    current.count += 1;
+    if (row?.unread) current.unread += 1;
+    if (row?.likelyUnsubscribe) current.unsubscribeLikely += 1;
+    current.lastSeenAt = now;
+    senders[key] = current;
+  }
+  memory = {
+    ...memory,
+    senders,
+    totalRowsObserved: Number(memory.totalRowsObserved || 0) + visibleRows.length,
+    scans: Number(memory.scans || 0) + 1,
+    updatedAt: now,
+  };
+  try { await chrome.storage.local.set({ sbGmailCompanionMemory: memory }); } catch (_) {}
+  return memory;
+}
+
+function bgTopGmailSendersFromRows(rows, limit = 5) {
+  const counts = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = bgNormalizeGmailSender(row?.sender || row?.email);
+    const current = counts.get(key) || { label: row?.sender || key, email: row?.email || "", count: 0, unread: 0, unsubscribeLikely: 0 };
+    current.count += 1;
+    if (row?.unread) current.unread += 1;
+    if (row?.likelyUnsubscribe) current.unsubscribeLikely += 1;
+    counts.set(key, current);
+  }
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)).slice(0, limit);
+}
+
+function bgTopGmailSendersFromMemory(memory, limit = 5) {
+  const senders = memory?.senders && typeof memory.senders === "object" ? Object.values(memory.senders) : [];
+  return senders
+    .map((sender) => ({
+      label: sender.label || sender.email || "Unknown sender",
+      email: sender.email || "",
+      count: Number(sender.count || 0),
+      unread: Number(sender.unread || 0),
+      unsubscribeLikely: Number(sender.unsubscribeLikely || 0),
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, limit);
+}
+
+function bgBuildGmailInboxSummary(task, inbox, memory) {
+  const rows = Array.isArray(inbox?.rows) ? inbox.rows : [];
+  const visibleTop = bgTopGmailSendersFromRows(rows, 6);
+  const rememberedTop = bgTopGmailSendersFromMemory(memory, 6);
+  const unreadCount = rows.filter((row) => row.unread).length;
+  const unsubscribeRows = rows.filter((row) => row.likelyUnsubscribe);
+  const visibleLine = visibleTop.length
+    ? visibleTop.map((item) => `${item.label} (${item.count})`).join(", ")
+    : "No visible senders found";
+  const memoryLine = rememberedTop.length
+    ? rememberedTop.map((item) => `${item.label} (${item.count})`).join(", ")
+    : "No prior Gmail scans yet";
+  const unsubscribeLine = unsubscribeRows.length
+    ? unsubscribeRows.slice(0, 5).map((row) => `${row.sender}: ${row.subject}`).join("\n- ")
+    : "I do not see obvious unsubscribe/newsletter candidates in the visible sample.";
+  return [
+    `I scanned ${rows.length} visible Gmail rows from the page.`,
+    `Visible top senders: ${visibleLine}.`,
+    `Unread in this visible sample: ${unreadCount}.`,
+    `Remembered across ${Number(memory?.scans || 0)} page scans: ${memoryLine}.`,
+    `Likely unsubscribe/newsletter candidates: ${unsubscribeRows.length}.`,
+    unsubscribeRows.length ? `- ${unsubscribeLine}` : unsubscribeLine,
+    "Note: this is page-based Gmail reading, not Gmail API access, so the stats improve as Braino sees more inbox/search pages.",
+  ].join("\n");
+}
+
+async function bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult) {
+  if (siteContext?.site === "gmail") return tabId;
+  const result = await bgRunAdapterStep({
+    history,
+    description: "Open Gmail",
+    type: "navigate",
+    onProgress,
+    onResult,
+    run: async () => {
+      const created = await new Promise((resolve) => chrome.tabs.create({
+        url: "https://mail.google.com/mail/u/0/#inbox",
+        active: true,
+      }, resolve));
+      const gmailTabId = created?.id || tabId;
+      try {
+        chrome.storage.local.set({ activeTabId: gmailTabId });
+      } catch (_) {}
+      if (gmailTabId) {
+        await bgWaitForTabReady(gmailTabId, 10000);
+        await bgDelay(1800);
+      }
+      return {
+        success: Boolean(gmailTabId),
+        tabId: gmailTabId,
+        url: created?.url || "https://mail.google.com/mail/u/0/#inbox",
+      };
+    },
+  });
+  return result?.tabId || tabId;
 }
 
 // Find the Spotify web-player tab (prefer the one actually playing audio).
@@ -5934,27 +6222,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   }
 
   if (parsed.adapter === "gmail" && parsed.intent === "search") {
-    if (siteContext?.site !== "gmail") {
-      await bgRunAdapterStep({
-        history,
-        description: "Open Gmail",
-        type: "navigate",
-        onProgress,
-        onResult,
-        run: async () => {
-          const result = await bgExecuteAgentAction(tabId, {
-            type: "navigate",
-            url: "https://mail.google.com/mail/u/0/#inbox",
-            description: "Open Gmail",
-          });
-          if (!result?.error) {
-            await bgWaitForTabReady(tabId, 8000);
-            await bgDelay(1800);
-          }
-          return result;
-        },
-      });
-    }
+    const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
 
     await bgRunAdapterStep({
       history,
@@ -5962,13 +6230,88 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       type: "gmailSearch",
       onProgress,
       onResult,
-      run: () => bgExecuteSiteAdapterAction(tabId, {
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
         type: "gmailSearch",
         query: parsed.query,
       }),
     });
 
     return `Searched Gmail for **${parsed.query}**.`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "readInboxSummary") {
+    const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
+
+    const inbox = await bgRunAdapterStep({
+      history,
+      description: "Read the visible Gmail inbox",
+      type: "gmailReadVisibleInbox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailReadVisibleInbox",
+        limit: 80,
+      }),
+    });
+    const memory = await bgRememberGmailInboxRows(inbox?.rows || []);
+    return bgBuildGmailInboxSummary(task, inbox, memory);
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "openEmail") {
+    const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
+
+    if (parsed.query) {
+      await bgRunAdapterStep({
+        history,
+        description: `Search Gmail for "${parsed.query}"`,
+        type: "gmailSearch",
+        onProgress,
+        onResult,
+        run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+          type: "gmailSearch",
+          query: parsed.query,
+        }),
+      });
+      await bgDelay(1500);
+    }
+
+    const opened = await bgRunAdapterStep({
+      history,
+      description: parsed.query ? `Open the matching Gmail message` : "Open the first visible Gmail message",
+      type: "gmailOpenVisibleEmail",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailOpenVisibleEmail",
+        query: parsed.query || "",
+        limit: 80,
+      }),
+    });
+
+    if (parsed.summarize) {
+      return bgBuildGmailCurrentThreadAnswer(task, opened?.thread, { wantsReplyAdvice: false });
+    }
+    const subject = opened?.thread?.subject || opened?.opened?.subject || "the message";
+    return `Opened **${subject}** in Gmail.`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "readCurrentThread") {
+    if (siteContext?.site !== "gmail") {
+      return "Open the Gmail email you want first, then ask me to read or summarize it.";
+    }
+
+    const thread = await bgRunAdapterStep({
+      history,
+      description: "Read the current Gmail thread",
+      type: "gmailReadCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailReadCurrentThread",
+      }),
+    });
+
+    return bgBuildGmailCurrentThreadAnswer(task, thread, parsed);
   }
 
   if (parsed.adapter === "gmail" && (parsed.intent === "draftEmail" || parsed.intent === "sendEmail")) {
@@ -5985,58 +6328,24 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       recipientLabel = bgFormatContactLabel(resolvedContact.contact, parsed.to);
     }
 
-    const composeUrl = bgBuildGmailComposeUrl({
-      to: recipientEmail,
-      subject: parsed.subject,
-      body: parsed.body,
-    });
+    const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
 
     await bgRunAdapterStep({
       history,
-      description: `Open Gmail compose for ${recipientLabel}`,
-      type: "navigate",
+      description: parsed.intent === "sendEmail" ? `Compose and send Gmail message to ${recipientLabel}` : `Open Gmail compose for ${recipientLabel}`,
+      type: "gmailComposeHuman",
       onProgress,
       onResult,
-      run: async () => {
-        const result = await bgExecuteAgentAction(tabId, {
-          type: "navigate",
-          url: composeUrl,
-          description: `Open Gmail compose for ${recipientLabel}`,
-        });
-        if (!result?.error) {
-          await bgWaitForTabReady(tabId, 8000);
-          await bgDelay(1800);
-        }
-        return result;
-      },
-    });
-
-    await bgRunAdapterStep({
-      history,
-      description: "Verify Gmail compose fields",
-      type: "gmailFillCompose",
-      onProgress,
-      onResult,
-      run: () => bgExecuteSiteAdapterAction(tabId, {
-        type: "gmailFillCompose",
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailComposeHuman",
         to: recipientEmail,
         subject: parsed.subject || "",
         body: parsed.body,
+        send: parsed.intent === "sendEmail",
       }),
     });
 
     if (parsed.intent === "sendEmail") {
-      if (shouldStop?.()) throw new Error("Stopped.");
-      await bgRunAdapterStep({
-        history,
-        description: "Send the Gmail message",
-        type: "gmailSendOpenCompose",
-        onProgress,
-        onResult,
-        run: () => bgExecuteSiteAdapterAction(tabId, {
-          type: "gmailSendOpenCompose",
-        }),
-      });
       return `Sent the email to **${recipientLabel}**.`;
     }
 
@@ -6044,6 +6353,40 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       return `Opened a Gmail draft to **${recipientLabel}**.`;
     }
     return `Drafted an email to **${recipientLabel}** in Gmail.`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "draftGeneratedReplyCurrentThread") {
+    if (siteContext?.site !== "gmail") {
+      return "Open the Gmail thread you want first, then ask me to draft a reply.";
+    }
+
+    const thread = await bgRunAdapterStep({
+      history,
+      description: "Read the current Gmail thread",
+      type: "gmailReadCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailReadCurrentThread",
+      }),
+    });
+    const replyBody = await bgBuildGmailGeneratedReply(task, thread);
+    if (!replyBody) return "I can see the thread, but I could not draft a useful reply from the visible email body.";
+
+    await bgRunAdapterStep({
+      history,
+      description: "Draft a reply in the current Gmail thread",
+      type: "gmailReplyToCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailReplyToCurrentThread",
+        body: replyBody,
+        send: false,
+      }),
+    });
+
+    return `Drafted this reply in Gmail:\n\n${replyBody}`;
   }
 
   if (parsed.adapter === "gmail" && parsed.intent === "replyCurrentThread") {
@@ -6812,17 +7155,14 @@ function bgTryFastPath(task, history, synth = null, geo = null) {
 }
 
 function bgGetPlatformGuide(url) {
-  if (/mail\.google\.com/.test(url)) return `
+if (/mail\.google\.com/.test(url)) return `
 ── GMAIL (you are here) ──
 Compose new email:
-  1. navigate → https://mail.google.com/mail/u/0/#compose
-  2. wait 1200
-  3. [{"type":"type","selector":"[name='to']","targetText":"To","text":"RECIPIENT"},{"type":"pressKey","key":"Tab"},{"type":"type","selector":"[name='subjectbox']","text":"SUBJECT"}]
-  4. pressKey Tab
-  5. type body → selector="[role='textbox'][aria-label*='Message']" or targetText="Message Body"
-  6. click Send → selector="[data-tooltip*='Send']" or [aria-label*="Send"] or targetText="Send"
-Reply: click Reply (.amn or targetText="Reply") → wait 600 → type in [role='textbox'] → click Send
-Search: click [aria-label="Search mail"] → type query → pressKey Enter`;
+  1. click the visible Compose/New message button
+  2. type recipient, subject, and body into the visible Gmail compose fields
+  3. click Send only if the user explicitly asked to send
+Reply: read the current thread first; if drafting, click Reply and type into the visible reply editor
+Search/open: use the Gmail search box, then open the matching visible result row`;
   if (/youtube\.com/.test(url)) return `
 ── YOUTUBE (you are here) ──
 Search & play: navigate → https://www.youtube.com/results?search_query=QUERY (encode spaces as +)
@@ -7024,7 +7364,7 @@ RULES:
 
 URL SHORTCUTS — single navigate, zero form interaction needed:
 ── EMAIL / MESSAGING ──
-Gmail compose:    https://mail.google.com/mail/?view=cm&to=TO&su=SUBJECT&body=BODY  (encode spaces as %20)
+Gmail compose:    navigate to https://mail.google.com/mail/u/0/#inbox, click Compose, then type recipient, subject, and body into the visible Gmail fields. Do not use Gmail prefill URLs unless the page UI is unavailable.
 WhatsApp by phone#:  https://wa.me/COUNTRYCODENUMBER?text=MESSAGE  (India: 91XXXXXXXXXX, encode spaces as %20)
 WhatsApp by name:    navigate → https://web.whatsapp.com → search contact name → click → type → Enter
 Twitter/X post:   navigate → https://x.com/compose/tweet  (type into the composer)

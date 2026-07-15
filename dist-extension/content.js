@@ -993,10 +993,57 @@ function __sbGmailSetInputValue(input, value) {
   return true;
 }
 
+function __sbGmailWait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
+}
+
+function __sbGmailDispatchKey(target, key) {
+  if (!target) return;
+  const keyCode = key === "Enter" ? 13 : key === "Tab" ? 9 : key.charCodeAt(0);
+  target.dispatchEvent(new KeyboardEvent("keydown", { key, code: key, keyCode, bubbles: true, cancelable: true }));
+  target.dispatchEvent(new KeyboardEvent("keypress", { key, code: key, keyCode, bubbles: true, cancelable: true }));
+  target.dispatchEvent(new KeyboardEvent("keyup", { key, code: key, keyCode, bubbles: true, cancelable: true }));
+}
+
 function __sbGmailFindOpenComposeDialog() {
   const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
   return dialogs.find((dialog) => __sbGmailVisible(dialog) && dialog.querySelector('input[name="subjectbox"], input[placeholder*="Subject"], textarea[name="to"]'))
     || null;
+}
+
+function __sbGmailFindComposeButton() {
+  const selectors = [
+    'div[role="button"][gh="cm"]',
+    'div[role="button"][aria-label*="Compose"]',
+    'div[role="button"][data-tooltip*="Compose"]',
+    'button[aria-label*="Compose"]',
+    ".T-I.T-I-KE",
+  ];
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (__sbGmailVisible(el)) return el;
+    }
+  }
+  const candidates = Array.from(document.querySelectorAll('div[role="button"], button'));
+  return candidates.find((el) => {
+    if (!__sbGmailVisible(el)) return false;
+    const label = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("data-tooltip") || "");
+    return /^(compose|new message)$/i.test(label) || /\bcompose\b/i.test(label);
+  }) || null;
+}
+
+async function __sbGmailEnsureComposeDialog() {
+  let dialog = __sbGmailFindOpenComposeDialog();
+  if (dialog) return { dialog };
+  const composeButton = __sbGmailFindComposeButton();
+  if (!composeButton) return { error: "Gmail Compose button was not found." };
+  composeButton.click();
+  for (let i = 0; i < 20; i += 1) {
+    await __sbGmailWait(250);
+    dialog = __sbGmailFindOpenComposeDialog();
+    if (dialog) return { dialog };
+  }
+  return { error: "Gmail compose window did not open." };
 }
 
 function __sbGmailFindComposeField(selectors, root = document) {
@@ -1012,6 +1059,7 @@ function __sbGmailFindComposeBody(root = document) {
     'div[role="textbox"][aria-label*="Message Body"]',
     'div[role="textbox"][g_editable="true"]',
     'div[contenteditable="true"][aria-label*="Message Body"]',
+    'div[contenteditable="true"][g_editable="true"]',
   ];
   return __sbGmailFindComposeField(selectors, root);
 }
@@ -1034,23 +1082,207 @@ function __sbGmailFindSendButton(root = document) {
   return __sbGmailFindComposeField(selectors, root);
 }
 
+function __sbGmailNormalizeReadableText(value) {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function __sbGmailTextFromClone(el) {
+  if (!el) return "";
+  const clone = el.cloneNode(true);
+  try {
+    clone.querySelectorAll([
+      "script",
+      "style",
+      "noscript",
+      "svg",
+      "button",
+      '[role="button"]',
+      '[aria-hidden="true"]',
+      ".gmail_quote",
+      ".yj6qo",
+      ".adL",
+      ".ajT",
+      ".ajR",
+    ].join(",")).forEach((node) => node.remove());
+  } catch (_) {}
+  return __sbGmailNormalizeReadableText(clone.innerText || clone.textContent || "");
+}
+
+function __sbGmailFirstVisibleText(selectors) {
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (!__sbGmailVisible(el)) continue;
+      const text = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("title") || "");
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
+function __sbGmailReadSender(root = document) {
+  const selectors = [
+    ".gD[email]",
+    "[email].gD",
+    "[data-hovercard-id]",
+    "span[email]",
+  ];
+  for (const selector of selectors) {
+    for (const el of root.querySelectorAll(selector)) {
+      if (!__sbGmailVisible(el)) continue;
+      const email = __sbGmailNormalizeText(el.getAttribute("email") || el.getAttribute("data-hovercard-id") || "");
+      const name = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("name") || email);
+      if (name || email) return { name, email };
+    }
+  }
+  return { name: "", email: "" };
+}
+
+function __sbGmailFindMessageBodyNodes() {
+  const selectors = [
+    '[role="main"] [role="listitem"] .a3s',
+    '[role="main"] .adn .a3s',
+    '[role="main"] .gs .a3s',
+    "div.a3s.aiL",
+    "div.a3s",
+  ];
+  const nodes = [];
+  const seen = new Set();
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (seen.has(el)) continue;
+      seen.add(el);
+      if (!__sbGmailVisible(el)) continue;
+      const composeDialog = el.closest?.('[role="dialog"]');
+      if (composeDialog && composeDialog.querySelector('input[name="subjectbox"], textarea[name="to"], [aria-label*="Message Body"]')) continue;
+      nodes.push(el);
+    }
+  }
+  return nodes;
+}
+
+function __sbGmailReadCurrentThread() {
+  const subject = __sbGmailFirstVisibleText([
+    '[role="main"] h2.hP',
+    "h2.hP",
+    '[role="main"] h1',
+    '[role="main"] h2',
+  ]);
+  const bodyNodes = __sbGmailFindMessageBodyNodes();
+  const messages = [];
+  const seenBodies = new Set();
+
+  for (const bodyNode of bodyNodes) {
+    const body = __sbGmailTextFromClone(bodyNode);
+    if (!body || body.length < 2 || seenBodies.has(body)) continue;
+    seenBodies.add(body);
+    const messageRoot = bodyNode.closest?.('[role="listitem"], .adn, .gs') || document;
+    const sender = __sbGmailReadSender(messageRoot);
+    const date = __sbGmailNormalizeText(
+      messageRoot.querySelector?.(".g3[title], [data-tooltip*=','][title], span[title]")?.getAttribute("title")
+      || messageRoot.querySelector?.(".g3, [data-tooltip*=',']")?.innerText
+      || ""
+    );
+    messages.push({ from: sender, date, body });
+  }
+
+  const fallbackSender = __sbGmailReadSender(document);
+  const body = messages.map((message) => message.body).filter(Boolean).join("\n\n---\n\n");
+  const result = {
+    success: Boolean(subject || body),
+    site: "gmail",
+    url: window.location.href,
+    title: document.title || "",
+    subject,
+    from: messages[0]?.from || fallbackSender,
+    date: messages[0]?.date || "",
+    body,
+    messages,
+  };
+  if (!body) result.error = "The open Gmail message body was not found.";
+  return result;
+}
+
+function __sbGmailFormatCurrentThread(thread) {
+  if (!thread || !thread.success) return "";
+  const lines = [
+    "Gmail current thread",
+    thread.subject ? `Subject: ${thread.subject}` : "",
+    thread.from?.name || thread.from?.email ? `From: ${[thread.from.name, thread.from.email && thread.from.email !== thread.from.name ? `<${thread.from.email}>` : ""].filter(Boolean).join(" ")}` : "",
+    thread.date ? `Date: ${thread.date}` : "",
+    thread.body ? `Body:\n${thread.body}` : "",
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
 async function __sbGmailSearch(query) {
   const input = __sbGmailFindSearchInput();
   if (!input) return { error: "Gmail search box was not found." };
   if (!__sbGmailSetInputValue(input, String(query || "").trim())) {
     return { error: "Gmail search query could not be entered." };
   }
-  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-  input.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-  input.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+  __sbGmailDispatchKey(input, "Enter");
   return { success: true, query: String(query || "").trim() };
+}
+
+function __sbGmailRecipientList(value) {
+  return String(value || "")
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function __sbGmailFillRecipients(toField, value) {
+  const recipients = __sbGmailRecipientList(value);
+  if (!toField || !recipients.length) return false;
+  for (const recipient of recipients) {
+    __sbGmailSetInputValue(toField, recipient);
+    await __sbGmailWait(120);
+    __sbGmailDispatchKey(toField, "Enter");
+    await __sbGmailWait(160);
+    if (__sbGmailNormalizeText(toField.value || toField.innerText || toField.textContent)) {
+      __sbGmailDispatchKey(toField, "Tab");
+      await __sbGmailWait(120);
+    }
+  }
+  return true;
+}
+
+async function __sbGmailSetRichTextField(field, text) {
+  if (!field) return false;
+  try { field.focus(); } catch (_) {}
+  field.click?.();
+  await __sbGmailWait(80);
+  const value = String(text || "");
+  try {
+    document.execCommand("selectAll", false, null);
+    document.execCommand("delete", false, null);
+  } catch (_) {}
+  const inserted = document.execCommand("insertText", false, value);
+  if (!inserted || !__sbGmailNormalizeText(field.innerText || field.textContent)) {
+    field.textContent = value;
+    try {
+      field.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: value, bubbles: true }));
+    } catch (_) {
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+  return __sbGmailNormalizeText(field.innerText || field.textContent).includes(__sbGmailNormalizeText(value).slice(0, 40));
 }
 
 async function __sbGmailFillComposeFields({ to, subject, body }, options = {}) {
   const root = __sbGmailFindOpenComposeDialog() || document;
   const toField = __sbGmailFindComposeField([
     'textarea[name="to"]',
+    'textarea[aria-label*="To"]',
     'input[aria-label*="Recipients"]',
+    'input[aria-label*="To"]',
     'input[peoplekit-id]',
   ], root);
   const subjectField = __sbGmailFindComposeField([
@@ -1059,30 +1291,31 @@ async function __sbGmailFillComposeFields({ to, subject, body }, options = {}) {
   ], root);
   const bodyField = __sbGmailFindComposeBody(root);
 
-  if (to && toField) __sbGmailSetInputValue(toField, to);
+  if (to && toField) await __sbGmailFillRecipients(toField, to);
   if (subject && subjectField) __sbGmailSetInputValue(subjectField, subject);
 
-  if (body && bodyField) {
-    try { bodyField.focus(); } catch(_) {}
-    bodyField.click?.();
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    const text = String(body || "");
-    try {
-      document.execCommand("selectAll", false, null);
-      document.execCommand("delete", false, null);
-    } catch(_) {}
-    const inserted = document.execCommand("insertText", false, text);
-    if (!inserted || !__sbGmailNormalizeText(bodyField.innerText || bodyField.textContent)) {
-      bodyField.textContent = text;
-      bodyField.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: text, bubbles: true }));
-    }
-  }
+  if (body && bodyField) await __sbGmailSetRichTextField(bodyField, body);
 
+  if (to && options.requireRecipient && !toField) return { error: "Gmail recipient field was not found." };
+  if (subject && options.requireSubject && !subjectField) return { error: "Gmail subject field was not found." };
+  if (body && !bodyField) return { error: "Gmail message body field was not found." };
   if (!options.requireBody && (to || subject || body)) {
     return { success: true };
   }
-  if (body && !bodyField) return { error: "Gmail message body field was not found." };
   return { success: true };
+}
+
+async function __sbGmailComposeHuman({ to, subject, body }, options = {}) {
+  const opened = await __sbGmailEnsureComposeDialog();
+  if (opened?.error) return opened;
+  const filled = await __sbGmailFillComposeFields({ to, subject, body }, {
+    requireRecipient: !!to,
+    requireSubject: !!subject,
+    requireBody: !!body,
+  });
+  if (filled?.error) return filled;
+  if (options.send) return __sbGmailSendOpenCompose();
+  return { success: true, mode: "compose", sent: false };
 }
 
 async function __sbGmailSendOpenCompose() {
@@ -1094,16 +1327,111 @@ async function __sbGmailSendOpenCompose() {
 }
 
 async function __sbGmailReplyToCurrentThread(body, options = {}) {
-  const replyButton = __sbGmailFindReplyButton();
-  if (!replyButton) return { error: "Reply button was not found in the current Gmail thread." };
-  replyButton.click();
-  await new Promise((resolve) => setTimeout(resolve, 700));
+  let bodyField = __sbGmailFindComposeBody(document);
+  if (!bodyField) {
+    const replyButton = __sbGmailFindReplyButton();
+    if (!replyButton) return { error: "Reply button was not found in the current Gmail thread." };
+    replyButton.click();
+    await __sbGmailWait(700);
+    bodyField = __sbGmailFindComposeBody(document);
+  }
   const filled = await __sbGmailFillComposeFields({ body }, { requireBody: true });
   if (filled?.error) return filled;
   if (options.send) {
     return __sbGmailSendOpenCompose();
   }
   return { success: true };
+}
+
+function __sbGmailCollectVisibleEmailRowElements(limit = 80) {
+  const selectors = [
+    "tr.zA",
+    'tr[role="row"]',
+    '[role="main"] [data-legacy-message-id]',
+  ];
+  const seen = new Set();
+  const elements = [];
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (seen.has(el) || !__sbGmailVisible(el)) continue;
+      seen.add(el);
+      const text = __sbGmailNormalizeText(el.innerText || el.textContent || "");
+      if (!text || text.length < 8) continue;
+      elements.push(el);
+      if (elements.length >= limit) break;
+    }
+    if (elements.length >= limit) break;
+  }
+  return elements;
+}
+
+function __sbGmailReadVisibleEmailRows(limit = 80) {
+  const rows = [];
+  for (const el of __sbGmailCollectVisibleEmailRowElements(limit)) {
+    const text = __sbGmailNormalizeText(el.innerText || el.textContent || "");
+    const senderEl = el.querySelector(".yW span[email], .zF[email], .bA4 span[email], .yW span, .zF, .bA4");
+    const sender = __sbGmailNormalizeText(
+      senderEl?.getAttribute?.("name")
+      || senderEl?.getAttribute?.("email")
+      || senderEl?.innerText
+      || senderEl?.textContent
+      || ""
+    );
+    const email = __sbGmailNormalizeText(senderEl?.getAttribute?.("email") || "");
+    const subjectEl = el.querySelector(".bog, .y6, .xS");
+    const subjectText = __sbGmailNormalizeText(subjectEl?.innerText || subjectEl?.textContent || "");
+    const dateEl = el.querySelector(".xW span[title], .xW, [title]");
+    const date = __sbGmailNormalizeText(dateEl?.getAttribute?.("title") || dateEl?.innerText || dateEl?.textContent || "");
+    const unread = /\bzE\b/.test(String(el.className || "")) || el.getAttribute("aria-label")?.toLowerCase?.().includes("unread") || false;
+    const likelyUnsubscribe = /\b(unsubscribe|newsletter|digest|promotion|promotional|marketing|sale|offer)\b/i.test(text);
+    rows.push({
+      index: rows.length + 1,
+      sender: sender || email || "Unknown sender",
+      email,
+      subject: subjectText || text.slice(0, 160),
+      snippet: text.slice(0, 360),
+      date,
+      unread: Boolean(unread),
+      likelyUnsubscribe,
+    });
+  }
+  return rows;
+}
+
+async function __sbGmailReadVisibleInbox(options = {}) {
+  const rows = __sbGmailReadVisibleEmailRows(options.limit || 80);
+  return {
+    success: true,
+    site: "gmail",
+    url: window.location.href,
+    title: document.title || "",
+    count: rows.length,
+    rows,
+  };
+}
+
+async function __sbGmailOpenVisibleEmail(query, options = {}) {
+  const rows = __sbGmailReadVisibleEmailRows(options.limit || 80);
+  const q = __sbGmailNormalizeText(query).toLowerCase();
+  const terms = q.split(/\s+/).filter((term) => term.length >= 2);
+  let matchIndex = 0;
+  if (terms.length) {
+    const found = rows.findIndex((row) => {
+      const hay = `${row.sender} ${row.email} ${row.subject} ${row.snippet}`.toLowerCase();
+      return terms.every((term) => hay.includes(term));
+    });
+    if (found >= 0) matchIndex = found;
+  }
+  const row = rows[matchIndex];
+  if (!row) return { error: "No visible Gmail message row was found." };
+  const elements = __sbGmailCollectVisibleEmailRowElements(options.limit || 80);
+  const el = elements[matchIndex];
+  if (!el) return { error: "The matching Gmail row could not be clicked." };
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  await __sbGmailWait(120);
+  el.click();
+  await __sbGmailWait(1200);
+  return { success: true, opened: row, thread: __sbGmailReadCurrentThread() };
 }
 
 async function __sbYouTubeEnsurePlayback() {
@@ -1350,9 +1678,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       scroll: { x: window.scrollX || 0, y: window.scrollY || 0, maxX: 0, maxY: 0, atTop: true, atBottom: true },
       elements: [],
     };
-    const serialized = window.BrainoElementMap?.serializeElementMap
+    let serialized = window.BrainoElementMap?.serializeElementMap
       ? window.BrainoElementMap.serializeElementMap(map, { keywords: msg.keywords || "", cap: msg.cap || 120 })
       : "";
+    try {
+      if (/mail\.google\.com$/.test(location.hostname)) {
+        const gmailThread = __sbGmailReadCurrentThread();
+        const gmailText = __sbGmailFormatCurrentThread(gmailThread);
+        if (gmailText) {
+          map.gmailCurrentThread = gmailThread;
+          serialized = `${gmailText.slice(0, 7000)}\n\nPAGE CONTROLS:\n${serialized}`;
+        }
+      }
+    } catch (_) {}
     sendResponse({ map, serialized });
     return true;
   }
@@ -1482,6 +1820,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "gmailSearch") {
           sendResponse(await __sbGmailSearch(msg.query || ""));
+          return;
+        }
+        if (msg.type === "gmailReadCurrentThread") {
+          sendResponse(__sbGmailReadCurrentThread());
+          return;
+        }
+        if (msg.type === "gmailReadVisibleInbox") {
+          sendResponse(await __sbGmailReadVisibleInbox({ limit: msg.limit || 80 }));
+          return;
+        }
+        if (msg.type === "gmailOpenVisibleEmail") {
+          sendResponse(await __sbGmailOpenVisibleEmail(msg.query || "", { limit: msg.limit || 80 }));
+          return;
+        }
+        if (msg.type === "gmailComposeHuman") {
+          sendResponse(await __sbGmailComposeHuman({
+            to: msg.to || "",
+            subject: msg.subject || "",
+            body: msg.body || "",
+          }, { send: !!msg.send }));
           return;
         }
         if (msg.type === "gmailFillCompose") {
@@ -1828,6 +2186,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           });
         }
         if (!el) {
+          if (/mail\.google\.com$/.test(location.hostname)) {
+            const gmailThread = __sbGmailReadCurrentThread();
+            const gmailText = __sbGmailFormatCurrentThread(gmailThread);
+            if (gmailText) {
+              sendResponse({ success: true, text: gmailText.slice(0, maxChars || 8000), site: "gmail" });
+              return true;
+            }
+          }
           // Fall back to returning visible page text excerpt
           sendResponse({ success: true, text: document.body?.innerText?.slice(0, maxChars || 800) || "(empty)" });
         } else {

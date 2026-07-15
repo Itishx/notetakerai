@@ -107,7 +107,7 @@
     const authUrl = String(obs?.url || "").toLowerCase();
     const authTitle = String(obs?.title || "").toLowerCase();
     const onSigninPage = /\/ap\/signin|\/signin\b|\/login\b|\/sessions\/new|accounts\.google\.com\/v3\/signin/.test(authUrl)
-      || /^(sign in|log ?in)\b/.test(authTitle);
+      || /^(?:please\s+)?(?:sign in|log ?in)\b/.test(authTitle);
     const hasPasswordField = Array.isArray(obs?.elements) && obs.elements.some((el) =>
       String(el?.inputType || "").toLowerCase() === "password"
       || (String(el?.role || "") === "textbox" && /^password\b/i.test(String(el?.name || ""))));
