@@ -13,16 +13,16 @@ import type { Moment, MomentReading } from "./types.ts";
 // Ordered most-urgent / most-specific first. The first match wins, so safety beats everything.
 const CUES: Array<{ moment: Moment; re: RegExp; weight: 1 | 2 | 3 }> = [
   // CRISIS / safety — check first, always. Kept deliberately conservative.
-  { moment: "crisis", weight: 3, re: /\b(kill myself|end (it|my life)|suicid(e|al)|don'?t want to (be here|live|wake up)|no reason to live|self[-\s]?harm|hurt myself|want to die)\b/i },
+  { moment: "crisis", weight: 3, re: /\b(kill myself|end (it|my life)|suicid(e|al)|don'?t want to (be here|live|wake up)|no reason to live|life (isn'?t|is not) worth living|rather be dead|want to die|wish i (was|were) dead|self[-\s]?harm|hurt myself|harm myself|cut myself|can'?t (go on|keep going)|done with life)\b/i },
 
   // GRIEF — a death / permanent loss.
-  { moment: "grief", weight: 3, re: /\b(passed away|died|death of|funeral|lost my (mom|mum|dad|father|mother|brother|sister|son|daughter|grand\w+|friend|dog|cat|pet))\b/i },
+  { moment: "grief", weight: 3, re: /\b(passed away|died|death of|funeral|cremat(ed|ion)|lost (someone|a friend|a loved one)|lost my (mom|mum|dad|father|mother|brother|sister|son|daughter|grand\w+|friend|dog|cat|pet)|is gone forever|no longer with us)\b/i },
 
   // HEARTBREAK — a relationship ending.
-  { moment: "heartbreak", weight: 3, re: /\b(broke up|breakup|broken up|dumped( me)?|she left me|he left me|they left me|ended things|got divorced|divorce|heart ?broken|my ex\b)\b/i },
+  { moment: "heartbreak", weight: 3, re: /\b(broke up|breakup|broken up|dumped( me)?|she left me|he left me|they left me|ended things|got divorced|divorce|heart ?broken|my ex\b|got ghosted|ghosted me|rejected me|doesn'?t love me|don'?t love me back|situationship ended)\b/i },
 
   // ANXIETY / overwhelm.
-  { moment: "anxiety", weight: 2, re: /\b(anxious|anxiety|panic(king|ked)?|overwhelmed|can'?t cope|so stressed|freaking out|terrified|scared (about|of)|dread(ing)?|nervous wreck|spiral(l?ing)?)\b/i },
+  { moment: "anxiety", weight: 2, re: /\b(anxious|anxiety|panic(king|ked)?|panic attack|can'?t breathe|overwhelmed|overstimulated|can'?t cope|so stressed|stressed out|freaking out|terrified|scared (about|of)|dread(ing)?|nervous wreck|spiral(l?ing)?|everything is too much|too much to handle|falling apart|breaking down|i'?m not okay|not okay right now)\b/i },
 
   // CELEBRATION — a win.
   { moment: "celebration", weight: 2, re: /(\b(i|we) (got|landed|nailed|aced|shipped|launched|finished|passed|won|finally did)\b|got the job|got promoted|she said yes|we did it|so happy|best day|!!!+|🎉|🥳)/i },
@@ -31,7 +31,7 @@ const CUES: Array<{ moment: Moment; re: RegExp; weight: 1 | 2 | 3 }> = [
   { moment: "conflict", weight: 1, re: /\b(be honest|brutal(ly)? honest|roast|tear (it|this) apart|what'?s wrong with|am i wrong|prove me wrong|devil'?s advocate|don'?t sugar ?coat|real(ly)? feedback|harsh)\b/i },
 
   // VENTING — needs to be heard.
-  { moment: "venting", weight: 1, re: /\b(i (just )?need to vent|rant|so done|fed up|hate my (job|boss|life)|nobody (gets|understands)|ugh|i'?m exhausted|burnt? out|nothing'?s working)\b/i },
+  { moment: "venting", weight: 2, re: /\b(i (just )?need to vent|rant|so done|fed up|hate my (job|boss|life)|nobody (gets|understands|cares)|ugh|i'?m exhausted|burnt? out|nothing'?s working|nothing is working|i feel (alone|lonely|empty|sad|awful|terrible|bad|broken|lost|stuck|worthless|useless|unlovable|like a failure)|i'?m (alone|lonely|sad|depressed|tired of this|tired of everything|done with this)|i hate myself|i keep crying|can'?t stop crying|bad day|rough day|everything sucks|life sucks)\b/i },
 
   // BANTER — playful, casual.
   { moment: "banter", weight: 1, re: /\b(lol|lmao|haha+|joke|you'?re funny|roast me( for fun)?|just messing|bored|entertain me|say something funny)\b/i },
