@@ -1159,7 +1159,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "stopRecordingAndTranscribe") {
     bgConsumeRecordingSeconds();
-    bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode, message.existingTranscript || "")
+    bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode, message.existingTranscript || "", message.meetingContext || null)
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -1173,6 +1173,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       existingTranscript: message.existingTranscript || "",
       mode: bgNormalizeRecordingMode(message.mode),
       knownSpeakerReferences: Array.isArray(message.knownSpeakerReferences) ? message.knownSpeakerReferences : [],
+      meetingContext: message.meetingContext && typeof message.meetingContext === "object" ? message.meetingContext : null,
     })
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
@@ -8822,11 +8823,20 @@ async function bgGetAudioSegment() {
   });
 }
 
-async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [] }) {
+function bgMeetingContextHasText(meetingContext) {
+  if (!meetingContext || typeof meetingContext !== "object") return false;
+  const captions = Array.isArray(meetingContext.captionTimeline) ? meetingContext.captionTimeline : [];
+  return captions.some((item) => String(item?.text || "").trim());
+}
+
+async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [], meetingContext = null }) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
   if (!stored.authToken) return { error: "Not signed in", notes: existingNotes };
 
-  if (!audioBase64) return { notes: existingNotes, empty: true };
+  const normalizedMode = bgNormalizeRecordingMode(mode);
+  if (!audioBase64 && !(normalizedMode === "meeting" && bgMeetingContextHasText(meetingContext))) {
+    return { notes: existingNotes, empty: true };
+  }
 
   try {
     const res = await fetch(`${BG_API_BASE}/transcribe-and-notes`, {
@@ -8837,11 +8847,12 @@ async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existin
         apikey: BG_SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
-        audioSegments: [audioBase64],
+        audioSegments: audioBase64 ? [audioBase64] : [],
         existingNotes,
         existingTranscript,
-        mode: bgNormalizeRecordingMode(mode),
+        mode: normalizedMode,
         knownSpeakerReferences,
+        meetingContext,
         clientNow: new Date().toISOString(),
         clientTimeZone: bgCalendarTimeZone(),
       }),
@@ -8883,7 +8894,7 @@ async function bgGetAndTranscribeSegment(existingNotes, mode, existingTranscript
   });
 }
 
-async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscript) {
+async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscript, meetingContext = null) {
   const activeMode = bgNormalizeRecordingMode(mode || bgRecordingMode);
   try {
     const stopRes = await stopRecording();
@@ -8893,6 +8904,7 @@ async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscr
       existingTranscript,
       mode: activeMode,
       knownSpeakerReferences: Array.isArray(stopRes?.knownSpeakerReferences) ? stopRes.knownSpeakerReferences : [],
+      meetingContext,
     });
   } finally {
     bgRecordingMode = "lecture";

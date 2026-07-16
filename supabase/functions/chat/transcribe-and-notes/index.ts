@@ -46,6 +46,31 @@ type MeetingArtifacts = {
   followUps: MeetingFollowUp[];
 };
 
+type MeetingSpeakerEvent = {
+  atMs: number;
+  untilMs: number;
+  name: string;
+  source: string;
+};
+
+type MeetingCaptionEvent = {
+  atMs: number;
+  speaker: string;
+  text: string;
+  source: string;
+};
+
+type MeetingContext = {
+  platform: string;
+  platformLabel: string;
+  title: string;
+  participantNames: string[];
+  speakerTimeline: MeetingSpeakerEvent[];
+  captionTimeline: MeetingCaptionEvent[];
+  currentSpeaker: string;
+  isPresenting: boolean;
+};
+
 class OpenAiRequestError extends Error {
   status: number;
 
@@ -72,8 +97,9 @@ serve(async (req) => {
     const clientTimeZone = typeof body.clientTimeZone === "string" && body.clientTimeZone.trim() ? body.clientTimeZone.trim() : "UTC";
     const segments = normalizeAudioSegments(body);
     const knownSpeakerReferences = normalizeKnownSpeakerReferences(body.knownSpeakerReferences);
+    const meetingContext = normalizeMeetingContext(body.meetingContext);
 
-    if (segments.length === 0) {
+    if (segments.length === 0 && !(mode === "meeting" && meetingContextHasCaptionText(meetingContext))) {
       return jsonResponse({ error: "No audio data provided" }, 400);
     }
 
@@ -92,6 +118,7 @@ serve(async (req) => {
           segment: segments[i],
           mode,
           knownSpeakerReferences,
+          meetingContext,
           openAiApiKey: OPENAI_API_KEY,
         });
         if (transcript) {
@@ -115,13 +142,16 @@ serve(async (req) => {
       }
     }
 
-    if (transcripts.length === 0) {
+    const captionTranscript = mode === "meeting" ? buildMeetingCaptionTranscript(meetingContext) : "";
+
+    if (transcripts.length === 0 && !captionTranscript) {
       return jsonResponse({ error: "No speech detected in any audio segment" }, 400);
     }
 
-    const combinedTranscript = transcripts.length === 1
+    const audioTranscript = transcripts.length === 1
       ? transcripts[0]
       : transcripts.map((t, i) => `[Segment ${i + 1}]\n${t}`).join("\n\n");
+    const combinedTranscript = captionTranscript || audioTranscript;
     const fullTranscript = [existingTranscript, combinedTranscript].filter(Boolean).join("\n\n").trim();
 
     console.log("Combined transcript length:", fullTranscript.length);
@@ -133,6 +163,7 @@ serve(async (req) => {
       existingNotes,
       existingImageKeys,
       transcript: fullTranscript || combinedTranscript,
+      meetingContext,
     });
 
     const notesRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -181,6 +212,7 @@ serve(async (req) => {
         meetingArtifacts = await extractMeetingArtifacts({
           transcript: fullTranscript || combinedTranscript,
           notes,
+          meetingContext,
           openAiApiKey: OPENAI_API_KEY,
           clientNow,
           clientTimeZone,
@@ -259,6 +291,83 @@ function normalizeKnownSpeakerReference(reference: unknown, index: number): Know
   };
 }
 
+function normalizeMeetingContext(rawValue: unknown): MeetingContext {
+  const raw = rawValue && typeof rawValue === "object" ? rawValue as Record<string, unknown> : {};
+  const participantNames = Array.isArray(raw.participantNames)
+    ? raw.participantNames.map((name) => normalizeMeetingName(name)).filter(Boolean).slice(0, 60)
+    : [];
+  const speakerTimeline = Array.isArray(raw.speakerTimeline)
+    ? raw.speakerTimeline.map(normalizeMeetingSpeakerEvent).filter((event): event is MeetingSpeakerEvent => Boolean(event)).slice(-200)
+    : [];
+  const captionTimeline = Array.isArray(raw.captionTimeline)
+    ? raw.captionTimeline.map(normalizeMeetingCaptionEvent).filter((event): event is MeetingCaptionEvent => Boolean(event)).slice(-200)
+    : [];
+  const platform = typeof raw.platform === "string" ? raw.platform.trim().slice(0, 40) : "";
+  const platformLabel = typeof raw.platformLabel === "string" ? raw.platformLabel.trim().slice(0, 80) : "";
+  const title = typeof raw.title === "string" ? raw.title.trim().slice(0, 160) : "";
+  const currentSpeaker = normalizeMeetingName(raw.currentSpeaker);
+  return {
+    platform,
+    platformLabel,
+    title,
+    participantNames: [...new Set(participantNames)],
+    speakerTimeline,
+    captionTimeline,
+    currentSpeaker,
+    isPresenting: raw.isPresenting === true,
+  };
+}
+
+function normalizeMeetingSpeakerEvent(value: unknown): MeetingSpeakerEvent | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const name = normalizeMeetingName(raw.name);
+  if (!name) return null;
+  const atMs = normalizeMs(raw.atMs);
+  const untilMs = Math.max(atMs, normalizeMs(raw.untilMs, atMs));
+  return {
+    atMs,
+    untilMs,
+    name,
+    source: typeof raw.source === "string" ? raw.source.trim().slice(0, 40) : "ui",
+  };
+}
+
+function normalizeMeetingCaptionEvent(value: unknown): MeetingCaptionEvent | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const text = typeof raw.text === "string" ? raw.text.replace(/\s+/g, " ").trim() : "";
+  if (!text) return null;
+  return {
+    atMs: normalizeMs(raw.atMs),
+    speaker: normalizeMeetingName(raw.speaker),
+    text: text.slice(0, 600),
+    source: typeof raw.source === "string" ? raw.source.trim().slice(0, 40) : "captions",
+  };
+}
+
+function normalizeMs(value: unknown, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number) : fallback;
+}
+
+function normalizeMeetingName(value: unknown) {
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+\(you\)$/i, "")
+    .replace(/\s+is\s+(?:speaking|presenting|sharing).*$/i, "")
+    .trim();
+  if (!text || text.length > 80) return "";
+  if (/\b(participants?|captions?|settings|microphone|camera|present|more options|chat|activities|host controls|raise hand|turn on|turn off)\b/i.test(text)) return "";
+  if (/^(speaker|participant|person|someone|meeting|google meet|captions?)$/i.test(text)) return "";
+  if (/^(you|me)$/i.test(text)) return "You";
+  return titleCaseSpeakerName(text);
+}
+
+function meetingContextHasCaptionText(context: MeetingContext) {
+  return context.captionTimeline.some((caption) => caption.text.trim().length > 0);
+}
+
 function normalizeMimeType(value: unknown, fallback: string) {
   const mimeType = typeof value === "string" ? value.trim().toLowerCase() : "";
   return mimeType.startsWith("audio/") ? mimeType : fallback;
@@ -285,11 +394,13 @@ async function transcribeSegment({
   segment,
   mode,
   knownSpeakerReferences,
+  meetingContext,
   openAiApiKey,
 }: {
   segment: AudioSegmentPayload;
   mode: RecordingMode;
   knownSpeakerReferences: KnownSpeakerReference[];
+  meetingContext: MeetingContext;
   openAiApiKey: string;
 }) {
   const form = new FormData();
@@ -321,7 +432,7 @@ async function transcribeSegment({
   }
 
   const transcribeData = await transcribeRes.json();
-  return formatTranscript(transcribeData, mode);
+  return formatTranscript(transcribeData, mode, meetingContext);
 }
 
 async function readOpenAiError(response: Response, fallback: string) {
@@ -448,7 +559,54 @@ function promoteExplicitSpeakerNames(entries: Array<{ speaker: string; text: str
   }));
 }
 
-function formatTranscript(payload: Record<string, unknown>, mode: RecordingMode) {
+function segmentTimeToMs(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return 0;
+  return number > 10000 ? Math.round(number) : Math.round(number * 1000);
+}
+
+function speakerFromMeetingTimeline(startMs: number, endMs: number, context: MeetingContext) {
+  if (!context?.speakerTimeline?.length) return "";
+  const windowStart = Math.max(0, startMs - 1800);
+  const windowEnd = Math.max(windowStart + 1, endMs + 1800);
+  const scores = new Map<string, number>();
+  for (const event of context.speakerTimeline) {
+    const eventStart = Number(event.atMs || 0);
+    const eventEnd = Math.max(eventStart + 1200, Number(event.untilMs || eventStart));
+    const overlap = Math.max(0, Math.min(windowEnd, eventEnd) - Math.max(windowStart, eventStart));
+    if (overlap <= 0) continue;
+    scores.set(event.name, (scores.get(event.name) || 0) + overlap);
+  }
+  let best = "";
+  let bestScore = 0;
+  for (const [name, score] of scores) {
+    if (score > bestScore) {
+      best = name;
+      bestScore = score;
+    }
+  }
+  return bestScore > 0 ? best : "";
+}
+
+function buildMeetingCaptionTranscript(context: MeetingContext) {
+  if (!context?.captionTimeline?.length) return "";
+  const merged: Array<{ speaker: string; text: string }> = [];
+  const seen = new Set<string>();
+  for (const caption of context.captionTimeline) {
+    const text = String(caption.text || "").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    const speaker = normalizeMeetingName(caption.speaker) || speakerFromMeetingTimeline(caption.atMs, caption.atMs + 3000, context) || context.currentSpeaker || "Speaker";
+    const key = `${speaker}:${text.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const previous = merged[merged.length - 1];
+    if (previous && previous.speaker === speaker) previous.text = `${previous.text} ${text}`.trim();
+    else merged.push({ speaker, text });
+  }
+  return merged.map((entry) => `${entry.speaker}: ${entry.text}`).join("\n");
+}
+
+function formatTranscript(payload: Record<string, unknown>, mode: RecordingMode, meetingContext: MeetingContext = normalizeMeetingContext(null)) {
   if (mode !== "meeting") {
     return typeof payload.text === "string" ? payload.text.trim() : "";
   }
@@ -464,7 +622,13 @@ function formatTranscript(payload: Record<string, unknown>, mode: RecordingMode)
   for (const segment of segments) {
     if (!segment || typeof segment !== "object") continue;
     const raw = segment as Record<string, unknown>;
-    const speaker = formatSpeakerLabel(raw.speaker, speakerIds, speakerCounter);
+    const startMs = segmentTimeToMs(raw.start ?? raw.start_time ?? raw.startMs);
+    const endMs = segmentTimeToMs(raw.end ?? raw.end_time ?? raw.endMs) || startMs + 3000;
+    let speaker = formatSpeakerLabel(raw.speaker, speakerIds, speakerCounter);
+    if (isGenericSpeakerLabel(speaker)) {
+      const timelineSpeaker = speakerFromMeetingTimeline(startMs, endMs, meetingContext);
+      if (timelineSpeaker) speaker = timelineSpeaker;
+    }
     const text = typeof raw.text === "string" ? raw.text.trim() : "";
     if (!text) continue;
     const previous = merged[merged.length - 1];
@@ -485,14 +649,24 @@ function buildNotesPrompts({
   existingNotes,
   existingImageKeys,
   transcript,
+  meetingContext,
 }: {
   mode: RecordingMode;
   hasExistingNotes: boolean;
   existingNotes: string;
   existingImageKeys: string[];
   transcript: string;
+  meetingContext?: MeetingContext;
 }) {
   if (mode === "meeting") {
+    const knownParticipants = meetingContext?.participantNames?.length
+      ? meetingContext.participantNames.join(", ")
+      : "none detected";
+    const meetingContextBlock = `Meeting context:
+- Platform: ${meetingContext?.platformLabel || meetingContext?.platform || "unknown"}
+- Title: ${meetingContext?.title || "unknown"}
+- Known participants detected from the meeting UI: ${knownParticipants}
+- Presentation active during this segment: ${meetingContext?.isPresenting ? "yes" : "no"}`;
     const system = hasExistingNotes
       ? `You are a precise meeting-notes assistant. Update the user's existing meeting notes using the latest transcript segment(s).
 
@@ -503,6 +677,7 @@ Rules:
 - Output clean Markdown
 - Prefer this section order when relevant: ## Summary, ## Participants, ## Decisions, ## Action Items, ## Follow-Ups, ## Open Questions
 - Include ## Participants whenever any names or stable speaker labels are available
+- Prefer participant names from the meeting context when transcript speaker labels match them.
 - Only include action items that were explicitly mentioned
 - Only include follow-ups that were explicitly mentioned
 - Attribute action items and follow-ups to explicit names when stated; otherwise use You or Speaker N
@@ -518,6 +693,7 @@ Rules:
 - Output clean Markdown
 - Prefer this section order when relevant: ## Summary, ## Participants, ## Decisions, ## Action Items, ## Follow-Ups, ## Open Questions
 - Include ## Participants whenever any names or stable speaker labels are available
+- Prefer participant names from the meeting context when transcript speaker labels match them.
 - Use short bullet points
 - Only include action items that were explicitly mentioned
 - Only include follow-ups that were explicitly mentioned
@@ -528,8 +704,8 @@ Rules:
 - Short transcript = short notes. Never pad or stretch content.`;
 
     const user = hasExistingNotes
-      ? `Existing meeting notes:\n\n${existingNotes}\n\nLatest transcript segment(s):\n\n${transcript}\n\nUpdate the meeting notes so they stay accurate and incorporate the new transcript.`
-      : `Convert this meeting transcript into structured meeting notes:\n\n${transcript}`;
+      ? `${meetingContextBlock}\n\nExisting meeting notes:\n\n${existingNotes}\n\nLatest transcript segment(s):\n\n${transcript}\n\nUpdate the meeting notes so they stay accurate and incorporate the new transcript.`
+      : `${meetingContextBlock}\n\nConvert this meeting transcript into structured meeting notes:\n\n${transcript}`;
 
     return { system, user };
   }
@@ -574,16 +750,21 @@ Rules:
 async function extractMeetingArtifacts({
   transcript,
   notes,
+  meetingContext,
   openAiApiKey,
   clientNow,
   clientTimeZone,
 }: {
   transcript: string;
   notes: string;
+  meetingContext: MeetingContext;
   openAiApiKey: string;
   clientNow: string;
   clientTimeZone: string;
 }): Promise<MeetingArtifacts> {
+  const knownParticipants = meetingContext.participantNames.length
+    ? meetingContext.participantNames.join(", ")
+    : "none detected";
   const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -629,6 +810,7 @@ Rules:
 - If the transcript gives a day but not a time, set dateIso and leave timeText empty.
 - If the transcript gives a time, preserve it in timeText exactly as naturally as possible.
 - Use owner / attendeeName / attendees only when the relevant person was explicitly named or clearly identified as You or Speaker N in the transcript.
+- Prefer these known participant names when the transcript clearly refers to them: ${knownParticipants}.
 - Never use A, B, Person A, or Person B. Use explicit names, You, or Speaker N only.
 - Keep sourceQuote short and verbatim.
 - Never invent owners, times, dates, emails, or extra follow-ups.
@@ -636,7 +818,7 @@ Rules:
         },
         {
           role: "user",
-          content: `Meeting transcript:\n\n${transcript}\n\nMeeting notes:\n\n${notes}`,
+          content: `Meeting context:\nPlatform: ${meetingContext.platformLabel || meetingContext.platform || "unknown"}\nTitle: ${meetingContext.title || "unknown"}\nKnown participants: ${knownParticipants}\nPresenting: ${meetingContext.isPresenting ? "yes" : "no"}\n\nMeeting transcript:\n\n${transcript}\n\nMeeting notes:\n\n${notes}`,
         },
       ],
     }),

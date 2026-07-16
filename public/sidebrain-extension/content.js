@@ -5051,6 +5051,11 @@ let __sbLecSegmentCount = 0;
 let __sbLectureRecordingMode = "lecture";
 let __sbLectureTranscript = "";
 let __sbMeetingArtifacts = { actionItems: [], followUps: [] };
+let __sbMeetingContext = null;
+let __sbMeetingPollTimer = null;
+let __sbMeetingObserver = null;
+let __sbMeetingAutosaveTimer = null;
+let __sbMeetingSegmentBusy = false;
 let __sbSpotifyUiState = {
   active: false,
   source: "spotify",
@@ -6010,6 +6015,7 @@ function __sbBuildBrainUI() {
     .sb-lec-waveform.paused .sb-lec-wave-bar { animation:none; transform:scaleY(0.3); opacity:0.35; }
     .sb-lec-timer { font-family:monospace; font-size:26px; font-weight:700; color:#1B1713; letter-spacing:0.04em; }
     .sb-lec-status { font-size:12px; color:#A79B92; text-align:center; min-height:16px; }
+    .sb-meeting-live-meta { font-size:10.5px; color:#705C50; background:rgba(255,251,247,0.72); border:1px solid rgba(65,48,40,0.1); border-radius:999px; padding:5px 9px; max-width:100%; text-align:center; }
     .sb-lec-btns { display:flex; gap:8px; width:100%; margin-top:4px; }
     .sb-lec-seg-btn { flex:1; padding:9px 6px; border:1px solid rgba(65,48,40,0.2); border-radius:14px; background:transparent; color:#413028; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s; }
     .sb-lec-seg-btn:hover { background:rgba(65,48,40,0.07); }
@@ -15098,6 +15104,413 @@ function __sbBindMeetingArtifactsActions() {
   });
 }
 
+const __SB_MEETING_CHECKPOINT_PREFIX = "sbMeetingCheckpoint:";
+const __SB_MEETING_AUTOSAVE_MS = 75000;
+const __SB_MEETING_CHECKPOINT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+function __sbMeetingPlatformInfo() {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  if (host === "meet.google.com") return { platform: "google-meet", label: "Google Meet", speakerAware: true };
+  if (/(^|\.)zoom\.us$/.test(host)) return { platform: "zoom-web", label: "Zoom Web", speakerAware: false };
+  if (/(^|\.)teams\.microsoft\.com$/.test(host) || /(^|\.)teams\.live\.com$/.test(host)) {
+    return { platform: "teams-web", label: "Teams Web", speakerAware: false };
+  }
+  return { platform: "browser-meeting", label: "Browser Meeting", speakerAware: false };
+}
+
+function __sbMeetingCheckpointKey() {
+  const info = __sbMeetingPlatformInfo();
+  const path = String(location.pathname || "").replace(/[^a-z0-9/_-]/gi, "").slice(0, 120) || "page";
+  return `${__SB_MEETING_CHECKPOINT_PREFIX}${info.platform}:${location.hostname}${path}`;
+}
+
+function __sbCleanMeetingText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function __sbLooksLikeMeetingName(value) {
+  const text = __sbCleanMeetingText(value);
+  if (!text || text.length < 2 || text.length > 80) return false;
+  if (/^(you|me|someone|participant|participants|meeting|google meet|meet|captions?|microphone|camera|presenting|speaking|muted|unmuted|joined|left|more options|pin|remove|host controls)$/i.test(text)) return false;
+  if (/[<>@]/.test(text)) return false;
+  return /[a-z]/i.test(text);
+}
+
+function __sbNormalizeMeetingName(value) {
+  let text = __sbCleanMeetingText(value)
+    .replace(/\s+\(you\)$/i, "")
+    .replace(/\s+is\s+(?:speaking|presenting|sharing).*$/i, "")
+    .replace(/\s+(?:speaking|presenting|sharing)\s*$/i, "")
+    .replace(/^(?:presentation by|screen shared by)\s+/i, "")
+    .trim();
+  if (/\b(participants?|captions?|settings|microphone|camera|present|more options|chat|activities|host controls|raise hand|turn on|turn off)\b/i.test(text)) return "";
+  if (/^(you|me)$/i.test(text)) return "You";
+  return __sbLooksLikeMeetingName(text) ? text : "";
+}
+
+function __sbIsVisibleMeetingElement(el) {
+  if (!el || !(el instanceof Element)) return false;
+  if (el.closest?.("#__sb_root__,#__sb_card_wrap__,#__sb_bar__")) return false;
+  const rect = el.getBoundingClientRect?.();
+  if (!rect || rect.width < 2 || rect.height < 2) return false;
+  const style = getComputedStyle(el);
+  return style.visibility !== "hidden" && style.display !== "none" && Number(style.opacity || 1) > 0.02;
+}
+
+function __sbMeetingTimeMs() {
+  return __sbMeetingContext ? Math.max(0, Date.now() - __sbMeetingContext.startedAt) : 0;
+}
+
+function __sbAddMeetingParticipant(name) {
+  if (!__sbMeetingContext) return;
+  const clean = __sbNormalizeMeetingName(name);
+  if (!clean) return;
+  const key = clean.toLowerCase();
+  if (!__sbMeetingContext.participantMap[key]) {
+    __sbMeetingContext.participantMap[key] = clean;
+    __sbMeetingContext.participants = Object.values(__sbMeetingContext.participantMap).slice(0, 60);
+  }
+}
+
+function __sbRecordMeetingSpeaker(name, source = "ui") {
+  if (!__sbMeetingContext) return;
+  const clean = __sbNormalizeMeetingName(name);
+  if (!clean) return;
+  __sbAddMeetingParticipant(clean);
+  const nowMs = __sbMeetingTimeMs();
+  const last = __sbMeetingContext.speakerTimeline[__sbMeetingContext.speakerTimeline.length - 1];
+  if (last && last.name === clean && nowMs - last.atMs < 2500) {
+    last.untilMs = nowMs;
+    last.source = last.source || source;
+  } else {
+    __sbMeetingContext.speakerTimeline.push({ atMs: nowMs, untilMs: nowMs, name: clean, source });
+    if (__sbMeetingContext.speakerTimeline.length > 500) __sbMeetingContext.speakerTimeline = __sbMeetingContext.speakerTimeline.slice(-500);
+  }
+  __sbMeetingContext.currentSpeaker = clean;
+  __sbMeetingContext.updatedAt = Date.now();
+  __sbUpdateMeetingStatus();
+}
+
+function __sbRecordMeetingCaption(speaker, text, source = "captions") {
+  if (!__sbMeetingContext) return;
+  const cleanText = __sbCleanMeetingText(text);
+  if (!cleanText || cleanText.length < 3) return;
+  if (/^(turn on captions|captions are on|captions are off)$/i.test(cleanText)) return;
+  const cleanSpeaker = __sbNormalizeMeetingName(speaker) || __sbMeetingContext.currentSpeaker || "";
+  if (cleanSpeaker) {
+    __sbAddMeetingParticipant(cleanSpeaker);
+    __sbRecordMeetingSpeaker(cleanSpeaker, source);
+  }
+  const key = `${cleanSpeaker || "speaker"}:${cleanText.slice(0, 180).toLowerCase()}`;
+  if (__sbMeetingContext.captionKeys[key]) return;
+  __sbMeetingContext.captionKeys[key] = true;
+  __sbMeetingContext.captionTimeline.push({
+    atMs: __sbMeetingTimeMs(),
+    speaker: cleanSpeaker,
+    text: cleanText,
+    source,
+  });
+  if (__sbMeetingContext.captionTimeline.length > 500) __sbMeetingContext.captionTimeline = __sbMeetingContext.captionTimeline.slice(-500);
+  __sbMeetingContext.updatedAt = Date.now();
+  __sbUpdateMeetingStatus();
+}
+
+function __sbExtractSpeakerFromMeetingText(text) {
+  const source = __sbCleanMeetingText(text);
+  if (!source) return "";
+  const patterns = [
+    /^(.{2,70}?)\s+is\s+(?:speaking|presenting|sharing)(?:\b|$)/i,
+    /^(.{2,70}?),?\s+(?:speaking|presenting|sharing)(?:\b|$)/i,
+    /(?:presentation by|screen shared by)\s+(.{2,70})$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    const name = __sbNormalizeMeetingName(match?.[1] || "");
+    if (name) return name;
+  }
+  return "";
+}
+
+function __sbExtractCaptionCandidate(el) {
+  if (!__sbIsVisibleMeetingElement(el)) return null;
+  const raw = __sbCleanMeetingText(el.innerText || el.textContent || "");
+  if (!raw || raw.length < 3 || raw.length > 900) return null;
+  if (raw.includes("Braino") || raw.includes("Stop & Get Notes")) return null;
+  if (!/[a-z]/i.test(raw) || raw.split(/\s+/).length < 3) return null;
+
+  const colon = raw.match(/^([A-Z][A-Za-z.' -]{1,48}|You):\s+(.{3,})$/);
+  if (colon) return { speaker: __sbNormalizeMeetingName(colon[1]), text: colon[2] };
+
+  const lines = String(el.innerText || el.textContent || "")
+    .split(/\n+/)
+    .map((line) => __sbCleanMeetingText(line))
+    .filter(Boolean);
+  if (lines.length >= 2 && __sbLooksLikeMeetingName(lines[0])) {
+    return { speaker: __sbNormalizeMeetingName(lines[0]), text: lines.slice(1).join(" ") };
+  }
+
+  return { speaker: "", text: raw };
+}
+
+function __sbScanGoogleMeetContext() {
+  if (!__sbMeetingContext || __sbMeetingContext.platform !== "google-meet") return;
+  const attrEls = document.querySelectorAll("[aria-label],[title],[data-tooltip],[data-self-name],[data-is-speaking],[data-speaking]");
+  let detectedSpeaker = "";
+  for (const el of attrEls) {
+    if (!__sbIsVisibleMeetingElement(el)) continue;
+    const attrs = [
+      el.getAttribute("data-self-name"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("title"),
+      el.getAttribute("data-tooltip"),
+    ].filter(Boolean);
+    for (const attr of attrs) {
+      const text = __sbCleanMeetingText(attr);
+      const explicit = __sbExtractSpeakerFromMeetingText(text);
+      if (explicit) detectedSpeaker = explicit;
+      const simpleName = __sbNormalizeMeetingName(text);
+      if (simpleName && !/\b(microphone|camera|caption|button|settings|options|present)\b/i.test(text)) {
+        __sbAddMeetingParticipant(simpleName);
+      }
+    }
+    const speakingFlag = String(el.getAttribute("data-is-speaking") || el.getAttribute("data-speaking") || "").toLowerCase();
+    if ((speakingFlag === "true" || speakingFlag === "1") && !detectedSpeaker) {
+      const tileText = __sbCleanMeetingText(el.getAttribute("aria-label") || el.textContent || "");
+      detectedSpeaker = __sbNormalizeMeetingName(tileText);
+    }
+  }
+  if (detectedSpeaker) __sbRecordMeetingSpeaker(detectedSpeaker, "meet-active-speaker");
+
+  const liveEls = document.querySelectorAll('[aria-live="polite"],[aria-live="assertive"],[role="log"]');
+  for (const el of liveEls) {
+    const caption = __sbExtractCaptionCandidate(el);
+    if (caption) __sbRecordMeetingCaption(caption.speaker, caption.text, "meet-captions");
+  }
+
+  const bodyText = __sbCleanMeetingText(document.body?.innerText || "");
+  const isPresenting = /\b(you are presenting|you'?re presenting|stop presenting|presenting to everyone|screen is being shared)\b/i.test(bodyText);
+  if (isPresenting !== __sbMeetingContext.isPresenting) {
+    __sbMeetingContext.isPresenting = isPresenting;
+    __sbMeetingContext.presentationTimeline.push({ atMs: __sbMeetingTimeMs(), presenting: isPresenting });
+    if (__sbMeetingContext.presentationTimeline.length > 120) __sbMeetingContext.presentationTimeline = __sbMeetingContext.presentationTimeline.slice(-120);
+    __sbUpdateMeetingStatus(isPresenting ? "Presentation detected. Still recording." : "");
+  }
+}
+
+function __sbMeetingContextPayload() {
+  if (!__sbMeetingContext) return null;
+  const speakerStart = __sbMeetingContext.sentSpeakerIndex || 0;
+  const captionStart = __sbMeetingContext.sentCaptionIndex || 0;
+  const payload = {
+    id: __sbMeetingContext.id,
+    platform: __sbMeetingContext.platform,
+    platformLabel: __sbMeetingContext.platformLabel,
+    title: __sbMeetingContext.title,
+    url: location.href,
+    startedAtIso: __sbMeetingContext.startedAtIso,
+    segmentStartMs: __sbMeetingContext.lastSegmentAtMs || 0,
+    segmentEndMs: __sbMeetingTimeMs(),
+    participantNames: (__sbMeetingContext.participants || []).slice(0, 60),
+    speakerTimeline: (__sbMeetingContext.speakerTimeline || []).slice(speakerStart).slice(-160),
+    captionTimeline: (__sbMeetingContext.captionTimeline || []).slice(captionStart).slice(-160),
+    presentationTimeline: (__sbMeetingContext.presentationTimeline || []).slice(-40),
+    currentSpeaker: __sbMeetingContext.currentSpeaker || "",
+    isPresenting: !!__sbMeetingContext.isPresenting,
+    hasCaptions: (__sbMeetingContext.captionTimeline || []).length > 0,
+    totalSpeakerEvents: (__sbMeetingContext.speakerTimeline || []).length,
+    totalCaptionEvents: (__sbMeetingContext.captionTimeline || []).length,
+  };
+  __sbMeetingContext.pendingSent = {
+    speakerIndex: (__sbMeetingContext.speakerTimeline || []).length,
+    captionIndex: (__sbMeetingContext.captionTimeline || []).length,
+    segmentEndMs: payload.segmentEndMs,
+  };
+  return payload;
+}
+
+function __sbMarkMeetingContextSent() {
+  if (!__sbMeetingContext?.pendingSent) return;
+  __sbMeetingContext.sentSpeakerIndex = __sbMeetingContext.pendingSent.speakerIndex;
+  __sbMeetingContext.sentCaptionIndex = __sbMeetingContext.pendingSent.captionIndex;
+  __sbMeetingContext.lastSegmentAtMs = __sbMeetingContext.pendingSent.segmentEndMs;
+  __sbMeetingContext.pendingSent = null;
+}
+
+function __sbMeetingPayloadHasText(payload) {
+  return Boolean(payload && Array.isArray(payload.captionTimeline) && payload.captionTimeline.some((item) => String(item?.text || "").trim()));
+}
+
+function __sbUpdateMeetingStatus(extra = "") {
+  if (__sbLectureRecordingMode !== "meeting") return;
+  const statusEl = document.getElementById("__sb_lec_status__");
+  const metaEl = document.getElementById("__sb_meeting_live_meta__");
+  if (!__sbMeetingContext) return;
+  const people = (__sbMeetingContext.participants || []).length;
+  const lastSpeaker = __sbMeetingContext.currentSpeaker || "Listening";
+  const captionText = (__sbMeetingContext.captionTimeline || []).length ? "captions on" : "audio fallback";
+  if (statusEl) statusEl.textContent = extra || `${__sbMeetingContext.platformLabel}: ${lastSpeaker} · ${captionText}`;
+  if (metaEl) {
+    const bits = [
+      `${people} speaker${people === 1 ? "" : "s"}`,
+      __sbMeetingContext.isPresenting ? "presenting" : "not presenting",
+      __sbMeetingContext.lastCheckpointAt ? `autosaved ${new Date(__sbMeetingContext.lastCheckpointAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "autosave ready",
+    ];
+    metaEl.textContent = bits.join(" · ");
+  }
+}
+
+async function __sbLoadMeetingCheckpoint() {
+  const key = __sbMeetingCheckpointKey();
+  const stored = await __sbStorageGet([key]);
+  const checkpoint = stored?.[key];
+  if (!checkpoint || checkpoint.completed) return null;
+  if (Date.now() - Number(checkpoint.updatedAt || 0) > __SB_MEETING_CHECKPOINT_MAX_AGE_MS) return null;
+  return checkpoint;
+}
+
+function __sbSaveMeetingCheckpoint(reason = "autosave", completed = false) {
+  if (!__sbMeetingContext || !__sbContextOk()) return;
+  const key = __sbMeetingContext.checkpointKey || __sbMeetingCheckpointKey();
+  const checkpoint = {
+    id: __sbMeetingContext.id,
+    platform: __sbMeetingContext.platform,
+    platformLabel: __sbMeetingContext.platformLabel,
+    title: __sbMeetingContext.title,
+    url: location.href,
+    notes: __sbLectureNotes || "",
+    transcript: __sbLectureTranscript || "",
+    artifacts: __sbMeetingArtifacts || { actionItems: [], followUps: [] },
+    participants: (__sbMeetingContext.participants || []).slice(0, 60),
+    speakerTimeline: (__sbMeetingContext.speakerTimeline || []).slice(-500),
+    captionTimeline: (__sbMeetingContext.captionTimeline || []).slice(-500),
+    presentationTimeline: (__sbMeetingContext.presentationTimeline || []).slice(-120),
+    sentSpeakerIndex: __sbMeetingContext.sentSpeakerIndex || 0,
+    sentCaptionIndex: __sbMeetingContext.sentCaptionIndex || 0,
+    lastSegmentAtMs: __sbMeetingContext.lastSegmentAtMs || 0,
+    updatedAt: Date.now(),
+    reason,
+    completed,
+  };
+  __sbMeetingContext.lastCheckpointAt = checkpoint.updatedAt;
+  chrome.storage.local.set({ [key]: checkpoint }, () => { void chrome.runtime.lastError; });
+  __sbUpdateMeetingStatus();
+}
+
+async function __sbStartMeetingContextTracker() {
+  const info = __sbMeetingPlatformInfo();
+  const checkpoint = await __sbLoadMeetingCheckpoint();
+  const now = Date.now();
+  const restoredParticipants = checkpoint?.participants || [];
+  const restoredSpeakerTimeline = Array.isArray(checkpoint?.speakerTimeline) ? checkpoint.speakerTimeline.slice(-500) : [];
+  const restoredCaptionTimeline = Array.isArray(checkpoint?.captionTimeline) ? checkpoint.captionTimeline.slice(-500) : [];
+  const restoredPresentationTimeline = Array.isArray(checkpoint?.presentationTimeline) ? checkpoint.presentationTimeline.slice(-120) : [];
+  const fallbackSpeakerIndex = checkpoint ? restoredSpeakerTimeline.length : 0;
+  const fallbackCaptionIndex = checkpoint ? restoredCaptionTimeline.length : 0;
+  const restoredSpeakerIndex = Number.isFinite(Number(checkpoint?.sentSpeakerIndex))
+    ? Math.min(Math.max(0, Number(checkpoint.sentSpeakerIndex)), restoredSpeakerTimeline.length)
+    : fallbackSpeakerIndex;
+  const restoredCaptionIndex = Number.isFinite(Number(checkpoint?.sentCaptionIndex))
+    ? Math.min(Math.max(0, Number(checkpoint.sentCaptionIndex)), restoredCaptionTimeline.length)
+    : fallbackCaptionIndex;
+  const restoredLastSegmentAtMs = Number.isFinite(Number(checkpoint?.lastSegmentAtMs))
+    ? Math.max(0, Number(checkpoint.lastSegmentAtMs))
+    : 0;
+  __sbMeetingContext = {
+    id: `mtg_${now}_${Math.random().toString(36).slice(2, 8)}`,
+    platform: info.platform,
+    platformLabel: info.label,
+    speakerAware: !!info.speakerAware,
+    title: __sbCleanMeetingText(document.title || "Meeting").slice(0, 120),
+    url: location.href,
+    startedAt: now,
+    startedAtIso: new Date(now).toISOString(),
+    participantMap: Object.fromEntries(restoredParticipants.map((name) => [String(name).toLowerCase(), name])),
+    participants: restoredParticipants.slice(0, 60),
+    speakerTimeline: restoredSpeakerTimeline,
+    captionTimeline: restoredCaptionTimeline,
+    captionKeys: {},
+    presentationTimeline: restoredPresentationTimeline,
+    currentSpeaker: "",
+    isPresenting: false,
+    sentSpeakerIndex: restoredSpeakerIndex,
+    sentCaptionIndex: restoredCaptionIndex,
+    lastSegmentAtMs: restoredLastSegmentAtMs,
+    checkpointKey: __sbMeetingCheckpointKey(),
+    lastCheckpointAt: checkpoint?.updatedAt || 0,
+    updatedAt: now,
+  };
+  for (const cap of __sbMeetingContext.captionTimeline) {
+    const key = `${cap?.speaker || "speaker"}:${String(cap?.text || "").slice(0, 180).toLowerCase()}`;
+    __sbMeetingContext.captionKeys[key] = true;
+  }
+  if (checkpoint?.notes) __sbLectureNotes = checkpoint.notes;
+  if (checkpoint?.transcript) __sbLectureTranscript = checkpoint.transcript;
+  if (checkpoint?.artifacts) __sbMeetingArtifacts = checkpoint.artifacts;
+
+  if (info.platform === "google-meet") {
+    __sbScanGoogleMeetContext();
+    __sbMeetingPollTimer = setInterval(__sbScanGoogleMeetContext, 1200);
+    try {
+      __sbMeetingObserver = new MutationObserver(() => __sbScanGoogleMeetContext());
+      __sbMeetingObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+    } catch (_) {}
+  }
+
+  __sbMeetingAutosaveTimer = setInterval(() => {
+    void __sbCaptureMeetingCheckpointSegment("autosave");
+  }, __SB_MEETING_AUTOSAVE_MS);
+  __sbSaveMeetingCheckpoint(checkpoint ? "recovered" : "start");
+  __sbUpdateMeetingStatus(checkpoint ? "Recovered prior meeting notes. Still recording." : "");
+}
+
+function __sbStopMeetingContextTracker(completed = false) {
+  if (__sbMeetingPollTimer) { clearInterval(__sbMeetingPollTimer); __sbMeetingPollTimer = null; }
+  if (__sbMeetingAutosaveTimer) { clearInterval(__sbMeetingAutosaveTimer); __sbMeetingAutosaveTimer = null; }
+  try { __sbMeetingObserver?.disconnect?.(); } catch (_) {}
+  __sbMeetingObserver = null;
+  if (__sbMeetingContext) __sbSaveMeetingCheckpoint(completed ? "completed" : "stopped", completed);
+}
+
+async function __sbWaitForMeetingSegmentIdle(maxMs = 3500) {
+  const started = Date.now();
+  while (__sbMeetingSegmentBusy && Date.now() - started < maxMs) {
+    await __sbSleep(200);
+  }
+}
+
+async function __sbCaptureMeetingCheckpointSegment(reason = "autosave") {
+  if (!__sbIsLectureRecording || __sbLectureRecordingMode !== "meeting" || __sbMeetingSegmentBusy) return;
+  if (!__sbInPageCaptureActive && !__sbMeetingContext) return;
+  __sbMeetingSegmentBusy = true;
+  __sbUpdateMeetingStatus(reason === "autosave" ? "Autosaving meeting notes..." : "Saving meeting notes...");
+  try {
+    const seg = __sbInPageCaptureActive
+      ? await __sbGetInPageSegment()
+      : { audioBase64: null, knownSpeakerReferences: [], meetingContext: __sbMeetingContextPayload() };
+    if (!seg.audioBase64 && !__sbMeetingPayloadHasText(seg.meetingContext)) {
+      __sbSaveMeetingCheckpoint(reason);
+      return;
+    }
+    const res = await __sbTranscribeIpSegment(seg);
+    if (res.error) {
+      __sbUpdateMeetingStatus(`Autosave skipped: ${String(res.error).slice(0, 80)}`);
+      __sbSaveMeetingCheckpoint("autosave-error");
+      return;
+    }
+    if (!res.empty) {
+      __sbMarkMeetingContextSent();
+      if (res.notes) __sbLectureNotes = res.notes;
+      if (res.transcript) __sbLectureTranscript = res.transcript;
+      if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
+      __sbLecSegmentCount++;
+    }
+    __sbSaveMeetingCheckpoint(reason);
+  } finally {
+    __sbMeetingSegmentBusy = false;
+    __sbUpdateMeetingStatus();
+  }
+}
+
 function __sbShowLectureRecordingCard() {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
@@ -15118,6 +15531,7 @@ function __sbShowLectureRecordingCard() {
       <div class="sb-lec-waveform" id="__sb_lec_waveform__">${bars}</div>
       <div class="sb-lec-timer" id="__sb_lec_card_timer__">00:00</div>
       <div class="sb-lec-status" id="__sb_lec_status__">${statusCopy}</div>
+      ${isMeeting ? `<div class="sb-meeting-live-meta" id="__sb_meeting_live_meta__">detecting speakers · autosave ready</div>` : ""}
       <div class="sb-lec-btns">
         ${segmentButtonHtml}
         <button id="__sb_lec_stop_btn__" class="sb-lec-stop-btn">⏹ Stop & Get Notes</button>
@@ -15205,12 +15619,13 @@ async function __sbBuildIpSpeakerRefs() {
 }
 
 async function __sbGetInPageSegment() {
-  if (!__sbIpRecorder) return { audioBase64: null, knownSpeakerReferences: [] };
+  const meetingContext = __sbLectureRecordingMode === "meeting" ? __sbMeetingContextPayload() : null;
+  if (!__sbIpRecorder) return { audioBase64: null, knownSpeakerReferences: [], meetingContext };
   await __sbFlushIpRecorder(__sbIpRecorder);
   const refs = await __sbBuildIpSpeakerRefs();
-  if (!__sbIpChunks.length) return { audioBase64: null, knownSpeakerReferences: refs };
+  if (!__sbIpChunks.length) return { audioBase64: null, knownSpeakerReferences: refs, meetingContext };
   const chunks = __sbIpChunks.slice(); __sbIpChunks = [];
-  return { audioBase64: await __sbBlobToBase64(new Blob(chunks, { type: "audio/webm" })), knownSpeakerReferences: refs };
+  return { audioBase64: await __sbBlobToBase64(new Blob(chunks, { type: "audio/webm" })), knownSpeakerReferences: refs, meetingContext };
 }
 
 async function __sbTranscribeIpSegment(seg) {
@@ -15222,6 +15637,7 @@ async function __sbTranscribeIpSegment(seg) {
       existingTranscript: __sbLectureTranscript,
       mode: __sbLectureRecordingMode,
       knownSpeakerReferences: seg.knownSpeakerReferences || [],
+      meetingContext: seg.meetingContext || null,
     }, (r) => resolve(r || {}));
   });
 }
@@ -15264,8 +15680,10 @@ async function __sbStartLectureRecording(options = {}) {
   try {
     // Synchronous-until-getDisplayMedia so the click's transient activation is still valid.
     await __sbStartInPageCapture(withMic);
+    if (mode === "meeting") await __sbStartMeetingContextTracker();
   } catch (err) {
     __sbIsLectureRecording = false;
+    __sbStopMeetingContextTracker(false);
     __sbCleanupInPageCapture();
     const name = String(err?.name || "");
     if (name === "NotAllowedError" || name === "AbortError") {
@@ -15286,6 +15704,7 @@ async function __sbStartLectureRecording(options = {}) {
   }
   __sbShowLectureRecordingBar(false);
   __sbShowLectureRecordingCard();
+  if (mode === "meeting") __sbUpdateMeetingStatus();
   if (options.readyMessage) {
     const statusEl = document.getElementById("__sb_lec_status__");
     if (statusEl) statusEl.textContent = String(options.readyMessage);
@@ -15354,6 +15773,10 @@ async function __sbStopLectureRecording() {
   if (brainBtnStop) { brainBtnStop.classList.remove("recording"); __sbRestoreWalkBrain(); }
   __sbShowLectureRecordingBar(false);
   __sbIsLectureRecording = false;
+  if (__sbLectureRecordingMode === "meeting") {
+    __sbStopMeetingContextTracker(false);
+    await __sbWaitForMeetingSegmentIdle();
+  }
 
   // Show loading state in the card while we process
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -15370,7 +15793,9 @@ async function __sbStopLectureRecording() {
   if (__sbInPageCaptureActive) {
     // In-page path: flush the final segment, transcribe it, then tear the capture down.
     const seg = await __sbGetInPageSegment();
-    res = seg.audioBase64 ? await __sbTranscribeIpSegment(seg) : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
+    res = (seg.audioBase64 || __sbMeetingPayloadHasText(seg.meetingContext))
+      ? await __sbTranscribeIpSegment(seg)
+      : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
     __sbCleanupInPageCapture();
   } else {
     res = await new Promise((resolve) => {
@@ -15380,6 +15805,7 @@ async function __sbStopLectureRecording() {
           existingNotes: __sbLectureNotes,
           existingTranscript: __sbLectureTranscript,
           mode: __sbLectureRecordingMode,
+          meetingContext: __sbLectureRecordingMode === "meeting" ? __sbMeetingContextPayload() : null,
         },
         (r) => resolve(r || {}),
       );
@@ -15387,13 +15813,19 @@ async function __sbStopLectureRecording() {
   }
 
   if (res.error) {
+    if (__sbLectureRecordingMode === "meeting") __sbSaveMeetingCheckpoint("final-error");
     __sbShowLectureResultMessage("Recording stopped", res.error);
     return;
   }
 
+  if (!res.empty) __sbMarkMeetingContextSent();
   if (res.notes) __sbLectureNotes = res.notes;
   if (res.transcript) __sbLectureTranscript = res.transcript;
   if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
+  if (__sbLectureRecordingMode === "meeting") {
+    __sbSaveMeetingCheckpoint("final", true);
+    __sbMeetingContext = null;
+  }
 
   if (__sbLectureNotes) {
     __sbShowLectureNotes(__sbLectureNotes, true);
