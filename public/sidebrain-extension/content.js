@@ -5159,6 +5159,7 @@ if (__sbContextOk()) {
     __sbRefreshInlineOwner();
     if (msg.action === "toggleSideBrainPanel") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      if (typeof __sbVerifyAgentRuntimeState === "function") __sbVerifyAgentRuntimeState("toggle");
       __sbToggleBrain();
       sendResponse({ ok: true });
     }
@@ -5288,6 +5289,13 @@ if (__sbContextOk()) {
       return false;
     }
     if (msg.action === "SB_AGENT_RUN_META" || msg.type === "SB_AGENT_RUN_META") {
+      const pending = __sbAgentPendingTurn;
+      if (typeof __sbForceClearAgentUi === "function") __sbForceClearAgentUi("new-run");
+      __sbAgentPendingTurn = pending;
+      __sbDelegateUiHidden = true;
+      __sbDelegateActive = true;
+      if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
+      if (typeof __sbSetStopBtn === "function") __sbSetStopBtn(true);
       if (typeof __sbAgentTraceStart === "function") __sbAgentTraceStart(msg.meta || {});
       sendResponse?.({ ok: true });
       return false;
@@ -7638,9 +7646,13 @@ function __sbBuildBrainUI() {
   // mid-flight here; if so, come up already in the working state instead of blank. ──
   try {
     chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
-      if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) return;
+      if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) {
+        if (typeof __sbForceClearAgentUi === "function") __sbForceClearAgentUi("boot-no-run");
+        return;
+      }
       __sbDelegateUiHidden = true;   // a delegate run owns this tab — the chat card stays SHUT
       __sbDelegateActive = true;     // run still going → no surface may tear down until it truly ends
+      if (typeof __sbAgentLogTouch === "function") __sbAgentLogTouch();
       document.getElementById("__sb_bar__")?.classList.add("open");
       if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
       // Restore the thinking island immediately (last thought carried from the background)
@@ -9375,6 +9387,7 @@ function __sbOpenPanel() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
+  if (typeof __sbVerifyAgentRuntimeState === "function") __sbVerifyAgentRuntimeState("panel-open");
   const wasOff = !__sbBrainVisible;             // OFF→PANEL plays the full climb wake-up
   __sbBrainVisible = true;
   __sbSetCursorRideMode(false);
@@ -11602,6 +11615,7 @@ function __sbSetBarAgentStatus(text) {
   if (!input || !bar) return;
   const log = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
   if (!log) return;
+  __sbAgentLogTouch();
   bar.classList.add("sb-agent-busy");
   if (!input.value) {                          // don't clobber what the user is typing
     input.placeholder = log.length > 88 ? log.slice(0, 87) + "…" : log;
@@ -11625,6 +11639,60 @@ let __sbAgentThought = "";   // Delegate's live per-step reasoning (rendered abo
 let __sbAgentBusy = false;            // true while an agent/research task runs
 let __sbAgentBusyLabel = "Working…";  // overrides the voice indicator's "Listening…" while busy
 let __sbAgentLogCollapseTimer = null;
+let __sbAgentLogLastUpdateAt = 0;
+let __sbAgentLogStaleTimer = null;
+const __SB_AGENT_LOG_STALE_MS = 90000;
+
+function __sbAgentLogTouch() {
+  __sbAgentLogLastUpdateAt = Date.now();
+  if (__sbAgentLogStaleTimer) clearTimeout(__sbAgentLogStaleTimer);
+  __sbAgentLogStaleTimer = setTimeout(() => {
+    const staleFor = Date.now() - (__sbAgentLogLastUpdateAt || 0);
+    if (staleFor < __SB_AGENT_LOG_STALE_MS) {
+      __sbAgentLogTouch();
+      return;
+    }
+    if (__sbDelegateActive || __sbAgentBusy || __sbAgentThought || __sbAgentLogSteps.length) {
+      __sbForceClearAgentUi("stale");
+    }
+  }, __SB_AGENT_LOG_STALE_MS + 500);
+}
+
+function __sbForceClearAgentUi(reason = "clear") {
+  __sbDelegateActive = false;
+  __sbDelegateUiHidden = false;
+  __sbAgentPendingTurn = null;
+  __sbAgentThought = "";
+  __sbAgentLogSteps = [];
+  __sbAgentBusy = false;
+  __sbAgentBusyLabel = "Working…";
+  __sbAgentLogLastUpdateAt = 0;
+  if (__sbAgentLogStaleTimer) { clearTimeout(__sbAgentLogStaleTimer); __sbAgentLogStaleTimer = null; }
+  if (__sbAgentLogCollapseTimer) { clearTimeout(__sbAgentLogCollapseTimer); __sbAgentLogCollapseTimer = null; }
+  if (typeof __sbAgentTraceFinish === "function" && reason !== "boot-no-run") __sbAgentTraceFinish();
+  if (typeof __sbClearBarAgentStatus === "function") __sbClearBarAgentStatus();
+  if (typeof __sbStopWaitEntertainment === "function") __sbStopWaitEntertainment();
+  if (typeof __sbSetStopBtn === "function") __sbSetStopBtn(false);
+  const bar = document.getElementById("__sb_bar__");
+  const log = document.getElementById("__sb_bar_log__");
+  if (bar) bar.classList.remove("sb-log-open", "sb-log-thinking", "sb-log-timing", "sb-agent-busy");
+  const stepsEl = log && log.querySelector(".sb-blog-steps");
+  if (stepsEl) stepsEl.innerHTML = "";
+  if (typeof __sbWkStatus === "function") __sbWkStatus(__sbHeadphoneMode ? "Listening…" : "");
+  if (typeof __sbSyncWalkerLane === "function") __sbSyncWalkerLane();
+}
+
+function __sbVerifyAgentRuntimeState(reason = "verify") {
+  if (!__sbDelegateActive && !__sbAgentBusy && !__sbAgentThought && !__sbAgentLogSteps.length) return;
+  const lastUpdateAt = __sbAgentLogLastUpdateAt || 0;
+  if (lastUpdateAt && Date.now() - lastUpdateAt < 2500) return;
+  try {
+    chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
+      if (chrome.runtime.lastError) return;
+      if (!resp || !resp.running || !resp.task) __sbForceClearAgentUi(reason);
+    });
+  } catch (_) {}
+}
 
 // Strip command boilerplate so "Search the web for X" and "Searching for 'X'" read as the same
 // step (kills the duplicated/noisy log lines).
@@ -11728,6 +11796,7 @@ function __sbAgentLogRender() {
 
 function __sbAgentLogShow(title) {
   if (__sbAgentLogCollapseTimer) { clearTimeout(__sbAgentLogCollapseTimer); __sbAgentLogCollapseTimer = null; }
+  __sbAgentLogTouch();
   __sbAgentBusy = true;
   if (title) __sbAgentBusyLabel = title;
   if (typeof __sbWkStatus === "function") __sbWkStatus(__sbAgentBusyLabel);  // flip "Listening…" → working label
@@ -11738,6 +11807,7 @@ function __sbAgentLogShow(title) {
 function __sbAgentLogStep(text) {
   const clean = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
   if (!clean) return;
+  __sbAgentLogTouch();
   const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
   const key = __sbAgentLogKey(clean);
   if (last && (last.text === clean || (key && __sbAgentLogKey(last.text) === key))) return;  // de-dupe repeats/near-repeats
@@ -11753,6 +11823,7 @@ function __sbAgentLogStep(text) {
 function __sbAgentLogThought(text) {
   const clean = String(text || "").replace(/\s+/g, " ").trim();
   if (!clean || clean === __sbAgentThought) return;
+  __sbAgentLogTouch();
   __sbAgentThought = clean;
   if (__sbJarvisOpen) __sbJarvisPushLog(`💭 ${clean}`);
   __sbAgentLogRender();
@@ -11763,6 +11834,7 @@ function __sbAgentLogThought(text) {
 // wait-entertainment stops. Every flow exit calls this so no surface is left saying
 // "Thinking/Researching…" after the task ended.
 function __sbAgentFlowDone() {
+  __sbAgentLogLastUpdateAt = 0;
   __sbAgentLogClear();
   if (typeof __sbClearBarAgentStatus === "function") __sbClearBarAgentStatus();
   if (typeof __sbStopWaitEntertainment === "function") __sbStopWaitEntertainment();
@@ -11772,6 +11844,7 @@ function __sbAgentFlowDone() {
 
 function __sbAgentLogClear() {
   if (__sbDelegateActive) return;   // run still going — keep the island up (nav resets must not collapse it)
+  if (__sbAgentLogStaleTimer) { clearTimeout(__sbAgentLogStaleTimer); __sbAgentLogStaleTimer = null; }
   __sbAgentThought = "";
   if (typeof __sbAgentTraceFinish === "function") __sbAgentTraceFinish();
   const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
@@ -14773,7 +14846,12 @@ function __sbRunAgent(task, options = {}) {
   if (document.getElementById("__sb_card_wrap__")?.classList.contains("visible")) __sbCollapseCard();
   __sbDelegateUiHidden = true;
   __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
-  __sbAgentLogClear(); __sbDelegateActive = true; __sbAgentLogShow("Working…"); __sbAgentLogThought("Thinking…");  // island opens ALREADY thinking; real thoughts replace in ~2s
+  if (typeof __sbForceClearAgentUi === "function") __sbForceClearAgentUi("new-run");
+  else __sbAgentLogClear();
+  __sbDelegateUiHidden = true;
+  __sbDelegateActive = true;
+  __sbAgentLogShow("Working…");
+  __sbAgentLogThought("Thinking…");  // island opens ALREADY thinking; real thoughts replace in ~2s
   __sbSetStopBtn(true);   // show the stop affordance (card + bar) the instant the task starts
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }

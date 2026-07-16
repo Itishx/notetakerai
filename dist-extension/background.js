@@ -1253,7 +1253,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const bootTabId = sender?.tab?.id || null;
     const bootTask = (bootTabId && bgAgentTaskByTab.get(bootTabId)) || "";
     const runFresh = Boolean(bgDelegateRunInfo) && (Date.now() - bgDelegateRunInfo.at < 30000);
-    sendResponse({ task: bootTask, running: Boolean(bootTask) && runFresh, lastThought: bgLastThoughtByTab.get(bootTabId) || "" });
+    const activeClaim = bootTabId ? bgActiveDelegateRunsByTab.get(bootTabId) : null;
+    const claimFresh = Boolean(activeClaim) && (Date.now() - activeClaim.startedAt < 120000);
+    const runOwnsThisTab = Boolean(bootTabId) && (
+      bgDelegateRunInfo?.tabId === bootTabId ||
+      bgDelegateAdoptTabId === bootTabId ||
+      claimFresh
+    );
+    const running = Boolean(bootTask) && ((runFresh && runOwnsThisTab) || claimFresh);
+    if (!running && bootTabId) {
+      bgAgentTaskByTab.delete(bootTabId);
+      bgLastThoughtByTab.delete(bootTabId);
+    }
+    sendResponse({
+      task: running ? bootTask : "",
+      running,
+      lastThought: running ? (bgLastThoughtByTab.get(bootTabId) || "") : "",
+    });
     return false;
   }
   if (message.action === "getStatus") {
@@ -2919,24 +2935,53 @@ function bgTryClaimDelegateRun(tabId, task) {
   return { ok: true, token };
 }
 
-function bgReleaseDelegateRun(tabId, token) {
-  const active = bgActiveDelegateRunsByTab.get(tabId);
-  if (active?.token === token) bgActiveDelegateRunsByTab.delete(tabId);
-  for (const [key, entry] of bgActiveDelegateRunsByTask) {
-    if (entry.token === token) bgActiveDelegateRunsByTask.delete(key);
+function bgClearDelegateTaskState(tabId, task) {
+  const taskKey = bgDelegateTaskKey(task);
+  if (tabId) {
+    bgAgentTaskByTab.delete(tabId);
+    bgLastThoughtByTab.delete(tabId);
+    if (bgDelegateRunInfo?.tabId === tabId) bgDelegateRunInfo = null;
+    if (bgDelegateAdoptTabId === tabId) bgDelegateAdoptTabId = null;
+  }
+  if (!taskKey) return;
+  for (const [mappedTabId, mappedTask] of bgAgentTaskByTab) {
+    if (bgDelegateTaskKey(mappedTask) !== taskKey) continue;
+    bgAgentTaskByTab.delete(mappedTabId);
+    bgLastThoughtByTab.delete(mappedTabId);
+    if (bgDelegateRunInfo?.tabId === mappedTabId) bgDelegateRunInfo = null;
+    if (bgDelegateAdoptTabId === mappedTabId) bgDelegateAdoptTabId = null;
   }
 }
 
+function bgReleaseDelegateRun(tabId, token) {
+  const active = bgActiveDelegateRunsByTab.get(tabId);
+  let releasedKey = "";
+  if (active?.token === token) {
+    releasedKey = active.key || "";
+    bgActiveDelegateRunsByTab.delete(tabId);
+  }
+  for (const [key, entry] of bgActiveDelegateRunsByTask) {
+    if (entry.token === token) {
+      releasedKey = releasedKey || key;
+      bgActiveDelegateRunsByTask.delete(key);
+    }
+  }
+  bgClearDelegateTaskState(tabId, releasedKey);
+}
+
 function bgBrainUpdate(tabId, text, final = false, opts = {}) {
+  const taskForMessage = opts.task || bgAgentTaskByTab.get(tabId) || "";
   void bgSendInlineUiMessage(tabId, {
     action: "sbAgentUpdate",
     text,
     final,
     speakHint: opts.speakHint || null,
-    task: opts.task || bgAgentTaskByTab.get(tabId) || "",
+    task: taskForMessage,
     keepLectureCard: opts.keepLectureCard === true,
   });
-  if (final) setTimeout(() => bgAgentTaskByTab.delete(tabId), 5000);
+  if (final) {
+    bgClearDelegateTaskState(tabId, taskForMessage);
+  }
 }
 
 async function bgSendInlineUiMessage(tabId, message) {
