@@ -1667,7 +1667,18 @@ async function __sbGmailOpenVisibleEmail(query, options = {}) {
   if (!el) return { error: "The matching Gmail row could not be clicked." };
   const beforeUrl = window.location.href;
   const target = el.querySelector('.xY.a4W, .y6, .bog, .xS, .yW, .zF, [role="link"], a[href*="#inbox/"], a[href*="#search/"]') || el;
-  __sbGmailClickElementAtCenter(target);
+  let clicked = false;
+  const clickTarget = () => {
+    if (clicked) return;
+    clicked = true;
+    __sbGmailClickElementAtCenter(target);
+  };
+  const animated = await __sbJumpPointAt(target, {
+    say: q ? "Opening this." : "This one.",
+    holdMs: 650,
+    onPoint: clickTarget,
+  }).catch(() => false);
+  if (!animated) clickTarget();
 
   let thread = null;
   for (let i = 0; i < 28; i += 1) {
@@ -4606,8 +4617,9 @@ function __sbJumpPointAt(el, opts = {}) {
     const onKey = (e) => { if (e.key === "Escape") dismiss = true; };
     const onClick = () => { dismiss = true; };
 
-    let phase = "crouch", pStart = performance.now(), said = false, holdStart = 0;
-    const T = { crouch: 280, launch: 160, fly: 640, land: 160, recover: 260, hold: 3400, bCrouch: 210, bFly: 580 };
+    let phase = "crouch", pStart = performance.now(), said = false, pointed = false, holdStart = 0;
+    const holdMs = Number.isFinite(Number(opts.holdMs)) ? Math.max(250, Number(opts.holdMs)) : 3400;
+    const T = { crouch: 280, launch: 160, fly: 640, land: 160, recover: 260, hold: holdMs, bCrouch: 210, bFly: 580 };
     const t0 = performance.now();
     const next = (p) => { phase = p; pStart = performance.now(); };
 
@@ -4694,6 +4706,10 @@ function __sbJumpPointAt(el, opts = {}) {
         fx.beam.style.opacity = "0.9";
         fx.beam.style.strokeDashoffset = (-(tt * 22) % 200).toFixed(1);
         if (!said) { said = true; if (opts.say) __sbWkSay(opts.say); }
+        if (!pointed) {
+          pointed = true;
+          try { opts.onPoint?.({ element: el }); } catch (_) {}
+        }
         if (held >= T.hold || dismiss) {
           next("bCrouch");
         }
