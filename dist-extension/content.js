@@ -5845,15 +5845,21 @@ function __sbBuildBrainUI() {
       font-size: 12.5px; line-height: 1.3; font-weight: 600; color: #2B221D;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .sb-bubble-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .sb-bubble-actions { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
     .sb-bubble-iconbtn {
-      border: none; background: rgba(67,50,42,0.07); color: #7A6157;
+      border: 1px solid rgba(255,255,255,0.62); background: rgba(255,251,247,0.76); color: #332821;
       width: 26px; height: 26px; border-radius: 8px; cursor: pointer;
       display: inline-flex; align-items: center; justify-content: center;
       font-size: 11px; font-weight: 600;
-      transition: background 0.12s, color 0.12s;
+      box-shadow: 0 5px 14px rgba(27,23,19,0.14), inset 0 1px 0 rgba(255,255,255,0.7);
+      text-shadow: 0 1px 0 rgba(255,255,255,0.55);
+      transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
     }
-    .sb-bubble-iconbtn:hover { background: rgba(201,84,74,0.14); color: #B44B42; }
+    .sb-bubble-iconbtn:hover {
+      background: rgba(255,255,255,0.92); color: #B44B42; border-color: rgba(201,84,74,0.34);
+      box-shadow: 0 7px 18px rgba(27,23,19,0.18), inset 0 1px 0 rgba(255,255,255,0.8);
+      transform: translateY(-1px);
+    }
 
     /* ── scrollable body ── */
     .sb-bubble-body {
@@ -6290,8 +6296,9 @@ function __sbBuildBrainUI() {
       --sb-pre-bg: rgba(0,0,0,0.35); --sb-pre-fg: #FBF7F1;
       --sb-bq-border: rgba(255,160,150,0.5); --sb-bq-fg: rgba(255,255,255,0.7);
       --sb-hr: rgba(255,255,255,0.15); --sb-link: #FFB3AE;
-      --sb-btn-fg: rgba(255,255,255,0.75); --sb-btn-bg: rgba(255,255,255,0.18);
-      --sb-btn-hover: rgba(255,255,255,0.32); --sb-rec-border: rgba(255,255,255,0.18);
+      --sb-btn-fg: #2D231D; --sb-btn-bg: rgba(255,251,247,0.78);
+      --sb-btn-hover: rgba(255,255,255,0.94); --sb-btn-border: rgba(255,255,255,0.62);
+      --sb-rec-border: rgba(255,255,255,0.18);
       position: relative; width: 100%;
       height: auto; max-height: min(72vh, 700px); min-height: 120px;
       display: flex; flex-direction: column; overflow: hidden;
@@ -6319,8 +6326,9 @@ function __sbBuildBrainUI() {
       --sb-pre-bg: rgba(27,23,19,0.08); --sb-pre-fg: #1B1713;
       --sb-bq-border: rgba(201,84,74,0.4); --sb-bq-fg: rgba(27,23,19,0.65);
       --sb-hr: rgba(65,48,40,0.12); --sb-link: #C9544A;
-      --sb-btn-fg: rgba(65,48,40,0.8); --sb-btn-bg: rgba(65,48,40,0.08);
-      --sb-btn-hover: rgba(65,48,40,0.15); --sb-rec-border: rgba(65,48,40,0.12);
+      --sb-btn-fg: #2D231D; --sb-btn-bg: rgba(255,255,255,0.74);
+      --sb-btn-hover: rgba(255,255,255,0.92); --sb-btn-border: rgba(65,48,40,0.16);
+      --sb-rec-border: rgba(65,48,40,0.12);
       backdrop-filter: blur(22px) saturate(170%);
       -webkit-backdrop-filter: blur(22px) saturate(170%);
       box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08),
@@ -6333,12 +6341,24 @@ function __sbBuildBrainUI() {
       padding: 12px 14px 4px; flex-shrink: 0;
     }
     .sb-card-header-btn {
-      border: none; background: var(--sb-btn-bg); color: var(--sb-btn-fg);
+      border: 1px solid var(--sb-btn-border); background: var(--sb-btn-bg); color: var(--sb-btn-fg);
       height: 26px; padding: 0 10px; border-radius: 8px; cursor: pointer;
-      font-size: 11px; font-weight: 600; transition: background 0.12s;
+      font-size: 11px; font-weight: 700; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      box-shadow: 0 6px 18px rgba(27,23,19,0.16), inset 0 1px 0 rgba(255,255,255,0.62);
+      text-shadow: 0 1px 0 rgba(255,255,255,0.5);
     }
-    .sb-card-header-btn:hover { background: var(--sb-btn-hover); }
+    .sb-card-header-btn:hover {
+      background: var(--sb-btn-hover); border-color: rgba(201,84,74,0.32);
+      box-shadow: 0 8px 22px rgba(27,23,19,0.2), inset 0 1px 0 rgba(255,255,255,0.76);
+      transform: translateY(-1px);
+    }
+    .sb-card-header-btn:focus-visible,
+    .sb-card-foot-btn:focus-visible,
+    #__sb_card_mode_btn__:focus-visible {
+      outline: 2px solid rgba(232,120,110,0.62);
+      outline-offset: 2px;
+    }
     .sb-card-scroll {
       flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px;
       user-select: text;
@@ -7162,13 +7182,31 @@ function __sbBuildBrainUI() {
     }
     #__sb_card_input__::placeholder { color: var(--sb-fg-3); }
     .sb-card-foot-btn {
-      width: 30px; height: 30px; border-radius: 50%; border: none;
-      background: transparent; color: var(--sb-btn-fg); cursor: pointer;
+      width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--sb-btn-border);
+      background: var(--sb-btn-bg); color: var(--sb-btn-fg); cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; transition: background 0.15s; padding: 0;
+      flex-shrink: 0; transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s; padding: 0;
+      box-shadow: 0 5px 15px rgba(27,23,19,0.14), inset 0 1px 0 rgba(255,255,255,0.62);
     }
-    .sb-card-foot-btn:hover { background: var(--sb-btn-bg); }
-    .sb-card-foot-btn.active { background: #fee2e2; color: #C9544A; }
+    .sb-card-foot-btn:hover {
+      background: var(--sb-btn-hover); border-color: rgba(201,84,74,0.32);
+      box-shadow: 0 7px 18px rgba(27,23,19,0.18), inset 0 1px 0 rgba(255,255,255,0.76);
+      transform: translateY(-1px);
+    }
+    .sb-card-foot-btn.active { background: #fee2e2; color: #C9544A; border-color: rgba(201,84,74,0.28); }
+    #__sb_bubble__ #__sb_card_mode_btn__ {
+      border: 1px solid var(--sb-btn-border);
+      background: var(--sb-btn-bg);
+      color: var(--sb-btn-fg);
+      box-shadow: 0 5px 15px rgba(27,23,19,0.14), inset 0 1px 0 rgba(255,255,255,0.62);
+      font-weight: 700;
+    }
+    #__sb_bubble__ #__sb_card_mode_btn__:hover {
+      background: var(--sb-btn-hover);
+      border-color: rgba(201,84,74,0.32);
+      box-shadow: 0 7px 18px rgba(27,23,19,0.18), inset 0 1px 0 rgba(255,255,255,0.76);
+    }
+    #__sb_bubble__ #__sb_card_mode_btn__ svg { opacity: 0.76; }
     #__sb_voice_status_badge__ {
       font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
       text-transform: uppercase; letter-spacing: 0.06em;
