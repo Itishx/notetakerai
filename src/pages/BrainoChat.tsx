@@ -15,7 +15,12 @@ const DELEGATE_KEY = "braino-site-chat-delegate-v1";
 
 const BRAINO_SITE_CONTEXT = `You are Braino inside the full-screen website chat on trybraino.com.
 
-Be useful first. Sound like Braino: direct, warm, alive, and never corporate. This chat can answer normally, and obvious browser/action tasks can route to Delegate through the user's extension.`;
+Be useful first. Sound like Braino: direct, warm, alive, and never corporate. This chat can answer normally, and obvious browser/action tasks can route to Delegate through the user's extension.
+
+Context discipline:
+- Treat the provided chat history as the active conversation. Short follow-ups like "bargad", "yes", "that one", or "tell me more" are usually answers to the immediately previous turn, not brand-new topics.
+- Use the saved-chat memory block when the user asks what you discussed earlier or references something from another Braino chat.
+- Do not pretend you remember something that is not in the provided history or memory block.`;
 
 type ChatRole = "user" | "assistant";
 type DelegateStatus = "pending" | "running" | "done" | "error";
@@ -144,6 +149,99 @@ function buildEmptyGreeting(user: { email?: string | null; user_metadata?: { ful
   return inIndia ? `Shaam ho gayi, ${name}. Kya karna hai?` : `Welcome back, ${name}. What are we doing?`;
 }
 
+const CHAT_MEMORY_STOP_WORDS = new Set([
+  "about", "after", "again", "also", "because", "braino", "chat", "could", "details", "does", "from", "give",
+  "have", "just", "know", "like", "more", "need", "please", "tell", "that", "their", "there", "these", "thing",
+  "this", "what", "when", "where", "which", "with", "would", "your",
+]);
+
+function compactText(text: string, max = 420) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+function extractMemoryTerms(message: string) {
+  return Array.from(new Set(
+    String(message || "")
+      .toLowerCase()
+      .replace(/https?:\/\/\S+/g, " ")
+      .replace(/[^a-z0-9\s'-]/g, " ")
+      .split(/\s+/)
+      .map((word) => word.replace(/^'+|'+$/g, ""))
+      .filter((word) => word.length > 2 && !CHAT_MEMORY_STOP_WORDS.has(word))
+  )).slice(0, 12);
+}
+
+function wantsSavedChatRecall(message: string) {
+  return /\b(remember|previous|earlier|last time|old chat|older chat|another chat|other chat|our chat|we talked|did we discuss|conversation|history)\b/i.test(message);
+}
+
+function formatChatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recently";
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function scoreThreadForMemory(thread: ChatThread, terms: string[], recencyIndex: number, forceRecall: boolean) {
+  const haystack = `${thread.title}\n${thread.messages.map((message) => message.text).join("\n")}`.toLowerCase();
+  const title = thread.title.toLowerCase();
+  const termScore = terms.reduce((score, term) => {
+    if (!term) return score;
+    let next = score;
+    if (title.includes(term)) next += 6;
+    if (haystack.includes(term)) next += 2;
+    return next;
+  }, 0);
+  const recencyScore = forceRecall ? Math.max(0, 5 - recencyIndex) : 0;
+  return termScore + recencyScore;
+}
+
+function renderThreadMemory(thread: ChatThread, messages: ChatMessage[]) {
+  const turns = messages
+    .filter((message) => message.kind !== "delegate" && message.text.trim())
+    .slice(-8)
+    .map((message) => `- ${message.role}: ${compactText(message.text, 360)}`)
+    .join("\n");
+  return `Saved chat: "${compactText(thread.title, 80)}" (${formatChatDate(thread.updatedAt)})\n${turns}`;
+}
+
+function buildChatMemoryContext(args: {
+  threads: ChatThread[];
+  currentThreadId: string;
+  currentMessages: ChatMessage[];
+  message: string;
+}) {
+  const { threads, currentThreadId, currentMessages, message } = args;
+  const activeTurns = currentMessages.filter((item) => item.kind !== "delegate" && item.text.trim()).slice(-10);
+  const terms = extractMemoryTerms(message);
+  const forceRecall = wantsSavedChatRecall(message);
+  const sortedThreads = [...threads]
+    .filter((thread) => thread.messages.some((item) => item.kind !== "delegate" && item.text.trim()))
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  const relevantThreads = sortedThreads
+    .filter((thread) => thread.id !== currentThreadId)
+    .map((thread, index) => ({ thread, score: scoreThreadForMemory(thread, terms, index, forceRecall) }))
+    .filter((item) => forceRecall || item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, forceRecall ? 8 : 5)
+    .map((item) => renderThreadMemory(item.thread, item.thread.messages));
+
+  const blocks = [
+    "Saved Braino chat context. Use this as recall, not as a transcript to repeat verbatim.",
+    activeTurns.length
+      ? `Immediate active thread before the latest user message:\n${activeTurns.map((item) => `- ${item.role}: ${compactText(item.text, 360)}`).join("\n")}`
+      : "",
+    relevantThreads.length
+      ? `Relevant saved chats from this browser:\n\n${relevantThreads.join("\n\n")}`
+      : forceRecall
+        ? "No older saved chats matched beyond the active thread."
+        : "",
+  ].filter(Boolean).join("\n\n");
+
+  return blocks.length > 6500 ? `${blocks.slice(0, 6500)}…` : blocks;
+}
+
 function looksLikeDelegateTask(text: string) {
   return /\b(open|go to|navigate|search|google|click|press|type|fill|submit|send|reply|email|gmail|book|buy|add to cart|order|schedule|create a doc|make a doc|edit|delete|archive|unsubscribe)\b/i.test(text);
 }
@@ -249,7 +347,7 @@ function Icon({ name }: { name: "new" | "search" | "library" | "menu" | "plus" |
 function BrainoMark({ size = 30, expr = "happy", talking = false }: { size?: number; expr?: string; talking?: boolean }) {
   return (
     <span className={`braino-avatar${talking ? " is-talking" : ""}`}>
-      <Braino size={size} expr={expr} arm={talking ? "wave" : "none"} legs gloves idle bobAmp={talking ? 1.2 : 0.45} />
+      <Braino size={size} expr={expr} arm="none" talk={talking} legs gloves idle bobAmp={talking ? 0.75 : 0.45} />
     </span>
   );
 }
@@ -257,18 +355,20 @@ function BrainoMark({ size = 30, expr = "happy", talking = false }: { size?: num
 async function callBrainoSiteChat(args: {
   message: string;
   history: ChatMessage[];
+  chatMemoryContext?: string;
   userId?: string;
   accessToken?: string;
   driveConnected?: boolean;
 }) {
   const authHeader = args.accessToken ? `Bearer ${args.accessToken}` : `Bearer ${SUPABASE_KEY}`;
+  const notes = [BRAINO_SITE_CONTEXT, args.chatMemoryContext].filter(Boolean).join("\n\n");
   const response = await fetch(`${SUPABASE_URL}/functions/v1/chat-about-notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: authHeader },
     body: JSON.stringify({
       message: args.message,
-      chatHistory: args.history.slice(-10).filter((m) => m.kind !== "delegate").map((m) => ({ role: m.role, content: m.text })),
-      notes: BRAINO_SITE_CONTEXT,
+      chatHistory: args.history.slice(-18).filter((m) => m.kind !== "delegate").map((m) => ({ role: m.role, content: m.text })),
+      notes,
       userId: args.userId,
       driveConnected: args.driveConnected ?? false,
       clientTimeZone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null,
@@ -276,7 +376,7 @@ async function callBrainoSiteChat(args: {
       pageContext: {
         title: "Braino full-screen chat",
         url: typeof window !== "undefined" ? window.location.href : "https://trybraino.com/chat",
-        text: "The user is talking to Braino inside the dedicated website chat page.",
+        text: "The user is talking to Braino inside the dedicated website chat page. Relevant saved chat recall is included in notes when available.",
       },
     }),
   });
@@ -454,7 +554,8 @@ function VoiceOverlay({
         <Icon name="x" />
       </button>
       <div className="bc-voice-glow" />
-      <div className="bc-big-braino">
+      <div className={`bc-big-braino${status === "listening" ? " is-listening" : ""}`}>
+        <div className="bc-voice-sonar" aria-hidden="true"><span /><span /></div>
         <BrainoMark size={190} expr={expr} talking={talking} />
       </div>
       <div className="bc-voice-state">
@@ -607,6 +708,12 @@ export default function BrainoChat() {
       const response = await callBrainoSiteChat({
         message: text,
         history,
+        chatMemoryContext: buildChatMemoryContext({
+          threads,
+          currentThreadId,
+          currentMessages: history,
+          message: text,
+        }),
         userId: user?.id,
         accessToken: session?.access_token,
         driveConnected,
@@ -620,7 +727,7 @@ export default function BrainoChat() {
       setMessages((prev) => [...prev, { id: createId(), role: "assistant", text: message, createdAt: new Date().toISOString(), kind: "chat" }]);
       throw askError;
     }
-  }, [driveConnected, session?.access_token, streamReply, user?.id]);
+  }, [currentThreadId, driveConnected, session?.access_token, streamReply, threads, user?.id]);
 
   const delegate = useCallback(async (task: string, history: ChatMessage[] = []) => {
     const tempId = createId();
@@ -983,8 +1090,8 @@ const CHAT_CSS = `
 }
 .braino-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none}
 .braino-avatar svg{overflow:visible;width:auto;height:auto}
-.braino-avatar.is-talking{animation:bcTalkBob .7s ease-in-out infinite}
-@keyframes bcTalkBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.braino-avatar.is-talking{animation:bcTalkBob 1s ease-in-out infinite}
+@keyframes bcTalkBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 
 .bc-sidebar{
   min-width:0;
@@ -1285,6 +1392,33 @@ const CHAT_CSS = `
 .bc-voice-stage.is-speaking .bc-voice-glow{animation-duration:.8s}
 @keyframes bcVoicePulse{0%,100%{transform:scale(.92);opacity:.7}50%{transform:scale(1.08);opacity:1}}
 .bc-big-braino{position:relative;z-index:1;filter:drop-shadow(0 18px 28px rgba(232,120,110,.22))}
+.bc-voice-sonar{
+  position:absolute;
+  left:50%;
+  top:42%;
+  width:170px;
+  height:170px;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:-1;
+  opacity:0;
+}
+.bc-big-braino.is-listening .bc-voice-sonar{opacity:1}
+.bc-voice-sonar span{
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  border:2px solid rgba(232,120,110,.42);
+  transform:scale(.45);
+  opacity:0;
+  animation:bcVoiceSonar 2.4s ease-out infinite;
+}
+.bc-voice-sonar span:nth-child(2){animation-delay:1.2s}
+@keyframes bcVoiceSonar{
+  0%{transform:scale(.45);opacity:0}
+  14%{opacity:.65}
+  100%{transform:scale(2.7);opacity:0}
+}
 .bc-voice-state{
   position:absolute;
   bottom:116px;
