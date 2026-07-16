@@ -1113,7 +1113,23 @@ function __sbGmailFindComposeBody(root = document) {
 }
 
 function __sbGmailFindReplyButton() {
+  const exactSelectors = [
+    '.amr .nr.wR .amn span.ams.bkH[role="link"]',
+    '.amr .amn span.ams.bkH[role="link"]',
+    'span.ams.bkH[role="link"]',
+  ];
+  for (const selector of exactSelectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (!__sbGmailVisible(el)) continue;
+      if (el.closest?.("#__sb_bar__, #sb-brain-mascot-wrapper, .bg-overlay")) continue;
+      const text = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("data-tooltip") || "");
+      if (/^reply$/i.test(text)) return el;
+    }
+  }
+
   const selectors = [
+    '.amr .nr.wR .amn span[role="link"]',
+    '.amr .amn span[role="link"]',
     '[role="main"] .amn .ams',
     '[role="main"] .ams.bkH',
     '[role="main"] div[role="button"][aria-label^="Reply"]',
