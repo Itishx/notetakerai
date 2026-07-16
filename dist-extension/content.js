@@ -1051,6 +1051,23 @@ function __sbGmailClickElement(el) {
   return true;
 }
 
+function __sbGmailClickElementAtCenter(el) {
+  if (!el) return false;
+  try { el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }); } catch (_) {}
+  const rect = el.getBoundingClientRect();
+  const x = Math.max(1, Math.min(window.innerWidth - 1, rect.left + rect.width / 2));
+  const y = Math.max(1, Math.min(window.innerHeight - 1, rect.top + rect.height / 2));
+  const hit = document.elementFromPoint(x, y);
+  const target = (hit && (el === hit || el.contains(hit))) ? hit : el;
+  try { target.focus?.(); } catch (_) {}
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y };
+  for (const type of ["mouseover", "mousemove", "mousedown", "mouseup", "click"]) {
+    try { target.dispatchEvent(new MouseEvent(type, opts)); } catch (_) {}
+  }
+  try { target.click?.(); } catch (_) {}
+  return true;
+}
+
 function __sbGmailFindOpenComposeDialog() {
   const roots = Array.from(document.querySelectorAll('[role="dialog"], .M9, .AD, .aoI'));
   return roots.find((dialog) => __sbGmailVisible(dialog) && dialog.querySelector('input[name="subjectbox"], input[placeholder*="Subject"], textarea[name="to"], textarea[aria-label*="To"], [aria-label*="Message Body"]'))
@@ -1573,6 +1590,9 @@ function __sbGmailCollectVisibleEmailRowElements(limit = 80) {
     for (const el of document.querySelectorAll(selector)) {
       if (seen.has(el) || !__sbGmailVisible(el)) continue;
       seen.add(el);
+      if (el.closest?.("#__sb_bar__, #sb-brain-mascot-wrapper, .bg-overlay")) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight) continue;
       const text = __sbGmailNormalizeText(el.innerText || el.textContent || "");
       if (!text || text.length < 8) continue;
       elements.push(el);
@@ -1647,7 +1667,7 @@ async function __sbGmailOpenVisibleEmail(query, options = {}) {
   if (!el) return { error: "The matching Gmail row could not be clicked." };
   const beforeUrl = window.location.href;
   const target = el.querySelector('.xY.a4W, .y6, .bog, .xS, .yW, .zF, [role="link"], a[href*="#inbox/"], a[href*="#search/"]') || el;
-  __sbGmailClickElement(target);
+  __sbGmailClickElementAtCenter(target);
 
   let thread = null;
   for (let i = 0; i < 28; i += 1) {
@@ -1658,7 +1678,7 @@ async function __sbGmailOpenVisibleEmail(query, options = {}) {
     }
   }
 
-  __sbGmailClickElement(target);
+  __sbGmailClickElementAtCenter(target);
   for (let i = 0; i < 20; i += 1) {
     await __sbGmailWait(250);
     thread = __sbGmailReadCurrentThread();
@@ -1668,6 +1688,17 @@ async function __sbGmailOpenVisibleEmail(query, options = {}) {
   }
 
   return { error: "Gmail row was clicked, but the email thread did not open." };
+}
+
+function __sbGmailGetViewMode() {
+  const url = window.location.href;
+  const visibleEmailCount = __sbGmailCollectVisibleEmailRowElements(20).length;
+  const threadBodyCount = __sbGmailFindMessageBodyNodes().length;
+  const hash = window.location.hash || "";
+  const looksLikeThreadUrl = /\/(?:FM|[A-Za-z0-9_-]{12,})/.test(hash) || /th=|message_id=/i.test(url);
+  if (threadBodyCount && (looksLikeThreadUrl || !visibleEmailCount)) return "thread";
+  if (visibleEmailCount) return "inbox";
+  return "gmail";
 }
 
 async function __sbYouTubeEnsurePlayback() {
@@ -1773,10 +1804,15 @@ function __sbGetSiteAdapterContext() {
   }
 
   if (/mail\.google\.com$/.test(host)) {
+    const visibleEmailCount = __sbGmailCollectVisibleEmailRowElements(20).length;
+    const gmailView = __sbGmailGetViewMode();
     return {
       site: "gmail",
       url,
       title: document.title,
+      gmailView,
+      visibleEmailCount,
+      hasOpenThread: gmailView === "thread",
     };
   }
 

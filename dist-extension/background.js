@@ -4373,7 +4373,7 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
   });
   const immediateSiteContext = await bgGetSiteAdapterContext(currentTabId).catch(() => null);
   const immediateAdapterTask = bgParseAdapterTask(task, immediateSiteContext, connectorHint);
-  if (bgShouldRunImmediateGmailReply(immediateAdapterTask, immediateSiteContext)) {
+  if (bgShouldRunImmediateGmailAdapter(immediateAdapterTask, immediateSiteContext)) {
     try {
       const adapterMessage = await bgTryHandleSiteAdapterTask({
         tabId: currentTabId,
@@ -5069,7 +5069,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   const raw = String(task || "").trim();
   const text = raw.toLowerCase();
   const assistantStrippedRaw = raw
-    .replace(/^\s*(?:(?:hey|hi|yo|okay|ok)\s+)?braino[:,]?\s*/i, "")
+    .replace(/^\s*(?:(?:hey|hi|yo|okay|ok)\s+)?(?:braino|breno)[:,]?\s*/i, "")
     .replace(/^\s*(?:can|could|would)\s+you\s+(?:please\s+)?/i, "")
     .replace(/^\s*please\s+/i, "")
     .trim() || raw;
@@ -5372,6 +5372,19 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
+  const openEmailMatch =
+    assistantStrippedRaw.match(/\b(?:open|show|pull up|bring up|click|tap)\s+(?:(?:this|that|the|a)\s+)?(?:(?:visible|shown|current|top|first|latest|last|recent)\s+)?(?:gmail\s+)?(?:email|emails|mail|message|thread)(?:\s+(?:that|which)\s+(?:is\s+)?(?:visible|shown|in\s+(?:the\s+)?view|on\s+(?:the\s+)?screen|in\s+(?:the\s+)?inbox)|\s+(?:in\s+(?:the\s+)?view|on\s+(?:the\s+)?screen|from\s+(?:the\s+)?inbox|visible\s+(?:in\s+)?(?:the\s+)?inbox))?(?:\s+(?:from|about|for|regarding|with|by|called|titled)\s+(.+?))?\s*[?.!]*$/i) ||
+    assistantStrippedRaw.match(/\b(?:open|show|pull up|bring up|click|tap)\s+(?:(?:this|that|the|a)\s+)?(?:email|mail|message|thread)\s+(?:in\s+(?:the\s+)?view|on\s+(?:the\s+)?screen|from\s+(?:the\s+)?inbox|visible\s+(?:in\s+)?(?:the\s+)?inbox)\s*[?.!]*$/i) ||
+    assistantStrippedRaw.match(/\b(?:read|summari[sz]e|explain)\s+(?:the\s+)?(?:latest|last|first|recent)?\s*(?:gmail\s+)?(?:email|emails|mail|message|thread)\s+(?:from|about|for|regarding|with|by|called|titled)\s+(.+)$/i);
+  if (wantsGmail && openEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "openEmail",
+      query: String(openEmailMatch[1] || "").replace(/[?.!]+$/g, "").trim(),
+      summarize: /\b(?:read|summari[sz]e|explain)\b/i.test(assistantStrippedRaw),
+    };
+  }
+
   const asksGmailInboxInsights = wantsGmail &&
     !/\b(?:send|draft|compose|write)\s+(?:an?\s+)?email\b/i.test(assistantStrippedRaw) &&
     /\b(?:inbox|emails?\s+(?:do\s+i\s+)?get|who\s+(?:emails|mails)|from\s+most|how\s+often|unsubscribe|newsletter|newsletters|triage|promotions?|senders?|what\s+emails)\b/i.test(assistantStrippedRaw);
@@ -5379,18 +5392,6 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     return {
       adapter: "gmail",
       intent: "readInboxSummary",
-    };
-  }
-
-  const openEmailMatch =
-    assistantStrippedRaw.match(/\b(?:open|show|pull up|bring up)\s+(?:the\s+)?(?:latest|last|first|recent)?\s*(?:gmail\s+)?(?:email|emails|mail|message|thread)(?:\s+(?:from|about|for|regarding|with|by|called|titled)\s+(.+))?$/i) ||
-    assistantStrippedRaw.match(/\b(?:read|summari[sz]e|explain)\s+(?:the\s+)?(?:latest|last|first|recent)?\s*(?:gmail\s+)?(?:email|emails|mail|message|thread)\s+(?:from|about|for|regarding|with|by|called|titled)\s+(.+)$/i);
-  if (wantsGmail && openEmailMatch) {
-    return {
-      adapter: "gmail",
-      intent: "openEmail",
-      query: String(openEmailMatch[1] || "").trim(),
-      summarize: /\b(?:read|summari[sz]e|explain)\b/i.test(assistantStrippedRaw),
     };
   }
 
@@ -5499,9 +5500,11 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   return null;
 }
 
-function bgShouldRunImmediateGmailReply(parsed, siteContext) {
+function bgShouldRunImmediateGmailAdapter(parsed, siteContext) {
   if (siteContext?.site !== "gmail" || parsed?.adapter !== "gmail") return false;
-  return parsed.intent === "replyCurrentThread" || parsed.intent === "draftGeneratedReplyCurrentThread";
+  return parsed.intent === "replyCurrentThread" ||
+    parsed.intent === "draftGeneratedReplyCurrentThread" ||
+    parsed.intent === "openEmail";
 }
 
 function bgLooksLikeBrowserTask(task) {
