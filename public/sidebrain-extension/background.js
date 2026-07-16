@@ -1818,7 +1818,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         connector,
       });
       const senderTabId = sender?.tab?.id || null;
-      const preferredTabId = senderTabId || message.senderTabId || await bgGetActiveTabId();
+      const preferredTabId = message.preferNonBrainoTab === true
+        ? await bgFindBestDelegateTargetTabId(senderTabId || message.senderTabId || null)
+        : senderTabId || message.senderTabId || await bgGetActiveTabId();
       const recovery = await bgEnsureScriptableBrainoTab(preferredTabId, {
         activate: true,
         handoffMessage: "Chrome pages can't host Braino, so I moved it to a normal tab to keep going.",
@@ -2636,6 +2638,40 @@ function bgIsScriptableUrl(url) {
          !url.startsWith("edge://") &&
          !url.startsWith("https://chrome.google.com/webstore") &&
          !url.startsWith("https://chromewebstore.google.com");
+}
+
+function bgIsBrainoSiteUrl(url) {
+  try {
+    const host = new URL(url || "").hostname;
+    return host === "trybraino.com" ||
+      host === "braino-eight.vercel.app" ||
+      /^braino-git-.*\.vercel\.app$/i.test(host) ||
+      host === "localhost" ||
+      host === "127.0.0.1";
+  } catch (_) {
+    return false;
+  }
+}
+
+async function bgFindBestDelegateTargetTabId(senderTabId = null) {
+  const choose = (tabs) => {
+    const candidates = (tabs || [])
+      .filter((tab) => tab?.id != null && tab.id !== senderTabId)
+      .filter((tab) => bgIsScriptableUrl(tab.url || "") && !bgIsBrainoSiteUrl(tab.url || ""))
+      .sort((a, b) => (Number(b.lastAccessed) || 0) - (Number(a.lastAccessed) || 0));
+    return candidates[0]?.id || null;
+  };
+
+  const currentWindowTabs = await new Promise((resolve) => {
+    chrome.tabs.query({ currentWindow: true }, (tabs) => resolve(tabs || []));
+  });
+  const currentWindowPick = choose(currentWindowTabs);
+  if (currentWindowPick) return currentWindowPick;
+
+  const allTabs = await new Promise((resolve) => {
+    chrome.tabs.query({}, (tabs) => resolve(tabs || []));
+  });
+  return choose(allTabs) || senderTabId || await bgGetActiveTabId();
 }
 
 // Pre-register the correct action popup for a tab so clicking the icon

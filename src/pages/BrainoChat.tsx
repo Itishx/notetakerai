@@ -40,6 +40,7 @@ type ChatThread = {
   title: string;
   updatedAt: string;
   messages: ChatMessage[];
+  customTitle?: boolean;
 };
 
 type Command = {
@@ -51,6 +52,17 @@ type Command = {
 };
 
 type Attachment = { id: string; name: string; size: string };
+type ExtensionDelegateResult = {
+  ok: boolean;
+  noBridge?: boolean;
+  error?: string | null;
+  duplicate?: boolean;
+  tabId?: number | null;
+  moved?: boolean;
+  created?: boolean;
+  quotaExceeded?: boolean;
+  surface?: string | null;
+};
 
 const log = {
   info: (scope: string, msg: string, data?: unknown) =>
@@ -118,6 +130,54 @@ function looksLikeDelegateTask(text: string) {
   return /\b(open|go to|navigate|search|google|click|press|type|fill|submit|send|reply|email|gmail|book|buy|add to cart|order|schedule|create a doc|make a doc|edit|delete|archive|unsubscribe)\b/i.test(text);
 }
 
+function runDelegateThroughExtension(task: string, history: ChatMessage[]): Promise<ExtensionDelegateResult> {
+  if (typeof window === "undefined") return Promise.resolve({ ok: false, noBridge: true });
+
+  return new Promise((resolve) => {
+    const requestId = createId();
+    let settled = false;
+    const cleanup = () => {
+      settled = true;
+      window.removeEventListener("message", onMessage);
+      clearTimeout(timer);
+    };
+    const finish = (result: ExtensionDelegateResult) => {
+      if (settled) return;
+      cleanup();
+      resolve(result);
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== window) return;
+      const data = event.data as Partial<ExtensionDelegateResult> & { type?: string; requestId?: string };
+      if (!data || data.type !== "BRAINO_CHAT_DELEGATE_RESULT" || data.requestId !== requestId) return;
+      finish({
+        ok: data.ok === true,
+        error: typeof data.error === "string" ? data.error : null,
+        duplicate: data.duplicate === true,
+        tabId: typeof data.tabId === "number" ? data.tabId : null,
+        moved: data.moved === true,
+        created: data.created === true,
+        quotaExceeded: data.quotaExceeded === true,
+        surface: typeof data.surface === "string" ? data.surface : null,
+      });
+    };
+    const timer = window.setTimeout(() => {
+      finish({ ok: false, noBridge: true, error: "Braino extension bridge did not answer." });
+    }, 1400);
+
+    window.addEventListener("message", onMessage);
+    window.postMessage({
+      type: "BRAINO_CHAT_DELEGATE_RUN",
+      requestId,
+      task,
+      chatHistory: history
+        .filter((message) => message.text.trim())
+        .slice(-8)
+        .map((message) => ({ role: message.role, content: message.text.slice(0, 600) })),
+    }, window.location.origin);
+  });
+}
+
 function fmtInline(text: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   let key = 0;
@@ -150,7 +210,7 @@ function Paragraphs({ text }: { text: string }) {
   );
 }
 
-function Icon({ name }: { name: "new" | "search" | "library" | "menu" | "plus" | "mic" | "voice" | "send" | "bolt" | "x" }) {
+function Icon({ name }: { name: "new" | "search" | "library" | "menu" | "plus" | "mic" | "voice" | "send" | "bolt" | "x" | "edit" | "trash" }) {
   const paths: Record<typeof name, React.ReactNode> = {
     new: <><path d="M12 5v14M5 12h14" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
@@ -162,6 +222,8 @@ function Icon({ name }: { name: "new" | "search" | "library" | "menu" | "plus" |
     send: <><path d="M12 19V5M5 12l7-7 7 7" /></>,
     bolt: <><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" /></>,
     x: <><path d="M6 6l12 12M18 6 6 18" /></>,
+    edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></>,
+    trash: <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -340,9 +402,6 @@ function Composer({
         <button className={`bc-route-btn${delegateMode ? " is-on" : ""}`} type="button" onClick={onToggleDelegate}>
           <Icon name="bolt" /> {delegateMode ? "Delegate" : "Instant"}
         </button>
-        <button className={`bc-icon-btn${voiceActive ? " is-on" : ""}`} type="button" aria-label="Voice mode" title="Voice mode" onClick={onVoiceToggle}>
-          <Icon name="mic" />
-        </button>
         <button className="bc-voice-orb" type="button" aria-label="Voice conversation" title="Voice conversation" onClick={onVoiceToggle}>
           <Icon name="voice" />
         </button>
@@ -423,7 +482,7 @@ export default function BrainoChat() {
   const [reveal, setReveal] = useState<{ id: string; n: number } | null>(null);
   const [driveConnected, setDriveConnected] = useState(false);
 
-  const scrollerRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLElement>(null);
   const revealTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => { document.title = "Braino Chat"; }, []);
@@ -456,12 +515,18 @@ export default function BrainoChat() {
       const existing = prev.find((thread) => thread.id === currentThreadId);
       const nextThread: ChatThread = {
         id: currentThreadId,
-        title: makeTitle(messages),
+        title: existing?.customTitle ? existing.title : makeTitle(messages),
         updatedAt: now,
         messages,
+        customTitle: existing?.customTitle,
       };
       const rest = prev.filter((thread) => thread.id !== currentThreadId);
-      if (existing && JSON.stringify(existing.messages) === JSON.stringify(messages) && existing.title === nextThread.title) return prev;
+      if (
+        existing &&
+        JSON.stringify(existing.messages) === JSON.stringify(messages) &&
+        existing.title === nextThread.title &&
+        existing.customTitle === nextThread.customTitle
+      ) return prev;
       return [nextThread, ...rest].slice(0, 80);
     });
   }, [currentThreadId, messages]);
@@ -540,17 +605,6 @@ export default function BrainoChat() {
   }, [driveConnected, session?.access_token, streamReply, user?.id]);
 
   const delegate = useCallback(async (task: string, history: ChatMessage[] = []) => {
-    if (!user) {
-      setMessages((prev) => [...prev, {
-        id: createId(),
-        role: "assistant",
-        text: "Delegate runs on your browser through the extension, so sign in first and I can run it from here.",
-        createdAt: new Date().toISOString(),
-        kind: "chat",
-      }]);
-      return;
-    }
-
     const tempId = createId();
     setMessages((prev) => [...prev, {
       id: tempId,
@@ -562,6 +616,41 @@ export default function BrainoChat() {
       steps: [],
       result: null,
     }]);
+
+    const extensionStart = await runDelegateThroughExtension(task, history);
+    if (extensionStart.ok) {
+      const detail = extensionStart.duplicate
+        ? "Delegate is already running this task in your browser."
+        : extensionStart.created
+          ? "Started Delegate in a new browser tab."
+          : extensionStart.moved
+            ? "Started Delegate on the best browser tab I could use."
+            : "Started Delegate in your browser.";
+      setMessages((prev) => prev.map((message) => message.id === tempId
+        ? {
+            ...message,
+            status: "done",
+            steps: [{ description: detail, ok: true }],
+            result: "Watch Braino on the target tab for the live run.",
+          }
+        : message));
+      return;
+    }
+
+    if (!extensionStart.noBridge) {
+      const message = extensionStart.quotaExceeded
+        ? "Delegate is blocked by your current plan limit."
+        : extensionStart.error || "The Braino extension could not start Delegate.";
+      setError(`Delegate failed: ${message}`);
+      setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: "error", result: message } : item));
+      return;
+    }
+
+    if (!user) {
+      const message = "I could not reach the installed extension from this page. Sign in and keep the extension running, then try again.";
+      setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: "error", result: message } : item));
+      return;
+    }
 
     const contextTurns = history
       .filter((message) => message.text.trim())
@@ -676,6 +765,38 @@ export default function BrainoChat() {
     setReveal(null);
   }, []);
 
+  const renameThread = useCallback((thread: ChatThread) => {
+    const nextTitle = window.prompt("Rename chat", thread.title)?.trim();
+    if (!nextTitle || nextTitle === thread.title) return;
+    setThreads((prev) => prev.map((item) => (
+      item.id === thread.id
+        ? { ...item, title: nextTitle.slice(0, 80), customTitle: true, updatedAt: new Date().toISOString() }
+        : item
+    )));
+  }, []);
+
+  const deleteThread = useCallback((thread: ChatThread) => {
+    if (!window.confirm(`Delete "${thread.title}"?`)) return;
+    const remaining = threads.filter((item) => item.id !== thread.id);
+    setThreads(remaining);
+    if (thread.id !== currentThreadId) return;
+
+    const nextThread = remaining[0];
+    if (nextThread) {
+      setCurrentThreadId(nextThread.id);
+      setMessages(nextThread.messages);
+    } else {
+      setCurrentThreadId(createId());
+      setMessages([]);
+    }
+    setDraft("");
+    setError("");
+    setReveal(null);
+    setAttachments([]);
+    setIsSending(false);
+    if (revealTimer.current) clearInterval(revealTimer.current);
+  }, [currentThreadId, threads]);
+
   const stopTask = useCallback(async (commandId: string) => {
     setMessages((prev) => prev.map((message) => message.commandId === commandId ? { ...message, status: "error", result: "Stopped by user" } : message));
     await supabase
@@ -701,6 +822,11 @@ export default function BrainoChat() {
     if (!q) return threads;
     return threads.filter((thread) => thread.title.toLowerCase().includes(q));
   }, [search, threads]);
+
+  const currentTitle = useMemo(() => {
+    const currentThread = threads.find((thread) => thread.id === currentThreadId);
+    return currentThread?.title || (messages.length ? makeTitle(messages) : "New chat");
+  }, [currentThreadId, messages, threads]);
 
   const placeholder = delegateMode ? "Tell Braino what to do..." : "Message Braino";
 
@@ -734,15 +860,24 @@ export default function BrainoChat() {
           <div className="bc-thread-list">
             {filteredThreads.length === 0 && <span className="bc-empty-chat">No chats yet</span>}
             {filteredThreads.map((thread) => (
-              <button
-                className={thread.id === currentThreadId ? "is-active" : ""}
-                type="button"
-                key={thread.id}
-                onClick={() => selectThread(thread)}
-                title={thread.title}
-              >
-                {thread.title}
-              </button>
+              <div className={`bc-thread-row${thread.id === currentThreadId ? " is-active" : ""}`} key={thread.id}>
+                <button
+                  className="bc-thread-open"
+                  type="button"
+                  onClick={() => selectThread(thread)}
+                  title={thread.title}
+                >
+                  {thread.title}
+                </button>
+                <div className="bc-thread-actions" aria-label={`${thread.title} actions`}>
+                  <button type="button" aria-label={`Rename ${thread.title}`} title="Rename chat" onClick={() => renameThread(thread)}>
+                    <Icon name="edit" />
+                  </button>
+                  <button type="button" aria-label={`Delete ${thread.title}`} title="Delete chat" onClick={() => deleteThread(thread)}>
+                    <Icon name="trash" />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -758,18 +893,15 @@ export default function BrainoChat() {
         </div>
       </aside>
 
-      <main className="bc-main">
+      <main className="bc-main" ref={scrollerRef}>
         <header className="bc-topbar">
           <div>
             <span className="bc-kicker">Braino Chat</span>
-            <h1>{messages.length ? makeTitle(messages) : "New chat"}</h1>
+            <h1>{currentTitle}</h1>
           </div>
-          <button className={`bc-delegate-top${delegateMode ? " is-on" : ""}`} type="button" onClick={() => setDelegateMode((value) => !value)}>
-            <Icon name="bolt" /> {delegateMode ? "Delegate on" : "Instant"}
-          </button>
         </header>
 
-        <div className="bc-scroll" ref={scrollerRef}>
+        <div className="bc-scroll">
           <div className="bc-thread">
             {messages.length === 0 && (
               <div className="bc-empty">
@@ -813,6 +945,8 @@ const CHAT_CSS = `
   z-index:50;
   display:grid;
   grid-template-columns:300px minmax(0,1fr);
+  height:100dvh;
+  min-height:0;
   background:#000;
   color:#ececec;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
@@ -820,7 +954,7 @@ const CHAT_CSS = `
 }
 .bchat *{box-sizing:border-box}
 .bchat button{font:inherit;color:inherit}
-.bchat button svg,.bc-search svg,.bc-nav svg,.bc-route-btn svg,.bc-delegate-top svg,.bc-attachment svg{
+.bchat button svg,.bc-search svg,.bc-nav svg,.bc-route-btn svg,.bc-attachment svg{
   width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round
 }
 .braino-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -830,6 +964,8 @@ const CHAT_CSS = `
 
 .bc-sidebar{
   min-width:0;
+  min-height:0;
+  height:100dvh;
   background:#050505;
   border-right:1px solid #242424;
   padding:18px 10px 12px;
@@ -845,7 +981,7 @@ const CHAT_CSS = `
 .bc-side-top,.bc-brand{display:flex;align-items:center;gap:10px}
 .bc-side-top{justify-content:space-between}
 .bc-brand strong{font-size:18px}
-.bc-side-icon,.bc-nav button,.bc-icon-btn,.bc-send,.bc-voice-orb,.bc-route-btn,.bc-delegate-top{
+.bc-side-icon,.bc-nav button,.bc-icon-btn,.bc-send,.bc-voice-orb,.bc-route-btn{
   border:0;
   background:transparent;
   cursor:pointer;
@@ -887,21 +1023,52 @@ const CHAT_CSS = `
   font-weight:700;
   color:#f1f1f1;
 }
-.bc-thread-list{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:4px}
-.bc-thread-list button{
+.bc-thread-list{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:4px;padding-right:2px}
+.bc-thread-row{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  border-radius:10px;
+  color:#d7d7d7;
+}
+.bc-thread-row:hover,.bc-thread-row.is-active{background:#202020;color:#fff}
+.bc-thread-open{
   border:0;
   background:transparent;
-  width:100%;
+  min-width:0;
+  flex:1;
   text-align:left;
-  color:#d7d7d7;
+  color:inherit;
   border-radius:10px;
-  padding:10px 12px;
+  padding:10px 8px 10px 12px;
   overflow:hidden;
   white-space:nowrap;
   text-overflow:ellipsis;
   cursor:pointer;
 }
-.bc-thread-list button:hover,.bc-thread-list button.is-active{background:#202020;color:#fff}
+.bc-thread-actions{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  flex:none;
+  opacity:0;
+  padding-right:4px;
+  transition:opacity .16s ease;
+}
+.bc-thread-row:hover .bc-thread-actions,.bc-thread-row:focus-within .bc-thread-actions,.bc-thread-row.is-active .bc-thread-actions{opacity:1}
+.bc-thread-actions button{
+  width:30px;
+  height:30px;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:#bdbdbd;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+}
+.bc-thread-actions button:hover{background:#303030;color:#fff}
+.bc-thread-actions svg{width:16px;height:16px}
 .bc-empty-chat{color:#777;font-size:13px;padding:10px 12px}
 .bc-account{
   border-top:1px solid #222;
@@ -917,29 +1084,34 @@ const CHAT_CSS = `
 .bc-account strong{font-size:14px;overflow:hidden;text-overflow:ellipsis}
 .bc-account a{font-size:12px;color:#aaa;text-decoration:none}
 
-.bc-main{min-width:0;position:relative;display:flex;flex-direction:column;background:#000}
+.bc-main{
+  min-width:0;
+  min-height:0;
+  height:100dvh;
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  background:#000;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-gutter:stable;
+  overscroll-behavior:contain;
+}
 .bc-topbar{
   height:70px;
   display:flex;
   align-items:center;
-  justify-content:space-between;
+  justify-content:flex-start;
   padding:0 28px;
   flex:none;
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:#000;
 }
 .bc-kicker{font-size:12px;color:#8c8c8c}
 .bc-topbar h1{font-size:18px;line-height:1.2;margin:2px 0 0;font-weight:650}
-.bc-delegate-top{
-  height:38px;
-  border-radius:999px;
-  background:#1f1f1f;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:0 14px;
-  color:#d8d8d8;
-}
-.bc-delegate-top.is-on{background:#3a1f1d;color:#ffb3ad}
-.bc-scroll{min-height:0;flex:1;overflow:auto;padding:20px 20px 160px}
+.bc-scroll{min-height:0;flex:1 0 auto;overflow:visible;padding:20px 20px 180px}
 .bc-thread{width:min(1020px,100%);margin:0 auto;display:flex;flex-direction:column;gap:30px}
 .bc-empty{min-height:48vh;display:grid;place-items:center;text-align:center;color:#dcdcdc;align-content:center;gap:16px}
 .bc-empty h2{font-size:30px;font-weight:500;margin:0}
@@ -977,14 +1149,19 @@ const CHAT_CSS = `
 .bc-step{color:#aaa;font-size:14px}
 
 .bc-dock{
-  position:absolute;
+  position:sticky;
   left:0;
   right:0;
   bottom:0;
+  z-index:4;
+  flex:none;
+  margin-top:auto;
   padding:24px 24px 30px;
   background:linear-gradient(180deg,rgba(0,0,0,0),#000 34%);
+  pointer-events:none;
 }
 .bc-composer-wrap{width:min(1020px,100%);margin:0 auto}
+.bc-composer-wrap,.bc-error{pointer-events:auto}
 .bc-attachments{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px 14px}
 .bc-attachment{display:inline-flex;align-items:center;gap:8px;border:1px solid #3a3a3a;background:#1f1f1f;border-radius:999px;padding:6px 8px 6px 12px;font-size:13px}
 .bc-attachment small{color:#999}

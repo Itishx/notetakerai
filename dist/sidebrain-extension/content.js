@@ -32,9 +32,17 @@ if (chrome?.runtime?.sendMessage) {
   };
 }
 
+function __sbIsBrainoSiteHost(host = location.hostname) {
+  return host === "trybraino.com" ||
+    host === "braino-eight.vercel.app" ||
+    /^braino-git-.*\.vercel\.app$/i.test(host) ||
+    host === "localhost" ||
+    host === "127.0.0.1";
+}
+
 // Sync Supabase session from website localStorage into extension storage so
 // checkAuth finds a token even when the user logged in on the website (not via the extension auth tab).
-if (location.hostname === 'trybraino.com') {
+if (__sbIsBrainoSiteHost()) {
   const __sbSyncWebAuth = () => {
     try {
       const raw = localStorage.getItem('sb-suwhgaxxdizowbyjlljj-auth-token');
@@ -58,6 +66,54 @@ if (location.hostname === 'trybraino.com') {
     if (e.key === 'sb-suwhgaxxdizowbyjlljj-auth-token') __sbSyncWebAuth();
   });
 }
+
+// Website chat → installed extension bridge. The page cannot call chrome.runtime
+// directly without knowing the extension id, so the content script receives a
+// same-window event and forwards it into the exact background Delegate path.
+window.addEventListener("message", (event) => {
+  if (event.source !== window || !__sbIsBrainoSiteHost()) return;
+  const data = event.data;
+  if (!data || data.type !== "BRAINO_CHAT_DELEGATE_RUN") return;
+
+  const requestId = String(data.requestId || "");
+  const task = String(data.task || "").trim().slice(0, 6000);
+  const chatHistory = Array.isArray(data.chatHistory) ? data.chatHistory.slice(-10) : [];
+  const reply = (payload) => {
+    try {
+      window.postMessage({ type: "BRAINO_CHAT_DELEGATE_RESULT", requestId, ...payload }, window.location.origin);
+    } catch (_) {}
+  };
+
+  if (!requestId || !task) {
+    reply({ ok: false, error: "Missing Delegate task." });
+    return;
+  }
+
+  try {
+    chrome.runtime.sendMessage({
+      action: "runBrainAgent",
+      task,
+      connector: data.connector || null,
+      source: "braino-chat-page",
+      preferNonBrainoTab: true,
+      chatHistory,
+    }, (res) => {
+      const err = chrome.runtime.lastError?.message || res?.error || null;
+      reply({
+        ok: !err && res?.ok !== false,
+        error: err,
+        duplicate: res?.duplicate === true,
+        tabId: res?.tabId || null,
+        moved: res?.moved === true,
+        created: res?.created === true,
+        quotaExceeded: res?.quotaExceeded === true,
+        surface: res?.surface || null,
+      });
+    });
+  } catch (error) {
+    reply({ ok: false, error: error?.message || "Could not reach Braino extension." });
+  }
+});
 
 // Generate a stable, unique CSS selector for an element (used by browser agent)
 function getStableSelector(el) {
