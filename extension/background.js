@@ -4371,6 +4371,24 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
     try { chrome.tabs.get(currentTabId, (tab) => resolve(chrome.runtime.lastError ? null : { url: tab?.url, title: tab?.title })); }
     catch { resolve(null); }
   });
+  const immediateSiteContext = await bgGetSiteAdapterContext(currentTabId).catch(() => null);
+  const immediateAdapterTask = bgParseAdapterTask(task, immediateSiteContext, connectorHint);
+  if (bgShouldRunImmediateGmailReply(immediateAdapterTask, immediateSiteContext)) {
+    try {
+      const adapterMessage = await bgTryHandleSiteAdapterTask({
+        tabId: currentTabId,
+        task,
+        connectorHint,
+        history,
+        onProgress,
+        shouldStop: () => bgAgentShouldStop,
+      });
+      if (adapterMessage) return finish(adapterMessage, true);
+    } catch (error) {
+      return finish(`Adapter error: ${error?.message || error}`, false);
+    }
+  }
+
   const userGeo = await bgGetUserGeo().catch(() => null);
   const synth = await bgSynthesizeIntent(task, conversationContext, pageInfo).catch(() => null);
   // Steer the fast path and everything after it by the context-resolved task, not the
@@ -5262,6 +5280,18 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
+  const currentReplyBodyMatch =
+    assistantStrippedRaw.match(/\b(?:write|draft|compose|send)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:reply|response|answer)(?:\s+(?:to|for)\s+(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread)))?\s*(?:saying|with|that says|and say|body|here'?s how|heres how|like this|:|-)\s+([\s\S]+)$/i) ||
+    assistantStrippedRaw.match(/\b(?:reply|respond|answer)(?:\s+(?:to\s+)?(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread)))?\s*(?:saying|with|that says|and say|body|here'?s how|heres how|like this|:|-)\s+([\s\S]+)$/i);
+  if (wantsGmail && currentReplyBodyMatch) {
+    return {
+      adapter: "gmail",
+      intent: "replyCurrentThread",
+      body: currentReplyBodyMatch[1].trim(),
+      send: !/^\s*(?:draft|compose)\b/i.test(assistantStrippedRaw),
+    };
+  }
+
   const replyEmailMatch = assistantStrippedRaw.match(/reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
   if (wantsGmail && replyEmailMatch) {
     return {
@@ -5298,7 +5328,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     assistantStrippedRaw.match(/\bwhat\s+should\s+i\s+(?:say|reply|respond)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+)$/i)
   );
   if (generatedReplyForEmailMatch) {
-    const draftOnly = /\b(?:draft|compose|generate|suggest|what\s+(?:can|should)|what\s+to\s+say|help(?: me)?)\b/i.test(assistantStrippedRaw);
+    const draftOnly = /\b(?:draft|compose|generate|suggest|what\s+(?:can|should)|what\s+to\s+say)\b/i.test(assistantStrippedRaw);
     return {
       adapter: "gmail",
       intent: "draftGeneratedReplyForEmail",
@@ -5308,13 +5338,14 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   }
 
   const generatedReplyMatch = wantsGmail && (
-    /\b(?:draft|write|compose|generate|send)\s+(?:a\s+)?(?:reply|response)\s+(?:to|for)\s+this(?:\s+(?:email|mail|message|thread))?\b/i.test(assistantStrippedRaw) ||
-    /\b(?:reply|respond)\s+(?:to\s+)?this(?:\s+(?:email|mail|message|thread))?\b/i.test(assistantStrippedRaw) ||
+    /\b(?:draft|write|compose|generate|send)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:reply|response|answer)\s*(?:to|for)?\s*(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread))?\b/i.test(assistantStrippedRaw) ||
+    /\b(?:reply|respond|answer)\s+(?:to\s+)?(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread))\b/i.test(assistantStrippedRaw) ||
+    /\bhelp(?:\s+me)?\s+(?:write|draft|compose)?\s*(?:a\s+|an\s+)?(?:reply|response|answer)\s*(?:to|for)?\s*(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread))?\b/i.test(assistantStrippedRaw) ||
     /\b(?:write|draft)\s+what\s+i\s+should\s+(?:say|reply|respond)\b/i.test(assistantStrippedRaw) ||
     /\bwhat\s+(?:can|should)\s+i\s+(?:say|reply|respond)\b/i.test(assistantStrippedRaw)
   );
   if (generatedReplyMatch) {
-    const draftOnly = /\b(?:draft|compose|generate|suggest|what\s+(?:can|should)|what\s+to\s+say|help(?: me)?)\b/i.test(assistantStrippedRaw);
+    const draftOnly = /\b(?:draft|compose|generate|suggest|what\s+(?:can|should)|what\s+to\s+say)\b/i.test(assistantStrippedRaw);
     return {
       adapter: "gmail",
       intent: "draftGeneratedReplyCurrentThread",
@@ -5466,6 +5497,11 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   }
 
   return null;
+}
+
+function bgShouldRunImmediateGmailReply(parsed, siteContext) {
+  if (siteContext?.site !== "gmail" || parsed?.adapter !== "gmail") return false;
+  return parsed.intent === "replyCurrentThread" || parsed.intent === "draftGeneratedReplyCurrentThread";
 }
 
 function bgLooksLikeBrowserTask(task) {
@@ -6433,7 +6469,18 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
 
     await bgRunAdapterStep({
       history,
-      description: parsed.send ? "Reply to the matching Gmail thread and send" : "Draft a reply in the matching Gmail thread",
+      description: "Click Gmail Reply",
+      type: "gmailOpenReplyBox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailOpenReplyBox",
+      }),
+    });
+
+    await bgRunAdapterStep({
+      history,
+      description: parsed.send ? "Paste and send Gmail reply" : "Paste Gmail reply draft",
       type: "gmailReplyToCurrentThread",
       onProgress,
       onResult,
@@ -6458,12 +6505,22 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       onProgress,
       onResult,
     });
+    await bgRunAdapterStep({
+      history,
+      description: "Click Gmail Reply",
+      type: "gmailOpenReplyBox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailOpenReplyBox",
+      }),
+    });
     const replyBody = await bgBuildGmailGeneratedReply(task, opened?.thread);
     if (!replyBody) return "I opened the matching Gmail thread, but I could not draft a useful reply from the visible email body.";
 
     await bgRunAdapterStep({
       history,
-      description: parsed.send ? "Write and send a reply in the matching Gmail thread" : "Draft a reply in the matching Gmail thread",
+      description: parsed.send ? "Paste and send Gmail reply" : "Paste Gmail reply draft",
       type: "gmailReplyToCurrentThread",
       onProgress,
       onResult,
@@ -6484,6 +6541,17 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       return "Open the Gmail thread you want first, then ask me to draft a reply.";
     }
 
+    await bgRunAdapterStep({
+      history,
+      description: "Click Gmail Reply",
+      type: "gmailOpenReplyBox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailOpenReplyBox",
+      }),
+    });
+
     const thread = await bgRunAdapterStep({
       history,
       description: "Read the current Gmail thread",
@@ -6499,7 +6567,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
 
     await bgRunAdapterStep({
       history,
-      description: parsed.send ? "Write and send a reply in the current Gmail thread" : "Draft a reply in the current Gmail thread",
+      description: parsed.send ? "Paste and send Gmail reply" : "Paste Gmail reply draft",
       type: "gmailReplyToCurrentThread",
       onProgress,
       onResult,
@@ -6522,7 +6590,18 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
 
     await bgRunAdapterStep({
       history,
-      description: parsed.send ? "Reply in the current Gmail thread and send" : "Draft a reply in the current Gmail thread",
+      description: "Click Gmail Reply",
+      type: "gmailOpenReplyBox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailOpenReplyBox",
+      }),
+    });
+
+    await bgRunAdapterStep({
+      history,
+      description: parsed.send ? "Paste and send Gmail reply" : "Paste Gmail reply draft",
       type: "gmailReplyToCurrentThread",
       onProgress,
       onResult,

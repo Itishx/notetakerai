@@ -1512,25 +1512,47 @@ async function __sbGmailSendOpenCompose() {
   return { error: "Gmail did not confirm the message was sent." };
 }
 
-async function __sbGmailReplyToCurrentThread(body, options = {}) {
+async function __sbGmailEnsureReplyBodyField() {
   let bodyField = __sbGmailFindComposeBody(document);
-  if (!bodyField) {
+  for (let attempt = 0; attempt < 4 && !bodyField; attempt += 1) {
     let replyButton = __sbGmailFindReplyButton();
-    if (!replyButton) {
+    if (!replyButton || attempt > 0) {
       const main = document.querySelector('[role="main"]') || document.scrollingElement || document.documentElement;
       try { main.scrollTo?.({ top: main.scrollHeight || document.body.scrollHeight, behavior: "smooth" }); } catch (_) {}
       await __sbGmailWait(450);
       replyButton = __sbGmailFindReplyButton();
     }
-    if (!replyButton) return { error: "Reply button was not found in the current Gmail thread." };
+    if (!replyButton) continue;
     __sbGmailClickElement(replyButton);
-    for (let i = 0; i < 28; i += 1) {
+    for (let i = 0; i < 16; i += 1) {
       await __sbGmailWait(250);
       bodyField = __sbGmailFindComposeBody(document);
       if (bodyField) break;
     }
+    if (!bodyField) {
+      try { replyButton.focus?.(); } catch (_) {}
+      __sbGmailDispatchKey(replyButton, "Enter");
+      for (let i = 0; i < 10; i += 1) {
+        await __sbGmailWait(250);
+        bodyField = __sbGmailFindComposeBody(document);
+        if (bodyField) break;
+      }
+    }
   }
-  if (!bodyField) return { error: "Gmail reply editor did not open." };
+  if (!bodyField) return { error: "Reply button was not found or Gmail reply editor did not open." };
+  return { bodyField };
+}
+
+async function __sbGmailOpenReplyBox() {
+  const opened = await __sbGmailEnsureReplyBodyField();
+  if (opened?.error) return opened;
+  return { success: true, mode: "reply" };
+}
+
+async function __sbGmailReplyToCurrentThread(body, options = {}) {
+  const opened = await __sbGmailEnsureReplyBodyField();
+  if (opened?.error) return opened;
+  const bodyField = opened.bodyField;
   const wroteBody = await __sbGmailSetRichTextField(bodyField, body);
   if (!wroteBody) return { error: "Gmail reply body could not be entered." };
   if (options.send) {
@@ -2066,6 +2088,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "gmailSendOpenCompose") {
           sendResponse(await __sbGmailSendOpenCompose());
+          return;
+        }
+        if (msg.type === "gmailOpenReplyBox") {
+          sendResponse(await __sbGmailOpenReplyBox());
           return;
         }
         if (msg.type === "gmailReplyToCurrentThread") {
