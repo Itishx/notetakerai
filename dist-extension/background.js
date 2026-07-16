@@ -5294,28 +5294,31 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   }
 
   const generatedReplyForEmailMatch = wantsGmail && (
-    assistantStrippedRaw.match(/\b(?:draft|write|compose|generate)\s+(?:a\s+)?(?:reply|response)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+)$/i) ||
+    assistantStrippedRaw.match(/\b(?:draft|write|compose|generate|send)\s+(?:a\s+)?(?:reply|response)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+)$/i) ||
     assistantStrippedRaw.match(/\bwhat\s+should\s+i\s+(?:say|reply|respond)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+)$/i)
   );
   if (generatedReplyForEmailMatch) {
+    const draftOnly = /\b(?:draft|compose|generate|suggest|what\s+(?:can|should)|what\s+to\s+say|help(?: me)?)\b/i.test(assistantStrippedRaw);
     return {
       adapter: "gmail",
       intent: "draftGeneratedReplyForEmail",
       query: String(generatedReplyForEmailMatch[1] || "").trim(),
-      send: false,
+      send: !draftOnly,
     };
   }
 
   const generatedReplyMatch = wantsGmail && (
-    /\b(?:draft|write|compose|generate)\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?(?:email|message|thread)\b/i.test(assistantStrippedRaw) ||
+    /\b(?:draft|write|compose|generate|send)\s+(?:a\s+)?(?:reply|response)\s+(?:to|for)\s+this(?:\s+(?:email|mail|message|thread))?\b/i.test(assistantStrippedRaw) ||
+    /\b(?:reply|respond)\s+(?:to\s+)?this(?:\s+(?:email|mail|message|thread))?\b/i.test(assistantStrippedRaw) ||
     /\b(?:write|draft)\s+what\s+i\s+should\s+(?:say|reply|respond)\b/i.test(assistantStrippedRaw) ||
     /\bwhat\s+(?:can|should)\s+i\s+(?:say|reply|respond)\b/i.test(assistantStrippedRaw)
   );
   if (generatedReplyMatch) {
+    const draftOnly = /\b(?:draft|compose|generate|suggest|what\s+(?:can|should)|what\s+to\s+say|help(?: me)?)\b/i.test(assistantStrippedRaw);
     return {
       adapter: "gmail",
       intent: "draftGeneratedReplyCurrentThread",
-      send: false,
+      send: !draftOnly,
     };
   }
 
@@ -6460,18 +6463,20 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
 
     await bgRunAdapterStep({
       history,
-      description: "Draft a reply in the matching Gmail thread",
+      description: parsed.send ? "Write and send a reply in the matching Gmail thread" : "Draft a reply in the matching Gmail thread",
       type: "gmailReplyToCurrentThread",
       onProgress,
       onResult,
       run: () => bgExecuteSiteAdapterAction(gmailTabId, {
         type: "gmailReplyToCurrentThread",
         body: replyBody,
-        send: false,
+        send: !!parsed.send,
       }),
     });
 
-    return `Drafted this reply in Gmail:\n\n${replyBody}`;
+    return parsed.send
+      ? `Replied in Gmail:\n\n${replyBody}`
+      : `Drafted this reply in Gmail:\n\n${replyBody}`;
   }
 
   if (parsed.adapter === "gmail" && parsed.intent === "draftGeneratedReplyCurrentThread") {
@@ -6494,18 +6499,20 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
 
     await bgRunAdapterStep({
       history,
-      description: "Draft a reply in the current Gmail thread",
+      description: parsed.send ? "Write and send a reply in the current Gmail thread" : "Draft a reply in the current Gmail thread",
       type: "gmailReplyToCurrentThread",
       onProgress,
       onResult,
       run: () => bgExecuteSiteAdapterAction(tabId, {
         type: "gmailReplyToCurrentThread",
         body: replyBody,
-        send: false,
+        send: !!parsed.send,
       }),
     });
 
-    return `Drafted this reply in Gmail:\n\n${replyBody}`;
+    return parsed.send
+      ? `Replied in Gmail:\n\n${replyBody}`
+      : `Drafted this reply in Gmail:\n\n${replyBody}`;
   }
 
   if (parsed.adapter === "gmail" && parsed.intent === "replyCurrentThread") {

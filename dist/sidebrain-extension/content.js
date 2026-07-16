@@ -1114,6 +1114,12 @@ function __sbGmailFindComposeBody(root = document) {
 
 function __sbGmailFindReplyButton() {
   const selectors = [
+    '[role="main"] .amn .ams',
+    '[role="main"] .ams.bkH',
+    '[role="main"] div[role="button"][aria-label^="Reply"]',
+    '[role="main"] span[role="link"][aria-label^="Reply"]',
+    '[role="main"] div[role="button"][data-tooltip^="Reply"]',
+    '[role="main"] span[role="button"][data-tooltip^="Reply"]',
     'div[role="button"][aria-label^="Reply"]',
     'span[role="link"][aria-label^="Reply"]',
     'div[role="button"][data-tooltip^="Reply"]',
@@ -1127,13 +1133,29 @@ function __sbGmailFindReplyButton() {
   ];
   const seen = new Set();
   const candidates = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
-  return candidates.find((el) => {
-    if (seen.has(el)) return false;
+  const scored = [];
+  for (const el of candidates) {
+    if (seen.has(el)) continue;
     seen.add(el);
-    if (!__sbGmailVisible(el)) return false;
+    if (!__sbGmailVisible(el)) continue;
+    if (el.closest?.("#__sb_bar__, #sb-brain-mascot-wrapper, .bg-overlay")) continue;
     const text = __sbGmailNormalizeText(el.getAttribute("aria-label") || el.getAttribute("data-tooltip") || el.innerText || el.textContent || "");
-    return /^reply$/i.test(text) || /^reply to all$/i.test(text) || /\breply\b/i.test(text);
-  }) || null;
+    if (!(/^reply$/i.test(text) || /^reply to all$/i.test(text) || /\breply\b/i.test(text))) continue;
+
+    const rect = el.getBoundingClientRect();
+    let score = 0;
+    if (/^reply$/i.test(text)) score += 80;
+    else if (/^reply to all$/i.test(text)) score += 55;
+    else score += 25;
+    if (el.closest?.('[role="main"]')) score += 30;
+    if (el.closest?.(".amn, .ams, .bkH")) score += 25;
+    if (rect.width >= 70 && rect.height >= 28) score += 25;
+    if (rect.top > window.innerHeight * 0.35) score += 20;
+    if (el.closest?.('[role="toolbar"], .G-atb, [gh="mtb"]')) score -= 50;
+    scored.push({ el, score, top: rect.top });
+  }
+  scored.sort((a, b) => (b.score - a.score) || (b.top - a.top));
+  return scored[0]?.el || null;
 }
 
 function __sbGmailFindSendButton(root = document) {
@@ -1477,7 +1499,13 @@ async function __sbGmailSendOpenCompose() {
 async function __sbGmailReplyToCurrentThread(body, options = {}) {
   let bodyField = __sbGmailFindComposeBody(document);
   if (!bodyField) {
-    const replyButton = __sbGmailFindReplyButton();
+    let replyButton = __sbGmailFindReplyButton();
+    if (!replyButton) {
+      const main = document.querySelector('[role="main"]') || document.scrollingElement || document.documentElement;
+      try { main.scrollTo?.({ top: main.scrollHeight || document.body.scrollHeight, behavior: "smooth" }); } catch (_) {}
+      await __sbGmailWait(450);
+      replyButton = __sbGmailFindReplyButton();
+    }
     if (!replyButton) return { error: "Reply button was not found in the current Gmail thread." };
     __sbGmailClickElement(replyButton);
     for (let i = 0; i < 28; i += 1) {
