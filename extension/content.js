@@ -5234,6 +5234,21 @@ const __SB_TEAM_CONFIG = {
   },
 };
 
+const __SB_TEAM_DEMO_STORE_KEY = "sbTeamDemoState";
+const __SB_TEAM_DEMO_SCRIPT = {
+  intro: [
+    "Hi. I'm Braino.",
+    "I live in Itish's browser, which sounds tiny until you realize the browser is where half of modern life has decided to happen.",
+    "I can read what is on the page, write with him, talk in voice, search the web, control tabs, help with Gmail, play music, and generally reduce the number of times he has to pretend clicking around is deep work.",
+    "I'm still learning, obviously. But I learn fast, because apparently Itish thinks sleeping before 6 am is optional.",
+    "Let me show you instead of yapping. Tell me one song you want me to play.",
+  ].join("\n\n"),
+  askSong: "Tell me one song you want me to play.",
+  songAck: (song) => `Perfect. I will open Spotify and play ${song}. Watch this.`,
+  afterSong: "That was purtified for you. Vibe handled. Now second trick: let's say you want to read a machine learning article on Medium. I will open Medium and find one.",
+  closing: "So that was it for what I can do. I'm still getting better every single day. I keep getting smarter. If Itish keeps working on me until 6 am, I don't see any other option but to get smarter.\n\nI think it's time to say hello to the team now. Which team are we talking to, ANZ or AT&T?",
+};
+
 let __sbTeamState = {
   phase: "idle",
   team: null,
@@ -5243,6 +5258,8 @@ let __sbTeamState = {
   currentPerson: null,
   lastLine: "",
   previousPhase: "awaiting_next_person",
+  demoTask: "",
+  demoSong: "",
 };
 
 function __sbTeamNormalize(value) {
@@ -5306,7 +5323,10 @@ function __sbTeamReset() {
     currentPerson: null,
     lastLine: "",
     previousPhase: "awaiting_next_person",
+    demoTask: "",
+    demoSong: "",
   };
+  __sbTeamClearDemoState();
 }
 
 function __sbTeamRememberAssistant(line, prompt = "Team mode") {
@@ -5374,6 +5394,108 @@ function __sbTeamBuildPersonMessage(personKey) {
   return [person.opening, person.message, person.closing].map((part) => String(part || "").trim()).filter(Boolean).join("\n\n");
 }
 
+function __sbTeamPersistDemoState(patch = {}) {
+  if (!__sbContextOk()) return;
+  const state = {
+    active: true,
+    phase: __sbTeamState.phase,
+    task: __sbTeamState.demoTask || "",
+    song: __sbTeamState.demoSong || "",
+    updatedAt: Date.now(),
+    ...patch,
+  };
+  try { chrome.storage.local.set({ [__SB_TEAM_DEMO_STORE_KEY]: state }); } catch (_) {}
+}
+
+function __sbTeamClearDemoState() {
+  if (!__sbContextOk()) return;
+  try { chrome.storage.local.remove(__SB_TEAM_DEMO_STORE_KEY); } catch (_) {}
+}
+
+function __sbTeamPauseSpotifyDemoSong() {
+  try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+}
+
+function __sbTeamExtractSong(text) {
+  let song = String(text || "").trim();
+  song = song
+    .replace(/^(?:play|put on|queue|search for|find|song is|the song is|i want|i want to hear|can you play)\s+/i, "")
+    .replace(/\s+(?:please|pls)$/i, "")
+    .trim();
+  return song || "Bargad by Arpit Bala";
+}
+
+function __sbTeamSpotifyDemoTask(song) {
+  return [
+    `Open Spotify and play "${song}".`,
+    "Use the browser like a human: open Spotify if needed, search for the track, click the best result, and play it.",
+    "Stop once the song is playing. Do not ask follow-up questions.",
+  ].join(" ");
+}
+
+function __sbTeamMediumDemoTask() {
+  return [
+    "Open Medium and find a readable machine learning article.",
+    "Search for a machine learning article, open one relevant result if available, and stop once the article is visible.",
+    "Do not sign in, do not click paid-only content, and do not ask follow-up questions.",
+  ].join(" ");
+}
+
+function __sbTeamLaunchDemoAgent(step, task, connector = "auto") {
+  __sbTeamState.phase = step;
+  __sbTeamState.demoTask = String(task || "").trim();
+  __sbTeamPersistDemoState({ phase: step, task: __sbTeamState.demoTask, connector });
+  __sbRunAgent(__sbTeamState.demoTask, { connector, modeOverride: "agent" });
+}
+
+async function __sbTeamStartIntroDemo(ctx = {}) {
+  __sbTeamState.phase = "demo_waiting_song";
+  __sbTeamState.team = null;
+  __sbTeamState.roster = [];
+  __sbTeamState.spoken = [];
+  __sbTeamState.demoTask = "";
+  __sbTeamState.demoSong = "";
+  __sbTeamPersistDemoState({ phase: "demo_waiting_song", task: "", song: "" });
+  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.intro, { ...ctx, prompt: ctx.prompt || "Introduce Braino" });
+}
+
+async function __sbTeamHandleDemoAgentFinal(agentPrompt, finalText = "") {
+  if (!__sbContextOk()) return false;
+  const stored = await new Promise((resolve) => {
+    try {
+      chrome.storage.local.get([__SB_TEAM_DEMO_STORE_KEY], (items) => resolve(items?.[__SB_TEAM_DEMO_STORE_KEY] || null));
+    } catch (_) { resolve(null); }
+  });
+  if (!stored?.active) return false;
+  const phase = String(stored.phase || __sbTeamState.phase || "");
+  const task = String(stored.task || __sbTeamState.demoTask || "").trim();
+  const prompt = String(agentPrompt || "").trim();
+  if (task && prompt && prompt !== task) return false;
+
+  if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
+  __sbTeamState.phase = phase;
+  __sbTeamState.demoTask = task;
+  __sbTeamState.demoSong = String(stored.song || __sbTeamState.demoSong || "").trim();
+
+  if (phase === "demo_running_song") {
+    __sbTeamPauseSpotifyDemoSong();
+    const articleTask = __sbTeamMediumDemoTask();
+    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.afterSong, { prompt: "Braino demo" });
+    __sbTeamLaunchDemoAgent("demo_running_article", articleTask, "auto");
+    return true;
+  }
+
+  if (phase === "demo_running_article") {
+    __sbTeamState.phase = "choosing_team";
+    __sbTeamState.demoTask = "";
+    __sbTeamClearDemoState();
+    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { prompt: "Braino demo" });
+    return true;
+  }
+
+  return false;
+}
+
 function __sbTeamGuardrailReply(promptText) {
   if (/\b(who are you|what are you|introduce yourself)\b/i.test(promptText)) {
     return "I'm Braino. I sit with Itish in the browser and help him read, write, talk, build, and get things done. But hold that thought. I have a message to finish first.";
@@ -5388,7 +5510,11 @@ function __sbTeamGuardrailReply(promptText) {
 }
 
 function __sbTeamIsStartPrompt(text) {
-  return /\b(say hi to my team|say hello to my team|talk to my team|meet my team|team demo|start team mode|introduce yourself to my team)\b/i.test(text);
+  return /\b(say hi to my team|say hello to my team|say hello to the team|talk to my team|talk to the team|meet my team|time to talk to (?:my|the) team|time to say hello to (?:my|the) team|start team messages|start the team messages)\b/i.test(text);
+}
+
+function __sbTeamIsIntroPrompt(text) {
+  return /\b(introduce yourself|introduce yourself to (?:my|the) team|show them what you can do|show what you can do|demo yourself|give (?:them|the team) a demo|who are you)\b/i.test(text);
 }
 
 function __sbTeamIsDonePrompt(text) {
@@ -5418,10 +5544,13 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
   const ctx = { fromVoice, voiceOutput, prompt: promptText };
   __sbChatHistory.push({ role: "user", content: promptText });
 
-  const finish = async (line, finishOptions = {}) => {
+  const finish = async (line) => {
     await __sbTeamSpeak(line, ctx);
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
     return true;
+  };
+  const completeTeamVoiceTurn = () => {
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
   };
 
   if (__sbTeamIsExitPrompt(promptText)) {
@@ -5455,6 +5584,35 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
 
   if (__sbTeamState.phase === "paused") {
     return await finish("I'm paused. Say resume when you want me back, or exit Team mode.");
+  }
+
+  if (__sbTeamIsIntroPrompt(promptText)) {
+    await __sbTeamStartIntroDemo(ctx);
+    completeTeamVoiceTurn();
+    return true;
+  }
+
+  if (__sbTeamState.phase === "demo_waiting_song") {
+    const song = __sbTeamExtractSong(promptText);
+    __sbTeamState.demoSong = song;
+    const task = __sbTeamSpotifyDemoTask(song);
+    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.songAck(song), ctx);
+    __sbTeamLaunchDemoAgent("demo_running_song", task, "spotify");
+    completeTeamVoiceTurn();
+    return true;
+  }
+
+  if (__sbTeamState.phase === "demo_running_song" || __sbTeamState.phase === "demo_running_article") {
+    return await finish("One second. I'm still doing the demo part.");
+  }
+
+  if (__sbTeamIsStartPrompt(promptText)) {
+    __sbTeamState.phase = "choosing_team";
+    __sbTeamState.team = null;
+    __sbTeamState.roster = [];
+    __sbTeamState.spoken = [];
+    __sbTeamClearDemoState();
+    return await finish(__sbTeamPromptForTeam());
   }
 
   const guardrail = __sbTeamGuardrailReply(promptText);
@@ -5685,39 +5843,55 @@ if (__sbContextOk()) {
         // Voice mode speaks the result with no panel; chat mode shows it.
         const finalText = String(msg.text || "").trim();
         const agentPrompt = String(msg.task || __sbAgentPendingTurn?.prompt || __sbLastAgentTask || "").trim();
-        if (agentPrompt && finalText) {
-          __sbFinalizeAgentPendingTurn(agentPrompt, finalText, {
-            render: !(msg.keepLectureCard && __sbIsLectureRecording),
-          });
-        } else {
-          __sbAgentPendingTurn = null;
-          if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
-        }
-        __sbSetStopBtn(false);
-        __sbClearBarAgentStatus();
-        __sbAgentFlowDone();   // task finished — settle EVERY surface (island, status, walker)
-        if (__sbRtAwaitingDelegateResult) {
-          __sbRtAwaitingDelegateResult = false;
-          if (finalText) {
-            void (async () => {
-              __sbRtRelayingAppMessage = true;
-              try {
-                await __sbSpeakWithPreferredVoice(finalText, "realtime");
-              } finally {
-                __sbRtRelayingAppMessage = false;
-                __sbCompleteRealtimeCostTurn({ force: true });
-                if (__sbHeadphoneMode && !__sbVoicePendingReply) {
-                  __sbSetHpBrainState("listening");
-                }
-              }
-            })();
+        const finishNormalAgentUpdate = () => {
+          if (agentPrompt && finalText) {
+            __sbFinalizeAgentPendingTurn(agentPrompt, finalText, {
+              render: !(msg.keepLectureCard && __sbIsLectureRecording),
+            });
           } else {
-            __sbCompleteRealtimeCostTurn({ force: true });
+            __sbAgentPendingTurn = null;
+            if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
           }
-        } else if (__sbHeadphoneMode && finalText && !__sbVoicePendingReply) {
-          // Delegate reached from voice but not via the realtime await path — speak the
-          // result back so a spoken task always gets a spoken answer.
-          __sbSpeakWithPreferredVoice(finalText).catch(() => {});
+          __sbSetStopBtn(false);
+          __sbClearBarAgentStatus();
+          __sbAgentFlowDone();   // task finished — settle EVERY surface (island, status, walker)
+          if (__sbRtAwaitingDelegateResult) {
+            __sbRtAwaitingDelegateResult = false;
+            if (finalText) {
+              void (async () => {
+                __sbRtRelayingAppMessage = true;
+                try {
+                  await __sbSpeakWithPreferredVoice(finalText, "realtime");
+                } finally {
+                  __sbRtRelayingAppMessage = false;
+                  __sbCompleteRealtimeCostTurn({ force: true });
+                  if (__sbHeadphoneMode && !__sbVoicePendingReply) {
+                    __sbSetHpBrainState("listening");
+                  }
+                }
+              })();
+            } else {
+              __sbCompleteRealtimeCostTurn({ force: true });
+            }
+          } else if (__sbHeadphoneMode && finalText && !__sbVoicePendingReply) {
+            // Delegate reached from voice but not via the realtime await path — speak the
+            // result back so a spoken task always gets a spoken answer.
+            __sbSpeakWithPreferredVoice(finalText).catch(() => {});
+          }
+        };
+        if (typeof __sbTeamHandleDemoAgentFinal === "function") {
+          void __sbTeamHandleDemoAgentFinal(agentPrompt, finalText).then((handled) => {
+            if (handled) {
+              __sbAgentPendingTurn = null;
+              __sbSetStopBtn(false);
+              __sbClearBarAgentStatus();
+              __sbAgentFlowDone();
+              return;
+            }
+            finishNormalAgentUpdate();
+          }).catch(() => finishNormalAgentUpdate());
+        } else {
+          finishNormalAgentUpdate();
         }
       } else {
         // ALWAYS surface progress in the docked log strip + bar (works in voice-only mode too,
@@ -12117,7 +12291,7 @@ function __sbBuildAgentHandoffPayload(task, options = {}) {
   return {
     task: String(task || "").trim(),
     connector: __sbNormalizeConnectorName(options.connector) || "auto",
-    mode: window.__sbForcedMode || "page",
+    mode: options.modeOverride || window.__sbForcedMode || "page",
     chatHistory,
     cardTurns,
     lastUserPrompt,
