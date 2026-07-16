@@ -1068,10 +1068,54 @@ function __sbGmailClickElementAtCenter(el) {
   return true;
 }
 
-function __sbGmailFindOpenComposeDialog() {
-  const roots = Array.from(document.querySelectorAll('[role="dialog"], .M9, .AD, .aoI'));
-  return roots.find((dialog) => __sbGmailVisible(dialog) && dialog.querySelector('input[name="subjectbox"], input[placeholder*="Subject"], textarea[name="to"], textarea[aria-label*="To"], [aria-label*="Message Body"]'))
-    || null;
+function __sbGmailGetOpenComposeDialogs() {
+  const selectors = [
+    '[role="dialog"]',
+    '.M9',
+    '.AD',
+  ];
+  const seen = new Set();
+  const dialogs = [];
+  for (const selector of selectors) {
+    for (const dialog of document.querySelectorAll(selector)) {
+      if (seen.has(dialog) || !__sbGmailVisible(dialog)) continue;
+      seen.add(dialog);
+      const hasComposeSurface = dialog.querySelector(
+        'input[name="subjectbox"], input[placeholder*="Subject"], textarea[name="to"], textarea[aria-label*="To"], [aria-label*="Recipients"], [aria-label*="Message Body"], div[contenteditable="true"][role="textbox"]',
+      );
+      const title = __sbGmailNormalizeText(dialog.querySelector(".aYF, .aYH, .Hp")?.innerText || dialog.innerText || "");
+      if (!hasComposeSurface && !/\bnew message\b/i.test(title)) continue;
+      dialogs.push(dialog);
+    }
+  }
+  return dialogs.sort((a, b) => {
+    const ar = a.getBoundingClientRect();
+    const br = b.getBoundingClientRect();
+    const az = Number(window.getComputedStyle(a).zIndex) || 0;
+    const bz = Number(window.getComputedStyle(b).zIndex) || 0;
+    return (az - bz) || (ar.left - br.left) || (ar.top - br.top);
+  });
+}
+
+function __sbGmailComposeDialogIsBlank(dialog) {
+  if (!dialog) return false;
+  const text = __sbGmailNormalizeText(dialog.innerText || dialog.textContent || "");
+  const subject = __sbGmailNormalizeText(dialog.querySelector('input[name="subjectbox"], input[placeholder*="Subject"], input[aria-label*="Subject"]')?.value || "");
+  const body = __sbGmailNormalizeText(__sbGmailFindComposeBody(dialog)?.innerText || __sbGmailFindComposeBody(dialog)?.textContent || "");
+  const hasRecipientChip = Boolean(dialog.querySelector("[email], [data-hovercard-id], [data-hovercard-owner-id]"));
+  return !subject && !body && !hasRecipientChip && !/\S+@\S+\.\S+/.test(text);
+}
+
+function __sbGmailFindOpenComposeDialog(options = {}) {
+  let dialogs = __sbGmailGetOpenComposeDialogs();
+  if (options.exclude instanceof Set) {
+    dialogs = dialogs.filter((dialog) => !options.exclude.has(dialog));
+  }
+  if (options.preferBlank) {
+    const blank = dialogs.filter(__sbGmailComposeDialogIsBlank);
+    if (blank.length) dialogs = blank;
+  }
+  return dialogs[dialogs.length - 1] || null;
 }
 
 function __sbGmailFindComposeButton() {
@@ -1095,15 +1139,21 @@ function __sbGmailFindComposeButton() {
   }) || null;
 }
 
-async function __sbGmailEnsureComposeDialog() {
-  let dialog = __sbGmailFindOpenComposeDialog();
-  if (dialog) return { dialog };
+async function __sbGmailEnsureComposeDialog(options = {}) {
+  const before = new Set(__sbGmailGetOpenComposeDialogs());
+  if (!options.forceNew) {
+    const existing = __sbGmailFindOpenComposeDialog({ preferBlank: true });
+    if (existing) return { dialog: existing };
+  }
   const composeButton = __sbGmailFindComposeButton();
   if (!composeButton) return { error: "Gmail Compose button was not found." };
   __sbGmailClickElement(composeButton);
+  let dialog = null;
   for (let i = 0; i < 32; i += 1) {
     await __sbGmailWait(250);
-    dialog = __sbGmailFindOpenComposeDialog();
+    dialog = __sbGmailFindOpenComposeDialog({ exclude: before }) ||
+      __sbGmailFindOpenComposeDialog({ preferBlank: true }) ||
+      __sbGmailFindOpenComposeDialog();
     if (dialog) return { dialog };
   }
   return { error: "Gmail compose window did not open." };
@@ -1434,18 +1484,17 @@ function __sbGmailRecipientLooksAccepted(root, field, value) {
 }
 
 async function __sbGmailFillComposeFields({ to, subject, body }, options = {}) {
-  const root = __sbGmailFindOpenComposeDialog() || document;
+  const root = options.root || __sbGmailFindOpenComposeDialog() || document;
   const toField = __sbGmailFindComposeField([
     'textarea[name="to"]',
+    'input[name="to"]',
     'textarea[aria-label*="To"]',
-    'textarea[aria-label*="Recipients"]',
-    '[name="to"]',
-    '[aria-label^="To"]',
-    '[aria-label*="Recipients"]',
-    '[role="combobox"][aria-label*="To"]',
-    'input[aria-label*="Recipients"]',
     'input[aria-label*="To"]',
+    'textarea[aria-label*="Recipients"]',
+    'input[aria-label*="Recipients"]',
     'input[peoplekit-id]',
+    '[role="combobox"][aria-label*="To"]',
+    '[role="combobox"][aria-label*="Recipients"]',
   ], root);
   const subjectField = __sbGmailFindComposeField([
     'input[name="subjectbox"]',
@@ -1474,15 +1523,16 @@ async function __sbGmailFillComposeFields({ to, subject, body }, options = {}) {
 }
 
 async function __sbGmailComposeHuman({ to, subject, body }, options = {}) {
-  const opened = await __sbGmailEnsureComposeDialog();
+  const opened = await __sbGmailEnsureComposeDialog({ forceNew: options.forceNew !== false });
   if (opened?.error) return opened;
   const filled = await __sbGmailFillComposeFields({ to, subject, body }, {
+    root: opened.dialog,
     requireRecipient: !!to,
     requireSubject: !!subject,
     requireBody: !!body,
   });
   if (filled?.error) return filled;
-  if (options.send) return __sbGmailSendOpenCompose();
+  if (options.send) return __sbGmailSendOpenCompose(opened.dialog);
   return { success: true, mode: "compose", sent: false };
 }
 
@@ -1495,8 +1545,8 @@ function __sbGmailFindConfirmationButton(pattern) {
   }) || null;
 }
 
-async function __sbGmailSendOpenCompose() {
-  const root = __sbGmailFindOpenComposeDialog() || document;
+async function __sbGmailSendOpenCompose(rootArg = null) {
+  const root = rootArg || __sbGmailFindOpenComposeDialog() || document;
   const sendButton = __sbGmailFindSendButton(root);
   if (!sendButton) return { error: "Gmail Send button was not found." };
   __sbGmailClickElement(sendButton);
@@ -1522,7 +1572,9 @@ async function __sbGmailSendOpenCompose() {
       return { error: statusText || "Gmail reported that the message was not sent." };
     }
 
-    const stillOpen = __sbGmailFindOpenComposeDialog();
+    const stillOpen = rootArg
+      ? (root.isConnected && __sbGmailVisible(root))
+      : __sbGmailFindOpenComposeDialog();
     if (!stillOpen) return { success: true, sent: true };
   }
 

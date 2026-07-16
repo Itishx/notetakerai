@@ -5504,6 +5504,8 @@ function bgShouldRunImmediateGmailAdapter(parsed, siteContext) {
   if (siteContext?.site !== "gmail" || parsed?.adapter !== "gmail") return false;
   return parsed.intent === "replyCurrentThread" ||
     parsed.intent === "draftGeneratedReplyCurrentThread" ||
+    parsed.intent === "draftEmail" ||
+    parsed.intent === "sendEmail" ||
     parsed.intent === "openEmail";
 }
 
