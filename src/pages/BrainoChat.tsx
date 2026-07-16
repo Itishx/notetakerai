@@ -126,6 +126,24 @@ function fmtSize(b: number) {
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function displayNameFromUser(user: { email?: string | null; user_metadata?: { full_name?: string; name?: string } } | null | undefined) {
+  const raw = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0];
+  if (!raw) return "there";
+  const first = raw.replace(/[._-]+/g, " ").trim().split(/\s+/)[0] || "there";
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
+function buildEmptyGreeting(user: { email?: string | null; user_metadata?: { full_name?: string; name?: string } } | null | undefined) {
+  const name = displayNameFromUser(user);
+  const hour = new Date().getHours();
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  const inIndia = /Kolkata|Calcutta/i.test(timeZone);
+  if (hour >= 23 || hour < 5) return inIndia ? `Late night, ${name}. Kya karna hai?` : `It's late, ${name}. What are we doing?`;
+  if (hour < 12) return inIndia ? `Morning, ${name}. Aaj kya karna hai?` : `Morning, ${name}. What are we doing?`;
+  if (hour < 18) return `Hey ${name}, what are we doing?`;
+  return inIndia ? `Shaam ho gayi, ${name}. Kya karna hai?` : `Welcome back, ${name}. What are we doing?`;
+}
+
 function looksLikeDelegateTask(text: string) {
   return /\b(open|go to|navigate|search|google|click|press|type|fill|submit|send|reply|email|gmail|book|buy|add to cart|order|schedule|create a doc|make a doc|edit|delete|archive|unsubscribe)\b/i.test(text);
 }
@@ -535,7 +553,7 @@ export default function BrainoChat() {
     if (!cmd?.id) return;
     setMessages((prev) => prev.map((message) => (
       message.commandId === cmd.id
-        ? { ...message, status: cmd.status, steps: cmd.steps || [], result: cmd.result ?? null, text: cmd.task || message.text }
+        ? { ...message, status: cmd.status, steps: cmd.steps || [], result: cmd.result ?? null }
         : message
     )));
   }, []);
@@ -609,7 +627,7 @@ export default function BrainoChat() {
     setMessages((prev) => [...prev, {
       id: tempId,
       role: "assistant",
-      text: task,
+      text: "Starting Delegate...",
       createdAt: new Date().toISOString(),
       kind: "delegate",
       status: "pending",
@@ -626,15 +644,17 @@ export default function BrainoChat() {
           : extensionStart.moved
             ? "Started Delegate on the best browser tab I could use."
             : "Started Delegate in your browser.";
+      const spoken = extensionStart.duplicate ? "Delegate is already running that." : "On it. I started Delegate.";
       setMessages((prev) => prev.map((message) => message.id === tempId
         ? {
             ...message,
+            text: "Delegate is running.",
             status: "done",
             steps: [{ description: detail, ok: true }],
             result: "Watch Braino on the target tab for the live run.",
           }
         : message));
-      return;
+      return spoken;
     }
 
     if (!extensionStart.noBridge) {
@@ -643,13 +663,13 @@ export default function BrainoChat() {
         : extensionStart.error || "The Braino extension could not start Delegate.";
       setError(`Delegate failed: ${message}`);
       setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: "error", result: message } : item));
-      return;
+      return message;
     }
 
     if (!user) {
       const message = "I could not reach the installed extension from this page. Sign in and keep the extension running, then try again.";
       setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: "error", result: message } : item));
-      return;
+      return message;
     }
 
     const contextTurns = history
@@ -674,12 +694,14 @@ export default function BrainoChat() {
       if (queueError) throw queueError;
       const row = data as unknown as Command;
       setMessages((prev) => prev.map((message) => message.id === tempId
-        ? { ...message, commandId: row.id, status: row.status, steps: row.steps || [], result: row.result ?? null }
+        ? { ...message, text: "Delegate is queued.", commandId: row.id, status: row.status, steps: row.steps || [], result: row.result ?? null }
         : message));
+      return "I queued Delegate for your browser.";
     } catch (queueError) {
       const message = queueError instanceof Error ? queueError.message : "Couldn't reach the task queue.";
       setError(`Delegate failed: ${message}`);
       setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: "error", result: message } : item));
+      return message;
     }
   }, [user]);
 
@@ -707,8 +729,9 @@ export default function BrainoChat() {
     const userMessage: ChatMessage = { id: createId(), role: "user", text, createdAt: new Date().toISOString(), kind: "chat" };
     const history = messages.slice();
     setMessages((prev) => [...prev, userMessage]);
+    if (delegateMode || looksLikeDelegateTask(text)) return await delegate(text, history);
     return await ask(text, history);
-  }, [ask, messages]);
+  }, [ask, delegate, delegateMode, messages]);
 
   const handleVoiceLog = useCallback((scope: string, message: string, data?: unknown) => {
     log.info(scope, message, data);
@@ -829,6 +852,7 @@ export default function BrainoChat() {
   }, [currentThreadId, messages, threads]);
 
   const placeholder = delegateMode ? "Tell Braino what to do..." : "Message Braino";
+  const emptyGreeting = useMemo(() => buildEmptyGreeting(user), [user]);
 
   return (
     <div className={`bchat ${sidebarCollapsed ? "is-collapsed" : ""}`}>
@@ -906,7 +930,7 @@ export default function BrainoChat() {
             {messages.length === 0 && (
               <div className="bc-empty">
                 <BrainoMark size={72} expr="happy" />
-                <h2>What should we figure out?</h2>
+                <h2>{emptyGreeting}</h2>
               </div>
             )}
             {messages.map((message) => (
@@ -993,6 +1017,13 @@ const CHAT_CSS = `
   background:#383838;
   border:1px solid #505050;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+.bc-composer .bc-icon-btn{
+  width:46px;
+  height:46px;
+  border-radius:50%;
+  flex:none;
+  align-self:center;
 }
 .bc-side-icon:hover,.bc-nav button:hover{background:#1d1d1d}
 .bc-icon-btn:hover{background:#464646;border-color:#666}
@@ -1170,7 +1201,7 @@ const CHAT_CSS = `
 .bc-composer{
   min-height:68px;
   display:flex;
-  align-items:flex-end;
+  align-items:center;
   gap:8px;
   border-radius:28px;
   background:#2a2a2a;
@@ -1200,6 +1231,7 @@ const CHAT_CSS = `
   display:flex;
   align-items:center;
   gap:7px;
+  align-self:center;
   background:#383838;
   border:1px solid #505050;
   color:#f2f2f2;
@@ -1208,6 +1240,7 @@ const CHAT_CSS = `
 .bc-route-btn.is-on{background:#4a2522;color:#ffc1bb}
 .bc-send,.bc-voice-orb{
   width:46px;height:46px;border-radius:50%;display:grid;place-items:center;flex:none;
+  align-self:center;
   border:1px solid #f7f7f7;
   box-shadow:0 3px 12px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.45);
 }
@@ -1232,23 +1265,26 @@ const CHAT_CSS = `
 
 .bc-voice-stage{
   position:fixed;
-  inset:0;
+  top:0;
+  right:0;
+  bottom:0;
+  left:300px;
   z-index:1000;
   display:grid;
   place-items:center;
-  background:rgba(0,0,0,.9);
+  background:#000;
   overflow:hidden;
 }
+.bchat.is-collapsed .bc-voice-stage{left:72px}
 .bc-voice-glow{
   position:absolute;
   width:480px;height:480px;border-radius:50%;
-  background:radial-gradient(circle,rgba(232,120,110,.38),rgba(232,120,110,.1) 40%,transparent 70%);
-  filter:blur(8px);
+  background:radial-gradient(circle,rgba(232,120,110,.24),rgba(232,120,110,.08) 42%,transparent 70%);
   animation:bcVoicePulse 2.2s ease-in-out infinite;
 }
 .bc-voice-stage.is-speaking .bc-voice-glow{animation-duration:.8s}
 @keyframes bcVoicePulse{0%,100%{transform:scale(.92);opacity:.7}50%{transform:scale(1.08);opacity:1}}
-.bc-big-braino{position:relative;z-index:1;filter:drop-shadow(0 30px 48px rgba(232,120,110,.36))}
+.bc-big-braino{position:relative;z-index:1;filter:drop-shadow(0 18px 28px rgba(232,120,110,.22))}
 .bc-voice-state{
   position:absolute;
   bottom:116px;
@@ -1298,6 +1334,7 @@ const CHAT_CSS = `
   .bc-sidebar{position:absolute;z-index:4;width:300px;inset:0 auto 0 0;transform:translateX(-100%);transition:transform .2s}
   .bchat:not(.is-collapsed) .bc-sidebar{transform:translateX(0)}
   .bchat.is-collapsed{grid-template-columns:1fr}
+  .bc-voice-stage,.bchat.is-collapsed .bc-voice-stage{left:0}
   .bc-topbar{padding-left:76px}
   .bc-scroll{padding-inline:14px}
   .bc-user-bubble{max-width:88%}

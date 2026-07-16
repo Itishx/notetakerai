@@ -211,6 +211,13 @@ export function useBrainoVoice({ accessToken, onTranscript, onLog }: Options) {
       };
       recognition.onerror = (event) => {
         const err = event.error || event.message || "Voice input failed.";
+        if (/abort|stop|stopped/i.test(err)) {
+          if (activeRef.current && !processingRef.current && !stopRequestedRef.current) {
+            setStatus("listening");
+            setTimeout(() => startListening(), 160);
+          }
+          return;
+        }
         if (err === "no-speech" && activeRef.current && !processingRef.current) {
           setStatus("listening");
           return;
