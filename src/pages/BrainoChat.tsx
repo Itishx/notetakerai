@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
+import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { useBrainoVoice } from "@/hooks/useBrainoVoice";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -143,7 +144,7 @@ function buildEmptyGreeting(user: { email?: string | null; user_metadata?: { ful
   const hour = new Date().getHours();
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
   const inIndia = /Kolkata|Calcutta/i.test(timeZone);
-  if (hour >= 23 || hour < 5) return inIndia ? `Late night, ${name}. Kya karna hai?` : `It's late, ${name}. What are we doing?`;
+  if (hour >= 23 || hour < 5) return inIndia ? `Late night hai, ${name}. Soja.` : `It's late, ${name}. What are we doing?`;
   if (hour < 12) return inIndia ? `Morning, ${name}. Aaj kya karna hai?` : `Morning, ${name}. What are we doing?`;
   if (hour < 18) return `Hey ${name}, what are we doing?`;
   return inIndia ? `Shaam ho gayi, ${name}. Kya karna hai?` : `Welcome back, ${name}. What are we doing?`;
@@ -349,6 +350,95 @@ function BrainoMark({ size = 30, expr = "happy", talking = false }: { size?: num
     <span className={`braino-avatar${talking ? " is-talking" : ""}`}>
       <Braino size={size} expr={expr} arm="none" talk={talking} legs gloves idle bobAmp={talking ? 0.75 : 0.45} />
     </span>
+  );
+}
+
+function GreetingWalker() {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const walkerRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    const walker = walkerRef.current;
+    const root = walker?.querySelector("#__sbwk_root__");
+    const flip = walker?.querySelector("#__sbwk_flip__") as HTMLElement | null;
+    if (!track || !walker || !root || !flip) return;
+
+    const q = (selector: string) => root.querySelector(selector) as SVGElement | null;
+    const legL = q("#__sbwk_ll__");
+    const legR = q("#__sbwk_rl__");
+    const eyeL = q("#__sbwk_eye_l__");
+    const eyeR = q("#__sbwk_eye_r__");
+    const pupL = q("#__sbwk_pupil_l__");
+    const pupR = q("#__sbwk_pupil_r__");
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let raf = 0;
+    let last = performance.now();
+    let start = last;
+    let dir = -1;
+    let x = Math.max(6, track.clientWidth - 64 - 6);
+    const speed = 74;
+
+    const place = (now: number, moving: boolean) => {
+      const t = (now - start) / 1000;
+      walker.style.transform = `translateX(${x}px)`;
+      flip.style.transform = `scaleX(${dir})`;
+
+      const s = t * 4.5;
+      const lp = Math.sin(s);
+      const rp = Math.sin(s + Math.PI);
+      const ll = moving ? Math.max(0, lp) * 5 : 0;
+      const rl = moving ? Math.max(0, rp) * 5 : 0;
+      const ls = moving ? Math.max(0, lp) * 8 : 0;
+      const rs = moving ? Math.max(0, rp) * 8 : 0;
+      const waddle = moving ? Math.sin(s) * 3.4 : 0;
+      const walkBob = moving ? (-Math.abs(Math.sin(s)) * 2 - 0.4) : 0;
+      const breath = 1 + 0.014 * Math.sin(t * 1.7);
+      const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+      root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+
+      legL?.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+      legR?.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+
+      const blinkPhase = t % 3.4;
+      const blink = blinkPhase < 0.13 ? Math.sin((blinkPhase / 0.13) * Math.PI) : 0;
+      const eyeSy = Math.max(0.06, 1 - blink);
+      eyeL?.setAttribute("transform", `translate(38,48) scale(1,${eyeSy}) translate(-38,-48)`);
+      eyeR?.setAttribute("transform", `translate(62,48) scale(1,${eyeSy}) translate(-62,-48)`);
+
+      const gaze = moving ? 2.4 : 0;
+      pupL?.setAttribute("transform", `translate(${gaze} 0)`);
+      pupR?.setAttribute("transform", `translate(${gaze} 0)`);
+    };
+
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const maxX = Math.max(6, track.clientWidth - 64 - 6);
+      x += dir * speed * dt;
+      if (x <= 6) { x = 6; dir = 1; }
+      else if (x >= maxX) { x = maxX; dir = -1; }
+      place(now, true);
+      raf = requestAnimationFrame(tick);
+    };
+
+    if (reduce) {
+      place(performance.now(), false);
+      return;
+    }
+
+    place(last, true);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <div className="bc-empty-walk-track" ref={trackRef} aria-hidden="true">
+      <span className="bc-empty-walker" ref={walkerRef}>
+        <div id="__sbwk_flip__" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+      </span>
+    </div>
   );
 }
 
@@ -1036,8 +1126,10 @@ export default function BrainoChat() {
           <div className="bc-thread">
             {messages.length === 0 && (
               <div className="bc-empty">
-                <BrainoMark size={72} expr="happy" />
-                <h2>{emptyGreeting}</h2>
+                <div className="bc-empty-greeting-stage">
+                  <GreetingWalker />
+                  <h2>{emptyGreeting}</h2>
+                </div>
               </div>
             )}
             {messages.map((message) => (
@@ -1251,8 +1343,51 @@ const CHAT_CSS = `
 .bc-topbar h1{font-size:18px;line-height:1.2;margin:2px 0 0;font-weight:650}
 .bc-scroll{min-height:0;flex:1 0 auto;overflow:visible;padding:20px 20px 180px}
 .bc-thread{width:min(1020px,100%);margin:0 auto;display:flex;flex-direction:column;gap:30px}
-.bc-empty{min-height:48vh;display:grid;place-items:center;text-align:center;color:#dcdcdc;align-content:center;gap:16px}
-.bc-empty h2{font-size:30px;font-weight:500;margin:0}
+.bc-empty{
+  min-height:54vh;
+  display:grid;
+  place-items:center;
+  text-align:center;
+  color:#dcdcdc;
+  align-content:center;
+  gap:18px;
+  padding-top:42px;
+}
+.bc-empty-greeting-stage{
+  position:relative;
+  display:inline-block;
+  width:fit-content;
+  max-width:min(92vw,900px);
+  min-width:min(360px,92vw);
+  padding:78px 14px 18px;
+}
+.bc-empty-walk-track{
+  position:absolute;
+  top:0;
+  left:14px;
+  right:14px;
+  height:78px;
+  overflow:hidden;
+  pointer-events:none;
+}
+.bc-empty-walker{
+  position:absolute;
+  left:0;
+  bottom:0;
+  width:64px;
+  display:block;
+  will-change:transform;
+}
+.bc-empty-walker #__sbwk_flip__{transform-origin:center;display:block}
+.bc-empty-walker svg{width:64px!important;height:auto!important;overflow:visible}
+.bc-empty h2{
+  font-family:"Instrument Serif",Georgia,serif;
+  font-size:clamp(34px,4.8vw,58px);
+  line-height:1.04;
+  letter-spacing:0;
+  font-weight:400;
+  margin:0;
+}
 .bc-turn{display:flex;gap:16px;align-items:flex-start}
 .bc-turn-user{justify-content:flex-end}
 .bc-user-bubble{
