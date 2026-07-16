@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
+import BrainoWalker from "@/components/BrainoWalker";
 import { useBrainoVoice } from "@/hooks/useBrainoVoice";
 
 /* ============================================================================
@@ -100,13 +101,6 @@ const THEMES: Record<Theme, Record<string, string>> = {
   light: { "--bg": "#FBF7F1", "--panel": "#FFFDF9", "--ink": "#1B1713", "--ink-2": "#4B413A", "--ink-3": "#8A7F75", "--line": "#EAE1D4", "--line-2": "#F0E9DE", "--accent": "#C9544A", "--btn": "#1B1713", "--btn-ink": "#FBF7F1", "--user-rule": "#D9C9B6" },
   dark: { "--bg": "#0B0807", "--panel": "#141110", "--ink": "#F5F1EA", "--ink-2": "rgba(245,241,234,.72)", "--ink-3": "rgba(245,241,234,.42)", "--line": "rgba(245,241,234,.13)", "--line-2": "rgba(245,241,234,.08)", "--accent": "#E8786E", "--btn": "#F5F1EA", "--btn-ink": "#0B0807", "--user-rule": "rgba(245,241,234,.28)" },
 };
-
-const SUGGESTIONS: { icon: string; label: string; prompt: string }[] = [
-  { icon: "write", label: "Write", prompt: "Help me write something" },
-  { icon: "explain", label: "Explain", prompt: "Explain a tricky concept simply" },
-  { icon: "spark", label: "Brainstorm", prompt: "Brainstorm some ideas with me" },
-  { icon: "plan", label: "Plan", prompt: "Help me plan my day" },
-];
 
 const CHAT_PAGE_CSS = `
   .bchat{
@@ -340,6 +334,209 @@ const CHAT_PAGE_CSS = `
   }
 `;
 
+const BRAINO_EXTENSION_CHAT_CSS = `
+  .bchat{
+    background:
+      radial-gradient(circle at 50% 102%, rgba(232,120,110,0.13), transparent 34%),
+      linear-gradient(180deg, var(--bg), color-mix(in srgb,var(--bg) 92%, #E8786E 8%));
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  .bchat .topbar{display:none;}
+  .bchat .landing{display:block; padding:0;}
+  .bchat .landing-col{width:100%; height:100%; max-width:none;}
+  .bchat .landing .braino-avatar,
+  .bchat .landing .eyebrow,
+  .bchat .landing .greeting,
+  .bchat .landing .sub,
+  .bchat .landing .chips{display:none;}
+  .bchat .signin-hint{
+    position:fixed; left:50%; bottom:92px; transform:translateX(-50%);
+    z-index:99997; width:min(640px,calc(100vw - 48px));
+    padding:8px 12px; border-radius:999px;
+    background:rgba(255,251,247,0.58); border:1px solid rgba(255,255,255,0.48);
+    backdrop-filter:blur(14px) saturate(170%); -webkit-backdrop-filter:blur(14px) saturate(170%);
+    box-shadow:0 10px 28px rgba(27,23,19,0.12);
+  }
+
+  .bchat .convo{
+    position:fixed; inset:0; display:block; min-height:100vh;
+    pointer-events:none;
+  }
+  .bchat .scroller{
+    position:fixed; top:70px; left:50%; transform:translateX(-50%);
+    width:min(820px,calc(100vw - 32px));
+    height:auto; max-height:min(72vh,calc(100vh - 190px)); min-height:140px;
+    overflow:auto; padding:0;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.38);
+    border-radius:24px;
+    box-shadow:0 40px 100px rgba(0,0,0,0.25),0 8px 24px rgba(0,0,0,0.14),
+      inset 2px 2px 1px rgba(255,255,255,0.25), inset -1px -1px 1px rgba(255,255,255,0.15);
+    backdrop-filter:blur(18px) saturate(180%);
+    -webkit-backdrop-filter:blur(18px) saturate(180%);
+    pointer-events:auto;
+  }
+  .bchat[data-theme="light"] .scroller{
+    background:rgba(255,251,247,0.54);
+    border-color:rgba(255,255,255,0.62);
+    box-shadow:0 18px 54px rgba(27,23,19,0.16),0 5px 18px rgba(27,23,19,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.62);
+  }
+  .bchat .thread{
+    width:100%; margin:0; padding:18px 26px 22px;
+    gap:0; display:flex; flex-direction:column;
+  }
+  .bchat .turn{
+    padding:0; margin:0; display:flex; flex-direction:column; align-items:flex-start;
+  }
+  .bchat .turn + .turn{
+    margin-top:18px; padding-top:18px;
+    border-top:1px solid rgba(255,255,255,0.08);
+  }
+  .bchat[data-theme="light"] .turn + .turn{border-top-color:rgba(65,48,40,0.08);}
+  .bchat .turn-head{gap:8px; margin-bottom:9px;}
+  .bchat .who{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:10.5px; letter-spacing:.16em; color:var(--ink-3);
+  }
+  .bchat .turn-user{align-items:flex-start; text-align:left;}
+  .bchat .turn-user .turn-head{display:none;}
+  .bchat .turn-user .turn-body{
+    display:inline-block; max-width:100%;
+    background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2);
+    border-radius:14px; padding:10px 14px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:13px; line-height:1.5; font-style:normal; color:var(--ink-2);
+    word-break:break-word;
+  }
+  .bchat[data-theme="light"] .turn-user .turn-body{
+    background:rgba(65,48,40,0.08); border-color:rgba(65,48,40,0.12); color:#4B413A;
+  }
+  .bchat .turn-braino .turn-body.read,
+  .bchat .dtask-result{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:14.5px; line-height:1.75; color:var(--ink);
+  }
+  .bchat .read .ln{margin:0 0 .9em;}
+  .bchat .read .ln:last-child{margin-bottom:0;}
+  .bchat .thread-foot{height:0;}
+  .bchat .err-banner{
+    position:fixed; left:50%; bottom:94px; transform:translateX(-50%);
+    z-index:99999; width:min(820px,calc(100vw - 48px)); margin:0;
+    background:rgba(255,251,247,0.78); color:#1B1713;
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  }
+
+  .bchat .dock{
+    position:fixed; left:0; right:0; bottom:0;
+    z-index:99997; padding:0 24px 20px;
+    margin:0; background:none; pointer-events:none;
+  }
+  .bchat .dock-inner{
+    width:min(1100px,100%); max-width:1100px; margin:0 auto; pointer-events:auto;
+  }
+  .bchat .landing .composer-wrap{
+    position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+    width:calc(100vw - 48px); max-width:1100px;
+    z-index:99997;
+  }
+  .bchat .dock .composer-wrap{position:static; transform:none; width:100%; max-width:none;}
+  .bchat .attachments{margin:0 0 10px 20px;}
+  .bchat .attach{display:none;}
+  .bchat .composer{
+    position:relative; isolation:isolate; overflow:visible;
+    display:flex; flex-direction:row; align-items:center; gap:8px;
+    width:100%; border-radius:100px; padding:10px 10px 10px 28px;
+    background:rgba(255,251,247,0.12);
+    border:1px solid rgba(255,255,255,0.5);
+    box-shadow:0 8px 32px rgba(27,23,19,0.18),0 2px 8px rgba(27,23,19,0.08),
+      inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+    backdrop-filter:blur(6px) saturate(180%);
+    -webkit-backdrop-filter:blur(6px) saturate(180%);
+    transition:border-color .2s, box-shadow .2s, background .2s;
+  }
+  .bchat .composer::before{
+    content:""; position:absolute; inset:0; border-radius:inherit; z-index:-1; pointer-events:none;
+    backdrop-filter:blur(16px) saturate(200%);
+    -webkit-backdrop-filter:blur(16px) saturate(200%);
+  }
+  .bchat .composer.hero{border-radius:100px; padding:10px 10px 10px 28px;}
+  .bchat .composer:focus-within{
+    border-color:rgba(232,120,110,0.42);
+    box-shadow:0 0 0 1.5px rgba(232,120,110,0.18),0 10px 34px rgba(27,23,19,0.2),
+      inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+  }
+  .bchat .composer.hp-active{
+    border-color:rgba(125,211,252,0.72);
+    box-shadow:0 0 0 1.5px rgba(56,189,248,0.55),0 0 22px rgba(56,189,248,0.4),
+      0 0 46px rgba(59,130,246,0.24),0 8px 32px rgba(27,23,19,0.18),
+      inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+  }
+  .bchat .composer textarea{
+    flex:1; min-width:0; max-height:120px; padding:0;
+    background:transparent; border:0; outline:0; resize:none;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:16px; line-height:1.4; color:#1B1713;
+    text-shadow:0 0 4px rgba(255,255,255,0.95),0 0 8px rgba(255,255,255,0.7),0 1px 1px rgba(255,255,255,0.8);
+  }
+  .bchat .composer.hero textarea{font-size:16px; padding:0;}
+  .bchat .composer textarea::placeholder{color:#4A3D34;}
+  .bchat .delegate-toggle{
+    height:38px; align-self:center; border:1px solid rgba(255,255,255,0.4);
+    background:rgba(255,251,247,0.55); border-radius:12px;
+    color:#3A2D24; font-size:12px; padding:0 12px;
+    filter:drop-shadow(0 0 2px rgba(255,255,255,0.75));
+  }
+  .bchat .delegate-toggle.on{background:#fee2e2; color:#C9544A; border-color:rgba(201,84,74,0.22);}
+  .bchat .delegate-toggle span{display:inline;}
+  .bchat .chat-bar-icon,
+  .bchat .send{
+    width:38px; height:38px; border-radius:50%; border:none;
+    background:transparent; color:#3A2D24; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; transition:background .15s, color .15s, transform .15s; padding:0;
+    filter:drop-shadow(0 0 2px rgba(255,255,255,0.9)) drop-shadow(0 0 4px rgba(255,255,255,0.55));
+  }
+  .bchat .chat-bar-icon:hover{background:rgba(65,48,40,0.08);}
+  .bchat .chat-bar-icon.active{background:#e0f2fe; color:#0284c7;}
+  .bchat .chat-bar-icon svg,
+  .bchat .send svg{width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;}
+  .bchat .chat-bar-icon .ti{width:17px; height:17px; stroke:currentColor;}
+  .bchat .send{
+    width:42px; height:42px; background:#E8786E; color:white;
+    filter:none;
+  }
+  .bchat .send:hover:not(:disabled){background:#C9544A; transform:none;}
+  .bchat .send:disabled{opacity:.42;}
+  .bchat .send svg{width:18px; height:18px; stroke:white;}
+  .bchat .dock-hint{
+    margin-top:10px; color:var(--ink-3); text-shadow:0 1px 0 rgba(255,255,255,0.45);
+  }
+
+  .bchat-voice{
+    z-index:100000; background:rgba(255,251,247,0.08);
+    backdrop-filter:blur(8px) saturate(170%); -webkit-backdrop-filter:blur(8px) saturate(170%);
+  }
+  .bchat-voice-inner{
+    border:1px solid rgba(255,255,255,0.44); border-radius:24px;
+    background:rgba(255,255,255,0.08);
+    box-shadow:0 40px 100px rgba(0,0,0,0.28), inset 1px 1px 0 rgba(255,255,255,0.28);
+    backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);
+  }
+  .bchat[data-theme="light"] .bchat-voice-inner{background:rgba(255,251,247,0.62);}
+
+  @media (max-width:640px){
+    .bchat .scroller{top:48px; width:calc(100vw - 20px); max-height:calc(100vh - 170px);}
+    .bchat .thread{padding:16px 18px 20px;}
+    .bchat .dock{padding:0 12px 16px;}
+    .bchat .landing .composer-wrap{width:calc(100vw - 24px); bottom:16px;}
+    .bchat .composer,.bchat .composer.hero{padding:9px 8px 9px 18px;}
+    .bchat .delegate-toggle{width:38px; padding:0; justify-content:center;}
+    .bchat .delegate-toggle span{display:none;}
+    .bchat .chat-bar-icon.theme{display:none;}
+  }
+`;
+
 /* ---------- helpers ---------- */
 function createMessageId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -397,18 +594,10 @@ function readStoredDelegate(): boolean {
   }
 }
 
-function greetWord() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-}
-
-function getDisplayName(displayName?: string | null, email?: string | null) {
-  const source = (displayName || email || "there").trim();
-  const token = source.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean)[0];
-  if (!token) return "there";
-  return token.charAt(0).toUpperCase() + token.slice(1);
+function looksLikeDelegateTask(text: string) {
+  const value = text.trim().toLowerCase();
+  if (!value) return false;
+  return /\b(open|go to|navigate|search|google|click|press|type|fill|submit|send|reply|email|gmail|book|buy|add to cart|order|schedule|create a doc|make a doc|edit|delete|archive|unsubscribe)\b/.test(value);
 }
 
 function fmtSize(b: number) {
@@ -458,16 +647,6 @@ function BrainoMark({ size = 30, expr = "happy", arm = "none" as string }) {
 }
 
 /* ---------- icons (verbatim shapes from the design) ---------- */
-function ActionIcon({ name }: { name: string }) {
-  const paths: Record<string, React.ReactNode> = {
-    write: <><path d="M4 20.5h4L19 9.5a2 2 0 0 0-2.8-2.8L5 17.7v2.8z" /><line x1="13.5" y1="6.5" x2="17.5" y2="10.5" /></>,
-    explain: <><circle cx="12" cy="12" r="9" /><path d="M9.4 9.3a2.7 2.7 0 1 1 3.4 2.7c-.7.2-1.1.8-1.1 1.5v.3" /><circle cx="11.7" cy="16.6" r="0.4" /></>,
-    spark: <><path d="M12 3l1.7 5.6L19 10l-5.3 1.4L12 17l-1.7-5.6L5 10l5.3-1.4z" /></>,
-    plan: <><circle cx="5" cy="6" r="1.2" /><line x1="9" y1="6" x2="20" y2="6" /><circle cx="5" cy="12" r="1.2" /><line x1="9" y1="12" x2="20" y2="12" /><circle cx="5" cy="18" r="1.2" /><line x1="9" y1="18" x2="20" y2="18" /></>,
-  };
-  return <svg className="ci" viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
-}
-
 function SunMoon({ dark }: { dark: boolean }) {
   return dark
     ? <svg viewBox="0 0 24 24" className="ti"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>
@@ -482,6 +661,7 @@ type Attachment = { id: string; name: string; size: string };
 function Composer({
   variant, value, setValue, onSend, disabled, placeholder,
   attachments, onPick, onRemove, delegateMode, onToggleDelegate,
+  voiceActive, onVoiceToggle, dark, onThemeToggle, showNewChat, onNewChat,
 }: {
   variant: "hero" | "dock";
   value: string;
@@ -494,6 +674,12 @@ function Composer({
   onRemove: (id: string) => void;
   delegateMode: boolean;
   onToggleDelegate: () => void;
+  voiceActive?: boolean;
+  onVoiceToggle?: () => void;
+  dark?: boolean;
+  onThemeToggle?: () => void;
+  showNewChat?: boolean;
+  onNewChat?: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -519,24 +705,35 @@ function Composer({
           ))}
         </div>
       )}
-      <div className={`composer ${variant}`}>
+      <div id="braino-chat-bar" className={`composer ${variant}${voiceActive ? " hp-active" : ""}`}>
         <button className="attach" aria-label="Attach a file" onClick={() => fileRef.current?.click()}>
           <svg className="ci" viewBox="0 0 24 24"><path d="M21 11.6l-8.9 8.9a5 5 0 0 1-7.1-7.1l8.9-8.9a3.3 3.3 0 0 1 4.7 4.7l-8.9 8.9a1.7 1.7 0 0 1-2.4-2.4l8.2-8.2" /></svg>
-        </button>
-        <button
-          className={`delegate-toggle${delegateMode ? " on" : ""}`}
-          type="button"
-          aria-pressed={delegateMode}
-          onClick={onToggleDelegate}
-          title="Delegate mode — your message is dispatched to your browser extension to run as a task"
-        >
-          <BoltIcon /><span>Delegate</span>
         </button>
         <textarea
           ref={ref} rows={1} value={value} placeholder={placeholder}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
         />
+        <button
+          className={`delegate-toggle${delegateMode ? " on" : ""}`}
+          type="button"
+          aria-pressed={delegateMode}
+          onClick={onToggleDelegate}
+          title="Auto routes obvious browser tasks to the extension. Toggle to force Delegate."
+        >
+          <BoltIcon /><span>{delegateMode ? "Delegate" : "Auto"}</span>
+        </button>
+        <button className={`chat-bar-icon${voiceActive ? " active" : ""}`} type="button" aria-label="Voice mode" title="Voice mode — Control x2" onClick={onVoiceToggle}>
+          <svg viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6" /><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z" /><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" /></svg>
+        </button>
+        {showNewChat && (
+          <button className="chat-bar-icon" type="button" aria-label="New chat" title="New chat" onClick={onNewChat}>
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        )}
+        <button className="chat-bar-icon theme" type="button" aria-label="Toggle theme" title="Toggle theme" onClick={onThemeToggle}>
+          <SunMoon dark={!!dark} />
+        </button>
         <button
           className="send" aria-label="Send"
           disabled={disabled || (!value.trim() && attachments.length === 0)}
@@ -703,7 +900,7 @@ async function callBrainoSiteChat(args: {
    App
    ============================================================================ */
 export default function BrainoChat() {
-  const { user, session, profile } = useAuth();
+  const { user, session } = useAuth();
   const [theme, setTheme] = useState<Theme>(() => readStoredTheme());
   const [messages, setMessages] = useState<ChatMessage[]>(() => readStoredMessages());
   const [draft, setDraft] = useState<string>(() => readStoredDraft());
@@ -949,7 +1146,7 @@ export default function BrainoChat() {
     setAttachments([]);
     scrollDown();
 
-    if (delegateMode) void delegate(text, history);
+    if (delegateMode || looksLikeDelegateTask(text)) void delegate(text, history);
     else void ask(text, history);
   }, [draft, attachments, isSending, messages, delegateMode, delegate, ask, scrollDown]);
 
@@ -963,8 +1160,6 @@ export default function BrainoChat() {
     try { window.sessionStorage.removeItem(STORAGE_KEY); window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
   }, []);
 
-  const displayName = useMemo(() => getDisplayName(profile?.display_name, user?.email), [profile?.display_name, user?.email]);
-
   // ── Voice mode (Ctrl ×2) — real-time, same backend + system prompt as the extension ──
   const buildVoiceConfigBody = useCallback(() => ({
     notes: BRAINO_SITE_CONTEXT,
@@ -977,13 +1172,16 @@ export default function BrainoChat() {
       text: "The user is talking to Braino by voice inside the dedicated website chat page.",
     },
   }), []);
+  const handleVoiceLog = useCallback((scope: string, msg: string, data?: unknown) => {
+    log.info(scope, msg, data);
+  }, []);
   const {
     active: voiceActive, status: voiceStatus, userText: voiceUserText,
     brainoText: voiceBrainoText, error: voiceError, toggle: voiceToggle, stop: voiceStop,
   } = useBrainoVoice({
     accessToken: session?.access_token,
     buildConfigBody: buildVoiceConfigBody,
-    onLog: (scope, msg, data) => log.info(scope, msg, data),
+    onLog: handleVoiceLog,
   });
 
   // Double-tap Control toggles voice; Esc exits.
@@ -1005,12 +1203,13 @@ export default function BrainoChat() {
   const wrapperStyle = { ...THEMES[theme], "--read": "19px" } as React.CSSProperties;
   const placeholder = delegateMode
     ? "Tell Braino what to do — he'll run it on your browser…"
-    : phase === "landing" ? "Ask Braino anything…" : "Message Braino…";
+    : "What's on your mind?";
 
   return (
     <div className="bchat" data-theme={theme} style={wrapperStyle}>
-      <style>{CHAT_PAGE_CSS}</style>
+      <style>{CHAT_PAGE_CSS}{BRAINO_EXTENSION_CHAT_CSS}</style>
       <BrainoDefs />
+      <BrainoWalker perchTargetId="braino-chat-bar" alwaysPerched />
 
       {/* Voice mode (Ctrl ×2): the whole screen perimeter glows, no mascot, just a live transcript. */}
       {voiceActive && (
@@ -1063,25 +1262,16 @@ export default function BrainoChat() {
       {phase === "landing" && (
         <section className="landing">
           <div className="landing-col">
-            <BrainoMark size={78} expr="happy" arm="wave" />
-            <div className="eyebrow">BRAINO · YOUR AI BROWSER SIDEKICK</div>
-            <h1 className="greeting">{greetWord()}, <span className="g-em">{displayName}.</span></h1>
-            <p className="sub">What can I help you with? Ask me anything — or flip on Delegate and hand me a task to run.</p>
             <Composer
               variant="hero" value={draft} setValue={setDraft} onSend={() => send()} disabled={isSending}
               placeholder={placeholder} attachments={attachments} onPick={pickFiles} onRemove={removeAttach}
               delegateMode={delegateMode} onToggleDelegate={() => setDelegateMode((v) => !v)}
+              voiceActive={voiceActive} onVoiceToggle={() => voiceToggle()}
+              dark={dark} onThemeToggle={() => setTheme(dark ? "light" : "dark")}
             />
             {delegateMode && !user && (
               <div className="signin-hint"><Link to="/auth?redirect=/chat">Sign in</Link> to delegate — tasks run on your browser via the extension.</div>
             )}
-            <div className="chips">
-              {SUGGESTIONS.map((s, i) => (
-                <button key={i} className="chip" onClick={() => send(s.prompt)} disabled={isSending}>
-                  <ActionIcon name={s.icon} /><span>{s.label}</span>
-                </button>
-              ))}
-            </div>
           </div>
         </section>
       )}
@@ -1110,13 +1300,16 @@ export default function BrainoChat() {
                 variant="dock" value={draft} setValue={setDraft} onSend={() => send()} disabled={isSending}
                 placeholder={placeholder} attachments={attachments} onPick={pickFiles} onRemove={removeAttach}
                 delegateMode={delegateMode} onToggleDelegate={() => setDelegateMode((v) => !v)}
+                voiceActive={voiceActive} onVoiceToggle={() => voiceToggle()}
+                dark={dark} onThemeToggle={() => setTheme(dark ? "light" : "dark")}
+                showNewChat={messages.length > 0} onNewChat={newChat}
               />
               <div className="dock-hint">
                 {delegateMode
                   ? (user
                       ? <>Delegate is on — your message runs as a task on your browser via the extension</>
                       : <><Link to="/auth?redirect=/chat">Sign in</Link> to delegate tasks to your browser</>)
-                  : <>Braino can write, explain, and run tasks · <kbd>Enter</kbd> to send</>}
+                  : <>Auto routes browser tasks to the extension · <kbd>Enter</kbd> to send · <kbd>Control</kbd> x2 to speak</>}
               </div>
             </div>
           </div>
