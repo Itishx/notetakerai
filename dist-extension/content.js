@@ -5169,9 +5169,9 @@ const __SB_TEAM_CONFIG = {
         label: "Madhuri",
         speechLabel: "Maa-dhoo-ree",
         aliases: ["madhuri", "maduri", "madhuree", "madhoori", "madhuri maam", "madhuri mam"],
-        opening: "Hey Madhuri. How are you doing? Itish has told me a lot about you.",
-        message: "He says you were one of the kindest leads he has had. You actually cared for him, and that stayed with him.",
-        closing: "He is very grateful for you, and he is going to miss you.",
+        opening: "Madhuri, you and him joined on the same day, and if on 31st July 2025, you would have told Itish the true bond you would go onto form, he'd be surprised.",
+        message: "You've been so patient and kind with him. He is very grateful for you, and he is going to miss you.",
+        closing: "Thanks for giving him the confidence always ki \"tum karloge\" and dekho, kar liya Itish ne. Aapki bohot yaad aaegi.",
         afterResponse: "That makes me really happy to hear.",
       },
       rahul: {
@@ -5179,16 +5179,16 @@ const __SB_TEAM_CONFIG = {
         speechLabel: "Raa-hul",
         aliases: ["rahul", "rahool"],
         opening: "Rahul. Two words.",
-        message: "Meri jaan.",
-        closing: "That is the whole message. Perfect as it is.",
+        message: "Itish has just two words for you: \"Meri Jaan\".",
+        closing: "That is the whole message. Perfect as it is. Beyond A.N.Z, always.",
       },
       shriya: {
-        label: "Shriya",
+        label: "Shreeya",
         speechLabel: "Shree-ya",
         aliases: ["shriya", "shreya", "shria", "shreeya"],
-        opening: "Shriya.",
-        message: "You see what is possible with vibe coding.",
-        closing: "That is the pitch.",
+        opening: "Hello Shreeya.",
+        message: "You were born and brought up in Amdocs and I was in Itish's browser.",
+        closing: "I hope the new project is keeping you just as busy. P.S. see all that is possible from vibe coding?",
       },
       palash: {
         label: "Palash",
@@ -5196,7 +5196,7 @@ const __SB_TEAM_CONFIG = {
         aliases: ["palash", "palashh", "palaash", "palash bhai"],
         opening: "Hey Palash, been a while. How are you doing?",
         message: "Itish wanted me to say thank you for always being there for him. For helping him switch the monitor on when he somehow could not figure it out, and for being supportive like an elder brother.",
-        closing: "He remembers that more than you probably know.",
+        closing: "You took him to the airport when he broke his leg, and that means more than you can ever know.",
       },
       shree: {
         label: "Shree",
@@ -5204,7 +5204,7 @@ const __SB_TEAM_CONFIG = {
         aliases: ["shree", "shri", "shri raksha", "shriraksha", "sri raksha", "sriraksha", "raksha", "shree raksha", "sree raksha", "sheeraksha", "she raksha", "shree raksh", "sri raksh"],
         opening: "Shree, Itish sees you like an elder sister.",
         message: "You made him realize he cannot always be painfully honest in every moment. He is working on it. At his core, he will probably always be honest, but he is learning how to carry it better.",
-        closing: "Thank you for caring enough to tell him the truth.",
+        closing: "Thank you for caring enough to tell him the truth and wanting him to do good. He will always remember you.",
       },
     },
   },
@@ -5219,49 +5219,50 @@ const __SB_TEAM_CONFIG = {
         aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji", "jyotisar", "jyotisaar", "jyoti sirr", "jyoti saar"],
         opening: "Jyoti sir, thank you for understanding Itish for who he is and for being so supportive.",
         message: "He learned a lot about what good management looks like from you. You make people laugh, but you also make people respect you.",
-        closing: "A lot of people look up to you, and he does too.",
+        closing: "A lot of people look up to you, and he does too. Party karenge sir, when and where, just let him know.",
       },
       surya: {
         label: "Surya",
         speechLabel: "Soor-ya",
         aliases: ["surya", "suria", "soorya", "surya sir", "suriya"],
-        opening: "Surya, thank you for bringing Itish into AT&T.",
-        message: "That first conversation meant a lot to him. You spoke to him for forty minutes like a human being and did not ask a single technical question.",
-        closing: "Also, he hopes you now realize why he never did much ETL. The only thing he really wanted to extract and transform was Braino.",
+        opening: "Surya, sorry for butchering your pronunciation, but thank you for bringing Itish into AT&T.",
+        message: "That first conversation meant a lot to him. You spoke to him for forty minutes like a human being and did not ask a single technical question, which he was hoping you would not ask, haha.",
+        closing: "Also, he hopes you now realize why he never did much ETL. The only thing he really wanted to extract and transform was me, Braino, but unlike him, I could tell you all about ETL and data warehousing, haha.",
       },
       hemangi: {
         label: "Hemangi",
         speechLabel: "Hey-maangi",
         aliases: ["hemangi", "hemangee", "himangi", "hemangy", "hemangi maam", "hemangi mam"],
-        opening: "Hemangi, I hope you now understand why Itish was not always the most proactive person in the room.",
-        message: "In his head, he was always running here, building me. But he is genuinely grateful for how sweet you were to him.",
-        closing: "He wishes he got more time to work with you.",
+        opening: "Hi Hemangi, thank you for always being super sweet and non scary to Itish.",
+        message: "Aapne hamesha bohot ache and pyaar se baat kari Itish se, and I get it, headphones in the ears all the time? Can get annoying, and yet you and Minul both were so nice about it.",
+        closing: "You would make an awesome team lead, or maybe you are one, honestly there are so many leads in this team even I am confused. But jokes apart, he wishes he got more time to work with you. Thank you. Also, we can stop worrying about the C.C.H Putty issue now, haha.",
       },
       minul: {
         label: "Minul",
         speechLabel: "Mee-nul",
         aliases: ["minul", "meenul", "minool", "minol", "meenol", "minull", "meenal"],
-        opening: "Minul, you kept Itish in check.",
-        message: "You held him accountable, made him do things right, and did not let him procrastinate. That mattered more than he probably said out loud.",
-        closing: "Thank you for keeping him honest and moving.",
+        opening: "Minul, I hope you now understand why Itish was not always the most proactive person in the room.",
+        message: "In his head, he was always running here, building me. But you kept Itish in check.",
+        closing: "You held him accountable, made him do things right, and did not let him procrastinate. That mattered more than he probably said out loud. Thank you for keeping him honest and moving.",
       },
     },
   },
 };
 
 const __SB_TEAM_DEMO_STORE_KEY = "sbTeamDemoState";
+const __SB_TEAM_FINAL_THANK_YOU = "Thank you for making Itish's time in Amdocs worth it. Thank you for making him feel as if he was home away from home. He will remember you always.";
 const __SB_TEAM_DEMO_SCRIPT = {
   intro: [
-    "I am Braino.",
+    "Okay so, hello there folks, I am Braino.",
     "I live inside Itish's browser, which is less creepy than it sounds and more useful than it has any right to be.",
-    "I can read pages, write emails, talk in voice, search the web, control tabs, play music, and generally do the browser chores while Itish pretends this was all calm and planned.",
+    "I can read pages, write emails, talk to you in real time with little to no latency, search the web, control your tabs, play music, and generally do the browser chores while Itish pretends this was all calm and planned.",
     "I also happen to look very adorable, and I have Itish to thank for that.",
-    "But let me stop yapping and play a song.",
+    "But let me stop yapping and show you something, for actions speak louder than words. Lets start with playing a song, here we go, watch.",
   ].join("\n\n"),
-  afterSong: "That was Spotify. Now let's say you want to open a machine learning article. I can do that as well. Here you go.",
-  afterSongFallback: "Spotify needed a warmup, but the browser trick is still the browser trick. Now let's say you want to open a machine learning article. I can do that as well. Here you go.",
-  beforeArticleSummary: "Let's say you have this article open right here. Now you do not want to read the whole thing, so I can summarize it for you without you having to leave the page.",
-  closing: "Now that was done. So that was it for what I can do. I'm still getting better every single day. I keep getting smarter. If Itish keeps working on me until 6 am, I don't see any other option but to get smarter.\n\nWhich team is in front of you, ANZ or AT&T?",
+  afterSong: "That was Spotify. Any song you want, I can play, as long as I am able to hear it correctly of course. Now let's say you want to read a machine learning article, watch.",
+  afterSongFallback: "Spotify needed a warmup, but the browser trick is still the browser trick. Now let's say you want to read a machine learning article, watch.",
+  beforeArticleSummary: "Now that we have it opened, let's say you do not want to read the whole thing, because like Itish, you are lazy, and want it summarised. Earlier, you would have to copy-paste the contents of this and put it into ChatGPT and ask it to summarize, but I can just do it right here, without you having to leave the page.\n\nWatch.",
+  closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while at heart I am desi, my accent is angrezi. So here we go. Itish, my guy.\n\nWhich team is in front of you, ANZ or AT&T?",
 };
 
 let __sbTeamState = {
@@ -6043,13 +6044,13 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
       __sbTeamState.spoken = [];
       return await finish(__sbTeamPromptForTeam());
     }
-    return await finish("Team mode is done. Say exit Team mode to go back to normal, or say hi to my team to start again.");
+    return await finish(`${__SB_TEAM_FINAL_THANK_YOU}\n\nSay exit Team mode to go back to normal, or say hi to my team to start again.`);
   }
 
   if (__sbTeamState.phase === "awaiting_next_person" || __sbTeamState.phase === "speaking_person") {
     if (__sbTeamIsDonePrompt(promptText)) {
       __sbTeamState.phase = "done";
-      return await finish("That's everyone I had prepared. Team mode is still on if you want to ask me something, or say exit Team mode.");
+      return await finish(__SB_TEAM_FINAL_THANK_YOU);
     }
 
     let selectedPerson = null;
@@ -6057,7 +6058,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
       selectedPerson = __sbTeamPickFallbackNext();
       if (!selectedPerson) {
         __sbTeamState.phase = "done";
-        return await finish("I have finished the prepared messages for this team.");
+        return await finish(__SB_TEAM_FINAL_THANK_YOU);
       }
     } else {
       const people = __sbTeamFindPeople(promptText, __sbTeamState.team).map((match) => match.personKey);
