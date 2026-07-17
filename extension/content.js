@@ -5246,16 +5246,16 @@ const __SB_TEAM_CONFIG = {
 const __SB_TEAM_DEMO_STORE_KEY = "sbTeamDemoState";
 const __SB_TEAM_DEMO_SCRIPT = {
   intro: [
-    "Hi. I'm Braino.",
-    "I live in Itish's browser, which sounds tiny until you realize the browser is where half of modern life has decided to happen.",
-    "I can read what is on the page, write with him, talk in voice, search the web, control tabs, help with Gmail, play music, and generally reduce the number of times he has to pretend clicking around is deep work.",
-    "I'm still learning, obviously. But I learn fast, because apparently Itish thinks sleeping before 6 am is optional.",
-    "Let me show you instead of yapping. Tell me one song you want me to play.",
+    "I am Braino.",
+    "I live inside Itish's browser, which is less creepy than it sounds and more useful than it has any right to be.",
+    "I can read pages, write emails, talk in voice, search the web, control tabs, play music, and generally do the browser chores while Itish pretends this was all calm and planned.",
+    "I also happen to look very adorable, and I have Itish to thank for that.",
+    "But let me stop yapping and play a song. Tell me one song you want me to play.",
   ].join("\n\n"),
   askSong: "Tell me one song you want me to play.",
   songAck: (song) => `Perfect. I will open Spotify and play ${song}. Watch this.`,
-  afterSong: "That was purtified for you. Vibe handled. Now second trick: let's say you want to read a machine learning article on Medium. I will open Medium and find one.",
-  closing: "So that was it for what I can do. I'm still getting better every single day. I keep getting smarter. If Itish keeps working on me until 6 am, I don't see any other option but to get smarter.\n\nI think it's time to say hello to the team now. Which team are we talking to, ANZ or AT&T?",
+  afterSong: "That was Spotify. Now let's say you want to open a machine learning article. I can do that as well. Here you go.",
+  closing: "Now that was done. So that was it for what I can do. I'm still getting better every single day. I keep getting smarter. If Itish keeps working on me until 6 am, I don't see any other option but to get smarter.\n\nWould you like me to say hello to your team? Now I'm sure they are watching.",
 };
 
 let __sbTeamState = {
@@ -5269,6 +5269,8 @@ let __sbTeamState = {
   previousPhase: "awaiting_next_person",
   demoTask: "",
   demoSong: "",
+  demoOriginTabId: null,
+  demoTabId: null,
 };
 
 function __sbTeamNormalize(value) {
@@ -5335,7 +5337,7 @@ function __sbTeamKnownPeopleLine(teamKey = __sbTeamState.team) {
 
 function __sbTeamSpeechText(text) {
   let speech = String(text || "");
-  speech = speech.replace(/\bAT&T\b/g, "A T and T").replace(/\bANZ\b/g, "A N Z");
+  speech = speech.replace(/\bAT&T\b/g, "A. T. and T.").replace(/\bANZ\b/g, "A. N. Z.");
   for (const team of Object.values(__SB_TEAM_CONFIG)) {
     for (const person of Object.values(team.people || {})) {
       const label = String(person.label || "").trim();
@@ -5359,6 +5361,8 @@ function __sbTeamReset() {
     previousPhase: "awaiting_next_person",
     demoTask: "",
     demoSong: "",
+    demoOriginTabId: null,
+    demoTabId: null,
   };
   __sbTeamClearDemoState();
 }
@@ -5453,6 +5457,14 @@ function __sbTeamBuildTeamIntroLine(teamKey) {
   return `Okay, ${team}. I can talk about ${people}. Who is here right now?`;
 }
 
+function __sbTeamIsYesPrompt(text) {
+  return /\b(yes|yeah|yep|sure|haan|ha|hanji|go ahead|do it|let's go|lets go|of course|please)\b/i.test(String(text || ""));
+}
+
+function __sbTeamIsNoPrompt(text) {
+  return /\b(no|nope|nah|not now|later)\b/i.test(String(text || ""));
+}
+
 async function __sbTeamSpeakPerson(teamKey, personKey, ctx = {}) {
   if (!__sbTeamSetTeam(teamKey)) return false;
   __sbTeamAddRoster([personKey]);
@@ -5472,6 +5484,8 @@ function __sbTeamPersistDemoState(patch = {}) {
     phase: __sbTeamState.phase,
     task: __sbTeamState.demoTask || "",
     song: __sbTeamState.demoSong || "",
+    originTabId: __sbTeamState.demoOriginTabId || null,
+    demoTabId: __sbTeamState.demoTabId || null,
     updatedAt: Date.now(),
     ...patch,
   };
@@ -5485,6 +5499,50 @@ function __sbTeamClearDemoState() {
 
 function __sbTeamPauseSpotifyDemoSong() {
   try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+}
+
+async function __sbTeamEnsureOriginTabId() {
+  if (__sbTeamState.demoOriginTabId) return __sbTeamState.demoOriginTabId;
+  const res = await __sbRuntimeMessage({ action: "sbGetSenderTabId" });
+  const tabId = Number(res?.tabId || 0) || null;
+  if (tabId) __sbTeamState.demoOriginTabId = tabId;
+  return tabId;
+}
+
+function __sbTeamDemoUrl(step, song) {
+  if (step === "demo_running_song") {
+    return `https://open.spotify.com/search/${encodeURIComponent(song || "Bargad by Arpit Bala")}`;
+  }
+  if (step === "demo_running_article") {
+    return "https://medium.com/search?q=machine%20learning";
+  }
+  return "";
+}
+
+async function __sbTeamOpenDemoTab(step, song) {
+  const url = __sbTeamDemoUrl(step, song);
+  if (!url) return null;
+  const opened = await __sbRuntimeMessage({ action: "openTab", url, active: true });
+  return Number(opened?.tabId || 0) || null;
+}
+
+function __sbTeamReturnDemoToOrigin({ phase, task, song, finalText, closeDelayMs = 250 }) {
+  const originTabId = Number(__sbTeamState.demoOriginTabId || 0) || null;
+  if (!originTabId) return false;
+  try {
+    chrome.runtime.sendMessage({
+      action: "sbTeamDemoReturnHome",
+      originTabId,
+      phase: String(phase || ""),
+      task: String(task || ""),
+      song: String(song || ""),
+      finalText: String(finalText || ""),
+      closeDelayMs,
+    }, () => { void chrome.runtime.lastError; });
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function __sbTeamExtractSong(text) {
@@ -5512,11 +5570,25 @@ function __sbTeamMediumDemoTask() {
   ].join(" ");
 }
 
-function __sbTeamLaunchDemoAgent(step, task, connector = "auto") {
+async function __sbTeamLaunchDemoAgent(step, task, connector = "auto") {
+  const originTabId = await __sbTeamEnsureOriginTabId();
+  const demoTabId = await __sbTeamOpenDemoTab(step, __sbTeamState.demoSong);
   __sbTeamState.phase = step;
   __sbTeamState.demoTask = String(task || "").trim();
-  __sbTeamPersistDemoState({ phase: step, task: __sbTeamState.demoTask, connector });
-  __sbRunAgent(__sbTeamState.demoTask, { connector, modeOverride: "agent" });
+  __sbTeamState.demoOriginTabId = originTabId || __sbTeamState.demoOriginTabId || null;
+  __sbTeamState.demoTabId = demoTabId || null;
+  __sbTeamPersistDemoState({
+    phase: step,
+    task: __sbTeamState.demoTask,
+    connector,
+    originTabId: __sbTeamState.demoOriginTabId,
+    demoTabId: __sbTeamState.demoTabId,
+  });
+  __sbRunAgent(__sbTeamState.demoTask, {
+    connector,
+    modeOverride: "agent",
+    targetTabId: demoTabId || undefined,
+  });
 }
 
 async function __sbTeamStartIntroDemo(ctx = {}) {
@@ -5526,7 +5598,15 @@ async function __sbTeamStartIntroDemo(ctx = {}) {
   __sbTeamState.spoken = [];
   __sbTeamState.demoTask = "";
   __sbTeamState.demoSong = "";
-  __sbTeamPersistDemoState({ phase: "demo_waiting_song", task: "", song: "" });
+  __sbTeamState.demoOriginTabId = await __sbTeamEnsureOriginTabId();
+  __sbTeamState.demoTabId = null;
+  __sbTeamPersistDemoState({
+    phase: "demo_waiting_song",
+    task: "",
+    song: "",
+    originTabId: __sbTeamState.demoOriginTabId,
+    demoTabId: null,
+  });
   await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.intro, { ...ctx, prompt: ctx.prompt || "Introduce Braino" });
 }
 
@@ -5547,17 +5627,81 @@ async function __sbTeamHandleDemoAgentFinal(agentPrompt, finalText = "") {
   __sbTeamState.phase = phase;
   __sbTeamState.demoTask = task;
   __sbTeamState.demoSong = String(stored.song || __sbTeamState.demoSong || "").trim();
+  __sbTeamState.demoOriginTabId = Number(stored.originTabId || __sbTeamState.demoOriginTabId || 0) || null;
+  __sbTeamState.demoTabId = Number(stored.demoTabId || __sbTeamState.demoTabId || 0) || null;
 
   if (phase === "demo_running_song") {
-    __sbTeamPauseSpotifyDemoSong();
-    const articleTask = __sbTeamMediumDemoTask();
-    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.afterSong, { prompt: "Braino demo" });
-    __sbTeamLaunchDemoAgent("demo_running_article", articleTask, "auto");
+    setTimeout(() => {
+      __sbTeamPauseSpotifyDemoSong();
+      const returned = __sbTeamReturnDemoToOrigin({
+        phase,
+        task,
+        song: __sbTeamState.demoSong,
+        finalText,
+        closeDelayMs: 250,
+      });
+      if (!returned) {
+        void (async () => {
+          const articleTask = __sbTeamMediumDemoTask();
+          await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.afterSong, { prompt: "Braino demo" });
+          await __sbTeamLaunchDemoAgent("demo_running_article", articleTask, "auto");
+        })();
+      }
+    }, 5000);
     return true;
   }
 
   if (phase === "demo_running_article") {
-    __sbTeamState.phase = "choosing_team";
+    setTimeout(() => {
+      const returned = __sbTeamReturnDemoToOrigin({
+        phase,
+        task,
+        song: __sbTeamState.demoSong,
+        finalText,
+        closeDelayMs: 250,
+      });
+      if (!returned) {
+        void (async () => {
+          __sbTeamState.phase = "demo_awaiting_team_yes";
+          __sbTeamState.demoTask = "";
+          __sbTeamClearDemoState();
+          await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { prompt: "Braino demo" });
+        })();
+      }
+    }, 1200);
+    return true;
+  }
+
+  return false;
+}
+
+async function __sbTeamContinueDemoFromOrigin(payload = {}) {
+  if (typeof __sbApplyForcedModeUi === "function") {
+    __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
+  }
+  __sbTeamState.demoOriginTabId = Number(payload.originTabId || __sbTeamState.demoOriginTabId || 0) || null;
+  __sbTeamState.demoTabId = null;
+  __sbTeamState.demoTask = "";
+  const phase = String(payload.phase || "");
+  const song = String(payload.song || __sbTeamState.demoSong || "").trim();
+  if (song) __sbTeamState.demoSong = song;
+
+  if (phase === "demo_running_song") {
+    __sbTeamState.phase = "demo_after_song";
+    __sbTeamPersistDemoState({
+      phase: "demo_after_song",
+      task: "",
+      song: __sbTeamState.demoSong,
+      originTabId: __sbTeamState.demoOriginTabId,
+      demoTabId: null,
+    });
+    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.afterSong, { prompt: "Braino demo" });
+    await __sbTeamLaunchDemoAgent("demo_running_article", __sbTeamMediumDemoTask(), "auto");
+    return true;
+  }
+
+  if (phase === "demo_running_article") {
+    __sbTeamState.phase = "demo_awaiting_team_yes";
     __sbTeamState.demoTask = "";
     __sbTeamClearDemoState();
     await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { prompt: "Braino demo" });
@@ -5686,7 +5830,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
     __sbTeamState.demoSong = song;
     const task = __sbTeamSpotifyDemoTask(song);
     await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.songAck(song), ctx);
-    __sbTeamLaunchDemoAgent("demo_running_song", task, "spotify");
+    await __sbTeamLaunchDemoAgent("demo_running_song", task, "spotify");
     completeTeamVoiceTurn();
     return true;
   }
@@ -5698,6 +5842,20 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
   const mentionedTeam = __sbTeamFindTeam(promptText);
   const mentionedPeople = __sbTeamFindPeople(promptText, mentionedTeam || __sbTeamState.team || null);
   const wantsDirectPerson = __sbTeamWantsDirectPerson(promptText) || ["awaiting_next_person", "speaking_person", "done", "idle", "choosing_team"].includes(__sbTeamState.phase);
+
+  if (__sbTeamState.phase === "demo_awaiting_team_yes") {
+    if (mentionedTeam) {
+      __sbTeamSetTeam(mentionedTeam, { clearRoster: true });
+      return await finish(__sbTeamPromptForRoom());
+    }
+    if (__sbTeamIsYesPrompt(promptText)) {
+      return await finish(__sbTeamPromptForTeam());
+    }
+    if (__sbTeamIsNoPrompt(promptText)) {
+      return await finish("No worries. Team mode is still on. Say yes when you want me to say hello to them.");
+    }
+    return await finish("Just say yes, or tell me ANZ or AT&T, and I will start the team part.");
+  }
 
   if (mentionedPeople.length === 1 && wantsDirectPerson) {
     const match = mentionedPeople[0];
@@ -5882,6 +6040,13 @@ window.addEventListener("message", (event) => {
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg.action === "sbTeamDemoContinue") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbRefreshInlineOwner();
+      void __sbTeamContinueDemoFromOrigin(msg);
+      sendResponse?.({ ok: true });
+      return true;
+    }
     if (!__sbOwnsInlineUi()) return;
     __sbRefreshInlineOwner();
     if (msg.action === "toggleSideBrainPanel") {
@@ -15674,6 +15839,7 @@ function __sbRunAgent(task, options = {}) {
     cardTurns: handoff.cardTurns,
     lastUserPrompt: handoff.lastUserPrompt,
     lastAssistantReply: handoff.lastAssistantReply,
+    targetTabId: Number(options.targetTabId || 0) || null,
   }, () => {
     if (!chrome.runtime.lastError) return;
     __sbFinalizeAgentPendingTurn(__sbLastAgentTask, "I couldn't start delegate mode just now.");
