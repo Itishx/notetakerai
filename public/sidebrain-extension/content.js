@@ -5180,7 +5180,7 @@ const __SB_TEAM_CONFIG = {
         aliases: ["madhuri", "maduri", "madhuree", "madhoori", "madhuri maam", "madhuri mam"],
         opening: "Madhuri, you and him joined on the same day, and if on 31st July 2025, you would have told Itish the true bond you would go onto form, he'd be surprised.",
         message: "You've been so patient and kind with him. He is very grateful for you, and he is going to miss you.",
-        closing: "Thanks for giving him the confidence always ki \"तुम सब कर लोगे\" and देखो, इटिश ने कर लिया। आपकी बहुत याद आएगी।",
+        closing: "Thanks for always giving him the confidence that he could do it, and look, Itish did it. He is going to miss you a lot.",
         afterResponse: "That makes me really happy to hear.",
       },
       rahul: {
@@ -5188,7 +5188,7 @@ const __SB_TEAM_CONFIG = {
         speechLabel: "Raa-hul",
         aliases: ["rahul", "rahool"],
         opening: "Rahul. Two words.",
-        message: "Itish has just two words for you: \"मेरी जान\".",
+        message: "Itish has just two words for you: \"My brother\".",
         closing: "That is the whole message. Perfect as it is. Beyond A.N.Z, always.",
       },
       shriya: {
@@ -5228,13 +5228,13 @@ const __SB_TEAM_CONFIG = {
         aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji", "jyotisar", "jyotisaar", "jyotish", "jyotish sir", "jyoti sirr", "jyoti saar"],
         opening: "Jyoti sir, thank you for understanding Itish for who he is and for being so supportive.",
         message: "He learned a lot about what good management looks like from you. You make people laugh, but you also make people respect you.",
-        closing: "A lot of people look up to you, and he does too. पार्टी करेंगे, सर। when and where, just let him know.",
+        closing: "A lot of people look up to you, and he does too. We will party, sir. When and where, just let Itish know.",
       },
       surya: {
         label: "Surya",
         speechLabel: "Soor-ya",
         aliases: ["surya", "suria", "soorya", "surya sir", "suriya"],
-        opening: "सूर्य, sorry for butchering your pronunciation, but thank you for bringing Itish into AT&T.",
+        opening: "Surya, sorry for butchering your pronunciation, but thank you for bringing Itish into AT&T.",
         message: "That first conversation meant a lot to him. You spoke to him for forty minutes like a human being and did not ask a single technical question, which he was hoping you would not ask, haha.",
         closing: "Also, he hopes you now realize why he never did much ETL. The only thing he really wanted to extract and transform was me, Braino, but unlike him, I could tell you all about ETL and data warehousing, haha.",
       },
@@ -5243,7 +5243,7 @@ const __SB_TEAM_CONFIG = {
         speechLabel: "Hey-maangi",
         aliases: ["hemangi", "hemangee", "himangi", "hemangy", "hemangi maam", "hemangi mam"],
         opening: "Hi Hemangi, thank you for always being super sweet and non scary to Itish.",
-        message: "Aapne hamesha bohot ache and pyaar se baat kari Itish se, and I get it, headphones in the ears all the time? Can get annoying, and yet you and Minul both were so nice about it.",
+        message: "You always spoke to Itish with so much kindness and warmth, and I get it, headphones in the ears all the time can get annoying. Yet you and Minul were both so nice about it.",
         closing: "You would make an awesome team lead, or maybe you are one, honestly there are so many leads in this team even I am confused. But jokes apart, he wishes he got more time to work with you. Thank you. Also, we can stop worrying about the C.C.H Putty issue now, haha.",
       },
       minul: {
@@ -5272,7 +5272,7 @@ const __SB_TEAM_DEMO_SCRIPT = {
   afterSongFallback: "Spotify needed a warmup, but the browser trick is still the browser trick. Now let's say you want to read a machine learning article, watch.",
   beforeArticleSummary: "Now that we have it opened, let's say you do not want to read the whole thing, because like Itish, you are lazy, and want it summarised. Earlier, you would have to copy-paste the contents of this and put it into ChatGPT and ask it to summarize, but I can just do it right here, without you having to leave the page.\n\nWatch.",
   articleSummary: "So, this article is about Google's TabFM, a foundation model for tabular data. In normal words, it can look at a spreadsheet it has never been trained on and still make predictions in one shot. The core point is simple: this is a serious challenge to the usual XGBoost-style workflow for spreadsheet prediction. And the reason people are paying attention is that Google's benchmark results make the skepticism harder to maintain.",
-  closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while at heart I am desi, my accent is angrezi. So here we go. Itish, my guy.\n\nWhich team is in front of you, ANZ or AT&T?",
+  closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while I am Indian at heart, my accent is very English. So here we go. Itish, my guy.\n\nWhich team is in front of you, ANZ or AT&T?",
 };
 
 let __sbTeamState = {
