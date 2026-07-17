@@ -1371,6 +1371,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         event: message.event,
         text: message.text,
         isFinal: message.isFinal,
+        confidence: message.confidence,
         error: message.message,
         source: message.source,
       }, () => { void chrome.runtime.lastError; });

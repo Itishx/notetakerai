@@ -172,9 +172,16 @@ async function startSpeechRecognition() {
   };
 
   recognition.onresult = (e) => {
-    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
+    const results = Array.from(e.results);
+    const transcript = results.map(r => r[0].transcript).join("");
     const isFinal = e.results[e.results.length - 1].isFinal;
-    chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text: transcript, isFinal });
+    const confidences = results
+      .map((r) => Number(r?.[0]?.confidence))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const confidence = confidences.length
+      ? confidences.reduce((sum, n) => sum + n, 0) / confidences.length
+      : null;
+    chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text: transcript, isFinal, confidence });
     if (isFinal) { voiceListening = false; recognition.stop(); }
   };
 

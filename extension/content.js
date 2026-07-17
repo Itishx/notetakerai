@@ -156,6 +156,7 @@ function __sbSendPageVoiceEvent(event, payload = {}) {
       event,
       text: payload.text,
       isFinal: payload.isFinal,
+      confidence: payload.confidence,
       message: payload.message,
       source: payload.source,
     });
@@ -198,14 +199,22 @@ function __sbStartPageVoiceRecognition(mode = "manual", source = "generic") {
     window.__sideBrainRecognition = rec;
 
     rec.onresult = (e) => {
-      const text = Array.from(e.results).map((r) => r[0].transcript).join("");
+      const results = Array.from(e.results);
+      const text = results.map((r) => r[0].transcript).join("");
       const isFinal = e.results[e.results.length - 1].isFinal;
+      const confidences = results
+        .map((r) => Number(r?.[0]?.confidence))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      const confidence = confidences.length
+        ? confidences.reduce((sum, n) => sum + n, 0) / confidences.length
+        : null;
       const currentMode = window.__sideBrainVoiceMode || mode;
       const currentSource = window.__sideBrainVoiceSource || source;
 
       __sbSendPageVoiceEvent("transcript", {
         text,
         isFinal,
+        confidence,
         source: currentSource,
       });
     };
@@ -13447,6 +13456,130 @@ function __sbIsJunkTranscript(text) {
   return false;
 }
 
+function __sbVoiceTranscriptStats(text) {
+  const raw = String(text || "").trim();
+  const normalized = __sbNormalizeForMatch(raw);
+  const words = normalized.match(/[a-z0-9]+(?:'[a-z0-9]+)?/g) || [];
+  const letters = (normalized.match(/[a-z]/g) || []).join("");
+  const vowels = (letters.match(/[aeiou]/g) || []).length;
+  const nonLatin = /[ऀ-ॿ一-鿿぀-ヿ가-힯Ѐ-ӿ؀-ۿ]/.test(raw);
+  return {
+    raw,
+    normalized,
+    words,
+    wordCount: words.length,
+    charCount: raw.length,
+    letterCount: letters.length,
+    vowelRatio: letters.length ? vowels / letters.length : 0,
+    nonLatin,
+  };
+}
+
+function __sbVoiceHasTeamSignal(text) {
+  try {
+    if (typeof __sbTeamFindTeam === "function" && __sbTeamFindTeam(text)) return true;
+    if (typeof __sbTeamFindPeopleSmart === "function" && __sbTeamFindPeopleSmart(text, __sbTeamState?.team || null).length) return true;
+  } catch (_) {}
+  return false;
+}
+
+function __sbVoiceHasShortIntent(stats) {
+  const norm = stats.normalized;
+  if (!norm) return false;
+  if (__sbVoiceHasTeamSignal(stats.raw)) return true;
+  if (/^(yes|yeah|yep|ya|haan|hanji|no|nope|nah|stop|pause|resume|repeat|skip|done|cancel|exit|send|close|open|play|next|back|continue|search)$/.test(norm)) return true;
+  if (/^(hi|hey|hello)\s+(braino|bruno|breno|reno)$/.test(norm)) return true;
+  if (/^(volume\s+)?(up|down|louder|quieter|mute|unmute)$/.test(norm)) return true;
+  return false;
+}
+
+function __sbVoiceLooksIntentful(stats) {
+  const text = stats.raw;
+  const norm = stats.normalized;
+  if (!norm) return false;
+  if (__sbVoiceHasShortIntent(stats)) return true;
+  if (/[?]$/.test(text)) return true;
+  if (/\b(braino|bruno|breno|reno)\b/.test(norm)) return true;
+  if (/\b(can|could|would|will|should|please|kindly)\s+(you|u)\b/.test(norm)) return true;
+  if (/\b(what|why|how|who|where|when|which)\b/.test(norm)) return true;
+  if (/\b(open|play|search|find|look|show|tell|say|speak|talk|write|reply|send|summari[sz]e|explain|read|click|close|scroll|record|transcribe|schedule|create|make|help|ask|answer)\b/.test(norm)) return true;
+  try {
+    if (typeof __sbDetectLanguageRequest === "function" && __sbDetectLanguageRequest(text)) return true;
+    if (typeof __sbDetectOpenSite === "function" && __sbDetectOpenSite(text)) return true;
+    if (typeof __sbIsBrowserActionCommand === "function" && __sbIsBrowserActionCommand(text)) return true;
+    if (typeof __sbIsVolumeCommand === "function" && __sbIsVolumeCommand(text)) return true;
+    if (typeof __sbDetectIntent === "function" && __sbDetectIntent(text) !== "chat") return true;
+  } catch (_) {}
+  return false;
+}
+
+function __sbAssessVoiceTranscript(text, options = {}) {
+  const stats = __sbVoiceTranscriptStats(text);
+  const confidence = Number(options.confidence);
+  const hasConfidence = Number.isFinite(confidence) && confidence > 0;
+  const partial = Boolean(options.partial);
+  const verdict = (accept, reason, askRepeat = false) => ({ accept, reason, askRepeat, ...stats });
+
+  if (!stats.raw) return verdict(false, "empty");
+  if (__sbIsJunkTranscript(stats.raw)) return verdict(false, "phantom");
+  if (!__sbActiveLanguage && stats.nonLatin && !__sbDetectLanguageRequest(stats.raw)) {
+    return verdict(false, "non_english_noise");
+  }
+
+  const fillerOnly = /^(uh|um|umm|hmm|hm|mm|mhm|huh|ah|oh|ooh|aah|ha|haha|hehe|cough|laugh|noise|background|okay|ok|right|yeah|yup)$/i.test(stats.normalized);
+  const shortIntent = __sbVoiceHasShortIntent(stats);
+  const intentful = __sbVoiceLooksIntentful(stats);
+
+  if (fillerOnly && !shortIntent) return verdict(false, "filler");
+  if (stats.wordCount === 0) return verdict(false, "no_words");
+
+  // Speculative replies are public-demo-dangerous: never let raw VAD noise start a response.
+  // Wait for a meaningful partial transcript, then the final transcript router can still act.
+  if (partial) {
+    if (stats.charCount < 8 || stats.wordCount < 2) return verdict(false, "partial_too_short");
+    if (!intentful && stats.wordCount < 4) return verdict(false, "partial_background");
+    if (stats.letterCount >= 12 && stats.vowelRatio < 0.16) return verdict(false, "partial_gibberish");
+    return verdict(true, "ok");
+  }
+
+  if (hasConfidence && confidence < 0.35 && !intentful && !shortIntent) {
+    return verdict(false, "low_confidence", true);
+  }
+  if (stats.charCount < 5 && !shortIntent) return verdict(false, "too_short");
+  if (stats.wordCount === 1 && !shortIntent && !intentful) return verdict(false, "one_word_background");
+  if (stats.wordCount <= 2 && !shortIntent && !intentful) return verdict(false, "short_background");
+  if (stats.letterCount >= 12 && stats.vowelRatio < 0.16) return verdict(false, "gibberish", true);
+
+  // In noisy rooms, random side chatter often transcribes as two or three harmless words.
+  // Do not route that to Braino unless it has a question/command/team signal.
+  if (stats.wordCount <= 3 && !intentful) {
+    return verdict(false, "not_addressed");
+  }
+
+  return verdict(true, "ok");
+}
+
+function __sbMaybePromptForDroppedVoice(assessment, options = {}) {
+  if (!assessment || assessment.accept) return;
+  __sbVoicePendingReply = false;
+  if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+  if (__sbSpeculativeActive || __sbSpeculativeHandledToken >= 0) {
+    __sbStopSpeech();
+    __sbSpeculativeActive = false;
+    __sbSpeculativeHandledToken = -1;
+  }
+  const shouldAsk = assessment.askRepeat && __sbVoiceLooksIntentful(assessment);
+  if (!shouldAsk) {
+    __sbVTMark?.(`🧹 Dropped voice noise (${assessment.reason})`);
+    return;
+  }
+  const now = Date.now();
+  if (now - __sbLastRepeatPromptAt > 12000 && !__sbHasActiveRealtimeResponse()) {
+    __sbLastRepeatPromptAt = now;
+    void __sbSpeakWithPreferredVoice("Sorry, I didn't catch that — could you say it again?", options.voiceOutput || "realtime");
+  }
+}
+
 function __sbIsCloseTabsCommand(text) {
   const t = String(text || "").toLowerCase();
   // "can you close some tabs" / "remove unused tabs" / "kill some tabs" / "too many tabs"
@@ -17434,10 +17567,10 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
-            // "auto" eagerness is calmer than "high" — it waits for a clearer end-of-speech,
-            // so loud background music/noise is less likely to be chopped into false turns.
+            // Public-demo safe: "low" waits for clearer speech before starting/stopping a turn.
+            // The transcript gate below is the second lock against fans, coughs, and side chatter.
             type: "semantic_vad",
-            eagerness: "auto",
+            eagerness: "low",
             create_response: false,
             interrupt_response: true,
           },
@@ -18165,6 +18298,11 @@ async function __sbStartSpeculativeAnswer() {
   // (open / play / search / send / book ...), do NOT speak a speculative reply. Let the
   // transcript router hand it to Delegate so Braino ACTS instead of narrating how to do it.
   const partial = String(__sbRtUserTranscript || "").trim();
+  const partialAssessment = __sbAssessVoiceTranscript(partial, { partial: true, source: "realtime" });
+  if (!partialAssessment.accept) {
+    __sbVTMark(`🧹 speculative skipped (${partialAssessment.reason})`);
+    return;
+  }
   if (partial && __sbDetectIntent(partial) !== "chat") { __sbVTMark("🧠 speculative skipped (action intent → delegate)"); return; }
   __sbSpeculativeToken = ++__sbRtTurnToken;
   __sbSpeculativeActive = true;
@@ -18468,9 +18606,21 @@ function __sbWaitForChainDelegate(myToken, turnToken) {
   });
 }
 
-function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
+function __sbScheduleVoiceTurnProcessing(transcript, onReady, options = {}) {
   const finalTranscript = String(transcript || "").trim();
-  if (!finalTranscript || typeof onReady !== "function") return;
+  if (!finalTranscript || typeof onReady !== "function") return false;
+
+  const assessment = options.precheckedAssessment?.accept
+    ? options.precheckedAssessment
+    : __sbAssessVoiceTranscript(finalTranscript, {
+      confidence: options.confidence,
+      source: options.source,
+      final: true,
+    });
+  if (!assessment.accept) {
+    __sbMaybePromptForDroppedVoice(assessment, { voiceOutput: options.voiceOutput || "realtime" });
+    return false;
+  }
 
   __sbLastFinalTranscript = finalTranscript;
   if (__sbVoiceSilenceTimer) clearTimeout(__sbVoiceSilenceTimer);
@@ -18494,6 +18644,7 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
   }, 200);   // settle window after a final transcript. Trimmed 350→200ms: the semantic VAD already
              // gates turn-end, so this is just a short coalesce buffer. Bump back up if Braino starts
              // jumping in on natural mid-sentence pauses.
+  return true;
 }
 
 // A short spoken "heard you, on it" the instant a turn routes to the SLOW (batch/agent) path, so the
@@ -19014,14 +19165,10 @@ function __sbHandleRtEvent(ev) {
     __sbVTMark("📝 Transcript ready");
 
     // Guard against transcription hallucinations on loud music / background noise / silence.
-    // The model would otherwise "hear" junk and answer with gibberish. Skip it; if it keeps
-    // happening, gently ask the user to repeat (rate-limited so we don't nag).
-    if (__sbIsJunkTranscript(transcript)) {
-      const now = Date.now();
-      if (now - __sbLastRepeatPromptAt > 8000 && !__sbHasActiveRealtimeResponse()) {
-        __sbLastRepeatPromptAt = now;
-        void __sbSpeakWithPreferredVoice("Sorry, I didn't catch that — could you say it again?", "realtime");
-      }
+    // In public demos, random room noise must not become a Braino turn.
+    const transcriptAssessment = __sbAssessVoiceTranscript(transcript, { source: "realtime", final: true });
+    if (!transcriptAssessment.accept) {
+      __sbMaybePromptForDroppedVoice(transcriptAssessment, { voiceOutput: "realtime" });
       return;
     }
 
@@ -19057,7 +19204,7 @@ function __sbHandleRtEvent(ev) {
       } else {
         void __sbHandleInlineRealtimeTurn(toProcess, turnToken);
       }
-    });
+    }, { source: "realtime", voiceOutput: "realtime", precheckedAssessment: transcriptAssessment });
     return;
   }
   if (ev.type === "response.created") {
@@ -19948,12 +20095,15 @@ function __sbHandleVoiceEvent(msg) {
       return;
     }
 
-    __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
+    const scheduled = __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       __sbStopRecording({ silent: true });
       if (input) input.value = "";
       if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
       void __sbProcessPrompt(toProcess, { fromVoice: true });
-    });
+    }, { source: "legacy", voiceOutput: "legacy", confidence: msg.confidence });
+    if (!scheduled) {
+      __sbStopRecording({ silent: true });
+    }
     return;
   }
 
