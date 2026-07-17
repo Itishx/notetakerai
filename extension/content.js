@@ -5180,7 +5180,7 @@ const __SB_TEAM_CONFIG = {
         aliases: ["madhuri", "maduri", "madhuree", "madhoori", "madhuri maam", "madhuri mam"],
         opening: "Madhuri, you and him joined on the same day, and if on 31st July 2025, you would have told Itish the true bond you would go onto form, he'd be surprised.",
         message: "You've been so patient and kind with him. He is very grateful for you, and he is going to miss you.",
-        closing: "Thanks for giving him the confidence always ki \"tum karloge\" and dekho, kar liya Itish ne. Aapki bohot yaad aaegi.",
+        closing: "Thanks for giving him the confidence always ki \"तुम सब कर लोगे\" and देखो, इटिश ने कर लिया। आपकी बहुत याद आएगी।",
         afterResponse: "That makes me really happy to hear.",
       },
       rahul: {
@@ -5188,7 +5188,7 @@ const __SB_TEAM_CONFIG = {
         speechLabel: "Raa-hul",
         aliases: ["rahul", "rahool"],
         opening: "Rahul. Two words.",
-        message: "Itish has just two words for you: \"Meri Jaan\".",
+        message: "Itish has just two words for you: \"मेरी जान\".",
         closing: "That is the whole message. Perfect as it is. Beyond A.N.Z, always.",
       },
       shriya: {
@@ -5228,13 +5228,13 @@ const __SB_TEAM_CONFIG = {
         aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji", "jyotisar", "jyotisaar", "jyotish", "jyotish sir", "jyoti sirr", "jyoti saar"],
         opening: "Jyoti sir, thank you for understanding Itish for who he is and for being so supportive.",
         message: "He learned a lot about what good management looks like from you. You make people laugh, but you also make people respect you.",
-        closing: "A lot of people look up to you, and he does too. Party karenge sir, when and where, just let him know.",
+        closing: "A lot of people look up to you, and he does too. पार्टी करेंगे, सर। when and where, just let him know.",
       },
       surya: {
         label: "Surya",
         speechLabel: "Soor-ya",
         aliases: ["surya", "suria", "soorya", "surya sir", "suriya"],
-        opening: "Surya, sorry for butchering your pronunciation, but thank you for bringing Itish into AT&T.",
+        opening: "सूर्य, sorry for butchering your pronunciation, but thank you for bringing Itish into AT&T.",
         message: "That first conversation meant a lot to him. You spoke to him for forty minutes like a human being and did not ask a single technical question, which he was hoping you would not ask, haha.",
         closing: "Also, he hopes you now realize why he never did much ETL. The only thing he really wanted to extract and transform was me, Braino, but unlike him, I could tell you all about ETL and data warehousing, haha.",
       },
@@ -5271,6 +5271,7 @@ const __SB_TEAM_DEMO_SCRIPT = {
   afterSong: "That was Spotify. Any song you want, I can play, as long as I am able to hear it correctly of course. Now let's say you want to read a machine learning article, watch.",
   afterSongFallback: "Spotify needed a warmup, but the browser trick is still the browser trick. Now let's say you want to read a machine learning article, watch.",
   beforeArticleSummary: "Now that we have it opened, let's say you do not want to read the whole thing, because like Itish, you are lazy, and want it summarised. Earlier, you would have to copy-paste the contents of this and put it into ChatGPT and ask it to summarize, but I can just do it right here, without you having to leave the page.\n\nWatch.",
+  articleSummary: "So, this article is about Google's TabFM, a foundation model for tabular data. In normal words, it can look at a spreadsheet it has never been trained on and still make predictions in one shot. The core point is simple: this is a serious challenge to the usual XGBoost-style workflow for spreadsheet prediction. And the reason people are paying attention is that Google's benchmark results make the skepticism harder to maintain.",
   closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while at heart I am desi, my accent is angrezi. So here we go. Itish, my guy.\n\nWhich team is in front of you, ANZ or AT&T?",
 };
 
@@ -5596,37 +5597,8 @@ async function __sbTeamCloseDemoTab(tabId, closeDelayMs = 0) {
 }
 
 async function __sbTeamReadDemoArticle(tabId) {
-  let page = null;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    page = await __sbRuntimeMessage({ action: "getPageContent", tabId: Number(tabId || 0) || null });
-    const candidate = String(page?.text || "").replace(/\s+/g, " ").trim();
-    if (candidate.length > 1200) break;
-    await __sbTeamDelay(1400);
-  }
-  const text = String(page?.text || "").replace(/\s+/g, " ").trim();
-  if (!text) {
-    return "The article is loaded, and this is the point of Braino: I can read what is on the page and turn it into the useful part without making you leave the tab.";
-  }
-  const title = String(page?.title || "this article").trim();
-  try {
-    const stored = await __sbStorageGet(["aiProvider"]);
-    const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
-    const { reply } = await __sbFetchAssistantReply({
-      message: "Summarize this article for a live demo in 3 short spoken sentences. Keep it simple, accurate, and confident. Mention why Braino reading the article saves time.",
-      notes: "",
-      aiProvider,
-      chatHistory: [],
-      pageContext: {
-        url: String(page?.url || __SB_TEAM_DEMO_ARTICLE_URL),
-        title,
-        text: text.slice(0, 9000),
-        hoveredContext: null,
-      },
-    });
-    const clean = String(reply || "").trim();
-    if (clean) return clean;
-  } catch (_) {}
-  return `This article is about ${title}. The useful bit is that I can read the page, pull out what matters, and give you the point without making you sit through the whole thing. That is the kind of browser help I mean.`;
+  void tabId;
+  return __SB_TEAM_DEMO_SCRIPT.articleSummary;
 }
 
 function __sbTeamExtractSong(text) {
@@ -5733,7 +5705,7 @@ async function __sbTeamStartIntroDemo(ctx = {}) {
     originTabId: __sbTeamState.demoOriginTabId,
     demoTabId: articleTabId,
   });
-  await __sbTeamDelay(3000);
+  await __sbTeamDelay(1400);
   await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.beforeArticleSummary, { ...ctx, prompt: "Braino demo" });
   const articleSummary = await __sbTeamReadDemoArticle(articleTabId);
   await __sbTeamSpeak(articleSummary, { ...ctx, prompt: "Article summary" });
