@@ -5161,7 +5161,8 @@ const __SB_TEAM_CONFIG = {
     people: {
       madhuri: {
         label: "Madhuri",
-        aliases: ["madhuri"],
+        speechLabel: "Maa-dhoo-ree",
+        aliases: ["madhuri", "maduri", "madhuree", "madhoori", "madhuri maam", "madhuri mam"],
         opening: "Hey Madhuri. How are you doing? Itish has told me a lot about you.",
         message: "He says you were one of the kindest leads he has had. You actually cared for him, and that stayed with him.",
         closing: "He is very grateful for you, and he is going to miss you.",
@@ -5169,28 +5170,32 @@ const __SB_TEAM_CONFIG = {
       },
       rahul: {
         label: "Rahul",
-        aliases: ["rahul"],
+        speechLabel: "Raa-hul",
+        aliases: ["rahul", "rahool"],
         opening: "Rahul. Two words.",
         message: "Meri jaan.",
         closing: "That is the whole message. Perfect as it is.",
       },
       shriya: {
         label: "Shriya",
-        aliases: ["shriya", "shreya", "shria"],
+        speechLabel: "Shree-ya",
+        aliases: ["shriya", "shreya", "shria", "shreeya"],
         opening: "Shriya.",
         message: "You see what is possible with vibe coding.",
         closing: "That is the pitch.",
       },
       palash: {
         label: "Palash",
-        aliases: ["palash", "palashh"],
+        speechLabel: "Puh-laash",
+        aliases: ["palash", "palashh", "palaash", "palash bhai"],
         opening: "Hey Palash, been a while. How are you doing?",
         message: "Itish wanted me to say thank you for always being there for him. For helping him switch the monitor on when he somehow could not figure it out, and for being supportive like an elder brother.",
         closing: "He remembers that more than you probably know.",
       },
       shree: {
         label: "Shree",
-        aliases: ["shree", "shri", "shri raksha", "shriraksha", "sri raksha", "sriraksha", "raksha"],
+        speechLabel: "Shree Raksha",
+        aliases: ["shree", "shri", "shri raksha", "shriraksha", "sri raksha", "sriraksha", "raksha", "shree raksha", "sree raksha", "sheeraksha", "she raksha", "shree raksh", "sri raksh"],
         opening: "Shree, Itish sees you like an elder sister.",
         message: "You made him realize he cannot always be painfully honest in every moment. He is working on it. At his core, he will probably always be honest, but he is learning how to carry it better.",
         closing: "Thank you for caring enough to tell him the truth.",
@@ -5199,33 +5204,37 @@ const __SB_TEAM_CONFIG = {
   },
   att: {
     label: "AT&T",
-    aliases: ["att", "at&t", "at and t", "a t and t", "a t t", "at t", "current team"],
+    aliases: ["att", "at&t", "at and t", "a t and t", "a t t", "at t", "atnt", "a t n t", "current team", "new team"],
     fallbackOrder: ["jyoti", "surya", "hemangi", "minul"],
     people: {
       jyoti: {
         label: "Jyoti sir",
-        aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji"],
+        speechLabel: "Jyo-tee sir",
+        aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji", "jyotisar", "jyotisaar", "jyoti sirr", "jyoti saar"],
         opening: "Jyoti sir, thank you for understanding Itish for who he is and for being so supportive.",
         message: "He learned a lot about what good management looks like from you. You make people laugh, but you also make people respect you.",
         closing: "A lot of people look up to you, and he does too.",
       },
       surya: {
         label: "Surya",
-        aliases: ["surya", "suria", "surya sir"],
+        speechLabel: "Soor-ya",
+        aliases: ["surya", "suria", "soorya", "surya sir", "suriya"],
         opening: "Surya, thank you for bringing Itish into AT&T.",
         message: "That first conversation meant a lot to him. You spoke to him for forty minutes like a human being and did not ask a single technical question.",
         closing: "Also, he hopes you now realize why he never did much ETL. The only thing he really wanted to extract and transform was Braino.",
       },
       hemangi: {
         label: "Hemangi",
-        aliases: ["hemangi", "hemangee"],
+        speechLabel: "Hey-maangi",
+        aliases: ["hemangi", "hemangee", "himangi", "hemangy", "hemangi maam", "hemangi mam"],
         opening: "Hemangi, I hope you now understand why Itish was not always the most proactive person in the room.",
         message: "In his head, he was always running here, building me. But he is genuinely grateful for how sweet you were to him.",
         closing: "He wishes he got more time to work with you.",
       },
       minul: {
         label: "Minul",
-        aliases: ["minul", "meenul", "minool"],
+        speechLabel: "Mee-nul",
+        aliases: ["minul", "meenul", "minool", "minol", "meenol", "minull", "meenal"],
         opening: "Minul, you kept Itish in check.",
         message: "You held him accountable, made him do things right, and did not let him procrastinate. That mattered more than he probably said out loud.",
         closing: "Thank you for keeping him honest and moving.",
@@ -5270,12 +5279,20 @@ function __sbTeamFindTeam(text) {
   const normalized = __sbTeamNormalize(text);
   if (!normalized) return null;
   for (const [teamKey, team] of Object.entries(__SB_TEAM_CONFIG)) {
-    if (team.aliases.some((alias) => {
-      const a = __sbTeamNormalize(alias);
-      return a && (normalized === a || normalized.includes(a));
-    })) return teamKey;
+    if (team.aliases.some((alias) => __sbTeamAliasMatches(normalized, alias))) return teamKey;
   }
   return null;
+}
+
+function __sbTeamAliasMatches(normalizedText, alias) {
+  const text = String(normalizedText || "");
+  const a = __sbTeamNormalize(alias);
+  if (!text || !a) return false;
+  if (text === a || text.includes(a)) return true;
+  const compactText = text.replace(/\s+/g, "");
+  const compactAlias = a.replace(/\s+/g, "");
+  if (compactAlias.length >= 4 && compactText.includes(compactAlias)) return true;
+  return a.split(" ").filter((part) => part.length >= 3).every((part) => text.includes(part));
 }
 
 function __sbTeamFindPeople(text, teamKey = null) {
@@ -5288,10 +5305,7 @@ function __sbTeamFindPeople(text, teamKey = null) {
     const people = __SB_TEAM_CONFIG[key]?.people || {};
     for (const [personKey, person] of Object.entries(people)) {
       const aliases = [person.label, personKey, ...(person.aliases || [])];
-      if (!aliases.some((alias) => {
-        const a = __sbTeamNormalize(alias);
-        return a && new RegExp(`(^|\\s)${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`).test(normalized);
-      })) continue;
+      if (!aliases.some((alias) => __sbTeamAliasMatches(normalized, alias))) continue;
       const id = `${key}:${personKey}`;
       if (!seen.has(id)) {
         seen.add(id);
@@ -5311,6 +5325,26 @@ function __sbTeamJoinLabels(keys, teamKey = __sbTeamState.team) {
   if (labels.length <= 1) return labels[0] || "";
   if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
   return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
+
+function __sbTeamKnownPeopleLine(teamKey = __sbTeamState.team) {
+  const team = __SB_TEAM_CONFIG[teamKey];
+  if (!team) return "";
+  return __sbTeamJoinLabels(team.fallbackOrder || Object.keys(team.people || {}), teamKey);
+}
+
+function __sbTeamSpeechText(text) {
+  let speech = String(text || "");
+  speech = speech.replace(/\bAT&T\b/g, "A T and T").replace(/\bANZ\b/g, "A N Z");
+  for (const team of Object.values(__SB_TEAM_CONFIG)) {
+    for (const person of Object.values(team.people || {})) {
+      const label = String(person.label || "").trim();
+      const speechLabel = String(person.speechLabel || "").trim();
+      if (!label || !speechLabel) continue;
+      speech = speech.replace(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), speechLabel);
+    }
+  }
+  return speech;
 }
 
 function __sbTeamReset() {
@@ -5340,14 +5374,15 @@ function __sbTeamRememberAssistant(line, prompt = "Team mode") {
 async function __sbTeamSpeak(line, ctx = {}) {
   const text = String(line || "").trim();
   if (!text) return;
+  const speechText = String(ctx.speechText || __sbTeamSpeechText(text)).trim();
   __sbStopSpeech();
   __sbNoteSpoken(text);
   __sbTeamRememberAssistant(text, ctx.prompt || "Team mode");
   __sbShowBubble(text, false, { rich: true, kicker: "Team Mode", prompt: ctx.prompt || "" });
   if (ctx.fromVoice) {
-    await __sbSpeakWithPreferredVoice(text, ctx.voiceOutput || "legacy", { verbatim: true });
+    await __sbSpeakWithPreferredVoice(speechText, ctx.voiceOutput || "legacy", { verbatim: true });
   } else {
-    void __sbSpeakText(text, { verbatim: true });
+    void __sbSpeakText(speechText, { verbatim: true });
   }
 }
 
@@ -5367,7 +5402,8 @@ function __sbTeamPromptForTeam() {
 function __sbTeamPromptForRoom() {
   __sbTeamState.phase = "collecting_room";
   const team = __SB_TEAM_CONFIG[__sbTeamState.team]?.label || "the team";
-  return `Okay, ${team}. Who is here right now?`;
+  const people = __sbTeamKnownPeopleLine(__sbTeamState.team);
+  return `Okay, ${team}. I have messages for ${people}. Who is here right now?`;
 }
 
 function __sbTeamPromptForNext(prefix = "") {
@@ -5392,6 +5428,41 @@ function __sbTeamBuildPersonMessage(personKey) {
   const person = __SB_TEAM_CONFIG[__sbTeamState.team]?.people?.[personKey];
   if (!person) return "";
   return [person.opening, person.message, person.closing].map((part) => String(part || "").trim()).filter(Boolean).join("\n\n");
+}
+
+function __sbTeamSetTeam(teamKey, options = {}) {
+  if (!__SB_TEAM_CONFIG[teamKey]) return false;
+  const changed = __sbTeamState.team !== teamKey;
+  __sbTeamState.team = teamKey;
+  if (changed || options.clearRoster) {
+    __sbTeamState.roster = [];
+    __sbTeamState.spoken = [];
+    __sbTeamState.pendingChoices = [];
+    __sbTeamState.currentPerson = null;
+  }
+  return true;
+}
+
+function __sbTeamWantsDirectPerson(text) {
+  return /\b(say|hello|hi|talk|speak|message|tell|next|first|start with|go to|about)\b/i.test(String(text || ""));
+}
+
+function __sbTeamBuildTeamIntroLine(teamKey) {
+  const team = __SB_TEAM_CONFIG[teamKey]?.label || "that team";
+  const people = __sbTeamKnownPeopleLine(teamKey);
+  return `Okay, ${team}. I can talk about ${people}. Who is here right now?`;
+}
+
+async function __sbTeamSpeakPerson(teamKey, personKey, ctx = {}) {
+  if (!__sbTeamSetTeam(teamKey)) return false;
+  __sbTeamAddRoster([personKey]);
+  const message = __sbTeamBuildPersonMessage(personKey);
+  if (!message) return false;
+  __sbTeamState.phase = "awaiting_next_person";
+  __sbTeamState.currentPerson = personKey;
+  if (!__sbTeamState.spoken.includes(personKey)) __sbTeamState.spoken.push(personKey);
+  await __sbTeamSpeak(`${message}\n\nWho next?`, ctx);
+  return true;
 }
 
 function __sbTeamPersistDemoState(patch = {}) {
@@ -5534,7 +5605,12 @@ function __sbTeamModeEnabled() {
 }
 
 function __sbTeamShouldAutoActivate(text) {
-  return __sbTeamIsStartPrompt(text) || __sbTeamIsIntroPrompt(text) || /\bteam mode\b/i.test(String(text || ""));
+  const raw = String(text || "");
+  return __sbTeamIsStartPrompt(raw)
+    || __sbTeamIsIntroPrompt(raw)
+    || /\bteam mode\b/i.test(raw)
+    || Boolean(__sbTeamFindTeam(raw))
+    || (__sbTeamWantsDirectPerson(raw) && __sbTeamFindPeople(raw).length > 0);
 }
 
 function __sbTeamActivateMode(options = {}) {
@@ -5619,6 +5695,30 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
     return await finish("One second. I'm still doing the demo part.");
   }
 
+  const mentionedTeam = __sbTeamFindTeam(promptText);
+  const mentionedPeople = __sbTeamFindPeople(promptText, mentionedTeam || __sbTeamState.team || null);
+  const wantsDirectPerson = __sbTeamWantsDirectPerson(promptText) || ["awaiting_next_person", "speaking_person", "done", "idle", "choosing_team"].includes(__sbTeamState.phase);
+
+  if (mentionedPeople.length === 1 && wantsDirectPerson) {
+    const match = mentionedPeople[0];
+    const spoken = await __sbTeamSpeakPerson(match.teamKey, match.personKey, ctx);
+    completeTeamVoiceTurn();
+    if (spoken) return true;
+  }
+
+  if (mentionedPeople.length > 1 && wantsDirectPerson && __sbTeamState.phase !== "collecting_room") {
+    const teamKey = mentionedTeam || mentionedPeople[0].teamKey;
+    __sbTeamSetTeam(teamKey);
+    __sbTeamAddRoster(mentionedPeople.filter((match) => match.teamKey === teamKey).map((match) => match.personKey));
+    return await finish(`I heard ${__sbTeamJoinLabels(__sbTeamState.roster, teamKey)}. Who should I talk to first?`);
+  }
+
+  if (mentionedTeam && !mentionedPeople.length) {
+    __sbTeamSetTeam(mentionedTeam, { clearRoster: true });
+    __sbTeamState.phase = "collecting_room";
+    return await finish(__sbTeamBuildTeamIntroLine(mentionedTeam));
+  }
+
   if (__sbTeamIsStartPrompt(promptText)) {
     __sbTeamState.phase = "choosing_team";
     __sbTeamState.team = null;
@@ -5644,10 +5744,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
   if (__sbTeamState.phase === "choosing_team") {
     const teamKey = __sbTeamFindTeam(promptText);
     if (!teamKey) return await finish("I heard you, but I need one clean choice: ANZ or AT&T?");
-    __sbTeamState.team = teamKey;
-    __sbTeamState.roster = [];
-    __sbTeamState.spoken = [];
-    __sbTeamState.pendingChoices = [];
+    __sbTeamSetTeam(teamKey, { clearRoster: true });
     return await finish(__sbTeamPromptForRoom());
   }
 
