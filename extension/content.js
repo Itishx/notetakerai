@@ -5533,6 +5533,19 @@ function __sbTeamModeEnabled() {
   return (window.__sbForcedMode || "page") === "team";
 }
 
+function __sbTeamShouldAutoActivate(text) {
+  return __sbTeamIsStartPrompt(text) || __sbTeamIsIntroPrompt(text) || /\bteam mode\b/i.test(String(text || ""));
+}
+
+function __sbTeamActivateMode(options = {}) {
+  if (options.reset) __sbTeamReset();
+  window.__sbForcedMode = "team";
+  window.__sbForcedConnector = "auto";
+  if (typeof __sbApplyForcedModeUi === "function") {
+    __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
+  }
+}
+
 async function __sbHandleTeamModeInput(rawText, options = {}) {
   if (!__sbTeamModeEnabled()) return false;
   const promptText = String(rawText || "").trim();
@@ -15041,7 +15054,8 @@ async function __sbProcessPrompt(text, options = {}) {
     return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
   };
 
-  if (__sbTeamModeEnabled()) {
+  if (__sbTeamModeEnabled() || __sbTeamShouldAutoActivate(promptText)) {
+    if (!__sbTeamModeEnabled()) __sbTeamActivateMode({ reset: true });
     await __sbHandleTeamModeInput(promptText, { fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
@@ -18224,7 +18238,8 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
-  if (__sbTeamModeEnabled()) {
+  if (__sbTeamModeEnabled() || __sbTeamShouldAutoActivate(transcript)) {
+    if (!__sbTeamModeEnabled()) __sbTeamActivateMode({ reset: true });
     __sbInterruptRealtimeResponse();
     await __sbHandleTeamModeInput(transcript, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
