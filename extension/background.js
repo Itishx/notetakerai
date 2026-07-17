@@ -1379,7 +1379,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "getPageContent") {
     (async () => {
-      const preferredTabId = sender?.tab?.id || await bgGetActiveTabId();
+      const requestedTabId = Number(message.tabId || 0) || null;
+      const preferredTabId = requestedTabId || sender?.tab?.id || await bgGetActiveTabId();
       const recovery = await bgEnsureScriptableBrainoTab(preferredTabId, {
         activate: true,
         handoffMessage: "Chrome pages can't be read, so I moved Braino to a normal tab.",

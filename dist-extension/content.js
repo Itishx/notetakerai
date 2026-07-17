@@ -3502,8 +3502,8 @@ const __SB_TEAM_DEMO_TRACK_URI = __SB_DANCE_TRACK_URI;
 const __SB_TEAM_DEMO_TRACK_URL = "https://open.spotify.com/track/5EKEFHtqsOW0lTxqh8BhlI";
 const __SB_TEAM_DEMO_TRACK_START_MS = __SB_DANCE_START_MS;
 const __SB_TEAM_DEMO_SPOTIFY_MS = 5000;
-const __SB_TEAM_DEMO_ARTICLE_URL = "https://medium.com/tag/machine-learning";
-const __SB_TEAM_DEMO_ARTICLE_MS = 5000;
+const __SB_TEAM_DEMO_ARTICLE_URL = "https://medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets-afbda2eea8c8";
+const __SB_TEAM_DEMO_ARTICLE_MS = 9000;
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -5260,6 +5260,7 @@ const __SB_TEAM_DEMO_SCRIPT = {
   ].join("\n\n"),
   afterSong: "That was Spotify. Now let's say you want to open a machine learning article. I can do that as well. Here you go.",
   afterSongFallback: "Spotify needed a warmup, but the browser trick is still the browser trick. Now let's say you want to open a machine learning article. I can do that as well. Here you go.",
+  beforeArticleSummary: "Let's say you have this article open right here. Now you do not want to read the whole thing, so I can summarize it for you without you having to leave the page.",
   closing: "Now that was done. So that was it for what I can do. I'm still getting better every single day. I keep getting smarter. If Itish keeps working on me until 6 am, I don't see any other option but to get smarter.\n\nWhich team is in front of you, ANZ or AT&T?",
 };
 
@@ -5285,6 +5286,8 @@ function __sbTeamNormalize(value) {
 function __sbTeamFindTeam(text) {
   const normalized = __sbTeamNormalize(text);
   if (!normalized) return null;
+  if (/\b(?:at\s+and\s+t|a\s+t\s+and\s+t|a\s+t\s+t|att|atnt|current team|new team)\b/.test(normalized)) return "att";
+  if (/\b(?:anz|a\s+n\s+z|australia\s+new\s+zealand|australia\s+and\s+new\s+zealand|old team|bank team)\b/.test(normalized)) return "anz";
   for (const [teamKey, team] of Object.entries(__SB_TEAM_CONFIG)) {
     if (team.aliases.some((alias) => __sbTeamAliasMatches(normalized, alias))) return teamKey;
   }
@@ -5300,7 +5303,7 @@ function __sbTeamAliasMatches(normalizedText, alias) {
   const compactAlias = a.replace(/\s+/g, "");
   if (compactAlias.length >= 3 && compactText.includes(compactAlias)) return true;
   const meaningfulParts = a.split(" ").filter((part) => part.length >= 3);
-  if (!meaningfulParts.length) return false;
+  if (meaningfulParts.length < 2) return false;
   return meaningfulParts.every((part) => text.includes(part));
 }
 
@@ -5568,6 +5571,40 @@ async function __sbTeamCloseDemoTab(tabId, closeDelayMs = 0) {
   });
 }
 
+async function __sbTeamReadDemoArticle(tabId) {
+  let page = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    page = await __sbRuntimeMessage({ action: "getPageContent", tabId: Number(tabId || 0) || null });
+    const candidate = String(page?.text || "").replace(/\s+/g, " ").trim();
+    if (candidate.length > 1200) break;
+    await __sbTeamDelay(1400);
+  }
+  const text = String(page?.text || "").replace(/\s+/g, " ").trim();
+  if (!text) {
+    return "The article is loaded, and this is the point of Braino: I can read what is on the page and turn it into the useful part without making you leave the tab.";
+  }
+  const title = String(page?.title || "this article").trim();
+  try {
+    const stored = await __sbStorageGet(["aiProvider"]);
+    const aiProvider = stored.aiProvider === "claude" ? "claude" : "lovable";
+    const { reply } = await __sbFetchAssistantReply({
+      message: "Summarize this article for a live demo in 3 short spoken sentences. Keep it simple, accurate, and confident. Mention why Braino reading the article saves time.",
+      notes: "",
+      aiProvider,
+      chatHistory: [],
+      pageContext: {
+        url: String(page?.url || __SB_TEAM_DEMO_ARTICLE_URL),
+        title,
+        text: text.slice(0, 9000),
+        hoveredContext: null,
+      },
+    });
+    const clean = String(reply || "").trim();
+    if (clean) return clean;
+  } catch (_) {}
+  return `This article is about ${title}. The useful bit is that I can read the page, pull out what matters, and give you the point without making you sit through the whole thing. That is the kind of browser help I mean.`;
+}
+
 function __sbTeamExtractSong(text) {
   let song = String(text || "").trim();
   song = song
@@ -5672,6 +5709,10 @@ async function __sbTeamStartIntroDemo(ctx = {}) {
     originTabId: __sbTeamState.demoOriginTabId,
     demoTabId: articleTabId,
   });
+  await __sbTeamDelay(3000);
+  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.beforeArticleSummary, { ...ctx, prompt: "Braino demo" });
+  const articleSummary = await __sbTeamReadDemoArticle(articleTabId);
+  await __sbTeamSpeak(articleSummary, { ...ctx, prompt: "Article summary" });
   await __sbTeamDelay(__SB_TEAM_DEMO_ARTICLE_MS);
   await __sbTeamCloseDemoTab(articleTabId, 0);
 
