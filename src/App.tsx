@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { useState } from "react";
 import SplashScreen from "@/components/SplashScreen";
 import BrainoWalker from "@/components/BrainoWalker";
+import SpiderManBrandNewDay from "./pages/SpiderManBrandNewDayFast.tsx";
 import PreLaunch from "./pages/PreLaunch.tsx";
 import Home from "./pages/Home.tsx";
 import LaunchIntro from "./pages/LaunchIntro.tsx";
@@ -49,6 +50,8 @@ import Shankar from "./pages/Shankar.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
+const SPLASH_SKIP_PATHS = new Set(["/", "/spiderman-brand-new-day", "/brand-new-day"]);
+const normalizePath = (path: string) => (path.length > 1 ? path.replace(/\/+$/, "") : path);
 
 function LandingGate({ introDone, onIntroDone }: { introDone: boolean; onIntroDone: () => void }) {
   return introDone ? <Home /> : <LaunchIntro onFinish={onIntroDone} />;
@@ -66,9 +69,14 @@ function AppShell({
   onHomeIntroDone: () => void;
 }) {
   const location = useLocation();
+  const pathname = normalizePath(location.pathname);
   // The walking Braino shows everywhere except the dedicated chat page; the "/" landing
   // hides it via PreLaunch's `body.sb-prelaunch #sb-brain-mascot-wrapper{display:none}` rule.
-  const hideMascot = location.pathname === "/chat" || (location.pathname === "/" && !homeIntroDone);
+  const hideMascot =
+    pathname === "/chat" ||
+    (pathname === "/" && !homeIntroDone) ||
+    pathname === "/spiderman-brand-new-day" ||
+    pathname === "/brand-new-day";
 
   return (
     <>
@@ -112,6 +120,8 @@ function AppShell({
         <Route path="/interns" element={<Interns />} />
         <Route path="/team" element={<Team />} />
         <Route path="/team/shankar" element={<Shankar />} />
+        <Route path="/spiderman-brand-new-day" element={<SpiderManBrandNewDay />} />
+        <Route path="/brand-new-day" element={<SpiderManBrandNewDay />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -122,7 +132,7 @@ function AppShell({
 const App = () => {
   const [splashDone, setSplashDone] = useState(() => {
     if (typeof window === "undefined") return false;
-    return window.location.pathname === "/";
+    return SPLASH_SKIP_PATHS.has(normalizePath(window.location.pathname));
   });
   const [homeIntroDone, setHomeIntroDone] = useState(false);
 
