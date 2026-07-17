@@ -5162,7 +5162,7 @@ function __sbIsSelfEcho(transcript) {
 const __SB_TEAM_CONFIG = {
   anz: {
     label: "ANZ",
-    aliases: ["anz", "a n z", "a and z", "australia new zealand", "australia and new zealand", "old team", "bank team"],
+    aliases: ["anz", "a n z", "a n n", "ann", "a and z", "australia new zealand", "australia and new zealand", "old team", "bank team"],
     fallbackOrder: ["madhuri", "rahul", "shriya", "palash", "shree"],
     people: {
       madhuri: {
@@ -5210,13 +5210,13 @@ const __SB_TEAM_CONFIG = {
   },
   att: {
     label: "AT&T",
-    aliases: ["att", "at&t", "at and t", "a t and t", "a t t", "at t", "atnt", "a t n t", "current team", "new team"],
+    aliases: ["att", "at&t", "at and t", "at and tea", "at and tee", "a t and t", "a t and tea", "a t and tee", "a t t", "at t", "atnt", "atandt", "atat", "a t a t", "a t n t", "current team", "new team"],
     fallbackOrder: ["jyoti", "surya", "hemangi", "minul"],
     people: {
       jyoti: {
         label: "Jyoti sir",
         speechLabel: "Jyo-tee sir",
-        aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji", "jyotisar", "jyotisaar", "jyoti sirr", "jyoti saar"],
+        aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji", "jyotisar", "jyotisaar", "jyotish", "jyotish sir", "jyoti sirr", "jyoti saar"],
         opening: "Jyoti sir, thank you for understanding Itish for who he is and for being so supportive.",
         message: "He learned a lot about what good management looks like from you. You make people laugh, but you also make people respect you.",
         closing: "A lot of people look up to you, and he does too. Party karenge sir, when and where, just let him know.",
@@ -5287,8 +5287,8 @@ function __sbTeamNormalize(value) {
 function __sbTeamFindTeam(text) {
   const normalized = __sbTeamNormalize(text);
   if (!normalized) return null;
-  if (/\b(?:at\s+and\s+t|a\s+t\s+and\s+t|a\s+t\s+t|att|atnt|current team|new team)\b/.test(normalized)) return "att";
-  if (/\b(?:anz|a\s+n\s+z|australia\s+new\s+zealand|australia\s+and\s+new\s+zealand|old team|bank team)\b/.test(normalized)) return "anz";
+  if (/\b(?:at\s+and\s+(?:t|tea|tee)|a\s+t\s+and\s+(?:t|tea|tee)|a\s+t\s+t|att|atnt|atandt|atat|current team|new team)\b/.test(normalized)) return "att";
+  if (/\b(?:anz|a\s+n\s+z|a\s+n\s+n|ann|australia\s+new\s+zealand|australia\s+and\s+new\s+zealand|old team|bank team)\b/.test(normalized)) return "anz";
   for (const [teamKey, team] of Object.entries(__SB_TEAM_CONFIG)) {
     if (team.aliases.some((alias) => __sbTeamAliasMatches(normalized, alias))) return teamKey;
   }
@@ -5299,10 +5299,13 @@ function __sbTeamAliasMatches(normalizedText, alias) {
   const text = String(normalizedText || "");
   const a = __sbTeamNormalize(alias);
   if (!text || !a) return false;
-  if (text === a || text.includes(a)) return true;
+  if (text === a) return true;
+  const escaped = a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (new RegExp(`(^|\\s)${escaped}(?=\\s|$)`).test(text)) return true;
   const compactText = text.replace(/\s+/g, "");
   const compactAlias = a.replace(/\s+/g, "");
-  if (compactAlias.length >= 3 && compactText.includes(compactAlias)) return true;
+  if (compactAlias.length >= 3 && compactText === compactAlias) return true;
+  if (compactAlias.length >= 5 && compactText.includes(compactAlias)) return true;
   const meaningfulParts = a.split(" ").filter((part) => part.length >= 3);
   if (meaningfulParts.length < 2) return false;
   return meaningfulParts.every((part) => text.includes(part));
@@ -5327,6 +5330,12 @@ function __sbTeamFindPeople(text, teamKey = null) {
     }
   }
   return matches;
+}
+
+function __sbTeamFindPeopleSmart(text, preferredTeamKey = null) {
+  const preferred = preferredTeamKey ? __sbTeamFindPeople(text, preferredTeamKey) : [];
+  if (preferred.length) return preferred;
+  return __sbTeamFindPeople(text, null);
 }
 
 function __sbTeamPersonLabel(personKey, teamKey = __sbTeamState.team) {
@@ -5468,6 +5477,11 @@ function __sbTeamBuildTeamIntroLine(teamKey) {
   return `Okay, ${team}. I can talk about ${people}. Who is here right now?`;
 }
 
+function __sbTeamDoneNudge() {
+  const team = __SB_TEAM_CONFIG[__sbTeamState.team]?.label || "the team";
+  return `Team mode is wrapped for ${team}. Type another prepared name if you want me to say one more message, say ANZ or AT&T to switch teams, or say exit Team mode.`;
+}
+
 function __sbTeamIsYesPrompt(text) {
   return /\b(yes|yeah|yep|sure|haan|ha|hanji|go ahead|do it|let's go|lets go|of course|please)\b/i.test(String(text || ""));
 }
@@ -5484,7 +5498,7 @@ async function __sbTeamSpeakPerson(teamKey, personKey, ctx = {}) {
   __sbTeamState.phase = "awaiting_next_person";
   __sbTeamState.currentPerson = personKey;
   if (!__sbTeamState.spoken.includes(personKey)) __sbTeamState.spoken.push(personKey);
-  await __sbTeamSpeak(`${message}\n\nWho next?`, ctx);
+  await __sbTeamSpeak(message, ctx);
   return true;
 }
 
@@ -5916,7 +5930,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
 
   if (/\b(resume|continue now|come back)\b/i.test(promptText) && __sbTeamState.phase === "paused") {
     __sbTeamState.phase = __sbTeamState.previousPhase || "awaiting_next_person";
-    return await finish(__sbTeamState.team ? "I'm back. Who next?" : __sbTeamPromptForTeam());
+    return await finish(__sbTeamState.team ? "I'm back." : __sbTeamPromptForTeam());
   }
 
   if (/\brepeat\b/i.test(promptText)) {
@@ -5927,7 +5941,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
     if (__sbTeamState.currentPerson && !__sbTeamState.spoken.includes(__sbTeamState.currentPerson)) {
       __sbTeamState.spoken.push(__sbTeamState.currentPerson);
     }
-    return await finish("Skipped. Who next?");
+    return await finish("Skipped.");
   }
 
   if (__sbTeamState.phase === "paused") {
@@ -5951,7 +5965,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
   }
 
   const mentionedTeam = __sbTeamFindTeam(promptText);
-  const mentionedPeople = __sbTeamFindPeople(promptText, mentionedTeam || __sbTeamState.team || null);
+  const mentionedPeople = __sbTeamFindPeopleSmart(promptText, mentionedTeam || __sbTeamState.team || null);
   const wantsDirectPerson = __sbTeamWantsDirectPerson(promptText) || ["awaiting_next_person", "speaking_person", "done", "idle", "choosing_team"].includes(__sbTeamState.phase);
 
   if (__sbTeamState.phase === "demo_awaiting_team_yes") {
@@ -5999,7 +6013,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
 
   const guardrail = __sbTeamGuardrailReply(promptText);
   if (guardrail) {
-    const tail = __sbTeamState.team ? " Who next?" : ` ${__sbTeamPromptForTeam()}`;
+    const tail = __sbTeamState.team ? "" : ` ${__sbTeamPromptForTeam()}`;
     return await finish(`${guardrail}${tail}`);
   }
 
@@ -6018,19 +6032,19 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
   }
 
   if (__sbTeamState.phase === "collecting_room") {
-    const people = __sbTeamFindPeople(promptText, __sbTeamState.team).map((match) => match.personKey);
+    const people = __sbTeamFindPeopleSmart(promptText, __sbTeamState.team).map((match) => match.personKey);
     if (!people.length) {
       return await finish("I didn't catch a prepared name. Who is here right now?");
     }
     __sbTeamAddRoster(people);
     if (people.length === 1) {
       const message = __sbTeamBuildPersonMessage(people[0]);
-      if (!message) return await finish("I don't have a message prepared for them yet, but I'm glad they're here. Who next?");
+      if (!message) return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
       __sbTeamState.phase = "speaking_person";
       __sbTeamState.currentPerson = people[0];
       if (!__sbTeamState.spoken.includes(people[0])) __sbTeamState.spoken.push(people[0]);
       __sbTeamState.phase = "awaiting_next_person";
-      return await finish(`${message}\n\nWho next?`);
+      return await finish(message);
     }
     const names = __sbTeamJoinLabels(__sbTeamState.roster);
     return await finish(__sbTeamPromptForNext(`Got it, ${names} ${__sbTeamState.roster.length === 1 ? "is" : "are"} here.`));
@@ -6044,7 +6058,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
       __sbTeamState.spoken = [];
       return await finish(__sbTeamPromptForTeam());
     }
-    return await finish(`${__SB_TEAM_FINAL_THANK_YOU}\n\nSay exit Team mode to go back to normal, or say hi to my team to start again.`);
+    return await finish(__sbTeamDoneNudge());
   }
 
   if (__sbTeamState.phase === "awaiting_next_person" || __sbTeamState.phase === "speaking_person") {
@@ -6061,7 +6075,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
         return await finish(__SB_TEAM_FINAL_THANK_YOU);
       }
     } else {
-      const people = __sbTeamFindPeople(promptText, __sbTeamState.team).map((match) => match.personKey);
+      const people = __sbTeamFindPeopleSmart(promptText, __sbTeamState.team).map((match) => match.personKey);
       if (people.length > 1) {
         __sbTeamAddRoster(people);
         __sbTeamState.pendingChoices = people;
@@ -6076,20 +6090,20 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
     if (!selectedPerson) {
       const current = __SB_TEAM_CONFIG[__sbTeamState.team]?.people?.[__sbTeamState.currentPerson];
       if (current?.afterResponse && /\b(thank|thanks|nice|good|great|cool|wow|hello|hi|hey|okay|ok|haha|lol|sweet|love it)\b/i.test(promptText)) {
-        return await finish(`${current.afterResponse} Who next?`);
+        return await finish(current.afterResponse);
       }
-      return await finish("I don't have a message prepared for them yet, but I'm glad they're here. Who next?");
+      return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
     }
 
     const message = __sbTeamBuildPersonMessage(selectedPerson);
     if (!message) {
-      return await finish("I don't have a message prepared for them yet, but I'm glad they're here. Who next?");
+      return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
     }
     __sbTeamState.phase = "speaking_person";
     __sbTeamState.currentPerson = selectedPerson;
     if (!__sbTeamState.spoken.includes(selectedPerson)) __sbTeamState.spoken.push(selectedPerson);
     __sbTeamState.phase = "awaiting_next_person";
-    return await finish(`${message}\n\nWho next?`);
+    return await finish(message);
   }
 
   return await finish("Team mode is on. Say, say hi to my team, when you want me to start.");
