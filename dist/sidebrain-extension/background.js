@@ -1085,6 +1085,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
     return true;
   }
+  if (message.action === "sbTeamCloseDemoTab") {
+    (async () => {
+      const originTabId = Number(message.originTabId || 0) || null;
+      const closeTabId = Number(message.closeTabId || 0) || null;
+      const closeDelayMs = Math.max(0, Math.min(5000, Number(message.closeDelayMs || 0)));
+      let originTab = null;
+      if (originTabId) {
+        try { originTab = await chrome.tabs.get(originTabId); } catch (_) { originTab = null; }
+      }
+      if (originTab?.id) {
+        try { await chrome.windows.update(originTab.windowId, { focused: true }); } catch (_) {}
+        try { await chrome.tabs.update(originTab.id, { active: true }); } catch (_) {}
+      }
+      if (closeTabId && closeTabId !== originTab?.id) {
+        setTimeout(() => {
+          try { chrome.tabs.remove(closeTabId, () => { void chrome.runtime.lastError; }); } catch (_) {}
+        }, closeDelayMs);
+      }
+      sendResponse({ ok: true, originTabId: originTab?.id || null, closedTabId: closeTabId || null });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
   if (message.action === "getStreamId") {
     (async () => {
       const requestedTabId = message.tabId || sender?.tab?.id || null;
@@ -1982,7 +2004,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       for (const [u, entry] of bgRecentOpenedTabs) {
         if (Date.now() - entry.ts > 60000) bgRecentOpenedTabs.delete(u);
       }
-      const recent = bgRecentOpenedTabs.get(url);
+      const recent = message.forceNew === true ? null : bgRecentOpenedTabs.get(url);
       if (recent && Date.now() - recent.ts < 10000) {
         chrome.tabs.get(recent.tabId, (tab) => {
           if (!chrome.runtime.lastError && tab?.id) {

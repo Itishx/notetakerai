@@ -3498,6 +3498,12 @@ const __SB_DANCE_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
 const __SB_DANCE_START_MS = 52000;          // 0:52
 const __SB_DANCE_DURATION_MS = 16000;       // dance until 1:08
 const __SB_DANCE_OUTRO_MS = 1800;           // music rides ~2 more beats, stops by 1:10
+const __SB_TEAM_DEMO_TRACK_URI = __SB_DANCE_TRACK_URI;
+const __SB_TEAM_DEMO_TRACK_URL = "https://open.spotify.com/track/5EKEFHtqsOW0lTxqh8BhlI";
+const __SB_TEAM_DEMO_TRACK_START_MS = __SB_DANCE_START_MS;
+const __SB_TEAM_DEMO_SPOTIFY_MS = 5000;
+const __SB_TEAM_DEMO_ARTICLE_URL = "https://medium.com/tag/machine-learning";
+const __SB_TEAM_DEMO_ARTICLE_MS = 5000;
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -5250,12 +5256,11 @@ const __SB_TEAM_DEMO_SCRIPT = {
     "I live inside Itish's browser, which is less creepy than it sounds and more useful than it has any right to be.",
     "I can read pages, write emails, talk in voice, search the web, control tabs, play music, and generally do the browser chores while Itish pretends this was all calm and planned.",
     "I also happen to look very adorable, and I have Itish to thank for that.",
-    "But let me stop yapping and play a song. Tell me one song you want me to play.",
+    "But let me stop yapping and play a song.",
   ].join("\n\n"),
-  askSong: "Tell me one song you want me to play.",
-  songAck: (song) => `Perfect. I will open Spotify and play ${song}. Watch this.`,
   afterSong: "That was Spotify. Now let's say you want to open a machine learning article. I can do that as well. Here you go.",
-  closing: "Now that was done. So that was it for what I can do. I'm still getting better every single day. I keep getting smarter. If Itish keeps working on me until 6 am, I don't see any other option but to get smarter.\n\nWould you like me to say hello to your team? Now I'm sure they are watching.",
+  afterSongFallback: "Spotify needed a warmup, but the browser trick is still the browser trick. Now let's say you want to open a machine learning article. I can do that as well. Here you go.",
+  closing: "Now that was done. So that was it for what I can do. I'm still getting better every single day. I keep getting smarter. If Itish keeps working on me until 6 am, I don't see any other option but to get smarter.\n\nWhich team is in front of you, ANZ or AT&T?",
 };
 
 let __sbTeamState = {
@@ -5293,8 +5298,10 @@ function __sbTeamAliasMatches(normalizedText, alias) {
   if (text === a || text.includes(a)) return true;
   const compactText = text.replace(/\s+/g, "");
   const compactAlias = a.replace(/\s+/g, "");
-  if (compactAlias.length >= 4 && compactText.includes(compactAlias)) return true;
-  return a.split(" ").filter((part) => part.length >= 3).every((part) => text.includes(part));
+  if (compactAlias.length >= 3 && compactText.includes(compactAlias)) return true;
+  const meaningfulParts = a.split(" ").filter((part) => part.length >= 3);
+  if (!meaningfulParts.length) return false;
+  return meaningfulParts.every((part) => text.includes(part));
 }
 
 function __sbTeamFindPeople(text, teamKey = null) {
@@ -5511,10 +5518,10 @@ async function __sbTeamEnsureOriginTabId() {
 
 function __sbTeamDemoUrl(step, song) {
   if (step === "demo_running_song") {
-    return `https://open.spotify.com/search/${encodeURIComponent(song || "Bargad by Arpit Bala")}`;
+    return __SB_TEAM_DEMO_TRACK_URL;
   }
   if (step === "demo_running_article") {
-    return "https://medium.com/search?q=machine%20learning";
+    return __SB_TEAM_DEMO_ARTICLE_URL;
   }
   return "";
 }
@@ -5522,7 +5529,7 @@ function __sbTeamDemoUrl(step, song) {
 async function __sbTeamOpenDemoTab(step, song) {
   const url = __sbTeamDemoUrl(step, song);
   if (!url) return null;
-  const opened = await __sbRuntimeMessage({ action: "openTab", url, active: true });
+  const opened = await __sbRuntimeMessage({ action: "openTab", url, active: true, forceNew: true });
   return Number(opened?.tabId || 0) || null;
 }
 
@@ -5543,6 +5550,22 @@ function __sbTeamReturnDemoToOrigin({ phase, task, song, finalText, closeDelayMs
   } catch (_) {
     return false;
   }
+}
+
+function __sbTeamDelay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+async function __sbTeamCloseDemoTab(tabId, closeDelayMs = 0) {
+  const closeTabId = Number(tabId || 0) || null;
+  const originTabId = await __sbTeamEnsureOriginTabId();
+  if (!originTabId && !closeTabId) return null;
+  return await __sbRuntimeMessage({
+    action: "sbTeamCloseDemoTab",
+    originTabId,
+    closeTabId,
+    closeDelayMs,
+  });
 }
 
 function __sbTeamExtractSong(text) {
@@ -5592,22 +5615,71 @@ async function __sbTeamLaunchDemoAgent(step, task, connector = "auto") {
 }
 
 async function __sbTeamStartIntroDemo(ctx = {}) {
-  __sbTeamState.phase = "demo_waiting_song";
+  __sbTeamClearDemoState();
+  __sbTeamState.phase = "demo_intro";
   __sbTeamState.team = null;
   __sbTeamState.roster = [];
   __sbTeamState.spoken = [];
   __sbTeamState.demoTask = "";
-  __sbTeamState.demoSong = "";
+  __sbTeamState.demoSong = "DAF by Badshah";
   __sbTeamState.demoOriginTabId = await __sbTeamEnsureOriginTabId();
   __sbTeamState.demoTabId = null;
   __sbTeamPersistDemoState({
-    phase: "demo_waiting_song",
+    flow: "direct-demo",
+    phase: "demo_intro",
     task: "",
-    song: "",
+    song: __sbTeamState.demoSong,
     originTabId: __sbTeamState.demoOriginTabId,
     demoTabId: null,
   });
   await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.intro, { ...ctx, prompt: ctx.prompt || "Introduce Braino" });
+
+  __sbTeamState.phase = "demo_running_song";
+  const spotifyTabId = await __sbTeamOpenDemoTab("demo_running_song", __sbTeamState.demoSong);
+  __sbTeamState.demoTabId = spotifyTabId;
+  __sbTeamPersistDemoState({
+    flow: "direct-demo",
+    phase: "demo_running_song",
+    task: "",
+    song: __sbTeamState.demoSong,
+    originTabId: __sbTeamState.demoOriginTabId,
+    demoTabId: spotifyTabId,
+  });
+  await __sbTeamDelay(1400);
+  const playResult = await Promise.race([
+    __sbSpotifyPlayTrack(__SB_TEAM_DEMO_TRACK_URI, __SB_TEAM_DEMO_TRACK_START_MS),
+    __sbTeamDelay(9000).then(() => ({ ok: false, timedOut: true })),
+  ]);
+  await __sbTeamDelay(__SB_TEAM_DEMO_SPOTIFY_MS);
+  __sbTeamPauseSpotifyDemoSong();
+  await __sbTeamCloseDemoTab(spotifyTabId, 0);
+
+  __sbTeamState.demoTabId = null;
+  __sbTeamState.phase = "demo_after_song";
+  await __sbTeamSpeak(
+    playResult?.ok ? __SB_TEAM_DEMO_SCRIPT.afterSong : __SB_TEAM_DEMO_SCRIPT.afterSongFallback,
+    { ...ctx, prompt: "Braino demo" },
+  );
+
+  __sbTeamState.phase = "demo_running_article";
+  const articleTabId = await __sbTeamOpenDemoTab("demo_running_article", "");
+  __sbTeamState.demoTabId = articleTabId;
+  __sbTeamPersistDemoState({
+    flow: "direct-demo",
+    phase: "demo_running_article",
+    task: "",
+    song: __sbTeamState.demoSong,
+    originTabId: __sbTeamState.demoOriginTabId,
+    demoTabId: articleTabId,
+  });
+  await __sbTeamDelay(__SB_TEAM_DEMO_ARTICLE_MS);
+  await __sbTeamCloseDemoTab(articleTabId, 0);
+
+  __sbTeamState.phase = "choosing_team";
+  __sbTeamState.demoTask = "";
+  __sbTeamState.demoTabId = null;
+  __sbTeamClearDemoState();
+  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { ...ctx, prompt: "Braino demo" });
 }
 
 async function __sbTeamHandleDemoAgentFinal(agentPrompt, finalText = "") {
@@ -5618,6 +5690,7 @@ async function __sbTeamHandleDemoAgentFinal(agentPrompt, finalText = "") {
     } catch (_) { resolve(null); }
   });
   if (!stored?.active) return false;
+  if (stored.flow !== "agent-demo") return false;
   const phase = String(stored.phase || __sbTeamState.phase || "");
   const task = String(stored.task || __sbTeamState.demoTask || "").trim();
   const prompt = String(agentPrompt || "").trim();
@@ -5826,11 +5899,7 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
   }
 
   if (__sbTeamState.phase === "demo_waiting_song") {
-    const song = __sbTeamExtractSong(promptText);
-    __sbTeamState.demoSong = song;
-    const task = __sbTeamSpotifyDemoTask(song);
-    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.songAck(song), ctx);
-    await __sbTeamLaunchDemoAgent("demo_running_song", task, "spotify");
+    await __sbTeamStartIntroDemo(ctx);
     completeTeamVoiceTurn();
     return true;
   }
@@ -5912,6 +5981,15 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
       return await finish("I didn't catch a prepared name. Who is here right now?");
     }
     __sbTeamAddRoster(people);
+    if (people.length === 1) {
+      const message = __sbTeamBuildPersonMessage(people[0]);
+      if (!message) return await finish("I don't have a message prepared for them yet, but I'm glad they're here. Who next?");
+      __sbTeamState.phase = "speaking_person";
+      __sbTeamState.currentPerson = people[0];
+      if (!__sbTeamState.spoken.includes(people[0])) __sbTeamState.spoken.push(people[0]);
+      __sbTeamState.phase = "awaiting_next_person";
+      return await finish(`${message}\n\nWho next?`);
+    }
     const names = __sbTeamJoinLabels(__sbTeamState.roster);
     return await finish(__sbTeamPromptForNext(`Got it, ${names} ${__sbTeamState.roster.length === 1 ? "is" : "are"} here.`));
   }
