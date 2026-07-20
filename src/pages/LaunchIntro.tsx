@@ -4,8 +4,8 @@
    the website"). Skippable, and it only plays ONCE per visitor (sessionStorage),
    so navigating around later never replays it.
 
-   HOW TO GO LIVE (Monday, when the video exists):
-     1. Drop the file at  public/braino-launch.mp4  (and optionally a poster at
+   HOW TO GO LIVE:
+     1. Drop the file at  public/Braino_Final.MP4  (and optionally a poster at
         public/braino-launch-poster.jpg).
      2. In src/App.tsx make this the landing page. The cleanest flip:
           <Route path="/" element={<LandingGate />} />
@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const VIDEO_SRC = "/braino-launch.mp4";           // drop the MP4 here
+const VIDEO_SRC = "/Braino_Final.MP4";
 const POSTER_SRC = "/braino-launch-poster.jpg";   // optional first-frame image
 const ENTER_TO = "/";                             // where "the website" lives
 const SEEN_KEY = "sb_launch_intro_seen";          // once-per-session flag
@@ -28,7 +28,12 @@ export function launchIntroSeen() {
   try { return sessionStorage.getItem(SEEN_KEY) === "1"; } catch { return false; }
 }
 
-export default function LaunchIntro() {
+type LaunchIntroProps = {
+  onFinish?: () => void;
+  enterTo?: string;
+};
+
+export default function LaunchIntro({ onFinish, enterTo = ENTER_TO }: LaunchIntroProps = {}) {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [needsTap, setNeedsTap] = useState(false);   // autoplay blocked → show a start button
@@ -39,8 +44,11 @@ export default function LaunchIntro() {
     setLeaving(true);
     try { sessionStorage.setItem(SEEN_KEY, "1"); } catch { /* private mode */ }
     // let the fade play, then enter the site
-    window.setTimeout(() => navigate(ENTER_TO, { replace: true }), 620);
-  }, [leaving, navigate]);
+    window.setTimeout(() => {
+      if (onFinish) onFinish();
+      else navigate(enterTo, { replace: true });
+    }, 620);
+  }, [enterTo, leaving, navigate, onFinish]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -74,7 +82,7 @@ export default function LaunchIntro() {
   return (
     <div
       style={{
-        position: "fixed", inset: 0, zIndex: 100, background: "#05070b",
+        position: "fixed", inset: 0, zIndex: 2147483600, background: "#05070b",
         display: "flex", alignItems: "center", justifyContent: "center",
         opacity: leaving ? 0 : 1, transition: "opacity 0.6s ease",
       }}

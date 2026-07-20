@@ -21,10 +21,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 type Phase = "greeting" | "features" | "askUsecases" | "usecases" | "askPersonality" | "personality" | "askSignup" | "signup" | "authing" | "welcome";
 type ContentKind = "features" | "usecases" | "personality";
+type TourVariant = "onboarding" | "homepage";
 const SET = { features: CARD_DATA, usecases: SCENARIOS, personality: PERSONALITY };
 const LINES = { features: CARD_LINES, usecases: SCENARIO_LINES, personality: PERSONALITY_LINES };
 
 const GREETING = "Hello. I'm Braino. Are you ready to see all that I can do?";
+const HOMEPAGE_GREETING = "I just got a quick idea. Let me walk you through it.";
+const HOMEPAGE_BRIDGE_LINES: Record<"askUsecases" | "askPersonality", string> = {
+  askUsecases: "That was the core toolkit. Now let me show you where this actually helps.",
+  askPersonality: "And one more thing, because this is the part that makes me feel less like a normal app.",
+};
+const HOMEPAGE_DONE_LINE = "That is the quick tour. The rest of the website is right here.";
 const ASK_LINES: Record<string, string> = {
   askUsecases: "That was it for what I can do! Want to see how people actually use me?",
   askPersonality: "Would you like to see what makes me unique?",
@@ -99,6 +106,19 @@ const GATE_CSS = `
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: opacity 0.3s ease;
 }
 .bg-overlay #__sb_input__::placeholder { color: #4A3D34; }
+.bg-overlay.bg-home-tour #__sb_input__ { display: none; }
+.bg-tour-skip {
+  position: fixed; top: 20px; right: 20px; z-index: 7;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 38px; padding: 8px 14px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.24); background: rgba(16,12,11,0.46);
+  color: rgba(255,255,255,0.88); backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px; font-weight: 650; cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.26);
+}
+.bg-tour-skip:hover { background: rgba(16,12,11,0.66); color: #fff; }
 .bg-overlay .sb-bar-icon-btn {
   width: 42px; height: 42px; border-radius: 50%; border: none; background: #E8786E; color: #fff;
   cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -139,8 +159,14 @@ const GATE_CSS = `
 }
 `;
 
-export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void }) {
-  void onFinish;
+export default function BrainoIntroGate({
+  onFinish,
+  variant = "onboarding",
+}: {
+  onFinish?: () => void;
+  variant?: TourVariant;
+}) {
+  const isHomeTour = variant === "homepage";
   const walkerRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -151,12 +177,15 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
   const talkingRef = useRef(false);
   const talkTimerRef = useRef<number | undefined>(undefined);
   const eyesClosedRef = useRef(false);
+  const autoTourStartedRef = useRef(false);
+  const homeTourFinishedRef = useRef(false);
 
-  const resumingRef = useRef<boolean>((() => { try { return localStorage.getItem("sb_onb") === "signup"; } catch { return false; } })());
+  const resumingRef = useRef<boolean>(!isHomeTour && (() => { try { return localStorage.getItem("sb_onb") === "signup"; } catch { return false; } })());
   const { user, profile, loading } = useAuth();
 
   const [phase, setPhase] = useState<Phase>(resumingRef.current ? "authing" : "greeting");
   const [view, setView] = useState<{ kind: ContentKind; step: number }>({ kind: "features", step: 0 });
+  const [perchedReady, setPerchedReady] = useState(false);
 
   const speak = (ms: number) => {
     talkingRef.current = true;
@@ -171,6 +200,10 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
   const showBarInput = (placeholder: string) => {
     const bar = barRef.current, input = inputRef.current; if (!bar) return;
     bar.classList.remove("bg-tour", "sb-climb");
+    if (isHomeTour) {
+      bar.classList.add("bg-tour");
+      return;
+    }
     if (input) { input.placeholder = placeholder; input.value = ""; window.setTimeout(() => input.focus(), 120); }
   };
 
@@ -252,8 +285,14 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
       if (perched) return;
       perched = true;
       walker.classList.add("bg-glow");
-      window.setTimeout(() => { say.classList.add("show"); speak(2600); }, 280);
-      window.setTimeout(() => { walker.classList.remove("bg-glow"); bar.classList.remove("sb-climb"); inputRef.current?.focus(); }, 1000);
+      setPerchedReady(true);
+      window.setTimeout(() => { say.classList.add("show"); speak(isHomeTour ? 3200 : 2600); }, 280);
+      window.setTimeout(() => {
+        walker.classList.remove("bg-glow");
+        bar.classList.remove("sb-climb");
+        if (isHomeTour) bar.classList.add("bg-tour");
+        else inputRef.current?.focus();
+      }, 1000);
     };
 
     if (resuming) {
@@ -336,6 +375,14 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loading]);
 
+  const finishHomeTour = () => {
+    if (homeTourFinishedRef.current) return;
+    homeTourFinishedRef.current = true;
+    sayRef.current?.classList.remove("show");
+    overlayRef.current?.classList.add("bg-exit");
+    window.setTimeout(() => onFinish?.(), 620);
+  };
+
   // ── phase transitions ──
   const enterContent = (kind: ContentKind) => {
     setPhase(kind);
@@ -345,6 +392,23 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
   };
   // A chapter just ended: close the card, hold a beat, then introduce the next part.
   const pauseThenAsk = (p: "askUsecases" | "askPersonality" | "askSignup") => {
+    if (isHomeTour) {
+      setPhase(p);
+      sayRef.current?.classList.remove("show");
+      if (p === "askSignup") {
+        window.setTimeout(() => {
+          sayLine(HOMEPAGE_DONE_LINE, 2300);
+          window.setTimeout(finishHomeTour, 1900);
+        }, 650);
+        return;
+      }
+      const nextKind: ContentKind = p === "askUsecases" ? "usecases" : "personality";
+      window.setTimeout(() => {
+        sayLine(HOMEPAGE_BRIDGE_LINES[p], 2400);
+        window.setTimeout(() => enterContent(nextKind), 1350);
+      }, 750);
+      return;
+    }
     setPhase(p);                                        // cardOpen → false, card fades closed
     sayRef.current?.classList.remove("show");
     window.setTimeout(() => { showBarInput("Type yes…"); sayLine(ASK_LINES[p]); }, 1000);
@@ -365,6 +429,13 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
   };
 
   const onBarBtn = () => {
+    if (isHomeTour) {
+      if (phase === "features" || phase === "usecases" || phase === "personality") { advanceContent(); return; }
+      if (phase === "greeting") { enterContent("features"); return; }
+      if (phase === "askUsecases") { enterContent("usecases"); return; }
+      if (phase === "askPersonality") { enterContent("personality"); return; }
+      if (phase === "askSignup") { finishHomeTour(); return; }
+    }
     if (phase === "features" || phase === "usecases" || phase === "personality") { advanceContent(); return; }
     // ask phases — require a typed answer
     if ((inputRef.current?.value || "").trim().length === 0) { inputRef.current?.focus(); return; }
@@ -398,12 +469,35 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
 
   const cardOpen = phase === "features" || phase === "usecases" || phase === "personality";
 
+  useEffect(() => {
+    if (!isHomeTour || !perchedReady || phase !== "greeting" || autoTourStartedRef.current) return;
+    autoTourStartedRef.current = true;
+    const timer = window.setTimeout(() => enterContent("features"), 2450);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHomeTour, perchedReady, phase]);
+
+  useEffect(() => {
+    if (!isHomeTour || !cardOpen || homeTourFinishedRef.current) return;
+    const line = LINES[view.kind][view.step] || "";
+    const words = line.split(/\s+/).filter(Boolean).length;
+    const waitMs = Math.max(3600, Math.min(7600, words * 220));
+    const timer = window.setTimeout(() => advanceContent(), waitMs);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHomeTour, cardOpen, phase, view.kind, view.step]);
+
   return (
-    <div ref={overlayRef} className="bg-overlay" role="dialog" aria-label="Braino onboarding">
+    <div ref={overlayRef} className={`bg-overlay${isHomeTour ? " bg-home-tour" : ""}`} role="dialog" aria-label="Braino onboarding">
       <GradientBackground />
       <style>{TOUR_SCENE_CSS}</style>
       <style>{GATE_CSS}</style>
       <svg width="0" height="0" style={{ position: "absolute", pointerEvents: "none" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: GLASS_FILTER_SVG }} />
+      {isHomeTour && (
+        <button type="button" className="bg-tour-skip" onClick={finishHomeTour}>
+          Skip the interactive tour. Just view the website as is.
+        </button>
+      )}
 
       <div ref={cardRef} className={`bg-card${cardOpen ? " show" : ""}`} aria-hidden={!cardOpen}>
         <div className="bg-card-grab" onPointerDown={onCardDown} onPointerMove={onCardMove} onPointerUp={onCardUp} onPointerCancel={onCardUp}>⠿</div>
@@ -418,7 +512,7 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
 
       <div className="bg-lane">
         <div ref={walkerRef} className="bg-walker" onClick={onBrainoClick}>
-          <div ref={sayRef} id="__sbwk_say__">{GREETING}</div>
+          <div ref={sayRef} id="__sbwk_say__">{isHomeTour ? HOMEPAGE_GREETING : GREETING}</div>
           <div id="__sbwk_flip__" dangerouslySetInnerHTML={{ __html: GATE_WALKER_SVG }} />
         </div>
       </div>

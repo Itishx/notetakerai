@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Braino : Your AI Browser Sidekick</title>
+    <script>
+      (function () {
+        var path = window.location.pathname.replace(/\/+$/, "") || "/";
+        if (path === "/brand-new-day" || path === "/spiderman-brand-new-day") {
+          document.documentElement.classList.add("bnd-html-boot");
+        }
+      })();
+    </script>
+    <style>
+      html.bnd-html-boot,
+      html.bnd-html-boot body,
+      html.bnd-html-boot #root {
+        min-height: 100%;
+        background: #060a12;
+      }
+    </style>
     <meta name="description" content="Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
