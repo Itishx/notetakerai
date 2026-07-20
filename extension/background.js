@@ -1166,6 +1166,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await chrome.tabs.update(originTabId, { active: true });
         } catch (_) {}
       }
+      await bgDelay(250);
+      try {
+        await new Promise((resolve) => {
+          chrome.tabs.remove(gmailTabId, () => {
+            void chrome.runtime.lastError;
+            resolve();
+          });
+        });
+      } catch (_) {}
 
       sendResponse({
         ok: true,
@@ -1173,6 +1182,83 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         subject: thread?.subject || "",
         replyBody,
         sent: shouldSend,
+        closed: true,
+      });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+  if (message.action === "sbDemoMapsSendToPhoneExact") {
+    (async () => {
+      const url = String(message.url || "").trim();
+      const originTabId = Number(message.originTabId || sender?.tab?.id || 0) || null;
+      if (!/^https:\/\/www\.google\.[^/]+\/maps\//.test(url)) {
+        sendResponse({ ok: false, error: "Demo Maps URL is invalid." });
+        return;
+      }
+
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url, active: true }, (created) => {
+          void chrome.runtime.lastError;
+          resolve(created || null);
+        });
+      });
+      const mapsTabId = Number(tab?.id || 0) || null;
+      if (!mapsTabId) {
+        sendResponse({ ok: false, error: "Could not open the demo Maps route." });
+        return;
+      }
+
+      let result = null;
+      try {
+        await bgWaitForTabReady(mapsTabId, 18000);
+        await bgDelay(2800);
+
+        for (let i = 0; i < 7; i += 1) {
+          result = await bgExecuteSiteAdapterAction(mapsTabId, { type: "mapsSendDirectionsToPhone" });
+          if (result?.sent || result?.success) break;
+          await bgDelay(850);
+        }
+      } finally {
+        await bgDelay(900);
+        if (originTabId) {
+          try {
+            const originTab = await chrome.tabs.get(originTabId);
+            if (originTab?.windowId) await chrome.windows.update(originTab.windowId, { focused: true });
+            await chrome.tabs.update(originTabId, { active: true });
+          } catch (_) {}
+        }
+        await bgDelay(200);
+        try {
+          await new Promise((resolve) => {
+            chrome.tabs.remove(mapsTabId, () => {
+              void chrome.runtime.lastError;
+              resolve();
+            });
+          });
+        } catch (_) {}
+      }
+
+      if (result?.sent || result?.success) {
+        sendResponse({
+          ok: true,
+          sent: true,
+          tabId: mapsTabId,
+          buttonLabel: result.buttonLabel || "",
+          phoneLabel: result.phoneLabel || "",
+          status: result.status || "",
+          verified: result.verified !== false,
+          closed: true,
+        });
+        return;
+      }
+
+      sendResponse({
+        ok: false,
+        sent: false,
+        tabId: mapsTabId,
+        error: result?.error || "Could not verify Maps Send to phone.",
+        candidates: Array.isArray(result?.candidates) ? result.candidates : [],
+        closed: true,
       });
     })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
     return true;

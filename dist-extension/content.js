@@ -1829,6 +1829,213 @@ function __sbGmailGetViewMode() {
   return "gmail";
 }
 
+function __sbMapsNormalizeText(value) {
+  return String(value || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function __sbMapsVisible(el) {
+  if (!el) return false;
+  const rect = el.getBoundingClientRect?.();
+  if (!rect || rect.width < 2 || rect.height < 2) return false;
+  if (rect.bottom < 0 || rect.right < 0 || rect.top > window.innerHeight || rect.left > window.innerWidth) return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+}
+
+function __sbMapsElementText(el) {
+  if (!el) return "";
+  return __sbMapsNormalizeText([
+    el.getAttribute?.("aria-label"),
+    el.getAttribute?.("data-tooltip"),
+    el.getAttribute?.("title"),
+    el.getAttribute?.("data-value"),
+    el.innerText,
+    el.textContent,
+  ].filter(Boolean).join(" "));
+}
+
+function __sbMapsClickElement(el) {
+  if (!el) return false;
+  try { el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }); } catch (_) {}
+  const rect = el.getBoundingClientRect?.();
+  const x = rect ? Math.max(1, Math.min(window.innerWidth - 1, rect.left + rect.width / 2)) : 1;
+  const y = rect ? Math.max(1, Math.min(window.innerHeight - 1, rect.top + rect.height / 2)) : 1;
+  const hit = document.elementFromPoint(x, y);
+  const target = hit && (hit === el || el.contains(hit) || hit.closest?.("button,[role='button'],[role='menuitem'],[role='option'],a"))
+    ? (hit.closest?.("button,[role='button'],[role='menuitem'],[role='option'],a") || hit)
+    : el;
+  try { target.focus?.(); } catch (_) {}
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y };
+  for (const type of ["pointerover", "mouseover", "mousemove", "pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+    try {
+      const EventCtor = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+      target.dispatchEvent(new EventCtor(type, opts));
+    } catch (_) {
+      try { target.dispatchEvent(new MouseEvent(type.replace(/^pointer/, "mouse"), opts)); } catch (_) {}
+    }
+  }
+  try { target.click?.(); } catch (_) {}
+  return true;
+}
+
+function __sbMapsFindInteractive(pattern, options = {}) {
+  const selectors = options.selectors || [
+    "button",
+    "[role='button']",
+    "[role='menuitem']",
+    "[role='option']",
+    "a",
+    "div[tabindex]",
+    "span[tabindex]",
+    "[aria-label]",
+    "[data-tooltip]",
+    "[title]",
+  ];
+  const seen = new Set();
+  const matches = [];
+  for (const el of Array.from(document.querySelectorAll(selectors.join(",")))) {
+    if (seen.has(el)) continue;
+    seen.add(el);
+    if (!__sbMapsVisible(el)) continue;
+    if (el.closest?.("#__sb_bar__, #sb-brain-mascot-wrapper, .bg-overlay")) continue;
+    const text = __sbMapsElementText(el);
+    if (!text || !pattern.test(text)) continue;
+    const rect = el.getBoundingClientRect();
+    let score = 0;
+    if (/send/i.test(text)) score += 50;
+    if (/phone|mobile|device/i.test(text)) score += 45;
+    if (/directions/i.test(text)) score += 20;
+    if (el.matches?.("button,[role='button'],[role='menuitem'],[role='option']")) score += 25;
+    if (rect.width >= 40 && rect.height >= 28) score += 10;
+    if (rect.top < window.innerHeight * 0.75) score += 6;
+    matches.push({ el, text, score, top: rect.top });
+  }
+  matches.sort((a, b) => (b.score - a.score) || (a.top - b.top));
+  return options.withText ? (matches[0] || null) : (matches[0]?.el || null);
+}
+
+function __sbMapsCollectLabels(pattern = /send|phone|mobile|device|directions/i, limit = 12) {
+  const labels = [];
+  const seen = new Set();
+  for (const el of Array.from(document.querySelectorAll("button,[role='button'],[role='menuitem'],[role='option'],a,[aria-label],[data-tooltip],[title]"))) {
+    if (!__sbMapsVisible(el)) continue;
+    const text = __sbMapsElementText(el);
+    if (!text || seen.has(text) || !pattern.test(text)) continue;
+    seen.add(text);
+    labels.push(text.slice(0, 140));
+    if (labels.length >= limit) break;
+  }
+  return labels;
+}
+
+function __sbMapsFindSuccessText() {
+  const statusSelectors = [
+    "[role='status']",
+    "[role='alert']",
+    ".section-alert",
+    ".widget-pane-toast",
+    ".mapsConsumerUiCommonSnackbar__snackbar",
+    ".m6QErb",
+  ];
+  const text = __sbMapsNormalizeText(
+    statusSelectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+      .filter(__sbMapsVisible)
+      .map(__sbMapsElementText)
+      .join(" ")
+  );
+  if (/\b(sent|directions sent|sent to|check your phone|opened on your phone)\b/i.test(text)) return text.slice(0, 220);
+  return "";
+}
+
+function __sbMapsFindPhoneOption() {
+  const blocked = /\b(email|e-mail|text|sms|copy|link|share|print|cancel|close|back|learn more|help)\b/i;
+  const openerLike = /\bsend(?:\s+(?:directions|route))?(?:\s+to)?(?:\s+(?:your|my))?\s+phone\b|\bsend directions\b/i;
+  const strong = __sbMapsFindInteractive(/\b(phone|mobile|device|iphone|android|pixel|samsung|oneplus|itish|send to)\b/i, {
+    selectors: ["button", "[role='button']", "[role='menuitem']", "[role='option']", "div[tabindex]", "span[tabindex]", "a"],
+    withText: true,
+  });
+  if (strong && !blocked.test(strong.text) && !openerLike.test(strong.text)) return strong.el;
+
+  const containers = Array.from(document.querySelectorAll("[role='dialog'],[role='menu'],[role='listbox'],.modal-dialog,.goog-menu,.widget-pane")).filter(__sbMapsVisible);
+  for (const root of containers.length ? containers : [document]) {
+    const choices = Array.from(root.querySelectorAll("button,[role='button'],[role='menuitem'],[role='option'],div[tabindex],span[tabindex],a"));
+    for (const el of choices) {
+      if (!__sbMapsVisible(el)) continue;
+      const text = __sbMapsElementText(el);
+      if (!text || text.length < 2 || text.length > 120 || blocked.test(text)) continue;
+      if (openerLike.test(text)) continue;
+      if (/\b(phone|mobile|device|iphone|android|pixel|samsung|oneplus|itish)\b/i.test(text)) return el;
+    }
+    for (const el of choices) {
+      if (!__sbMapsVisible(el)) continue;
+      const text = __sbMapsElementText(el);
+      if (!text || text.length < 2 || text.length > 80 || blocked.test(text)) continue;
+      if (openerLike.test(text)) continue;
+      if (!/\b(send|directions|route)\b/i.test(text)) return el;
+    }
+  }
+  return null;
+}
+
+async function __sbMapsSendDirectionsToPhone() {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const buttonMatch = __sbMapsFindInteractive(
+    /\bsend(?:\s+(?:directions|route))?(?:\s+to)?(?:\s+(?:your|my))?\s+phone\b|\bsend to phone\b|\bsend directions\b/i,
+    { withText: true }
+  );
+  if (!buttonMatch?.el) {
+    return {
+      error: "Maps Send to phone button was not found.",
+      candidates: __sbMapsCollectLabels(),
+    };
+  }
+
+  __sbMapsClickElement(buttonMatch.el);
+  await wait(850);
+  let successText = __sbMapsFindSuccessText();
+  if (successText) {
+    return { success: true, sent: true, buttonLabel: buttonMatch.text, status: successText };
+  }
+
+  const phoneOption = __sbMapsFindPhoneOption();
+  if (!phoneOption) {
+    for (let i = 0; i < 6; i += 1) {
+      await wait(500);
+      successText = __sbMapsFindSuccessText();
+      if (successText) return { success: true, sent: true, buttonLabel: buttonMatch.text, status: successText };
+    }
+    return {
+      error: "Maps Send to phone opened, but no phone device option was visible.",
+      buttonLabel: buttonMatch.text,
+      candidates: __sbMapsCollectLabels(/phone|mobile|device|send|email|text|sms/i),
+    };
+  }
+
+  const phoneLabel = __sbMapsElementText(phoneOption);
+  __sbMapsClickElement(phoneOption);
+  for (let i = 0; i < 10; i += 1) {
+    await wait(500);
+    successText = __sbMapsFindSuccessText();
+    if (successText) {
+      return {
+        success: true,
+        sent: true,
+        buttonLabel: buttonMatch.text,
+        phoneLabel,
+        status: successText,
+      };
+    }
+  }
+
+  return {
+    success: true,
+    sent: true,
+    verified: false,
+    buttonLabel: buttonMatch.text,
+    phoneLabel,
+  };
+}
+
 async function __sbYouTubeEnsurePlayback() {
   const video = document.querySelector("video");
   if (!video) return { error: "No YouTube video player was found." };
@@ -2181,6 +2388,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "youtubeEnsurePlayback") {
           sendResponse(await __sbYouTubeEnsurePlayback());
+          return;
+        }
+        if (msg.type === "mapsSendDirectionsToPhone") {
+          sendResponse(await __sbMapsSendDirectionsToPhone());
           return;
         }
         if (msg.type === "mediumReadSearchResults") {
@@ -3514,7 +3725,7 @@ const __SB_TEAM_DEMO_SPOTIFY_MS = 5000;
 const __SB_TEAM_DEMO_ARTICLE_URL = "https://medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets-afbda2eea8c8";
 const __SB_TEAM_DEMO_ARTICLE_MS = 9000;
 const __SB_DEMO_GMAIL_URL = "https://mail.google.com/mail/u/0/#inbox/QgrcJHrtsHNdZxwlBxRRbHmNNtBCNLJpLpG";
-const __SB_DEMO_MAPS_ROUTE_URL = "https://www.google.com/maps/dir/India+Gate,+New+Delhi/Qutub+Minar,+New+Delhi";
+const __SB_DEMO_MAPS_ROUTE_URL = "https://www.google.com/maps/dir/Times+Square,+New+York/Central+Park,+New+York?hl=en";
 const __SB_DEMO_LAUNCH_URL = "https://www.trybraino.com/";
 
 // Put on / take off Braino's glasses (walker + docked brain).
@@ -6136,12 +6347,13 @@ const __SB_DEMO_SCRIPT = {
     "Also, yes, I look adorable. Not technically a feature, but it helps.",
     "Anyway. Enough yapping. Let me show you.",
   ].join("\n\n"),
-  beforeGmail: "First, Gmail. This is the useful part, correct? You get an email. You do not want to think from zero. I open the exact thread, read it, write the reply in your tone, and send it. Simple.",
-  afterGmail: "Done. Email replied to and sent. That is the point. No copy-paste, no random compose window, no getting lost. I use the Gmail thread that is already there.",
+  beforeGmail: "First, Gmail. Let's say we have an email sitting there. I open it, read it, write the reply in your tone, send it, close the tab, and come back. Three seconds type energy. Simple.",
+  afterGmail: "Done. Replied, sent, tab closed, and I am back here. That is the point. I do the Gmail work where the email actually lives.",
   beforeDance: "Okay. Serious work done. Now a little bit of nonsense. I can control Spotify too, and because Braino has arms and legs now, obviously I have to dance.",
   afterDance: "Oh, and I can dance too. I look good while doing it, don't I?",
-  beforeMaps: "Now Maps. Let's say you want to go from one place to another, and you do not want to fight the interface. I open the route and try to send it to your phone.",
-  afterMaps: "That was Maps. If your Google account shows the Send to phone option, I try it right there. Did you receive that yet? I hope you did.",
+  beforeMaps: "Now Maps. English route this time: Times Square to Central Park. I open the directions, hit Send to phone, close the tab, and come back.",
+  afterMaps: "Done. Directions sent to phone. I clicked the Send to phone flow, so this is not me guessing from vibes.",
+  afterMapsFallback: "Maps hit a snag. I opened the route, but I could not verify the Send to phone flow from the page. I am keeping the demo moving, but this is the Maps locator to test first.",
   beforeLaunch: "One last serious thing. Braino has a launch page now, so let me open it and let the video do the talking for a second.",
   beforeTrump: "And because I am clearly very multi-talented, here is one deeply unnecessary party trick.",
   trump: "Okay folks, Braino is here. Tremendous little browser brain, maybe the best browser brain anyone has ever seen. He reads emails, he opens maps, he dances, he does tabs, he does replies. The other bots, frankly, very sleepy. Braino? Huge energy. Beautiful energy. Many people are saying it.",
@@ -6232,7 +6444,7 @@ async function __sbDemoSpeak(line, ctx = {}) {
 }
 
 async function __sbDemoRunGmail(ctx = {}) {
-  __sbDemoPersistState({ phase: "gmail_running", task: "" });
+  __sbDemoPersistState({ phase: "gmail_running", task: "", flow: "direct" });
   const originTabId = await __sbDemoEnsureOriginTabId();
   const result = await __sbRuntimeMessage({
     action: "sbDemoGmailReplyExact",
@@ -6254,7 +6466,7 @@ async function __sbDemoRunGmail(ctx = {}) {
 function __sbDemoMapsTask() {
   return [
     `Open Google Maps directions for this route: ${__SB_DEMO_MAPS_ROUTE_URL}.`,
-    "Show the route from India Gate, New Delhi to Qutub Minar, New Delhi.",
+    "Show the route from Times Square, New York to Central Park, New York.",
     "If a Send directions to your phone or Send to phone control is visible, click it and choose the available phone option if one is obvious.",
     "If the send-to-phone control is not visible, stop once the route is visible. Do not ask follow-up questions.",
   ].join(" ");
@@ -6264,6 +6476,7 @@ async function __sbDemoLaunchAgent(phase, task, connector = "auto") {
   const originTabId = await __sbDemoEnsureOriginTabId();
   __sbDemoPersistState({
     phase,
+    flow: "agent",
     task: String(task || "").trim(),
     originTabId,
     demoTabId: null,
@@ -6273,7 +6486,7 @@ async function __sbDemoLaunchAgent(phase, task, connector = "auto") {
 }
 
 async function __sbDemoRunDance(ctx = {}) {
-  __sbDemoPersistState({ phase: "dance_running", task: "" });
+  __sbDemoPersistState({ phase: "dance_running", task: "", flow: "direct" });
   await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeDance, { ...ctx, prompt: "Spotify demo" });
   const playResult = await Promise.race([
     __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS),
@@ -6292,11 +6505,26 @@ async function __sbDemoRunDance(ctx = {}) {
 
 async function __sbDemoRunMaps(ctx = {}) {
   await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeMaps, { ...ctx, prompt: "Maps demo" });
-  await __sbDemoLaunchAgent("maps_running", __sbDemoMapsTask(), "auto");
+  __sbDemoPersistState({ phase: "maps_running", task: "", flow: "direct" });
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  const result = await __sbRuntimeMessage({
+    action: "sbDemoMapsSendToPhoneExact",
+    url: __SB_DEMO_MAPS_ROUTE_URL,
+    originTabId,
+  });
+  if (result?.ok && result?.sent) {
+    await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterMaps, { ...ctx, prompt: "Maps demo" });
+  } else {
+    await __sbDemoSpeak(
+      result?.error ? `${__SB_DEMO_SCRIPT.afterMapsFallback} ${result.error}` : __SB_DEMO_SCRIPT.afterMapsFallback,
+      { ...ctx, prompt: "Maps demo" },
+    );
+  }
+  await __sbDemoRunLaunchAndTrump(ctx);
 }
 
 async function __sbDemoRunLaunchAndTrump(ctx = {}) {
-  __sbDemoPersistState({ phase: "launch_running", task: "" });
+  __sbDemoPersistState({ phase: "launch_running", task: "", flow: "direct" });
   await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeLaunch, { ...ctx, prompt: "Launch demo" });
   const originTabId = await __sbDemoEnsureOriginTabId();
   let launchTabId = null;
@@ -6321,7 +6549,7 @@ async function __sbDemoRunLaunchAndTrump(ctx = {}) {
 }
 
 async function __sbDemoRunTrump(ctx = {}) {
-  __sbDemoPersistState({ phase: "trump_running", task: "" });
+  __sbDemoPersistState({ phase: "trump_running", task: "", flow: "direct" });
   await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeTrump, { ...ctx, prompt: "Party trick" });
   __sbActivateVoicePersonaSilently("trump");
   await __sbDemoSpeak(__SB_DEMO_SCRIPT.trump, { ...ctx, prompt: "Trump parody", voiceOutput: ctx.voiceOutput || "legacy" });
@@ -6336,6 +6564,7 @@ async function __sbDemoStart(ctx = {}) {
   const originTabId = await __sbDemoEnsureOriginTabId();
   __sbDemoPersistState({
     phase: "intro",
+    flow: "direct",
     task: "",
     originTabId,
     demoTabId: null,
@@ -6351,8 +6580,10 @@ async function __sbDemoHandleAgentFinal(agentPrompt, finalText = "") {
   const stored = await __sbDemoReadStoredState();
   if (!stored?.active) return false;
   const phase = String(stored.phase || "");
+  const flow = String(stored.flow || "");
   const task = String(stored.task || "").trim();
   const prompt = String(agentPrompt || "").trim();
+  if (flow !== "agent") return false;
   if (task && prompt && __sbNormalizeForMatch(prompt) !== __sbNormalizeForMatch(task)) return false;
 
   __sbDemoState = { ...__sbDemoState, ...stored, phase, task };
