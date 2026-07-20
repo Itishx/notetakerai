@@ -1107,6 +1107,76 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
     return true;
   }
+  if (message.action === "sbDemoGmailReplyExact") {
+    (async () => {
+      const url = String(message.url || "").trim();
+      const originTabId = Number(message.originTabId || sender?.tab?.id || 0) || null;
+      const shouldSend = message.send !== false;
+      if (!/^https:\/\/mail\.google\.com\//.test(url)) {
+        sendResponse({ ok: false, error: "Demo Gmail URL is invalid." });
+        return;
+      }
+
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url, active: true }, (created) => {
+          void chrome.runtime.lastError;
+          resolve(created || null);
+        });
+      });
+      const gmailTabId = Number(tab?.id || 0) || null;
+      if (!gmailTabId) {
+        sendResponse({ ok: false, error: "Could not open the demo Gmail thread." });
+        return;
+      }
+
+      await bgWaitForTabReady(gmailTabId, 18000);
+      await bgDelay(2200);
+
+      let thread = null;
+      for (let i = 0; i < 12; i += 1) {
+        thread = await bgExecuteSiteAdapterAction(gmailTabId, { type: "gmailReadCurrentThread" });
+        if (bgGmailThreadHasBody(thread)) break;
+        await bgDelay(700);
+      }
+      if (!bgGmailThreadHasBody(thread)) {
+        throw new Error(thread?.error || "The demo Gmail thread opened, but Braino could not read the message body.");
+      }
+
+      const openedReply = await bgExecuteSiteAdapterAction(gmailTabId, { type: "gmailOpenReplyBox" });
+      if (openedReply?.error) throw new Error(openedReply.error);
+
+      const replyBody = await bgBuildGmailGeneratedReply(
+        "Demo mode: reply to this Gmail in Itish's tone. Keep it short, natural, and send-ready.",
+        thread,
+      );
+      if (!replyBody) throw new Error("Braino could not generate a useful Gmail reply.");
+
+      const replyResult = await bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailReplyToCurrentThread",
+        body: replyBody,
+        send: shouldSend,
+      });
+      if (replyResult?.error) throw new Error(replyResult.error);
+
+      await bgDelay(900);
+      if (originTabId) {
+        try {
+          const originTab = await chrome.tabs.get(originTabId);
+          if (originTab?.windowId) await chrome.windows.update(originTab.windowId, { focused: true });
+          await chrome.tabs.update(originTabId, { active: true });
+        } catch (_) {}
+      }
+
+      sendResponse({
+        ok: true,
+        tabId: gmailTabId,
+        subject: thread?.subject || "",
+        replyBody,
+        sent: shouldSend,
+      });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
   if (message.action === "getStreamId") {
     (async () => {
       const requestedTabId = message.tabId || sender?.tab?.id || null;

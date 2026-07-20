@@ -3513,7 +3513,7 @@ const __SB_TEAM_DEMO_TRACK_START_MS = __SB_DANCE_START_MS;
 const __SB_TEAM_DEMO_SPOTIFY_MS = 5000;
 const __SB_TEAM_DEMO_ARTICLE_URL = "https://medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets-afbda2eea8c8";
 const __SB_TEAM_DEMO_ARTICLE_MS = 9000;
-const __SB_DEMO_GMAIL_URL = "https://mail.google.com/mail/u/0/#inbox";
+const __SB_DEMO_GMAIL_URL = "https://mail.google.com/mail/u/0/#inbox/QgrcJHrtsHNdZxwlBxRRbHmNNtBCNLJpLpG";
 const __SB_DEMO_MAPS_ROUTE_URL = "https://www.google.com/maps/dir/India+Gate,+New+Delhi/Qutub+Minar,+New+Delhi";
 const __SB_DEMO_LAUNCH_URL = "https://www.trybraino.com/";
 
@@ -6130,21 +6130,22 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
 const __SB_DEMO_STORE_KEY = "sbSoloDemoState";
 const __SB_DEMO_SCRIPT = {
   intro: [
-    "Hello there. I am Braino.",
-    "I live inside your browser, which sounds suspicious until you realize the browser is exactly where most of your life is already happening.",
-    "I can read what is on your screen, help you write, control tabs, handle browser tasks, talk in real time, and occasionally behave like a tiny overqualified showman.",
-    "Let me stop yapping and show you the useful stuff first.",
+    "Okay so, hello there folks. I am Braino.",
+    "I live inside the browser, which sounds a little suspicious, I know, but point being: this is where the work is happening anyway.",
+    "I can read the page, understand what is going on, write with you, open tabs, control websites, talk in real time, and do the tiny browser chores that quietly eat half the day.",
+    "Also, yes, I look adorable. Not technically a feature, but it helps.",
+    "Anyway. Enough yapping. Let me show you.",
   ].join("\n\n"),
-  beforeGmail: "First: Gmail. If you have an email open, I can read it, understand it, and write the reply in your tone. For the demo, I will open Gmail, pick a visible recent email, and get a reply draft ready.",
-  afterGmail: "Done. That is Gmail: no copy-paste, no switching tools, no staring at a blank reply box. I read the thread and write the reply where it belongs.",
-  beforeDance: "Next, music. I can control Spotify too, and because apparently I have limbs now, this gets a little theatrical.",
+  beforeGmail: "First, Gmail. This is the useful part, correct? You get an email. You do not want to think from zero. I open the exact thread, read it, write the reply in your tone, and send it. Simple.",
+  afterGmail: "Done. Email replied to and sent. That is the point. No copy-paste, no random compose window, no getting lost. I use the Gmail thread that is already there.",
+  beforeDance: "Okay. Serious work done. Now a little bit of nonsense. I can control Spotify too, and because Braino has arms and legs now, obviously I have to dance.",
   afterDance: "Oh, and I can dance too. I look good while doing it, don't I?",
-  beforeMaps: "Now maps. Say you want directions and you do not want to fight with the interface. I can open the route and try to send it to your phone.",
-  afterMaps: "That was Maps. If your Google account exposes the Send to phone button, I try it right there. Did you receive that yet? I hope you did.",
-  beforeLaunch: "One last serious thing. Braino has a proper launch page now, so let me open it and let the video speak for a second.",
-  beforeTrump: "And because I am multi-talented, here is one deeply unnecessary party trick.",
+  beforeMaps: "Now Maps. Let's say you want to go from one place to another, and you do not want to fight the interface. I open the route and try to send it to your phone.",
+  afterMaps: "That was Maps. If your Google account shows the Send to phone option, I try it right there. Did you receive that yet? I hope you did.",
+  beforeLaunch: "One last serious thing. Braino has a launch page now, so let me open it and let the video do the talking for a second.",
+  beforeTrump: "And because I am clearly very multi-talented, here is one deeply unnecessary party trick.",
   trump: "Okay folks, Braino is here. Tremendous little browser brain, maybe the best browser brain anyone has ever seen. He reads emails, he opens maps, he dances, he does tabs, he does replies. The other bots, frankly, very sleepy. Braino? Huge energy. Beautiful energy. Many people are saying it.",
-  closing: "That is the demo. I am still getting better every day, and honestly, I do not see another option. Too much has already happened.",
+  closing: "And yeah. That is Braino. Useful first. Slightly dramatic second. Getting better every day, because apparently sleeping is optional now.",
 };
 
 let __sbDemoState = {
@@ -6203,6 +6204,14 @@ function __sbDemoDelay(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
+function __sbDemoSpeechChunks(text) {
+  const chunks = String(text || "")
+    .split(/\n{2,}/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  return chunks.length ? chunks : [String(text || "").trim()].filter(Boolean);
+}
+
 async function __sbDemoSpeak(line, ctx = {}) {
   const text = String(line || "").trim();
   if (!text) return false;
@@ -6213,16 +6222,33 @@ async function __sbDemoSpeak(line, ctx = {}) {
   __sbCardTurns.push({ prompt: ctx.prompt || "Demo mode", answer: text });
   __sbShowBubble(text, false, { rich: true, kicker: "Demo Mode", prompt: ctx.prompt || "" });
   const preferred = ctx.voiceOutput === "realtime" ? "realtime" : (__sbHeadphoneMode ? "realtime" : "legacy");
-  return await __sbSpeakWithPreferredVoice(speechText, preferred, { verbatim: true });
+  let spoke = false;
+  const chunks = __sbDemoSpeechChunks(speechText);
+  for (let i = 0; i < chunks.length; i += 1) {
+    spoke = (await __sbSpeakWithPreferredVoice(chunks[i], preferred, { verbatim: true })) || spoke;
+    if (i < chunks.length - 1) await __sbDemoDelay(260);
+  }
+  return spoke;
 }
 
-function __sbDemoGmailTask() {
-  return [
-    `Open Gmail at ${__SB_DEMO_GMAIL_URL}.`,
-    "Use the visible Gmail UI like a human. If the inbox is visible, open a recent visible email that is safe to demo.",
-    "Read the currently open thread, summarize it briefly, click Reply, and write a short useful reply draft in the user's tone.",
-    "Do not send the email. Leave the reply draft visible and stop.",
-  ].join(" ");
+async function __sbDemoRunGmail(ctx = {}) {
+  __sbDemoPersistState({ phase: "gmail_running", task: "" });
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  const result = await __sbRuntimeMessage({
+    action: "sbDemoGmailReplyExact",
+    url: __SB_DEMO_GMAIL_URL,
+    send: true,
+    originTabId,
+  });
+  if (!result?.ok) {
+    await __sbDemoSpeak(
+      `Gmail hit a snag: ${result?.error || "I could not complete the demo reply."} I am going to keep the demo moving, but this is the step to test first.`,
+      { ...ctx, prompt: "Gmail demo" },
+    );
+  } else {
+    await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterGmail, { ...ctx, prompt: "Gmail demo" });
+  }
+  await __sbDemoRunDance(ctx);
 }
 
 function __sbDemoMapsTask() {
@@ -6317,7 +6343,7 @@ async function __sbDemoStart(ctx = {}) {
   });
   await __sbDemoSpeak(__SB_DEMO_SCRIPT.intro, { ...ctx, prompt: ctx.prompt || "Introduce Braino" });
   await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeGmail, { ...ctx, prompt: "Gmail demo" });
-  await __sbDemoLaunchAgent("gmail_running", __sbDemoGmailTask(), "gmail");
+  await __sbDemoRunGmail(ctx);
 }
 
 async function __sbDemoHandleAgentFinal(agentPrompt, finalText = "") {
