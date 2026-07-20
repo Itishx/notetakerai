@@ -1,8 +1,8 @@
 /* ============================================================================
    LaunchIntro — the cinematic first thing a visitor sees. A full-screen MP4
    plays start to finish, then the site fades in automatically ("enter to meet
-   the website"). Skippable, and it only plays ONCE per visitor (sessionStorage),
-   so navigating around later never replays it.
+   the website"). It only plays ONCE per visitor (sessionStorage), so navigating
+   around later never replays it.
 
    HOW TO GO LIVE:
      1. Drop the file at  public/Braino_Final.MP4  (and optionally a poster at
@@ -70,15 +70,6 @@ export default function LaunchIntro({ onFinish, enterTo = ENTER_TO }: LaunchIntr
     });
   };
 
-  // Keyboard: Esc / Enter / Space skips into the site.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (["Escape", "Enter", " "].includes(e.key)) { e.preventDefault(); finish(); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [finish]);
-
   return (
     <div
       style={{
@@ -118,22 +109,6 @@ export default function LaunchIntro({ onFinish, enterTo = ENTER_TO }: LaunchIntr
           <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
         </button>
       )}
-
-      {/* Always-available skip. */}
-      <button
-        onClick={finish}
-        style={{
-          position: "absolute", right: 24, bottom: 22,
-          padding: "9px 16px", borderRadius: 999,
-          border: "1px solid rgba(255,255,255,0.22)",
-          background: "rgba(255,255,255,0.06)", backdropFilter: "blur(6px)",
-          color: "rgba(255,255,255,0.86)", fontSize: 13, fontWeight: 500,
-          fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer",
-          letterSpacing: "0.01em",
-        }}
-      >
-        Skip intro →
-      </button>
     </div>
   );
 }
