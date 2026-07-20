@@ -3513,6 +3513,9 @@ const __SB_TEAM_DEMO_TRACK_START_MS = __SB_DANCE_START_MS;
 const __SB_TEAM_DEMO_SPOTIFY_MS = 5000;
 const __SB_TEAM_DEMO_ARTICLE_URL = "https://medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets-afbda2eea8c8";
 const __SB_TEAM_DEMO_ARTICLE_MS = 9000;
+const __SB_DEMO_GMAIL_URL = "https://mail.google.com/mail/u/0/#inbox";
+const __SB_DEMO_MAPS_ROUTE_URL = "https://www.google.com/maps/dir/India+Gate,+New+Delhi/Qutub+Minar,+New+Delhi";
+const __SB_DEMO_LAUNCH_URL = "https://www.trybraino.com/";
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -5166,6 +5169,39 @@ function __sbIsSelfEcho(transcript) {
   return bt.length >= 4 && overlap / bt.length >= 0.7;   // mostly Braino's own words coming back
 }
 
+let __sbVoiceOutputGuardAt = 0;
+function __sbBrainoOutputActive() {
+  return Boolean(
+    __sbIsSpeaking
+    || __sbWalkTalking
+    || __sbStreamFishActive
+    || __sbHasActiveRealtimeResponse()
+  );
+}
+function __sbVoiceAddressesBraino(text) {
+  const norm = __sbNormalizeForMatch(text);
+  if (!norm) return false;
+  if (/\b(braino|bruno|breno|reno|dino)\b/.test(norm)) return true;
+  if (/\b(stop|pause|wait|hold on|listen|one second|repeat|skip|exit|cancel|enough|resume)\b/.test(norm)) return true;
+  if (__sbDemoModeEnabled?.() && /\b(yes|no|gmail|spotify|maps?|launch|website|demo|dance|trump|continue)\b/.test(norm)) return true;
+  if (__sbTeamModeEnabled?.() && (__sbVoiceHasTeamSignal?.(text) || /\b(yes|no|done|continue|pause|resume|repeat|skip)\b/.test(norm))) return true;
+  return false;
+}
+function __sbShouldDropSpeechDuringBrainoOutput(text, options = {}) {
+  const guardRecent = Date.now() - __sbVoiceOutputGuardAt < 12000;
+  if (!__sbBrainoOutputActive() && !guardRecent) return false;
+  if (__sbIsSelfEcho(text) && !__sbVoiceAddressesBraino(text)) return true;
+  const confidence = Number(options.confidence);
+  const hasConfidence = Number.isFinite(confidence) && confidence > 0;
+  const stats = typeof __sbVoiceTranscriptStats === "function"
+    ? __sbVoiceTranscriptStats(text)
+    : { normalized: __sbNormalizeForMatch(text), wordCount: String(text || "").trim().split(/\s+/).filter(Boolean).length };
+  const addressed = __sbVoiceAddressesBraino(text);
+  if (!addressed) return true;
+  if (hasConfidence && confidence < 0.45 && stats.wordCount <= 4) return true;
+  return false;
+}
+
 // Private live-demo flow for Itish's teammate farewell messages. This stays entirely local
 // and deterministic so Team mode never leaks into Delegate, Gmail, browser actions, or search.
 const __SB_TEAM_CONFIG = {
@@ -5861,7 +5897,6 @@ function __sbTeamModeEnabled() {
 function __sbTeamShouldAutoActivate(text) {
   const raw = String(text || "");
   return __sbTeamIsStartPrompt(raw)
-    || __sbTeamIsIntroPrompt(raw)
     || /\bteam mode\b/i.test(raw)
     || Boolean(__sbTeamFindTeam(raw))
     || (__sbTeamWantsDirectPerson(raw) && __sbTeamFindPeople(raw).length > 0);
@@ -6089,6 +6124,278 @@ async function __sbHandleTeamModeInput(rawText, options = {}) {
 
   return await finish("Team mode is on. Say, say hi to my team, when you want me to start.");
 }
+
+// Private solo product demo. Kept separate from Team mode so "introduce yourself" cannot
+// accidentally fall into ANZ/AT&T scripts.
+const __SB_DEMO_STORE_KEY = "sbSoloDemoState";
+const __SB_DEMO_SCRIPT = {
+  intro: [
+    "Hello there. I am Braino.",
+    "I live inside your browser, which sounds suspicious until you realize the browser is exactly where most of your life is already happening.",
+    "I can read what is on your screen, help you write, control tabs, handle browser tasks, talk in real time, and occasionally behave like a tiny overqualified showman.",
+    "Let me stop yapping and show you the useful stuff first.",
+  ].join("\n\n"),
+  beforeGmail: "First: Gmail. If you have an email open, I can read it, understand it, and write the reply in your tone. For the demo, I will open Gmail, pick a visible recent email, and get a reply draft ready.",
+  afterGmail: "Done. That is Gmail: no copy-paste, no switching tools, no staring at a blank reply box. I read the thread and write the reply where it belongs.",
+  beforeDance: "Next, music. I can control Spotify too, and because apparently I have limbs now, this gets a little theatrical.",
+  afterDance: "Oh, and I can dance too. I look good while doing it, don't I?",
+  beforeMaps: "Now maps. Say you want directions and you do not want to fight with the interface. I can open the route and try to send it to your phone.",
+  afterMaps: "That was Maps. If your Google account exposes the Send to phone button, I try it right there. Did you receive that yet? I hope you did.",
+  beforeLaunch: "One last serious thing. Braino has a proper launch page now, so let me open it and let the video speak for a second.",
+  beforeTrump: "And because I am multi-talented, here is one deeply unnecessary party trick.",
+  trump: "Okay folks, Braino is here. Tremendous little browser brain, maybe the best browser brain anyone has ever seen. He reads emails, he opens maps, he dances, he does tabs, he does replies. The other bots, frankly, very sleepy. Braino? Huge energy. Beautiful energy. Many people are saying it.",
+  closing: "That is the demo. I am still getting better every day, and honestly, I do not see another option. Too much has already happened.",
+};
+
+let __sbDemoState = {
+  phase: "idle",
+  task: "",
+  originTabId: null,
+  demoTabId: null,
+  startedAt: 0,
+};
+
+function __sbDemoModeEnabled() {
+  return (window.__sbForcedMode || "page") === "demo";
+}
+
+function __sbDemoIsStartPrompt(text) {
+  return /\b(introduce yourself|show (?:me|us|them)?\s*(?:the )?demo|run (?:the )?demo|start (?:the )?demo|demo yourself|what can you do|show what you can do)\b/i.test(String(text || ""));
+}
+
+function __sbDemoShouldAutoActivate(text) {
+  const t = String(text || "");
+  return /\bdemo mode\b/i.test(t) || /\b(braino demo|run the demo|show me the demo|show us the demo)\b/i.test(t);
+}
+
+function __sbDemoReset() {
+  __sbDemoState = { phase: "idle", task: "", originTabId: null, demoTabId: null, startedAt: 0 };
+  try { chrome.storage.local.remove(__SB_DEMO_STORE_KEY); } catch (_) {}
+}
+
+function __sbDemoPersistState(patch = {}) {
+  if (!__sbContextOk()) return;
+  __sbDemoState = {
+    ...__sbDemoState,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+  try { chrome.storage.local.set({ [__SB_DEMO_STORE_KEY]: { active: true, ...__sbDemoState } }); } catch (_) {}
+}
+
+async function __sbDemoReadStoredState() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get([__SB_DEMO_STORE_KEY], (items) => resolve(items?.[__SB_DEMO_STORE_KEY] || null));
+    } catch (_) { resolve(null); }
+  });
+}
+
+async function __sbDemoEnsureOriginTabId() {
+  if (__sbDemoState.originTabId) return __sbDemoState.originTabId;
+  const res = await __sbRuntimeMessage({ action: "sbGetSenderTabId" });
+  const tabId = Number(res?.tabId || 0) || null;
+  if (tabId) __sbDemoState.originTabId = tabId;
+  return tabId;
+}
+
+function __sbDemoDelay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+async function __sbDemoSpeak(line, ctx = {}) {
+  const text = String(line || "").trim();
+  if (!text) return false;
+  const speechText = String(ctx.speechText || text).trim();
+  __sbStopSpeech();
+  __sbNoteSpoken(text);
+  __sbChatHistory.push({ role: "assistant", content: text });
+  __sbCardTurns.push({ prompt: ctx.prompt || "Demo mode", answer: text });
+  __sbShowBubble(text, false, { rich: true, kicker: "Demo Mode", prompt: ctx.prompt || "" });
+  const preferred = ctx.voiceOutput === "realtime" ? "realtime" : (__sbHeadphoneMode ? "realtime" : "legacy");
+  return await __sbSpeakWithPreferredVoice(speechText, preferred, { verbatim: true });
+}
+
+function __sbDemoGmailTask() {
+  return [
+    `Open Gmail at ${__SB_DEMO_GMAIL_URL}.`,
+    "Use the visible Gmail UI like a human. If the inbox is visible, open a recent visible email that is safe to demo.",
+    "Read the currently open thread, summarize it briefly, click Reply, and write a short useful reply draft in the user's tone.",
+    "Do not send the email. Leave the reply draft visible and stop.",
+  ].join(" ");
+}
+
+function __sbDemoMapsTask() {
+  return [
+    `Open Google Maps directions for this route: ${__SB_DEMO_MAPS_ROUTE_URL}.`,
+    "Show the route from India Gate, New Delhi to Qutub Minar, New Delhi.",
+    "If a Send directions to your phone or Send to phone control is visible, click it and choose the available phone option if one is obvious.",
+    "If the send-to-phone control is not visible, stop once the route is visible. Do not ask follow-up questions.",
+  ].join(" ");
+}
+
+async function __sbDemoLaunchAgent(phase, task, connector = "auto") {
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  __sbDemoPersistState({
+    phase,
+    task: String(task || "").trim(),
+    originTabId,
+    demoTabId: null,
+    startedAt: __sbDemoState.startedAt || Date.now(),
+  });
+  __sbRunAgent(task, { connector, modeOverride: "agent" });
+}
+
+async function __sbDemoRunDance(ctx = {}) {
+  __sbDemoPersistState({ phase: "dance_running", task: "" });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeDance, { ...ctx, prompt: "Spotify demo" });
+  const playResult = await Promise.race([
+    __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS),
+    __sbDemoDelay(9000).then(() => ({ ok: false, timedOut: true })),
+  ]);
+  if (!playResult?.ok) {
+    __sbWkSay(playResult?.reason === "signin" ? "Connect Spotify for tunes" : "Open Spotify so I can DJ");
+  }
+  await __sbDemoDelay(350);
+  __sbWkDance(__SB_DANCE_DURATION_MS);
+  await __sbDemoDelay(__SB_DANCE_DURATION_MS + __SB_DANCE_OUTRO_MS + 450);
+  __sbTeamPauseSpotifyDemoSong();
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterDance, { ...ctx, prompt: "Spotify demo" });
+  await __sbDemoRunMaps(ctx);
+}
+
+async function __sbDemoRunMaps(ctx = {}) {
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeMaps, { ...ctx, prompt: "Maps demo" });
+  await __sbDemoLaunchAgent("maps_running", __sbDemoMapsTask(), "auto");
+}
+
+async function __sbDemoRunLaunchAndTrump(ctx = {}) {
+  __sbDemoPersistState({ phase: "launch_running", task: "" });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeLaunch, { ...ctx, prompt: "Launch demo" });
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  let launchTabId = null;
+  try {
+    const opened = await __sbRuntimeMessage({ action: "openTab", url: __SB_DEMO_LAUNCH_URL, active: true, forceNew: true });
+    launchTabId = Number(opened?.tabId || 0) || null;
+    __sbDemoPersistState({ demoTabId: launchTabId });
+  } catch (_) {}
+  await __sbDemoDelay(8500);
+  if (launchTabId || originTabId) {
+    try {
+      await __sbRuntimeMessage({
+        action: "sbTeamCloseDemoTab",
+        originTabId,
+        closeTabId: launchTabId,
+        closeDelayMs: 0,
+      });
+    } catch (_) {}
+  }
+  await __sbDemoDelay(400);
+  await __sbDemoRunTrump(ctx);
+}
+
+async function __sbDemoRunTrump(ctx = {}) {
+  __sbDemoPersistState({ phase: "trump_running", task: "" });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeTrump, { ...ctx, prompt: "Party trick" });
+  __sbActivateVoicePersonaSilently("trump");
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.trump, { ...ctx, prompt: "Trump parody", voiceOutput: ctx.voiceOutput || "legacy" });
+  await __sbExitVoicePersona({ fromVoice: true, voiceOutput: ctx.voiceOutput || "legacy" });
+  __sbDemoPersistState({ phase: "done", task: "", demoTabId: null });
+  try { chrome.storage.local.remove(__SB_DEMO_STORE_KEY); } catch (_) {}
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.closing, { ...ctx, prompt: "Demo complete" });
+}
+
+async function __sbDemoStart(ctx = {}) {
+  __sbDemoReset();
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  __sbDemoPersistState({
+    phase: "intro",
+    task: "",
+    originTabId,
+    demoTabId: null,
+    startedAt: Date.now(),
+  });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.intro, { ...ctx, prompt: ctx.prompt || "Introduce Braino" });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeGmail, { ...ctx, prompt: "Gmail demo" });
+  await __sbDemoLaunchAgent("gmail_running", __sbDemoGmailTask(), "gmail");
+}
+
+async function __sbDemoHandleAgentFinal(agentPrompt, finalText = "") {
+  void finalText;
+  const stored = await __sbDemoReadStoredState();
+  if (!stored?.active) return false;
+  const phase = String(stored.phase || "");
+  const task = String(stored.task || "").trim();
+  const prompt = String(agentPrompt || "").trim();
+  if (task && prompt && __sbNormalizeForMatch(prompt) !== __sbNormalizeForMatch(task)) return false;
+
+  __sbDemoState = { ...__sbDemoState, ...stored, phase, task };
+  if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("demo", { showReady: false, resetDemo: false });
+
+  if (phase === "gmail_running") {
+    void (async () => {
+      __sbDemoPersistState({ phase: "after_gmail", task: "" });
+      await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterGmail, { prompt: "Gmail demo" });
+      await __sbDemoRunDance({ prompt: "Spotify demo" });
+    })();
+    return true;
+  }
+
+  if (phase === "maps_running") {
+    void (async () => {
+      __sbDemoPersistState({ phase: "after_maps", task: "" });
+      await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterMaps, { prompt: "Maps demo" });
+      await __sbDemoRunLaunchAndTrump({ prompt: "Launch demo" });
+    })();
+    return true;
+  }
+
+  return false;
+}
+
+function __sbDemoActivateMode(options = {}) {
+  if (options.reset) __sbDemoReset();
+  window.__sbForcedMode = "demo";
+  window.__sbForcedConnector = "auto";
+  if (typeof __sbApplyForcedModeUi === "function") {
+    __sbApplyForcedModeUi("demo", { showReady: false, resetDemo: false });
+  }
+}
+
+async function __sbHandleDemoModeInput(rawText, options = {}) {
+  if (!__sbDemoModeEnabled()) return false;
+  const promptText = String(rawText || "").trim();
+  if (!promptText) return true;
+  const fromVoice = Boolean(options.fromVoice);
+  const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
+  const ctx = { fromVoice, voiceOutput, prompt: promptText };
+  __sbChatHistory.push({ role: "user", content: promptText });
+
+  const finish = async (line) => {
+    await __sbDemoSpeak(line, ctx);
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
+    return true;
+  };
+
+  if (/\b(exit demo mode|leave demo mode|stop demo mode|normal mode|go back to normal)\b/i.test(promptText)) {
+    __sbDemoReset();
+    if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("page");
+    return await finish("Demo mode is off. Back to normal Braino.");
+  }
+
+  if (["gmail_running", "maps_running", "dance_running", "launch_running", "trump_running"].includes(__sbDemoState.phase)) {
+    return await finish("One second. The demo is already running.");
+  }
+
+  if (__sbDemoIsStartPrompt(promptText)) {
+    await __sbDemoStart(ctx);
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
+    return true;
+  }
+
+  return await finish("Demo mode is on. Say, introduce yourself, and I will run the full demo.");
+}
 let __sbMovieModeActive = false;
 let __sbMovieModeState = { frame: null, media: null, descriptor: "" };
 let __sbMovieModeSyncTimer = null;
@@ -6269,8 +6576,18 @@ if (__sbContextOk()) {
             __sbSpeakWithPreferredVoice(finalText).catch(() => {});
           }
         };
-        if (typeof __sbTeamHandleDemoAgentFinal === "function") {
-          void __sbTeamHandleDemoAgentFinal(agentPrompt, finalText).then((handled) => {
+        const finishSpecialAgentUpdate = async () => {
+          if (typeof __sbDemoHandleAgentFinal === "function") {
+            const handledDemo = await __sbDemoHandleAgentFinal(agentPrompt, finalText);
+            if (handledDemo) return true;
+          }
+          if (typeof __sbTeamHandleDemoAgentFinal === "function") {
+            const handledTeam = await __sbTeamHandleDemoAgentFinal(agentPrompt, finalText);
+            if (handledTeam) return true;
+          }
+          return false;
+        };
+        void finishSpecialAgentUpdate().then((handled) => {
             if (handled) {
               __sbAgentPendingTurn = null;
               __sbSetStopBtn(false);
@@ -6280,9 +6597,6 @@ if (__sbContextOk()) {
             }
             finishNormalAgentUpdate();
           }).catch(() => finishNormalAgentUpdate());
-        } else {
-          finishNormalAgentUpdate();
-        }
       } else {
         // ALWAYS surface progress in the docked log strip + bar (works in voice-only mode too,
         // where the card below is suppressed). This is the fix for "I just see him standing".
@@ -6435,11 +6749,14 @@ if (__sbContextOk()) {
 }
 
 function __sbApplyForcedModeUi(mode, options = {}) {
-  const nextMode = ["page", "web", "lecture", "meeting", "team", "agent"].includes(mode) ? mode : "page";
+  const nextMode = ["page", "web", "lecture", "meeting", "team", "demo", "agent"].includes(mode) ? mode : "page";
   const previousMode = window.__sbForcedMode || "page";
   window.__sbForcedMode = nextMode;
   if (nextMode !== "team" && previousMode === "team" && options.resetTeam !== false && typeof __sbTeamReset === "function") {
     __sbTeamReset();
+  }
+  if (nextMode !== "demo" && previousMode === "demo" && options.resetDemo !== false && typeof __sbDemoReset === "function") {
+    __sbDemoReset();
   }
 
   const labels = {
@@ -6448,6 +6765,7 @@ function __sbApplyForcedModeUi(mode, options = {}) {
     lecture: "🎙 Lecture",
     meeting: "👥 Meeting",
     team: "👥 Team",
+    demo: "🎬 Demo",
     agent: "🤖 Delegate",
   };
   const label = labels[nextMode] || labels.page;
@@ -8769,6 +9087,7 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="team"><span class="sb-di-icon">👥</span><span class="sb-di-label">Team</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="demo"><span class="sb-di-icon">🎬</span><span class="sb-di-label">Demo</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
     <div class="sb-dropdown-label" style="margin-top:8px">Wake</div>
     <button class="sb-dropdown-item" data-wake="toggle"><span class="sb-di-icon">👂</span><span class="sb-di-label">“Hey Braino” + double-clap</span><span class="sb-di-check">✓</span></button>
@@ -9193,6 +9512,7 @@ function __sbBuildBrainUI() {
     item.addEventListener("click", () => {
       const mode = item.dataset.mode;
       if (mode === "team") __sbTeamReset();
+      if (mode === "demo") __sbDemoReset();
       __sbApplyForcedModeUi(mode);
       __sbCloseAllDropdowns();
     });
@@ -15555,6 +15875,12 @@ async function __sbProcessPrompt(text, options = {}) {
     return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
   };
 
+  if (__sbDemoModeEnabled() || __sbDemoShouldAutoActivate(promptText)) {
+    if (!__sbDemoModeEnabled()) __sbDemoActivateMode({ reset: true });
+    await __sbHandleDemoModeInput(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   if (__sbTeamModeEnabled() || __sbTeamShouldAutoActivate(promptText)) {
     if (!__sbTeamModeEnabled()) __sbTeamActivateMode({ reset: true });
     await __sbHandleTeamModeInput(promptText, { fromVoice, voiceOutput, voiceTurnToken });
@@ -18754,8 +19080,14 @@ function __sbIsUnhandledOpenCommand(text) {
 
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
-  if (__sbIsSelfEcho(transcript)) {
+  if (__sbIsSelfEcho(transcript) && !__sbVoiceAddressesBraino(transcript)) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbDemoModeEnabled() || __sbDemoShouldAutoActivate(transcript)) {
+    if (!__sbDemoModeEnabled()) __sbDemoActivateMode({ reset: true });
+    __sbInterruptRealtimeResponse();
+    await __sbHandleDemoModeInput(transcript, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
   if (__sbTeamModeEnabled() || __sbTeamShouldAutoActivate(transcript)) {
@@ -19101,6 +19433,13 @@ function __sbHandleRtEvent(ev) {
     // boot (~0.5-5s cold start) is paid during your sentence instead of on your wait — which is why
     // the slowest first-sound runs were always the LONGEST utterances (isolate went cold mid-sentence).
     try { __sbWarmFishTts(); } catch (_) {}
+    const brainoWasSpeaking = __sbBrainoOutputActive();
+    if (brainoWasSpeaking) {
+      __sbVoiceOutputGuardAt = Date.now();
+      __sbRtUserTranscript = "";
+      if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+      return;
+    }
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
     // voices: cancel the realtime model's audio and stop Fish Audio/browser playback.
@@ -19118,6 +19457,10 @@ function __sbHandleRtEvent(ev) {
     __sbVTMark("🛑 You stopped talking");
     // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
     if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    if (Date.now() - __sbVoiceOutputGuardAt < 12000 && __sbBrainoOutputActive()) {
+      __sbVTMark("🧹 Ignoring room audio while Braino is speaking");
+      return;
+    }
     // Speculative beta: start answering from the audio NOW, before the transcript lands (~1s sooner).
     // The transcript handler keeps it (plain chat) or any action branch cancels it via __sbStopSpeech.
     if (__sbSpeculativeReply) void __sbStartSpeculativeAnswer();
@@ -19141,6 +19484,12 @@ function __sbHandleRtEvent(ev) {
     const transcriptAssessment = __sbAssessVoiceTranscript(transcript, { source: "realtime", final: true });
     if (!transcriptAssessment.accept) {
       __sbMaybePromptForDroppedVoice(transcriptAssessment, { voiceOutput: "realtime" });
+      return;
+    }
+    if (__sbShouldDropSpeechDuringBrainoOutput(transcript, { source: "realtime" })) {
+      __sbVoicePendingReply = false;
+      __sbVTMark("🧹 Dropped room speech while Braino was speaking");
+      if (__sbHeadphoneMode) __sbSetHpBrainState(__sbBrainoOutputActive() ? "speaking" : "listening");
       return;
     }
 
@@ -19249,6 +19598,15 @@ function __sbApplyVoiceAutoRoutingDefaults() {
   if ((window.__sbForcedMode || "page") === "team") {
     window.__sbForcedConnector = "auto";
     if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
+    __sbRefreshConnectorButtons();
+    document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_connector_dropdown__")?.classList.remove("open");
+    return;
+  }
+  if ((window.__sbForcedMode || "page") === "demo") {
+    window.__sbForcedConnector = "auto";
+    if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("demo", { showReady: false, resetDemo: false });
     __sbRefreshConnectorButtons();
     document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
     document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
@@ -20064,6 +20422,14 @@ function __sbHandleVoiceEvent(msg) {
         __sbVoiceSilenceTimer = null;
         __sbLastFinalTranscript = null;
       }
+      return;
+    }
+
+    if (__sbShouldDropSpeechDuringBrainoOutput(transcript, { source: "legacy", confidence: msg.confidence })) {
+      __sbVoicePendingReply = false;
+      if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+      __sbLastFinalTranscript = null;
+      __sbStopRecording({ silent: true });
       return;
     }
 
