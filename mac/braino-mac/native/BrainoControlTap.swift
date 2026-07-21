@@ -6,6 +6,7 @@ final class BrainoControlTap {
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
   private var lastControlDown: TimeInterval = 0
+  private var lastSpaceDown: TimeInterval = 0
   private var controlIsDown = false
   private var lastUnavailableLogAt: TimeInterval = 0
 
@@ -36,7 +37,7 @@ final class BrainoControlTap {
       return
     }
 
-    let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+    let mask = CGEventMask((1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue))
     let refcon = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
     guard let tap = CGEvent.tapCreate(
       tap: .cgSessionEventTap,
@@ -63,7 +64,12 @@ final class BrainoControlTap {
     printLine("braino-control-tap-ready")
   }
 
-  private func handle(_ event: CGEvent) {
+  private func handle(_ type: CGEventType, _ event: CGEvent) {
+    if type == .keyDown {
+      handleKeyDown(event)
+      return
+    }
+
     let isControl = event.flags.contains(.maskControl)
     if isControl && !controlIsDown {
       let now = ProcessInfo.processInfo.systemUptime
@@ -77,6 +83,20 @@ final class BrainoControlTap {
     controlIsDown = isControl
   }
 
+  private func handleKeyDown(_ event: CGEvent) {
+    let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+    let isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+    guard keyCode == 49, !isAutoRepeat else { return }
+
+    let now = ProcessInfo.processInfo.systemUptime
+    if now - lastSpaceDown < 0.52 {
+      printLine("double-space")
+      lastSpaceDown = 0
+    } else {
+      lastSpaceDown = now
+    }
+  }
+
   private func printLine(_ line: String) {
     print(line)
     fflush(stdout)
@@ -88,7 +108,7 @@ final class BrainoControlTap {
     }
 
     let owner = Unmanaged<BrainoControlTap>.fromOpaque(refcon).takeUnretainedValue()
-    owner.handle(event)
+    owner.handle(type, event)
     return Unmanaged.passUnretained(event)
   }
 }

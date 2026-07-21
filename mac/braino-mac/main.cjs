@@ -8,10 +8,14 @@ const ROOT_DIR = path.resolve(__dirname, "../..");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
-const APP_VERSION = "12.0.3";
+const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
+const APP_VERSION = "12.0.4";
+const ORGANIZED_FOLDER_NAME = "Braino Organized";
+const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 
 let dockWindow = null;
 let swiftHotkey = null;
+let activeSpeech = null;
 let lastControlTapAt = 0;
 
 function loadDotEnv() {
@@ -56,6 +60,23 @@ function execFileP(command, args, options = {}) {
 function sendToRenderer(channel, payload) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   dockWindow.webContents.send(channel, payload);
+}
+
+function sendTaskProgress(payload) {
+  sendToRenderer("braino-mac:task-progress", payload);
+}
+
+function splitHelperLines(onLine) {
+  let buffer = "";
+  return (chunk) => {
+    buffer += String(chunk || "");
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) onLine(trimmed);
+    }
+  };
 }
 
 function positionDockWindow() {
@@ -129,6 +150,20 @@ function markControlTap(source) {
   lastControlTapAt = now;
 }
 
+function toggleDockWindowVisibility(source) {
+  if (!dockWindow || dockWindow.isDestroyed()) return;
+  if (dockWindow.isVisible()) {
+    dockWindow.hide();
+    return;
+  }
+  dockWindow.showInactive();
+  sendToRenderer("braino-mac:helper-status", {
+    type: "visibility",
+    line: "braino-visible",
+    source,
+  });
+}
+
 function registerHotkeys() {
   const registered = {
     controlSpace: globalShortcut.register("CommandOrControl+Space", () => {
@@ -164,6 +199,10 @@ function startSwiftHotkeyHelper() {
         if (dockWindow && !dockWindow.isDestroyed()) dockWindow.showInactive();
         return;
       }
+      if (trimmed === "double-space") {
+        toggleDockWindowVisibility("double Space");
+        return;
+      }
       sendToRenderer("braino-mac:helper-status", { type: "swift", line: trimmed });
     });
   });
@@ -176,6 +215,94 @@ function startSwiftHotkeyHelper() {
   swiftHotkey.on("exit", (code) => {
     sendToRenderer("braino-mac:helper-status", { type: "swift-exit", code });
     swiftHotkey = null;
+  });
+}
+
+function decodeSpeechLine(line) {
+  const tabIndex = line.indexOf("\t");
+  if (tabIndex === -1) return { type: line, text: "" };
+  return {
+    type: line.slice(0, tabIndex),
+    text: line.slice(tabIndex + 1).trim(),
+  };
+}
+
+function stopNativeSpeech() {
+  if (!activeSpeech) return;
+  try { activeSpeech.kill(); } catch (_) {}
+  activeSpeech = null;
+}
+
+function runNativeSpeech() {
+  if (!fs.existsSync(SPEECH_HELPER_PATH)) {
+    return Promise.resolve({ ok: false, error: "Native speech helper is missing." });
+  }
+
+  if (activeSpeech) stopNativeSpeech();
+  return new Promise((resolve) => {
+    let settled = false;
+    let latestTranscript = "";
+    const child = spawn("xcrun", ["swift", SPEECH_HELPER_PATH], {
+      cwd: ROOT_DIR,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    activeSpeech = child;
+
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      if (activeSpeech === child) activeSpeech = null;
+      try { child.kill(); } catch (_) {}
+      resolve(payload);
+    };
+
+    const timeout = setTimeout(() => {
+      finish(latestTranscript
+        ? { ok: true, transcript: latestTranscript }
+        : { ok: false, error: "No speech heard." });
+    }, 16000);
+
+    child.stdout.on("data", splitHelperLines((line) => {
+      const parsed = decodeSpeechLine(line);
+      if (parsed.type === "speech-ready") {
+        sendToRenderer("braino-mac:speech-transcript", { status: "ready", text: "" });
+        return;
+      }
+      if (parsed.type === "speech-partial") {
+        latestTranscript = parsed.text || latestTranscript;
+        sendToRenderer("braino-mac:speech-transcript", { status: "partial", text: latestTranscript });
+        return;
+      }
+      if (parsed.type === "speech-final") {
+        clearTimeout(timeout);
+        finish({ ok: true, transcript: parsed.text || latestTranscript });
+        return;
+      }
+      if (parsed.type === "speech-error") {
+        clearTimeout(timeout);
+        finish({ ok: false, error: parsed.text || "Native speech failed." });
+        return;
+      }
+      sendToRenderer("braino-mac:speech-transcript", { status: "helper", text: line });
+    }));
+
+    child.stderr.on("data", splitHelperLines((line) => {
+      sendToRenderer("braino-mac:speech-transcript", { status: "error", text: line });
+    }));
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      finish({ ok: false, error: error?.message || "Could not start native speech." });
+    });
+
+    child.on("exit", () => {
+      clearTimeout(timeout);
+      if (!settled) {
+        finish(latestTranscript
+          ? { ok: true, transcript: latestTranscript }
+          : { ok: false, error: "No speech heard." });
+      }
+    });
   });
 }
 
@@ -245,13 +372,196 @@ async function frontWindowSummary() {
   return stdout.trim();
 }
 
+function categoryForFile(fileName) {
+  const lower = fileName.toLowerCase();
+  const ext = path.extname(lower).slice(1);
+  if (/^screen\s+shot|^screenshot|^screen\s+recording|^screenrecording/.test(lower)) return "Screenshots and Recordings";
+  if (["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tiff", "bmp", "svg"].includes(ext)) return "Images";
+  if (["mov", "mp4", "m4v", "avi", "mkv", "webm"].includes(ext)) return "Videos";
+  if (["mp3", "wav", "m4a", "aac", "flac", "ogg"].includes(ext)) return "Audio";
+  if (ext === "pdf") return "PDFs";
+  if (["doc", "docx", "pages", "txt", "rtf", "md"].includes(ext)) return "Documents";
+  if (["xls", "xlsx", "csv", "numbers", "tsv"].includes(ext)) return "Spreadsheets";
+  if (["ppt", "pptx", "key"].includes(ext)) return "Presentations";
+  if (["zip", "rar", "7z", "tar", "gz", "dmg", "pkg"].includes(ext)) return "Archives and Installers";
+  if (["js", "jsx", "ts", "tsx", "py", "java", "c", "cpp", "html", "css", "json", "xml", "yml", "yaml"].includes(ext)) return "Code";
+  if (["fig", "psd", "ai", "sketch"].includes(ext)) return "Design";
+  if (["url", "webloc", "inetloc"].includes(ext)) return "Links";
+  return "Misc";
+}
+
+function shouldSkipDesktopEntry(fileName, stats) {
+  if (!fileName || fileName.startsWith(".")) return true;
+  if (fileName === ORGANIZED_FOLDER_NAME) return true;
+  if (stats.isDirectory()) return true;
+  if (!stats.isFile()) return true;
+  return false;
+}
+
+async function uniquePath(targetPath) {
+  const parsed = path.parse(targetPath);
+  let candidate = targetPath;
+  let index = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(parsed.dir, `${parsed.name} ${index}${parsed.ext}`);
+    index += 1;
+  }
+  return candidate;
+}
+
+async function writeOrganizeManifest(baseDir, manifest) {
+  const manifestPath = path.join(baseDir, ORGANIZE_MANIFEST_NAME);
+  await fs.promises.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+}
+
+async function organizeDesktopFiles() {
+  const desktopDir = path.join(os.homedir(), "Desktop");
+  const organizedDir = path.join(desktopDir, ORGANIZED_FOLDER_NAME);
+  sendTaskProgress({ status: "thinking", text: "Scanning Desktop" });
+
+  let entries = [];
+  try {
+    entries = await fs.promises.readdir(desktopDir);
+  } catch (error) {
+    return {
+      ok: false,
+      say: `I could not read your Desktop yet: ${error?.message || "permission issue"}.`,
+    };
+  }
+
+  const filesToMove = [];
+  for (const fileName of entries) {
+    const sourcePath = path.join(desktopDir, fileName);
+    let stats;
+    try {
+      stats = await fs.promises.lstat(sourcePath);
+    } catch (_) {
+      continue;
+    }
+    if (shouldSkipDesktopEntry(fileName, stats)) continue;
+    filesToMove.push({ fileName, sourcePath, category: categoryForFile(fileName) });
+  }
+
+  if (!filesToMove.length) {
+    sendTaskProgress({ status: "done", text: "Desktop already clean" });
+    return { ok: true, say: "Your Desktop already looks clean. I did not find loose files to move." };
+  }
+
+  await fs.promises.mkdir(organizedDir, { recursive: true });
+  const manifest = {
+    createdAt: new Date().toISOString(),
+    desktopDir,
+    organizedDir,
+    moves: [],
+  };
+  const counts = new Map();
+
+  for (const item of filesToMove) {
+    const categoryDir = path.join(organizedDir, item.category);
+    await fs.promises.mkdir(categoryDir, { recursive: true });
+    const destinationPath = await uniquePath(path.join(categoryDir, item.fileName));
+    sendTaskProgress({ status: "thinking", text: `Moving ${item.fileName}` });
+    await fs.promises.rename(item.sourcePath, destinationPath);
+    manifest.moves.push({
+      fileName: item.fileName,
+      category: item.category,
+      from: item.sourcePath,
+      to: destinationPath,
+    });
+    counts.set(item.category, (counts.get(item.category) || 0) + 1);
+  }
+
+  await writeOrganizeManifest(organizedDir, manifest);
+  sendTaskProgress({ status: "done", text: `Organized ${manifest.moves.length} files` });
+
+  const summary = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([category, count]) => `${count} ${category}`)
+    .join(", ");
+  return {
+    ok: true,
+    files: manifest.moves.map((move) => move.to),
+    say: `Done. I organized ${manifest.moves.length} Desktop file${manifest.moves.length === 1 ? "" : "s"} into ${ORGANIZED_FOLDER_NAME}${summary ? `: ${summary}` : ""}. Existing folders were left alone, and I saved an undo manifest.`,
+  };
+}
+
+async function undoDesktopOrganization() {
+  const desktopDir = path.join(os.homedir(), "Desktop");
+  const organizedDir = path.join(desktopDir, ORGANIZED_FOLDER_NAME);
+  const manifestPath = path.join(organizedDir, ORGANIZE_MANIFEST_NAME);
+  if (!fs.existsSync(manifestPath)) {
+    return { ok: false, say: "I do not see a Braino organize manifest to undo." };
+  }
+
+  const manifest = JSON.parse(await fs.promises.readFile(manifestPath, "utf8"));
+  const moves = Array.isArray(manifest.moves) ? manifest.moves.slice().reverse() : [];
+  let restored = 0;
+  for (const move of moves) {
+    if (!move?.to || !move?.from || !fs.existsSync(move.to)) continue;
+    const destinationPath = await uniquePath(move.from);
+    sendTaskProgress({ status: "thinking", text: `Restoring ${path.basename(destinationPath)}` });
+    await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+    await fs.promises.rename(move.to, destinationPath);
+    restored += 1;
+  }
+  sendTaskProgress({ status: "done", text: `Restored ${restored} files` });
+  return {
+    ok: true,
+    say: `Done. I restored ${restored} file${restored === 1 ? "" : "s"} back to the Desktop.`,
+  };
+}
+
+async function transcribeAudioCommand(payload = {}) {
+  const audioBase64 = String(payload.audioBase64 || "").trim();
+  const mimeType = String(payload.mimeType || "audio/webm").trim();
+  if (!audioBase64) return { ok: false, error: "No audio was recorded." };
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false, error: "Supabase is not configured for transcription." };
+  }
+
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/transcribe-and-notes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      mode: "lecture",
+      audioBase64,
+      fileName: "braino-mac-command.webm",
+      mimeType,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { ok: false, error: data?.error || `Transcription failed (${response.status}).` };
+  }
+
+  const transcript = String(data?.transcript || "").trim();
+  return transcript
+    ? { ok: true, transcript }
+    : { ok: false, error: "The audio was recorded, but no speech was detected." };
+}
+
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
   const text = raw.toLowerCase();
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
 
+  if (/\b(undo|reverse|restore)\b.*\b(organize|organization|desktop|files?)\b/.test(text)) {
+    return undoDesktopOrganization();
+  }
+
+  if (/\b(organize|organise|clean up|cleanup|tidy|sort)\b.*\b(my\s+)?(desktop|files?|desktop files?)\b/.test(text)
+    || /\bdesktop\b.*\b(messy|cluttered|chaos|clean)\b/.test(text)) {
+    return organizeDesktopFiles();
+  }
+
   if (/\b(quit|exit|close braino|hide braino)\b/.test(text)) {
-    app.hide();
+    if (dockWindow && !dockWindow.isDestroyed()) dockWindow.hide();
     return { ok: true, say: "Done. I am still around, just hiding." };
   }
 
@@ -332,7 +642,7 @@ async function runDelegate(prompt) {
 
   return {
     ok: true,
-    say: "For the Mac prototype, I can open apps, search the web in Chrome, find documents with Spotlight, open files, and tell you the front window. Give me one of those.",
+    say: "For the Mac prototype, I can organize your Desktop, open apps, search the web in Chrome, find documents with Spotlight, open files, and tell you the front window. Give me one of those.",
   };
 }
 
@@ -343,6 +653,15 @@ ipcMain.handle("braino-mac:get-config", () => ({
 }));
 
 ipcMain.handle("braino-mac:delegate", async (_event, prompt) => runDelegate(prompt));
+
+ipcMain.handle("braino-mac:native-listen", async () => runNativeSpeech());
+
+ipcMain.handle("braino-mac:native-listen-stop", () => {
+  stopNativeSpeech();
+  return { ok: true };
+});
+
+ipcMain.handle("braino-mac:transcribe-audio", async (_event, payload) => transcribeAudioCommand(payload));
 
 ipcMain.handle("braino-mac:request-accessibility", () => ({
   accessibilityTrusted: requestAccessibilityTrust(true),
@@ -394,6 +713,7 @@ app.whenReady().then(() => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  stopNativeSpeech();
   if (swiftHotkey) {
     try { swiftHotkey.kill(); } catch (_) {}
   }

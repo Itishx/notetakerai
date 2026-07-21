@@ -16,9 +16,22 @@ contextBridge.exposeInMainWorld("brainoMac", {
   getWalkerSvg: () => walkerSvg,
   delegate: (prompt) => ipcRenderer.invoke("braino-mac:delegate", prompt),
   requestAccessibility: () => ipcRenderer.invoke("braino-mac:request-accessibility"),
+  nativeListen: () => ipcRenderer.invoke("braino-mac:native-listen"),
+  stopNativeListen: () => ipcRenderer.invoke("braino-mac:native-listen-stop"),
+  transcribeAudio: (payload) => ipcRenderer.invoke("braino-mac:transcribe-audio", payload),
   setMousePassthrough: (passthrough) => ipcRenderer.send("braino-mac:set-mouse-passthrough", Boolean(passthrough)),
   tts: (text) => ipcRenderer.invoke("braino-mac:tts", text),
   systemSay: (text) => ipcRenderer.invoke("braino-mac:system-say", text),
+  onTaskProgress: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:task-progress", handler);
+    return () => ipcRenderer.removeListener("braino-mac:task-progress", handler);
+  },
+  onSpeechTranscript: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:speech-transcript", handler);
+    return () => ipcRenderer.removeListener("braino-mac:speech-transcript", handler);
+  },
   onVoiceToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:voice-toggle", handler);

@@ -29,7 +29,7 @@ let listening = false;
 let processing = false;
 let sayTimer = 0;
 let lastLocalControlTap = 0;
-let recognition = null;
+let listenToken = 0;
 let mousePassthrough = true;
 let dragState = null;
 
@@ -193,7 +193,7 @@ async function speak(text) {
   } finally {
     speaking = false;
     setTalk(false);
-    if (!listening && !processing) setStatus("ready", "Double Control or Control+Space");
+    if (!listening && !processing) setStatus("ready", "Double Space to show/hide");
   }
 }
 
@@ -218,87 +218,118 @@ async function runDelegate(prompt) {
   }
 }
 
-function getSpeechRecognitionCtor() {
-  return window.SpeechRecognition || window.webkitSpeechRecognition;
-}
-
 function stopRecognition() {
-  if (recognition) {
-    try { recognition.abort(); } catch (_) {}
-    recognition = null;
-  }
+  listenToken += 1;
+  window.brainoMac.stopNativeListen().catch(() => {});
   listening = false;
 }
 
-function startListening() {
-  if (processing) return;
-  const Ctor = getSpeechRecognitionCtor();
-  if (!Ctor) {
-    const typed = window.prompt("Braino Mac delegate command");
-    if (typed) void runDelegate(typed);
-    else setStatus("error", "SpeechRecognition unavailable");
-    return;
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return window.btoa(binary);
+}
+
+async function recordShortCommandForTranscription() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    throw new Error("Mic recording is not available in this Electron build.");
   }
 
-  stopRecognition();
-  recognition = new Ctor();
-  recognition.lang = "en-US";
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
-
-  let finalText = "";
-  recognition.onstart = () => {
-    listening = true;
-    setStatus("listening", "Listening");
-    setBubble("I am listening.", 1200);
-    setWave(true);
-  };
-  recognition.onresult = (event) => {
-    let interim = "";
-    for (let index = event.resultIndex; index < event.results.length; index += 1) {
-      const item = event.results[index];
-      const heard = item?.[0]?.transcript || "";
-      if (item?.isFinal) finalText += heard;
-      else interim += heard;
-    }
-    const visible = (finalText || interim).trim();
-    if (visible) setBubble(visible, 0);
-  };
-  recognition.onerror = (event) => {
-    const err = event?.error || event?.message || "voice failed";
-    stopRecognition();
-    if (err === "no-speech") {
-      setStatus("ready", "No speech heard");
-      setBubble("I did not catch anything.", 1800);
-      return;
-    }
-    setStatus("error", err);
-    setBubble(`Voice error: ${err}`, 2600);
-  };
-  recognition.onend = () => {
-    const clean = finalText.trim();
-    stopRecognition();
-    if (clean) void runDelegate(clean);
-    else if (!processing) setStatus("ready", "Double Control or Control+Space");
-  };
+  const mimeType = window.MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+    ? "audio/webm;codecs=opus"
+    : "audio/webm";
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+  });
 
   try {
-    recognition.start();
+    const chunks = [];
+    const recorder = new MediaRecorder(stream, { mimeType });
+    const done = new Promise((resolve, reject) => {
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) chunks.push(event.data);
+      };
+      recorder.onerror = () => reject(new Error("Audio recording failed."));
+      recorder.onstop = resolve;
+    });
+
+    recorder.start();
+    await new Promise((resolve) => window.setTimeout(resolve, 4800));
+    if (recorder.state !== "inactive") recorder.stop();
+    await done;
+
+    if (!chunks.length) throw new Error("No audio chunks were recorded.");
+    const blob = new Blob(chunks, { type: mimeType });
+    const audioBase64 = arrayBufferToBase64(await blob.arrayBuffer());
+    return window.brainoMac.transcribeAudio({
+      audioBase64,
+      mimeType: blob.type || mimeType,
+    });
+  } finally {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+}
+
+async function startListening() {
+  if (processing) return;
+  stopRecognition();
+  const token = listenToken;
+  listening = true;
+  setStatus("listening", "Listening");
+  setBubble("I am listening.", 1200);
+  setWave(true);
+
+  try {
+    const result = await window.brainoMac.nativeListen();
+    if (token !== listenToken) return;
+    listening = false;
+    let transcript = String(result?.transcript || "").trim();
+
+    if (!(result?.ok && transcript)) {
+      setStatus("listening", "Recording fallback");
+      setBubble("Native voice missed that. Say it once more.", 1700);
+      await new Promise((resolve) => window.setTimeout(resolve, 1250));
+      const fallback = await recordShortCommandForTranscription();
+      if (token !== listenToken) return;
+      transcript = String(fallback?.transcript || "").trim();
+      if (!(fallback?.ok && transcript)) {
+        throw new Error(fallback?.error || result?.error || "Voice did not return a transcript.");
+      }
+    }
+
+    void runDelegate(transcript);
   } catch (error) {
-    setStatus("error", "Could not start mic");
-    setBubble(error?.message || "Could not start voice.", 2600);
+    if (token !== listenToken) return;
+    listening = false;
+    setStatus("error", "Voice error");
+    setBubble(`Voice error: ${error?.message || "native speech failed"}`, 3600);
+    const typed = window.prompt("Braino Mac delegate command");
+    if (typed) void runDelegate(typed);
+  } finally {
+    if (token === listenToken && !processing) {
+      listening = false;
+      setStatus("ready", "Double Space to show/hide");
+    }
   }
 }
 
 function toggleVoice() {
   if (listening) {
     stopRecognition();
-    setStatus("ready", "Double Control or Control+Space");
+    setStatus("ready", "Double Space to show/hide");
     setBubble("Stopped listening.", 1200);
     return;
   }
-  startListening();
+  void startListening();
 }
 
 function handleDragMove(event) {
@@ -425,6 +456,19 @@ function tick(now) {
 }
 
 window.brainoMac.onVoiceToggle(() => toggleVoice());
+window.brainoMac.onTaskProgress((progress) => {
+  if (progress.status) setStatus(progress.status, progress.text || progress.status);
+  if (progress.text) setBubble(progress.text, 1200);
+});
+window.brainoMac.onSpeechTranscript((speech) => {
+  if (speech.status === "ready") {
+    setStatus("listening", "Listening");
+    return;
+  }
+  if (speech.status === "partial" && speech.text) {
+    setBubble(speech.text, 0);
+  }
+});
 window.brainoMac.onHelperStatus((status) => {
   const line = status?.line || "";
   if (line === "braino-control-tap-ready") {
@@ -441,15 +485,15 @@ window.brainoMac.onHelperStatus((status) => {
 });
 
 window.brainoMac.getConfig().then(async (config) => {
-  setStatus("ready", "Double Control or Control+Space");
+  setStatus("ready", "Double Space to show/hide");
   let trusted = Boolean(config.accessibilityTrusted);
   if (!trusted) {
     const requested = await window.brainoMac.requestAccessibility().catch(() => null);
     trusted = Boolean(requested?.accessibilityTrusted);
   }
   const permissionHint = trusted
-    ? "I am walking on your Dock now. Drag me anywhere, or double Control and tell me what to do."
-    : "I am walking on your Dock now. Drag me anywhere. Control+Space works, and I asked macOS for Accessibility so double Control can work too.";
+    ? "I am walking on your Dock now. Double Space hides me, double Control talks to me."
+    : "I am walking on your Dock now. Double Space hides me. Control+Space works, and I asked macOS for Accessibility so double Control can work too.";
   void speak(permissionHint);
 });
 
