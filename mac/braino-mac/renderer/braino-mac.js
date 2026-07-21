@@ -32,6 +32,20 @@ let lastLocalControlTap = 0;
 let listenToken = 0;
 let mousePassthrough = true;
 let dragState = null;
+let rtPc = null;
+let rtDc = null;
+let rtMic = null;
+let rtRemoteAudio = null;
+let rtUserTranscript = "";
+let rtUsageSessionId = null;
+let rtHeartbeatTimer = null;
+let realtimeActive = false;
+let realtimeConnecting = false;
+let realtimeVoiceEngine = "fish";
+let voiceTurnInFlight = false;
+let currentSpeechAudio = null;
+let speechGeneration = 0;
+let lastSpokenLine = { text: "", ts: 0 };
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -82,6 +96,9 @@ function pickRoamTarget(now = performance.now()) {
 function setStatus(status, text) {
   statusPill.className = status;
   lane.className = status;
+  walker.classList.toggle("voice-active", ["connecting", "listening", "hearing", "captured"].includes(status));
+  walker.classList.toggle("hearing", status === "hearing");
+  walker.classList.toggle("speaking", status === "speaking");
   statusText.textContent = text;
 }
 
@@ -131,6 +148,66 @@ function setWave(on) {
   if (on) window.setTimeout(() => { waving = false; }, 1500);
 }
 
+function normalizeForVoiceMatch(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function noteSpoken(text) {
+  const normalized = normalizeForVoiceMatch(text);
+  if (normalized) lastSpokenLine = { text: normalized, ts: Date.now() };
+}
+
+function voiceAddressesBraino(text) {
+  const normalized = normalizeForVoiceMatch(text);
+  if (!normalized) return false;
+  if (/\b(braino|bruno|breno|reno|dino)\b/.test(normalized)) return true;
+  return /\b(stop|pause|wait|hold on|listen|repeat|cancel|enough|organize|organise|open|search|find|clean|undo)\b/.test(normalized);
+}
+
+function isSelfEcho(text) {
+  const heard = normalizeForVoiceMatch(text);
+  const spoken = lastSpokenLine.text;
+  if (!heard || !spoken || Date.now() - lastSpokenLine.ts > 10000) return false;
+  if (heard === spoken) return true;
+  if (heard.length >= 10 && (spoken.includes(heard) || heard.includes(spoken))) return true;
+  const heardWords = new Set(heard.split(" "));
+  const spokenWords = spoken.split(" ");
+  const overlap = spokenWords.filter((word) => heardWords.has(word)).length;
+  return spokenWords.length >= 4 && overlap / spokenWords.length >= 0.68;
+}
+
+function transcriptStats(text) {
+  const normalized = normalizeForVoiceMatch(text);
+  const words = normalized ? normalized.split(" ").filter(Boolean) : [];
+  return { normalized, words, wordCount: words.length };
+}
+
+function shouldAcceptVoiceTranscript(text) {
+  const stats = transcriptStats(text);
+  if (!stats.normalized || stats.wordCount === 0) return false;
+  if (isSelfEcho(text) && !voiceAddressesBraino(text)) return false;
+  if ((speaking || processing || voiceTurnInFlight) && !voiceAddressesBraino(text)) return false;
+  if (stats.wordCount <= 2 && !voiceAddressesBraino(text)) return false;
+  if (stats.normalized.length < 5 && !voiceAddressesBraino(text)) return false;
+  if (/^(uh|um|hmm|huh|yeah|okay|ok|no|yes|thanks?|thank you)$/i.test(stats.normalized)) return false;
+  return true;
+}
+
+function stopSpeechOutput() {
+  speechGeneration += 1;
+  if (currentSpeechAudio) {
+    try { currentSpeechAudio.pause(); } catch (_) {}
+    currentSpeechAudio.src = "";
+    currentSpeechAudio = null;
+  }
+  speaking = false;
+  setTalk(false);
+}
+
 function setMousePassthrough(on) {
   if (mousePassthrough === on) return;
   mousePassthrough = on;
@@ -173,6 +250,8 @@ function refreshMousePassthrough(event) {
 async function speak(text) {
   const line = String(text || "").trim();
   if (!line) return;
+  const generation = ++speechGeneration;
+  noteSpoken(line);
   setBubble(line, Math.max(2400, Math.min(7200, line.length * 58)));
   speaking = true;
   setStatus("speaking", "Speaking");
@@ -181,28 +260,39 @@ async function speak(text) {
     const response = await window.brainoMac.tts(line);
     if (response?.ok && response.dataUrl) {
       const audio = new Audio(response.dataUrl);
+      currentSpeechAudio = audio;
       await new Promise((resolve) => {
         audio.onended = resolve;
         audio.onerror = resolve;
         audio.play().catch(resolve);
       });
+      if (currentSpeechAudio === audio) currentSpeechAudio = null;
     } else {
       await window.brainoMac.systemSay(line);
       await new Promise((resolve) => window.setTimeout(resolve, Math.min(3600, Math.max(900, line.length * 42))));
     }
   } finally {
-    speaking = false;
-    setTalk(false);
-    if (!listening && !processing) setStatus("ready", "Double Space to show/hide");
+    if (generation === speechGeneration) {
+      speaking = false;
+      currentSpeechAudio = null;
+      setTalk(false);
+      if (realtimeActive && !processing) setStatus("listening", "Listening");
+      else if (!listening && !processing) setStatus("ready", "Double Space to show/hide");
+    }
   }
 }
 
-async function runDelegate(prompt) {
+async function runDelegate(prompt, options = {}) {
   const text = String(prompt || "").trim();
   if (!text) return;
   processing = true;
-  listening = false;
-  stopRecognition();
+  if (options.keepRealtime) {
+    listening = realtimeActive;
+  } else {
+    listening = false;
+    stopRecognition();
+    stopRealtimeVoice();
+  }
   setStatus("thinking", "Delegating");
   setBubble(text, 1400);
   setWave(true);
@@ -215,6 +305,10 @@ async function runDelegate(prompt) {
     setStatus("error", "Delegate error");
   } finally {
     processing = false;
+    if (realtimeActive) {
+      listening = true;
+      setStatus("listening", "Listening");
+    }
   }
 }
 
@@ -222,6 +316,296 @@ function stopRecognition() {
   listenToken += 1;
   window.brainoMac.stopNativeListen().catch(() => {});
   listening = false;
+}
+
+function buildRealtimeSessionUpdate() {
+  return {
+    type: "session.update",
+    session: {
+      type: "realtime",
+      instructions: [
+        "You are Braino running as a Mac desktop companion.",
+        "You are not the final assistant voice. Your job is to listen accurately, transcribe the user's command, and let the Mac app execute it.",
+        "If the audio is fan noise, music, a cough, a tiny background word, or side chatter that is not addressed to Braino, do not guess.",
+        "Stay in English unless the user explicitly asks otherwise.",
+        "Prefer silence over hallucination when the audio is unclear.",
+      ].join("\n"),
+      output_modalities: realtimeVoiceEngine === "realtime" ? ["audio"] : ["text"],
+      audio: {
+        input: {
+          noise_reduction: {
+            type: "near_field",
+          },
+          transcription: {
+            model: "gpt-4o-transcribe",
+            language: "en",
+            prompt: [
+              "Transcribe the user's direct command to Braino.",
+              "Ignore music, fans, coughs, accidental noises, and unrelated background speech.",
+              "Keep names, app names, URLs, file names, and code tokens intact.",
+              "If the input is not a clear user command, leave it empty.",
+            ].join(" "),
+          },
+          turn_detection: {
+            type: "semantic_vad",
+            eagerness: "low",
+            create_response: false,
+            interrupt_response: true,
+          },
+        },
+        output: {
+          voice: "marin",
+        },
+      },
+    },
+  };
+}
+
+function sendRealtimeEvent(event) {
+  if (!rtDc || rtDc.readyState !== "open") return false;
+  const payload = { ...event };
+  if (!payload.event_id) payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  rtDc.send(JSON.stringify(payload));
+  return true;
+}
+
+function startRealtimeHeartbeat(sessionId) {
+  if (rtHeartbeatTimer) window.clearInterval(rtHeartbeatTimer);
+  rtUsageSessionId = sessionId || null;
+  if (!rtUsageSessionId) return;
+  rtHeartbeatTimer = window.setInterval(() => {
+    window.brainoMac.updateRealtimeSession({
+      action: "heartbeat",
+      sessionId: rtUsageSessionId,
+      reason: "mac_heartbeat",
+    }).catch(() => {});
+  }, 15000);
+}
+
+function endRealtimeUsageSession(reason = "mac_client_exit") {
+  const sessionId = rtUsageSessionId;
+  rtUsageSessionId = null;
+  if (rtHeartbeatTimer) {
+    window.clearInterval(rtHeartbeatTimer);
+    rtHeartbeatTimer = null;
+  }
+  if (!sessionId) return;
+  window.brainoMac.updateRealtimeSession({
+    action: "end",
+    sessionId,
+    reason,
+  }).catch(() => {});
+}
+
+function stopRealtimeVoice() {
+  const dc = rtDc;
+  const pc = rtPc;
+  const mic = rtMic;
+  const remoteAudio = rtRemoteAudio;
+  const hadRealtime = Boolean(rtPc || rtDc || rtMic || realtimeActive || realtimeConnecting);
+  rtPc = null;
+  rtDc = null;
+  rtMic = null;
+  rtRemoteAudio = null;
+  rtUserTranscript = "";
+  realtimeActive = false;
+  realtimeConnecting = false;
+  voiceTurnInFlight = false;
+  try { dc?.close(); } catch (_) {}
+  try { pc?.close(); } catch (_) {}
+  mic?.getTracks().forEach((track) => track.stop());
+  if (remoteAudio) {
+    try { remoteAudio.pause(); } catch (_) {}
+    remoteAudio.srcObject = null;
+    remoteAudio.remove();
+  }
+  if (hadRealtime) endRealtimeUsageSession("mac_client_stop");
+  if (listening) listening = false;
+}
+
+function setRealtimeMicEnabled(on) {
+  rtMic?.getAudioTracks?.().forEach((track) => {
+    track.enabled = Boolean(on);
+  });
+}
+
+function handleRealtimeEvent(event) {
+  if (!event?.type) return;
+  if (event.type === "session.created" || event.type === "session.updated") {
+    if (realtimeActive || realtimeConnecting) {
+      setStatus("listening", "Listening");
+    }
+    return;
+  }
+
+  if (event.type === "input_audio_buffer.speech_started") {
+    rtUserTranscript = "";
+    if (speaking || processing || voiceTurnInFlight) {
+      setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
+      return;
+    }
+    setStatus("hearing", "Hearing you");
+    setBubble("Listening...", 0);
+    return;
+  }
+
+  if (event.type === "input_audio_buffer.speech_stopped") {
+    if (speaking || processing || voiceTurnInFlight) {
+      setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
+      return;
+    }
+    setStatus("captured", "Got it");
+    setBubble("Got it.", 900);
+    return;
+  }
+
+  if (event.type === "conversation.item.input_audio_transcription.delta") {
+    if (typeof event.delta === "string" && event.delta) {
+      rtUserTranscript += event.delta;
+      setBubble(rtUserTranscript.trim() || "Listening...", 0);
+    }
+    return;
+  }
+
+  if (event.type === "conversation.item.input_audio_transcription.completed") {
+    const transcript = String(event.transcript || rtUserTranscript || "").trim();
+    rtUserTranscript = "";
+    if (!transcript) {
+      setStatus("listening", "Listening");
+      return;
+    }
+    if (voiceTurnInFlight || !shouldAcceptVoiceTranscript(transcript)) {
+      if (speaking || processing || voiceTurnInFlight) {
+        setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
+      } else {
+        setStatus("listening", "Listening");
+        setBubble("Still listening.", 900);
+      }
+      return;
+    }
+    if (speaking) stopSpeechOutput();
+    voiceTurnInFlight = true;
+    setRealtimeMicEnabled(false);
+    void runDelegate(transcript, { keepRealtime: true }).finally(() => {
+      voiceTurnInFlight = false;
+      setRealtimeMicEnabled(true);
+      if (realtimeActive) {
+        listening = true;
+        setStatus("listening", "Listening");
+      }
+    });
+    return;
+  }
+
+  if (event.type === "error") {
+    const message = event.error?.message || event.message || "Realtime voice error.";
+    setStatus("error", "Voice error");
+    setBubble(`Voice error: ${message}`, 3600);
+  }
+}
+
+async function waitForRealtimeDataChannel(dc) {
+  if (dc.readyState === "open") return;
+  await new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error("Live voice timed out while connecting.")), 15000);
+    dc.addEventListener("open", () => {
+      window.clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+    dc.addEventListener("error", () => {
+      window.clearTimeout(timeout);
+      reject(new Error("Live voice control channel failed."));
+    }, { once: true });
+  });
+}
+
+async function ensureMicrophoneAccess() {
+  const result = await window.brainoMac.requestMicrophone().catch((error) => ({
+    ok: false,
+    error: error?.message || "Could not request microphone access.",
+  }));
+  if (result?.ok === false) {
+    throw new Error(result.error || "Microphone access was denied.");
+  }
+  if (result?.status && ["denied", "restricted"].includes(result.status)) {
+    throw new Error("Microphone access is blocked in macOS Privacy settings.");
+  }
+}
+
+async function startRealtimeVoice() {
+  stopRecognition();
+  stopRealtimeVoice();
+  realtimeConnecting = true;
+  listening = true;
+  setStatus("connecting", "Waking voice");
+  setBubble("Voice is waking up.", 1300);
+
+  try {
+    await ensureMicrophoneAccess();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    rtMic = stream;
+
+    const pc = new RTCPeerConnection();
+    rtPc = pc;
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    const playOpenAiVoice = realtimeVoiceEngine === "realtime";
+    rtRemoteAudio = new Audio();
+    rtRemoteAudio.autoplay = true;
+    rtRemoteAudio.muted = !playOpenAiVoice;
+    rtRemoteAudio.volume = playOpenAiVoice ? 1 : 0;
+    document.body.appendChild(rtRemoteAudio);
+    pc.addEventListener("track", (event) => {
+      if (!rtRemoteAudio) return;
+      rtRemoteAudio.srcObject = event.streams[0] || new MediaStream([event.track]);
+      rtRemoteAudio.play().catch(() => {});
+    });
+    pc.addEventListener("connectionstatechange", () => {
+      if (pc !== rtPc) return;
+      if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
+        stopRealtimeVoice();
+        setStatus("error", "Voice disconnected");
+        setBubble("Voice disconnected. Double Control wakes me again.", 3200);
+      }
+    });
+
+    const dc = pc.createDataChannel("oai-events");
+    rtDc = dc;
+    dc.addEventListener("message", (event) => {
+      try {
+        handleRealtimeEvent(JSON.parse(event.data));
+      } catch (_) {}
+    });
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    const result = await window.brainoMac.createRealtimeCall({
+      offerSdp: offer.sdp || "",
+      voiceEngine: realtimeVoiceEngine,
+    });
+    if (!result?.ok || !result.answerSdp) {
+      throw new Error(result?.error || "Realtime voice could not start.");
+    }
+    await pc.setRemoteDescription({ type: "answer", sdp: result.answerSdp });
+    await waitForRealtimeDataChannel(dc);
+    sendRealtimeEvent(buildRealtimeSessionUpdate());
+    startRealtimeHeartbeat(result.sessionId || null);
+
+    realtimeActive = true;
+    realtimeConnecting = false;
+    listening = true;
+    setStatus("listening", "Listening");
+    setBubble("I am listening.", 1400);
+  } catch (error) {
+    stopRealtimeVoice();
+    throw error;
+  }
 }
 
 function arrayBufferToBase64(buffer) {
@@ -243,6 +627,7 @@ async function recordShortCommandForTranscription() {
   const mimeType = window.MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
     ? "audio/webm;codecs=opus"
     : "audio/webm";
+  await ensureMicrophoneAccess();
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: true,
@@ -279,33 +664,40 @@ async function recordShortCommandForTranscription() {
   }
 }
 
-async function startListening() {
+async function startLegacyCommandCapture(reason = "") {
   if (processing) return;
   stopRecognition();
   const token = listenToken;
   listening = true;
   setStatus("listening", "Listening");
-  setBubble("I am listening.", 1200);
+  setBubble(reason ? "Realtime missed. Say it once more." : "I am listening.", 1200);
   setWave(true);
 
   try {
-    const result = await window.brainoMac.nativeListen();
-    if (token !== listenToken) return;
-    listening = false;
-    let transcript = String(result?.transcript || "").trim();
+    let transcript = "";
+    let lastError = null;
 
-    if (!(result?.ok && transcript)) {
-      setStatus("listening", "Recording fallback");
-      setBubble("Native voice missed that. Say it once more.", 1700);
-      await new Promise((resolve) => window.setTimeout(resolve, 1250));
-      const fallback = await recordShortCommandForTranscription();
+    try {
+      setStatus("listening", "Recording");
+      const recorded = await recordShortCommandForTranscription();
       if (token !== listenToken) return;
-      transcript = String(fallback?.transcript || "").trim();
-      if (!(fallback?.ok && transcript)) {
-        throw new Error(fallback?.error || result?.error || "Voice did not return a transcript.");
+      transcript = String(recorded?.transcript || "").trim();
+      if (!(recorded?.ok && transcript)) {
+        throw new Error(recorded?.error || "Recording did not return a transcript.");
+      }
+    } catch (recordError) {
+      lastError = recordError;
+      setStatus("listening", "Native fallback");
+      setBubble("Recording missed. Trying native voice.", 1600);
+      const result = await window.brainoMac.nativeListen();
+      if (token !== listenToken) return;
+      transcript = String(result?.transcript || "").trim();
+      if (!(result?.ok && transcript)) {
+        throw new Error(result?.error || lastError?.message || "Voice did not return a transcript.");
       }
     }
 
+    listening = false;
     void runDelegate(transcript);
   } catch (error) {
     if (token !== listenToken) return;
@@ -322,8 +714,21 @@ async function startListening() {
   }
 }
 
+async function startListening() {
+  if (processing || realtimeConnecting) return;
+  try {
+    await startRealtimeVoice();
+  } catch (error) {
+    setStatus("error", "Voice error");
+    setBubble(`Voice error: ${error?.message || "realtime failed"}`, 3600);
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+    await startLegacyCommandCapture(error?.message || "");
+  }
+}
+
 function toggleVoice() {
-  if (listening) {
+  if (realtimeActive || realtimeConnecting || listening) {
+    stopRealtimeVoice();
     stopRecognition();
     setStatus("ready", "Double Space to show/hide");
     setBubble("Stopped listening.", 1200);
@@ -398,25 +803,29 @@ window.addEventListener("keydown", (event) => {
   if (now - lastLocalControlTap < 520) toggleVoice();
   lastLocalControlTap = now;
 });
+window.addEventListener("beforeunload", () => stopRealtimeVoice());
 
 function tick(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   const t = (now - start) / 1000;
+  const shouldHoldAttention = listening || realtimeConnecting || processing || speaking;
+  let walkingNow = false;
 
-  if (!dragState) {
+  if (!dragState && !shouldHoldAttention) {
     if (movementMode === "dock") {
       targetY = getDockBounds().y;
     }
     const distance = Math.hypot(targetX - posX, targetY - posY);
     if (distance < 5 || now > nextTargetAt) pickRoamTarget(now);
-    const speed = processing ? 48 : listening ? 42 : speaking ? 36 : 76;
+    const speed = 76;
     const dx = targetX - posX;
     const dy = targetY - posY;
     const dist = Math.max(0.01, Math.hypot(dx, dy));
     const step = Math.min(dist, speed * dt);
     setPosition(posX + (dx / dist) * step, posY + (dy / dist) * step);
     if (Math.abs(dx) > 0.25) dirX = dx >= 0 ? 1 : -1;
+    walkingNow = step > 0.05 && dist > 0.5;
   }
 
   walker.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;
@@ -426,12 +835,13 @@ function tick(now) {
   const s = t * 4.5;
   const leftPhase = Math.sin(s);
   const rightPhase = Math.sin(s + Math.PI);
-  const leftLift = Math.max(0, leftPhase) * 5;
-  const rightLift = Math.max(0, rightPhase) * 5;
-  const leftSwing = Math.max(0, leftPhase) * 8;
-  const rightSwing = Math.max(0, rightPhase) * 8;
-  const waddle = Math.sin(s) * 3.4;
-  const walkBob = -Math.abs(Math.sin(s)) * 2 - 0.4;
+  const walkAmount = walkingNow ? 1 : 0;
+  const leftLift = Math.max(0, leftPhase) * 5 * walkAmount;
+  const rightLift = Math.max(0, rightPhase) * 5 * walkAmount;
+  const leftSwing = Math.max(0, leftPhase) * 8 * walkAmount;
+  const rightSwing = Math.max(0, rightPhase) * 8 * walkAmount;
+  const waddle = Math.sin(s) * 3.4 * walkAmount;
+  const walkBob = (-Math.abs(Math.sin(s)) * 2 - 0.4) * walkAmount;
   const breath = 1 + 0.014 * Math.sin(t * 1.7);
   const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
   const blinkPhase = t % 3.4;

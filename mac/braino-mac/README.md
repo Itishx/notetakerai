@@ -15,10 +15,21 @@ Braino starts on the visible macOS Dock strip and patrols across it. Drag Braino
 ## Controls
 
 - Double `Space`: show or hide Braino, matching the browser extension invocation style.
-- Double `Control`: start voice listening through the native Swift helper.
+- Double `Control`: start live Braino voice. The primary path is the same WebRTC realtime loop as the Chrome extension: mic -> realtime transcription/VAD -> delegate action -> Braino/Fish Audio speech.
 - `Control+Space`: backup voice toggle.
 - If macOS does not show the permission prompt, open System Settings -> Privacy & Security -> Accessibility and allow the terminal/Electron process running Braino.
-- If native speech recognition misses, Braino asks you to say it once more, records a short command, transcribes that audio through Supabase/OpenAI, then falls back to a typed delegate prompt only if that also fails.
+- Microphone access is requested separately before realtime or fallback recording starts. If it is blocked, open System Settings -> Privacy & Security -> Microphone and allow the terminal/Electron process running Braino.
+- If realtime is not configured or cannot connect, Braino records a short command, transcribes that audio through Supabase/OpenAI, then tries the native Swift helper, then falls back to a typed delegate prompt only if that also fails.
+
+## Live Voice Setup
+
+The extension's realtime endpoint requires the signed-in Braino Supabase JWT. For the Mac prototype, pass that token as `BRAINO_AUTH_TOKEN` before running:
+
+```bash
+BRAINO_AUTH_TOKEN="your-signed-in-braino-token" npm run mac:dev
+```
+
+For local development without the Braino Supabase realtime endpoint, `OPENAI_API_KEY` can be used as a direct local realtime fallback. In both paths, OpenAI realtime is used for live listening/transcription; Braino's audible reply still uses the existing Fish Audio voice when configured.
 
 ## First Delegate Actions
 
@@ -56,11 +67,11 @@ Existing Desktop folders are left alone. Braino writes `~/Desktop/Braino Organiz
 - App launching: open common Mac apps by name.
 - Browser control starter: open Chrome, open URLs, and run Google searches.
 - Local awareness starter: report the front app/window title through Accessibility.
-- Voice-first operation: native macOS speech recognition for commands, Fish Audio for Braino speech when configured, macOS `say` fallback otherwise.
+- Voice-first operation: realtime WebRTC listening when configured, browser recording fallback, native macOS speech recognition fallback, Fish Audio for Braino speech when configured, macOS `say` fallback otherwise.
 - Visual companion: Dock patrol, drag-anywhere placement, transparent click-through overlay.
 
 ## Dynamic Island / Notch UI
 
 macOS does not expose an official API for third-party apps to draw inside the real Dynamic Island/notch system surface. The practical version is a Braino-owned, always-on-top top-center overlay that visually behaves like a Dynamic Island: listening pulse, task progress, quick status, and small mascot reactions.
 
-This first version is intentionally voice-first and delegate-only. It does not yet port the full extension agent loop, Gmail DOM adapters, or browser page extraction. The next bridge should connect this native shell to the existing delegate planner and Chrome extension runtime.
+This first version is intentionally voice-first and delegate-only. It does not yet port the full extension agent loop, Gmail DOM adapters, or browser page extraction. The next bridge should share the signed-in browser extension auth/session with this native shell automatically.

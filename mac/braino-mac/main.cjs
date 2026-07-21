@@ -9,7 +9,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.4";
+const APP_VERSION = "12.0.5";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 
@@ -42,6 +42,8 @@ function loadDotEnv() {
 const ENV = { ...loadDotEnv(), ...process.env };
 const SUPABASE_URL = ENV.VITE_SUPABASE_URL || ENV.SUPABASE_URL || "https://suwhgaxxdizowbyjlljj.supabase.co";
 const SUPABASE_ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY || ENV.VITE_SUPABASE_PUBLISHABLE_KEY || ENV.SUPABASE_ANON_KEY || "";
+const OPENAI_API_KEY = ENV.OPENAI_API_KEY || "";
+const BRAINO_AUTH_TOKEN = ENV.BRAINO_AUTH_TOKEN || ENV.VITE_BRAINO_AUTH_TOKEN || "";
 
 function execFileP(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -136,6 +138,19 @@ function requestAccessibilityTrust(prompt = true) {
     return systemPreferences.isTrustedAccessibilityClient(Boolean(prompt));
   } catch (_) {
     return false;
+  }
+}
+
+async function requestMicrophoneAccess() {
+  if (process.platform !== "darwin") return { ok: true, status: "unsupported" };
+  try {
+    const before = systemPreferences.getMediaAccessStatus("microphone");
+    if (before === "granted") return { ok: true, status: before };
+    const granted = await systemPreferences.askForMediaAccess("microphone");
+    const after = systemPreferences.getMediaAccessStatus("microphone");
+    return { ok: Boolean(granted || after === "granted"), status: after };
+  } catch (error) {
+    return { ok: false, status: "unknown", error: error?.message || "Could not request microphone access." };
   }
 }
 
@@ -546,6 +561,151 @@ async function transcribeAudioCommand(payload = {}) {
     : { ok: false, error: "The audio was recorded, but no speech was detected." };
 }
 
+function buildRealtimeSessionConfig() {
+  return {
+    type: "realtime",
+    model: "gpt-realtime-mini",
+    output_modalities: ["text"],
+    instructions: [
+      "You are Braino, running as a Mac desktop companion.",
+      "Your job in this session is to listen accurately and let the Mac app execute actions.",
+      "If the audio is unclear, silent, music, fan noise, or side chatter, output nothing rather than guessing.",
+      "Always transcribe and reason in English unless the user explicitly asks for another language.",
+      "Keep spoken responses short, warm, and direct.",
+    ].join("\n"),
+    audio: {
+      input: {
+        noise_reduction: { type: "near_field" },
+        transcription: {
+          model: "gpt-4o-transcribe",
+          language: "en",
+          prompt: [
+            "Transcribe exactly what the user says.",
+            "If the audio is unclear, silent, music/noise, or unrelated background speech, output nothing.",
+            "Keep names, brands, URLs, file names, and code tokens intact.",
+          ].join(" "),
+        },
+        turn_detection: {
+          type: "semantic_vad",
+          eagerness: "low",
+          create_response: false,
+          interrupt_response: true,
+        },
+      },
+      output: {
+        voice: "marin",
+      },
+    },
+  };
+}
+
+async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
+  const sdp = String(offerSdp || "").trim();
+  if (!sdp) return { ok: false, error: "Missing realtime offer SDP." };
+
+  const requestedModel = voiceEngine === "realtime" ? "gpt-realtime-2" : "gpt-realtime-mini";
+  if (BRAINO_AUTH_TOKEN && SUPABASE_URL && SUPABASE_ANON_KEY) {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${BRAINO_AUTH_TOKEN}`,
+        "X-Braino-Realtime-Model": requestedModel,
+      },
+      body: sdp,
+    });
+    const answerSdp = await response.text();
+    if (!response.ok) {
+      let message = `Realtime failed (${response.status}).`;
+      try {
+        const parsed = JSON.parse(answerSdp);
+        message = parsed.details || parsed.error || message;
+      } catch (_) {
+        if (answerSdp) message = answerSdp;
+      }
+      return { ok: false, error: message };
+    }
+    return {
+      ok: true,
+      answerSdp,
+      transport: "supabase",
+      sessionId: response.headers.get("x-braino-realtime-session-id") || null,
+      realtimeModel: response.headers.get("x-braino-realtime-model") || requestedModel,
+      transcriptionModel: response.headers.get("x-braino-realtime-transcription-model") || "gpt-4o-transcribe",
+    };
+  }
+
+  if (!OPENAI_API_KEY) {
+    return {
+      ok: false,
+      error: "Realtime needs either BRAINO_AUTH_TOKEN for the Braino Supabase realtime endpoint or OPENAI_API_KEY for direct local realtime.",
+    };
+  }
+
+  const formData = new FormData();
+  formData.set("sdp", sdp);
+  formData.set("session", JSON.stringify({ ...buildRealtimeSessionConfig(), model: requestedModel }));
+
+  const response = await fetch("https://api.openai.com/v1/realtime/calls", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: formData,
+  });
+  const answerSdp = await response.text();
+  if (!response.ok) {
+    let message = `OpenAI realtime failed (${response.status}).`;
+    try {
+      const parsed = JSON.parse(answerSdp);
+      message = parsed?.error?.message || parsed?.message || message;
+    } catch (_) {
+      if (answerSdp) message = answerSdp;
+    }
+    return { ok: false, error: message };
+  }
+
+  return {
+    ok: true,
+    answerSdp,
+    transport: "openai-direct",
+    sessionId: null,
+    realtimeModel: requestedModel,
+    transcriptionModel: "gpt-4o-transcribe",
+  };
+}
+
+async function updateRealtimeSession({ action, sessionId, reason } = {}) {
+  const normalizedAction = String(action || "").trim().toLowerCase();
+  const id = String(sessionId || "").trim();
+  if (!BRAINO_AUTH_TOKEN || !SUPABASE_URL || !SUPABASE_ANON_KEY || !id) {
+    return { ok: false, error: "Realtime session tracking is not configured." };
+  }
+  if (!["heartbeat", "end"].includes(normalizedAction)) {
+    return { ok: false, error: "Unsupported realtime session action." };
+  }
+
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-session`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${BRAINO_AUTH_TOKEN}`,
+    },
+    body: JSON.stringify({
+      action: normalizedAction,
+      sessionId: id,
+      reason: String(reason || "mac_client").trim(),
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  return response.ok
+    ? { ok: true, ...data }
+    : { ok: false, error: data?.error || `Realtime session update failed (${response.status}).` };
+}
+
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
   const text = raw.toLowerCase();
@@ -649,7 +809,10 @@ async function runDelegate(prompt) {
 ipcMain.handle("braino-mac:get-config", () => ({
   appVersion: APP_VERSION,
   supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
+  realtimeConfigured: Boolean((BRAINO_AUTH_TOKEN && SUPABASE_URL && SUPABASE_ANON_KEY) || OPENAI_API_KEY),
+  realtimeAuthSource: BRAINO_AUTH_TOKEN ? "braino" : OPENAI_API_KEY ? "openai" : "missing",
   accessibilityTrusted: systemPreferences.isTrustedAccessibilityClient(false),
+  microphoneStatus: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "unsupported",
 }));
 
 ipcMain.handle("braino-mac:delegate", async (_event, prompt) => runDelegate(prompt));
@@ -663,9 +826,15 @@ ipcMain.handle("braino-mac:native-listen-stop", () => {
 
 ipcMain.handle("braino-mac:transcribe-audio", async (_event, payload) => transcribeAudioCommand(payload));
 
+ipcMain.handle("braino-mac:create-realtime-call", async (_event, payload) => createRealtimeCall(payload));
+
+ipcMain.handle("braino-mac:update-realtime-session", async (_event, payload) => updateRealtimeSession(payload));
+
 ipcMain.handle("braino-mac:request-accessibility", () => ({
   accessibilityTrusted: requestAccessibilityTrust(true),
 }));
+
+ipcMain.handle("braino-mac:request-microphone", async () => requestMicrophoneAccess());
 
 ipcMain.on("braino-mac:set-mouse-passthrough", (_event, passthrough) => {
   if (!dockWindow || dockWindow.isDestroyed()) return;
