@@ -1451,6 +1451,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().then(sendResponse).catch(() => sendResponse({ ok: false }));
     return true;
   }
+  if (message.action === "sbSpotifyEnsureDanceMusic") {
+    (async () => {
+      const tabId = sender?.tab?.id || null;
+      const fallbackUri = String(message.fallbackUri || "").trim();
+      const fallbackPositionMs = Number.isFinite(Number(message.fallbackPositionMs)) ? Number(message.fallbackPositionMs) : 0;
+
+      const currentState = await bgFetchSpotifyPlayerState();
+      if (currentState?.isPlaying && currentState?.track) {
+        const uiState = bgBuildSpotifyUiStateFromPlayback(currentState, {
+          intent: "dance_mode",
+          summary: "Braino is dancing to the Spotify track you already had playing.",
+        });
+        if (tabId) bgPushSpotifyState(tabId, uiState, { focusSpotify: false });
+        return { ok: true, source: "current", state: uiState };
+      }
+
+      if (!fallbackUri) return { ok: false, reason: "missing_track" };
+      try {
+        const prevActive = tabId || await bgGetActiveTabId();
+        const existing = await bgFindSpotifyTab().catch(() => null);
+        await bgPlaySpotifyWithAutoOpen([fallbackUri], fallbackPositionMs, { background: Boolean(existing) });
+        if (!existing && prevActive) {
+          try { chrome.tabs.update(prevActive, { active: true }); } catch (_) {}
+        }
+        await bgDelay(900);
+        const nextState = await bgFetchSpotifyPlayerState();
+        const uiState = bgBuildSpotifyUiStateFromPlayback(nextState, {
+          intent: "dance_mode",
+          assumePlaying: true,
+          summary: "Braino started a fallback track for dance mode.",
+        });
+        if (tabId) bgPushSpotifyState(tabId, uiState, { focusSpotify: false });
+        return { ok: true, source: "fallback", state: uiState };
+      } catch (err) {
+        const msg = String(err?.message || "");
+        return {
+          ok: false,
+          reason: /sign\s?in|auth|connect/i.test(msg) ? "signin" : "device",
+          error: msg,
+        };
+      }
+    })().then(sendResponse).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (message.action === "sbSpotifyPause") {
     // End of a party trick: the band stops when the show stops.
     bgCallSpotifyFunction("spotify-playback", { action: "pause" })

@@ -3698,6 +3698,9 @@ let __sbWkMoonRaf = null;
 let __sbWkDancing = false;     // true while the dance routine owns the rig
 let __sbWkDanceRaf = null;
 let __sbWkDanceArmAnchor = null; // original paint-order slot for the arm groups (restored on end)
+let __sbDanceModeActive = false; // persistent dance mode: Braino keeps dancing until stopped
+let __sbDanceModeOwnsSpotify = false; // true only when Braino started the fallback song himself
+let __sbDanceModeStatusTimer = null;
 let __sbWkJumping = false;      // true while the jump-and-point owns the rig
 let __sbWkJumpRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
@@ -3748,15 +3751,28 @@ function __sbMoonwalkIntent(text) {
   return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
 }
 
+function __sbDanceStopIntent(text) {
+  const t = __sbNormalizeForMatch(text);
+  if (!t) return false;
+  if (__sbDanceModeActive && /^(stop|pause|enough|done|exit|quit|cancel|bas|ruk|ruko)$/.test(t)) return true;
+  return /\b(stop|pause|end|finish|quit|exit|cancel|enough|bas|ruk|ruko)\b.{0,24}\b(dance|dancing|party|moves?)\b/.test(t)
+    || /\b(dance|dancing|party|moves?)\b.{0,24}\b(stop|pause|end|finish|quit|exit|cancel|enough)\b/.test(t)
+    || /\bdance break over\b/.test(t);
+}
+
 // "Braino, dance!" — deliberately LOOSE: voice STT mangles the wake word ("Reynos,
 // dance for me"), so ANY utterance containing the word dance fires the trick (owner's
 // explicit call). Only media commands ("play dance monkey") stay music, and moonwalk
 // keeps its own trick.
 function __sbDanceIntent(text) {
   const t = String(text || "").toLowerCase();
+  if (__sbDanceStopIntent(t)) return false;
   if (__sbMoonwalkIntent(t)) return false;
-  if (/\b(play|queue|put on|song|track|album|playlist|spotify)\b/.test(t)) return false;
-  return /\bdanc(?:e|es|ed|ing)\b|\bbust a move\b|\bshow (?:me|us) your moves\b/.test(t);
+  const explicitDance = /\bdance\s+mode\b|\bkeep\s+danc(?:e|ing)\b|\bdanc(?:e|es|ed|ing)\s+(?:for|with|on|to)\b|\bbust a move\b|\bshow (?:me|us) your moves\b/.test(t);
+  if (explicitDance) return true;
+  if (/\b(play|queue|put on)\b.*\b(song|track|album|playlist)\b/.test(t)) return false;
+  if (/\b(play|queue|put on)\b.*\bdanc(?:e|ing)\b/.test(t)) return false;
+  return /\bdanc(?:e|es|ed|ing)\b/.test(t);
 }
 
 // Best-effort: play an exact track from a timestamp. Routed through the BACKGROUND so a
@@ -3775,6 +3791,109 @@ async function __sbSpotifyPlayTrack(uri, positionMs = 0) {
 }
 async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
   return __sbSpotifyPlayTrack(__SB_BILLIE_JEAN_URI, positionMs);
+}
+
+async function __sbSpotifyEnsureDanceMusic() {
+  try {
+    const res = await __sbRuntimeMessage({
+      action: "sbSpotifyEnsureDanceMusic",
+      fallbackUri: __SB_DANCE_TRACK_URI,
+      fallbackPositionMs: __SB_DANCE_START_MS,
+    });
+    if (res?.state) __sbApplySpotifyState(res.state, { openCard: false, focusSpotify: false });
+    return res || { ok: false };
+  } catch (_) {
+    return { ok: false };
+  }
+}
+
+function __sbSetDanceModeVisual(active) {
+  const bar = document.getElementById("__sb_bar__");
+  const input = document.getElementById("__sb_input__");
+  bar?.classList.toggle("sb-dance-mode", !!active);
+  document.documentElement?.classList?.toggle("__sb_dance_mode_active__", !!active);
+  if (input) {
+    if (active) input.setAttribute("placeholder", "Dance mode is on. Say stop dancing when you're done.");
+    else __sbSetGreetingPlaceholder();
+  }
+}
+
+function __sbEnsureDanceModeBar() {
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  __sbBrainVisible = true;
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "none";
+  __sbToggleInput(true, { skipPersist: true, suppressFocus: true, allowWhileSpotify: true });
+  setTimeout(() => __sbSetDanceModeVisual(true), 80);
+}
+
+function __sbStopDanceMode(options = {}) {
+  const wasActive = __sbDanceModeActive || __sbWkDancing;
+  __sbDanceModeActive = false;
+  if (__sbDanceModeStatusTimer) {
+    clearInterval(__sbDanceModeStatusTimer);
+    __sbDanceModeStatusTimer = null;
+  }
+  __sbSetDanceModeVisual(false);
+  if (__sbWkDancing) __sbWkEndDance();
+  if (options.pauseSpotify !== false && __sbDanceModeOwnsSpotify) {
+    try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
+  }
+  __sbDanceModeOwnsSpotify = false;
+  if (wasActive && !options.silent) __sbWkSay("Dance break over.");
+  return wasActive;
+}
+
+async function __sbStartDanceMode(ctx = {}) {
+  const { fromVoice = false, speakVoiceReply = null } = ctx;
+  __sbStopSpeech();
+  __sbStopDanceMode({ silent: true, pauseSpotify: false });
+  __sbDanceModeActive = true;
+  __sbDanceModeOwnsSpotify = false;
+  __sbEnsureDanceModeBar();
+
+  const danceLines = [
+    "Oh, you want to see me dance? Say less.",
+    "Alright, clearing the floor. I can keep going until you tell me to stop.",
+    "Dance mode? Done. I will not interrupt myself after fifteen seconds this time.",
+    "You picked the right brain for this. Watch.",
+  ];
+  const danceLine = danceLines[Math.floor(Math.random() * danceLines.length)];
+  if (fromVoice && typeof speakVoiceReply === "function") {
+    try { await speakVoiceReply(danceLine); } catch (_) {}
+  } else {
+    __sbWkSay(danceLine);
+  }
+
+  const music = await __sbSpotifyEnsureDanceMusic();
+  if (!__sbDanceModeActive) return { ok: false, stopped: true };
+  if (!music?.ok) {
+    __sbDanceModeActive = false;
+    __sbSetDanceModeVisual(false);
+    const line = music?.reason === "signin"
+      ? "Connect Spotify first, then I can dance properly."
+      : "Play something on Spotify and ask me again. I need a beat, my guy.";
+    if (fromVoice && typeof speakVoiceReply === "function") {
+      try { await speakVoiceReply(line); } catch (_) {}
+    } else {
+      __sbWkSay(line);
+    }
+    return { ok: false, reason: music?.reason || "spotify" };
+  }
+
+  __sbDanceModeOwnsSpotify = music.source !== "current";
+  setTimeout(() => {
+    if (!__sbDanceModeActive) return;
+    __sbSetDanceModeVisual(true);
+    __sbWkDance(Number.POSITIVE_INFINITY, { continuous: true });
+  }, 350);
+
+  __sbDanceModeStatusTimer = setInterval(() => {
+    if (!__sbDanceModeActive) return;
+    __sbSetDanceModeVisual(true);
+  }, 2500);
+  return { ok: true, source: music.source || "spotify" };
 }
 
 // ── Moonwalk ────────────────────────────────────────────────────────────────
@@ -3917,7 +4036,7 @@ function __sbWkEndMoonwalk(xResume) {
 // the verbatim port of the website's BrainoDanceGrid.tsx (the slow groove). The
 // blend lerps arms/body AND scaleX through zero — Braino turns to face you.
 // Same rig-ownership contract as the moonwalk.
-function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
+function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS, options = {}) {
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
   const walker = document.getElementById("__sbwk_walker__");
@@ -3973,7 +4092,9 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
   const lerp = (a, b2, u) => a + (b2 - a) * u;
   const smooth = (u) => u * u * (3 - 2 * u);
 
-  const totalS = durationMs / 1000;
+  const continuous = !!options.continuous || !Number.isFinite(Number(durationMs)) || Number(durationMs) <= 0;
+  const finiteDurationMs = Math.max(1000, Number(durationMs) || __SB_DANCE_DURATION_MS);
+  const totalS = continuous ? (__SB_DANCE_DURATION_MS / 1000) : (finiteDurationMs / 1000);
   const GUN_S = Math.max(6, totalS - 5);   // gun fingers OWNS the floor (11s of 16); disco gets the rest
   const BLEND_S = 0.7;                     // smooth turn into disco fever
   const start = performance.now();
@@ -4023,7 +4144,7 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
     if (pupL) pupL.setAttribute("transform", `translate(${px} ${py})`);
     if (pupR) pupR.setAttribute("transform", `translate(${px} ${py})`);
 
-    if (now - start < durationMs) __sbWkDanceRaf = requestAnimationFrame(step);
+    if (continuous ? __sbDanceModeActive : (now - start < finiteDurationMs)) __sbWkDanceRaf = requestAnimationFrame(step);
     else __sbWkEndDance(x);
   };
   __sbWkDanceRaf = requestAnimationFrame(step);
@@ -7312,6 +7433,55 @@ function __sbBuildBrainUI() {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #__sb_input__::placeholder { color: #A79B92; }
+    @keyframes __sb_dance_bar_hue__ {
+      0% {
+        border-color: rgba(198,112,255,0.72);
+        box-shadow: 0 0 0 1px rgba(198,112,255,0.32), 0 0 28px rgba(198,112,255,0.42), 0 18px 48px rgba(42,18,82,0.28);
+      }
+      25% {
+        border-color: rgba(112,171,255,0.72);
+        box-shadow: 0 0 0 1px rgba(112,171,255,0.32), 0 0 30px rgba(112,171,255,0.42), 0 18px 48px rgba(18,44,82,0.28);
+      }
+      50% {
+        border-color: rgba(255,114,219,0.72);
+        box-shadow: 0 0 0 1px rgba(255,114,219,0.32), 0 0 34px rgba(255,114,219,0.44), 0 18px 48px rgba(84,18,78,0.28);
+      }
+      75% {
+        border-color: rgba(124,255,205,0.72);
+        box-shadow: 0 0 0 1px rgba(124,255,205,0.28), 0 0 30px rgba(124,255,205,0.38), 0 18px 48px rgba(18,74,64,0.24);
+      }
+      100% {
+        border-color: rgba(198,112,255,0.72);
+        box-shadow: 0 0 0 1px rgba(198,112,255,0.32), 0 0 28px rgba(198,112,255,0.42), 0 18px 48px rgba(42,18,82,0.28);
+      }
+    }
+    @keyframes __sb_dance_input_text__ {
+      0%, 100% { color: #6D28D9; }
+      35% { color: #2563EB; }
+      65% { color: #DB2777; }
+    }
+    #__sb_bar__.sb-dance-mode {
+      border-color: rgba(198,112,255,0.72) !important;
+      background: linear-gradient(115deg, rgba(255,251,247,0.82), rgba(245,232,255,0.72), rgba(229,245,255,0.68), rgba(255,235,248,0.72)) !important;
+      animation: __sb_dance_bar_hue__ 3.8s ease-in-out infinite;
+    }
+    #__sb_bar__.sb-dance-mode #__sb_input__ {
+      animation: __sb_dance_input_text__ 4.2s ease-in-out infinite;
+      font-weight: 650;
+    }
+    #__sb_bar__.sb-dance-mode #__sb_input__::placeholder {
+      color: rgba(89,42,148,0.72);
+    }
+    #__sb_bar__.sb-dance-mode #__sb_send_btn__ {
+      background: linear-gradient(135deg, #7C3AED, #EC4899, #22D3EE);
+      box-shadow: 0 0 18px rgba(168,85,247,0.58);
+    }
+    #__sb_bar__.sb-dance-mode #__sb_rec_btn__,
+    #__sb_bar__.sb-dance-mode #__sb_voice_mode_btn__,
+    #__sb_bar__.sb-dance-mode .sb-pill-dropdown-btn {
+      background: rgba(124,58,237,0.10);
+      color: #5B21B6;
+    }
     #__sb_send_btn__ {
       width: 32px; height: 32px; border-radius: 50%; border: none;
       background: #E8786E; color: white; cursor: pointer;
@@ -11061,6 +11231,7 @@ function __sbDock() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
+  if (__sbDanceModeActive || __sbWkDancing) __sbStopDanceMode({ silent: true });
   __sbBrainVisible = true;
   __sbSetCursorRideMode(false);
   __sbToggleInput(false, { skipPersist: true }); // closes bar, stops walker
@@ -11078,6 +11249,7 @@ function __sbHideAll() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
+  if (__sbDanceModeActive || __sbWkDancing) __sbStopDanceMode({ silent: true });
   __sbBrainVisible = false;
   __sbSetCursorRideMode(false);
   if (__sbMovieModeActive) __sbDeactivateMovieMode({ silent: true });
@@ -11105,7 +11277,7 @@ function __sbToggleInput(open, options = {}) {
   if (!__sbOwnsInlineUi()) return;
   if (open) {
     // While Spotify is playing, clicking the brain opens the player card, not the bar
-    if (__sbSpotifyIsPlaying()) {
+    if (__sbSpotifyIsPlaying() && !options.allowWhileSpotify && !__sbDanceModeActive) {
       const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
       if (cardOpen) { __sbCollapseCard(); } else { __sbRenderSpotifyPanel({ openCard: true, focusInput: false }); }
       return;
@@ -11198,7 +11370,7 @@ function __sbToggleInput(open, options = {}) {
     __sbStopWalkLoop();
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
     const bar = document.getElementById("__sb_bar__");
-    bar?.classList.remove("open", "sb-waking", "sb-signin", "sb-cinematic");
+    bar?.classList.remove("open", "sb-waking", "sb-signin", "sb-cinematic", "sb-dance-mode");
     __sbScheduleCursorFollow();
   }
 }
@@ -12907,7 +13079,7 @@ function __sbSyncSpotifyVisualState() {
   bubble?.classList.toggle("sb-spotify-active", active);
   __sbSyncIdleState();
   // Hide the floating bar while music is playing
-  if (active) {
+  if (active && !__sbDanceModeActive) {
     const bar = document.getElementById("__sb_bar__");
     if (bar?.classList.contains("open") && !bar.classList.contains("sb-waking") && !bar.classList.contains("sb-signin")) {
       bar.classList.remove("open");
@@ -16213,6 +16385,16 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  if (__sbDanceStopIntent(promptText)) {
+    __sbStopSpeech();
+    const stopped = __sbStopDanceMode({ silent: true });
+    const line = stopped ? "Done. Dance mode off." : "I was not dancing, but noted.";
+    if (fromVoice) { await speakVoiceReply(line); }
+    else { __sbWkSay(line); }
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   // "moonwalk" → cue Billie Jean (best-effort) at the moonwalk moment, then dance.
   if (__sbMoonwalkIntent(promptText)) {
     __sbStopSpeech();
@@ -16228,40 +16410,10 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
-  // "dance for me" → the showman flow: a playful line FIRST, cue DAF at 0:59 while it
-  // lands, and start dancing ONLY once the music is confirmed playing. No music, no
-  // dance — Braino says what's missing instead.
+  // "dance for me" → persistent dance mode. If Spotify is already playing, Braino dances
+  // to that track. Otherwise he starts the fallback DAF cut and keeps dancing until stopped.
   if (__sbDanceIntent(promptText)) {
-    __sbStopSpeech();
-    const danceLines = [
-      "Oh, you want to see me dance? Watch this.",
-      "A dance? Say less.",
-      "Alright, clearing the floor. Watch this.",
-      "You picked the right brain for this. Watch.",
-    ];
-    const danceLine = danceLines[Math.floor(Math.random() * danceLines.length)];
-    // STRICT sequence: the line finishes FIRST, then Spotify fires, then (once the music
-    // confirms) the dance. Awaiting the speech is what stops the overlap.
-    if (fromVoice) { try { await speakVoiceReply(danceLine); } catch (_) {} }
-    else { __sbWkSay(danceLine); }
-    const playP = __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS);
-    const capP = new Promise((res) => setTimeout(() => res({ ok: false, timedOut: true }), 9000));
-    Promise.race([playP, capP]).then((r) => {
-      if (r && r.ok) {
-        setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
-        // Curtain call: dance ends at 1:08, the music rides a couple more beats and
-        // stops by 1:10, then he asks for the review.
-        setTimeout(async () => {
-          try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
-          const followUp = "So, how was it?";
-          if (fromVoice) { try { await speakVoiceReply(followUp); } catch (_) {} }
-          else { __sbWkSay(followUp); }
-        }, 350 + __SB_DANCE_DURATION_MS + __SB_DANCE_OUTRO_MS);
-      } else {
-        const line = r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧";
-        if (fromVoice) { speakVoiceReply(line); } else { __sbWkSay(line); }
-      }
-    });
+    await __sbStartDanceMode({ fromVoice, speakVoiceReply });
     if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
@@ -19462,7 +19614,8 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 
   // Party tricks — dance / moonwalk. Steer down __sbProcessPrompt BEFORE any classification,
   // or the realtime model just NARRATES a dance instead of Braino actually dancing.
-  if (__sbDanceIntent(transcript) || __sbDanceIntent(promptText)
+  if (__sbDanceStopIntent(transcript) || __sbDanceStopIntent(promptText)
+    || __sbDanceIntent(transcript) || __sbDanceIntent(promptText)
     || __sbMoonwalkIntent(transcript) || __sbMoonwalkIntent(promptText)) {
     __sbPatchRealtimeCostTurn({ routeIntent: "party_trick" });
     await __sbProcessPrompt(promptText, {
