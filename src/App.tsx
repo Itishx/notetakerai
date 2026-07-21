@@ -67,7 +67,17 @@ function LandingGate({
   onIntroDone: () => void;
   onTourDone: () => void;
 }) {
-  if (!introDone) return <LaunchIntro onFinish={onIntroDone} />;
+  if (!introDone) {
+    return (
+      <LaunchIntro
+        onFinish={onIntroDone}
+        onSkipToWebsite={() => {
+          onIntroDone();
+          onTourDone();
+        }}
+      />
+    );
+  }
   return (
     <>
       <Home />
@@ -76,12 +86,17 @@ function LandingGate({
   );
 }
 
-function IntroPreviewRoute({ onIntroDone }: { onIntroDone: () => void }) {
+function IntroPreviewRoute({ onIntroDone, onTourDone }: { onIntroDone: () => void; onTourDone: () => void }) {
   const navigate = useNavigate();
   return (
     <LaunchIntro
       onFinish={() => {
         onIntroDone();
+        navigate("/", { replace: true });
+      }}
+      onSkipToWebsite={() => {
+        onIntroDone();
+        onTourDone();
         navigate("/", { replace: true });
       }}
     />
@@ -129,7 +144,7 @@ function AppShell({
             />
           } />
           {/* Launch intro film remains previewable at /intro. */}
-          <Route path="/intro" element={<IntroPreviewRoute onIntroDone={onHomeIntroDone} />} />
+          <Route path="/intro" element={<IntroPreviewRoute onIntroDone={onHomeIntroDone} onTourDone={onHomeTourDone} />} />
           <Route path="/prelaunch" element={<PreLaunch />} />
           <Route path="/home-classic" element={<Index />} />
           <Route path="/teaser" element={<LaunchTeaser />} />

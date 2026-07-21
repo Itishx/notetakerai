@@ -1045,6 +1045,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url !== undefined || changeInfo.status === "complete") {
     bgSyncActionPopup(tabId, tab?.url || "");
   }
+  const url = String(changeInfo.url || tab?.url || "");
+  if (changeInfo.status === "complete" && /\/functions\/v1\/spotify-oauth-callback\b/.test(url) && !/[?&]error=/.test(url)) {
+    setTimeout(() => {
+      chrome.tabs.remove(tabId, () => { void chrome.runtime.lastError; });
+    }, 1400);
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -1260,6 +1266,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         candidates: Array.isArray(result?.candidates) ? result.candidates : [],
         closed: true,
       });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+  if (message.action === "sbOpenDumboDance") {
+    (async () => {
+      const url = String(message.url || "").trim();
+      const startSeconds = Number(message.startSeconds || 117) || 117;
+      const trackKey = String(message.trackKey || "").trim();
+      const trackLabel = String(message.trackLabel || "Dumbo").trim();
+      if (!/^https:\/\/(www\.)?youtube\.com\/watch\?/.test(url)) {
+        sendResponse({ ok: false, error: `${trackLabel} YouTube URL is invalid.` });
+        return;
+      }
+
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url, active: true }, (created) => {
+          void chrome.runtime.lastError;
+          resolve(created || null);
+        });
+      });
+      const tabId = Number(tab?.id || 0) || null;
+      if (!tabId) {
+        sendResponse({ ok: false, error: `Could not open ${trackLabel} on YouTube.` });
+        return;
+      }
+
+      await bgWaitForTabReady(tabId, 18000);
+      await bgDelay(1600);
+      const result = await bgSendInlineUiMessage(tabId, {
+        action: "sbDumboDanceStart",
+        startSeconds,
+        trackKey,
+        trackLabel,
+      });
+      sendResponse({ ok: !result?.error, tabId, result });
     })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
     return true;
   }
@@ -2446,6 +2487,8 @@ async function bgScavengeAuthFromBrainoTabs() {
 }
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 const BG_BRAINO_FAVORITE_SONG_URI = "spotify:track:6Hgh47WXVKtXN5zGOu0hjI";
+const BG_SPOTIFY_RECONNECT_THROTTLE_MS = 2 * 60 * 1000;
+let bgSpotifyReconnectLastOpenedAt = 0;
 
 // Flat registry of what Braino can do — consulted before dispatching to the LLM agent loop.
 const BG_CAPABILITY_MANIFEST = {
@@ -4975,6 +5018,11 @@ async function bgCallSpotifyFunction(functionName, payload) {
 
 async function bgOpenSpotifyReconnect(token) {
   try {
+    const now = Date.now();
+    if (now - bgSpotifyReconnectLastOpenedAt < BG_SPOTIFY_RECONNECT_THROTTLE_MS) {
+      console.warn("[Braino][Spotify][BG] Reconnect already opened recently; suppressing duplicate auth tab.");
+      return false;
+    }
     const tok = token || (await bgRefreshAuthToken());
     if (!tok) return false;
     const response = await fetch(`${BG_API_BASE}/spotify-oauth-start`, {
@@ -4987,6 +5035,7 @@ async function bgOpenSpotifyReconnect(token) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data?.authUrl) return false;
+    bgSpotifyReconnectLastOpenedAt = now;
     await new Promise((resolve) => chrome.tabs.create({ url: data.authUrl }, resolve));
     return true;
   } catch (err) {

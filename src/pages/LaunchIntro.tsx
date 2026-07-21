@@ -30,25 +30,34 @@ export function launchIntroSeen() {
 
 type LaunchIntroProps = {
   onFinish?: () => void;
+  onSkipToWebsite?: () => void;
   enterTo?: string;
 };
 
-export default function LaunchIntro({ onFinish, enterTo = ENTER_TO }: LaunchIntroProps = {}) {
+export default function LaunchIntro({ onFinish, onSkipToWebsite, enterTo = ENTER_TO }: LaunchIntroProps = {}) {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [needsTap, setNeedsTap] = useState(false);   // autoplay blocked → show a start button
   const [leaving, setLeaving] = useState(false);
 
-  const finish = useCallback(() => {
+  const complete = useCallback((next?: () => void) => {
     if (leaving) return;
     setLeaving(true);
     try { sessionStorage.setItem(SEEN_KEY, "1"); } catch { /* private mode */ }
     // let the fade play, then enter the site
     window.setTimeout(() => {
-      if (onFinish) onFinish();
+      if (next) next();
+      else if (onFinish) onFinish();
       else navigate(enterTo, { replace: true });
     }, 620);
   }, [enterTo, leaving, navigate, onFinish]);
+
+  const finish = useCallback(() => complete(), [complete]);
+
+  const skipStraightToWebsite = useCallback(() => {
+    try { videoRef.current?.pause(); } catch { /* noop */ }
+    complete(onSkipToWebsite);
+  }, [complete, onSkipToWebsite]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -109,6 +118,26 @@ export default function LaunchIntro({ onFinish, enterTo = ENTER_TO }: LaunchIntr
           <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
         </button>
       )}
+
+      <button
+        onClick={skipStraightToWebsite}
+        style={{
+          position: "absolute", right: 24, bottom: 22,
+          minHeight: 40, padding: "9px 16px", borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.28)",
+          background: "rgba(8,10,16,0.46)",
+          backdropFilter: "blur(10px) saturate(150%)",
+          WebkitBackdropFilter: "blur(10px) saturate(150%)",
+          color: "rgba(255,255,255,0.92)",
+          fontSize: 13, fontWeight: 650,
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          cursor: "pointer", letterSpacing: "0.01em",
+          boxShadow: "0 10px 32px rgba(0,0,0,0.36)",
+        }}
+        aria-label="Skip straight to website"
+      >
+        Skip straight to website
+      </button>
     </div>
   );
 }

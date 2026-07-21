@@ -2360,6 +2360,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === "sbDumboDanceStart") {
+    (async () => {
+      sendResponse(await __sbStartDumboDanceOnCurrentPage({
+        trackKey: msg.trackKey || "",
+        startSeconds: msg.startSeconds || __SB_DUMBO_DANCE_START_SECONDS,
+      }));
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+
   if (msg.action === "siteAdapterAction") {
     (async () => {
       try {
@@ -3701,6 +3711,9 @@ let __sbWkDanceArmAnchor = null; // original paint-order slot for the arm groups
 let __sbDanceModeActive = false; // persistent dance mode: Braino keeps dancing until stopped
 let __sbDanceModeOwnsSpotify = false; // true only when Braino started the fallback song himself
 let __sbDanceModeStatusTimer = null;
+let __sbDanceModeMusicSource = "";
+let __sbDanceMusicPending = null;
+let __sbDanceMusicCache = { at: 0, result: null };
 let __sbWkJumping = false;      // true while the jump-and-point owns the rig
 let __sbWkJumpRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
@@ -3721,6 +3734,26 @@ const __SB_DANCE_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
 const __SB_DANCE_START_MS = 52000;          // 0:52
 const __SB_DANCE_DURATION_MS = 16000;       // dance until 1:08
 const __SB_DANCE_OUTRO_MS = 1800;           // music rides ~2 more beats, stops by 1:10
+const __SB_DUMBO_DANCE_URL = "https://www.youtube.com/watch?v=pyLs2dk9aVU&list=RDpyLs2dk9aVU&start_radio=1&t=117s";
+const __SB_DUMBO_DANCE_START_SECONDS = 117;
+const __SB_BRABUS_DANCE_URL = "https://www.youtube.com/watch?v=Vjelj0un5CI&list=RDVjelj0un5CI&start_radio=1&t=44s";
+const __SB_BRABUS_DANCE_START_SECONDS = 44;
+const __SB_YOUTUBE_DANCE_TRACKS = {
+  dumbo: {
+    key: "dumbo",
+    label: "Dumbo",
+    url: __SB_DUMBO_DANCE_URL,
+    videoId: "pyLs2dk9aVU",
+    startSeconds: __SB_DUMBO_DANCE_START_SECONDS,
+  },
+  brabus: {
+    key: "brabus",
+    label: "Brabus",
+    url: __SB_BRABUS_DANCE_URL,
+    videoId: "Vjelj0un5CI",
+    startSeconds: __SB_BRABUS_DANCE_START_SECONDS,
+  },
+};
 const __SB_TEAM_DEMO_TRACK_URI = __SB_DANCE_TRACK_URI;
 const __SB_TEAM_DEMO_TRACK_URL = "https://open.spotify.com/track/5EKEFHtqsOW0lTxqh8BhlI";
 const __SB_TEAM_DEMO_TRACK_START_MS = __SB_DANCE_START_MS;
@@ -3749,6 +3782,36 @@ function __sbGlassesIntent(text) {
 
 function __sbMoonwalkIntent(text) {
   return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
+}
+
+function __sbBrabusVibeIntent(text) {
+  const t = __sbNormalizeForMatch(text);
+  if (!t) return false;
+  return /\b(?:let s|lets|let us)\s+vibe\b/.test(t)
+    || /\bvibe\s+(?:with\s+)?(?:brabus|me|braino|bruno|breno|reno)\b/.test(t);
+}
+
+function __sbYouTubeDanceTrackFromText(text) {
+  const t = __sbNormalizeForMatch(text);
+  if (!t) return null;
+  if (__sbBrabusVibeIntent(text)) return __SB_YOUTUBE_DANCE_TRACKS.brabus;
+  if (/\bbrabus\b/.test(t)) return __SB_YOUTUBE_DANCE_TRACKS.brabus;
+  if (/\bdumbo\b/.test(t)) return __SB_YOUTUBE_DANCE_TRACKS.dumbo;
+  return null;
+}
+
+function __sbGetYouTubeDanceTrack(value) {
+  if (value && typeof value === "object" && value.url) return value;
+  const key = __sbNormalizeForMatch(value);
+  return __SB_YOUTUBE_DANCE_TRACKS[key] || __sbYouTubeDanceTrackFromText(value) || null;
+}
+
+function __sbDumboDanceIntent(text) {
+  const track = __sbYouTubeDanceTrackFromText(text);
+  if (!track) return false;
+  if (__sbBrabusVibeIntent(text)) return true;
+  const t = __sbNormalizeForMatch(text);
+  return /\b(play|start|open|put|song|track|video|dance|mode|travis|scott|brabus|dumbo|vibe)\b/.test(t);
 }
 
 function __sbDanceStopIntent(text) {
@@ -3807,14 +3870,225 @@ async function __sbSpotifyEnsureDanceMusic() {
   }
 }
 
+function __sbIsYouTubeDanceSurface() {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  return /(^|\.)youtube\.com$/.test(host) || /(^|\.)music\.youtube\.com$/.test(host);
+}
+
+function __sbFindDanceVideo() {
+  let best = null;
+  let bestScore = -1;
+  try {
+    for (const video of Array.from(document.querySelectorAll("video"))) {
+      const rect = video.getBoundingClientRect();
+      const area = Math.max(0, rect.width) * Math.max(0, rect.height);
+      const visible = rect.width > 80 && rect.height > 45 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
+      const score = area + (!video.paused && !video.ended ? 1_000_000 : 0) + (visible ? 100_000 : 0);
+      if (score > bestScore) {
+        best = video;
+        bestScore = score;
+      }
+    }
+  } catch (_) {}
+  return best;
+}
+
+async function __sbEnsureYouTubeDanceMusic() {
+  if (!__sbIsYouTubeDanceSurface()) return { ok: false, reason: "not_youtube" };
+  const video = __sbFindDanceVideo();
+  if (!video) return { ok: false, reason: "no_video" };
+
+  if (video.paused || video.ended || video.readyState < 2) {
+    const playback = await __sbYouTubeEnsurePlayback();
+    await __sbAdapterWait(350);
+    if (!playback?.success || playback?.blocked || video.paused) {
+      return { ok: false, reason: "youtube_blocked" };
+    }
+  }
+
+  // Reuse the existing music/headphones state. Dance mode adds the color-cycle layer on top.
+  __sbMusicAmbientArming = false;
+  __sbMusicAmbientOn = true;
+  __sbSetMusicGear(true);
+  return { ok: true, source: "youtube", ownsSpotify: false };
+}
+
+async function __sbEnsureDanceMusic() {
+  const youtube = await __sbEnsureYouTubeDanceMusic();
+  if (youtube?.ok) {
+    __sbDanceMusicCache = { at: Date.now(), result: youtube };
+    return youtube;
+  }
+
+  const cached = __sbDanceMusicCache?.result;
+  const cacheAge = Date.now() - (__sbDanceMusicCache?.at || 0);
+  const cacheTtl = cached?.ok ? 15_000 : 60_000;
+  if (cached && cacheAge < cacheTtl) return cached;
+  if (__sbDanceMusicPending) return __sbDanceMusicPending;
+
+  __sbDanceMusicPending = __sbSpotifyEnsureDanceMusic()
+    .then((result) => {
+      const normalized = result || { ok: false, reason: "spotify" };
+      __sbDanceMusicCache = { at: Date.now(), result: normalized };
+      return normalized;
+    })
+    .catch(() => {
+      const failed = { ok: false, reason: "spotify" };
+      __sbDanceMusicCache = { at: Date.now(), result: failed };
+      return failed;
+    })
+    .finally(() => {
+      __sbDanceMusicPending = null;
+    });
+  return __sbDanceMusicPending;
+}
+
+function __sbEnsureDumboFx() {
+  let fx = document.getElementById("__sb_dumbo_fx__");
+  if (!fx) {
+    fx = document.createElement("div");
+    fx.id = "__sb_dumbo_fx__";
+    const bits = Array.from({ length: 44 }, (_, i) => {
+      const left = (i * 23) % 101;
+      const delay = ((i * 137) % 1800) / -1000;
+      const duration = 2.2 + ((i * 7) % 13) / 10;
+      const hue = (i * 41) % 360;
+      const size = 6 + (i % 5) * 2;
+      const drift = ((i % 9) - 4) * 18;
+      return `<span class="sb-dumbo-confetti" style="--x:${left}vw;--delay:${delay}s;--dur:${duration}s;--hue:${hue};--size:${size}px;--drift:${drift}px"></span>`;
+    }).join("");
+    fx.innerHTML = `
+      <div class="sb-dumbo-bars" aria-hidden>${Array.from({ length: 18 }, (_, i) => `<i style="--i:${i}"></i>`).join("")}</div>
+      <div class="sb-dumbo-burst" aria-hidden></div>
+      ${bits}
+    `;
+  }
+  const host = __sbGetFullscreenUiHost();
+  if (host && fx.parentElement !== host) {
+    try { host.appendChild(fx); } catch (_) {
+      try { (document.body || document.documentElement).appendChild(fx); } catch (_) {}
+    }
+  }
+  return fx;
+}
+
+function __sbSetDumboPartyMode(active) {
+  document.documentElement?.classList?.toggle("__sb_dumbo_mode_active__", !!active);
+  const fx = active ? __sbEnsureDumboFx() : document.getElementById("__sb_dumbo_fx__");
+  if (!fx) return;
+  fx.classList.toggle("active", !!active);
+  if (!active) setTimeout(() => {
+    if (!fx.classList.contains("active")) {
+      try { fx.remove(); } catch (_) {}
+    }
+  }, 400);
+}
+
+async function __sbSeekYouTubeForDumbo(startSeconds = __SB_DUMBO_DANCE_START_SECONDS) {
+  let video = __sbFindDanceVideo();
+  for (let i = 0; !video && i < 12; i += 1) {
+    await __sbAdapterWait(450);
+    video = __sbFindDanceVideo();
+  }
+  if (!video) return { ok: false, reason: "no_video" };
+  const seconds = Math.max(0, Number(startSeconds) || __SB_DUMBO_DANCE_START_SECONDS);
+  try { video.currentTime = seconds; } catch (_) {}
+  await __sbAdapterWait(250);
+  if (Math.abs((video.currentTime || 0) - seconds) > 4) {
+    try { video.currentTime = seconds; } catch (_) {}
+  }
+  const playback = await __sbYouTubeEnsurePlayback();
+  return { ok: !playback?.blocked, playback };
+}
+
+async function __sbEnterYouTubeFullscreenBestEffort() {
+  const selectors = [
+    ".ytp-fullscreen-button",
+    'button[aria-label*="Full screen"]',
+    'button[title*="Full screen"]',
+  ];
+  for (const selector of selectors) {
+    const button = document.querySelector(selector);
+    if (!__sbAdapterIsVisible(button)) continue;
+    try { __sbAdapterClick(button); } catch (_) {}
+    await __sbAdapterWait(650);
+    if (document.fullscreenElement) {
+      __sbSyncFullscreenUiMount();
+      return { ok: true, method: "button" };
+    }
+    break;
+  }
+
+  const player = document.querySelector("#movie_player, ytd-player, .html5-video-player") || __sbFindDanceVideo();
+  try {
+    await player?.requestFullscreen?.();
+    await __sbAdapterWait(450);
+  } catch (_) {}
+  if (document.fullscreenElement) {
+    __sbSyncFullscreenUiMount();
+    return { ok: true, method: "api" };
+  }
+
+  const theater = document.querySelector(".ytp-size-button, button[aria-label*='Theater mode'], button[title*='Theater mode']");
+  if (__sbAdapterIsVisible(theater)) {
+    try { __sbAdapterClick(theater); } catch (_) {}
+  }
+  return { ok: false, method: "theater_fallback" };
+}
+
+async function __sbStartDumboDanceOnCurrentPage(options = {}) {
+  const track = __sbGetYouTubeDanceTrack(options.track || options.trackKey) || __SB_YOUTUBE_DANCE_TRACKS.dumbo;
+  const startSeconds = Number(options.startSeconds || track.startSeconds || __SB_DUMBO_DANCE_START_SECONDS);
+  __sbStopSpeech();
+  __sbDanceMusicCache = { at: Date.now(), result: { ok: true, source: "youtube", ownsSpotify: false } };
+  __sbSetDumboPartyMode(true);
+  const playback = await __sbSeekYouTubeForDumbo(startSeconds);
+  await __sbStartDanceMode({ fromVoice: false });
+  const fullscreen = await __sbEnterYouTubeFullscreenBestEffort();
+  __sbSyncFullscreenUiMount();
+  __sbSetDumboPartyMode(true);
+  __sbWkSay(`${track.label} mode.`);
+  return { ok: !!playback?.ok, playback, fullscreen, track: track.key };
+}
+
+async function __sbStartDumboDance(ctx = {}) {
+  const { fromVoice = false, speakVoiceReply = null } = ctx;
+  const track = __sbGetYouTubeDanceTrack(ctx.track || ctx.trackKey || ctx.promptText) || __SB_YOUTUBE_DANCE_TRACKS.dumbo;
+  __sbStopSpeech();
+  if (__sbDanceModeActive || __sbWkDancing) __sbStopDanceMode({ silent: true, pauseSpotify: false });
+  if (__sbIsYouTubeDanceSurface() && new RegExp(track.videoId, "i").test(location.href)) {
+    if (fromVoice && typeof speakVoiceReply === "function") {
+      try { await speakVoiceReply(`${track.label} mode. Give me one second.`); } catch (_) {}
+    } else {
+      __sbWkSay(`${track.label} mode.`);
+    }
+    return __sbStartDumboDanceOnCurrentPage({ track, startSeconds: track.startSeconds });
+  }
+
+  const line = `${track.label} mode. Opening YouTube.`;
+  if (fromVoice && typeof speakVoiceReply === "function") {
+    try { await speakVoiceReply(line); } catch (_) {}
+  } else {
+    __sbWkSay(line);
+  }
+  const res = await __sbRuntimeMessage({
+    action: "sbOpenDumboDance",
+    url: track.url,
+    startSeconds: track.startSeconds,
+    trackKey: track.key,
+    trackLabel: track.label,
+  });
+  return res || { ok: false };
+}
+
 function __sbSetDanceModeVisual(active) {
   const bar = document.getElementById("__sb_bar__");
   const input = document.getElementById("__sb_input__");
   bar?.classList.toggle("sb-dance-mode", !!active);
   document.documentElement?.classList?.toggle("__sb_dance_mode_active__", !!active);
   if (input) {
-    if (active) input.setAttribute("placeholder", "Dance mode is on. Say stop dancing when you're done.");
-    else __sbSetGreetingPlaceholder();
+    const oldDancePlaceholder = /^dance mode is on\b/i.test(input.getAttribute("placeholder") || "");
+    if (!active && oldDancePlaceholder) __sbSetGreetingPlaceholder();
   }
 }
 
@@ -3831,6 +4105,9 @@ function __sbEnsureDanceModeBar() {
 function __sbStopDanceMode(options = {}) {
   const wasActive = __sbDanceModeActive || __sbWkDancing;
   __sbDanceModeActive = false;
+  __sbSetDumboPartyMode(false);
+  __sbDanceMusicPending = null;
+  __sbDanceMusicCache = { at: 0, result: null };
   if (__sbDanceModeStatusTimer) {
     clearInterval(__sbDanceModeStatusTimer);
     __sbDanceModeStatusTimer = null;
@@ -3841,16 +4118,25 @@ function __sbStopDanceMode(options = {}) {
     try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
   }
   __sbDanceModeOwnsSpotify = false;
+  __sbDanceModeMusicSource = "";
   if (wasActive && !options.silent) __sbWkSay("Dance break over.");
   return wasActive;
 }
 
 async function __sbStartDanceMode(ctx = {}) {
   const { fromVoice = false, speakVoiceReply = null } = ctx;
+  if (__sbDanceModeActive) {
+    __sbEnsureDanceModeBar();
+    __sbSetDanceModeVisual(true);
+    if (!__sbWkDancing) __sbWkDance(Number.POSITIVE_INFINITY, { continuous: true });
+    return { ok: true, alreadyActive: true, source: __sbDanceModeMusicSource || "active" };
+  }
+
   __sbStopSpeech();
   __sbStopDanceMode({ silent: true, pauseSpotify: false });
   __sbDanceModeActive = true;
   __sbDanceModeOwnsSpotify = false;
+  __sbDanceModeMusicSource = "";
   __sbEnsureDanceModeBar();
 
   const danceLines = [
@@ -3866,23 +4152,24 @@ async function __sbStartDanceMode(ctx = {}) {
     __sbWkSay(danceLine);
   }
 
-  const music = await __sbSpotifyEnsureDanceMusic();
+  const music = await __sbEnsureDanceMusic();
   if (!__sbDanceModeActive) return { ok: false, stopped: true };
   if (!music?.ok) {
     __sbDanceModeActive = false;
     __sbSetDanceModeVisual(false);
     const line = music?.reason === "signin"
       ? "Connect Spotify first, then I can dance properly."
-      : "Play something on Spotify and ask me again. I need a beat, my guy.";
+      : "Play something on YouTube or Spotify and ask me again. I need a beat, my guy.";
     if (fromVoice && typeof speakVoiceReply === "function") {
       try { await speakVoiceReply(line); } catch (_) {}
     } else {
       __sbWkSay(line);
     }
-    return { ok: false, reason: music?.reason || "spotify" };
+    return { ok: false, reason: music?.reason || "music" };
   }
 
-  __sbDanceModeOwnsSpotify = music.source !== "current";
+  __sbDanceModeMusicSource = music.source || "spotify";
+  __sbDanceModeOwnsSpotify = music.ownsSpotify === true || music.source === "fallback";
   setTimeout(() => {
     if (!__sbDanceModeActive) return;
     __sbSetDanceModeVisual(true);
@@ -4057,6 +4344,11 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS, options = {}) {
   const laBg = q("#__sbwk_la_bg__"), raBg = q("#__sbwk_ra_bg__");
   const laFg = q("#__sbwk_la__"), raFg = q("#__sbwk_ra__");
   const pupL = q("#__sbwk_pupil_l__"), pupR = q("#__sbwk_pupil_r__");
+  const legL = q("#__sbwk_ll__"), legR = q("#__sbwk_rl__");
+  const moonlegs = q("#__sbwk_moonlegs__");
+  const mwR = q("#__sbwk_mw_r__"), mwRh = q("#__sbwk_mw_rh__");
+  const mwL = q("#__sbwk_mw_l__"), mwLh = q("#__sbwk_mw_lh__");
+  const fedora = q("#__sbwk_fedora__");
   q("#__sbwk_ll__")?.setAttribute("transform", "");
   q("#__sbwk_rl__")?.setAttribute("transform", "");
   // The coral body is painted AFTER the arm layers, so arms raised overhead vanish
@@ -4079,15 +4371,66 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS, options = {}) {
     if (bg) bg.setAttribute("transform", tx);
     if (fg) fg.setAttribute("transform", tx);
   };
+  const setMoonDance = (on) => {
+    if (moonlegs) moonlegs.setAttribute("display", on ? "inline" : "none");
+    if (fedora) fedora.setAttribute("display", on ? "inline" : "none");
+    if (legL) legL.setAttribute("display", on ? "none" : "inline");
+    if (legR) legR.setAttribute("display", on ? "none" : "inline");
+  };
+  const setNormalLegs = (leftLift = 0, rightLift = 0, leftSwing = 0, rightSwing = 0) => {
+    setMoonDance(false);
+    if (legL) legL.setAttribute("transform", `translate(0 ${-leftLift}) rotate(${leftSwing} 44 74)`);
+    if (legR) legR.setAttribute("transform", `translate(0 ${-rightLift}) rotate(${rightSwing} 56 74)`);
+  };
 
   // Website pose math, verbatim time constants (BrainoDanceGrid.tsx).
+  const poseTwist = (t) => {
+    const b = t * 3.4, sway = Math.sin(b), knee = Math.abs(Math.sin(b));
+    return {
+      tx: sway * 9, ty: 0, sy: 1 - knee * 0.06, la: 42 + sway * 26, ra: -42 + sway * 26,
+      lookX: sway * 0.5, lookY: 0, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+      ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7,
+    };
+  };
   const poseGun = (t) => {   // Gun Fingers — point to the sky, strut left
     const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
-    return { ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25, lookX: -0.4, lookY: -0.45, tilt: 0 };
+    return {
+      ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25,
+      lookX: -0.4, lookY: -0.45, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+      ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7,
+    };
   };
   const poseDisco = (t) => { // Disco Fever — diagonal point, one arm
     const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
-    return { ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56, lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35, tx: stab * 6 };
+    return {
+      ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56,
+      lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35, tx: stab * 6,
+      ll: Math.max(0, Math.sin(b * 2)) * 3, rl: Math.max(0, -Math.sin(b * 2)) * 3,
+      ls: Math.max(0, Math.sin(b * 2)) * 5, rs: Math.max(0, -Math.sin(b * 2)) * 5,
+    };
+  };
+  const poseSprinkler = (t) => {
+    const period = 2.0, raw = (t % period) / period;
+    let e;
+    if (raw < 0.78) { const u = raw / 0.78; e = u * u * (3 - 2 * u); } else { e = 1 - (raw - 0.78) / 0.22; }
+    const kick = Math.sin(t * 4.1);
+    return {
+      tx: (e - 0.5) * 5, ty: 0, sy: 1 - Math.abs(Math.sin(raw * Math.PI)) * 0.03,
+      la: 102, ra: -128 + e * 100, lookX: -0.35 + e * 0.7, lookY: 0, tilt: 0,
+      ll: Math.max(0, kick) * 3, rl: Math.max(0, -kick) * 3,
+      ls: Math.max(0, kick) * 5, rs: Math.max(0, -kick) * 5,
+    };
+  };
+  const poseRaise = (t) => {
+    const b = t * 3.9, push = Math.abs(Math.sin(b)), lean = Math.sin(b * 0.5);
+    return {
+      tx: lean * 5, ty: -push * 11, sy: 1, la: 116 + push * 20, ra: -116 - push * 20,
+      lookX: lean * 0.3, lookY: -0.4, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 2, rl: Math.max(0, -Math.sin(b)) * 2,
+      ls: lean * 4, rs: lean * 4,
+    };
   };
   const lerp = (a, b2, u) => a + (b2 - a) * u;
   const smooth = (u) => u * u * (3 - 2 * u);
@@ -4100,11 +4443,82 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS, options = {}) {
   const start = performance.now();
   let last = start;
   let strutX = null;
+  let moonX = null;
+  const danceCycle = [
+    { key: "twist", dur: 3.5, pose: poseTwist },
+    { key: "disco", dur: 3.5, pose: poseDisco },
+    { key: "sprinkler", dur: 3.8, pose: poseSprinkler },
+    { key: "raise", dur: 3.4, pose: poseRaise },
+    { key: "gun", dur: 4.8, pose: poseGun },
+    { key: "moon", dur: 4.6 },
+  ];
+  const danceCycleTotal = danceCycle.reduce((sum, item) => sum + item.dur, 0);
+  const continuousMove = (t) => {
+    let local = ((t % danceCycleTotal) + danceCycleTotal) % danceCycleTotal;
+    for (const item of danceCycle) {
+      if (local < item.dur) return { item, local };
+      local -= item.dur;
+    }
+    return { item: danceCycle[0], local: 0 };
+  };
 
   const step = (now) => {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const t = (now - start) / 1000;
+
+    if (continuous) {
+      const { item, local } = continuousMove(t);
+      let x = midX, face = 1, la = 0, ra = 0, ty = 0, sy = 1, lookX = 0, lookY = 0, tilt = 0;
+      if (item.key === "moon") {
+        if (moonX === null) moonX = maxX;
+        moonX -= 58 * dt;
+        if (moonX < minX) moonX = maxX;
+        x = moonX;
+        face = 1;
+        setMoonDance(true);
+        const ph = Math.sin(local * 4.2);
+        const heelR = Math.max(0, ph) * 42, heelL = Math.max(0, -ph) * 42;
+        const slideR = Math.max(0, -ph) * 10, slideL = Math.max(0, ph) * 10;
+        if (mwR) mwR.setAttribute("transform", `translate(${12 + slideR} 0)`);
+        if (mwRh) mwRh.setAttribute("transform", `rotate(${-heelR} 24 101)`);
+        if (mwL) mwL.setAttribute("transform", `translate(${slideL} 0)`);
+        if (mwLh) mwLh.setAttribute("transform", `rotate(${-heelL} 24 101)`);
+        la = 38 + Math.sin(local * 2.1) * 10;
+        ra = -38 + Math.sin(local * 2.1) * 10;
+        lookX = 0.45; lookY = 0.05; tilt = ph * 0.35; sy = 1 - Math.abs(ph) * 0.035;
+        ty = -Math.abs(ph) * 1.2;
+      } else {
+        moonX = null;
+        const p = item.pose(local);
+        ({ la, ra, ty, sy, lookX, lookY, tilt } = p);
+        if (item.key === "gun") {
+          if (strutX === null) strutX = maxX;
+          strutX -= 40 * dt;
+          if (strutX < minX) strutX = maxX;
+          x = strutX;
+          face = -1;
+        } else {
+          strutX = null;
+          x = midX + (p.tx || 0) * 1.6;
+          face = 1;
+        }
+        setNormalLegs(p.ll || 0, p.rl || 0, p.ls || 0, p.rs || 0);
+      }
+
+      walker.style.transform = `translateX(${x}px)`;
+      if (flip) flip.style.transform = `scaleX(${face})`;
+      setArm(laBg, laFg, la || 0);
+      setArm(raBg, raFg, ra || 0);
+      const sy2 = sy == null ? 1 : sy;
+      root.setAttribute("transform", `rotate(${tilt || 0} 50 50) translate(0 ${(ty || 0) + 101 * (1 - sy2)}) scale(1 ${sy2})`);
+      const px = (lookX || 0) * 2.4, py = (lookY || 0) * 2;
+      if (pupL) pupL.setAttribute("transform", `translate(${px} ${py})`);
+      if (pupR) pupR.setAttribute("transform", `translate(${px} ${py})`);
+      if (__sbDanceModeActive) __sbWkDanceRaf = requestAnimationFrame(step);
+      else __sbWkEndDance(x);
+      return;
+    }
 
     let x, face, la, ra, ty, sy, lookX, lookY, tilt;
     if (t < GUN_S) {
@@ -4158,6 +4572,10 @@ function __sbWkEndDance(xResume) {
     for (const sel of ["#__sbwk_la__", "#__sbwk_ra__", "#__sbwk_la_bg__", "#__sbwk_ra_bg__", "#__sbwk_ll__", "#__sbwk_rl__"]) {
       root.querySelector(sel)?.setAttribute("transform", "");
     }
+    root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_moonlegs__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_ll__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_rl__")?.setAttribute("display", "inline");
     root.querySelector("#__sbwk_react__")?.setAttribute("display", "none");
     root.querySelector("#__sbwk_rc__")?.setAttribute("display", "none");
     root.querySelector("#__sbwk_mouth__")?.setAttribute("display", "inline");
@@ -4173,6 +4591,8 @@ function __sbWkEndDance(xResume) {
     }
     __sbWkDanceArmAnchor = null;
   }
+  const flip = document.getElementById("__sbwk_flip__");
+  if (flip) flip.style.transform = "";
   __sbWkDancing = false; __sbWkMoonwalking = false; __sbWkThrowMode = false;
   if (__sbInputOpen) {
     const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
@@ -7436,41 +7856,43 @@ function __sbBuildBrainUI() {
     @keyframes __sb_dance_bar_hue__ {
       0% {
         border-color: rgba(198,112,255,0.72);
-        box-shadow: 0 0 0 1px rgba(198,112,255,0.32), 0 0 28px rgba(198,112,255,0.42), 0 18px 48px rgba(42,18,82,0.28);
+        box-shadow: 0 0 0 1.5px rgba(198,112,255,0.55), 0 0 24px rgba(198,112,255,0.42), 0 0 48px rgba(42,18,82,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
       }
       25% {
         border-color: rgba(112,171,255,0.72);
-        box-shadow: 0 0 0 1px rgba(112,171,255,0.32), 0 0 30px rgba(112,171,255,0.42), 0 18px 48px rgba(18,44,82,0.28);
+        box-shadow: 0 0 0 1.5px rgba(112,171,255,0.55), 0 0 24px rgba(112,171,255,0.42), 0 0 48px rgba(18,44,82,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
       }
       50% {
         border-color: rgba(255,114,219,0.72);
-        box-shadow: 0 0 0 1px rgba(255,114,219,0.32), 0 0 34px rgba(255,114,219,0.44), 0 18px 48px rgba(84,18,78,0.28);
+        box-shadow: 0 0 0 1.5px rgba(255,114,219,0.55), 0 0 24px rgba(255,114,219,0.42), 0 0 48px rgba(84,18,78,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
       }
       75% {
         border-color: rgba(124,255,205,0.72);
-        box-shadow: 0 0 0 1px rgba(124,255,205,0.28), 0 0 30px rgba(124,255,205,0.38), 0 18px 48px rgba(18,74,64,0.24);
+        box-shadow: 0 0 0 1.5px rgba(124,255,205,0.55), 0 0 24px rgba(124,255,205,0.38), 0 0 48px rgba(18,74,64,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
       }
       100% {
         border-color: rgba(198,112,255,0.72);
-        box-shadow: 0 0 0 1px rgba(198,112,255,0.32), 0 0 28px rgba(198,112,255,0.42), 0 18px 48px rgba(42,18,82,0.28);
+        box-shadow: 0 0 0 1.5px rgba(198,112,255,0.55), 0 0 24px rgba(198,112,255,0.42), 0 0 48px rgba(42,18,82,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
       }
     }
-    @keyframes __sb_dance_input_text__ {
-      0%, 100% { color: #6D28D9; }
-      35% { color: #2563EB; }
-      65% { color: #DB2777; }
+    @keyframes __sb_dance_sweep_tint__ {
+      0%, 100% { background: linear-gradient(105deg, transparent 38%, rgba(198,112,255,0.48) 50%, transparent 62%); }
+      25% { background: linear-gradient(105deg, transparent 38%, rgba(112,171,255,0.48) 50%, transparent 62%); }
+      50% { background: linear-gradient(105deg, transparent 38%, rgba(255,114,219,0.48) 50%, transparent 62%); }
+      75% { background: linear-gradient(105deg, transparent 38%, rgba(124,255,205,0.46) 50%, transparent 62%); }
     }
     #__sb_bar__.sb-dance-mode {
       border-color: rgba(198,112,255,0.72) !important;
-      background: linear-gradient(115deg, rgba(255,251,247,0.82), rgba(245,232,255,0.72), rgba(229,245,255,0.68), rgba(255,235,248,0.72)) !important;
+      background: rgba(255,251,247,0.72) !important;
       animation: __sb_dance_bar_hue__ 3.8s ease-in-out infinite;
     }
-    #__sb_bar__.sb-dance-mode #__sb_input__ {
-      animation: __sb_dance_input_text__ 4.2s ease-in-out infinite;
-      font-weight: 650;
-    }
-    #__sb_bar__.sb-dance-mode #__sb_input__::placeholder {
-      color: rgba(89,42,148,0.72);
+    #__sb_bar__.sb-dance-mode::after,
+    #__sb_bar__.sb-dance-mode.sb-music-ambient::after,
+    #__sb_bar__.hp-active.sb-dance-mode::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background-size: 220% 100%;
+      animation: __sb_bar_sweep__ 2.15s linear infinite, __sb_dance_sweep_tint__ 5.2s ease-in-out infinite;
+      mix-blend-mode: screen; z-index: 1;
     }
     #__sb_bar__.sb-dance-mode #__sb_send_btn__ {
       background: linear-gradient(135deg, #7C3AED, #EC4899, #22D3EE);
@@ -7481,6 +7903,82 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-dance-mode .sb-pill-dropdown-btn {
       background: rgba(124,58,237,0.10);
       color: #5B21B6;
+    }
+    #__sb_dumbo_fx__ {
+      position: fixed; inset: 0; pointer-events: none;
+      z-index: 2147483645; display: none; overflow: hidden;
+      mix-blend-mode: normal;
+    }
+    #__sb_dumbo_fx__.active { display: block; }
+    #__sb_dumbo_fx__::before,
+    #__sb_dumbo_fx__::after {
+      content: ""; position: absolute; inset: -12%;
+      pointer-events: none; opacity: 0.72;
+    }
+    #__sb_dumbo_fx__::before {
+      background:
+        linear-gradient(90deg, rgba(236,72,153,0.10), transparent 28%, rgba(34,211,238,0.12) 48%, transparent 72%, rgba(250,204,21,0.10)),
+        repeating-linear-gradient(115deg, rgba(255,255,255,0.18) 0 2px, transparent 2px 22px);
+      animation: __sb_dumbo_sweep__ 3.4s linear infinite;
+    }
+    #__sb_dumbo_fx__::after {
+      background:
+        radial-gradient(circle at 18% 24%, rgba(236,72,153,0.30), transparent 22%),
+        radial-gradient(circle at 82% 18%, rgba(34,211,238,0.28), transparent 20%),
+        radial-gradient(circle at 52% 82%, rgba(250,204,21,0.22), transparent 24%);
+      animation: __sb_dumbo_pulse__ 2.4s ease-in-out infinite;
+    }
+    @keyframes __sb_dumbo_sweep__ {
+      0% { transform: translateX(-5%) rotate(0deg); }
+      100% { transform: translateX(5%) rotate(1deg); }
+    }
+    @keyframes __sb_dumbo_pulse__ {
+      0%, 100% { opacity: 0.5; transform: scale(1); filter: saturate(1.1); }
+      50% { opacity: 0.82; transform: scale(1.035); filter: saturate(1.65); }
+    }
+    .sb-dumbo-confetti {
+      position: absolute; left: var(--x); top: -10vh;
+      width: var(--size); height: calc(var(--size) * 1.85);
+      border-radius: 2px;
+      background: hsl(var(--hue) 96% 62%);
+      box-shadow: 0 0 14px hsl(var(--hue) 96% 62% / 0.55);
+      animation: __sb_dumbo_fall__ var(--dur) linear infinite;
+      animation-delay: var(--delay);
+      transform: rotate(calc(var(--hue) * 1deg));
+    }
+    @keyframes __sb_dumbo_fall__ {
+      0% { transform: translate3d(0,-12vh,0) rotate(0deg); opacity: 0; }
+      12% { opacity: 1; }
+      100% { transform: translate3d(var(--drift),112vh,0) rotate(720deg); opacity: 0; }
+    }
+    .sb-dumbo-bars {
+      position: absolute; left: 50%; bottom: 8.5vh;
+      width: min(560px, 64vw); height: 76px;
+      transform: translateX(-50%);
+      display: flex; align-items: end; justify-content: center; gap: 9px;
+      opacity: 0.82; filter: drop-shadow(0 0 18px rgba(236,72,153,0.34));
+    }
+    .sb-dumbo-bars i {
+      width: 12px; min-height: 14px; border-radius: 999px 999px 3px 3px;
+      background: linear-gradient(180deg, #22d3ee, #ec4899 55%, #facc15);
+      animation: __sb_dumbo_bar__ 0.52s ease-in-out infinite alternate;
+      animation-delay: calc(var(--i) * -0.045s);
+    }
+    @keyframes __sb_dumbo_bar__ {
+      from { height: 18px; transform: translateY(0); }
+      to { height: 74px; transform: translateY(-5px); }
+    }
+    .sb-dumbo-burst {
+      position: absolute; left: 50%; top: 48%; width: 34vmin; aspect-ratio: 1;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.35);
+      box-shadow: 0 0 34px rgba(34,211,238,0.32), inset 0 0 42px rgba(236,72,153,0.22);
+      animation: __sb_dumbo_burst__ 1.55s ease-out infinite;
+    }
+    @keyframes __sb_dumbo_burst__ {
+      0% { opacity: 0.82; transform: translate(-50%, -50%) scale(0.58); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.45); }
     }
     #__sb_send_btn__ {
       width: 32px; height: 32px; border-radius: 50%; border: none;
@@ -9185,6 +9683,21 @@ function __sbBuildBrainUI() {
     /* Headphone mode (blue) always wins over the ambient music glow. */
     #__sb_bar__.hp-active.sb-music-ambient { box-shadow: 0 0 0 1.5px rgba(56,189,248,0.55), 0 0 22px rgba(56,189,248,0.40), 0 0 46px rgba(59,130,246,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3); border-color: rgba(125,211,252,0.7); }
     #__sb_bar__.hp-active.sb-music-ambient::after { background: linear-gradient(105deg, transparent 38%, rgba(125,211,252,0.45) 50%, transparent 62%); background-size: 220% 100%; }
+    #__sb_bar__.sb-dance-mode.sb-music-ambient,
+    #__sb_bar__.hp-active.sb-dance-mode,
+    #__sb_bar__.hp-active.sb-music-ambient.sb-dance-mode {
+      border-color: rgba(198,112,255,0.72) !important;
+      background: rgba(255,251,247,0.72) !important;
+      animation: __sb_dance_bar_hue__ 3.8s ease-in-out infinite !important;
+    }
+    #__sb_bar__.sb-dance-mode.sb-music-ambient::after,
+    #__sb_bar__.hp-active.sb-dance-mode::after,
+    #__sb_bar__.hp-active.sb-music-ambient.sb-dance-mode::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background-size: 220% 100% !important;
+      animation: __sb_bar_sweep__ 2.15s linear infinite, __sb_dance_sweep_tint__ 5.2s ease-in-out infinite !important;
+      mix-blend-mode: screen; z-index: 1;
+    }
     /* Listening intensifies the ring slightly so the user knows Braino is hearing them. */
     #__sb_bar__.hp-active.hp-listening {
       box-shadow: 0 0 0 2px rgba(59,130,246,0.65), 0 0 28px rgba(56,189,248,0.5),
@@ -10096,6 +10609,7 @@ function __sbSyncFullscreenUiMount() {
     "__sb_connector_dropdown__",
     "__sb_connector_slash_dropdown__",
     "__sb_model_dropdown__",
+    "__sb_dumbo_fx__",
   ];
 
   for (const id of ids) {
@@ -14207,6 +14721,7 @@ function __sbVoiceHasTeamSignal(text) {
 function __sbVoiceHasShortIntent(stats) {
   const norm = stats.normalized;
   if (!norm) return false;
+  if (typeof __sbBrabusVibeIntent === "function" && __sbBrabusVibeIntent(stats.raw)) return true;
   if (__sbVoiceHasTeamSignal(stats.raw)) return true;
   if (/^(yes|yeah|yep|ya|haan|hanji|no|nope|nah|stop|pause|resume|repeat|skip|done|cancel|exit|send|close|open|play|next|back|continue|search)$/.test(norm)) return true;
   if (/^(hi|hey|hello)\s+(braino|bruno|breno|reno)$/.test(norm)) return true;
@@ -14218,6 +14733,7 @@ function __sbVoiceLooksIntentful(stats) {
   const text = stats.raw;
   const norm = stats.normalized;
   if (!norm) return false;
+  if (typeof __sbBrabusVibeIntent === "function" && __sbBrabusVibeIntent(text)) return true;
   if (__sbVoiceHasShortIntent(stats)) return true;
   if (/[?]$/.test(text)) return true;
   if (/\b(braino|bruno|breno|reno)\b/.test(norm)) return true;
@@ -16391,6 +16907,14 @@ async function __sbProcessPrompt(text, options = {}) {
     const line = stopped ? "Done. Dance mode off." : "I was not dancing, but noted.";
     if (fromVoice) { await speakVoiceReply(line); }
     else { __sbWkSay(line); }
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // YouTube-only dance submodes: "play Dumbo" starts at 1:57, and "let's vibe"
+  // starts Brabus at 0:44. Both try fullscreen and keep the continuous party rig running.
+  if (__sbDumboDanceIntent(promptText)) {
+    await __sbStartDumboDance({ fromVoice, speakVoiceReply, promptText });
     if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
@@ -19615,6 +20139,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Party tricks — dance / moonwalk. Steer down __sbProcessPrompt BEFORE any classification,
   // or the realtime model just NARRATES a dance instead of Braino actually dancing.
   if (__sbDanceStopIntent(transcript) || __sbDanceStopIntent(promptText)
+    || __sbDumboDanceIntent(transcript) || __sbDumboDanceIntent(promptText)
     || __sbDanceIntent(transcript) || __sbDanceIntent(promptText)
     || __sbMoonwalkIntent(transcript) || __sbMoonwalkIntent(promptText)) {
     __sbPatchRealtimeCostTurn({ routeIntent: "party_trick" });
