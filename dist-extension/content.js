@@ -19064,6 +19064,54 @@ async function __sbStartRealtimeConnectAttempt() {
   return true;
 }
 
+function __sbNormalizeRealtimeSdp(sdp) {
+  const text = String(sdp || "");
+  if (!text.trim()) return "";
+  const normalized = text.replace(/\r?\n/g, "\r\n");
+  return normalized.endsWith("\r\n") ? normalized : `${normalized}\r\n`;
+}
+
+function __sbRealtimeSdpDiagnostics(sdp) {
+  const text = String(sdp || "");
+  return {
+    offerChars: text.length,
+    hasVersionLine: /^v=0\r?$/m.test(text),
+    mediaLineCount: (text.match(/^m=/gm) || []).length,
+    hasAudioLine: /^m=audio\s/m.test(text),
+    hasApplicationLine: /^m=application\s/m.test(text),
+    endsWithLineBreak: /\r?\n$/.test(text),
+  };
+}
+
+function __sbIsLikelyRealtimeOfferSdp(sdp) {
+  const diagnostics = __sbRealtimeSdpDiagnostics(sdp);
+  return diagnostics.hasVersionLine && diagnostics.hasAudioLine && diagnostics.hasApplicationLine;
+}
+
+function __sbIsLikelyRealtimeAnswerSdp(sdp) {
+  const diagnostics = __sbRealtimeSdpDiagnostics(sdp);
+  return diagnostics.hasVersionLine && diagnostics.mediaLineCount > 0;
+}
+
+function __sbGetLocalRealtimeOfferSdp(peerConnection, fallbackOffer) {
+  return __sbNormalizeRealtimeSdp(
+    peerConnection?.localDescription?.sdp ||
+    peerConnection?.pendingLocalDescription?.sdp ||
+    fallbackOffer?.sdp ||
+    "",
+  );
+}
+
+async function __sbWaitForRealtimeOfferSdp(peerConnection, fallbackOffer, timeoutMs = 900) {
+  const startedAt = Date.now();
+  let sdp = __sbGetLocalRealtimeOfferSdp(peerConnection, fallbackOffer);
+  while (!__sbIsLikelyRealtimeOfferSdp(sdp) && Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    sdp = __sbGetLocalRealtimeOfferSdp(peerConnection, fallbackOffer);
+  }
+  return sdp;
+}
+
 async function __sbStartRealtimeVoice() {
   if (__sbRtLocalConnectInFlight || __sbRtControlReady()) return true;
   __sbRtLocalConnectInFlight = true;
@@ -19147,13 +19195,20 @@ async function __sbStartRealtimeVoice() {
 
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
+    const offerSdp = await __sbWaitForRealtimeOfferSdp(peerConnection, offer);
+    const sentDiagnostics = __sbRealtimeSdpDiagnostics(offerSdp);
+    if (!__sbIsLikelyRealtimeOfferSdp(offerSdp)) {
+      console.warn("[Braino][Realtime] refusing invalid in-tab offer SDP", sentDiagnostics);
+      throw new Error("Live AI could not create a valid audio session offer.");
+    }
+    console.debug("[Braino][Realtime] sending in-tab offer SDP", sentDiagnostics);
 
     const res = await __sbAuthedApiFetch("openai-realtime-call", {
       method: "POST",
       headers: {
         "Content-Type": "application/sdp",
       },
-      body: offer.sdp || "",
+      body: offerSdp,
     }, {
       suppressSignIn: true,
     });
@@ -19167,6 +19222,12 @@ async function __sbStartRealtimeVoice() {
       try {
         errorPayload = JSON.parse(errorText);
       } catch {}
+      console.warn("[Braino][Realtime] in-tab offer rejected", {
+        status: res.status,
+        error: errorPayload?.details || errorPayload?.error || errorText || null,
+        sentDiagnostics,
+        returnedDiagnostics: errorPayload?.sdpDiagnostics || null,
+      });
       if (res.status === 429) {
         throw new Error(errorPayload.details || errorPayload.error || errorText || "Live AI is busy — too many requests. Try again in a moment.");
       }
@@ -19184,6 +19245,13 @@ async function __sbStartRealtimeVoice() {
     }
 
     const answerSdp = await res.text();
+    if (!__sbIsLikelyRealtimeAnswerSdp(answerSdp)) {
+      console.warn("[Braino][Realtime] invalid in-tab answer SDP", {
+        answerChars: String(answerSdp || "").length,
+        preview: String(answerSdp || "").slice(0, 160),
+      });
+      throw new Error("Live AI returned an invalid audio session answer.");
+    }
     await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
     await dataChannelOpen;
     const booted = __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());

@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-braino-realtime-model, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-braino-realtime-model, x-braino-voice-engine, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Expose-Headers":
     "X-Braino-Realtime-Session-Id, X-Braino-Realtime-Allocated-Ms, X-Braino-Realtime-Model, X-Braino-Realtime-Transcription-Model",
 };
@@ -123,8 +123,8 @@ serve(async (req) => {
       }
     }
 
-    const sdp = (await req.text()).trim();
-    if (!sdp) {
+    const sdp = normalizeRealtimeSdp(await req.text());
+    if (!sdp.trim()) {
       return json({ error: "Missing SDP offer." }, 400);
     }
     const sdpDiagnostics = getSdpDiagnostics(sdp);
@@ -142,7 +142,7 @@ serve(async (req) => {
 
     const voiceSessionId = await createRealtimeVoiceSession(authClient, user.id);
     const multipart = new FormData();
-    multipart.set("sdp", sdp);
+    multipart.set("sdp", new Blob([sdp], { type: "application/sdp" }), "offer.sdp");
     multipart.set("session", JSON.stringify(buildRealtimeSessionConfig(realtimeModel, realtimeVoice)));
 
     const openAiResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
@@ -318,6 +318,13 @@ function extractOpenAiError(raw: string) {
   }
 }
 
+function normalizeRealtimeSdp(raw: string) {
+  const text = String(raw || "");
+  if (!text.trim()) return "";
+  const normalized = text.replace(/\r?\n/g, "\r\n");
+  return normalized.endsWith("\r\n") ? normalized : `${normalized}\r\n`;
+}
+
 function getSdpDiagnostics(sdp: string) {
   return {
     offerChars: sdp.length,
@@ -325,6 +332,7 @@ function getSdpDiagnostics(sdp: string) {
     mediaLineCount: (sdp.match(/^m=/gm) || []).length,
     hasAudioLine: /^m=audio\s/m.test(sdp),
     hasApplicationLine: /^m=application\s/m.test(sdp),
+    endsWithLineBreak: /\r?\n$/.test(sdp),
   };
 }
 
