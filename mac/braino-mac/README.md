@@ -69,9 +69,17 @@ The first organizer pass targets loose files on `~/Desktop`. It creates `~/Deskt
 
 Existing Desktop folders are left alone. Braino writes `~/Desktop/Braino Organized/.braino-last-organize.json` so the latest organization can be undone.
 
+## Mac Skills
+
+These are the local Mac-only skills that do not require the browser extension agent loop:
+
+1. Organize loose Desktop files into `Braino Organized`, grouped by category.
+2. Undo the last Desktop organization using the saved `.braino-last-organize.json` manifest.
+3. Find files on the Mac with Spotlight metadata/content search.
+4. Open the best matching file when the user asks Braino to open a document, PDF, resume, receipt, or named file.
+
 ## Mac Capability Map
 
-- Desktop/file hygiene: organize loose Desktop files, undo the last organization, find files with Spotlight, open matching files.
 - App launching: open common Mac apps by name.
 - Browser control starter: open Chrome, open URLs, and run Google searches.
 - Local awareness starter: report the front app/window title through Accessibility.

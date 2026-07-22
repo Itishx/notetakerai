@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.20";
+const APP_VERSION = "12.0.21";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -829,6 +829,20 @@ function extractAfter(text, regexes) {
   return "";
 }
 
+const MAC_SKILLS_REPLY = [
+  "Mac skills right now:",
+  "1. I can organize loose Desktop files into clean folders.",
+  "2. I can undo the last Desktop organization.",
+  "3. I can find files on this Mac with Spotlight.",
+  "4. I can open the best matching file when you ask for it.",
+].join("\n");
+
+function isMacSkillsPrompt(text) {
+  const raw = String(text || "").toLowerCase();
+  return /\b(mac skills?|macbook skills?|local skills?|desktop skills?|mac capabilities|what can you do on (?:my\s+)?mac|what can you do locally)\b/.test(raw)
+    || (/\bwhat can you do\b/.test(raw) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(raw));
+}
+
 async function openChromeUrl(url) {
   await execFileP("open", ["-a", "Google Chrome", url]);
 }
@@ -1534,6 +1548,10 @@ async function runDelegate(prompt) {
   const text = raw.toLowerCase();
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
 
+  if (isMacSkillsPrompt(text)) {
+    return { ok: true, say: MAC_SKILLS_REPLY };
+  }
+
   if (isDesktopOrganizeUndoIntent(text)) {
     return undoDesktopOrganization();
   }
@@ -1603,6 +1621,9 @@ async function runDelegate(prompt) {
   const fileQuery = extractAfter(raw, [
     /\b(?:find|search for|look for|open)\s+(?:my\s+)?(?:file|document|pdf|doc|docx|ppt|spreadsheet|sheet|presentation|note)s?\s+(?:called|named|about|for)?\s*(.+)$/i,
     /\b(?:find|open)\s+(.+?)\s+(?:file|document|pdf|doc|docx|ppt|spreadsheet|sheet|presentation|note)s?$/i,
+    /\b(?:find|search for|look for)\s+(.+?)\s+(?:on|in)\s+(?:my\s+)?(?:mac|macbook|computer|system)$/i,
+    /\bopen\s+(?:my\s+)?(.+?\.(?:pdf|docx?|pptx?|xlsx?|csv|txt|md|pages|numbers|key|png|jpe?g|webp|mov|mp4|mp3|zip))$/i,
+    /\bopen\s+(?:my\s+)?(resume|cv|cover letter|portfolio|invoice|receipt)\b/i,
   ]);
   if (fileQuery) {
     const files = await findFiles(fileQuery);

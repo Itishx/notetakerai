@@ -206,6 +206,43 @@ function setTalk(on) {
   if (talk) talk.style.display = on ? "inline" : "none";
 }
 
+function updateTalkMotion(t, talking) {
+  const smile = q("#__sbwk_smile__");
+  const talk = q("#__sbwk_talk__");
+  const outer = q("#__sbwk_te__");
+  const inner = q("#__sbwk_ti__");
+  if (!talking) {
+    if (smile) smile.style.display = "";
+    if (talk) talk.style.display = "none";
+    if (inner) inner.style.display = "";
+    return;
+  }
+
+  const openAmount = Math.max(0, Math.min(1,
+    (0.5 + 0.5 * Math.sin(t * 13.5))
+    * (0.55 + 0.45 * Math.sin(t * 7.7 + 1.3))
+    * (0.7 + 0.3 * Math.sin(t * 23))
+  ));
+  const ry = 1.4 + openAmount * 4.2;
+  const rx = 4 - openAmount * 0.5;
+  if (smile) smile.style.display = "none";
+  if (talk) talk.style.display = "block";
+  if (outer) {
+    outer.setAttribute("rx", String(rx));
+    outer.setAttribute("ry", String(ry));
+  }
+  if (inner) {
+    if (openAmount > 0.25) {
+      inner.style.display = "block";
+      inner.setAttribute("cy", String(61.8 + ry * 0.4));
+      inner.setAttribute("rx", String(rx * 0.62));
+      inner.setAttribute("ry", String(ry * 0.5));
+    } else {
+      inner.style.display = "none";
+    }
+  }
+}
+
 function setWave(on) {
   waving = on;
   window.clearTimeout(waveTimer);
@@ -1767,13 +1804,11 @@ function tick(now) {
     q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(62,48) scale(1,${eyeScale}) translate(-62,-48)`);
 
     const gaze = (engaged || !walkingNow) ? 0 : 2.4;
-    const speechDrift = speaking ? Math.sin(t * 10) * 0.25 : 0;
-    q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${gaze} ${speechDrift})`);
-    q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${gaze} ${speechDrift})`);
+    q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${gaze} 0)`);
+    q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${gaze} 0)`);
   }
 
-  const mouthOpen = speaking && Math.sin(t * 21) > -0.28;
-  setTalk(mouthOpen);
+  updateTalkMotion(t, speaking);
 
   requestAnimationFrame(tick);
 }

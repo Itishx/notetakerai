@@ -84,41 +84,6 @@ body {
   opacity: 0;
 }
 
-#walker.voice-active::before {
-  left: 50%;
-  top: 48%;
-  width: 88px;
-  height: 88px;
-  z-index: 0;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle, rgba(255,255,255,0.22) 0 16%, transparent 17%),
-    radial-gradient(circle, rgba(232,120,110,0.32) 0 34%, rgba(246,168,162,0.18) 35% 52%, transparent 64%);
-  filter: blur(1px);
-  transform: translate(-50%, -50%) scale(0.88);
-  opacity: 0.64;
-  animation: macVoiceAura 1.7s ease-in-out infinite;
-}
-
-#walker.voice-active::after {
-  left: 50%;
-  top: 48%;
-  width: 62px;
-  height: 62px;
-  z-index: 0;
-  border-radius: 999px;
-  border: 2px solid rgba(255,255,255,0.42);
-  box-shadow:
-    0 0 0 12px rgba(232,120,110,0.18),
-    0 0 0 28px rgba(232,120,110,0.08),
-    0 0 34px rgba(232,120,110,0.32);
-  transform: translate(-50%, -50%) scale(0.78);
-  opacity: 0.72;
-  animation: voiceSonar 1.9s ease-out infinite;
-}
-
-#walker.listening::before,
-#walker.listening::after,
 #walker.hearing::before,
 #walker.hearing::after {
   display: block;
@@ -138,13 +103,20 @@ body {
   animation: voiceSonar 2.4s ease-out infinite;
 }
 
-#walker.listening::after,
 #walker.hearing::after {
   animation-delay: 1.2s;
 }
 
+#walker.hearing svg {
+  animation: macWalkerListenGlow 2s ease-in-out infinite;
+}
+
 #walker.connecting svg {
   animation: macVoiceConnecting 1.6s ease-in-out infinite;
+}
+
+#walker.speaking svg {
+  animation: macWalkerSpeakGlow 1s ease-in-out infinite;
 }
 
 #walker.authenticating svg {
@@ -273,22 +245,19 @@ body {
   100% { opacity: 0; transform: translate(-50%, -50%) scale(3.3); }
 }
 
-@keyframes macVoiceAura {
-  0%, 100% {
-    opacity: 0.46;
-    transform: translate(-50%, -50%) scale(0.82);
-    filter: blur(2px) saturate(110%);
-  }
-  50% {
-    opacity: 0.82;
-    transform: translate(-50%, -50%) scale(1.05);
-    filter: blur(1px) saturate(150%);
-  }
-}
-
 @keyframes macVoiceConnecting {
   0%, 100% { filter: drop-shadow(0 0 8px rgba(56,189,248,0.6)); }
   50% { filter: drop-shadow(0 0 16px rgba(56,189,248,0.85)); }
+}
+
+@keyframes macWalkerListenGlow {
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(232,120,110,0.55)) drop-shadow(0 0 4px rgba(246,168,162,0.4)); }
+  50% { filter: drop-shadow(0 0 18px rgba(232,120,110,0.75)) drop-shadow(0 0 8px rgba(246,168,162,0.55)); }
+}
+
+@keyframes macWalkerSpeakGlow {
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(99,102,241,0.75)) drop-shadow(0 0 4px rgba(139,92,246,0.5)); }
+  50% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.95)) drop-shadow(0 0 9px rgba(139,92,246,0.65)); }
 }
 
 @keyframes macAuthGlow {
