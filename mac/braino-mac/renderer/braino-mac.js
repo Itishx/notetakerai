@@ -13,6 +13,7 @@ const START_OFFSCREEN_X = -W - 36;
 const TTS_CHUNK_MAX_CHARS = 240;
 const TTS_FETCH_TIMEOUT_MS = 14000;
 const TTS_WARM_INTERVAL_MS = 240000;
+const REALTIME_IDLE_TIMEOUT_MS = 15000;
 
 walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
 const root = walker.querySelector("#__sbwk_root__");
@@ -44,6 +45,8 @@ let rtMic = null;
 let rtRemoteAudio = null;
 let rtUserTranscript = "";
 let rtTranscriptFlushTimer = 0;
+let rtIdleTimer = 0;
+let rtLastActivityAt = 0;
 let rtUsageSessionId = null;
 let rtHeartbeatTimer = null;
 let realtimeActive = false;
@@ -761,8 +764,10 @@ async function speak(text) {
       currentSpeechAudio = null;
       setTalk(false);
       logRenderer("speech.done", { chars: line.length, durationMs: Math.round(performance.now() - startedAt) });
-      if (realtimeActive && !processing) setStatus("listening", "Listening");
-      else if (!listening && !processing) setStatus("ready", "Double Space to show/hide");
+      if (realtimeActive && !processing) {
+        setStatus("listening", "Listening");
+        scheduleRealtimeIdleShutdown("speech_done");
+      } else if (!listening && !processing) setStatus("ready", "Double Space to show/hide");
     }
   }
 }
@@ -780,6 +785,7 @@ async function runDelegate(prompt, options = {}) {
   processing = true;
   if (options.keepRealtime) {
     listening = realtimeActive;
+    clearRealtimeIdleTimer();
   } else {
     listening = false;
     stopRecognition();
@@ -816,6 +822,7 @@ async function runDelegate(prompt, options = {}) {
       if (realtimeActive) {
         listening = true;
         setStatus("listening", "Listening");
+        markRealtimeActivity("delegate_done");
       }
     }
   }
@@ -906,6 +913,52 @@ function endRealtimeUsageSession(reason = "mac_client_exit") {
   }).catch(() => {});
 }
 
+function clearRealtimeIdleTimer() {
+  if (rtIdleTimer) {
+    window.clearTimeout(rtIdleTimer);
+    rtIdleTimer = 0;
+  }
+}
+
+function scheduleRealtimeIdleShutdown(reason = "quiet") {
+  clearRealtimeIdleTimer();
+  if (!realtimeActive || realtimeConnecting) return;
+  rtIdleTimer = window.setTimeout(() => {
+    rtIdleTimer = 0;
+    if (!realtimeActive) return;
+    const idleMs = Date.now() - (rtLastActivityAt || Date.now());
+    if (processing || speaking || voiceTurnInFlight || String(rtUserTranscript || "").trim()) {
+      logRenderer("realtime.idle.defer", {
+        reason,
+        idleMs,
+        processing,
+        speaking,
+        voiceTurnInFlight,
+        hasTranscript: Boolean(String(rtUserTranscript || "").trim()),
+      });
+      scheduleRealtimeIdleShutdown("busy");
+      return;
+    }
+    if (idleMs < REALTIME_IDLE_TIMEOUT_MS - 250) {
+      scheduleRealtimeIdleShutdown("activity_reset");
+      return;
+    }
+    logRenderer("realtime.idle.stop", { reason, idleMs });
+    stopRealtimeVoice();
+    setStatus("ready", "Ready");
+    setBubble("Stopped listening after a quiet moment.", 1600);
+  }, REALTIME_IDLE_TIMEOUT_MS);
+}
+
+function markRealtimeActivity(reason, options = {}) {
+  rtLastActivityAt = Date.now();
+  if (options.schedule === false) {
+    clearRealtimeIdleTimer();
+    return;
+  }
+  scheduleRealtimeIdleShutdown(reason);
+}
+
 function stopRealtimeVoice() {
   const dc = rtDc;
   const pc = rtPc;
@@ -918,6 +971,7 @@ function stopRealtimeVoice() {
   rtRemoteAudio = null;
   rtUserTranscript = "";
   clearRealtimeTranscriptFlush();
+  clearRealtimeIdleTimer();
   realtimeActive = false;
   realtimeConnecting = false;
   voiceTurnInFlight = false;
@@ -962,6 +1016,7 @@ function flushRealtimeTranscript(reason) {
   });
   if (!transcript) {
     setStatus("listening", "Listening");
+    scheduleRealtimeIdleShutdown("empty_transcript");
     return;
   }
   if (voiceTurnInFlight || !accepted) {
@@ -969,9 +1024,12 @@ function flushRealtimeTranscript(reason) {
       setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
     } else {
       setStatus("listening", "Listening");
+      scheduleRealtimeIdleShutdown("ignored_transcript");
     }
     return;
   }
+  clearRealtimeIdleTimer();
+  markRealtimeActivity("accepted_transcript", { schedule: false });
   if (speaking) stopSpeechOutput();
   voiceTurnInFlight = true;
   void runDelegate(transcript, { keepRealtime: true }).finally(() => {
@@ -979,6 +1037,7 @@ function flushRealtimeTranscript(reason) {
     if (realtimeActive) {
       listening = true;
       setStatus("listening", "Listening");
+      scheduleRealtimeIdleShutdown("turn_done");
     }
   });
 }
@@ -1001,11 +1060,13 @@ function handleRealtimeEvent(event) {
   if (event.type === "session.created" || event.type === "session.updated") {
     if (realtimeActive || realtimeConnecting) {
       setStatus("listening", "Listening");
+      if (realtimeActive) scheduleRealtimeIdleShutdown("session_ready");
     }
     return;
   }
 
   if (event.type === "input_audio_buffer.speech_started") {
+    markRealtimeActivity("speech_started", { schedule: false });
     rtUserTranscript = "";
     clearRealtimeTranscriptFlush();
     if (speaking) {
@@ -1029,6 +1090,7 @@ function handleRealtimeEvent(event) {
   }
 
   if (event.type === "input_audio_buffer.speech_stopped") {
+    markRealtimeActivity("speech_stopped", { schedule: false });
     if (speaking || processing || voiceTurnInFlight) {
       setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
       return;
@@ -1042,6 +1104,7 @@ function handleRealtimeEvent(event) {
   if (event.type === "conversation.item.input_audio_transcription.delta") {
     const delta = typeof event.delta === "string" ? event.delta : "";
     if (delta) {
+      markRealtimeActivity("transcript_delta", { schedule: false });
       rtUserTranscript += delta;
       setBubble(rtUserTranscript.trim() || "Listening...", 0);
       scheduleRealtimeTranscriptFlush("transcript_idle", 1600);
@@ -1050,6 +1113,7 @@ function handleRealtimeEvent(event) {
   }
 
   if (event.type === "conversation.item.input_audio_transcription.completed") {
+    markRealtimeActivity("transcript_completed", { schedule: false });
     rtUserTranscript = String(event.transcript || rtUserTranscript || "");
     flushRealtimeTranscript("completed");
     return;
@@ -1060,6 +1124,7 @@ function handleRealtimeEvent(event) {
     logRenderer("realtime.event.error", { message, error: event.error || null });
     setStatus("error", "Voice error");
     setBubble(`Voice error: ${message}`, 3600);
+    clearRealtimeIdleTimer();
   }
 }
 
@@ -1256,6 +1321,7 @@ async function startRealtimeVoice() {
     realtimeActive = true;
     realtimeConnecting = false;
     listening = true;
+    markRealtimeActivity("realtime_ready");
     startFishWarmKeepAlive();
     setStatus("listening", "Listening");
     setBubble("I am listening.", 1400);
