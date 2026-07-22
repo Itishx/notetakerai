@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import SideBrainLogo from "@/components/SideBrainLogo";
 
 type AuthView = "login" | "signup" | "forgot";
+const SUPABASE_AUTH_STORAGE_KEY = "sb-suwhgaxxdizowbyjlljj-auth-token";
 
 const normalizeAuthError = (message: string) => {
   if (message === "Invalid login credentials") {
@@ -11,10 +12,21 @@ const normalizeAuthError = (message: string) => {
   return message;
 };
 
+const readStoredBrainoSession = () => {
+  try {
+    const raw = localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const stored = JSON.parse(raw);
+    return stored?.access_token ? stored : null;
+  } catch (_error) {
+    return null;
+  }
+};
+
 /**
- * This page is opened by the Chrome extension for authentication.
- * After the user logs in, it sends the auth token back to the extension
- * via chrome.runtime.sendMessage using the extension ID stored in the URL params.
+ * This page is opened by the Chrome extension and the Braino Mac shell for authentication.
+ * After login, it relays the auth token to the extension via chrome.runtime, or to the
+ * local Mac callback when the Mac app opened the page with a one-time callback URL.
  */
 const ExtensionAuth = () => {
   const { user, session, profile, loading, signIn, signUp, resetPassword } = useAuth();
@@ -29,55 +41,110 @@ const ExtensionAuth = () => {
 
   const params = new URLSearchParams(window.location.search);
   const extensionId = params.get("ext");
+  const macCallback = params.get("macCallback");
+  const macNonce = params.get("macNonce");
+  const isMacAuth = Boolean(macCallback && macNonce);
 
   useEffect(() => {
-    if (!user || !session || !extensionId || sent) return;
+    if (sent) return;
+    if (!extensionId && !isMacAuth) return;
 
-    const displayName = profile?.display_name || user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
+    const storedSession = readStoredBrainoSession();
+    const authSession = session || storedSession;
+    const authUser = user || authSession?.user || null;
+    if (!authSession?.access_token || !authUser) return;
+
+    const displayName =
+      profile?.display_name ||
+      authUser.user_metadata?.full_name ||
+      authUser.user_metadata?.name ||
+      authUser.email?.split("@")[0] ||
+      "User";
 
     const payload = {
       action: "authToken",
-      token: session.access_token,
-      refreshToken: session.refresh_token,
-      userId: user.id,
+      token: authSession.access_token,
+      refreshToken: authSession.refresh_token,
+      expiresAt: authSession.expires_at,
+      userId: authUser.id,
       displayName,
-      email: user.email,
+      email: authUser.email,
     };
 
-    try {
-      const w = window as typeof window & {
-        chrome?: {
-          runtime?: {
-            lastError?: { message?: string };
-            sendMessage?: (extensionId: string, payload: unknown, cb: (response: unknown) => void) => void;
+    const relayToExtension = () => {
+      if (!extensionId) return;
+      try {
+        const w = window as typeof window & {
+          chrome?: {
+            runtime?: {
+              lastError?: { message?: string };
+              sendMessage?: (extensionId: string, payload: unknown, cb: (response: unknown) => void) => void;
+            };
           };
         };
-      };
 
-      if (w.chrome?.runtime?.sendMessage) {
-        w.chrome.runtime.sendMessage(extensionId, payload, (response) => {
-          if (w.chrome?.runtime?.lastError) {
-            console.log("Extension message error:", w.chrome.runtime.lastError.message);
-          } else {
-            console.log("Auth token sent to extension:", response);
-          }
-        });
+        if (w.chrome?.runtime?.sendMessage) {
+          w.chrome.runtime.sendMessage(extensionId, payload, (response) => {
+            if (w.chrome?.runtime?.lastError) {
+              console.log("Extension message error:", w.chrome.runtime.lastError.message);
+            } else {
+              console.log("Auth token sent to extension:", response);
+            }
+          });
+        }
+      } catch (_error) {
+        console.log("Could not send to extension directly");
       }
-    } catch (_error) {
-      console.log("Could not send to extension directly");
+    };
+
+    const exposeDomRelay = () => {
+      const existing = document.getElementById("sidebrain-auth-data");
+      existing?.remove();
+
+      const el = document.createElement("div");
+      el.id = "sidebrain-auth-data";
+      el.style.display = "none";
+      el.textContent = JSON.stringify(payload);
+      document.body.appendChild(el);
+    };
+
+    const relayToMac = async () => {
+      if (!macCallback || !macNonce) return false;
+      try {
+        const url = new URL(macCallback);
+        if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)) {
+          throw new Error("Invalid Braino Mac callback URL.");
+        }
+        const response = await fetch(url.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, nonce: macNonce }),
+        });
+        if (!response.ok) throw new Error(`Braino Mac callback failed (${response.status}).`);
+        setTimeout(() => {
+          window.close();
+        }, 700);
+        return true;
+      } catch (relayError) {
+        console.log("Braino Mac auth relay failed:", relayError);
+        setError(relayError instanceof Error ? relayError.message : "Braino Mac did not accept the sign-in yet.");
+        return false;
+      }
+    };
+
+    if (extensionId) {
+      relayToExtension();
+      exposeDomRelay();
+      setSent(true);
+      return;
     }
 
-    const existing = document.getElementById("sidebrain-auth-data");
-    existing?.remove();
-
-    const el = document.createElement("div");
-    el.id = "sidebrain-auth-data";
-    el.style.display = "none";
-    el.textContent = JSON.stringify(payload);
-    document.body.appendChild(el);
-
-    setSent(true);
-  }, [user, session, profile, extensionId, sent]);
+    if (isMacAuth) {
+      relayToMac().then((ok) => {
+        if (ok) setSent(true);
+      });
+    }
+  }, [user, session, profile, extensionId, macCallback, macNonce, isMacAuth, sent]);
 
   const switchView = (nextView: AuthView) => {
     setView(nextView);
@@ -140,7 +207,7 @@ const ExtensionAuth = () => {
           <SideBrainLogo sizeClass="text-2xl" />
           <h2 className="text-xl font-semibold mt-4 text-foreground">Signed in!</h2>
           <p className="text-muted-foreground mt-2 text-sm">
-            Returning to Braino…
+            {isMacAuth ? "Returning to Braino Mac…" : "Returning to Braino…"}
           </p>
         </div>
       </div>
@@ -156,9 +223,13 @@ const ExtensionAuth = () => {
 
   const subtitle =
     view === "login"
-      ? "Manual email and password sign-in works here too."
+      ? isMacAuth
+        ? "Braino Mac will use this signed-in session for live voice."
+        : "Manual email and password sign-in works here too."
       : view === "signup"
-        ? "Use email and password so the extension can sign in cleanly."
+        ? isMacAuth
+          ? "Use email and password so Braino Mac can sign in cleanly."
+          : "Use email and password so the extension can sign in cleanly."
         : "We will send you to the normal reset flow, then you can sign in here again.";
 
   return (

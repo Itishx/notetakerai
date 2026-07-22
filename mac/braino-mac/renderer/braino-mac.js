@@ -108,8 +108,11 @@ function pickRoamTarget(now = performance.now()) {
 function setStatus(status, text) {
   statusPill.className = status;
   lane.className = status;
-  walker.classList.toggle("voice-active", ["connecting", "listening", "hearing", "captured"].includes(status));
+  walker.classList.toggle("voice-active", ["connecting", "listening", "hearing", "captured", "speaking"].includes(status));
+  walker.classList.toggle("connecting", status === "connecting");
+  walker.classList.toggle("listening", status === "listening");
   walker.classList.toggle("hearing", status === "hearing");
+  walker.classList.toggle("captured", status === "captured");
   walker.classList.toggle("speaking", status === "speaking");
   statusText.textContent = text;
 }
@@ -588,6 +591,18 @@ async function startRealtimeVoice() {
   });
 
   try {
+    const authResult = await window.brainoMac.ensureAuth("realtime").catch((error) => ({
+      ok: false,
+      error: error?.message || "Braino sign-in failed.",
+    }));
+    logRenderer("realtime.auth.result", {
+      ok: Boolean(authResult?.ok),
+      source: authResult?.source || "unknown",
+      error: authResult?.error || null,
+    });
+    if (!authResult?.ok) {
+      throw new Error(authResult?.error || "Braino sign-in is required for realtime voice.");
+    }
     await ensureMicrophoneAccess();
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -962,6 +977,11 @@ function tick(now) {
 }
 
 window.brainoMac.onVoiceToggle(() => toggleVoice());
+window.brainoMac.onAuthRequired(() => {
+  setStatus("connecting", "Authenticating");
+  setBubble("Let me authenticate you first.", 2600);
+  setWave(true);
+});
 window.brainoMac.onTaskProgress((progress) => {
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
   if (progress.text) setBubble(progress.text, 1200);

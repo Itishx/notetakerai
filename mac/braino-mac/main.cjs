@@ -1,6 +1,8 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, screen, shell, systemPreferences } = require("electron");
 const { execFile, spawn } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 
@@ -9,16 +11,22 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.6";
+const APP_VERSION = "12.0.7";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
 const LOG_PATH = path.join(LOG_DIR, "braino-mac.log");
+const AUTH_STORE_DIR = path.join(os.homedir(), "Library", "Application Support", "Braino Mac");
+const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
+const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 
 let dockWindow = null;
 let swiftHotkey = null;
 let activeSpeech = null;
 let lastControlTapAt = 0;
+let cachedAuthSession = null;
+let pendingAuthWaiters = [];
+let authBrowserFlow = null;
 
 function loadDotEnv() {
   const out = {};
@@ -45,7 +53,14 @@ const ENV = { ...loadDotEnv(), ...process.env };
 const SUPABASE_URL = ENV.VITE_SUPABASE_URL || ENV.SUPABASE_URL || "https://suwhgaxxdizowbyjlljj.supabase.co";
 const SUPABASE_ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY || ENV.VITE_SUPABASE_PUBLISHABLE_KEY || ENV.SUPABASE_ANON_KEY || "";
 const OPENAI_API_KEY = ENV.OPENAI_API_KEY || ENV.OPENAI_REALTIME_API_KEY || ENV.VITE_OPENAI_API_KEY || "";
-const BRAINO_AUTH_TOKEN = ENV.BRAINO_AUTH_TOKEN || ENV.BRAINO_SUPABASE_AUTH_TOKEN || ENV.VITE_BRAINO_AUTH_TOKEN || ENV.VITE_BRAINO_SUPABASE_AUTH_TOKEN || "";
+const ENV_BRAINO_AUTH_TOKEN = ENV.BRAINO_AUTH_TOKEN || ENV.BRAINO_SUPABASE_AUTH_TOKEN || ENV.VITE_BRAINO_AUTH_TOKEN || ENV.VITE_BRAINO_SUPABASE_AUTH_TOKEN || "";
+const DEFAULT_BRAINO_AUTH_ORIGINS = app.isPackaged
+  ? "https://trybraino.com"
+  : "https://trybraino.com,https://braino-git-cinemamode-itishs-projects.vercel.app";
+const BRAINO_AUTH_ORIGINS = (ENV.BRAINO_MAC_AUTH_ORIGINS || DEFAULT_BRAINO_AUTH_ORIGINS)
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
 
 function redact(value) {
   if (value == null) return value;
@@ -93,6 +108,357 @@ function logMac(event, payload = {}) {
     fs.appendFileSync(LOG_PATH, line);
   } catch (_) {}
   console.log("[Braino Mac]", event, sanitizeForLog(payload));
+}
+
+function normalizeAuthSession(data = {}) {
+  const accessToken = String(data.access_token || "").trim();
+  const refreshToken = String(data.refresh_token || "").trim();
+  if (!accessToken) return null;
+  const expiresIn = Number(data.expires_in || 0);
+  const expiresAt = Number(data.expires_at || 0) || Math.floor(Date.now() / 1000) + (expiresIn > 0 ? expiresIn : 3600);
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_at: expiresAt,
+    user: data.user || null,
+    saved_at: new Date().toISOString(),
+  };
+}
+
+function loadAuthSession() {
+  if (cachedAuthSession) return cachedAuthSession;
+  try {
+    if (!fs.existsSync(AUTH_STORE_PATH)) return null;
+    const parsed = JSON.parse(fs.readFileSync(AUTH_STORE_PATH, "utf8"));
+    cachedAuthSession = normalizeAuthSession(parsed);
+    return cachedAuthSession;
+  } catch (error) {
+    logMac("auth.load.failed", { error });
+    return null;
+  }
+}
+
+function saveAuthSession(session) {
+  const normalized = normalizeAuthSession(session);
+  if (!normalized) throw new Error("Auth response did not include an access token.");
+  fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+  fs.writeFileSync(AUTH_STORE_PATH, JSON.stringify(normalized, null, 2), { mode: 0o600 });
+  cachedAuthSession = normalized;
+  logMac("auth.session.saved", {
+    userId: normalized.user?.id || null,
+    email: normalized.user?.email || null,
+    expiresAt: normalized.expires_at,
+    authStorePath: AUTH_STORE_PATH,
+  });
+  return normalized;
+}
+
+function clearAuthSession() {
+  cachedAuthSession = null;
+  try {
+    if (fs.existsSync(AUTH_STORE_PATH)) fs.unlinkSync(AUTH_STORE_PATH);
+  } catch (error) {
+    logMac("auth.clear.failed", { error });
+  }
+}
+
+function authStatusPayload() {
+  const session = loadAuthSession();
+  return {
+    authenticated: Boolean(ENV_BRAINO_AUTH_TOKEN || session?.access_token),
+    source: ENV_BRAINO_AUTH_TOKEN ? "env" : session?.access_token ? "stored" : "missing",
+    email: session?.user?.email || null,
+    userId: session?.user?.id || null,
+    expiresAt: session?.expires_at || null,
+    authStorePath: AUTH_STORE_PATH,
+  };
+}
+
+async function supabaseAuthFetch(pathname, body) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error("Supabase is not configured for Braino auth.");
+  }
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/${pathname}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error_description || data?.msg || data?.error || `Auth failed (${response.status}).`);
+  }
+  return data;
+}
+
+async function refreshStoredBrainoSession(session) {
+  if (!session?.refresh_token) return null;
+  logMac("auth.refresh.start", { email: session.user?.email || null });
+  const data = await supabaseAuthFetch("token?grant_type=refresh_token", {
+    refresh_token: session.refresh_token,
+  });
+  const next = saveAuthSession({ ...data, user: data.user || session.user || null });
+  logMac("auth.refresh.ok", { email: next.user?.email || null, expiresAt: next.expires_at });
+  return next;
+}
+
+async function getBrainoAuthToken(options = {}) {
+  if (ENV_BRAINO_AUTH_TOKEN) return ENV_BRAINO_AUTH_TOKEN;
+  const refresh = options.refresh !== false;
+  let session = loadAuthSession();
+  if (!session?.access_token) return "";
+  const expiresAtMs = Number(session.expires_at || 0) * 1000;
+  if (!refresh || expiresAtMs > Date.now() + 60_000) return session.access_token;
+  try {
+    session = await refreshStoredBrainoSession(session);
+    return session?.access_token || "";
+  } catch (error) {
+    logMac("auth.refresh.failed", { error });
+    clearAuthSession();
+    return "";
+  }
+}
+
+function authSessionFromRelayPayload(data = {}) {
+  const displayName = String(data.displayName || data.name || "").trim();
+  return normalizeAuthSession({
+    access_token: data.token || data.access_token,
+    refresh_token: data.refreshToken || data.refresh_token,
+    expires_at: data.expiresAt || data.expires_at,
+    expires_in: data.expiresIn || data.expires_in,
+    user: data.user || {
+      id: data.userId || data.user_id || null,
+      email: data.email || null,
+      user_metadata: displayName ? { full_name: displayName, name: displayName } : {},
+    },
+  });
+}
+
+function resolveAuthWaiters(payload) {
+  const waiters = pendingAuthWaiters;
+  pendingAuthWaiters = [];
+  waiters.forEach(({ resolve }) => resolve(payload));
+}
+
+function rejectAuthWaiters(error) {
+  const waiters = pendingAuthWaiters;
+  pendingAuthWaiters = [];
+  waiters.forEach(({ resolve }) => resolve({ ok: false, error: error?.message || String(error || "Authentication cancelled.") }));
+}
+
+function authCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "600",
+  };
+}
+
+function sendAuthHttp(res, statusCode, payload = {}) {
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    ...authCorsHeaders(),
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function readAuthJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > 1024 * 1024) {
+        req.destroy(new Error("Auth callback body was too large."));
+      }
+    });
+    req.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (error) {
+        reject(new Error("Auth callback was not valid JSON."));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function escapeAppleScriptString(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+async function closeBrowserTabsMatching(fragment) {
+  const safeFragment = escapeAppleScriptString(fragment);
+  if (!safeFragment || process.platform !== "darwin") return;
+
+  const browsers = ["Google Chrome", "Google Chrome Beta", "Google Chrome Canary", "Microsoft Edge", "Brave Browser", "Arc"];
+  for (const browser of browsers) {
+    const safeBrowser = escapeAppleScriptString(browser);
+    const script = `
+tell application "System Events"
+  if exists process "${safeBrowser}" then
+    tell application "${safeBrowser}"
+      repeat with w in windows
+        set matchingTabs to {}
+        repeat with t in tabs of w
+          try
+            if (URL of t as string) contains "${safeFragment}" then set end of matchingTabs to t
+          end try
+        end repeat
+        repeat with t in matchingTabs
+          try
+            close t
+          end try
+        end repeat
+      end repeat
+    end tell
+  end if
+end tell`;
+    try {
+      await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 5000 });
+      logMac("auth.browser_tabs.close_attempted", { browser, fragment });
+    } catch (error) {
+      logMac("auth.browser_tabs.close_failed", { browser, error });
+    }
+  }
+}
+
+function stopAuthBrowserFlow(options = {}) {
+  const flow = authBrowserFlow;
+  if (!flow) return;
+  authBrowserFlow = null;
+  if (flow.timeout) clearTimeout(flow.timeout);
+  if (flow.server) {
+    try { flow.server.close(); } catch (_) {}
+  }
+  if (options.closeTabs !== false) {
+    void closeBrowserTabsMatching(`macNonce=${encodeURIComponent(flow.nonce)}`);
+  }
+}
+
+function buildAuthRelayUrl(origin, port, nonce, reason) {
+  const url = new URL(`${origin}/auth/extension`);
+  url.searchParams.set("mode", "signin");
+  url.searchParams.set("source", "braino-mac");
+  url.searchParams.set("reason", reason || "realtime");
+  url.searchParams.set("macCallback", `http://127.0.0.1:${port}${AUTH_CALLBACK_PATH}`);
+  url.searchParams.set("macNonce", nonce);
+  return url.toString();
+}
+
+async function openBrowserAuthTabs(flow) {
+  for (const origin of BRAINO_AUTH_ORIGINS) {
+    const url = buildAuthRelayUrl(origin, flow.port, flow.nonce, flow.reason);
+    logMac("auth.browser.open", { origin, url });
+    await shell.openExternal(url);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+async function startBrowserAuthFlow(reason = "realtime") {
+  if (authBrowserFlow) {
+    logMac("auth.browser.reuse", { reason, port: authBrowserFlow.port });
+    return;
+  }
+
+  const nonce = crypto.randomBytes(18).toString("base64url");
+  const server = http.createServer(async (req, res) => {
+    const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+    if (requestUrl.pathname !== AUTH_CALLBACK_PATH) {
+      sendAuthHttp(res, 404, { ok: false, error: "not_found" });
+      return;
+    }
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, authCorsHeaders());
+      res.end();
+      return;
+    }
+
+    if (req.method !== "POST") {
+      sendAuthHttp(res, 405, { ok: false, error: "method_not_allowed" });
+      return;
+    }
+
+    try {
+      const body = await readAuthJsonBody(req);
+      if (body?.nonce !== nonce) {
+        logMac("auth.callback.bad_nonce", { hasNonce: Boolean(body?.nonce) });
+        sendAuthHttp(res, 403, { ok: false, error: "bad_nonce" });
+        return;
+      }
+
+      const session = authSessionFromRelayPayload(body);
+      if (!session?.access_token) {
+        sendAuthHttp(res, 400, { ok: false, error: "missing_token" });
+        return;
+      }
+
+      saveAuthSession(session);
+      sendAuthHttp(res, 200, { ok: true });
+      logMac("auth.callback.ok", { email: session.user?.email || null, userId: session.user?.id || null });
+      resolveAuthWaiters({ ok: true, source: "browser", email: session.user?.email || null });
+      stopAuthBrowserFlow({ closeTabs: true });
+    } catch (error) {
+      logMac("auth.callback.failed", { error });
+      sendAuthHttp(res, 500, { ok: false, error: error?.message || "auth_callback_failed" });
+    }
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const port = server.address()?.port;
+  authBrowserFlow = {
+    server,
+    port,
+    nonce,
+    reason,
+    timeout: setTimeout(() => {
+      logMac("auth.browser.timeout", { reason, port });
+      stopAuthBrowserFlow({ closeTabs: true });
+      rejectAuthWaiters(new Error("Braino browser sign-in timed out."));
+    }, 120000),
+  };
+
+  logMac("auth.browser.start", {
+    reason,
+    port,
+    originCount: BRAINO_AUTH_ORIGINS.length,
+  });
+
+  try {
+    await openBrowserAuthTabs(authBrowserFlow);
+  } catch (error) {
+    logMac("auth.browser.open_failed", { error });
+    stopAuthBrowserFlow({ closeTabs: true });
+    rejectAuthWaiters(error);
+  }
+}
+
+async function ensureBrainoAuth(reason = "realtime") {
+  const existing = await getBrainoAuthToken();
+  if (existing) return { ok: true, source: ENV_BRAINO_AUTH_TOKEN ? "env" : "stored" };
+  if (OPENAI_API_KEY) return { ok: true, source: "openai" };
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false, error: "Supabase is not configured for Braino auth." };
+  }
+  sendToRenderer("braino-mac:auth-required", { reason });
+  return new Promise((resolve) => {
+    pendingAuthWaiters.push({ resolve });
+    startBrowserAuthFlow(reason).catch((error) => {
+      logMac("auth.browser.start_failed", { error });
+      rejectAuthWaiters(error);
+    });
+  });
 }
 
 function execFileP(command, args, options = {}) {
@@ -672,10 +1038,11 @@ function buildRealtimeSessionConfig() {
 
 async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   const sdp = String(offerSdp || "").trim();
+  let authToken = await getBrainoAuthToken();
   logMac("realtime.create.start", {
     voiceEngine: voiceEngine || "fish",
     offerChars: sdp.length,
-    hasBrainoAuthToken: Boolean(BRAINO_AUTH_TOKEN),
+    hasBrainoAuthToken: Boolean(authToken),
     hasOpenAiApiKey: Boolean(OPENAI_API_KEY),
     hasSupabaseUrl: Boolean(SUPABASE_URL),
     hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
@@ -686,7 +1053,17 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   }
 
   const requestedModel = voiceEngine === "realtime" ? "gpt-realtime-2" : "gpt-realtime-mini";
-  if (BRAINO_AUTH_TOKEN && SUPABASE_URL && SUPABASE_ANON_KEY) {
+  if (!authToken && !OPENAI_API_KEY && SUPABASE_URL && SUPABASE_ANON_KEY) {
+    logMac("realtime.create.auth_required", { requestedModel });
+    const authResult = await ensureBrainoAuth("realtime");
+    if (!authResult?.ok) {
+      logMac("realtime.create.auth_failed", { error: authResult?.error || "Authentication cancelled." });
+      return { ok: false, error: authResult?.error || "Braino sign-in is required for realtime voice." };
+    }
+    authToken = await getBrainoAuthToken();
+  }
+
+  if (authToken && SUPABASE_URL && SUPABASE_ANON_KEY) {
     logMac("realtime.create.transport", {
       transport: "supabase",
       requestedModel,
@@ -696,7 +1073,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
       headers: {
         "Content-Type": "application/sdp",
         apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${BRAINO_AUTH_TOKEN}`,
+        Authorization: `Bearer ${authToken}`,
         "X-Braino-Realtime-Model": requestedModel,
       },
       body: sdp,
@@ -734,7 +1111,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
 
   if (!OPENAI_API_KEY) {
     logMac("realtime.create.missing_credentials", {
-      hasBrainoAuthToken: Boolean(BRAINO_AUTH_TOKEN),
+      hasBrainoAuthToken: Boolean(authToken),
       hasOpenAiApiKey: Boolean(OPENAI_API_KEY),
       envKeysPresent: Object.keys(ENV).filter((key) => /OPENAI|BRAINO_AUTH|SUPABASE/i.test(key)).sort(),
     });
@@ -792,11 +1169,12 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
 async function updateRealtimeSession({ action, sessionId, reason } = {}) {
   const normalizedAction = String(action || "").trim().toLowerCase();
   const id = String(sessionId || "").trim();
-  if (!BRAINO_AUTH_TOKEN || !SUPABASE_URL || !SUPABASE_ANON_KEY || !id) {
+  const authToken = await getBrainoAuthToken();
+  if (!authToken || !SUPABASE_URL || !SUPABASE_ANON_KEY || !id) {
     logMac("realtime.session.skip", {
       action: normalizedAction,
       hasSessionId: Boolean(id),
-      hasBrainoAuthToken: Boolean(BRAINO_AUTH_TOKEN),
+      hasBrainoAuthToken: Boolean(authToken),
       hasSupabaseUrl: Boolean(SUPABASE_URL),
       hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
     });
@@ -811,7 +1189,7 @@ async function updateRealtimeSession({ action, sessionId, reason } = {}) {
     headers: {
       "Content-Type": "application/json",
       apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${BRAINO_AUTH_TOKEN}`,
+      Authorization: `Bearer ${authToken}`,
     },
     body: JSON.stringify({
       action: normalizedAction,
@@ -932,15 +1310,19 @@ async function runDelegate(prompt) {
   };
 }
 
-ipcMain.handle("braino-mac:get-config", () => ({
-  appVersion: APP_VERSION,
-  supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
-  realtimeConfigured: Boolean((BRAINO_AUTH_TOKEN && SUPABASE_URL && SUPABASE_ANON_KEY) || OPENAI_API_KEY),
-  realtimeAuthSource: BRAINO_AUTH_TOKEN ? "braino" : OPENAI_API_KEY ? "openai" : "missing",
-  accessibilityTrusted: systemPreferences.isTrustedAccessibilityClient(false),
-  microphoneStatus: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "unsupported",
-  logPath: LOG_PATH,
-}));
+ipcMain.handle("braino-mac:get-config", () => {
+  const auth = authStatusPayload();
+  return {
+    appVersion: APP_VERSION,
+    supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
+    realtimeConfigured: Boolean((auth.authenticated && SUPABASE_URL && SUPABASE_ANON_KEY) || OPENAI_API_KEY),
+    realtimeAuthSource: auth.source === "env" || auth.source === "stored" ? "braino" : OPENAI_API_KEY ? "openai" : "missing",
+    auth,
+    accessibilityTrusted: systemPreferences.isTrustedAccessibilityClient(false),
+    microphoneStatus: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "unsupported",
+    logPath: LOG_PATH,
+  };
+});
 
 ipcMain.handle("braino-mac:delegate", async (_event, prompt) => runDelegate(prompt));
 
@@ -948,6 +1330,15 @@ ipcMain.handle("braino-mac:log", async (_event, payload = {}) => {
   logMac(String(payload?.event || "renderer.log"), payload?.data || {});
   return { ok: true, logPath: LOG_PATH };
 });
+
+ipcMain.handle("braino-mac:auth-status", async () => authStatusPayload());
+
+ipcMain.handle("braino-mac:auth-sign-out", async () => {
+  clearAuthSession();
+  return { ok: true, ...authStatusPayload() };
+});
+
+ipcMain.handle("braino-mac:ensure-auth", async (_event, reason) => ensureBrainoAuth(String(reason || "realtime")));
 
 ipcMain.handle("braino-mac:native-listen", async () => runNativeSpeech());
 
@@ -1003,11 +1394,13 @@ ipcMain.handle("braino-mac:system-say", async (_event, text) => {
 });
 
 app.whenReady().then(() => {
+  const auth = authStatusPayload();
   logMac("app.ready", {
     appVersion: APP_VERSION,
     hasSupabaseUrl: Boolean(SUPABASE_URL),
     hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
-    hasBrainoAuthToken: Boolean(BRAINO_AUTH_TOKEN),
+    hasBrainoAuthToken: Boolean(auth.authenticated),
+    brainoAuthSource: auth.source,
     hasOpenAiApiKey: Boolean(OPENAI_API_KEY),
     envKeysPresent: Object.keys(ENV).filter((key) => /OPENAI|BRAINO_AUTH|SUPABASE/i.test(key)).sort(),
     logPath: LOG_PATH,

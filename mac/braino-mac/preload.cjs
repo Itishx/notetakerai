@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld("brainoMac", {
   getConfig: () => ipcRenderer.invoke("braino-mac:get-config"),
   getWalkerSvg: () => walkerSvg,
   log: (payload) => ipcRenderer.invoke("braino-mac:log", payload),
+  authStatus: () => ipcRenderer.invoke("braino-mac:auth-status"),
+  authSignOut: () => ipcRenderer.invoke("braino-mac:auth-sign-out"),
+  ensureAuth: (reason) => ipcRenderer.invoke("braino-mac:ensure-auth", reason),
   delegate: (prompt) => ipcRenderer.invoke("braino-mac:delegate", prompt),
   createRealtimeCall: (payload) => ipcRenderer.invoke("braino-mac:create-realtime-call", payload),
   updateRealtimeSession: (payload) => ipcRenderer.invoke("braino-mac:update-realtime-session", payload),
@@ -40,6 +43,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:voice-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:voice-toggle", handler);
+  },
+  onAuthRequired: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:auth-required", handler);
+    return () => ipcRenderer.removeListener("braino-mac:auth-required", handler);
   },
   onHelperStatus: (callback) => {
     const handler = (_event, payload) => callback(payload || {});

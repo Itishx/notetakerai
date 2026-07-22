@@ -23,11 +23,9 @@ Braino starts on the visible macOS Dock strip and patrols across it. Drag Braino
 
 ## Live Voice Setup
 
-The extension's realtime endpoint requires the signed-in Braino Supabase JWT. For the Mac prototype, pass that token as `BRAINO_AUTH_TOKEN` before running:
+The extension's realtime endpoint requires the signed-in Braino Supabase JWT. On Mac, Braino uses the same browser-based wakeup auth flow as the extension: when realtime voice wakes without a saved session, Braino opens the hosted `/auth/extension` relay page in the browser, receives the signed-in Supabase session on a local `127.0.0.1` callback, closes the auth tabs, and stores the access/refresh token at `~/Library/Application Support/Braino Mac/auth-session.json`.
 
-```bash
-BRAINO_AUTH_TOKEN="your-signed-in-braino-token" npm run mac:dev
-```
+For local development, Braino opens both `trybraino.com` and the cinema preview auth relay by default, because either origin may have the current session. Packaged builds default to `trybraino.com` only. Override with `BRAINO_MAC_AUTH_ORIGINS` when needed.
 
 For local development without the Braino Supabase realtime endpoint, `OPENAI_API_KEY`, `OPENAI_REALTIME_API_KEY`, or `VITE_OPENAI_API_KEY` can be used as a direct local realtime fallback. In both paths, OpenAI realtime is used for live listening/transcription; Braino's audible reply still uses the existing Fish Audio voice when configured.
 
