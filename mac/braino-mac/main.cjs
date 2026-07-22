@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.29";
+const APP_VERSION = "12.0.30";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -868,7 +868,7 @@ const MAC_SKILLS_REPLY = [
   "9. I can open the best matching file when you ask for it.",
   "10. I can open installed Mac apps by name, and fall back to the right website for common services.",
   "11. I can close apps or matching browser tabs for the services I opened.",
-  "12. I can play songs through the Spotify Mac app when your Spotify account is connected.",
+  "12. I can play songs and control playback through the Spotify Mac app when your Spotify account is connected.",
 ].join("\n");
 
 function isMacSkillsPrompt(text) {
@@ -965,22 +965,51 @@ function formatSpotifyArtists(track) {
 
 function parseSpotifyPlayIntent(raw) {
   const source = String(raw || "").trim();
-  if (!/\bplay\b/i.test(source)) return null;
-  if (!/\bspotify\b/i.test(source) && !/\b(song|track|music)\b/i.test(source)) return null;
+  const hasPlayIntent = /\b(?:play|played|put on|queue|spin|listen to|start listening to)\b/i.test(source);
+  if (!hasPlayIntent) return null;
+  const mentionsSpotify = /\bspotify\b/i.test(source);
+  const mentionsMusic = /\b(song|track|music|tune|album|artist)\b/i.test(source);
+  const wantsVideo = /\b(youtube|video|movie|show|episode|trailer|netflix|watch)\b/i.test(source) && !mentionsSpotify;
+  if (wantsVideo) return null;
+  if (!mentionsSpotify && !mentionsMusic && !/\b(?:play|put on|queue|spin|listen to)\s+["“][^"”]+["”]/i.test(source)) {
+    const loosePlay = source.match(/\b(?:play|put on|queue|spin|listen to)\s+(.+)$/i);
+    if (!loosePlay || loosePlay[1].trim().split(/\s+/).length > 8) return null;
+  }
   if (/\b(?:pause|resume|continue|next|skip|previous|prev|volume|stop)\b/i.test(source)) return null;
   const song = extractAfter(source, [
-    /\bplay\s+["“](.+?)["”]\s+(?:on|in|with)\s+spotify\b/i,
-    /\bplay\s+["“](.+?)["”]\s*$/i,
-    /\bplay\s+(?:the\s+)?(?:song|track|music)\s+["“]?(.+?)["”]?\s+(?:on|in|with)\s+spotify\b/i,
-    /\bplay\s+(.+?)\s+(?:on|in|with)\s+spotify\b/i,
-    /\bspotify\s+(?:play|start)\s+(.+)$/i,
+    /\b(?:play|played|put on|queue|spin|listen to)\s+["“](.+?)["”]\s+(?:on|in|with)\s+spotify\b/i,
+    /\b(?:play|played|put on|queue|spin|listen to)\s+["“](.+?)["”]\s*$/i,
+    /\b(?:play|played|put on|queue|spin|listen to)\s+(?:the\s+)?(?:song|track|music|tune)\s+["“]?(.+?)["”]?\s+(?:on|in|with)\s+spotify\b/i,
+    /\b(?:play|played|put on|queue|spin|listen to)\s+(.+?)\s+(?:on|in|with)\s+spotify\b/i,
+    /\bspotify\s+(?:play|played|start|put on|queue|spin)\s+(.+)$/i,
+    /\b(?:play|put on|queue|spin|listen to)\s+(.+)$/i,
   ]);
   const cleaned = cleanOpenTarget(song)
     .replace(/\b(?:on|in|with)\s+spotify\b/gi, " ")
+    .replace(/^(?:the\s+)?(?:song|track|music|tune)\s+/i, "")
+    .replace(/\b(?:for me|please|pls|right now|now)\b$/i, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (!cleaned || /^(?:this|it|song|track|music)$/i.test(cleaned)) return { needsSong: true, song: "" };
+  if (!cleaned || /^(?:this|it|this song|this track|this music|song|track|music)$/i.test(cleaned)) {
+    return { needsSong: true, song: "" };
+  }
   return { needsSong: false, song: cleaned };
+}
+
+function parseSpotifyControlIntent(raw) {
+  const source = String(raw || "").trim();
+  const mentionsSpotifyPlayback = /\b(spotify|song|track|music|tune|playlist)\b/i.test(source);
+  const shortControl = /^(?:pause|resume|continue|play|next|skip|previous|prev|back|stop)\b/i.test(cleanPrompt(source));
+  if (!mentionsSpotifyPlayback && !shortControl) return null;
+  if (/\b(?:pause|stop)\b/i.test(source)) return { control: "pause" };
+  if (/\b(?:resume|continue)\b/i.test(source)) return { control: "play" };
+  const cleaned = cleanPrompt(source);
+  if (/^(?:play|start)\s*$/i.test(cleaned) || /^(?:play|start)\s+(?:the\s+)?(?:song|music|track|spotify)$/i.test(cleaned)) {
+    return { control: "play" };
+  }
+  if (/\b(?:next|skip)\b/i.test(source)) return { control: "next" };
+  if (/\b(?:previous|prev|back)\b/i.test(source)) return { control: "previous" };
+  return null;
 }
 
 async function playSpotifyTrackInMacApp(uri) {
@@ -993,19 +1022,99 @@ end tell`;
   await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
 }
 
+async function isMacApplicationRunning(appName) {
+  const safeApp = escapeAppleScriptString(canonicalAppName(appName));
+  const script = `
+tell application "System Events"
+  return exists application process "${safeApp}"
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 2500 });
+    return /^true$/i.test(stdout.trim());
+  } catch (error) {
+    logMac("app.running_check.failed", { appName: safeApp, error });
+    return false;
+  }
+}
+
+async function readSpotifyMacState() {
+  const script = `
+tell application "System Events"
+  set spotifyRunning to exists application process "Spotify"
+end tell
+if spotifyRunning then
+  tell application "Spotify"
+    set stateText to player state as text
+    set trackName to ""
+    set artistName to ""
+    try
+      set trackName to name of current track
+      set artistName to artist of current track
+    end try
+    return stateText & linefeed & trackName & linefeed & artistName
+  end tell
+else
+  return "not running"
+end if`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 4000 });
+    const [state = "", name = "", artist = ""] = stdout.trim().split(/\r?\n/);
+    return { ok: true, state, name, artist };
+  } catch (error) {
+    logMac("spotify.mac_app.state.failed", { error });
+    return { ok: false, error: error?.message || "Could not read Spotify state." };
+  }
+}
+
+async function controlSpotifyPlaybackOnMac(control) {
+  const normalized = String(control || "").trim().toLowerCase();
+  const commandMap = {
+    pause: "pause",
+    play: "play",
+    next: "next track",
+    previous: "previous track",
+  };
+  const command = commandMap[normalized];
+  if (!command) return { ok: false, say: "Tell me pause, resume, next, or previous for Spotify." };
+  const startedAt = Date.now();
+  sendTaskProgress({ status: "thinking", text: `Spotify ${normalized}` });
+  if (normalized === "play") await openApp("Spotify");
+  try {
+    await execFileP("/usr/bin/osascript", ["-e", `tell application "Spotify" to ${command}`], { timeout: 6000 });
+    const state = await readSpotifyMacState();
+    logMac("spotify.mac_app.control.done", {
+      control: normalized,
+      state: state?.state || "",
+      track: state?.name || "",
+      artist: state?.artist || "",
+      durationMs: Date.now() - startedAt,
+    });
+    return { ok: true, say: normalized === "pause" ? "Paused Spotify." : normalized === "play" ? "Resumed Spotify." : normalized === "next" ? "Skipped to the next track." : "Went back to the previous track." };
+  } catch (error) {
+    logMac("spotify.mac_app.control.failed", { control: normalized, error });
+    const apiAction = normalized === "previous" ? "previous" : normalized;
+    const api = await callSpotifyFunction("spotify-playback", { action: apiAction });
+    if (api.ok) return { ok: true, say: normalized === "pause" ? "Paused Spotify." : normalized === "play" ? "Resumed Spotify." : normalized === "next" ? "Skipped to the next track." : "Went back to the previous track." };
+    return { ok: false, say: api.error || "Spotify did not accept that playback command." };
+  }
+}
+
 async function playSpotifySongOnMac(songQuery) {
   const query = String(songQuery || "").trim();
   if (!query) return { ok: false, say: "Tell me the song name and I will play it on Spotify." };
+  const startedAt = Date.now();
   sendTaskProgress({ status: "thinking", text: `Searching Spotify for ${query}` });
-  const search = await callSpotifyFunction("spotify-search", { query, limit: 5 });
+  const wasRunningPromise = isMacApplicationRunning("Spotify");
+  const openPromise = openApp("Spotify");
+  const searchPromise = callSpotifyFunction("spotify-search", { query, limit: 5 });
+  const [wasRunning, openResult, search] = await Promise.all([wasRunningPromise, openPromise, searchPromise]);
   if (!search.ok) return { ok: false, say: search.error || "Spotify search failed." };
   const track = Array.isArray(search.tracks) ? search.tracks[0] : null;
   if (!track?.uri) return { ok: false, say: `I could not find ${query} on Spotify.` };
 
   sendTaskProgress({ status: "thinking", text: "Opening Spotify" });
-  const openResult = await openApp("Spotify");
   if (!openResult.ok) return { ok: false, say: "I found the track, but I could not open the Spotify Mac app." };
-  await new Promise((resolve) => setTimeout(resolve, 900));
+  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 180 : 650));
 
   const title = String(track.name || track.title || query).trim();
   const artists = formatSpotifyArtists(track) || "unknown";
@@ -1017,7 +1126,16 @@ async function playSpotifySongOnMac(songQuery) {
   try {
     await playSpotifyTrackInMacApp(track.uri);
     nativeOk = true;
-    logMac("spotify.mac_app.play.done", { track: title, artists, uri: track.uri });
+    const state = await readSpotifyMacState();
+    logMac("spotify.mac_app.play.done", {
+      track: title,
+      artists,
+      uri: track.uri,
+      state: state?.state || "",
+      stateTrack: state?.name || "",
+      stateArtist: state?.artist || "",
+      durationMs: Date.now() - startedAt,
+    });
   } catch (error) {
     logMac("spotify.mac_app.play.failed", { track: title, artists, uri: track.uri, error });
   }
@@ -2980,6 +3098,15 @@ async function runDelegate(prompt) {
     logMac("delegate.web_search_intent", { query: textForLog(webQuery) });
     await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`);
     return { ok: true, say: `Searching Chrome for ${webQuery}.` };
+  }
+
+  const spotifyControl = parseSpotifyControlIntent(raw);
+  if (spotifyControl) {
+    logMac("delegate.spotify_control_intent", {
+      raw: textForLog(raw),
+      control: spotifyControl.control,
+    });
+    return controlSpotifyPlaybackOnMac(spotifyControl.control);
   }
 
   const spotifyPlay = parseSpotifyPlayIntent(raw);
