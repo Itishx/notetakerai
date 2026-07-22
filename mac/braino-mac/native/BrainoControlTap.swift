@@ -103,7 +103,7 @@ final class BrainoControlTap {
   }
 
   private static let handleEvent: CGEventTapCallBack = { _, type, event, refcon in
-    guard type == .flagsChanged, let refcon else {
+    guard (type == .flagsChanged || type == .keyDown), let refcon else {
       return Unmanaged.passUnretained(event)
     }
 

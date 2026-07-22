@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.35";
+const APP_VERSION = "12.0.36";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -43,6 +43,7 @@ let lastOverlayDisplayKey = "";
 let lastOverlayContextKey = "";
 let lastOverlayStateSentAt = 0;
 let dockWindowHiddenByUser = false;
+let lastOverlayRaiseLogAt = 0;
 
 function loadDotEnv() {
   const out = {};
@@ -792,6 +793,30 @@ function sendOverlayState(reason, display = displayForContext(activeMacContext))
   });
 }
 
+function raiseDockWindow(reason = "raise") {
+  if (!dockWindow || dockWindow.isDestroyed() || dockWindowHiddenByUser) return;
+  try {
+    dockWindow.setFocusable(false);
+    dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+    dockWindow.setAlwaysOnTop(false);
+    dockWindow.setAlwaysOnTop(true, "screen-saver", 1);
+    if (!dockWindow.isVisible()) dockWindow.showInactive();
+    dockWindow.moveTop?.();
+    const now = Date.now();
+    if (reason !== "poll" || now - lastOverlayRaiseLogAt > 10000) {
+      lastOverlayRaiseLogAt = now;
+      logMac("overlay.raise", {
+        reason,
+        visible: dockWindow.isVisible(),
+        focused: dockWindow.isFocused(),
+        appName: activeMacContext?.appName || "",
+      });
+    }
+  } catch (error) {
+    logMac("overlay.raise.failed", { reason, error });
+  }
+}
+
 function positionDockWindow(display = displayForContext(activeMacContext), reason = "position", options = {}) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   const targetDisplay = display || screen.getPrimaryDisplay();
@@ -806,14 +831,7 @@ function positionDockWindow(display = displayForContext(activeMacContext), reaso
     }, false);
     lastOverlayDisplayKey = key;
   }
-  try {
-    dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
-    dockWindow.setAlwaysOnTop(true, "screen-saver", 1);
-    if (!dockWindowHiddenByUser) {
-      if (!dockWindow.isVisible()) dockWindow.showInactive();
-      dockWindow.moveTop?.();
-    }
-  } catch (_) {}
+  raiseDockWindow(reason);
   if (options.notify !== false) sendOverlayState(reason, targetDisplay);
 }
 
@@ -864,6 +882,7 @@ function createDockWindow() {
   const initialDisplay = displayForContext(activeMacContext);
   const initialBounds = initialDisplay.bounds;
   dockWindow = new BrowserWindow({
+    type: "panel",
     width: initialBounds.width,
     height: initialBounds.height,
     x: initialBounds.x,
@@ -879,7 +898,7 @@ function createDockWindow() {
     maximizable: false,
     fullscreenable: false,
     hasShadow: false,
-    focusable: true,
+    focusable: false,
     title: "Braino Mac",
     show: false,
     acceptFirstMouse: true,
@@ -894,12 +913,13 @@ function createDockWindow() {
     },
   });
 
-  dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  app.dock?.hide?.();
+  dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   dockWindow.setAlwaysOnTop(true, "screen-saver", 1);
+  dockWindow.setFocusable(false);
   dockWindow.setIgnoreMouseEvents(true, { forward: true });
   dockWindow.once("ready-to-show", () => {
     positionDockWindow(initialDisplay, "ready-to-show");
-    dockWindow.showInactive();
   });
   dockWindow.on("blur", () => {
     positionDockWindow(undefined, "blur");
