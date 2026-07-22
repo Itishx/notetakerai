@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.23";
+const APP_VERSION = "12.0.25";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -19,6 +19,11 @@ const LOG_PATH = path.join(LOG_DIR, "braino-mac.log");
 const AUTH_STORE_DIR = path.join(os.homedir(), "Library", "Application Support", "Braino Mac");
 const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
 const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
+const {
+  resolveWebTarget,
+  resolveAppTarget,
+  extractCloseShortcutTarget,
+} = require(path.join(ROOT_DIR, "extension", "lib", "openTargets.cjs"));
 
 let dockWindow = null;
 let swiftHotkey = null;
@@ -345,9 +350,10 @@ function escapeAppleScriptString(value) {
 
 async function closeBrowserTabsMatching(fragment) {
   const safeFragment = escapeAppleScriptString(fragment);
-  if (!safeFragment || process.platform !== "darwin") return;
+  if (!safeFragment || process.platform !== "darwin") return { ok: false, attemptedBrowsers: 0 };
 
   const browsers = ["Google Chrome", "Google Chrome Beta", "Google Chrome Canary", "Microsoft Edge", "Brave Browser", "Arc"];
+  let attemptedBrowsers = 0;
   for (const browser of browsers) {
     const safeBrowser = escapeAppleScriptString(browser);
     const script = `
@@ -372,11 +378,13 @@ tell application "System Events"
 end tell`;
     try {
       await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 5000 });
+      attemptedBrowsers += 1;
       logMac("auth.browser_tabs.close_attempted", { browser, fragment });
     } catch (error) {
       logMac("auth.browser_tabs.close_failed", { browser, error });
     }
   }
+  return { ok: true, attemptedBrowsers };
 }
 
 function stopAuthBrowserFlow(options = {}) {
@@ -850,6 +858,8 @@ const MAC_SKILLS_REPLY = [
   "3. I can find files on this Mac with Spotlight.",
   "4. I can open the best matching file when you ask for it.",
   "5. I can open installed Mac apps by name, and fall back to the right website for common services.",
+  "6. I can close apps or matching browser tabs for the services I opened.",
+  "7. I can play songs through the Spotify Mac app when your Spotify account is connected.",
 ].join("\n");
 
 function isMacSkillsPrompt(text) {
@@ -862,6 +872,160 @@ async function openChromeUrl(url) {
   await execFileP("open", ["-a", "Google Chrome", url]);
 }
 
+async function openSpotifyReconnect(authToken) {
+  if (!authToken || !SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/spotify-oauth-start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ source: "braino-mac" }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.authUrl) {
+      logMac("spotify.reconnect.failed", { status: response.status, error: data?.error || null });
+      return false;
+    }
+    await shell.openExternal(data.authUrl);
+    logMac("spotify.reconnect.opened", { status: response.status });
+    return true;
+  } catch (error) {
+    logMac("spotify.reconnect.error", { error });
+    return false;
+  }
+}
+
+async function callSpotifyFunction(functionName, payload) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false, error: "Supabase is not configured for Spotify." };
+  }
+  let authToken = await getBrainoAuthToken();
+  if (!authToken) {
+    const authResult = await ensureBrainoAuth("spotify");
+    if (!authResult?.ok) return { ok: false, error: authResult?.error || "Braino sign-in is required for Spotify." };
+    authToken = await getBrainoAuthToken();
+  }
+  if (!authToken) return { ok: false, error: "Braino sign-in is required for Spotify." };
+
+  logMac("spotify.function.start", {
+    functionName,
+    payloadKeys: Object.keys(payload || {}),
+  });
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/${functionName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      logMac("spotify.function.failed", {
+        functionName,
+        status: response.status,
+        error: data?.error || null,
+        details: data?.details || null,
+        reconnectRequired: Boolean(data?.reconnectRequired),
+      });
+      if (data?.reconnectRequired) {
+        await openSpotifyReconnect(authToken);
+        return { ok: false, error: "Spotify needs to be reconnected. I opened the reconnect page." };
+      }
+      return { ok: false, error: [data?.error, data?.details].filter(Boolean).join(" - ") || `${functionName} failed (${response.status}).` };
+    }
+    logMac("spotify.function.done", { functionName, status: response.status });
+    return { ok: true, ...data };
+  } catch (error) {
+    logMac("spotify.function.error", { functionName, error });
+    return { ok: false, error: error?.message || `${functionName} failed.` };
+  }
+}
+
+function formatSpotifyArtists(track) {
+  if (Array.isArray(track?.artists)) {
+    return track.artists.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean).join(", ");
+  }
+  return String(track?.artists || "").trim();
+}
+
+function parseSpotifyPlayIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\bplay\b/i.test(source)) return null;
+  if (!/\bspotify\b/i.test(source) && !/\b(song|track|music)\b/i.test(source)) return null;
+  if (/\b(?:pause|resume|continue|next|skip|previous|prev|volume|stop)\b/i.test(source)) return null;
+  const song = extractAfter(source, [
+    /\bplay\s+["“](.+?)["”]\s+(?:on|in|with)\s+spotify\b/i,
+    /\bplay\s+["“](.+?)["”]\s*$/i,
+    /\bplay\s+(?:the\s+)?(?:song|track|music)\s+["“]?(.+?)["”]?\s+(?:on|in|with)\s+spotify\b/i,
+    /\bplay\s+(.+?)\s+(?:on|in|with)\s+spotify\b/i,
+    /\bspotify\s+(?:play|start)\s+(.+)$/i,
+  ]);
+  const cleaned = cleanOpenTarget(song)
+    .replace(/\b(?:on|in|with)\s+spotify\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned || /^(?:this|it|song|track|music)$/i.test(cleaned)) return { needsSong: true, song: "" };
+  return { needsSong: false, song: cleaned };
+}
+
+async function playSpotifyTrackInMacApp(uri) {
+  const safeUri = escapeAppleScriptString(uri);
+  const script = `
+tell application "Spotify"
+  activate
+  play track "${safeUri}"
+end tell`;
+  await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
+}
+
+async function playSpotifySongOnMac(songQuery) {
+  const query = String(songQuery || "").trim();
+  if (!query) return { ok: false, say: "Tell me the song name and I will play it on Spotify." };
+  sendTaskProgress({ status: "thinking", text: `Searching Spotify for ${query}` });
+  const search = await callSpotifyFunction("spotify-search", { query, limit: 5 });
+  if (!search.ok) return { ok: false, say: search.error || "Spotify search failed." };
+  const track = Array.isArray(search.tracks) ? search.tracks[0] : null;
+  if (!track?.uri) return { ok: false, say: `I could not find ${query} on Spotify.` };
+
+  sendTaskProgress({ status: "thinking", text: "Opening Spotify" });
+  const openResult = await openApp("Spotify");
+  if (!openResult.ok) return { ok: false, say: "I found the track, but I could not open the Spotify Mac app." };
+  await new Promise((resolve) => setTimeout(resolve, 900));
+
+  const title = String(track.name || track.title || query).trim();
+  const artists = formatSpotifyArtists(track) || "unknown";
+  let nativeOk = false;
+  let apiOk = false;
+  let apiError = "";
+
+  sendTaskProgress({ status: "thinking", text: `Playing ${title}` });
+  try {
+    await playSpotifyTrackInMacApp(track.uri);
+    nativeOk = true;
+    logMac("spotify.mac_app.play.done", { track: title, artists, uri: track.uri });
+  } catch (error) {
+    logMac("spotify.mac_app.play.failed", { track: title, artists, uri: track.uri, error });
+  }
+
+  const playback = await callSpotifyFunction("spotify-playback", { action: "play", uris: [track.uri] });
+  if (playback.ok) {
+    apiOk = true;
+  } else {
+    apiError = playback.error || "Spotify playback failed.";
+    logMac("spotify.api_play.failed_after_native", { track: title, artists, error: apiError });
+  }
+
+  if (!nativeOk && !apiOk) return { ok: false, say: apiError || "Spotify opened, but I could not start playback." };
+  sendTaskProgress({ status: "done", text: `Playing ${title}` });
+  return { ok: true, say: `Playing ${title} by ${artists} on Spotify.` };
+}
+
 const FILE_KIND_EXTENSIONS = {
   pdf: [".pdf"],
   image: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".heif", ".tiff", ".bmp", ".svg"],
@@ -872,43 +1036,6 @@ const FILE_KIND_EXTENSIONS = {
   presentation: [".ppt", ".pptx", ".key"],
   archive: [".zip", ".rar", ".7z", ".tar", ".gz", ".dmg", ".pkg"],
 };
-
-const COMMON_WEB_TARGETS = new Map([
-  ["chatgpt", "https://chatgpt.com"],
-  ["gmail", "https://mail.google.com"],
-  ["google maps", "https://maps.google.com"],
-  ["linkedin", "https://www.linkedin.com"],
-  ["maps", "https://maps.google.com"],
-  ["medium", "https://medium.com"],
-  ["netflix", "https://www.netflix.com"],
-  ["spotify", "https://open.spotify.com"],
-  ["twitter", "https://x.com"],
-  ["whatsapp", "https://web.whatsapp.com"],
-  ["x", "https://x.com"],
-  ["youtube", "https://www.youtube.com"],
-  ["youtube music", "https://music.youtube.com"],
-]);
-
-const APP_NAME_ALIASES = new Map([
-  ["activity monitor", "Activity Monitor"],
-  ["app store", "App Store"],
-  ["chrome", "Google Chrome"],
-  ["cursor", "Cursor"],
-  ["facetime", "FaceTime"],
-  ["finder", "Finder"],
-  ["google chrome", "Google Chrome"],
-  ["mail", "Mail"],
-  ["messages", "Messages"],
-  ["music", "Music"],
-  ["notes", "Notes"],
-  ["photos", "Photos"],
-  ["safari", "Safari"],
-  ["slack", "Slack"],
-  ["spotify", "Spotify"],
-  ["terminal", "Terminal"],
-  ["whatsapp", "WhatsApp"],
-  ["xcode", "Xcode"],
-]);
 
 function normalizeSearchToken(value) {
   return String(value || "")
@@ -935,13 +1062,11 @@ function cleanOpenTarget(value) {
 
 function canonicalAppName(appName) {
   const cleaned = cleanOpenTarget(appName);
-  const normalized = normalizeSearchToken(cleaned);
-  return APP_NAME_ALIASES.get(normalized) || cleaned;
+  return resolveAppTarget(cleaned) || cleaned;
 }
 
 function commonWebTargetFor(appName) {
-  const normalized = normalizeSearchToken(cleanOpenTarget(appName));
-  return COMMON_WEB_TARGETS.get(normalized) || "";
+  return resolveWebTarget(cleanOpenTarget(appName));
 }
 
 function appBaseName(appPath) {
@@ -1089,6 +1214,69 @@ async function openApp(appName) {
   }
   logMac("app.open.not_found", { requested: textForLog(appName), canonical });
   return { ok: false, appName: canonical, error: "App was not found." };
+}
+
+async function quitMacApplication(appName) {
+  const canonical = canonicalAppName(appName);
+  if (!canonical || process.platform !== "darwin") return { ok: false, appName: canonical, status: "unsupported" };
+  const safeApp = escapeAppleScriptString(canonical);
+  const script = `
+tell application "System Events"
+  set appIsRunning to exists application process "${safeApp}"
+end tell
+if appIsRunning then
+  tell application "${safeApp}" to quit
+  return "closed"
+else
+  return "not_running"
+end if`;
+  logMac("app.close.start", { requested: textForLog(appName), canonical });
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });
+    const status = stdout.trim() || "unknown";
+    logMac("app.close.done", { requested: textForLog(appName), canonical, status });
+    return { ok: status === "closed", appName: canonical, status };
+  } catch (error) {
+    logMac("app.close.failed", { requested: textForLog(appName), canonical, error });
+    return { ok: false, appName: canonical, status: "failed", error: error?.message || "Could not close app." };
+  }
+}
+
+async function closeOpenTarget(target) {
+  const cleaned = cleanOpenTarget(target);
+  if (!cleaned) return { ok: false, say: "Tell me what to close." };
+
+  logMac("delegate.close_intent", { target: textForLog(cleaned) });
+  const appResult = await quitMacApplication(cleaned);
+  const website = commonWebTargetFor(cleaned);
+  let webResult = null;
+  if (website) {
+    try {
+      const host = new URL(website).hostname.replace(/^www\./, "");
+      webResult = await closeBrowserTabsMatching(host);
+      logMac("delegate.close_web_tabs", { target: textForLog(cleaned), website, host, attemptedBrowsers: webResult?.attemptedBrowsers || 0 });
+    } catch (error) {
+      logMac("delegate.close_web_tabs.failed", { target: textForLog(cleaned), website, error });
+    }
+  }
+
+  if (appResult.ok && website) {
+    return { ok: true, say: `Closed ${appResult.appName}, and closed any ${cleaned} browser tabs too.` };
+  }
+  if (appResult.ok) {
+    return { ok: true, say: `Closed ${appResult.appName}.` };
+  }
+  if (website) {
+    return { ok: true, say: `I did not see the ${cleaned} app running, so I closed any ${cleaned} browser tabs I could find.` };
+  }
+
+  const matches = await findInstalledApps(cleaned);
+  if (matches.length) {
+    const retry = await quitMacApplication(appBaseName(matches[0]));
+    if (retry.ok) return { ok: true, say: `Closed ${retry.appName}.` };
+    return { ok: false, say: `${appBaseName(matches[0])} exists, but I do not see it running right now.` };
+  }
+  return { ok: false, say: `I could not find an app or known website called ${cleaned}.` };
 }
 
 function mdfindExpression(query) {
@@ -2029,12 +2217,17 @@ async function runDelegate(prompt) {
     return undoDesktopOrganization();
   }
 
+  const closeTarget = extractCloseShortcutTarget(raw);
+  if (closeTarget && !/\bbraino\b/i.test(closeTarget)) {
+    return closeOpenTarget(closeTarget);
+  }
+
   if (/\b(organize|organise|clean up|cleanup|tidy|sort)\b.*\b(my\s+)?(desktop|files?|desktop files?)\b/.test(text)
     || /\bdesktop\b.*\b(messy|cluttered|chaos|clean)\b/.test(text)) {
     return organizeDesktopFiles();
   }
 
-  if (/\b(quit|exit|close braino|hide braino)\b/.test(text)) {
+  if (/^(?:quit|exit|hide|close)$/i.test(text) || /\b(?:quit|exit|close|hide)\s+braino\b/i.test(text)) {
     if (dockWindow && !dockWindow.isDestroyed()) dockWindow.hide();
     return { ok: true, say: "Done. I am still around, just hiding." };
   }
@@ -2083,6 +2276,19 @@ async function runDelegate(prompt) {
     logMac("delegate.web_search_intent", { query: textForLog(webQuery) });
     await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`);
     return { ok: true, say: `Searching Chrome for ${webQuery}.` };
+  }
+
+  const spotifyPlay = parseSpotifyPlayIntent(raw);
+  if (spotifyPlay) {
+    logMac("delegate.spotify_play_intent", {
+      raw: textForLog(raw),
+      song: textForLog(spotifyPlay.song || ""),
+      needsSong: Boolean(spotifyPlay.needsSong),
+    });
+    if (spotifyPlay.needsSong) {
+      return { ok: true, say: "Tell me the song name and I will play it on Spotify." };
+    }
+    return playSpotifySongOnMac(spotifyPlay.song);
   }
 
   const fileIntent = parseFileIntent(raw);

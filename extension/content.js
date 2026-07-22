@@ -8352,7 +8352,7 @@ function __sbBuildBrainUI() {
       box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
                   inset -1px -1px 1px rgba(255,255,255,0.3);
-      width: calc(100vw - 48px); max-width: 1100px;
+      width: min(calc(100vw - 48px), 840px);
       backdrop-filter: blur(6px) saturate(180%); -webkit-backdrop-filter: blur(6px) saturate(180%);
       pointer-events: none; opacity: 0;
       /* Below the walker lane so the climbing/strolling Braino renders in FRONT of the
@@ -8385,7 +8385,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-send-pulse { animation: __sb_bar_send__ 0.7s ease-out; }
     /* Activity log INSIDE the pill — the SAME bar extends a LITTLE from its top to show the last
        couple of steps, then settles back. Small + tight so it reads clean. */
-    #__sb_bar_row__ { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 28px; width: 100%; box-sizing: border-box; }
+    #__sb_bar_row__ { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 22px; width: 100%; box-sizing: border-box; }
     #__sb_bar_log__ {
       max-height: 0; opacity: 0; overflow: hidden;
       display: flex; flex-direction: column; gap: 1px; padding: 0 24px;
@@ -8438,7 +8438,7 @@ function __sbBuildBrainUI() {
     /* Wakeup / sign-in overlays replace the input row (the bar is a column now): hide the row so
        its padding doesn't leave a gap, and give the overlay the row's padding. */
     #__sb_bar__.sb-waking #__sb_bar_row__, #__sb_bar__.sb-signin #__sb_bar_row__ { display: none; }
-    #__sb_bar__.sb-waking #__sb_wakeup__, #__sb_bar__.sb-signin #__sb_signin_cta__ { padding: 11px 14px 11px 28px; box-sizing: border-box; width: 100%; }
+    #__sb_bar__.sb-waking #__sb_wakeup__, #__sb_bar__.sb-signin #__sb_signin_cta__ { padding: 9px 12px 9px 22px; box-sizing: border-box; width: 100%; }
     /* Card is display-only now — the constant bottom bar is the single input. */
     #__sb_bubble__ .sb-card-footer { display: none !important; }
     /* Wake-up climb: bar is visible glass, expands from the center (scaleX driven in JS),
@@ -8544,14 +8544,14 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
-      font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.35;
       /* Light halo so the dark text stays legible on a transparent glass over dark pages. */
       text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.7), 0 1px 1px rgba(255,255,255,0.8);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #__sb_input__::placeholder { color: #4A3D34; }
     .sb-bar-icon-btn {
-      width: 38px; height: 38px; border-radius: 50%; border: none;
+      width: 32px; height: 32px; border-radius: 50%; border: none;
       background: transparent; color: #3A2D24; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
@@ -8561,7 +8561,7 @@ function __sbBuildBrainUI() {
     .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
     .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
     #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
-    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 42px !important; height: 42px !important; }
+    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 36px !important; height: 36px !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
       position: fixed; z-index: 2147483648; top: 50%; left: 50%;

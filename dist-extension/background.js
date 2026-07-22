@@ -32,6 +32,7 @@ for (const [obj, key] of [[chrome.runtime, "sendMessage"], [chrome.tabs, "sendMe
 
 try {
   importScripts(
+    "lib/openTargets.cjs",
     "lib/elementMap.js",
     "lib/models.js",
     "lib/taskState.js",
@@ -7666,6 +7667,20 @@ Should I send **Name** to your phone?
 `;
 }
 
+function bgBuildOpenShortcutFastPath(task, opensThenActs = false) {
+  const shortcuts = globalThis.BrainoOpenTargets;
+  const target = shortcuts?.extractOpenShortcutTarget?.(task);
+  if (!target) return null;
+  const url = shortcuts.resolveWebTarget?.(target);
+  if (!url) return null;
+  return [{
+    type: "navigate",
+    url,
+    description: `Open ${target}`,
+    continueAfter: Boolean(opensThenActs),
+  }];
+}
+
 function bgTryFastPath(task, history, synth = null, geo = null) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
@@ -7695,6 +7710,8 @@ function bgTryFastPath(task, history, synth = null, geo = null) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck", continueAfter: opensThenActs }];
   }
+  const openShortcutFastPath = bgBuildOpenShortcutFastPath(task, opensThenActs);
+  if (openShortcutFastPath) return openShortcutFastPath;
   const amazonSearchFastPath = bgBuildAmazonSearchFastPath(task, synth, geo);
   if (amazonSearchFastPath) return amazonSearchFastPath;
   const googleMapsFastPath = bgBuildGoogleMapsFastPath(task, synth);
