@@ -51,6 +51,18 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function logRenderer(event, data = {}) {
+  window.brainoMac.log({ event, data }).catch(() => {});
+}
+
+function errorForLog(error) {
+  return {
+    name: error?.name || "Error",
+    message: error?.message || String(error || ""),
+    stack: error?.stack ? String(error.stack).split("\n").slice(0, 5).join("\n") : "",
+  };
+}
+
 function getMoveBounds() {
   return {
     minX: 10,
@@ -285,6 +297,11 @@ async function speak(text) {
 async function runDelegate(prompt, options = {}) {
   const text = String(prompt || "").trim();
   if (!text) return;
+  logRenderer("delegate.start", {
+    promptChars: text.length,
+    keepRealtime: Boolean(options.keepRealtime),
+    realtimeActive,
+  });
   processing = true;
   if (options.keepRealtime) {
     listening = realtimeActive;
@@ -298,9 +315,15 @@ async function runDelegate(prompt, options = {}) {
   setWave(true);
   try {
     const result = await window.brainoMac.delegate(text);
+    logRenderer("delegate.done", {
+      ok: Boolean(result?.ok),
+      sayChars: String(result?.say || "").length,
+      filesCount: Array.isArray(result?.files) ? result.files.length : 0,
+    });
     showFiles(result?.files || []);
     await speak(result?.say || "Done.");
   } catch (error) {
+    logRenderer("delegate.error", { error: errorForLog(error) });
     await speak(`Delegate error: ${error?.message || "something broke"}.`);
     setStatus("error", "Delegate error");
   } finally {
@@ -431,6 +454,13 @@ function setRealtimeMicEnabled(on) {
 
 function handleRealtimeEvent(event) {
   if (!event?.type) return;
+  if (![
+    "conversation.item.input_audio_transcription.delta",
+    "input_audio_buffer.speech_started",
+    "input_audio_buffer.speech_stopped",
+  ].includes(event.type)) {
+    logRenderer("realtime.event", { type: event.type });
+  }
   if (event.type === "session.created" || event.type === "session.updated") {
     if (realtimeActive || realtimeConnecting) {
       setStatus("listening", "Listening");
@@ -470,6 +500,11 @@ function handleRealtimeEvent(event) {
   if (event.type === "conversation.item.input_audio_transcription.completed") {
     const transcript = String(event.transcript || rtUserTranscript || "").trim();
     rtUserTranscript = "";
+    logRenderer("realtime.transcript.completed", {
+      transcriptChars: transcript.length,
+      accepted: shouldAcceptVoiceTranscript(transcript),
+      voiceTurnInFlight,
+    });
     if (!transcript) {
       setStatus("listening", "Listening");
       return;
@@ -499,6 +534,7 @@ function handleRealtimeEvent(event) {
 
   if (event.type === "error") {
     const message = event.error?.message || event.message || "Realtime voice error.";
+    logRenderer("realtime.event.error", { message, error: event.error || null });
     setStatus("error", "Voice error");
     setBubble(`Voice error: ${message}`, 3600);
   }
@@ -520,10 +556,16 @@ async function waitForRealtimeDataChannel(dc) {
 }
 
 async function ensureMicrophoneAccess() {
+  logRenderer("microphone.request.start");
   const result = await window.brainoMac.requestMicrophone().catch((error) => ({
     ok: false,
     error: error?.message || "Could not request microphone access.",
   }));
+  logRenderer("microphone.request.result", {
+    ok: result?.ok,
+    status: result?.status || "unknown",
+    error: result?.error || null,
+  });
   if (result?.ok === false) {
     throw new Error(result.error || "Microphone access was denied.");
   }
@@ -539,6 +581,11 @@ async function startRealtimeVoice() {
   listening = true;
   setStatus("connecting", "Waking voice");
   setBubble("Voice is waking up.", 1300);
+  logRenderer("realtime.start", {
+    voiceEngine: realtimeVoiceEngine,
+    hasGetUserMedia: Boolean(navigator.mediaDevices?.getUserMedia),
+    hasRTCPeerConnection: Boolean(window.RTCPeerConnection),
+  });
 
   try {
     await ensureMicrophoneAccess();
@@ -550,6 +597,9 @@ async function startRealtimeVoice() {
       },
     });
     rtMic = stream;
+    logRenderer("realtime.mic.ok", {
+      audioTracks: stream.getAudioTracks().length,
+    });
 
     const pc = new RTCPeerConnection();
     rtPc = pc;
@@ -568,6 +618,7 @@ async function startRealtimeVoice() {
     });
     pc.addEventListener("connectionstatechange", () => {
       if (pc !== rtPc) return;
+      logRenderer("realtime.peer.state", { state: pc.connectionState });
       if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
         stopRealtimeVoice();
         setStatus("error", "Voice disconnected");
@@ -577,6 +628,9 @@ async function startRealtimeVoice() {
 
     const dc = pc.createDataChannel("oai-events");
     rtDc = dc;
+    dc.addEventListener("open", () => logRenderer("realtime.datachannel.open"));
+    dc.addEventListener("close", () => logRenderer("realtime.datachannel.close"));
+    dc.addEventListener("error", () => logRenderer("realtime.datachannel.error"));
     dc.addEventListener("message", (event) => {
       try {
         handleRealtimeEvent(JSON.parse(event.data));
@@ -585,13 +639,26 @@ async function startRealtimeVoice() {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    logRenderer("realtime.offer.created", {
+      offerChars: offer.sdp?.length || 0,
+    });
     const result = await window.brainoMac.createRealtimeCall({
       offerSdp: offer.sdp || "",
       voiceEngine: realtimeVoiceEngine,
     });
     if (!result?.ok || !result.answerSdp) {
+      logRenderer("realtime.create.failed", {
+        error: result?.error || "Realtime voice could not start.",
+        transport: result?.transport || null,
+      });
       throw new Error(result?.error || "Realtime voice could not start.");
     }
+    logRenderer("realtime.create.ok", {
+      transport: result.transport || "unknown",
+      hasSessionId: Boolean(result.sessionId),
+      realtimeModel: result.realtimeModel || null,
+      transcriptionModel: result.transcriptionModel || null,
+    });
     await pc.setRemoteDescription({ type: "answer", sdp: result.answerSdp });
     await waitForRealtimeDataChannel(dc);
     sendRealtimeEvent(buildRealtimeSessionUpdate());
@@ -602,7 +669,9 @@ async function startRealtimeVoice() {
     listening = true;
     setStatus("listening", "Listening");
     setBubble("I am listening.", 1400);
+    logRenderer("realtime.ready");
   } catch (error) {
+    logRenderer("realtime.start.error", { error: errorForLog(error) });
     stopRealtimeVoice();
     throw error;
   }
@@ -621,6 +690,10 @@ function arrayBufferToBase64(buffer) {
 
 async function recordShortCommandForTranscription() {
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    logRenderer("voice.record.unavailable", {
+      hasGetUserMedia: Boolean(navigator.mediaDevices?.getUserMedia),
+      hasMediaRecorder: Boolean(window.MediaRecorder),
+    });
     throw new Error("Mic recording is not available in this Electron build.");
   }
 
@@ -628,6 +701,7 @@ async function recordShortCommandForTranscription() {
     ? "audio/webm;codecs=opus"
     : "audio/webm";
   await ensureMicrophoneAccess();
+  logRenderer("voice.record.start", { mimeType });
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: true,
@@ -654,6 +728,11 @@ async function recordShortCommandForTranscription() {
 
     if (!chunks.length) throw new Error("No audio chunks were recorded.");
     const blob = new Blob(chunks, { type: mimeType });
+    logRenderer("voice.record.done", {
+      chunks: chunks.length,
+      bytes: blob.size,
+      mimeType: blob.type || mimeType,
+    });
     const audioBase64 = arrayBufferToBase64(await blob.arrayBuffer());
     return window.brainoMac.transcribeAudio({
       audioBase64,
@@ -672,6 +751,9 @@ async function startLegacyCommandCapture(reason = "") {
   setStatus("listening", "Listening");
   setBubble(reason ? "Realtime missed. Say it once more." : "I am listening.", 1200);
   setWave(true);
+  logRenderer("voice.fallback.start", {
+    reason,
+  });
 
   try {
     let transcript = "";
@@ -685,22 +767,34 @@ async function startLegacyCommandCapture(reason = "") {
       if (!(recorded?.ok && transcript)) {
         throw new Error(recorded?.error || "Recording did not return a transcript.");
       }
+      logRenderer("voice.fallback.recording_transcript", {
+        transcriptChars: transcript.length,
+      });
     } catch (recordError) {
       lastError = recordError;
+      logRenderer("voice.fallback.recording_error", { error: errorForLog(recordError) });
       setStatus("listening", "Native fallback");
       setBubble("Recording missed. Trying native voice.", 1600);
       const result = await window.brainoMac.nativeListen();
       if (token !== listenToken) return;
       transcript = String(result?.transcript || "").trim();
       if (!(result?.ok && transcript)) {
+        logRenderer("voice.fallback.native_failed", {
+          ok: result?.ok,
+          error: result?.error || lastError?.message || null,
+        });
         throw new Error(result?.error || lastError?.message || "Voice did not return a transcript.");
       }
+      logRenderer("voice.fallback.native_transcript", {
+        transcriptChars: transcript.length,
+      });
     }
 
     listening = false;
     void runDelegate(transcript);
   } catch (error) {
     if (token !== listenToken) return;
+    logRenderer("voice.fallback.error", { error: errorForLog(error) });
     listening = false;
     setStatus("error", "Voice error");
     setBubble(`Voice error: ${error?.message || "native speech failed"}`, 3600);
@@ -716,9 +810,11 @@ async function startLegacyCommandCapture(reason = "") {
 
 async function startListening() {
   if (processing || realtimeConnecting) return;
+  logRenderer("voice.toggle.start_listening");
   try {
     await startRealtimeVoice();
   } catch (error) {
+    logRenderer("voice.realtime_to_fallback", { error: errorForLog(error) });
     setStatus("error", "Voice error");
     setBubble(`Voice error: ${error?.message || "realtime failed"}`, 3600);
     await new Promise((resolve) => window.setTimeout(resolve, 900));
@@ -895,6 +991,15 @@ window.brainoMac.onHelperStatus((status) => {
 });
 
 window.brainoMac.getConfig().then(async (config) => {
+  logRenderer("app.config", {
+    appVersion: config?.appVersion,
+    supabaseConfigured: Boolean(config?.supabaseConfigured),
+    realtimeConfigured: Boolean(config?.realtimeConfigured),
+    realtimeAuthSource: config?.realtimeAuthSource || "unknown",
+    accessibilityTrusted: Boolean(config?.accessibilityTrusted),
+    microphoneStatus: config?.microphoneStatus || "unknown",
+    logPath: config?.logPath || "",
+  });
   setStatus("ready", "Double Space to show/hide");
   let trusted = Boolean(config.accessibilityTrusted);
   if (!trusted) {

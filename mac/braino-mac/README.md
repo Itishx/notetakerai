@@ -29,7 +29,17 @@ The extension's realtime endpoint requires the signed-in Braino Supabase JWT. Fo
 BRAINO_AUTH_TOKEN="your-signed-in-braino-token" npm run mac:dev
 ```
 
-For local development without the Braino Supabase realtime endpoint, `OPENAI_API_KEY` can be used as a direct local realtime fallback. In both paths, OpenAI realtime is used for live listening/transcription; Braino's audible reply still uses the existing Fish Audio voice when configured.
+For local development without the Braino Supabase realtime endpoint, `OPENAI_API_KEY`, `OPENAI_REALTIME_API_KEY`, or `VITE_OPENAI_API_KEY` can be used as a direct local realtime fallback. In both paths, OpenAI realtime is used for live listening/transcription; Braino's audible reply still uses the existing Fish Audio voice when configured.
+
+The OpenAI key configured in Supabase Edge Function secrets is server-side. The Mac app cannot read that secret directly; it can only use it by calling the Braino realtime Edge Function with a signed-in Braino JWT.
+
+Voice logs are written to:
+
+```bash
+~/Library/Logs/Braino Mac/braino-mac.log
+```
+
+The log records credential presence, transport choice, HTTP status, mic permission state, WebRTC state, and fallback transitions with secrets redacted.
 
 ## First Delegate Actions
 

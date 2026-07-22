@@ -9,9 +9,11 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.5";
+const APP_VERSION = "12.0.6";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
+const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
+const LOG_PATH = path.join(LOG_DIR, "braino-mac.log");
 
 let dockWindow = null;
 let swiftHotkey = null;
@@ -42,8 +44,56 @@ function loadDotEnv() {
 const ENV = { ...loadDotEnv(), ...process.env };
 const SUPABASE_URL = ENV.VITE_SUPABASE_URL || ENV.SUPABASE_URL || "https://suwhgaxxdizowbyjlljj.supabase.co";
 const SUPABASE_ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY || ENV.VITE_SUPABASE_PUBLISHABLE_KEY || ENV.SUPABASE_ANON_KEY || "";
-const OPENAI_API_KEY = ENV.OPENAI_API_KEY || "";
-const BRAINO_AUTH_TOKEN = ENV.BRAINO_AUTH_TOKEN || ENV.VITE_BRAINO_AUTH_TOKEN || "";
+const OPENAI_API_KEY = ENV.OPENAI_API_KEY || ENV.OPENAI_REALTIME_API_KEY || ENV.VITE_OPENAI_API_KEY || "";
+const BRAINO_AUTH_TOKEN = ENV.BRAINO_AUTH_TOKEN || ENV.BRAINO_SUPABASE_AUTH_TOKEN || ENV.VITE_BRAINO_AUTH_TOKEN || ENV.VITE_BRAINO_SUPABASE_AUTH_TOKEN || "";
+
+function redact(value) {
+  if (value == null) return value;
+  const text = String(value);
+  if (!text) return "";
+  if (/^(sk-|eyJ|sbp_|ghp_|github_pat_|xox)/i.test(text) || text.length > 80) {
+    return `${text.slice(0, 6)}...${text.slice(-4)} (${text.length} chars)`;
+  }
+  return text;
+}
+
+function sanitizeForLog(value) {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack?.split("\n").slice(0, 5).join("\n"),
+    };
+  }
+  if (Array.isArray(value)) return value.map(sanitizeForLog);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (/token|key|secret|authorization|apikey|sdp|password/i.test(key)) {
+        out[key] = typeof item === "boolean" ? item : redact(item);
+      } else {
+        out[key] = sanitizeForLog(item);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+function logMac(event, payload = {}) {
+  const entry = {
+    ts: new Date().toISOString(),
+    pid: process.pid,
+    event,
+    ...sanitizeForLog(payload),
+  };
+  const line = `[${entry.ts}] ${event} ${JSON.stringify(entry)}\n`;
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    fs.appendFileSync(LOG_PATH, line);
+  } catch (_) {}
+  console.log("[Braino Mac]", event, sanitizeForLog(payload));
+}
 
 function execFileP(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -145,11 +195,14 @@ async function requestMicrophoneAccess() {
   if (process.platform !== "darwin") return { ok: true, status: "unsupported" };
   try {
     const before = systemPreferences.getMediaAccessStatus("microphone");
+    logMac("microphone.permission.before", { status: before });
     if (before === "granted") return { ok: true, status: before };
     const granted = await systemPreferences.askForMediaAccess("microphone");
     const after = systemPreferences.getMediaAccessStatus("microphone");
+    logMac("microphone.permission.after", { granted, status: after });
     return { ok: Boolean(granted || after === "granted"), status: after };
   } catch (error) {
+    logMac("microphone.permission.error", { error });
     return { ok: false, status: "unknown", error: error?.message || "Could not request microphone access." };
   }
 }
@@ -532,9 +585,19 @@ async function transcribeAudioCommand(payload = {}) {
   const mimeType = String(payload.mimeType || "audio/webm").trim();
   if (!audioBase64) return { ok: false, error: "No audio was recorded." };
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    logMac("voice.transcribe.missing_supabase", {
+      hasSupabaseUrl: Boolean(SUPABASE_URL),
+      hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
+    });
     return { ok: false, error: "Supabase is not configured for transcription." };
   }
 
+  logMac("voice.transcribe.start", {
+    mimeType,
+    audioBytesApprox: Math.floor(audioBase64.length * 0.75),
+    hasSupabaseUrl: Boolean(SUPABASE_URL),
+    hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
+  });
   const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/transcribe-and-notes`, {
     method: "POST",
     headers: {
@@ -552,10 +615,18 @@ async function transcribeAudioCommand(payload = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    logMac("voice.transcribe.failed", {
+      status: response.status,
+      error: data?.error || null,
+    });
     return { ok: false, error: data?.error || `Transcription failed (${response.status}).` };
   }
 
   const transcript = String(data?.transcript || "").trim();
+  logMac("voice.transcribe.done", {
+    transcriptChars: transcript.length,
+    hasTranscript: Boolean(transcript),
+  });
   return transcript
     ? { ok: true, transcript }
     : { ok: false, error: "The audio was recorded, but no speech was detected." };
@@ -601,10 +672,25 @@ function buildRealtimeSessionConfig() {
 
 async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   const sdp = String(offerSdp || "").trim();
-  if (!sdp) return { ok: false, error: "Missing realtime offer SDP." };
+  logMac("realtime.create.start", {
+    voiceEngine: voiceEngine || "fish",
+    offerChars: sdp.length,
+    hasBrainoAuthToken: Boolean(BRAINO_AUTH_TOKEN),
+    hasOpenAiApiKey: Boolean(OPENAI_API_KEY),
+    hasSupabaseUrl: Boolean(SUPABASE_URL),
+    hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
+  });
+  if (!sdp) {
+    logMac("realtime.create.missing_sdp");
+    return { ok: false, error: "Missing realtime offer SDP." };
+  }
 
   const requestedModel = voiceEngine === "realtime" ? "gpt-realtime-2" : "gpt-realtime-mini";
   if (BRAINO_AUTH_TOKEN && SUPABASE_URL && SUPABASE_ANON_KEY) {
+    logMac("realtime.create.transport", {
+      transport: "supabase",
+      requestedModel,
+    });
     const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-call`, {
       method: "POST",
       headers: {
@@ -624,8 +710,18 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
       } catch (_) {
         if (answerSdp) message = answerSdp;
       }
+      logMac("realtime.create.supabase_failed", {
+        status: response.status,
+        error: message,
+      });
       return { ok: false, error: message };
     }
+    logMac("realtime.create.supabase_ok", {
+      status: response.status,
+      sessionId: response.headers.get("x-braino-realtime-session-id") || null,
+      realtimeModel: response.headers.get("x-braino-realtime-model") || requestedModel,
+      transcriptionModel: response.headers.get("x-braino-realtime-transcription-model") || "gpt-4o-transcribe",
+    });
     return {
       ok: true,
       answerSdp,
@@ -637,6 +733,11 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   }
 
   if (!OPENAI_API_KEY) {
+    logMac("realtime.create.missing_credentials", {
+      hasBrainoAuthToken: Boolean(BRAINO_AUTH_TOKEN),
+      hasOpenAiApiKey: Boolean(OPENAI_API_KEY),
+      envKeysPresent: Object.keys(ENV).filter((key) => /OPENAI|BRAINO_AUTH|SUPABASE/i.test(key)).sort(),
+    });
     return {
       ok: false,
       error: "Realtime needs either BRAINO_AUTH_TOKEN for the Braino Supabase realtime endpoint or OPENAI_API_KEY for direct local realtime.",
@@ -647,6 +748,10 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   formData.set("sdp", sdp);
   formData.set("session", JSON.stringify({ ...buildRealtimeSessionConfig(), model: requestedModel }));
 
+  logMac("realtime.create.transport", {
+    transport: "openai-direct",
+    requestedModel,
+  });
   const response = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",
     headers: {
@@ -663,9 +768,17 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
     } catch (_) {
       if (answerSdp) message = answerSdp;
     }
+    logMac("realtime.create.openai_failed", {
+      status: response.status,
+      error: message,
+    });
     return { ok: false, error: message };
   }
 
+  logMac("realtime.create.openai_ok", {
+    status: response.status,
+    requestedModel,
+  });
   return {
     ok: true,
     answerSdp,
@@ -680,6 +793,13 @@ async function updateRealtimeSession({ action, sessionId, reason } = {}) {
   const normalizedAction = String(action || "").trim().toLowerCase();
   const id = String(sessionId || "").trim();
   if (!BRAINO_AUTH_TOKEN || !SUPABASE_URL || !SUPABASE_ANON_KEY || !id) {
+    logMac("realtime.session.skip", {
+      action: normalizedAction,
+      hasSessionId: Boolean(id),
+      hasBrainoAuthToken: Boolean(BRAINO_AUTH_TOKEN),
+      hasSupabaseUrl: Boolean(SUPABASE_URL),
+      hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
+    });
     return { ok: false, error: "Realtime session tracking is not configured." };
   }
   if (!["heartbeat", "end"].includes(normalizedAction)) {
@@ -701,6 +821,12 @@ async function updateRealtimeSession({ action, sessionId, reason } = {}) {
   });
 
   const data = await response.json().catch(() => ({}));
+  logMac(response.ok ? "realtime.session.ok" : "realtime.session.failed", {
+    action: normalizedAction,
+    status: response.status,
+    sessionId: id,
+    error: data?.error || null,
+  });
   return response.ok
     ? { ok: true, ...data }
     : { ok: false, error: data?.error || `Realtime session update failed (${response.status}).` };
@@ -813,9 +939,15 @@ ipcMain.handle("braino-mac:get-config", () => ({
   realtimeAuthSource: BRAINO_AUTH_TOKEN ? "braino" : OPENAI_API_KEY ? "openai" : "missing",
   accessibilityTrusted: systemPreferences.isTrustedAccessibilityClient(false),
   microphoneStatus: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "unsupported",
+  logPath: LOG_PATH,
 }));
 
 ipcMain.handle("braino-mac:delegate", async (_event, prompt) => runDelegate(prompt));
+
+ipcMain.handle("braino-mac:log", async (_event, payload = {}) => {
+  logMac(String(payload?.event || "renderer.log"), payload?.data || {});
+  return { ok: true, logPath: LOG_PATH };
+});
 
 ipcMain.handle("braino-mac:native-listen", async () => runNativeSpeech());
 
@@ -871,6 +1003,15 @@ ipcMain.handle("braino-mac:system-say", async (_event, text) => {
 });
 
 app.whenReady().then(() => {
+  logMac("app.ready", {
+    appVersion: APP_VERSION,
+    hasSupabaseUrl: Boolean(SUPABASE_URL),
+    hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
+    hasBrainoAuthToken: Boolean(BRAINO_AUTH_TOKEN),
+    hasOpenAiApiKey: Boolean(OPENAI_API_KEY),
+    envKeysPresent: Object.keys(ENV).filter((key) => /OPENAI|BRAINO_AUTH|SUPABASE/i.test(key)).sort(),
+    logPath: LOG_PATH,
+  });
   requestAccessibilityTrust(true);
   createDockWindow();
   registerHotkeys();

@@ -14,6 +14,7 @@ const walkerSvg = loadWalkerSvg();
 contextBridge.exposeInMainWorld("brainoMac", {
   getConfig: () => ipcRenderer.invoke("braino-mac:get-config"),
   getWalkerSvg: () => walkerSvg,
+  log: (payload) => ipcRenderer.invoke("braino-mac:log", payload),
   delegate: (prompt) => ipcRenderer.invoke("braino-mac:delegate", prompt),
   createRealtimeCall: (payload) => ipcRenderer.invoke("braino-mac:create-realtime-call", payload),
   updateRealtimeSession: (payload) => ipcRenderer.invoke("braino-mac:update-realtime-session", payload),
