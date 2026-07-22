@@ -142,7 +142,7 @@ serve(async (req) => {
 
     const voiceSessionId = await createRealtimeVoiceSession(authClient, user.id);
     const multipart = new FormData();
-    multipart.set("sdp", new Blob([sdp], { type: "application/sdp" }), "offer.sdp");
+    multipart.set("sdp", sdp);
     multipart.set("session", JSON.stringify(buildRealtimeSessionConfig(realtimeModel, realtimeVoice)));
 
     const openAiResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
