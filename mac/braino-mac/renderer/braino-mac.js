@@ -14,6 +14,9 @@ const TTS_CHUNK_MAX_CHARS = 240;
 const TTS_FETCH_TIMEOUT_MS = 14000;
 const TTS_WARM_INTERVAL_MS = 240000;
 const REALTIME_IDLE_TIMEOUT_MS = 15000;
+const REALTIME_SPEECH_STOP_FLUSH_MS = 220;
+const REALTIME_TRANSCRIPT_IDLE_FLUSH_MS = 520;
+const REALTIME_CHAT_RESPONSE_TIMEOUT_MS = 12000;
 
 walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
 const root = walker.querySelector("#__sbwk_root__");
@@ -44,6 +47,7 @@ let rtDc = null;
 let rtMic = null;
 let rtRemoteAudio = null;
 let rtUserTranscript = "";
+let rtTranscriptFinal = false;
 let rtTranscriptFlushTimer = 0;
 let rtIdleTimer = 0;
 let rtLastActivityAt = 0;
@@ -54,10 +58,16 @@ let realtimeConnecting = false;
 let realtimeVoiceEngine = "fish";
 let voiceCycleInFlight = false;
 let voiceTurnInFlight = false;
+let realtimeResponseInFlight = false;
+let realtimeResponseWaiter = null;
+let realtimeResponseText = "";
+let realtimeStreamTts = null;
 let delegateGeneration = 0;
 let currentSpeechAudio = null;
 let currentSpeechUrl = null;
 let speechGeneration = 0;
+let voiceLatencyCounter = 0;
+let voiceLatencyTurn = null;
 let lastSpokenLine = { text: "", ts: 0 };
 let scriptedWalk = null;
 let authPose = false;
@@ -81,6 +91,47 @@ function errorForLog(error) {
     message: error?.message || String(error || ""),
     stack: error?.stack ? String(error.stack).split("\n").slice(0, 5).join("\n") : "",
   };
+}
+
+function startVoiceLatencyTurn(reason = "speech_started") {
+  const now = performance.now();
+  voiceLatencyTurn = {
+    id: ++voiceLatencyCounter,
+    reason,
+    speechStartedAt: now,
+    speechStoppedAt: 0,
+    transcriptCompletedAt: 0,
+    delegateStartedAt: 0,
+    delegateDoneAt: 0,
+    firstAudioAt: 0,
+  };
+  logRenderer("voice.latency.speech_started", { turnId: voiceLatencyTurn.id, reason });
+}
+
+function voiceLatencySnapshot() {
+  if (!voiceLatencyTurn) return {};
+  const now = performance.now();
+  return {
+    turnId: voiceLatencyTurn.id,
+    sinceSpeechStartedMs: Math.max(0, Math.round(now - voiceLatencyTurn.speechStartedAt)),
+    sinceSpeechStoppedMs: voiceLatencyTurn.speechStoppedAt
+      ? Math.max(0, Math.round(now - voiceLatencyTurn.speechStoppedAt))
+      : null,
+  };
+}
+
+function markVoiceLatency(stage, data = {}) {
+  if (!voiceLatencyTurn) return;
+  const now = performance.now();
+  if (stage === "speech_stopped") voiceLatencyTurn.speechStoppedAt = now;
+  if (stage === "transcript_completed") voiceLatencyTurn.transcriptCompletedAt = now;
+  if (stage === "delegate_started") voiceLatencyTurn.delegateStartedAt = now;
+  if (stage === "delegate_done") voiceLatencyTurn.delegateDoneAt = now;
+  if (stage === "first_audio" && !voiceLatencyTurn.firstAudioAt) voiceLatencyTurn.firstAudioAt = now;
+  logRenderer(`voice.latency.${stage}`, {
+    ...voiceLatencySnapshot(),
+    ...data,
+  });
 }
 
 function getMoveBounds() {
@@ -319,6 +370,7 @@ function shouldAcceptVoiceTranscript(text) {
 
 function stopSpeechOutput() {
   speechGeneration += 1;
+  realtimeStreamTts = null;
   ttsAbortControllers.forEach((controller) => {
     try { controller.abort(); } catch (_) {}
   });
@@ -583,7 +635,12 @@ function playStreamedTtsResponse(response, generation) {
     audio.addEventListener("ended", () => finish(), { once: true });
     audio.addEventListener("error", () => finish(audio.error || new Error("TTS audio playback failed.")), { once: true });
     audio.addEventListener("playing", () => {
-      logRenderer("tts.first_audio", { durationMs: Math.round(performance.now() - startedAt), streamed: true });
+      markVoiceLatency("first_audio", { source: "streamed_tts" });
+      logRenderer("tts.first_audio", {
+        durationMs: Math.round(performance.now() - startedAt),
+        streamed: true,
+        ...voiceLatencySnapshot(),
+      });
     }, { once: true });
 
     mediaSource.addEventListener("sourceopen", async () => {
@@ -628,7 +685,14 @@ async function playBufferedTtsResponse(response, generation) {
   await new Promise((resolve, reject) => {
     audio.onended = resolve;
     audio.onerror = () => reject(audio.error || new Error("TTS audio playback failed."));
-    audio.onplaying = () => logRenderer("tts.first_audio", { durationMs: Math.round(performance.now() - startedAt), streamed: false });
+    audio.onplaying = () => {
+      markVoiceLatency("first_audio", { source: "buffered_tts" });
+      logRenderer("tts.first_audio", {
+        durationMs: Math.round(performance.now() - startedAt),
+        streamed: false,
+        ...voiceLatencySnapshot(),
+      });
+    };
     audio.play().catch(reject);
   });
   clearSpeechAudio(audio, url);
@@ -672,6 +736,119 @@ async function speakWithStreamingTts(text, generation) {
     }
   }
   return spoke;
+}
+
+function beginRealtimeStreamTts(generation) {
+  realtimeStreamTts = {
+    generation,
+    buffer: "",
+    queue: [],
+    group: "",
+    firstEmitted: false,
+    draining: false,
+    ended: false,
+    spoke: false,
+    error: null,
+  };
+  speaking = true;
+  setTalk(true);
+  setStatus("speaking", "Speaking");
+  setWave(true);
+  void drainRealtimeStreamTts();
+}
+
+function enqueueRealtimeStreamTtsChunk(streamState, chunk) {
+  const clean = String(chunk || "").trim();
+  if (!clean) return;
+  if (!streamState.firstEmitted) {
+    streamState.queue.push(clean);
+    streamState.firstEmitted = true;
+    return;
+  }
+  if (streamState.group && streamState.group.length + 1 + clean.length > TTS_CHUNK_MAX_CHARS) {
+    streamState.queue.push(streamState.group);
+    streamState.group = clean;
+  } else {
+    streamState.group = streamState.group ? `${streamState.group} ${clean}` : clean;
+  }
+}
+
+function feedRealtimeStreamTts(delta) {
+  const streamState = realtimeStreamTts;
+  if (!streamState || streamState.generation !== speechGeneration) return;
+  streamState.buffer += String(delta || "");
+  let match;
+  while ((match = streamState.buffer.match(/^([\s\S]*?[.!?…।])\s+/))) {
+    const sentence = match[1].trim();
+    streamState.buffer = streamState.buffer.slice(match[0].length);
+    enqueueRealtimeStreamTtsChunk(streamState, sentence);
+  }
+  void drainRealtimeStreamTts();
+}
+
+function endRealtimeStreamTts() {
+  const streamState = realtimeStreamTts;
+  if (!streamState || streamState.generation !== speechGeneration) return;
+  const tail = streamState.buffer.trim();
+  streamState.buffer = "";
+  if (tail) enqueueRealtimeStreamTtsChunk(streamState, tail);
+  if (streamState.group) {
+    streamState.queue.push(streamState.group);
+    streamState.group = "";
+  }
+  streamState.ended = true;
+  void drainRealtimeStreamTts();
+}
+
+async function drainRealtimeStreamTts() {
+  const streamState = realtimeStreamTts;
+  if (!streamState || streamState.draining) return;
+  streamState.draining = true;
+  try {
+    let pendingFetch = null;
+    while (true) {
+      if (!realtimeStreamTts || streamState.generation !== speechGeneration) return;
+      let currentFetch = pendingFetch;
+      pendingFetch = null;
+      if (!currentFetch) {
+        if (!streamState.queue.length) {
+          if (streamState.ended) break;
+          await new Promise((resolve) => window.setTimeout(resolve, 25));
+          continue;
+        }
+        currentFetch = fetchTtsChunk(streamState.queue.shift(), streamState.generation)
+          .catch((error) => ({ error }));
+      }
+      const result = await currentFetch;
+      if (!realtimeStreamTts || streamState.generation !== speechGeneration) return;
+      if (streamState.queue.length) {
+        pendingFetch = fetchTtsChunk(streamState.queue.shift(), streamState.generation)
+          .catch((error) => ({ error }));
+      }
+      if (result?.error) {
+        streamState.error = result.error;
+        logRenderer("realtime.chat.tts_stream_failed", { error: errorForLog(result.error) });
+        break;
+      }
+      const played = await playTtsFetchResult(result, streamState.generation);
+      if (played) streamState.spoke = true;
+    }
+  } finally {
+    if (realtimeStreamTts === streamState) {
+      streamState.draining = false;
+    }
+  }
+}
+
+async function waitForRealtimeStreamTts(generation) {
+  while (
+    realtimeStreamTts
+    && realtimeStreamTts.generation === generation
+    && (realtimeStreamTts.draining || realtimeStreamTts.queue.length || !realtimeStreamTts.ended)
+  ) {
+    await new Promise((resolve) => window.setTimeout(resolve, 35));
+  }
+  return realtimeStreamTts && realtimeStreamTts.generation === generation ? realtimeStreamTts : null;
 }
 
 function setMousePassthrough(on) {
@@ -737,11 +914,15 @@ async function speak(text) {
       if (response?.ok && response.dataUrl) {
         const audio = new Audio(response.dataUrl);
         setSpeechAudio(audio);
-        audio.onplaying = () => logRenderer("tts.first_audio", {
-          durationMs: Math.round(performance.now() - startedAt),
-          streamed: false,
-          fallback: true,
-        });
+        audio.onplaying = () => {
+          markVoiceLatency("first_audio", { source: "fallback_tts" });
+          logRenderer("tts.first_audio", {
+            durationMs: Math.round(performance.now() - startedAt),
+            streamed: false,
+            fallback: true,
+            ...voiceLatencySnapshot(),
+          });
+        };
         await new Promise((resolve) => {
           audio.onended = resolve;
           audio.onerror = resolve;
@@ -782,6 +963,7 @@ async function runDelegate(prompt, options = {}) {
     keepRealtime: Boolean(options.keepRealtime),
     realtimeActive,
   });
+  markVoiceLatency("delegate_started", { route: "delegate", runId });
   processing = true;
   if (options.keepRealtime) {
     listening = realtimeActive;
@@ -806,6 +988,12 @@ async function runDelegate(prompt, options = {}) {
       sayChars: String(result?.say || "").length,
       filesCount: Array.isArray(result?.files) ? result.files.length : 0,
     });
+    markVoiceLatency("delegate_done", {
+      route: "delegate",
+      runId,
+      ok: Boolean(result?.ok),
+      sayChars: String(result?.say || "").length,
+    });
     showFiles(result?.files || []);
     await speak(result?.say || "Done.");
   } catch (error) {
@@ -814,6 +1002,12 @@ async function runDelegate(prompt, options = {}) {
       return;
     }
     logRenderer("delegate.error", { error: errorForLog(error) });
+    markVoiceLatency("delegate_done", {
+      route: "delegate",
+      runId,
+      ok: false,
+      error: error?.message || "delegate_error",
+    });
     await speak(`Delegate error: ${error?.message || "something broke"}.`);
     setStatus("error", "Delegate error");
   } finally {
@@ -841,7 +1035,9 @@ function buildRealtimeSessionUpdate() {
       type: "realtime",
       instructions: [
         "You are Braino running as a Mac desktop companion.",
-        "You are not the final assistant voice. Your job is to listen accurately, transcribe the user's command, and let the Mac app execute it.",
+        "Your primary job is to listen accurately, transcribe the user's command, and let the Mac app execute actions.",
+        "When the Mac client explicitly sends response.create for ordinary conversation, answer directly as Braino.",
+        "In direct conversation, be warm, emotionally mature, concise, and natural, matching the Braino Chrome extension personality.",
         "If the audio is fan noise, music, a cough, a tiny background word, or side chatter that is not addressed to Braino, do not guess.",
         "Stay in English unless the user explicitly asks otherwise.",
         "Prefer silence over hallucination when the audio is unclear.",
@@ -864,7 +1060,7 @@ function buildRealtimeSessionUpdate() {
           },
           turn_detection: {
             type: "semantic_vad",
-            eagerness: "low",
+            eagerness: "medium",
             create_response: false,
             interrupt_response: true,
           },
@@ -883,6 +1079,162 @@ function sendRealtimeEvent(event) {
   if (!payload.event_id) payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   rtDc.send(JSON.stringify(payload));
   return true;
+}
+
+function createRealtimeResponseWaiter() {
+  if (realtimeResponseWaiter?.resolve) {
+    realtimeResponseWaiter.resolve({ status: "cancelled", text: realtimeResponseText });
+  }
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(() => {
+      resolveRealtimeResponse({
+        status: "timeout",
+        text: realtimeResponseText,
+        errorMessage: "Realtime response timed out.",
+      });
+    }, REALTIME_CHAT_RESPONSE_TIMEOUT_MS);
+    realtimeResponseWaiter = {
+      resolve: (result) => {
+        window.clearTimeout(timeout);
+        resolve(result);
+      },
+    };
+  });
+}
+
+function resolveRealtimeResponse(result) {
+  const waiter = realtimeResponseWaiter;
+  realtimeResponseWaiter = null;
+  realtimeResponseInFlight = false;
+  if (waiter?.resolve) waiter.resolve(result || { status: "done", text: realtimeResponseText });
+}
+
+function cancelRealtimeResponse(reason = "cancelled") {
+  if (!realtimeResponseInFlight && !realtimeResponseWaiter) return;
+  sendRealtimeEvent({ type: "response.cancel" });
+  resolveRealtimeResponse({ status: "cancelled", text: realtimeResponseText, errorMessage: reason });
+}
+
+function extractRealtimeDoneText(event) {
+  const output = Array.isArray(event?.response?.output) ? event.response.output : [];
+  const parts = [];
+  for (const item of output) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const part of content) {
+      if (typeof part?.text === "string") parts.push(part.text);
+      else if (typeof part?.transcript === "string") parts.push(part.transcript);
+    }
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function isLikelyMacActionTranscript(text) {
+  const normalized = normalizeForVoiceMatch(text);
+  if (!normalized) return false;
+  if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|pause|resume|spotify|youtube|song|music|chrome|browser|website|tab|gmail|email|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|click|reply|write|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+}
+
+function shouldUseRealtimeDirectChat(text) {
+  if (!realtimeActive || !rtDc || rtDc.readyState !== "open") return false;
+  if (isLikelyMacActionTranscript(text)) return false;
+  return normalizeForVoiceMatch(text).length > 0;
+}
+
+function buildRealtimeChatInstructions() {
+  return [
+    "You are Braino, Itish's Mac companion, answering in the same warm personality as the Braino Chrome extension.",
+    "Be emotionally mature, natural, concise, witty when appropriate, and never robotic.",
+    "Do not invent Mac actions. If the user asks to operate the Mac, say you can help and let the app route the action next time.",
+    "Keep the first sentence short and complete so voice playback can begin immediately.",
+    "Prefer one to three short sentences unless the user asks for detail.",
+  ].join("\n");
+}
+
+async function answerViaRealtimeChat(prompt) {
+  const text = String(prompt || "").trim();
+  if (!text || !shouldUseRealtimeDirectChat(text)) return false;
+  const runId = ++delegateGeneration;
+  stopSpeechOutput();
+  const generation = speechGeneration;
+  realtimeResponseText = "";
+  realtimeResponseInFlight = true;
+  processing = true;
+  listening = realtimeActive;
+  clearRealtimeIdleTimer();
+  setStatus("thinking", "Thinking");
+  setBubble(text, 1000);
+  setWave(true);
+  markVoiceLatency("delegate_started", { route: "realtime_chat", runId });
+
+  const waiter = createRealtimeResponseWaiter();
+  beginRealtimeStreamTts(generation);
+  const sent = sendRealtimeEvent({
+    type: "response.create",
+    response: {
+      output_modalities: realtimeVoiceEngine === "realtime" ? ["audio"] : ["text"],
+      input: [
+        {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text,
+            },
+          ],
+        },
+      ],
+      instructions: buildRealtimeChatInstructions(),
+    },
+  });
+  if (!sent) {
+    realtimeStreamTts = null;
+    resolveRealtimeResponse({ status: "error", text: "", errorMessage: "Realtime data channel is not ready." });
+    processing = false;
+    speaking = false;
+    setTalk(false);
+    return false;
+  }
+
+  try {
+    const result = await waiter;
+    if (runId !== delegateGeneration) return true;
+    const finalText = String(result?.text || realtimeResponseText || "").trim();
+    markVoiceLatency("delegate_done", {
+      route: "realtime_chat",
+      runId,
+      status: result?.status || "unknown",
+      responseChars: finalText.length,
+    });
+    endRealtimeStreamTts();
+    const streamState = await waitForRealtimeStreamTts(generation);
+    if (finalText) noteSpoken(finalText);
+    if (streamState?.error && !streamState.spoke && finalText && generation === speechGeneration) {
+      await speak(finalText);
+    } else if (!streamState?.spoke && finalText && generation === speechGeneration) {
+      await speak(finalText);
+    }
+    return Boolean(finalText || streamState?.spoke);
+  } catch (error) {
+    logRenderer("realtime.chat.error", { error: errorForLog(error) });
+    return false;
+  } finally {
+    if (runId === delegateGeneration) {
+      realtimeResponseInFlight = false;
+      realtimeResponseWaiter = null;
+      realtimeResponseText = "";
+      if (realtimeStreamTts?.generation === generation) realtimeStreamTts = null;
+      speaking = false;
+      processing = false;
+      setTalk(false);
+      if (realtimeActive) {
+        listening = true;
+        setStatus("listening", "Listening");
+        scheduleRealtimeIdleShutdown("realtime_chat_done");
+      }
+    }
+  }
 }
 
 function startRealtimeHeartbeat(sessionId) {
@@ -960,6 +1312,10 @@ function markRealtimeActivity(reason, options = {}) {
 }
 
 function stopRealtimeVoice() {
+  if (realtimeResponseInFlight || realtimeResponseWaiter) {
+    try { sendRealtimeEvent({ type: "response.cancel" }); } catch (_) {}
+    resolveRealtimeResponse({ status: "cancelled", text: realtimeResponseText, errorMessage: "realtime stopped" });
+  }
   const dc = rtDc;
   const pc = rtPc;
   const mic = rtMic;
@@ -970,6 +1326,9 @@ function stopRealtimeVoice() {
   rtMic = null;
   rtRemoteAudio = null;
   rtUserTranscript = "";
+  rtTranscriptFinal = false;
+  realtimeResponseText = "";
+  realtimeStreamTts = null;
   clearRealtimeTranscriptFlush();
   clearRealtimeIdleTimer();
   realtimeActive = false;
@@ -1005,7 +1364,12 @@ function scheduleRealtimeTranscriptFlush(reason, delay = 900) {
 
 function flushRealtimeTranscript(reason) {
   const transcript = String(rtUserTranscript || "").trim();
+  if (reason === "speech_stopped" && transcript && !rtTranscriptFinal) {
+    scheduleRealtimeTranscriptFlush("waiting_final_transcript", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
+    return;
+  }
   rtUserTranscript = "";
+  rtTranscriptFinal = false;
   clearRealtimeTranscriptFlush();
   const accepted = shouldAcceptVoiceTranscript(transcript);
   logRenderer("realtime.transcript.flush", {
@@ -1032,14 +1396,26 @@ function flushRealtimeTranscript(reason) {
   markRealtimeActivity("accepted_transcript", { schedule: false });
   if (speaking) stopSpeechOutput();
   voiceTurnInFlight = true;
-  void runDelegate(transcript, { keepRealtime: true }).finally(() => {
-    voiceTurnInFlight = false;
-    if (realtimeActive) {
-      listening = true;
-      setStatus("listening", "Listening");
-      scheduleRealtimeIdleShutdown("turn_done");
+  void (async () => {
+    try {
+      if (shouldUseRealtimeDirectChat(transcript)) {
+        const handled = await answerViaRealtimeChat(transcript);
+        if (handled) return;
+        logRenderer("realtime.chat.fallback_to_delegate", {
+          transcriptChars: transcript.length,
+          ...voiceLatencySnapshot(),
+        });
+      }
+      await runDelegate(transcript, { keepRealtime: true });
+    } finally {
+      voiceTurnInFlight = false;
+      if (realtimeActive) {
+        listening = true;
+        setStatus("listening", "Listening");
+        scheduleRealtimeIdleShutdown("turn_done");
+      }
     }
-  });
+  })();
 }
 
 function setRealtimeMicEnabled(on) {
@@ -1052,6 +1428,8 @@ function handleRealtimeEvent(event) {
   if (!event?.type) return;
   if (![
     "conversation.item.input_audio_transcription.delta",
+    "response.output_text.delta",
+    "response.output_audio_transcript.delta",
     "input_audio_buffer.speech_started",
     "input_audio_buffer.speech_stopped",
   ].includes(event.type)) {
@@ -1067,9 +1445,12 @@ function handleRealtimeEvent(event) {
 
   if (event.type === "input_audio_buffer.speech_started") {
     markRealtimeActivity("speech_started", { schedule: false });
+    startVoiceLatencyTurn("speech_started");
     rtUserTranscript = "";
+    rtTranscriptFinal = false;
     clearRealtimeTranscriptFlush();
-    if (speaking) {
+    if (speaking || realtimeResponseInFlight) {
+      cancelRealtimeResponse("barge_in");
       delegateGeneration += 1;
       voiceTurnInFlight = false;
       processing = false;
@@ -1091,13 +1472,14 @@ function handleRealtimeEvent(event) {
 
   if (event.type === "input_audio_buffer.speech_stopped") {
     markRealtimeActivity("speech_stopped", { schedule: false });
+    markVoiceLatency("speech_stopped");
     if (speaking || processing || voiceTurnInFlight) {
       setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
       return;
     }
     setStatus("captured", "Got it");
     setBubble("Got it.", 900);
-    scheduleRealtimeTranscriptFlush("speech_stopped", 750);
+    scheduleRealtimeTranscriptFlush("speech_stopped", REALTIME_SPEECH_STOP_FLUSH_MS);
     return;
   }
 
@@ -1105,9 +1487,10 @@ function handleRealtimeEvent(event) {
     const delta = typeof event.delta === "string" ? event.delta : "";
     if (delta) {
       markRealtimeActivity("transcript_delta", { schedule: false });
+      rtTranscriptFinal = false;
       rtUserTranscript += delta;
       setBubble(rtUserTranscript.trim() || "Listening...", 0);
-      scheduleRealtimeTranscriptFlush("transcript_idle", 1600);
+      scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
     }
     return;
   }
@@ -1115,13 +1498,51 @@ function handleRealtimeEvent(event) {
   if (event.type === "conversation.item.input_audio_transcription.completed") {
     markRealtimeActivity("transcript_completed", { schedule: false });
     rtUserTranscript = String(event.transcript || rtUserTranscript || "");
+    rtTranscriptFinal = true;
+    markVoiceLatency("transcript_completed", { transcriptChars: rtUserTranscript.trim().length });
     flushRealtimeTranscript("completed");
+    return;
+  }
+
+  if (event.type === "response.created") {
+    realtimeResponseInFlight = true;
+    realtimeResponseText = "";
+    logRenderer("realtime.chat.response_started", voiceLatencySnapshot());
+    return;
+  }
+
+  if (event.type === "response.output_text.delta" || event.type === "response.output_audio_transcript.delta") {
+    const delta = typeof event.delta === "string" ? event.delta : "";
+    if (delta) {
+      realtimeResponseText += delta;
+      feedRealtimeStreamTts(delta);
+    }
+    return;
+  }
+
+  if (event.type === "response.output_text.done" || event.type === "response.output_audio_transcript.done") {
+    const doneText = String(event.text || event.transcript || "").trim();
+    if (doneText && doneText.length > realtimeResponseText.length) realtimeResponseText = doneText;
+    return;
+  }
+
+  if (event.type === "response.done") {
+    const finalText = extractRealtimeDoneText(event) || realtimeResponseText;
+    resolveRealtimeResponse({ status: "done", text: finalText });
+    return;
+  }
+
+  if (event.type === "response.cancelled") {
+    resolveRealtimeResponse({ status: "cancelled", text: realtimeResponseText });
     return;
   }
 
   if (event.type === "error") {
     const message = event.error?.message || event.message || "Realtime voice error.";
     logRenderer("realtime.event.error", { message, error: event.error || null });
+    if (realtimeResponseInFlight || realtimeResponseWaiter) {
+      resolveRealtimeResponse({ status: "error", text: realtimeResponseText, errorMessage: message });
+    }
     setStatus("error", "Voice error");
     setBubble(`Voice error: ${message}`, 3600);
     clearRealtimeIdleTimer();

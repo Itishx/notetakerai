@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.28";
+const APP_VERSION = "12.0.29";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -2359,6 +2359,7 @@ function buildRealtimeSessionConfig() {
     instructions: [
       "You are Braino, running as a Mac desktop companion.",
       "Your job in this session is to listen accurately and let the Mac app execute actions.",
+      "When the Mac client explicitly requests a conversational response, answer as Braino with warmth, emotional intelligence, and concise natural speech.",
       "If the audio is unclear, silent, music, fan noise, or side chatter, output nothing rather than guessing.",
       "Always transcribe and reason in English unless the user explicitly asks for another language.",
       "Keep spoken responses short, warm, and direct.",
@@ -2377,7 +2378,7 @@ function buildRealtimeSessionConfig() {
         },
         turn_detection: {
           type: "semantic_vad",
-          eagerness: "low",
+          eagerness: "medium",
           create_response: false,
           interrupt_response: true,
         },
@@ -2526,6 +2527,50 @@ async function exchangeRealtimeOfferWithOpenAi({ sdp, clientSecret, requestedMod
   return { ok: true, answerSdp };
 }
 
+async function createRealtimeCallFromSupabaseDirect({ sdp, authToken, requestedModel, voiceEngine }) {
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-call`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/sdp",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${authToken}`,
+      "X-Braino-Realtime-Model": requestedModel,
+      "X-Braino-Voice-Engine": voiceEngine || "fish",
+    },
+    body: sdp,
+  });
+  const answerSdp = await response.text();
+  if (!response.ok) {
+    let message = `Supabase realtime failed (${response.status}).`;
+    try {
+      const parsed = JSON.parse(answerSdp);
+      message = parsed?.details || parsed?.error || parsed?.message || message;
+    } catch (_) {
+      if (answerSdp) message = answerSdp;
+    }
+    return { ok: false, error: message, status: response.status };
+  }
+  if (!isLikelyRealtimeAnswerSdp(answerSdp)) {
+    return {
+      ok: false,
+      error: "Supabase realtime returned an invalid answer SDP.",
+      status: response.status,
+    };
+  }
+  return {
+    ok: true,
+    answerSdp,
+    sessionId: response.headers.get("x-braino-realtime-session-id") || null,
+    realtimeModel: response.headers.get("x-braino-realtime-model") || requestedModel,
+    transcriptionModel: response.headers.get("x-braino-realtime-transcription-model") || "gpt-4o-transcribe",
+  };
+}
+
+function isLikelyRealtimeAnswerSdp(sdp) {
+  const text = String(sdp || "");
+  return /^v=0\r?$/m.test(text) && /^m=/m.test(text);
+}
+
 async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   const sdp = normalizeRealtimeSdp(offerSdp);
   let authToken = await getBrainoAuthToken();
@@ -2554,6 +2599,36 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   }
 
   if (authToken && SUPABASE_URL && SUPABASE_ANON_KEY) {
+    logMac("realtime.create.transport", {
+      transport: "supabase-direct-sdp",
+      requestedModel,
+    });
+    const directResult = await createRealtimeCallFromSupabaseDirect({
+      sdp,
+      authToken,
+      requestedModel,
+      voiceEngine,
+    });
+    if (directResult?.ok) {
+      logMac("realtime.create.supabase_direct_ok", {
+        sessionId: directResult.sessionId || null,
+        realtimeModel: directResult.realtimeModel || requestedModel,
+        transcriptionModel: directResult.transcriptionModel || "gpt-4o-transcribe",
+      });
+      return {
+        ok: true,
+        answerSdp: directResult.answerSdp,
+        transport: "supabase-direct-sdp",
+        sessionId: directResult.sessionId || null,
+        realtimeModel: directResult.realtimeModel || requestedModel,
+        transcriptionModel: directResult.transcriptionModel || "gpt-4o-transcribe",
+      };
+    }
+    logMac("realtime.create.supabase_direct_failed", {
+      status: directResult?.status || null,
+      error: directResult?.error || "direct SDP failed",
+    });
+
     logMac("realtime.create.transport", {
       transport: "supabase-ephemeral",
       requestedModel,
