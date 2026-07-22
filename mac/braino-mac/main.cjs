@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.34";
+const APP_VERSION = "12.0.35";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -41,6 +41,8 @@ let activeMacContext = null;
 let overlaySyncTimer = null;
 let lastOverlayDisplayKey = "";
 let lastOverlayContextKey = "";
+let lastOverlayStateSentAt = 0;
+let dockWindowHiddenByUser = false;
 
 function loadDotEnv() {
   const out = {};
@@ -782,6 +784,7 @@ function overlayContextKey(context) {
 
 function sendOverlayState(reason, display = displayForContext(activeMacContext)) {
   const displayMetrics = getDisplayMetrics(display || screen.getPrimaryDisplay());
+  lastOverlayStateSentAt = Date.now();
   sendToRenderer("braino-mac:overlay-context", {
     reason,
     activeContext: activeMacContext,
@@ -789,7 +792,7 @@ function sendOverlayState(reason, display = displayForContext(activeMacContext))
   });
 }
 
-function positionDockWindow(display = displayForContext(activeMacContext), reason = "position") {
+function positionDockWindow(display = displayForContext(activeMacContext), reason = "position", options = {}) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   const targetDisplay = display || screen.getPrimaryDisplay();
   const { bounds } = targetDisplay;
@@ -804,10 +807,20 @@ function positionDockWindow(display = displayForContext(activeMacContext), reaso
     lastOverlayDisplayKey = key;
   }
   try {
-    dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     dockWindow.setAlwaysOnTop(true, "screen-saver", 1);
+    if (!dockWindowHiddenByUser) {
+      if (!dockWindow.isVisible()) dockWindow.showInactive();
+      dockWindow.moveTop?.();
+    }
   } catch (_) {}
-  sendOverlayState(reason, targetDisplay);
+  if (options.notify !== false) sendOverlayState(reason, targetDisplay);
+}
+
+function ensureDockWindowVisible(reason = "show") {
+  if (!dockWindow || dockWindow.isDestroyed()) return;
+  dockWindowHiddenByUser = false;
+  positionDockWindow(displayForContext(activeMacContext), reason);
 }
 
 async function refreshDesktopOverlayContext(reason = "poll") {
@@ -817,8 +830,12 @@ async function refreshDesktopOverlayContext(reason = "poll") {
   }
   const display = displayForContext(activeMacContext);
   const contextKey = overlayContextKey(activeMacContext);
+  const displayKey = overlayDisplayKey(display);
+  const displayChanged = Boolean(displayKey && displayKey !== lastOverlayDisplayKey);
+  let contextChanged = false;
   if (contextKey && contextKey !== lastOverlayContextKey) {
     lastOverlayContextKey = contextKey;
+    contextChanged = true;
     logMac("desktop.context.changed", {
       reason,
       appName: activeMacContext?.appName || "",
@@ -827,7 +844,12 @@ async function refreshDesktopOverlayContext(reason = "poll") {
       displayId: display?.id || null,
     });
   }
-  positionDockWindow(display, reason);
+  const shouldNotifyRenderer =
+    reason !== "poll" ||
+    contextChanged ||
+    displayChanged ||
+    Date.now() - lastOverlayStateSentAt > 30000;
+  positionDockWindow(display, reason, { notify: shouldNotifyRenderer });
 }
 
 function startDesktopOverlaySync() {
@@ -919,7 +941,7 @@ function markControlTap(source) {
   if (now - lastControlTapAt < 520) {
     lastControlTapAt = 0;
     sendToRenderer("braino-mac:voice-toggle", { source });
-    if (dockWindow && !dockWindow.isDestroyed()) dockWindow.showInactive();
+    ensureDockWindowVisible("voice-hotkey");
     return;
   }
   lastControlTapAt = now;
@@ -928,10 +950,11 @@ function markControlTap(source) {
 function toggleDockWindowVisibility(source) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   if (dockWindow.isVisible()) {
+    dockWindowHiddenByUser = true;
     dockWindow.hide();
     return;
   }
-  dockWindow.showInactive();
+  ensureDockWindowVisible("visibility-toggle");
   sendToRenderer("braino-mac:helper-status", {
     type: "visibility",
     line: "braino-visible",
@@ -943,7 +966,7 @@ function registerHotkeys() {
   const registered = {
     controlSpace: globalShortcut.register("CommandOrControl+Space", () => {
       sendToRenderer("braino-mac:voice-toggle", { source: "Control+Space" });
-      if (dockWindow && !dockWindow.isDestroyed()) dockWindow.showInactive();
+      ensureDockWindowVisible("voice-hotkey");
     }),
     bareControl: false,
   };
@@ -971,7 +994,7 @@ function startSwiftHotkeyHelper() {
       if (!trimmed) return;
       if (trimmed === "double-control") {
         sendToRenderer("braino-mac:voice-toggle", { source: "double Control" });
-        if (dockWindow && !dockWindow.isDestroyed()) dockWindow.showInactive();
+        ensureDockWindowVisible("voice-hotkey");
         return;
       }
       if (trimmed === "double-space") {
@@ -1139,6 +1162,7 @@ function isMacSkillsPrompt(text) {
 
 async function openChromeUrl(url) {
   await execFileP("open", ["-a", "Google Chrome", url]);
+  setTimeout(() => ensureDockWindowVisible("open-chrome-url"), 650);
 }
 
 async function openSpotifyReconnect(authToken) {

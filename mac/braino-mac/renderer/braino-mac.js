@@ -17,6 +17,7 @@ const REALTIME_IDLE_TIMEOUT_MS = 15000;
 const REALTIME_SPEECH_STOP_FLUSH_MS = 220;
 const REALTIME_TRANSCRIPT_IDLE_FLUSH_MS = 520;
 const REALTIME_CHAT_RESPONSE_TIMEOUT_MS = 12000;
+const REALTIME_SURFACE_SYNC_MIN_INTERVAL_MS = 30000;
 
 walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
 const root = walker.querySelector("#__sbwk_root__");
@@ -53,6 +54,8 @@ let rtTranscriptFlushTimer = 0;
 let rtIdleTimer = 0;
 let rtLastActivityAt = 0;
 let rtSurfaceSyncTimer = 0;
+let lastRealtimeSurfaceContextKey = "";
+let lastRealtimeSurfaceSyncAt = 0;
 let rtUsageSessionId = null;
 let rtHeartbeatTimer = null;
 let realtimeActive = false;
@@ -1099,6 +1102,16 @@ function buildRealtimeSessionUpdate() {
   };
 }
 
+function realtimeSurfaceContextKey() {
+  const context = activeMacContext || {};
+  return [
+    context.appName || "",
+    context.windowTitle || "",
+    context.browserTitle || "",
+    context.browserUrl || "",
+  ].join("::");
+}
+
 function sendRealtimeEvent(event) {
   if (!rtDc || rtDc.readyState !== "open") return false;
   const payload = { ...event };
@@ -1109,17 +1122,28 @@ function sendRealtimeEvent(event) {
 
 function scheduleRealtimeSurfaceSync(reason = "surface_change") {
   if (!realtimeActive || !rtDc || rtDc.readyState !== "open") return;
+  const nextKey = realtimeSurfaceContextKey();
+  const now = Date.now();
+  const changed = Boolean(nextKey && nextKey !== lastRealtimeSurfaceContextKey);
+  const force = !["poll", "overlay_context"].includes(reason);
+  if (!force && !changed && now - lastRealtimeSurfaceSyncAt < REALTIME_SURFACE_SYNC_MIN_INTERVAL_MS) return;
   if (rtSurfaceSyncTimer) window.clearTimeout(rtSurfaceSyncTimer);
   rtSurfaceSyncTimer = window.setTimeout(() => {
     rtSurfaceSyncTimer = 0;
     const sent = sendRealtimeEvent(buildRealtimeSessionUpdate());
-    logRenderer("realtime.surface_context.sync", {
-      reason,
-      sent,
-      appName: activeMacContext?.appName || "",
-      title: activeMacContext?.browserTitle || activeMacContext?.windowTitle || "",
-      url: activeMacContext?.browserUrl || "",
-    });
+    if (sent) {
+      lastRealtimeSurfaceContextKey = nextKey;
+      lastRealtimeSurfaceSyncAt = Date.now();
+      if (changed || force) {
+        logRenderer("realtime.surface_context.sync", {
+          reason,
+          sent,
+          appName: activeMacContext?.appName || "",
+          title: activeMacContext?.browserTitle || activeMacContext?.windowTitle || "",
+          url: activeMacContext?.browserUrl || "",
+        });
+      }
+    }
   }, 180);
 }
 
@@ -1479,6 +1503,8 @@ function handleRealtimeEvent(event) {
     "response.output_audio_transcript.delta",
     "input_audio_buffer.speech_started",
     "input_audio_buffer.speech_stopped",
+    "session.updated",
+    "rate_limits.updated",
   ].includes(event.type)) {
     logRenderer("realtime.event", { type: event.type });
   }
