@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   stopNativeListen: () => ipcRenderer.invoke("braino-mac:native-listen-stop"),
   transcribeAudio: (payload) => ipcRenderer.invoke("braino-mac:transcribe-audio", payload),
   setMousePassthrough: (passthrough) => ipcRenderer.send("braino-mac:set-mouse-passthrough", Boolean(passthrough)),
+  ttsConfig: () => ipcRenderer.invoke("braino-mac:tts-config"),
   tts: (text) => ipcRenderer.invoke("braino-mac:tts", text),
   systemSay: (text) => ipcRenderer.invoke("braino-mac:system-say", text),
   onTaskProgress: (callback) => {

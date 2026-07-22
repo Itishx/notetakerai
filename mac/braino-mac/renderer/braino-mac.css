@@ -42,7 +42,7 @@ body {
 }
 
 #walker-lane.thinking {
-  animation: laneThink 1.2s linear infinite;
+  animation: none;
 }
 
 #walker-lane.speaking {
@@ -117,11 +117,6 @@ body {
   animation: voiceSonar 1.9s ease-out infinite;
 }
 
-#walker.listening svg,
-#walker.hearing svg {
-  animation: macListenGlow 2s ease-in-out infinite;
-}
-
 #walker.listening::before,
 #walker.listening::after,
 #walker.hearing::before,
@@ -150,14 +145,6 @@ body {
 
 #walker.connecting svg {
   animation: macVoiceConnecting 1.6s ease-in-out infinite;
-}
-
-#walker.captured svg {
-  animation: macCapturedGlow 1.8s ease-in-out infinite;
-}
-
-#walker.speaking svg {
-  animation: macSpeakingGlow 1s ease-in-out infinite;
 }
 
 #walker.authenticating svg {
@@ -299,40 +286,9 @@ body {
   }
 }
 
-@keyframes macListenGlow {
-  0%, 100% {
-    filter:
-      drop-shadow(0 0 10px rgba(232,120,110,0.55))
-      drop-shadow(0 0 4px rgba(246,168,162,0.4));
-  }
-  50% {
-    filter:
-      drop-shadow(0 0 18px rgba(232,120,110,0.75))
-      drop-shadow(0 0 8px rgba(246,168,162,0.55));
-  }
-}
-
 @keyframes macVoiceConnecting {
   0%, 100% { filter: drop-shadow(0 0 8px rgba(56,189,248,0.6)); }
   50% { filter: drop-shadow(0 0 16px rgba(56,189,248,0.85)); }
-}
-
-@keyframes macCapturedGlow {
-  0%, 100% { filter: drop-shadow(0 0 16px rgba(45,212,191,0.7)); }
-  50% { filter: drop-shadow(0 0 24px rgba(45,212,191,0.9)); }
-}
-
-@keyframes macSpeakingGlow {
-  0%, 100% {
-    filter:
-      drop-shadow(0 0 10px rgba(99,102,241,0.75))
-      drop-shadow(0 0 4px rgba(139,92,246,0.5));
-  }
-  50% {
-    filter:
-      drop-shadow(0 0 20px rgba(99,102,241,0.95))
-      drop-shadow(0 0 9px rgba(139,92,246,0.65));
-  }
 }
 
 @keyframes macAuthGlow {
@@ -361,11 +317,6 @@ body {
 
 @keyframes laneListen {
   50% { filter: drop-shadow(0 0 18px rgba(96,165,250,0.28)); }
-}
-
-@keyframes laneThink {
-  0% { filter: hue-rotate(0deg); }
-  100% { filter: hue-rotate(360deg); }
 }
 
 @keyframes laneSpeak {

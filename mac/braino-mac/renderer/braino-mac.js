@@ -10,6 +10,9 @@ const fileStrip = document.getElementById("file-strip");
 const ESTIMATED_DOCK_HEIGHT = 94;
 const DOCK_PERCH_LIFT = 42;
 const START_OFFSCREEN_X = -W - 36;
+const TTS_CHUNK_MAX_CHARS = 240;
+const TTS_FETCH_TIMEOUT_MS = 14000;
+const TTS_WARM_INTERVAL_MS = 240000;
 
 walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
 const root = walker.querySelector("#__sbwk_root__");
@@ -49,12 +52,16 @@ let realtimeVoiceEngine = "fish";
 let voiceCycleInFlight = false;
 let voiceTurnInFlight = false;
 let currentSpeechAudio = null;
+let currentSpeechUrl = null;
 let speechGeneration = 0;
 let lastSpokenLine = { text: "", ts: 0 };
 let scriptedWalk = null;
 let authPose = false;
 let startupActive = false;
 let startupPose = null;
+let ttsConfigPromise = null;
+let ttsWarmTimer = 0;
+const ttsAbortControllers = new Set();
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -271,13 +278,358 @@ function shouldAcceptVoiceTranscript(text) {
 
 function stopSpeechOutput() {
   speechGeneration += 1;
+  ttsAbortControllers.forEach((controller) => {
+    try { controller.abort(); } catch (_) {}
+  });
+  ttsAbortControllers.clear();
   if (currentSpeechAudio) {
     try { currentSpeechAudio.pause(); } catch (_) {}
     currentSpeechAudio.src = "";
     currentSpeechAudio = null;
   }
+  if (currentSpeechUrl) {
+    try { URL.revokeObjectURL(currentSpeechUrl); } catch (_) {}
+    currentSpeechUrl = null;
+  }
   speaking = false;
   setTalk(false);
+}
+
+function stripSpeechText(text) {
+  return String(text || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/<\/?[a-z][^>]*>/gi, " ")
+    .replace(/\n{2,}/g, ". ")
+    .replace(/\n/g, ". ")
+    .replace(/[*_#`~|>]/g, " ")
+    .replace(/[/\\]/g, " ")
+    .replace(/(\.\s*){2,}/g, ". ")
+    .replace(/\s+([.,?!;:])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function splitSpeechIntoTtsChunks(text) {
+  const clean = stripSpeechText(text);
+  if (!clean) return [];
+  if (clean.length <= TTS_CHUNK_MAX_CHARS) return [clean];
+  const sentences = clean.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (sentences.length <= 1) return [clean];
+
+  const chunks = [sentences[0]];
+  let buffer = "";
+  for (let index = 1; index < sentences.length; index += 1) {
+    const candidate = buffer ? `${buffer} ${sentences[index]}` : sentences[index];
+    if (buffer && candidate.length > TTS_CHUNK_MAX_CHARS) {
+      chunks.push(buffer);
+      buffer = sentences[index];
+    } else {
+      buffer = candidate;
+    }
+  }
+  if (buffer) chunks.push(buffer);
+  return chunks;
+}
+
+async function getTtsConfig() {
+  if (!ttsConfigPromise) ttsConfigPromise = window.brainoMac.ttsConfig().catch(() => null);
+  return ttsConfigPromise;
+}
+
+async function warmFishTts() {
+  const config = await getTtsConfig();
+  if (!config?.ok || !config.endpoint || !config.anonKey) return;
+  fetch(config.endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: config.anonKey,
+    },
+    body: JSON.stringify({ warm: true }),
+  }).catch(() => {});
+}
+
+function startFishWarmKeepAlive() {
+  void warmFishTts();
+  if (ttsWarmTimer) return;
+  ttsWarmTimer = window.setInterval(() => {
+    if (!realtimeActive && !realtimeConnecting) {
+      stopFishWarmKeepAlive();
+      return;
+    }
+    void warmFishTts();
+  }, TTS_WARM_INTERVAL_MS);
+}
+
+function stopFishWarmKeepAlive() {
+  if (!ttsWarmTimer) return;
+  window.clearInterval(ttsWarmTimer);
+  ttsWarmTimer = 0;
+}
+
+function isAbortLike(error) {
+  const name = String(error?.name || "").toLowerCase();
+  const message = String(error?.message || error || "").toLowerCase();
+  return name === "aborterror" || message.includes("abort");
+}
+
+async function readTtsError(response) {
+  const status = response?.status || 0;
+  const errorKind = response?.headers?.get?.("x-braino-tts-error") || "";
+  let message = `Fish Audio TTS failed (${status}).`;
+  try {
+    const data = await response.clone().json();
+    if (data?.error) message = String(data.error);
+  } catch (_) {
+    try {
+      const text = await response.clone().text();
+      if (text) message = text.slice(0, 300);
+    } catch (_) {}
+  }
+  const error = new Error(message);
+  error.status = status;
+  error.errorKind = errorKind;
+  return error;
+}
+
+async function fetchTtsChunk(text, generation) {
+  const config = await getTtsConfig();
+  if (!config?.ok || !config.endpoint || !config.anonKey) {
+    throw new Error("Fish Audio TTS is not configured.");
+  }
+  if (generation !== speechGeneration) return null;
+
+  const controller = new AbortController();
+  ttsAbortControllers.add(controller);
+  const startedAt = performance.now();
+  const timeout = window.setTimeout(() => controller.abort(), TTS_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(config.endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: config.anonKey,
+      },
+      body: JSON.stringify({ text: stripSpeechText(text), latency: "normal" }),
+      signal: controller.signal,
+    });
+    window.clearTimeout(timeout);
+    if (generation !== speechGeneration) return null;
+    if (!response.ok) throw await readTtsError(response);
+    logRenderer("tts.fetch.headers", {
+      chars: String(text || "").length,
+      durationMs: Math.round(performance.now() - startedAt),
+      provider: response.headers.get("x-braino-tts-provider") || "unknown",
+      contentType: response.headers.get("content-type") || "",
+    });
+    return { response, controller };
+  } catch (error) {
+    window.clearTimeout(timeout);
+    ttsAbortControllers.delete(controller);
+    if (generation !== speechGeneration || isAbortLike(error)) return null;
+    throw error;
+  }
+}
+
+function canStreamTtsMp3(response) {
+  const contentType = String(response?.headers?.get?.("content-type") || "").toLowerCase();
+  if (!contentType.includes("mpeg") && !contentType.includes("mp3")) return false;
+  try {
+    return typeof MediaSource !== "undefined"
+      && typeof MediaSource.isTypeSupported === "function"
+      && MediaSource.isTypeSupported("audio/mpeg");
+  } catch (_) {
+    return false;
+  }
+}
+
+function waitForSourceBuffer(sourceBuffer) {
+  if (!sourceBuffer?.updating) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      sourceBuffer.removeEventListener("updateend", onEnd);
+      sourceBuffer.removeEventListener("error", onError);
+    };
+    const onEnd = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("SourceBuffer append failed."));
+    };
+    sourceBuffer.addEventListener("updateend", onEnd);
+    sourceBuffer.addEventListener("error", onError);
+  });
+}
+
+function appendTtsChunk(sourceBuffer, chunk) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      sourceBuffer.removeEventListener("updateend", onEnd);
+      sourceBuffer.removeEventListener("error", onError);
+    };
+    const onEnd = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("SourceBuffer append failed."));
+    };
+    sourceBuffer.addEventListener("updateend", onEnd);
+    sourceBuffer.addEventListener("error", onError);
+    try {
+      sourceBuffer.appendBuffer(chunk);
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
+  });
+}
+
+function setSpeechAudio(audio, url = null) {
+  currentSpeechAudio = audio;
+  currentSpeechUrl = url;
+}
+
+function clearSpeechAudio(audio, url = null) {
+  if (currentSpeechAudio === audio) currentSpeechAudio = null;
+  if (url && currentSpeechUrl === url) {
+    try { URL.revokeObjectURL(url); } catch (_) {}
+    currentSpeechUrl = null;
+  }
+}
+
+function playStreamedTtsResponse(response, generation) {
+  return new Promise((resolve, reject) => {
+    let mediaSource = null;
+    let audio = null;
+    let url = null;
+    let settled = false;
+    let totalBytes = 0;
+    let started = false;
+    const startedAt = performance.now();
+
+    const finish = (error = null) => {
+      if (settled) return;
+      settled = true;
+      clearSpeechAudio(audio, url);
+      if (error) reject(error);
+      else resolve(totalBytes);
+    };
+
+    try {
+      mediaSource = new MediaSource();
+      url = URL.createObjectURL(mediaSource);
+      audio = new Audio();
+      audio.src = url;
+      setSpeechAudio(audio, url);
+    } catch (error) {
+      finish(error);
+      return;
+    }
+
+    audio.addEventListener("ended", () => finish(), { once: true });
+    audio.addEventListener("error", () => finish(audio.error || new Error("TTS audio playback failed.")), { once: true });
+    audio.addEventListener("playing", () => {
+      logRenderer("tts.first_audio", { durationMs: Math.round(performance.now() - startedAt), streamed: true });
+    }, { once: true });
+
+    mediaSource.addEventListener("sourceopen", async () => {
+      let sourceBuffer = null;
+      try {
+        sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+        const reader = response.body.getReader();
+        while (true) {
+          if (generation !== speechGeneration) {
+            try { await reader.cancel(); } catch (_) {}
+            finish();
+            return;
+          }
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value?.byteLength) {
+            totalBytes += value.byteLength;
+            await appendTtsChunk(sourceBuffer, value);
+            if (!started) {
+              started = true;
+              audio.play().catch((error) => finish(error));
+            }
+          }
+        }
+        await waitForSourceBuffer(sourceBuffer);
+        if (mediaSource.readyState === "open") mediaSource.endOfStream();
+        if (!started) finish();
+      } catch (error) {
+        finish(error);
+      }
+    }, { once: true });
+  });
+}
+
+async function playBufferedTtsResponse(response, generation) {
+  const startedAt = performance.now();
+  const blob = await response.blob();
+  if (generation !== speechGeneration) return false;
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  setSpeechAudio(audio, url);
+  await new Promise((resolve, reject) => {
+    audio.onended = resolve;
+    audio.onerror = () => reject(audio.error || new Error("TTS audio playback failed."));
+    audio.onplaying = () => logRenderer("tts.first_audio", { durationMs: Math.round(performance.now() - startedAt), streamed: false });
+    audio.play().catch(reject);
+  });
+  clearSpeechAudio(audio, url);
+  return true;
+}
+
+async function playTtsFetchResult(result, generation) {
+  if (!result?.response) return false;
+  try {
+    if (canStreamTtsMp3(result.response) && result.response.body) {
+      await playStreamedTtsResponse(result.response, generation);
+    } else {
+      await playBufferedTtsResponse(result.response, generation);
+    }
+    return generation === speechGeneration;
+  } finally {
+    if (result.controller) ttsAbortControllers.delete(result.controller);
+  }
+}
+
+async function speakWithStreamingTts(text, generation) {
+  const chunks = splitSpeechIntoTtsChunks(text);
+  if (!chunks.length) return false;
+  let spoke = false;
+  let pendingFetch = null;
+  for (let index = 0; index < chunks.length; index += 1) {
+    if (generation !== speechGeneration) return spoke;
+    const fetchPromise = pendingFetch || fetchTtsChunk(chunks[index], generation);
+    pendingFetch = null;
+    const current = await fetchPromise;
+    if (!current) return spoke;
+    if (index + 1 < chunks.length) {
+      pendingFetch = fetchTtsChunk(chunks[index + 1], generation).catch((error) => ({ error }));
+    }
+    if (current.error) throw current.error;
+    const played = await playTtsFetchResult(current, generation);
+    if (played) spoke = true;
+    if (pendingFetch && generation !== speechGeneration) {
+      await pendingFetch.catch(() => null);
+      return spoke;
+    }
+  }
+  return spoke;
 }
 
 function setMousePassthrough(on) {
@@ -323,23 +675,44 @@ async function speak(text) {
   const line = String(text || "").trim();
   if (!line) return;
   const generation = ++speechGeneration;
+  const startedAt = performance.now();
   noteSpoken(line);
   setBubble(line, Math.max(2400, Math.min(7200, line.length * 58)));
   speaking = true;
   setStatus("speaking", "Speaking");
   setTalk(true);
+  logRenderer("speech.start", { chars: line.length });
   try {
-    const response = await window.brainoMac.tts(line);
-    if (response?.ok && response.dataUrl) {
-      const audio = new Audio(response.dataUrl);
-      currentSpeechAudio = audio;
-      await new Promise((resolve) => {
-        audio.onended = resolve;
-        audio.onerror = resolve;
-        audio.play().catch(resolve);
-      });
-      if (currentSpeechAudio === audio) currentSpeechAudio = null;
-    } else {
+    let spoke = false;
+    try {
+      spoke = await speakWithStreamingTts(line, generation);
+    } catch (streamError) {
+      if (generation !== speechGeneration || isAbortLike(streamError)) return;
+      logRenderer("tts.streaming.failed", { error: errorForLog(streamError) });
+    }
+    if (!spoke && generation === speechGeneration) {
+      const response = await window.brainoMac.tts(line);
+      if (response?.ok && response.dataUrl) {
+        const audio = new Audio(response.dataUrl);
+        setSpeechAudio(audio);
+        audio.onplaying = () => logRenderer("tts.first_audio", {
+          durationMs: Math.round(performance.now() - startedAt),
+          streamed: false,
+          fallback: true,
+        });
+        await new Promise((resolve) => {
+          audio.onended = resolve;
+          audio.onerror = resolve;
+          audio.play().catch(resolve);
+        });
+        if (currentSpeechAudio === audio) currentSpeechAudio = null;
+      } else {
+        await window.brainoMac.systemSay(line);
+        await new Promise((resolve) => window.setTimeout(resolve, Math.min(3600, Math.max(900, line.length * 42))));
+      }
+    }
+  } catch (_) {
+    if (generation === speechGeneration) {
       await window.brainoMac.systemSay(line);
       await new Promise((resolve) => window.setTimeout(resolve, Math.min(3600, Math.max(900, line.length * 42))));
     }
@@ -348,6 +721,7 @@ async function speak(text) {
       speaking = false;
       currentSpeechAudio = null;
       setTalk(false);
+      logRenderer("speech.done", { chars: line.length, durationMs: Math.round(performance.now() - startedAt) });
       if (realtimeActive && !processing) setStatus("listening", "Listening");
       else if (!listening && !processing) setStatus("ready", "Double Space to show/hide");
     }
@@ -504,6 +878,7 @@ function stopRealtimeVoice() {
     remoteAudio.remove();
   }
   if (hadRealtime) endRealtimeUsageSession("mac_client_stop");
+  stopFishWarmKeepAlive();
   if (listening) listening = false;
 }
 
@@ -744,6 +1119,7 @@ async function startRealtimeVoice() {
       throw new Error(authResult?.error || "Braino sign-in is required for realtime voice.");
     }
     setAuthPose(false);
+    void warmFishTts();
     await ensureMicrophoneAccess();
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -819,6 +1195,7 @@ async function startRealtimeVoice() {
     realtimeActive = true;
     realtimeConnecting = false;
     listening = true;
+    startFishWarmKeepAlive();
     setStatus("listening", "Listening");
     setBubble("I am listening.", 1400);
     logRenderer("realtime.ready");

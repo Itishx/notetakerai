@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.18";
+const APP_VERSION = "12.0.19";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -1418,6 +1418,7 @@ function macClientContext() {
 }
 
 async function runMacConversation(prompt) {
+  const startedAt = Date.now();
   const authToken = await getBrainoAuthToken();
   const auth = authStatusPayload();
   const context = macClientContext();
@@ -1480,10 +1481,11 @@ async function runMacConversation(prompt) {
     logMac("mac.chat.done", {
       replyChars: reply.length,
       historyTurns: macChatHistory.length,
+      durationMs: Date.now() - startedAt,
     });
     return { ok: true, say: reply };
   } catch (error) {
-    logMac("mac.chat.error", { error });
+    logMac("mac.chat.error", { error, durationMs: Date.now() - startedAt });
     return {
       ok: true,
       say: "I am here. The chat wire slipped for a second, but I am listening.",
@@ -1642,6 +1644,12 @@ ipcMain.on("braino-mac:set-mouse-passthrough", (_event, passthrough) => {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   dockWindow.setIgnoreMouseEvents(Boolean(passthrough), { forward: true });
 });
+
+ipcMain.handle("braino-mac:tts-config", () => ({
+  ok: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
+  endpoint: SUPABASE_URL ? `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/fish-audio-tts` : "",
+  anonKey: SUPABASE_ANON_KEY || "",
+}));
 
 ipcMain.handle("braino-mac:tts", async (_event, text) => {
   const speakable = String(text || "").trim();
