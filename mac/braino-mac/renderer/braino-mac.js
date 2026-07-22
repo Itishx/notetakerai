@@ -558,6 +558,62 @@ async function waitForRealtimeDataChannel(dc) {
   });
 }
 
+function getLocalOfferSdp(pc, fallbackOffer = null) {
+  return String(
+    pc?.localDescription?.sdp ||
+    pc?.pendingLocalDescription?.sdp ||
+    fallbackOffer?.sdp ||
+    ""
+  ).trim();
+}
+
+function isLikelyRealtimeOfferSdp(sdp) {
+  return /^v=0\r?$/m.test(sdp) && /^m=/m.test(sdp);
+}
+
+async function waitForIceGathering(pc, timeoutMs = 1500) {
+  if (!pc || pc.iceGatheringState === "complete") return;
+  await new Promise((resolve) => {
+    const timeout = window.setTimeout(done, timeoutMs);
+    function done() {
+      window.clearTimeout(timeout);
+      pc.removeEventListener("icegatheringstatechange", onChange);
+      resolve();
+    }
+    function onChange() {
+      if (pc.iceGatheringState === "complete") done();
+    }
+    pc.addEventListener("icegatheringstatechange", onChange);
+  });
+}
+
+async function createLocalRealtimeOffer(pc) {
+  const offer = await pc.createOffer({
+    offerToReceiveAudio: true,
+  });
+  await pc.setLocalDescription(offer);
+  let sdp = getLocalOfferSdp(pc, offer);
+  if (!sdp || !isLikelyRealtimeOfferSdp(sdp)) {
+    await waitForIceGathering(pc, 1800);
+    sdp = getLocalOfferSdp(pc, offer);
+  }
+  logRenderer("realtime.offer.created", {
+    offerChars: sdp.length,
+    iceGatheringState: pc.iceGatheringState || "unknown",
+    hasVersionLine: /^v=0\r?$/m.test(sdp),
+    mediaLineCount: (sdp.match(/^m=/gm) || []).length,
+    hasAudioLine: /^m=audio/m.test(sdp),
+    hasApplicationLine: /^m=application/m.test(sdp),
+  });
+  if (!sdp) {
+    throw new Error("Realtime could not create a WebRTC offer. No local SDP was generated.");
+  }
+  if (!isLikelyRealtimeOfferSdp(sdp)) {
+    throw new Error("Realtime created an invalid WebRTC offer before calling the server.");
+  }
+  return sdp;
+}
+
 async function ensureMicrophoneAccess() {
   logRenderer("microphone.request.start");
   const result = await window.brainoMac.requestMicrophone().catch((error) => ({
@@ -652,13 +708,9 @@ async function startRealtimeVoice() {
       } catch (_) {}
     });
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    logRenderer("realtime.offer.created", {
-      offerChars: offer.sdp?.length || 0,
-    });
+    const offerSdp = await createLocalRealtimeOffer(pc);
     const result = await window.brainoMac.createRealtimeCall({
-      offerSdp: offer.sdp || "",
+      offerSdp,
       voiceEngine: realtimeVoiceEngine,
     });
     if (!result?.ok || !result.answerSdp) {
