@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.21";
+const APP_VERSION = "12.0.22";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -835,6 +835,7 @@ const MAC_SKILLS_REPLY = [
   "2. I can undo the last Desktop organization.",
   "3. I can find files on this Mac with Spotlight.",
   "4. I can open the best matching file when you ask for it.",
+  "5. I can open installed Mac apps by name, and fall back to the right website for common services.",
 ].join("\n");
 
 function isMacSkillsPrompt(text) {
@@ -847,22 +848,340 @@ async function openChromeUrl(url) {
   await execFileP("open", ["-a", "Google Chrome", url]);
 }
 
+const FILE_KIND_EXTENSIONS = {
+  pdf: [".pdf"],
+  image: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".heif", ".tiff", ".bmp", ".svg"],
+  video: [".mov", ".mp4", ".m4v", ".avi", ".mkv", ".webm"],
+  audio: [".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"],
+  document: [".doc", ".docx", ".pages", ".txt", ".rtf", ".md"],
+  spreadsheet: [".xls", ".xlsx", ".csv", ".numbers", ".tsv"],
+  presentation: [".ppt", ".pptx", ".key"],
+  archive: [".zip", ".rar", ".7z", ".tar", ".gz", ".dmg", ".pkg"],
+};
+
+const COMMON_WEB_TARGETS = new Map([
+  ["chatgpt", "https://chatgpt.com"],
+  ["gmail", "https://mail.google.com"],
+  ["google maps", "https://maps.google.com"],
+  ["linkedin", "https://www.linkedin.com"],
+  ["maps", "https://maps.google.com"],
+  ["medium", "https://medium.com"],
+  ["netflix", "https://www.netflix.com"],
+  ["spotify", "https://open.spotify.com"],
+  ["twitter", "https://x.com"],
+  ["whatsapp", "https://web.whatsapp.com"],
+  ["x", "https://x.com"],
+  ["youtube", "https://www.youtube.com"],
+  ["youtube music", "https://music.youtube.com"],
+]);
+
+const APP_NAME_ALIASES = new Map([
+  ["activity monitor", "Activity Monitor"],
+  ["app store", "App Store"],
+  ["chrome", "Google Chrome"],
+  ["cursor", "Cursor"],
+  ["facetime", "FaceTime"],
+  ["finder", "Finder"],
+  ["google chrome", "Google Chrome"],
+  ["mail", "Mail"],
+  ["messages", "Messages"],
+  ["music", "Music"],
+  ["notes", "Notes"],
+  ["photos", "Photos"],
+  ["safari", "Safari"],
+  ["slack", "Slack"],
+  ["spotify", "Spotify"],
+  ["terminal", "Terminal"],
+  ["whatsapp", "WhatsApp"],
+  ["xcode", "Xcode"],
+]);
+
+function normalizeSearchToken(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/['"`]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9\s.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mdfindLiteral(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"').trim();
+}
+
+function cleanOpenTarget(value) {
+  return String(value || "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/\s+(?:for me|please|pls)$/i, "")
+    .replace(/^(?:the|my|an?|application)\s+/i, "")
+    .trim();
+}
+
+function canonicalAppName(appName) {
+  const cleaned = cleanOpenTarget(appName);
+  const normalized = normalizeSearchToken(cleaned);
+  return APP_NAME_ALIASES.get(normalized) || cleaned;
+}
+
+function commonWebTargetFor(appName) {
+  const normalized = normalizeSearchToken(cleanOpenTarget(appName));
+  return COMMON_WEB_TARGETS.get(normalized) || "";
+}
+
+function appBaseName(appPath) {
+  const base = path.basename(appPath || "", ".app");
+  return base || path.basename(appPath || "");
+}
+
+function rankNameMatch(candidateName, query) {
+  const candidate = normalizeSearchToken(candidateName);
+  const target = normalizeSearchToken(query);
+  if (!candidate || !target) return 0;
+  if (candidate === target) return 100;
+  if (candidate.startsWith(target)) return 84;
+  if (candidate.includes(target)) return 70;
+  const targetWords = target.split(" ").filter(Boolean);
+  const hits = targetWords.filter((word) => candidate.includes(word)).length;
+  return hits ? 40 + hits * 8 : 0;
+}
+
+async function findInstalledApps(appName) {
+  const cleaned = canonicalAppName(appName);
+  if (!cleaned) return [];
+  if (normalizeSearchToken(cleaned).length < 2) return [];
+  const escaped = mdfindLiteral(cleaned);
+  const expression = `kMDItemContentType == "com.apple.application-bundle" && (kMDItemDisplayName == "*${escaped}*"cd || kMDItemFSName == "*${escaped}*.app"cd)`;
+  let paths = [];
+  try {
+    const result = await execFileP("mdfind", [expression], { timeout: 8000 });
+    paths = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  } catch (error) {
+    logMac("app.search.mdfind.failed", { appName: cleaned, error });
+  }
+
+  const scanRoots = ["/Applications", path.join(os.homedir(), "Applications")].filter((rootPath) => fs.existsSync(rootPath));
+  for (const rootPath of scanRoots) {
+    try {
+      const result = await execFileP("find", [rootPath, "-maxdepth", "3", "-name", "*.app", "-print"], { timeout: 8000 });
+      paths.push(...result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+    } catch (error) {
+      logMac("app.search.find.failed", { rootPath, error });
+    }
+  }
+
+  return Array.from(new Set(paths))
+    .filter((appPath) => appPath.endsWith(".app") && rankNameMatch(appBaseName(appPath), cleaned) > 0)
+    .sort((a, b) => rankNameMatch(appBaseName(b), cleaned) - rankNameMatch(appBaseName(a), cleaned))
+    .slice(0, 5);
+}
+
 async function openApp(appName) {
-  await execFileP("open", ["-a", appName]);
+  const canonical = canonicalAppName(appName);
+  if (!canonical) return { ok: false, error: "No app name was provided." };
+  try {
+    await execFileP("open", ["-a", canonical], { timeout: 8000 });
+    return { ok: true, appName: canonical, method: "open-a" };
+  } catch (error) {
+    logMac("app.open.open_a.failed", { appName: canonical, error });
+  }
+
+  const matches = await findInstalledApps(canonical);
+  if (matches.length) {
+    const openError = await shell.openPath(matches[0]);
+    if (!openError) return { ok: true, appName: appBaseName(matches[0]), appPath: matches[0], method: "spotlight" };
+    logMac("app.open.path.failed", { appName: canonical, appPath: matches[0], error: openError });
+  }
+  return { ok: false, appName: canonical, error: "App was not found." };
 }
 
 function mdfindExpression(query) {
-  const escaped = String(query || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"').trim();
-  return `kMDItemDisplayName == "*${escaped}*"cd || kMDItemTextContent == "*${escaped}*"cd`;
+  const escaped = mdfindLiteral(query);
+  return `kMDItemDisplayName == "*${escaped}*"cd || kMDItemFSName == "*${escaped}*"cd || kMDItemTextContent == "*${escaped}*"cd`;
 }
 
-async function findFiles(query) {
-  const result = await execFileP("mdfind", [mdfindExpression(query)], { timeout: 12000 });
-  return result.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((filePath) => !/\/Library\/|\/node_modules\/|\/\.git\//.test(filePath))
+function fileKindForText(text) {
+  const raw = String(text || "").toLowerCase();
+  const ext = path.extname(raw).toLowerCase();
+  if (ext === ".pdf" || /\bpdfs?\b/.test(raw)) return "pdf";
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".heif", ".tiff", ".bmp", ".svg"].includes(ext)
+    || /\b(images?|photos?|pictures?|pngs?|jpe?gs?|webp|screenshots?)\b/.test(raw)) return "image";
+  if ([".mov", ".mp4", ".m4v", ".avi", ".mkv", ".webm"].includes(ext) || /\b(videos?|movies?|mp4|mov)\b/.test(raw)) return "video";
+  if ([".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"].includes(ext) || /\b(audio|songs?|music|mp3)\b/.test(raw)) return "audio";
+  if ([".xls", ".xlsx", ".csv", ".numbers", ".tsv"].includes(ext) || /\b(spreadsheets?|sheets?|excel|csv|numbers)\b/.test(raw)) return "spreadsheet";
+  if ([".ppt", ".pptx", ".key"].includes(ext) || /\b(presentations?|slides?|ppt|keynote)\b/.test(raw)) return "presentation";
+  if ([".zip", ".rar", ".7z", ".tar", ".gz", ".dmg", ".pkg"].includes(ext) || /\b(archives?|zips?|installers?|dmg|pkg)\b/.test(raw)) return "archive";
+  if (/\b(folders?|directories?)\b/.test(raw)) return "folder";
+  if ([".doc", ".docx", ".pages", ".txt", ".rtf", ".md"].includes(ext) || /\b(documents?|docs?|docx?|pages|notes?|text files?)\b/.test(raw)) return "document";
+  return "";
+}
+
+function fileExtensionsForKind(kind) {
+  return FILE_KIND_EXTENSIONS[kind] || [];
+}
+
+function cleanFileQuery(value, kind = "") {
+  const kindWords = [
+    "file", "files", "document", "documents", "doc", "docs", "pdf", "pdfs", "image", "images",
+    "photo", "photos", "picture", "pictures", "png", "jpg", "jpeg", "webp", "folder", "folders",
+    "directory", "directories", "spreadsheet", "spreadsheets", "sheet", "sheets", "presentation",
+    "presentations", "slides", "video", "videos", "audio", "song", "songs", "archive", "zip",
+  ];
+  let query = String(value || "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/\b(?:that\s+)?i\s+have\b/gi, " ")
+    .replace(/\b(?:on|in)\s+(?:my\s+)?(?:mac|macbook|computer|system)\b/gi, " ")
+    .replace(/\b(?:called|named|titled|about|for)\b/gi, " ")
+    .replace(/^(?:the|my|an?|some)\s+/i, "")
+    .trim();
+
+  const hasExplicitExtension = /\.[a-z0-9]{2,5}$/i.test(query);
+  if (!hasExplicitExtension) {
+    query = query.replace(new RegExp(`\\b(?:${kindWords.join("|")})\\b`, "gi"), " ");
+  }
+  if (kind && !hasExplicitExtension) {
+    query = query.replace(new RegExp(`\\b${kind}\\b`, "gi"), " ");
+  }
+  return query.replace(/\s+/g, " ").trim();
+}
+
+function parseFileIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!source) return null;
+  const lower = source.toLowerCase();
+  if (/\bapps?|applications?\b/.test(lower) && !/\b(files?|documents?|pdfs?|images?|folders?)\b/.test(lower)) return null;
+
+  const kind = fileKindForText(source);
+  const hasMacScope = /\b(?:on|in)\s+(?:my\s+)?(?:mac|macbook|computer|system)\b/i.test(source);
+  const hasFileWord = Boolean(kind) || hasMacScope || /\b(files?|documents?|pdfs?|images?|photos?|pictures?|folders?|directories?)\b/i.test(source);
+  const hasFileVerb = /\b(find|search for|look for|open|show me|locate|help me look for|help me find)\b/i.test(source);
+  if (!hasFileVerb || !hasFileWord) return null;
+
+  const patterns = [
+    /\b(?:help me\s+)?(?:find|search for|look for|locate|open|show me)\s+(?:the\s+|my\s+|a\s+|an\s+)?(?:file|document|doc|pdf|image|photo|picture|png|jpg|jpeg|webp|folder|directory|spreadsheet|sheet|presentation|slides|video|audio|song|archive|zip)s?\s+(?:called|named|titled|about|for)?\s*(.+)$/i,
+    /\b(?:help me\s+)?(?:find|search for|look for|locate|open|show me)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:file|document|doc|pdf|image|photo|picture|png|jpg|jpeg|webp|folder|directory|spreadsheet|sheet|presentation|slides|video|audio|song|archive|zip)s?(?:\s+(?:file|document|folder|image|that\s+i\s+have|i\s+have|on\s+my\s+mac|in\s+my\s+mac|on\s+my\s+computer|in\s+my\s+computer))*$/i,
+    /\b(?:help me\s+)?(?:find|search for|look for|locate|open|show me)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:on|in)\s+(?:my\s+)?(?:mac|macbook|computer|system)$/i,
+    /\bopen\s+(?:my\s+)?(.+?\.(?:pdf|docx?|pptx?|xlsx?|csv|txt|md|pages|numbers|key|png|jpe?g|gif|webp|heic|mov|mp4|mp3|zip|dmg|pkg))$/i,
+    /\b(?:find|search for|look for|open)\s+(?:my\s+)?(resume|cv|cover letter|portfolio|invoice|receipt)\b/i,
+  ];
+
+  const captured = extractAfter(source, patterns) || (kind ? source.replace(/\b(?:find|search for|look for|locate|open|show me|help me)\b/gi, " ") : "");
+  const query = cleanFileQuery(captured, kind);
+  if (!query) return null;
+  return {
+    query,
+    kind,
+    shouldOpen: /\bopen\b/i.test(source),
+  };
+}
+
+function shouldSkipSearchPath(filePath) {
+  if (/\/Library\/Mobile Documents\//.test(filePath)) {
+    return /\/(?:node_modules|\.git|\.cache|\.Trash)\//.test(filePath);
+  }
+  return /\/(?:Library|node_modules|\.git|\.cache|\.Trash)\//.test(filePath)
+    || /^\/(?:System|Library|private|usr|bin|sbin)\b/.test(filePath);
+}
+
+function pathMatchesKind(filePath, kind, stats = null) {
+  if (!kind) return true;
+  if (kind === "folder") return stats ? stats.isDirectory() : true;
+  if (stats && !stats.isFile()) return false;
+  const ext = path.extname(filePath).toLowerCase();
+  const allowed = fileExtensionsForKind(kind);
+  return !allowed.length || allowed.includes(ext);
+}
+
+function rankFileMatch(filePath, query, kind) {
+  const basename = path.basename(filePath);
+  const nameWithoutExt = basename.replace(/\.[^.]+$/, "");
+  let score = rankNameMatch(nameWithoutExt, query);
+  score = Math.max(score, rankNameMatch(basename, query));
+  if (pathMatchesKind(filePath, kind)) score += 18;
+  if (filePath.startsWith(path.join(os.homedir(), "Desktop"))) score += 10;
+  if (filePath.startsWith(path.join(os.homedir(), "Downloads"))) score += 8;
+  if (filePath.startsWith(path.join(os.homedir(), "Documents"))) score += 7;
+  return score;
+}
+
+async function fallbackWalkFileSearch(query, options = {}) {
+  const roots = [
+    path.join(os.homedir(), "Desktop"),
+    path.join(os.homedir(), "Documents"),
+    path.join(os.homedir(), "Downloads"),
+    path.join(os.homedir(), "Pictures"),
+    path.join(os.homedir(), "Movies"),
+    path.join(os.homedir(), "Music"),
+    path.join(os.homedir(), "Library", "Mobile Documents", "com~apple~CloudDocs"),
+  ].filter((rootPath) => fs.existsSync(rootPath));
+  const normalizedQuery = normalizeSearchToken(query);
+  const results = [];
+  let visited = 0;
+  const maxVisited = 24000;
+  const maxDepth = 6;
+
+  async function walk(dir, depth) {
+    if (results.length >= 12 || visited >= maxVisited || shouldSkipSearchPath(`${dir}/`)) return;
+    let entries = [];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch (_) {
+      return;
+    }
+    for (const entry of entries) {
+      if (results.length >= 12 || visited >= maxVisited) return;
+      if (!entry.name || entry.name.startsWith(".")) continue;
+      const fullPath = path.join(dir, entry.name);
+      if (shouldSkipSearchPath(`${fullPath}/`)) continue;
+      visited += 1;
+      const isDirectory = entry.isDirectory();
+      const statsLike = { isDirectory: () => isDirectory, isFile: () => entry.isFile() };
+      const candidateText = normalizeSearchToken(entry.name.replace(/\.[^.]+$/, ""));
+      if (candidateText.includes(normalizedQuery) && pathMatchesKind(fullPath, options.kind || "", statsLike)) {
+        results.push(fullPath);
+      }
+      if (isDirectory && depth < maxDepth) await walk(fullPath, depth + 1);
+    }
+  }
+
+  for (const rootPath of roots) {
+    await walk(rootPath, 0);
+    if (results.length >= 12 || visited >= maxVisited) break;
+  }
+  return results;
+}
+
+async function findFiles(query, options = {}) {
+  const cleanQuery = cleanFileQuery(query, options.kind || "");
+  if (!cleanQuery) return [];
+  let mdfindPaths = [];
+  try {
+    const result = await execFileP("mdfind", [mdfindExpression(cleanQuery)], { timeout: 12000 });
+    mdfindPaths = result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch (error) {
+    logMac("file.search.mdfind.failed", { query: cleanQuery, kind: options.kind || "", error });
+  }
+  const fallbackPaths = mdfindPaths.length < 4 ? await fallbackWalkFileSearch(cleanQuery, options) : [];
+  const seen = new Set();
+  const candidates = [...mdfindPaths, ...fallbackPaths]
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  return candidates
+    .filter((filePath) => {
+      if (seen.has(filePath) || shouldSkipSearchPath(filePath)) return false;
+      seen.add(filePath);
+      let stats = null;
+      try {
+        stats = fs.lstatSync(filePath);
+      } catch (_) {
+        return false;
+      }
+      return pathMatchesKind(filePath, options.kind || "", stats);
+    })
+    .sort((a, b) => rankFileMatch(b, cleanQuery, options.kind || "") - rankFileMatch(a, cleanQuery, options.kind || ""))
     .slice(0, 8);
 }
 
@@ -1591,15 +1910,6 @@ async function runDelegate(prompt) {
     return { ok: true, say: `Opened ${folder}.` };
   }
 
-  const appName = extractAfter(raw, [
-    /\bopen\s+(?:the\s+)?(?:app\s+)?([A-Za-z][\w\s.&-]{1,40})\s+app$/i,
-    /\bopen\s+(Chrome|Google Chrome|Safari|Finder|Xcode|Cursor|Spotify|Slack|Notion|Terminal|Mail|Calendar|Notes)\b/i,
-  ]);
-  if (appName) {
-    await openApp(appName);
-    return { ok: true, say: `Opening ${appName}.` };
-  }
-
   const urlTarget = extractAfter(raw, [
     /\b(?:open|go to|navigate to|visit)\s+(\S+\.\S+|https?:\/\/\S+)/i,
   ]);
@@ -1618,17 +1928,11 @@ async function runDelegate(prompt) {
     return { ok: true, say: `Searching Chrome for ${webQuery}.` };
   }
 
-  const fileQuery = extractAfter(raw, [
-    /\b(?:find|search for|look for|open)\s+(?:my\s+)?(?:file|document|pdf|doc|docx|ppt|spreadsheet|sheet|presentation|note)s?\s+(?:called|named|about|for)?\s*(.+)$/i,
-    /\b(?:find|open)\s+(.+?)\s+(?:file|document|pdf|doc|docx|ppt|spreadsheet|sheet|presentation|note)s?$/i,
-    /\b(?:find|search for|look for)\s+(.+?)\s+(?:on|in)\s+(?:my\s+)?(?:mac|macbook|computer|system)$/i,
-    /\bopen\s+(?:my\s+)?(.+?\.(?:pdf|docx?|pptx?|xlsx?|csv|txt|md|pages|numbers|key|png|jpe?g|webp|mov|mp4|mp3|zip))$/i,
-    /\bopen\s+(?:my\s+)?(resume|cv|cover letter|portfolio|invoice|receipt)\b/i,
-  ]);
-  if (fileQuery) {
-    const files = await findFiles(fileQuery);
-    if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${fileQuery}.` };
-    if (/\bopen\b/i.test(raw)) {
+  const fileIntent = parseFileIntent(raw);
+  if (fileIntent) {
+    const files = await findFiles(fileIntent.query, { kind: fileIntent.kind });
+    if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${fileIntent.query}.` };
+    if (fileIntent.shouldOpen) {
       await shell.openPath(files[0]);
       return { ok: true, say: `Opened ${path.basename(files[0])}.`, files };
     }
@@ -1637,6 +1941,22 @@ async function runDelegate(prompt) {
       say: `I found ${files.length} match${files.length === 1 ? "" : "es"}. The first one is ${path.basename(files[0])}.`,
       files,
     };
+  }
+
+  const appName = extractAfter(raw, [
+    /\b(?:open|launch|start)\s+(?:the\s+)?(?:app\s+)?([A-Za-z][\w\s.&-]{0,60}?)(?:\s+app)?(?:\s+for\s+me)?$/i,
+  ]);
+  if (appName && !isLikelyUrl(appName)) {
+    const appResult = await openApp(appName);
+    if (appResult.ok) {
+      return { ok: true, say: `Opening ${appResult.appName || cleanOpenTarget(appName)}.` };
+    }
+    const website = commonWebTargetFor(appName);
+    if (website) {
+      await openChromeUrl(website);
+      const host = new URL(website).hostname.replace(/^www\./, "");
+      return { ok: true, say: `I did not find a Mac app for ${cleanOpenTarget(appName)}, so I opened ${host}.` };
+    }
   }
 
   if (/\bchrome\b|\bbrowser\b|\bsearch\b|\bopen\b/.test(text)) {

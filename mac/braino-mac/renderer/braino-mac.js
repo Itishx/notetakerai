@@ -51,6 +51,7 @@ let realtimeConnecting = false;
 let realtimeVoiceEngine = "fish";
 let voiceCycleInFlight = false;
 let voiceTurnInFlight = false;
+let delegateGeneration = 0;
 let currentSpeechAudio = null;
 let currentSpeechUrl = null;
 let speechGeneration = 0;
@@ -320,6 +321,7 @@ function stopSpeechOutput() {
   });
   ttsAbortControllers.clear();
   if (currentSpeechAudio) {
+    try { currentSpeechAudio.dispatchEvent(new Event("ended")); } catch (_) {}
     try { currentSpeechAudio.pause(); } catch (_) {}
     currentSpeechAudio.src = "";
     currentSpeechAudio = null;
@@ -768,7 +770,9 @@ async function speak(text) {
 async function runDelegate(prompt, options = {}) {
   const text = String(prompt || "").trim();
   if (!text) return;
+  const runId = ++delegateGeneration;
   logRenderer("delegate.start", {
+    runId,
     promptChars: text.length,
     keepRealtime: Boolean(options.keepRealtime),
     realtimeActive,
@@ -786,7 +790,12 @@ async function runDelegate(prompt, options = {}) {
   setWave(true);
   try {
     const result = await window.brainoMac.delegate(text);
+    if (runId !== delegateGeneration) {
+      logRenderer("delegate.stale", { runId, currentRunId: delegateGeneration });
+      return;
+    }
     logRenderer("delegate.done", {
+      runId,
       ok: Boolean(result?.ok),
       sayChars: String(result?.say || "").length,
       filesCount: Array.isArray(result?.files) ? result.files.length : 0,
@@ -794,14 +803,20 @@ async function runDelegate(prompt, options = {}) {
     showFiles(result?.files || []);
     await speak(result?.say || "Done.");
   } catch (error) {
+    if (runId !== delegateGeneration) {
+      logRenderer("delegate.error.stale", { runId, currentRunId: delegateGeneration, error: errorForLog(error) });
+      return;
+    }
     logRenderer("delegate.error", { error: errorForLog(error) });
     await speak(`Delegate error: ${error?.message || "something broke"}.`);
     setStatus("error", "Delegate error");
   } finally {
-    processing = false;
-    if (realtimeActive) {
-      listening = true;
-      setStatus("listening", "Listening");
+    if (runId === delegateGeneration) {
+      processing = false;
+      if (realtimeActive) {
+        listening = true;
+        setStatus("listening", "Listening");
+      }
     }
   }
 }
@@ -959,10 +974,8 @@ function flushRealtimeTranscript(reason) {
   }
   if (speaking) stopSpeechOutput();
   voiceTurnInFlight = true;
-  setRealtimeMicEnabled(false);
   void runDelegate(transcript, { keepRealtime: true }).finally(() => {
     voiceTurnInFlight = false;
-    setRealtimeMicEnabled(true);
     if (realtimeActive) {
       listening = true;
       setStatus("listening", "Listening");
@@ -995,8 +1008,19 @@ function handleRealtimeEvent(event) {
   if (event.type === "input_audio_buffer.speech_started") {
     rtUserTranscript = "";
     clearRealtimeTranscriptFlush();
-    if (speaking || processing || voiceTurnInFlight) {
-      setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
+    if (speaking) {
+      delegateGeneration += 1;
+      voiceTurnInFlight = false;
+      processing = false;
+      stopSpeechOutput();
+      setRealtimeMicEnabled(true);
+      setStatus("hearing", "Hearing you");
+      setBubble("Listening...", 0);
+      logRenderer("realtime.barge_in", { currentRunId: delegateGeneration });
+      return;
+    }
+    if (processing || voiceTurnInFlight) {
+      setStatus("thinking", "Delegating");
       return;
     }
     setStatus("hearing", "Hearing you");

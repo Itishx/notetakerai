@@ -15,7 +15,7 @@ Braino starts on the visible macOS Dock strip and patrols across it. Drag Braino
 ## Controls
 
 - Double `Space`: show or hide Braino, matching the browser extension invocation style.
-- Double `Control`: start live Braino voice. The primary path is the same WebRTC realtime loop as the Chrome extension: mic -> realtime transcription/VAD -> delegate action -> Braino/Fish Audio speech.
+- Double `Control`: start live Braino voice. The primary path is the same WebRTC realtime loop as the Chrome extension: mic -> realtime transcription/VAD -> delegate action -> Braino/Fish Audio speech. You can barge in while Braino is speaking; the old reply is cancelled and the new command takes over.
 - `Control+Space`: backup voice toggle.
 - If macOS does not show the permission prompt, open System Settings -> Privacy & Security -> Accessibility and allow the terminal/Electron process running Braino.
 - Microphone access is requested separately before realtime or fallback recording starts. If it is blocked, open System Settings -> Privacy & Security -> Microphone and allow the terminal/Electron process running Braino.
@@ -43,10 +43,11 @@ The log records credential presence, transport choice, HTTP status, mic permissi
 
 - Organize Desktop files: “Braino, organize all my files” or “Clean up my Desktop”.
 - Undo the last Desktop organization: “Undo desktop organization”.
-- Open apps: “Open Chrome”, “Open Xcode”, “Open Finder”.
+- Open apps: “Open WhatsApp”, “Open Cursor”, “Open Xcode”, “Open Finder”.
+- Open common services: “Open Netflix” opens the Mac app if it exists, otherwise the correct website.
 - Open websites: “Go to github.com”.
 - Web search: “Search the web for best ML papers”.
-- Local search: “Find document called resume” or “Open PDF about tax”.
+- Local search: “Find document called resume”, “Look for the tax PDF”, or “Open yaya image”.
 - Front window: “What do you see?” / “What is open?”
 
 ## Desktop Organization
@@ -75,12 +76,13 @@ These are the local Mac-only skills that do not require the browser extension ag
 
 1. Organize loose Desktop files into `Braino Organized`, grouped by category.
 2. Undo the last Desktop organization using the saved `.braino-last-organize.json` manifest.
-3. Find files on the Mac with Spotlight metadata/content search.
-4. Open the best matching file when the user asks Braino to open a document, PDF, resume, receipt, or named file.
+3. Find files on the Mac with Spotlight metadata/content search, with a fallback scan of common user folders.
+4. Open the best matching file when the user asks Braino to open a document, PDF, image, folder, resume, receipt, or named file.
+5. Open installed Mac apps by name, with website fallback for common services like Netflix, WhatsApp, YouTube, Gmail, Maps, LinkedIn, Spotify, X, and ChatGPT.
 
 ## Mac Capability Map
 
-- App launching: open common Mac apps by name.
+- App launching: open installed Mac apps by name, first through macOS app resolution and then Spotlight app bundle lookup.
 - Browser control starter: open Chrome, open URLs, and run Google searches.
 - Local awareness starter: report the front app/window title through Accessibility.
 - Voice-first operation: realtime WebRTC listening when configured, browser recording fallback, native macOS speech recognition fallback, Fish Audio for Braino speech when configured, macOS `say` fallback otherwise.
