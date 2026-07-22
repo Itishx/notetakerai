@@ -58,10 +58,22 @@ serve(async (req) => {
       return json({ error: "Sign in required." }, 401);
     }
 
-    const sdp = await req.text();
-    if (!sdp.trim()) {
+    const sdp = (await req.text()).trim();
+    if (!sdp) {
       return json({ error: "Missing SDP offer." }, 400);
     }
+    const sdpDiagnostics = getSdpDiagnostics(sdp);
+    if (!sdpDiagnostics.hasVersionLine || !sdpDiagnostics.hasAudioLine) {
+      return json(
+        {
+          error: "Invalid SDP offer.",
+          details: "The realtime offer did not include the expected SDP version and audio lines.",
+          sdpDiagnostics,
+        },
+        400,
+      );
+    }
+    console.log("openai-realtime-call received SDP", sdpDiagnostics);
 
     const sessionStartedAt = new Date().toISOString();
     const { data: voiceSession, error: voiceSessionError } = await authClient
@@ -81,7 +93,7 @@ serve(async (req) => {
     }
 
     const formData = new FormData();
-    formData.set("sdp", sdp);
+    formData.set("sdp", new Blob([sdp], { type: "application/sdp" }), "offer.sdp");
     formData.set(
       "session",
       JSON.stringify({
@@ -119,6 +131,7 @@ serve(async (req) => {
         {
           error: "Failed to create realtime session.",
           details: extractOpenAiError(answerSdp),
+          sdpDiagnostics,
         },
         openAiResponse.status,
       );
@@ -184,6 +197,16 @@ function extractOpenAiError(raw: string) {
   } catch {
     return raw;
   }
+}
+
+function getSdpDiagnostics(sdp: string) {
+  return {
+    offerChars: sdp.length,
+    hasVersionLine: /^v=0\r?$/m.test(sdp),
+    mediaLineCount: (sdp.match(/^m=/gm) || []).length,
+    hasAudioLine: /^m=audio\s/m.test(sdp),
+    hasApplicationLine: /^m=application\s/m.test(sdp),
+  };
 }
 
 async function hashSafetyIdentifier(value: string) {

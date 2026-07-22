@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.11";
+const APP_VERSION = "12.0.12";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -116,13 +116,51 @@ function normalizeAuthSession(data = {}) {
   if (!accessToken) return null;
   const expiresIn = Number(data.expires_in || 0);
   const expiresAt = Number(data.expires_at || 0) || Math.floor(Date.now() / 1000) + (expiresIn > 0 ? expiresIn : 3600);
+  const user = data.user || null;
+  const displayName = cleanDisplayName(
+    data.display_name ||
+      data.displayName ||
+      data.name ||
+      user?.user_metadata?.full_name ||
+      user?.user_metadata?.name ||
+      user?.email ||
+      "",
+  );
   return {
     access_token: accessToken,
     refresh_token: refreshToken,
     expires_at: expiresAt,
-    user: data.user || null,
+    display_name: displayName || null,
+    user,
     saved_at: new Date().toISOString(),
   };
+}
+
+function cleanDisplayName(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.includes("@")) return nameFromEmail(raw);
+  return raw;
+}
+
+function nameFromEmail(email) {
+  const local = String(email || "").split("@")[0] || "";
+  const firstWord =
+    local.replace(/\d+/g, " ").replace(/[._-]+/g, " ").trim().split(/\s+/).find(Boolean) || "";
+  if (!firstWord) return "";
+  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1);
+}
+
+function displayNameFromSession(session) {
+  if (!session) return "";
+  return cleanDisplayName(
+    session.display_name ||
+      session.displayName ||
+      session.user?.user_metadata?.full_name ||
+      session.user?.user_metadata?.name ||
+      session.user?.email ||
+      "",
+  );
 }
 
 function loadAuthSession() {
@@ -147,6 +185,7 @@ function saveAuthSession(session) {
   logMac("auth.session.saved", {
     userId: normalized.user?.id || null,
     email: normalized.user?.email || null,
+    displayName: normalized.display_name || null,
     expiresAt: normalized.expires_at,
     authStorePath: AUTH_STORE_PATH,
   });
@@ -164,10 +203,12 @@ function clearAuthSession() {
 
 function authStatusPayload() {
   const session = loadAuthSession();
+  const displayName = displayNameFromSession(session);
   return {
     authenticated: Boolean(ENV_BRAINO_AUTH_TOKEN || session?.access_token),
     source: ENV_BRAINO_AUTH_TOKEN ? "env" : session?.access_token ? "stored" : "missing",
     email: session?.user?.email || null,
+    displayName: displayName || null,
     userId: session?.user?.id || null,
     expiresAt: session?.expires_at || null,
     authStorePath: AUTH_STORE_PATH,
@@ -199,7 +240,11 @@ async function refreshStoredBrainoSession(session) {
   const data = await supabaseAuthFetch("token?grant_type=refresh_token", {
     refresh_token: session.refresh_token,
   });
-  const next = saveAuthSession({ ...data, user: data.user || session.user || null });
+  const next = saveAuthSession({
+    ...data,
+    display_name: session.display_name || null,
+    user: data.user || session.user || null,
+  });
   logMac("auth.refresh.ok", { email: next.user?.email || null, expiresAt: next.expires_at });
   return next;
 }
@@ -228,6 +273,7 @@ function authSessionFromRelayPayload(data = {}) {
     refresh_token: data.refreshToken || data.refresh_token,
     expires_at: data.expiresAt || data.expires_at,
     expires_in: data.expiresIn || data.expires_in,
+    display_name: displayName || data.display_name,
     user: data.user || {
       id: data.userId || data.user_id || null,
       email: data.email || null,
@@ -1052,12 +1098,31 @@ function buildRealtimeSessionConfig() {
   };
 }
 
+function getSdpStats(sdp) {
+  const text = String(sdp || "");
+  return {
+    offerChars: text.length,
+    hasVersionLine: /^v=0\r?$/m.test(text),
+    mediaLineCount: (text.match(/^m=/gm) || []).length,
+    hasAudioLine: /^m=audio\s/m.test(text),
+    hasApplicationLine: /^m=application\s/m.test(text),
+  };
+}
+
+function appendRealtimeSdp(formData, sdp) {
+  if (typeof Blob === "function") {
+    formData.set("sdp", new Blob([sdp], { type: "application/sdp" }), "offer.sdp");
+    return;
+  }
+  formData.set("sdp", sdp);
+}
+
 async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   const sdp = String(offerSdp || "").trim();
   let authToken = await getBrainoAuthToken();
   logMac("realtime.create.start", {
     voiceEngine: voiceEngine || "fish",
-    offerChars: sdp.length,
+    ...getSdpStats(sdp),
     hasBrainoAuthToken: Boolean(authToken),
     hasOpenAiApiKey: Boolean(OPENAI_API_KEY),
     hasSupabaseUrl: Boolean(SUPABASE_URL),
@@ -1106,6 +1171,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
       logMac("realtime.create.supabase_failed", {
         status: response.status,
         error: message,
+        ...getSdpStats(sdp),
       });
       return { ok: false, error: message };
     }
@@ -1138,7 +1204,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   }
 
   const formData = new FormData();
-  formData.set("sdp", sdp);
+  appendRealtimeSdp(formData, sdp);
   formData.set("session", JSON.stringify({ ...buildRealtimeSessionConfig(), model: requestedModel }));
 
   logMac("realtime.create.transport", {

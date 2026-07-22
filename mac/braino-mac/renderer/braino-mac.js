@@ -982,7 +982,7 @@ async function runStartupSequence(config = {}) {
   if (authResult?.ok) {
     flashAuthSuccess();
     const auth = await window.brainoMac.authStatus().catch(() => null);
-    const label = auth?.email ? auth.email.split("@")[0] : "";
+    const label = auth?.displayName || "";
     setStatus("ready", "Double Space to show/hide");
     setBubble(label ? `Hello, ${label}.` : "Authenticated. I am on the Dock now.", 1900);
   } else {
