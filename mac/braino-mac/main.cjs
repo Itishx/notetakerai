@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.32";
+const APP_VERSION = "12.0.34";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -76,6 +76,70 @@ const BRAINO_AUTH_ORIGINS = (ENV.BRAINO_MAC_AUTH_ORIGINS || DEFAULT_BRAINO_AUTH_
   .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
+const RAW_CONSOLE = {
+  log: console.log.bind(console),
+  info: console.info.bind(console),
+  warn: console.warn.bind(console),
+  error: console.error.bind(console),
+  debug: console.debug.bind(console),
+};
+
+function isStdioWriteError(error) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || error || "");
+  return (
+    code === "EIO" ||
+    code === "EPIPE" ||
+    code === "ERR_STREAM_DESTROYED" ||
+    /\bwrite\s+(EIO|EPIPE)\b/i.test(message)
+  );
+}
+
+function appendMacLogLine(line) {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    fs.appendFileSync(LOG_PATH, line);
+  } catch (_) {}
+}
+
+function guardStdioStream(stream, label) {
+  if (!stream || typeof stream.write !== "function") return;
+  const originalWrite = stream.write.bind(stream);
+  stream.write = (...args) => {
+    try {
+      return originalWrite(...args);
+    } catch (error) {
+      if (isStdioWriteError(error)) {
+        appendMacLogLine(`[${new Date().toISOString()}] stdio.${label}.write_failed ${String(error?.message || error)}\n`);
+        return false;
+      }
+      throw error;
+    }
+  };
+  if (typeof stream.on === "function") {
+    stream.on("error", (error) => {
+      appendMacLogLine(`[${new Date().toISOString()}] stdio.${label}.error ${String(error?.message || error)}\n`);
+    });
+  }
+}
+
+function safeConsole(method, ...args) {
+  try {
+    const fn = RAW_CONSOLE[method] || RAW_CONSOLE.log;
+    fn(...args);
+  } catch (error) {
+    if (!isStdioWriteError(error)) {
+      appendMacLogLine(`[${new Date().toISOString()}] console.${method}.failed ${String(error?.message || error)}\n`);
+    }
+  }
+}
+
+guardStdioStream(process.stdout, "stdout");
+guardStdioStream(process.stderr, "stderr");
+for (const method of Object.keys(RAW_CONSOLE)) {
+  console[method] = (...args) => safeConsole(method, ...args);
+}
+
 function redact(value) {
   if (value == null) return value;
   const text = String(value);
@@ -118,10 +182,9 @@ function logMac(event, payload = {}) {
   };
   const line = `[${entry.ts}] ${event} ${JSON.stringify(entry)}\n`;
   try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    fs.appendFileSync(LOG_PATH, line);
+    appendMacLogLine(line);
   } catch (_) {}
-  console.log("[Braino Mac]", event, sanitizeForLog(payload));
+  safeConsole("log", "[Braino Mac]", event, sanitizeForLog(payload));
 }
 
 function textForLog(value, maxLength = 180) {
