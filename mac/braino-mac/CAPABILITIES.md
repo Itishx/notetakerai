@@ -7,7 +7,13 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
 - Normal conversation through the same Braino personality layer.
 - Local Mac skills:
   - organize Desktop files into folders
+  - bulk organize Desktop files by type, date, or project
   - undo the last Desktop organization
+  - undo the last file action Braino performed
+  - create folders
+  - rename files and folders
+  - move files and folders
+  - delete files and folders with confirmation
   - find files by name/type/content
   - open matching files, PDFs, images, videos, folders
   - open Mac apps like WhatsApp, Spotify, Chrome, Cursor, Finder, Terminal

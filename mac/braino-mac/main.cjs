@@ -11,13 +11,16 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.27";
+const APP_VERSION = "12.0.28";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
 const LOG_PATH = path.join(LOG_DIR, "braino-mac.log");
 const AUTH_STORE_DIR = path.join(os.homedir(), "Library", "Application Support", "Braino Mac");
 const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
+const FILE_ACTION_HISTORY_PATH = path.join(AUTH_STORE_DIR, "file-actions.json");
+const FILE_ACTION_CONFIRM_MS = 120000;
+const MAX_FILE_ACTION_HISTORY = 80;
 const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 const {
   resolveWebTarget,
@@ -33,6 +36,7 @@ let cachedAuthSession = null;
 let pendingAuthWaiters = [];
 let authBrowserFlow = null;
 let macChatHistory = [];
+let pendingFileConfirmation = null;
 
 function loadDotEnv() {
   const out = {};
@@ -854,12 +858,17 @@ function extractAfter(text, regexes) {
 const MAC_SKILLS_REPLY = [
   "Mac skills right now:",
   "1. I can organize loose Desktop files into clean folders.",
-  "2. I can undo the last Desktop organization.",
-  "3. I can find files on this Mac with Spotlight.",
-  "4. I can open the best matching file when you ask for it.",
-  "5. I can open installed Mac apps by name, and fall back to the right website for common services.",
-  "6. I can close apps or matching browser tabs for the services I opened.",
-  "7. I can play songs through the Spotify Mac app when your Spotify account is connected.",
+  "2. I can bulk organize Desktop files by type, date, or project.",
+  "3. I can undo the last file action I performed.",
+  "4. I can create folders on Desktop, Documents, Downloads, Pictures, Movies, Music, or Home.",
+  "5. I can rename files and folders.",
+  "6. I can move files or folders into another folder.",
+  "7. I can delete files or folders only after explicit confirmation, then restore them with undo.",
+  "8. I can find files on this Mac with Spotlight.",
+  "9. I can open the best matching file when you ask for it.",
+  "10. I can open installed Mac apps by name, and fall back to the right website for common services.",
+  "11. I can close apps or matching browser tabs for the services I opened.",
+  "12. I can play songs through the Spotify Mac app when your Spotify account is connected.",
 ].join("\n");
 
 function isMacSkillsPrompt(text) {
@@ -1558,6 +1567,55 @@ function categoryForFile(fileName) {
   return "Misc";
 }
 
+function organizeModeForText(text) {
+  const raw = String(text || "").toLowerCase();
+  if (/\bby\s+date\b|\bdate\s+(?:wise|based)\b|\bmonth\b|\bmodified\b/.test(raw)) return "date";
+  if (/\bby\s+project\b|\bproject\s+(?:wise|based)\b|\bprojects?\b/.test(raw)) return "project";
+  return "type";
+}
+
+function dateCategoryForFile(stats) {
+  const date = stats?.mtime instanceof Date ? stats.mtime : new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `By Date/${year}-${month}`;
+}
+
+function projectCategoryForFile(fileName) {
+  const base = path.basename(fileName, path.extname(fileName));
+  const normalized = normalizeSearchToken(base)
+    .replace(/\bscreen\s*shot\b/g, " ")
+    .replace(/\bscreenshot\b/g, " ")
+    .replace(/\bscreen\s*recording\b/g, " ")
+    .replace(/\b(?:copy|final|draft|version|v\d+)\b/g, " ")
+    .replace(/\b\d{4}[-_. ]?\d{1,2}[-_. ]?\d{1,2}\b/g, " ")
+    .replace(/\b\d{1,2}[-_. ]?\d{1,2}[-_. ]?\d{2,4}\b/g, " ")
+    .replace(/\b\d{1,2}[.:]\d{2}(?:\s?[ap]m)?\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const knownProjects = [
+    ["Braino", /\bbraino|notetaker|sidebrain|cinema\s*mode\b/],
+    ["Resume", /\bresume|cv|cover\s+letter|portfolio\b/],
+    ["Amdocs", /\bamdocs|anz|at\s*and\s*t|att\b/],
+    ["Invoices and Receipts", /\binvoice|receipt|payment|bill\b/],
+    ["Screenshots", /\bscreen|shot|recording\b/],
+  ];
+  for (const [name, regex] of knownProjects) {
+    if (regex.test(normalized)) return `By Project/${name}`;
+  }
+  const words = normalized
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !/^\d+$/.test(word))
+    .slice(0, 3);
+  return `By Project/${words.length ? titleCaseWords(words.join(" ")) : "Misc Project"}`;
+}
+
+function organizationCategoryForItem(fileName, stats, mode) {
+  if (mode === "date") return dateCategoryForFile(stats);
+  if (mode === "project") return projectCategoryForFile(fileName);
+  return categoryForFile(fileName);
+}
+
 function shouldSkipDesktopEntry(fileName, stats) {
   if (!fileName || fileName.startsWith(".")) return true;
   if (fileName === ORGANIZED_FOLDER_NAME) return true;
@@ -1589,6 +1647,524 @@ function desktopOrganizePaths() {
   return { desktopDir, organizedDir, manifestPath };
 }
 
+function readFileActionHistory() {
+  try {
+    if (!fs.existsSync(FILE_ACTION_HISTORY_PATH)) return [];
+    const parsed = JSON.parse(fs.readFileSync(FILE_ACTION_HISTORY_PATH, "utf8"));
+    return Array.isArray(parsed?.actions) ? parsed.actions : [];
+  } catch (error) {
+    logMac("file.history.read.failed", { error });
+    return [];
+  }
+}
+
+async function writeFileActionHistory(actions) {
+  const safeActions = Array.isArray(actions) ? actions.slice(-MAX_FILE_ACTION_HISTORY) : [];
+  await fs.promises.mkdir(AUTH_STORE_DIR, { recursive: true });
+  await fs.promises.writeFile(FILE_ACTION_HISTORY_PATH, JSON.stringify({ actions: safeActions }, null, 2));
+}
+
+async function pushFileAction(action) {
+  const nextAction = {
+    id: action?.id || crypto.randomUUID(),
+    createdAt: action?.createdAt || new Date().toISOString(),
+    type: action?.type || "file_action",
+    description: action?.description || "file action",
+    steps: Array.isArray(action?.steps) ? action.steps : [],
+  };
+  const history = readFileActionHistory();
+  history.push(nextAction);
+  await writeFileActionHistory(history);
+  logMac("file.history.push", {
+    actionId: nextAction.id,
+    type: nextAction.type,
+    description: nextAction.description,
+    steps: nextAction.steps.length,
+  });
+  return nextAction;
+}
+
+function hasFileActionHistory() {
+  return readFileActionHistory().length > 0;
+}
+
+function safePathExists(filePath) {
+  try {
+    return Boolean(filePath && fs.existsSync(filePath));
+  } catch (_) {
+    return false;
+  }
+}
+
+function isDangerousFileOperationPath(filePath) {
+  const resolved = path.resolve(String(filePath || ""));
+  const home = os.homedir();
+  const exactProtected = new Set([
+    "/",
+    home,
+    path.join(home, "Desktop"),
+    path.join(home, "Documents"),
+    path.join(home, "Downloads"),
+    path.join(home, "Pictures"),
+    path.join(home, "Movies"),
+    path.join(home, "Music"),
+    path.join(home, "Applications"),
+    "/Applications",
+    "/System",
+    "/Library",
+  ]);
+  if (exactProtected.has(resolved)) return true;
+  if (/^\/(?:System|Library|bin|sbin|usr|private|etc|var)\b/.test(resolved)) return true;
+  if (path.basename(resolved).startsWith(".")) return true;
+  return false;
+}
+
+function sanitizeFileSystemName(value) {
+  return String(value || "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/[.?!]+$/g, "")
+    .replace(/\s+(?:for me|please|pls)$/i, "")
+    .replace(/^(?:the|my|an?|new)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[/:]/g, "-")
+    .replace(/^\.+$/g, "")
+    .trim();
+}
+
+function titleCaseWords(value) {
+  return String(value || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function knownFolderPathForName(value) {
+  const key = normalizeSearchToken(value)
+    .replace(/\bfolder\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const folders = {
+    desktop: path.join(os.homedir(), "Desktop"),
+    downloads: path.join(os.homedir(), "Downloads"),
+    download: path.join(os.homedir(), "Downloads"),
+    documents: path.join(os.homedir(), "Documents"),
+    document: path.join(os.homedir(), "Documents"),
+    pictures: path.join(os.homedir(), "Pictures"),
+    picture: path.join(os.homedir(), "Pictures"),
+    photos: path.join(os.homedir(), "Pictures"),
+    photo: path.join(os.homedir(), "Pictures"),
+    movies: path.join(os.homedir(), "Movies"),
+    videos: path.join(os.homedir(), "Movies"),
+    video: path.join(os.homedir(), "Movies"),
+    music: path.join(os.homedir(), "Music"),
+    songs: path.join(os.homedir(), "Music"),
+    home: os.homedir(),
+  };
+  return folders[key] || "";
+}
+
+function extractKnownFolderReference(text) {
+  const match = String(text || "").match(/\b(?:on|in|inside|under|within|to|into)\s+(?:my\s+)?(desktop|downloads?|documents?|pictures?|photos?|movies?|videos?|music|songs?|home)(?:\s+folder)?\b/i);
+  return match?.[1] ? knownFolderPathForName(match[1]) : "";
+}
+
+function stripKnownFolderReference(text) {
+  return String(text || "")
+    .replace(/\b(?:on|in|inside|under|within|to|into)\s+(?:my\s+)?(?:desktop|downloads?|documents?|pictures?|photos?|movies?|videos?|music|songs?|home)(?:\s+folder)?\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function expandHomePath(value) {
+  const rawPath = String(value || "").trim();
+  if (!rawPath) return "";
+  if (rawPath === "~") return os.homedir();
+  if (rawPath.startsWith("~/")) return path.join(os.homedir(), rawPath.slice(2));
+  return rawPath;
+}
+
+async function movePath(sourcePath, destinationPath) {
+  await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+  try {
+    await fs.promises.rename(sourcePath, destinationPath);
+    return;
+  } catch (error) {
+    if (error?.code !== "EXDEV") throw error;
+  }
+  await fs.promises.cp(sourcePath, destinationPath, {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
+    preserveTimestamps: true,
+  });
+  await fs.promises.rm(sourcePath, { recursive: true, force: false });
+}
+
+function isFileActionUndoIntent(text) {
+  const raw = String(text || "").toLowerCase();
+  const undoSignal = /\b(undo|reverse|restore|put back|move back)\b/.test(raw);
+  if (!undoSignal) return false;
+  if (/\b(file|folder|rename|renamed|move|moved|delete|deleted|trash|desktop|organize|organise|cleanup|cleaned|sort|sorted|action)\b/.test(raw)) return true;
+  return /\b(it|that|this|last|previous|everything|all|what you just did|whatever you just did)\b/.test(raw) && hasFileActionHistory();
+}
+
+async function undoLastFileAction() {
+  const history = readFileActionHistory();
+  const action = history.pop();
+  if (!action) {
+    if (hasDesktopOrganizeManifest()) return undoDesktopOrganization();
+    return { ok: false, say: "I do not have a file action to undo yet." };
+  }
+
+  let undone = 0;
+  let skipped = 0;
+  const touchedDirs = new Set();
+  const steps = Array.isArray(action.steps) ? action.steps.slice().reverse() : [];
+  logMac("file.undo.start", {
+    actionId: action.id,
+    type: action.type,
+    description: action.description,
+    steps: steps.length,
+  });
+
+  for (const step of steps) {
+    try {
+      if (["move", "rename", "delete"].includes(step?.type)) {
+        const currentPath = step.type === "delete" ? step.trashPath : step.to;
+        const originalPath = step.from;
+        if (!safePathExists(currentPath) || !originalPath) {
+          skipped += 1;
+          continue;
+        }
+        const destinationPath = await uniquePath(originalPath);
+        sendTaskProgress({ status: "thinking", text: `Restoring ${path.basename(destinationPath)}` });
+        await movePath(currentPath, destinationPath);
+        touchedDirs.add(path.dirname(currentPath));
+        undone += 1;
+      } else if (step?.type === "create_folder") {
+        const folderPath = step.path;
+        if (!safePathExists(folderPath)) {
+          skipped += 1;
+          continue;
+        }
+        const entries = await fs.promises.readdir(folderPath);
+        if (entries.length) {
+          skipped += 1;
+          logMac("file.undo.create_folder.not_empty", { folderPath, entries: entries.length });
+          continue;
+        }
+        sendTaskProgress({ status: "thinking", text: `Removing ${path.basename(folderPath)}` });
+        await fs.promises.rmdir(folderPath);
+        undone += 1;
+      }
+    } catch (error) {
+      skipped += 1;
+      logMac("file.undo.step.failed", { actionId: action.id, step, error });
+    }
+  }
+
+  if (action.type === "organize_desktop") {
+    const { organizedDir, manifestPath } = desktopOrganizePaths();
+    try { if (fs.existsSync(manifestPath)) await fs.promises.unlink(manifestPath); } catch (_) {}
+    const dirs = Array.from(touchedDirs)
+      .filter((dir) => {
+        const relative = path.relative(organizedDir, dir);
+        return relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+      })
+      .sort((a, b) => b.length - a.length);
+    for (const dir of dirs) {
+      try {
+        if ((await fs.promises.readdir(dir)).length === 0) await fs.promises.rmdir(dir);
+      } catch (_) {}
+    }
+    try {
+      if (fs.existsSync(organizedDir) && (await fs.promises.readdir(organizedDir)).length === 0) await fs.promises.rmdir(organizedDir);
+    } catch (_) {}
+  }
+
+  await writeFileActionHistory(history);
+  logMac("file.undo.done", {
+    actionId: action.id,
+    type: action.type,
+    undone,
+    skipped,
+  });
+  sendTaskProgress({ status: "done", text: undone ? `Undid ${undone} file step${undone === 1 ? "" : "s"}` : "Undo checked" });
+  if (!undone) {
+    return { ok: false, say: `I found the last action, but there was nothing left I could safely undo${skipped ? `; ${skipped} step${skipped === 1 ? "" : "s"} were skipped` : ""}.` };
+  }
+  return {
+    ok: true,
+    say: `Done. I undid ${action.description || "the last file action"}${skipped ? `, with ${skipped} skipped step${skipped === 1 ? "" : "s"}` : ""}.`,
+  };
+}
+
+function parseCreateFolderIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\b(create|make|new)\b/i.test(source) || !/\bfolders?\b/i.test(source)) return null;
+  const captured = extractAfter(source, [
+    /\b(?:create|make)\s+(?:a\s+)?(?:new\s+)?folder\s+(?:called|named)?\s*(.+)$/i,
+    /\b(?:create|make)\s+(.+?)\s+folder\b/i,
+    /\bnew\s+folder\s+(?:called|named)?\s*(.+)$/i,
+  ]);
+  const parentDir = extractKnownFolderReference(source) || path.join(os.homedir(), "Desktop");
+  const name = sanitizeFileSystemName(stripKnownFolderReference(captured)
+    .replace(/\b(?:called|named)\b/gi, " ")
+    .replace(/\bfolder\b/gi, " "));
+  if (!name) return null;
+  return { name, parentDir };
+}
+
+async function createMacFolder(intent) {
+  const parentDir = intent?.parentDir || path.join(os.homedir(), "Desktop");
+  const folderName = sanitizeFileSystemName(intent?.name || "");
+  if (!folderName) return { ok: false, say: "Tell me the folder name and I will create it." };
+  if (!safePathExists(parentDir)) return { ok: false, say: `I could not find the parent folder for ${folderName}.` };
+  if (isDangerousFileOperationPath(parentDir) && parentDir === "/Applications") {
+    return { ok: false, say: "I will not create folders inside Applications from voice." };
+  }
+
+  const targetPath = await uniquePath(path.join(parentDir, folderName));
+  sendTaskProgress({ status: "thinking", text: `Creating ${path.basename(targetPath)}` });
+  await fs.promises.mkdir(targetPath, { recursive: false });
+  await pushFileAction({
+    type: "create_folder",
+    description: `creating ${path.basename(targetPath)}`,
+    steps: [{ type: "create_folder", path: targetPath }],
+  });
+  sendTaskProgress({ status: "done", text: `Created ${path.basename(targetPath)}` });
+  logMac("file.create_folder.done", { folderName, parentDir, targetPath });
+  return {
+    ok: true,
+    files: [targetPath],
+    say: `Created ${path.basename(targetPath)} in ${path.basename(parentDir) || parentDir}.`,
+  };
+}
+
+function parseRenameFileIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\b(rename|change name|call)\b/i.test(source)) return null;
+  const match = source.match(/\brename\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+to\s+(.+)$/i)
+    || source.match(/\bchange\s+(?:the\s+)?name\s+of\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+to\s+(.+)$/i)
+    || source.match(/\bcall\s+(?:the\s+|my\s+|a\s+|an\s+)?(?:file|folder|document|pdf|image|video)\s+(.+?)\s+(.+)$/i);
+  if (!match?.[1] || !match?.[2]) return null;
+  const kind = fileKindForText(match[1]);
+  const query = cleanFileQuery(match[1], kind);
+  const newName = sanitizeFileSystemName(match[2].replace(/\b(?:file|folder|document|pdf|image|video)\b$/i, ""));
+  if (!query || !newName) return null;
+  return { query, kind, newName };
+}
+
+async function renameMacFile(intent) {
+  const files = await findFiles(intent.query, { kind: intent.kind });
+  if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${intent.query}.` };
+  const sourcePath = files[0];
+  if (isDangerousFileOperationPath(sourcePath)) return { ok: false, say: `I will not rename ${path.basename(sourcePath)} from voice.` };
+  const stats = await fs.promises.lstat(sourcePath);
+  const ext = stats.isFile() ? path.extname(sourcePath) : "";
+  const hasNewExt = /\.[a-z0-9]{2,8}$/i.test(intent.newName);
+  const finalName = stats.isFile() && ext && !hasNewExt ? `${intent.newName}${ext}` : intent.newName;
+  const destinationPath = await uniquePath(path.join(path.dirname(sourcePath), finalName));
+
+  sendTaskProgress({ status: "thinking", text: `Renaming ${path.basename(sourcePath)}` });
+  await movePath(sourcePath, destinationPath);
+  await pushFileAction({
+    type: "rename",
+    description: `renaming ${path.basename(sourcePath)} to ${path.basename(destinationPath)}`,
+    steps: [{ type: "rename", from: sourcePath, to: destinationPath }],
+  });
+  sendTaskProgress({ status: "done", text: `Renamed ${path.basename(destinationPath)}` });
+  logMac("file.rename.done", { sourcePath, destinationPath });
+  return {
+    ok: true,
+    files: [destinationPath],
+    say: `Renamed ${path.basename(sourcePath)} to ${path.basename(destinationPath)}.`,
+  };
+}
+
+function parseMoveFileIntent(raw) {
+  const source = String(raw || "").trim();
+  if (/\b(move back|put back|undo|restore)\b/i.test(source)) return null;
+  if (!/\b(move|put|place)\b/i.test(source)) return null;
+  const match = source.match(/\b(?:move|put|place)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:to|into|in)\s+(?:the\s+|my\s+)?(.+)$/i);
+  if (!match?.[1] || !match?.[2]) return null;
+  const kind = fileKindForText(match[1]);
+  const query = cleanFileQuery(match[1], kind);
+  const destination = match[2].trim();
+  if (!query || !destination) return null;
+  return { query, kind, destination };
+}
+
+async function resolveDestinationFolder(destinationText) {
+  const raw = String(destinationText || "").trim();
+  if (!raw) return { ok: false, error: "No destination folder was provided." };
+  const expanded = expandHomePath(raw.replace(/^["'`]+|["'`]+$/g, ""));
+  if (path.isAbsolute(expanded) && safePathExists(expanded)) {
+    const stats = await fs.promises.lstat(expanded);
+    return stats.isDirectory()
+      ? { ok: true, folderPath: expanded, created: false }
+      : { ok: false, error: `${path.basename(expanded)} is not a folder.` };
+  }
+
+  const known = knownFolderPathForName(raw) || extractKnownFolderReference(raw);
+  if (known) return { ok: true, folderPath: known, created: false };
+
+  const newFolderName = extractAfter(raw, [
+    /\b(?:new\s+)?folder\s+(?:called|named)\s+(.+)$/i,
+    /\b(?:new\s+)?folder\s+(.+)$/i,
+  ]);
+  if (/\bnew\s+folder\b/i.test(raw) && newFolderName) {
+    const parentDir = extractKnownFolderReference(raw) || path.join(os.homedir(), "Desktop");
+    const folderPath = await uniquePath(path.join(parentDir, sanitizeFileSystemName(stripKnownFolderReference(newFolderName))));
+    await fs.promises.mkdir(folderPath, { recursive: false });
+    return { ok: true, folderPath, created: true };
+  }
+
+  const cleanDestination = sanitizeFileSystemName(stripKnownFolderReference(raw).replace(/\bfolder\b/gi, " "));
+  if (!cleanDestination) return { ok: false, error: "I could not understand the destination folder." };
+  const folders = await findFiles(cleanDestination, { kind: "folder" });
+  if (!folders.length) return { ok: false, error: `I could not find a folder called ${cleanDestination}.` };
+  return { ok: true, folderPath: folders[0], created: false };
+}
+
+async function moveMacFile(intent) {
+  const files = await findFiles(intent.query, { kind: intent.kind });
+  if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${intent.query}.` };
+  const sourcePath = files[0];
+  if (isDangerousFileOperationPath(sourcePath)) return { ok: false, say: `I will not move ${path.basename(sourcePath)} from voice.` };
+  const destination = await resolveDestinationFolder(intent.destination);
+  if (!destination.ok) return { ok: false, say: destination.error };
+  const destinationFolder = destination.folderPath;
+  const sourceResolved = path.resolve(sourcePath);
+  const destinationResolved = path.resolve(destinationFolder);
+  if (sourceResolved === destinationResolved || path.dirname(sourceResolved) === destinationResolved) {
+    return { ok: true, say: `${path.basename(sourcePath)} is already there.` };
+  }
+  if (destinationResolved.startsWith(`${sourceResolved}${path.sep}`)) {
+    return { ok: false, say: "I will not move a folder inside itself." };
+  }
+
+  const destinationPath = await uniquePath(path.join(destinationFolder, path.basename(sourcePath)));
+  sendTaskProgress({ status: "thinking", text: `Moving ${path.basename(sourcePath)}` });
+  await movePath(sourcePath, destinationPath);
+  const steps = [];
+  if (destination.created) steps.push({ type: "create_folder", path: destinationFolder });
+  steps.push({ type: "move", from: sourcePath, to: destinationPath });
+  await pushFileAction({
+    type: "move",
+    description: `moving ${path.basename(sourcePath)} to ${path.basename(destinationFolder) || destinationFolder}`,
+    steps,
+  });
+  sendTaskProgress({ status: "done", text: `Moved ${path.basename(destinationPath)}` });
+  logMac("file.move.done", { sourcePath, destinationPath, destinationCreated: destination.created });
+  return {
+    ok: true,
+    files: [destinationPath],
+    say: `Moved ${path.basename(destinationPath)} to ${path.basename(destinationFolder) || destinationFolder}.`,
+  };
+}
+
+function parseDeleteFileIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\b(delete|remove|trash)\b/i.test(source) && !/\bmove\b.+\btrash\b/i.test(source)) return null;
+  const captured = extractAfter(source, [
+    /\bmove\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+to\s+(?:the\s+)?trash$/i,
+    /\b(?:delete|remove|trash)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)$/i,
+  ]);
+  const kind = fileKindForText(captured || source);
+  const query = cleanFileQuery(captured || source.replace(/\b(delete|remove|trash)\b/gi, " "), kind);
+  if (!query) return null;
+  return { query, kind };
+}
+
+function isDeleteConfirmation(text) {
+  const raw = String(text || "").trim().toLowerCase();
+  return /^(?:yes|yeah|yep|yup|sure|confirm|confirmed|do it|go ahead|delete it|trash it|move it to trash|yes delete it)$/.test(raw)
+    || /\b(?:yes|yeah|yep|yup|confirm|confirmed)\b.*\b(?:delete|trash)\b/.test(raw);
+}
+
+function isDeleteCancel(text) {
+  return /^(?:no|nope|cancel|stop|don't|do not|leave it|never mind|nevermind)$/i
+    .test(String(text || "").trim().toLowerCase());
+}
+
+async function executeConfirmedDelete(confirmation) {
+  if (!confirmation?.filePath || !safePathExists(confirmation.filePath)) {
+    pendingFileConfirmation = null;
+    return { ok: false, say: "That file is not there anymore, so I did not delete anything." };
+  }
+  const sourcePath = confirmation.filePath;
+  if (isDangerousFileOperationPath(sourcePath)) {
+    pendingFileConfirmation = null;
+    return { ok: false, say: `I will not delete ${path.basename(sourcePath)} from voice.` };
+  }
+  const trashRoot = path.join(os.homedir(), ".Trash");
+  const fallbackTrashRoot = path.join(AUTH_STORE_DIR, "Safe Trash");
+  const root = safePathExists(trashRoot) ? trashRoot : fallbackTrashRoot;
+  const trashPath = await uniquePath(path.join(root, path.basename(sourcePath)));
+  sendTaskProgress({ status: "thinking", text: `Moving ${path.basename(sourcePath)} to Trash` });
+  await movePath(sourcePath, trashPath);
+  await pushFileAction({
+    type: "delete",
+    description: `deleting ${path.basename(sourcePath)}`,
+    steps: [{ type: "delete", from: sourcePath, trashPath }],
+  });
+  pendingFileConfirmation = null;
+  sendTaskProgress({ status: "done", text: `Deleted ${path.basename(sourcePath)}` });
+  logMac("file.delete.done", { sourcePath, trashPath });
+  return {
+    ok: true,
+    say: `Deleted ${path.basename(sourcePath)}. I moved it to Trash and saved undo for it.`,
+  };
+}
+
+function handlePendingFileConfirmation(raw) {
+  const pending = pendingFileConfirmation;
+  if (!pending) return null;
+  if (Date.now() - Number(pending.createdAt || 0) > FILE_ACTION_CONFIRM_MS) {
+    pendingFileConfirmation = null;
+    return null;
+  }
+  if (isDeleteCancel(raw)) {
+    pendingFileConfirmation = null;
+    return { ok: true, say: "Cancelled. I did not delete anything." };
+  }
+  if (isDeleteConfirmation(raw)) {
+    return executeConfirmedDelete(pending);
+  }
+  pendingFileConfirmation = null;
+  return null;
+}
+
+async function requestDeleteConfirmation(intent) {
+  const files = await findFiles(intent.query, { kind: intent.kind });
+  if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${intent.query}.` };
+  const filePath = files[0];
+  if (isDangerousFileOperationPath(filePath)) return { ok: false, say: `I will not delete ${path.basename(filePath)} from voice.` };
+  pendingFileConfirmation = {
+    type: "delete",
+    createdAt: Date.now(),
+    filePath,
+    query: intent.query,
+    kind: intent.kind || "",
+    alternatives: files.slice(1, 4),
+  };
+  logMac("file.delete.confirmation_requested", {
+    query: intent.query,
+    kind: intent.kind || "",
+    filePath,
+    alternatives: pendingFileConfirmation.alternatives,
+  });
+  sendTaskProgress({ status: "thinking", text: `Confirm delete ${path.basename(filePath)}` });
+  return {
+    ok: true,
+    files: [filePath, ...pendingFileConfirmation.alternatives],
+    say: `I found ${path.basename(filePath)}. Say yes, delete it to move it to Trash, or say cancel.`,
+  };
+}
+
 function hasDesktopOrganizeManifest() {
   return fs.existsSync(desktopOrganizePaths().manifestPath);
 }
@@ -1604,7 +2180,8 @@ function isDesktopOrganizeUndoIntent(text) {
   return false;
 }
 
-async function organizeDesktopFiles() {
+async function organizeDesktopFiles(options = {}) {
+  const mode = ["type", "date", "project"].includes(options.mode) ? options.mode : "type";
   const { desktopDir, organizedDir } = desktopOrganizePaths();
   sendTaskProgress({ status: "thinking", text: "Scanning Desktop" });
 
@@ -1628,7 +2205,7 @@ async function organizeDesktopFiles() {
       continue;
     }
     if (shouldSkipDesktopEntry(fileName, stats)) continue;
-    filesToMove.push({ fileName, sourcePath, category: categoryForFile(fileName) });
+    filesToMove.push({ fileName, sourcePath, category: organizationCategoryForItem(fileName, stats, mode) });
   }
 
   if (!filesToMove.length) {
@@ -1641,6 +2218,7 @@ async function organizeDesktopFiles() {
     createdAt: new Date().toISOString(),
     desktopDir,
     organizedDir,
+    mode,
     moves: [],
   };
   const counts = new Map();
@@ -1661,6 +2239,11 @@ async function organizeDesktopFiles() {
   }
 
   await writeOrganizeManifest(organizedDir, manifest);
+  await pushFileAction({
+    type: "organize_desktop",
+    description: `organizing Desktop files by ${mode}`,
+    steps: manifest.moves.map((move) => ({ type: "move", from: move.from, to: move.to })),
+  });
   sendTaskProgress({ status: "done", text: `Organized ${manifest.moves.length} files` });
 
   const summary = Array.from(counts.entries())
@@ -1671,7 +2254,7 @@ async function organizeDesktopFiles() {
   return {
     ok: true,
     files: manifest.moves.map((move) => move.to),
-    say: `Done. I organized ${manifest.moves.length} Desktop file${manifest.moves.length === 1 ? "" : "s"} into ${ORGANIZED_FOLDER_NAME}${summary ? `: ${summary}` : ""}. Existing folders were left alone, and I saved an undo manifest.`,
+    say: `Done. I organized ${manifest.moves.length} Desktop file${manifest.moves.length === 1 ? "" : "s"} by ${mode} into ${ORGANIZED_FOLDER_NAME}${summary ? `: ${summary}` : ""}. Existing folders were left alone, and I saved undo for it.`,
   };
 }
 
@@ -2213,8 +2796,11 @@ async function runDelegate(prompt) {
     return { ok: true, say: MAC_SKILLS_REPLY };
   }
 
-  if (isDesktopOrganizeUndoIntent(text)) {
-    return undoDesktopOrganization();
+  const pendingFileResult = await handlePendingFileConfirmation(raw);
+  if (pendingFileResult) return pendingFileResult;
+
+  if (isFileActionUndoIntent(text) || isDesktopOrganizeUndoIntent(text)) {
+    return undoLastFileAction();
   }
 
   const closeTarget = extractCloseShortcutTarget(raw);
@@ -2223,8 +2809,51 @@ async function runDelegate(prompt) {
   }
 
   if (/\b(organize|organise|clean up|cleanup|tidy|sort)\b.*\b(my\s+)?(desktop|files?|desktop files?)\b/.test(text)
+    || /\b(?:bulk\s+)?(?:organize|organise|clean up|cleanup|tidy|sort)\b.*\b(type|date|project|month)\b/.test(text)
     || /\bdesktop\b.*\b(messy|cluttered|chaos|clean)\b/.test(text)) {
-    return organizeDesktopFiles();
+    return organizeDesktopFiles({ mode: organizeModeForText(text) });
+  }
+
+  const createFolderIntent = parseCreateFolderIntent(raw);
+  if (createFolderIntent) {
+    logMac("delegate.create_folder_intent", {
+      raw: textForLog(raw),
+      name: createFolderIntent.name,
+      parentDir: createFolderIntent.parentDir,
+    });
+    return createMacFolder(createFolderIntent);
+  }
+
+  const renameFileIntent = parseRenameFileIntent(raw);
+  if (renameFileIntent) {
+    logMac("delegate.rename_file_intent", {
+      raw: textForLog(raw),
+      query: renameFileIntent.query,
+      kind: renameFileIntent.kind || "",
+      newName: renameFileIntent.newName,
+    });
+    return renameMacFile(renameFileIntent);
+  }
+
+  const moveFileIntent = parseMoveFileIntent(raw);
+  if (moveFileIntent) {
+    logMac("delegate.move_file_intent", {
+      raw: textForLog(raw),
+      query: moveFileIntent.query,
+      kind: moveFileIntent.kind || "",
+      destination: moveFileIntent.destination,
+    });
+    return moveMacFile(moveFileIntent);
+  }
+
+  const deleteFileIntent = parseDeleteFileIntent(raw);
+  if (deleteFileIntent) {
+    logMac("delegate.delete_file_intent", {
+      raw: textForLog(raw),
+      query: deleteFileIntent.query,
+      kind: deleteFileIntent.kind || "",
+    });
+    return requestDeleteConfirmation(deleteFileIntent);
   }
 
   if (/^(?:quit|exit|hide|close)$/i.test(text) || /\b(?:quit|exit|close|hide)\s+braino\b/i.test(text)) {

@@ -43,7 +43,12 @@ It also records Mac delegate routing for local file/app actions, including clean
 ## First Delegate Actions
 
 - Organize Desktop files: “Braino, organize all my files” or “Clean up my Desktop”.
-- Undo the last Desktop organization: “Undo desktop organization”.
+- Bulk organize Desktop files: “Organize my files by type”, “Organize by date”, or “Organize by project”.
+- Undo the last file action: “Undo that”, “Undo the last file action”, or “Restore what you just moved”.
+- Create folders: “Create a folder called Invoices on Desktop” or “Make a folder called Resumes in Documents”.
+- Rename files: “Rename Braino Final video to Braino Launch”.
+- Move files: “Move the tax PDF to Documents” or “Move yaya image to Pictures”.
+- Delete files with confirmation: “Delete the old receipt PDF”, then say “yes, delete it” or “cancel”.
 - Open apps: “Open WhatsApp”, “Open Cursor”, “Open Xcode”, “Open Finder”.
 - Open common services: “Open Netflix” opens the Mac app if it exists, otherwise the correct website.
 - Open websites: “Go to github.com”.
@@ -75,11 +80,15 @@ Existing Desktop folders are left alone. Braino writes `~/Desktop/Braino Organiz
 
 These are the local Mac-only skills that do not require the browser extension agent loop:
 
-1. Organize loose Desktop files into `Braino Organized`, grouped by category.
-2. Undo the last Desktop organization using the saved `.braino-last-organize.json` manifest.
-3. Find files on the Mac with Spotlight metadata/content search, with a fallback scan of common user folders.
-4. Open the best matching file when the user asks Braino to open a document, PDF, image, folder, resume, receipt, or named file.
-5. Open installed Mac apps by name, with website fallback for common services like Netflix, WhatsApp, YouTube, Gmail, Maps, LinkedIn, Spotify, X, and ChatGPT.
+1. Organize loose Desktop files into `Braino Organized`, grouped by type, date, or project.
+2. Undo the last file action from the persistent action journal at `~/Library/Application Support/Braino Mac/file-actions.json`.
+3. Create folders in common user locations.
+4. Rename files and folders with extension preservation.
+5. Move files and folders into known folders or searched destination folders.
+6. Delete files and folders only after explicit confirmation, by moving them to Trash with an undo record.
+7. Find files on the Mac with Spotlight metadata/content search, with a fallback scan of common user folders.
+8. Open the best matching file when the user asks Braino to open a document, PDF, image, folder, resume, receipt, or named file.
+9. Open installed Mac apps by name, with website fallback for common services like Netflix, WhatsApp, YouTube, Gmail, Maps, LinkedIn, Spotify, X, and ChatGPT.
 
 ## Mac Capability Map
 
