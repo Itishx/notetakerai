@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.19";
+const APP_VERSION = "12.0.20";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -911,9 +911,30 @@ async function writeOrganizeManifest(baseDir, manifest) {
   await fs.promises.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 }
 
-async function organizeDesktopFiles() {
+function desktopOrganizePaths() {
   const desktopDir = path.join(os.homedir(), "Desktop");
   const organizedDir = path.join(desktopDir, ORGANIZED_FOLDER_NAME);
+  const manifestPath = path.join(organizedDir, ORGANIZE_MANIFEST_NAME);
+  return { desktopDir, organizedDir, manifestPath };
+}
+
+function hasDesktopOrganizeManifest() {
+  return fs.existsSync(desktopOrganizePaths().manifestPath);
+}
+
+function isDesktopOrganizeUndoIntent(text) {
+  const raw = String(text || "").toLowerCase();
+  const undoSignal = /\b(undo|reverse|restore|put back|move back)\b/.test(raw);
+  if (!undoSignal) return false;
+  if (/\b(organize|organisation|organization|desktop|files?|folders?|clean(?:ed)? up|sort(?:ed)?)\b/.test(raw)) return true;
+  if (/\b(it|that|this|last|previous|everything|all|what you just did|whatever you just did)\b/.test(raw)) {
+    return hasDesktopOrganizeManifest();
+  }
+  return false;
+}
+
+async function organizeDesktopFiles() {
+  const { desktopDir, organizedDir } = desktopOrganizePaths();
   sendTaskProgress({ status: "thinking", text: "Scanning Desktop" });
 
   let entries = [];
@@ -984,9 +1005,7 @@ async function organizeDesktopFiles() {
 }
 
 async function undoDesktopOrganization() {
-  const desktopDir = path.join(os.homedir(), "Desktop");
-  const organizedDir = path.join(desktopDir, ORGANIZED_FOLDER_NAME);
-  const manifestPath = path.join(organizedDir, ORGANIZE_MANIFEST_NAME);
+  const { organizedDir, manifestPath } = desktopOrganizePaths();
   if (!fs.existsSync(manifestPath)) {
     return { ok: false, say: "I do not see a Braino organize manifest to undo." };
   }
@@ -994,14 +1013,31 @@ async function undoDesktopOrganization() {
   const manifest = JSON.parse(await fs.promises.readFile(manifestPath, "utf8"));
   const moves = Array.isArray(manifest.moves) ? manifest.moves.slice().reverse() : [];
   let restored = 0;
+  const touchedDirs = new Set();
   for (const move of moves) {
     if (!move?.to || !move?.from || !fs.existsSync(move.to)) continue;
     const destinationPath = await uniquePath(move.from);
     sendTaskProgress({ status: "thinking", text: `Restoring ${path.basename(destinationPath)}` });
     await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
     await fs.promises.rename(move.to, destinationPath);
+    touchedDirs.add(path.dirname(move.to));
     restored += 1;
   }
+  try { await fs.promises.unlink(manifestPath); } catch (_) {}
+  const dirs = Array.from(touchedDirs)
+    .filter((dir) => {
+      const relative = path.relative(organizedDir, dir);
+      return relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+    })
+    .sort((a, b) => b.length - a.length);
+  for (const dir of dirs) {
+    try {
+      if ((await fs.promises.readdir(dir)).length === 0) await fs.promises.rmdir(dir);
+    } catch (_) {}
+  }
+  try {
+    if ((await fs.promises.readdir(organizedDir)).length === 0) await fs.promises.rmdir(organizedDir);
+  } catch (_) {}
   sendTaskProgress({ status: "done", text: `Restored ${restored} files` });
   return {
     ok: true,
@@ -1498,7 +1534,7 @@ async function runDelegate(prompt) {
   const text = raw.toLowerCase();
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
 
-  if (/\b(undo|reverse|restore)\b.*\b(organize|organization|desktop|files?)\b/.test(text)) {
+  if (isDesktopOrganizeUndoIntent(text)) {
     return undoDesktopOrganization();
   }
 
