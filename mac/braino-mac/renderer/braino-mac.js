@@ -74,6 +74,8 @@ let speechGeneration = 0;
 let voiceLatencyCounter = 0;
 let voiceLatencyTurn = null;
 let lastSpokenLine = { text: "", ts: 0 };
+let pendingDelegateState = { hasPendingWorkflow: false, hasPendingFileConfirmation: false };
+let localChatMemory = [];
 let scriptedWalk = null;
 let authPose = false;
 let startupActive = false;
@@ -349,7 +351,40 @@ function voiceAddressesBraino(text) {
   const normalized = normalizeForVoiceMatch(text);
   if (!normalized) return false;
   if (/\b(braino|bruno|breno|reno|dino)\b/.test(normalized)) return true;
-  return /\b(stop|pause|wait|hold on|listen|repeat|cancel|enough|organize|organise|open|search|find|clean|undo)\b/.test(normalized);
+  return /\b(stop|pause|wait|hold on|listen|repeat|cancel|enough|organize|organise|open|search|find|clean|undo|create|make|note|notes|mail|gmail|email|send|draft|compose)\b/.test(normalized);
+}
+
+function rememberLocalChat(role, content) {
+  const text = String(content || "").replace(/\s+/g, " ").trim();
+  if (!text) return;
+  localChatMemory.push({ role, content: text });
+  if (localChatMemory.length > 24) localChatMemory = localChatMemory.slice(-24);
+}
+
+function recentLocalChatLines(limit = 10) {
+  const turns = localChatMemory.slice(-limit);
+  if (!turns.length) return [];
+  return [
+    "Recent Mac Braino conversation, use this as live context:",
+    ...turns.map((turn) => `${turn.role === "assistant" ? "Braino" : "User"}: ${turn.content}`),
+  ];
+}
+
+function hasPendingDelegateFollowup() {
+  return Boolean(pendingDelegateState?.hasPendingWorkflow || pendingDelegateState?.hasPendingFileConfirmation);
+}
+
+async function refreshDelegateState() {
+  if (!window.brainoMac.delegateState) return pendingDelegateState;
+  try {
+    const state = await window.brainoMac.delegateState();
+    pendingDelegateState = state && typeof state === "object"
+      ? state
+      : { hasPendingWorkflow: false, hasPendingFileConfirmation: false };
+  } catch (_) {
+    pendingDelegateState = { hasPendingWorkflow: false, hasPendingFileConfirmation: false };
+  }
+  return pendingDelegateState;
 }
 
 function isSelfEcho(text) {
@@ -374,6 +409,10 @@ function shouldAcceptVoiceTranscript(text) {
   const stats = transcriptStats(text);
   if (!stats.normalized || stats.wordCount === 0) return false;
   if (isSelfEcho(text) && !voiceAddressesBraino(text)) return false;
+  if (hasPendingDelegateFollowup()) {
+    if (/^(uh|um|hmm|huh)$/i.test(stats.normalized)) return false;
+    return true;
+  }
   if ((speaking || processing || voiceTurnInFlight) && !voiceAddressesBraino(text)) return false;
   if (/^(hi|hello|hey|yo|braino|bruno|breno|reno)$/i.test(stats.normalized)) return true;
   if (stats.wordCount === 1 && !voiceAddressesBraino(text)) return false;
@@ -1001,7 +1040,13 @@ async function runDelegate(prompt, options = {}) {
       ok: Boolean(result?.ok),
       sayChars: String(result?.say || "").length,
       filesCount: Array.isArray(result?.files) ? result.files.length : 0,
+      hasPendingWorkflow: Boolean(result?.delegateState?.hasPendingWorkflow),
+      workflowStage: result?.delegateState?.workflowStage || "",
     });
+    if (result?.delegateState) pendingDelegateState = result.delegateState;
+    else await refreshDelegateState();
+    rememberLocalChat("user", text);
+    if (result?.say) rememberLocalChat("assistant", result.say);
     markVoiceLatency("delegate_done", {
       route: "delegate",
       runId,
@@ -1197,12 +1242,14 @@ function extractRealtimeDoneText(event) {
 function isLikelyMacActionTranscript(text) {
   const normalized = normalizeForVoiceMatch(text);
   if (!normalized) return false;
+  if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|pause|resume|spotify|youtube|song|music|chrome|browser|website|tab|gmail|email|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|click|reply|write|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|pause|resume|spotify|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|reply|write|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
   if (!realtimeActive || !rtDc || rtDc.readyState !== "open") return false;
+  if (hasPendingDelegateFollowup()) return false;
   if (isLikelyMacActionTranscript(text)) return false;
   return normalizeForVoiceMatch(text).length > 0;
 }
@@ -1211,6 +1258,7 @@ function buildRealtimeChatInstructions() {
   return [
     "You are Braino, Itish's Mac companion, answering in the same warm personality as the Braino Chrome extension.",
     ...activeMacContextLines(),
+    ...recentLocalChatLines(),
     "Be emotionally mature, natural, concise, witty when appropriate, and never robotic.",
     "Do not invent Mac actions. If the user asks to operate the Mac, say you can help and let the app route the action next time.",
     "Keep the first sentence short and complete so voice playback can begin immediately.",
@@ -1277,6 +1325,8 @@ async function answerViaRealtimeChat(prompt) {
     endRealtimeStreamTts();
     const streamState = await waitForRealtimeStreamTts(generation);
     if (finalText) noteSpoken(finalText);
+    rememberLocalChat("user", text);
+    if (finalText) rememberLocalChat("assistant", finalText);
     if (streamState?.error && !streamState.spoke && finalText && generation === speechGeneration) {
       await speak(finalText);
     } else if (!streamState?.spoke && finalText && generation === speechGeneration) {
@@ -2460,6 +2510,7 @@ window.brainoMac.getConfig().then(async (config) => {
     microphoneStatus: config?.microphoneStatus || "unknown",
     logPath: config?.logPath || "",
   });
+  await refreshDelegateState();
   await runStartupSequence(config || {});
 }).catch((error) => {
   logRenderer("app.config.error", { error: errorForLog(error) });

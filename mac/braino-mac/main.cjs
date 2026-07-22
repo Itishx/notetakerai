@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, screen, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, clipboard, globalShortcut, ipcMain, screen, shell, systemPreferences } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.37";
+const APP_VERSION = "12.0.38";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -1211,6 +1211,9 @@ function htmlForNotesBody(value) {
 function cleanNoteContent(value) {
   const text = String(value || "")
     .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/^(?:i\s+(?:would\s+)?like\s+(?:the\s+)?note\s+to\s+(?:say|be|read))\s*[:\-]?\s*/i, "")
+    .replace(/^(?:i\s+(?:would\s+)?like\s+to\s+)?(?:create|make|write|take|add)\s+(?:a\s+)?(?:new\s+)?note\s+(?:about|that|saying|with|for)?\s*/i, "")
+    .replace(/^(?:i\s+(?:would\s+)?like\s+to\s+)?(?:talk|write|remember)\s+(?:about|that)\s*/i, "")
     .replace(/^(?:the\s+)?note\s+(?:should\s+)?(?:say|be|read)\s*[:\-]?\s*/i, "")
     .replace(/^(?:about|that|saying|with|content|body|text)\s+/i, "")
     .replace(/\s+(?:for me|please|pls)$/i, "")
@@ -1286,19 +1289,76 @@ function clearPendingMacWorkflow() {
   pendingMacWorkflow = null;
 }
 
+function delegateStatePayload() {
+  return {
+    hasPendingWorkflow: Boolean(pendingMacWorkflow),
+    workflowType: pendingMacWorkflow?.type || "",
+    workflowStage: pendingMacWorkflow?.stage || "",
+    hasPendingFileConfirmation: Boolean(pendingFileConfirmation),
+    chatHistoryTurns: macChatHistory.length,
+  };
+}
+
 function isWorkflowCancelIntent(text) {
   return /^(?:cancel|stop|never mind|nevermind|leave it|forget it|no)$/i.test(String(text || "").trim());
+}
+
+async function createAppleNoteViaUi({ title, body, includeTitleLine = false } = {}) {
+  const noteText = includeTitleLine && title ? `${title}\n\n${body}` : body;
+  if (!String(noteText || "").trim()) return { ok: false, error: "No note text was provided." };
+
+  const previousClipboard = clipboard.readText();
+  clipboard.writeText(noteText);
+  const script = `
+tell application id "com.apple.Notes"
+  activate
+end tell
+delay 0.45
+tell application "System Events"
+  tell process "Notes"
+    keystroke "n" using command down
+    delay 0.25
+    keystroke "v" using command down
+  end tell
+end tell
+return ${appleScriptStringLiteral(title || "Braino Note")}`;
+
+  logMac("notes.create.ui_fallback.start", {
+    title: textForLog(title),
+    bodyChars: String(body || "").length,
+    accessibilityTrusted: systemPreferences.isTrustedAccessibilityClient(false),
+  });
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
+    setTimeout(() => {
+      try {
+        if (clipboard.readText() === noteText) clipboard.writeText(previousClipboard);
+      } catch (_) {}
+    }, 700);
+    const createdTitle = stdout.trim() || title || "Braino Note";
+    logMac("notes.create.ui_fallback.done", { title: textForLog(createdTitle), bodyChars: String(body || "").length });
+    return { ok: true, title: createdTitle };
+  } catch (error) {
+    setTimeout(() => {
+      try {
+        if (clipboard.readText() === noteText) clipboard.writeText(previousClipboard);
+      } catch (_) {}
+    }, 700);
+    logMac("notes.create.ui_fallback.failed", { title: textForLog(title), error });
+    return { ok: false, error: error?.message || "UI fallback failed." };
+  }
 }
 
 async function createAppleNote(note) {
   if (process.platform !== "darwin") return { ok: false, say: "Apple Notes is only available on macOS." };
   const body = cleanNoteContent(note?.body || "");
   if (!body) return { ok: false, say: "Tell me what the note should say." };
-  const title = deriveNoteTitle(body, note?.title || "");
+  const explicitTitle = cleanNoteContent(note?.title || "");
+  const title = deriveNoteTitle(body, explicitTitle);
   const script = `
 set noteName to ${appleScriptStringLiteral(title)}
 set noteBody to ${appleScriptStringLiteral(htmlForNotesBody(body))}
-tell application "Notes"
+tell application id "com.apple.Notes"
   activate
   set targetFolder to missing value
   repeat with theAccount in accounts
@@ -1331,13 +1391,22 @@ return noteName`;
     return { ok: true, say: `Done. I created the note in Apple Notes: ${createdTitle}.` };
   } catch (error) {
     logMac("notes.create.failed", { title: textForLog(title), error });
-    return { ok: false, say: `I opened Notes, but macOS would not let me create the note yet: ${error?.message || "AppleScript failed"}.` };
+    const fallback = await createAppleNoteViaUi({ title, body, includeTitleLine: Boolean(explicitTitle) });
+    if (fallback.ok) {
+      setTimeout(() => ensureDockWindowVisible("notes-create-ui-fallback"), 450);
+      sendTaskProgress({ status: "done", text: "Created note" });
+      return { ok: true, say: `Done. I created the note in Apple Notes: ${fallback.title || title}.` };
+    }
+    return { ok: false, say: `I opened Notes, but macOS would not let me create the note yet: ${fallback.error || error?.message || "AppleScript failed"}.` };
   }
 }
 
 async function startNoteWorkflow(intent = {}) {
   if (!intent.body) {
-    await openApp("Notes").catch(() => null);
+    const openResult = await openApp("Notes");
+    if (!openResult.ok) {
+      return { ok: false, say: `I could not open Apple Notes yet: ${openResult.error || "macOS did not find the app"}.` };
+    }
     setTimeout(() => ensureDockWindowVisible("notes-pending"), 450);
     setPendingMacWorkflow({
       type: "note",
@@ -1372,6 +1441,7 @@ function isGenericMailRecipient(value) {
 function cleanMailBody(value) {
   return String(value || "")
     .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/^(?:i\s+(?:would\s+)?like\s+(?:the\s+)?(?:email|mail|message)\s+to\s+(?:say|be|read))\s*[:\-]?\s*/i, "")
     .replace(/^(?:the\s+)?(?:email|mail|message)\s+(?:should\s+)?(?:say|be|read)\s*[:\-]?\s*/i, "")
     .replace(/^(?:body|message|saying|that|about)\s*[:\-]?\s*/i, "")
     .replace(/\s+(?:for me|please|pls)$/i, "")
@@ -1390,15 +1460,15 @@ function deriveMailSubject(body) {
 
 function parseMailIntent(raw) {
   const source = String(raw || "").trim();
-  if (!/\b(?:mail|email)\b/i.test(source)) return null;
-  if (!/\b(?:send|write|compose|draft|create|mail|email)\b/i.test(source)) return null;
+  if (!/\b(?:mail|email|gmail)\b/i.test(source)) return null;
+  if (!/\b(?:send|write|compose|draft|create|mail|email|gmail)\b/i.test(source)) return null;
   const lower = source.toLowerCase();
   const action = /\b(?:draft|compose|write|create)\b/i.test(source) && !/\bsend\b/i.test(source)
     ? "draft"
     : "send";
 
   const toMatch = source.match(/\bto\s+(.+?)(?=\s+(?:with\s+)?subject\b|\s+(?:body|message|saying|that|about)\b|$)/i)
-    || source.match(/\bemail\s+(.+?)(?=\s+(?:with\s+)?subject\b|\s+(?:body|message|saying|that|about)\b|$)/i);
+    || source.match(/\b(?:email|gmail|mail)\s+(.+?)(?=\s+(?:with\s+)?subject\b|\s+(?:body|message|saying|that|about)\b|$)/i);
   let recipient = cleanMailRecipient(toMatch?.[1] || "");
   if (isGenericMailRecipient(recipient)) recipient = "";
 
@@ -1415,9 +1485,9 @@ function parseMailIntent(raw) {
   body = cleanMailBody(body);
   if (subject && body === subject) body = "";
 
-  const asksMail = /\b(?:send|write|compose|draft|create)\s+(?:an?\s+)?(?:mail|email)\b/i.test(source)
+  const asksMail = /\b(?:send|write|compose|draft|create)\s+(?:an?\s+)?(?:mail|email|gmail)\b/i.test(source)
     || /\bemail\s+\S+/i.test(source);
-  if (!asksMail && !/\b(mail|email)\s+(?:to|for)\b/i.test(lower)) return null;
+  if (!asksMail && !/\b(mail|email|gmail)\s+(?:to|for)\b/i.test(lower)) return null;
   return { action, recipient, subject, body };
 }
 
@@ -1436,7 +1506,7 @@ async function resolveMailRecipient(recipient) {
 
   const script = `
 set queryName to ${appleScriptStringLiteral(cleaned)}
-tell application "Contacts"
+tell application id "com.apple.AddressBook"
   repeat with thePerson in people
     try
       set personName to name of thePerson as text
@@ -1484,7 +1554,7 @@ set recipientName to ${appleScriptStringLiteral(recipientName || recipientEmail)
 set recipientEmail to ${appleScriptStringLiteral(recipientEmail)}
 set mailSubject to ${appleScriptStringLiteral(subject)}
 set mailBody to ${appleScriptStringLiteral(body)}
-tell application "Mail"
+tell application id "com.apple.mail"
   activate
   set outgoingMessage to make new outgoing message with properties {subject:mailSubject, content:mailBody & linefeed, visible:true}
   tell outgoingMessage
@@ -1539,12 +1609,18 @@ async function executeMailWorkflow(data = {}) {
   };
   if (!mail.recipient && !mail.recipientEmail) {
     setPendingMacWorkflow({ type: "mail", stage: "mail_recipient", data: mail });
-    await openApp("Mail").catch(() => null);
+    const openResult = await openApp("Mail");
+    if (!openResult.ok) {
+      return { ok: false, say: `I could not open Apple Mail yet: ${openResult.error || "macOS did not find the app"}.` };
+    }
     return { ok: true, say: "Opening Mail. Who should I send it to?" };
   }
   if (!mail.body) {
     setPendingMacWorkflow({ type: "mail", stage: "mail_body", data: mail });
-    await openApp("Mail").catch(() => null);
+    const openResult = await openApp("Mail");
+    if (!openResult.ok) {
+      return { ok: false, say: `I could not open Apple Mail yet: ${openResult.error || "macOS did not find the app"}.` };
+    }
     return { ok: true, say: "What should the email say?" };
   }
 
@@ -1584,9 +1660,11 @@ async function handlePendingMacWorkflow(raw) {
   }
 
   if (pending.type === "note") {
-    const body = cleanNoteContent(raw);
+    const parsed = parseNoteIntent(raw);
+    const body = parsed?.body || cleanNoteContent(raw);
+    const title = parsed?.title || pending.data?.title || "";
     clearPendingMacWorkflow();
-    return createAppleNote({ ...(pending.data || {}), body });
+    return createAppleNote({ ...(pending.data || {}), title, body });
   }
 
   if (pending.type === "mail") {
@@ -1995,6 +2073,27 @@ function candidateMatchesQuery(candidateText, queryText) {
   return queryWords.every((word) => fuzzyWordIncluded(candidateWords, word));
 }
 
+const NATIVE_APP_BUNDLE_IDS = {
+  notes: "com.apple.Notes",
+  mail: "com.apple.mail",
+  contacts: "com.apple.AddressBook",
+  calendar: "com.apple.iCal",
+  reminders: "com.apple.reminders",
+  finder: "com.apple.finder",
+  preview: "com.apple.Preview",
+  photos: "com.apple.Photos",
+  music: "com.apple.Music",
+  messages: "com.apple.MobileSMS",
+  facetime: "com.apple.FaceTime",
+  safari: "com.apple.Safari",
+  spotify: "com.spotify.client",
+};
+
+function nativeBundleIdForApp(appName) {
+  const key = normalizeSearchToken(canonicalAppName(appName));
+  return NATIVE_APP_BUNDLE_IDS[key] || "";
+}
+
 async function findInstalledApps(appName) {
   const cleaned = canonicalAppName(appName);
   if (!cleaned) return [];
@@ -2054,6 +2153,17 @@ async function openApp(appName) {
     requested: textForLog(appName),
     canonical,
   });
+  const bundleId = nativeBundleIdForApp(canonical);
+  if (bundleId) {
+    try {
+      await execFileP("open", ["-b", bundleId], { timeout: 8000 });
+      logMac("app.open.success", { requested: textForLog(appName), canonical, bundleId, method: "open-bundle" });
+      return { ok: true, appName: canonical, bundleId, method: "open-bundle" };
+    } catch (error) {
+      logMac("app.open.bundle.failed", { appName: canonical, bundleId, error });
+    }
+  }
+
   try {
     await execFileP("open", ["-a", canonical], { timeout: 8000 });
     logMac("app.open.success", { requested: textForLog(appName), canonical, method: "open-a" });
@@ -3684,6 +3794,7 @@ async function runMacConversation(prompt) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return {
       ok: true,
+      source: "mac_conversation",
       say: "I am here. The chat line is not connected yet on this Mac build, but I am listening.",
     };
   }
@@ -3706,6 +3817,7 @@ async function runMacConversation(prompt) {
       });
       return {
         ok: true,
+        source: "mac_conversation",
         say: "I am here. That reply got stuck on the way back. Say it again and I will catch it.",
       };
     }
@@ -3717,11 +3829,12 @@ async function runMacConversation(prompt) {
       historyTurns: macChatHistory.length,
       durationMs: Date.now() - startedAt,
     });
-    return { ok: true, say: reply };
+    return { ok: true, source: "mac_conversation", say: reply };
   } catch (error) {
     logMac("mac.chat.error", { error, durationMs: Date.now() - startedAt });
     return {
       ok: true,
+      source: "mac_conversation",
       say: "I am here. The chat wire slipped for a second, but I am listening.",
     };
   }
@@ -3729,6 +3842,18 @@ async function runMacConversation(prompt) {
 
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
+  const result = await routeMacDelegate(prompt, raw);
+  if (raw && result?.source !== "mac_conversation") {
+    rememberMacChat("user", raw);
+    if (result?.say) rememberMacChat("assistant", result.say);
+  }
+  return {
+    ...(result || { ok: false, say: "I could not route that yet." }),
+    delegateState: delegateStatePayload(),
+  };
+}
+
+async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   const text = raw.toLowerCase();
   const latestContext = await readActiveMacContext();
   if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
@@ -3984,6 +4109,8 @@ ipcMain.handle("braino-mac:get-config", () => {
 });
 
 ipcMain.handle("braino-mac:delegate", async (_event, prompt) => runDelegate(prompt));
+
+ipcMain.handle("braino-mac:delegate-state", async () => delegateStatePayload());
 
 ipcMain.handle("braino-mac:active-context", async () => {
   await refreshDesktopOverlayContext("manual");
