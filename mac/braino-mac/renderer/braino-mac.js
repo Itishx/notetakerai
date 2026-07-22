@@ -26,6 +26,7 @@ let start = performance.now();
 let last = start;
 let movementMode = "dock";
 let displayMetrics = null;
+let activeMacContext = null;
 let posX = START_OFFSCREEN_X;
 let posY = getDockBounds().y;
 let targetX = getDockBounds().minX;
@@ -51,6 +52,7 @@ let rtTranscriptFinal = false;
 let rtTranscriptFlushTimer = 0;
 let rtIdleTimer = 0;
 let rtLastActivityAt = 0;
+let rtSurfaceSyncTimer = 0;
 let rtUsageSessionId = null;
 let rtHeartbeatTimer = null;
 let realtimeActive = false;
@@ -158,13 +160,22 @@ function getDockBounds() {
   };
 }
 
-function applyDisplayMetrics(metrics) {
+function applyDisplayMetrics(metrics, options = {}) {
+  const previousDisplayId = displayMetrics?.id || null;
+  const nextDisplayId = metrics?.id || null;
   displayMetrics = metrics && typeof metrics === "object" ? metrics : null;
-  if (movementMode !== "dock" || !displayMetrics) return;
+  if (!displayMetrics) return;
+  const displayChanged = Boolean(options.displayChanged || (previousDisplayId && nextDisplayId && previousDisplayId !== nextDisplayId));
   const dock = getDockBounds();
-  setPosition(posX, dock.y);
-  targetY = dock.y;
-  targetX = clamp(targetX, dock.minX, dock.maxX);
+  if (movementMode === "dock") {
+    setPosition(posX, dock.y);
+    targetY = dock.y;
+    targetX = clamp(targetX, dock.minX, dock.maxX);
+  } else if (displayChanged && !dragState) {
+    setPosition(posX, posY);
+    targetX = clamp(targetX, getMoveBounds().minX, getMoveBounds().maxX);
+    targetY = clamp(targetY, getMoveBounds().minY, getMoveBounds().maxY);
+  }
   updateFloatingUi();
 }
 
@@ -1028,6 +1039,20 @@ function stopRecognition() {
   listening = false;
 }
 
+function activeMacContextLines() {
+  const context = activeMacContext;
+  if (!context?.appName) {
+    return ["Current Mac surface: unknown yet; answer generally unless the user asks for a concrete Mac action."];
+  }
+  const title = context.browserTitle || context.windowTitle || "";
+  return [
+    `Current active Mac app: ${context.appName}.`,
+    title ? `Current window/tab title: ${title}.` : "",
+    context.browserUrl ? `Current browser URL: ${context.browserUrl}.` : "",
+    context.isBrowser ? "The user is in a browser window, but Mac Braino does not have live DOM bridge access yet; use the title/URL and route concrete browser actions through delegate." : "",
+  ].filter(Boolean);
+}
+
 function buildRealtimeSessionUpdate() {
   return {
     type: "session.update",
@@ -1035,6 +1060,7 @@ function buildRealtimeSessionUpdate() {
       type: "realtime",
       instructions: [
         "You are Braino running as a Mac desktop companion.",
+        ...activeMacContextLines(),
         "Your primary job is to listen accurately, transcribe the user's command, and let the Mac app execute actions.",
         "When the Mac client explicitly sends response.create for ordinary conversation, answer directly as Braino.",
         "In direct conversation, be warm, emotionally mature, concise, and natural, matching the Braino Chrome extension personality.",
@@ -1079,6 +1105,22 @@ function sendRealtimeEvent(event) {
   if (!payload.event_id) payload.event_id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   rtDc.send(JSON.stringify(payload));
   return true;
+}
+
+function scheduleRealtimeSurfaceSync(reason = "surface_change") {
+  if (!realtimeActive || !rtDc || rtDc.readyState !== "open") return;
+  if (rtSurfaceSyncTimer) window.clearTimeout(rtSurfaceSyncTimer);
+  rtSurfaceSyncTimer = window.setTimeout(() => {
+    rtSurfaceSyncTimer = 0;
+    const sent = sendRealtimeEvent(buildRealtimeSessionUpdate());
+    logRenderer("realtime.surface_context.sync", {
+      reason,
+      sent,
+      appName: activeMacContext?.appName || "",
+      title: activeMacContext?.browserTitle || activeMacContext?.windowTitle || "",
+      url: activeMacContext?.browserUrl || "",
+    });
+  }, 180);
 }
 
 function createRealtimeResponseWaiter() {
@@ -1144,6 +1186,7 @@ function shouldUseRealtimeDirectChat(text) {
 function buildRealtimeChatInstructions() {
   return [
     "You are Braino, Itish's Mac companion, answering in the same warm personality as the Braino Chrome extension.",
+    ...activeMacContextLines(),
     "Be emotionally mature, natural, concise, witty when appropriate, and never robotic.",
     "Do not invent Mac actions. If the user asks to operate the Mac, say you can help and let the app route the action next time.",
     "Keep the first sentence short and complete so voice playback can begin immediately.",
@@ -1331,6 +1374,10 @@ function stopRealtimeVoice() {
   realtimeStreamTts = null;
   clearRealtimeTranscriptFlush();
   clearRealtimeIdleTimer();
+  if (rtSurfaceSyncTimer) {
+    window.clearTimeout(rtSurfaceSyncTimer);
+    rtSurfaceSyncTimer = 0;
+  }
   realtimeActive = false;
   realtimeConnecting = false;
   voiceTurnInFlight = false;
@@ -2361,8 +2408,19 @@ window.brainoMac.onHelperStatus((status) => {
     setStatus("ready", "Control+Space ready");
   }
 });
+window.brainoMac.onOverlayContext((payload) => {
+  const previousDisplayId = displayMetrics?.id || null;
+  if (payload?.activeContext) activeMacContext = payload.activeContext;
+  if (payload?.displayMetrics) {
+    applyDisplayMetrics(payload.displayMetrics, {
+      displayChanged: Boolean(previousDisplayId && payload.displayMetrics.id && previousDisplayId !== payload.displayMetrics.id),
+    });
+  }
+  if (!startupActive) scheduleRealtimeSurfaceSync(payload?.reason || "overlay_context");
+});
 
 window.brainoMac.getConfig().then(async (config) => {
+  if (config?.activeContext) activeMacContext = config.activeContext;
   logRenderer("app.config", {
     appVersion: config?.appVersion,
     dockTop: config?.displayMetrics?.dockTop || null,
@@ -2370,6 +2428,8 @@ window.brainoMac.getConfig().then(async (config) => {
     supabaseConfigured: Boolean(config?.supabaseConfigured),
     realtimeConfigured: Boolean(config?.realtimeConfigured),
     realtimeAuthSource: config?.realtimeAuthSource || "unknown",
+    activeApp: config?.activeContext?.appName || "",
+    activeTitle: config?.activeContext?.browserTitle || config?.activeContext?.windowTitle || "",
     accessibilityTrusted: Boolean(config?.accessibilityTrusted),
     microphoneStatus: config?.microphoneStatus || "unknown",
     logPath: config?.logPath || "",

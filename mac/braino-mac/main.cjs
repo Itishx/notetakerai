@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.31";
+const APP_VERSION = "12.0.32";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -37,6 +37,10 @@ let pendingAuthWaiters = [];
 let authBrowserFlow = null;
 let macChatHistory = [];
 let pendingFileConfirmation = null;
+let activeMacContext = null;
+let overlaySyncTimer = null;
+let lastOverlayDisplayKey = "";
+let lastOverlayContextKey = "";
 
 function loadDotEnv() {
   const out = {};
@@ -542,7 +546,11 @@ function execFileP(command, args, options = {}) {
 
 function sendToRenderer(channel, payload) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
-  dockWindow.webContents.send(channel, payload);
+  try {
+    dockWindow.webContents.send(channel, payload);
+  } catch (error) {
+    logMac("renderer.send.failed", { channel, error });
+  }
 }
 
 function sendTaskProgress(payload) {
@@ -562,25 +570,14 @@ function splitHelperLines(onLine) {
   };
 }
 
-function positionDockWindow() {
-  if (!dockWindow || dockWindow.isDestroyed()) return;
-  const display = screen.getPrimaryDisplay();
-  dockWindow.setBounds({
-    x: display.bounds.x,
-    y: display.bounds.y,
-    width: display.bounds.width,
-    height: display.bounds.height,
-  }, false);
-}
-
-function getDisplayMetrics() {
-  const display = screen.getPrimaryDisplay();
+function getDisplayMetrics(display = screen.getPrimaryDisplay()) {
   const { bounds, workArea, scaleFactor } = display;
   const dockHeight = Math.max(0, (bounds.y + bounds.height) - (workArea.y + workArea.height));
   const dockTop = dockHeight > 0
     ? workArea.y - bounds.y + workArea.height
     : bounds.height - 94;
   return {
+    id: display.id,
     bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
     workArea: { x: workArea.x, y: workArea.y, width: workArea.width, height: workArea.height },
     scaleFactor,
@@ -589,12 +586,203 @@ function getDisplayMetrics() {
   };
 }
 
+function parseNumberPair(value) {
+  const [left, right] = String(value || "")
+    .split(",")
+    .map((part) => Number(part.trim()));
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
+  return [left, right];
+}
+
+function normalizeActiveMacContext(parts = []) {
+  const appName = String(parts[0] || "").trim();
+  if (!appName) return null;
+  const bundleId = String(parts[1] || "").trim();
+  const windowTitle = String(parts[2] || "").trim();
+  const position = parseNumberPair(parts[3]);
+  const size = parseNumberPair(parts[4]);
+  const browserTitle = String(parts[5] || "").trim();
+  const browserUrl = String(parts[6] || "").trim();
+  const windowBounds = position && size && size[0] > 0 && size[1] > 0
+    ? { x: position[0], y: position[1], width: size[0], height: size[1] }
+    : null;
+  return {
+    appName,
+    bundleId,
+    windowTitle,
+    windowBounds,
+    browserTitle,
+    browserUrl,
+    isBrowser: Boolean(browserUrl),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function isBrainoSelfContext(context) {
+  const text = `${context?.appName || ""} ${context?.windowTitle || ""} ${context?.bundleId || ""}`;
+  return /Braino Mac/i.test(text) || /vite_react_shadcn_ts/i.test(text);
+}
+
+async function readActiveMacContext() {
+  if (process.platform !== "darwin") return null;
+  const script = `
+set frontApp to ""
+set windowTitle to ""
+set windowPositionText to ""
+set windowSizeText to ""
+tell application "System Events"
+  try
+    set frontProc to first application process whose frontmost is true
+    set frontApp to name of frontProc as text
+    try
+      tell frontProc
+        if (count of windows) > 0 then
+          set windowTitle to name of window 1 as text
+          set {wx, wy} to position of window 1
+          set {ww, wh} to size of window 1
+          set windowPositionText to (wx as text) & "," & (wy as text)
+          set windowSizeText to (ww as text) & "," & (wh as text)
+        end if
+      end tell
+    end try
+  end try
+end tell
+set AppleScript's text item delimiters to tab
+return {frontApp, "", windowTitle, windowPositionText, windowSizeText, "", ""} as text`;
+
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 3500 });
+    const context = normalizeActiveMacContext(String(stdout || "").trimEnd().split("\t"));
+    if (!context) return null;
+    const browser = await readActiveBrowserContext(context.appName);
+    if (browser?.browserUrl || browser?.browserTitle) {
+      context.browserTitle = browser.browserTitle || "";
+      context.browserUrl = browser.browserUrl || "";
+      context.isBrowser = Boolean(browser.browserUrl);
+    }
+    return context;
+  } catch (error) {
+    logMac("desktop.context.read_failed", { error });
+    return null;
+  }
+}
+
+async function readActiveBrowserContext(appName) {
+  const browser = String(appName || "").trim();
+  if (!["Google Chrome", "Brave Browser", "Microsoft Edge", "Safari"].includes(browser)) {
+    return null;
+  }
+  const script = browser === "Safari"
+    ? 'tell application "Safari" to return (name of front document as text) & (ASCII character 9) & (URL of front document as text)'
+    : `tell application "${escapeAppleScriptString(browser)}" to return (title of active tab of window 1 as text) & (ASCII character 9) & (URL of active tab of window 1 as text)`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 2500 });
+    const [browserTitle = "", browserUrl = ""] = String(stdout || "").trimEnd().split("\t");
+    return {
+      browserTitle: browserTitle.trim(),
+      browserUrl: browserUrl.trim(),
+    };
+  } catch (error) {
+    logMac("desktop.browser_context.read_failed", { appName: browser, error });
+    return null;
+  }
+}
+
+function displayForContext(context) {
+  if (context?.windowBounds) {
+    try {
+      return screen.getDisplayMatching(context.windowBounds);
+    } catch (_) {}
+  }
+  try {
+    return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  } catch (_) {
+    return screen.getPrimaryDisplay();
+  }
+}
+
+function overlayDisplayKey(display) {
+  const b = display?.bounds || {};
+  return [display?.id || "", b.x, b.y, b.width, b.height].join(":");
+}
+
+function overlayContextKey(context) {
+  if (!context) return "";
+  return [
+    context.appName || "",
+    context.windowTitle || "",
+    context.browserTitle || "",
+    context.browserUrl || "",
+    context.windowBounds ? `${context.windowBounds.x},${context.windowBounds.y},${context.windowBounds.width},${context.windowBounds.height}` : "",
+  ].join("::");
+}
+
+function sendOverlayState(reason, display = displayForContext(activeMacContext)) {
+  const displayMetrics = getDisplayMetrics(display || screen.getPrimaryDisplay());
+  sendToRenderer("braino-mac:overlay-context", {
+    reason,
+    activeContext: activeMacContext,
+    displayMetrics,
+  });
+}
+
+function positionDockWindow(display = displayForContext(activeMacContext), reason = "position") {
+  if (!dockWindow || dockWindow.isDestroyed()) return;
+  const targetDisplay = display || screen.getPrimaryDisplay();
+  const { bounds } = targetDisplay;
+  const key = overlayDisplayKey(targetDisplay);
+  if (key !== lastOverlayDisplayKey) {
+    dockWindow.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+    }, false);
+    lastOverlayDisplayKey = key;
+  }
+  try {
+    dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    dockWindow.setAlwaysOnTop(true, "screen-saver", 1);
+  } catch (_) {}
+  sendOverlayState(reason, targetDisplay);
+}
+
+async function refreshDesktopOverlayContext(reason = "poll") {
+  const context = await readActiveMacContext();
+  if (context && !isBrainoSelfContext(context)) {
+    activeMacContext = context;
+  }
+  const display = displayForContext(activeMacContext);
+  const contextKey = overlayContextKey(activeMacContext);
+  if (contextKey && contextKey !== lastOverlayContextKey) {
+    lastOverlayContextKey = contextKey;
+    logMac("desktop.context.changed", {
+      reason,
+      appName: activeMacContext?.appName || "",
+      windowTitle: textForLog(activeMacContext?.windowTitle || activeMacContext?.browserTitle || ""),
+      browserUrl: textForLog(activeMacContext?.browserUrl || ""),
+      displayId: display?.id || null,
+    });
+  }
+  positionDockWindow(display, reason);
+}
+
+function startDesktopOverlaySync() {
+  if (overlaySyncTimer) clearInterval(overlaySyncTimer);
+  void refreshDesktopOverlayContext("startup");
+  overlaySyncTimer = setInterval(() => {
+    void refreshDesktopOverlayContext("poll");
+  }, 900);
+}
+
 function createDockWindow() {
+  const initialDisplay = displayForContext(activeMacContext);
+  const initialBounds = initialDisplay.bounds;
   dockWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    x: 0,
-    y: 0,
+    width: initialBounds.width,
+    height: initialBounds.height,
+    x: initialBounds.x,
+    y: initialBounds.y,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
@@ -608,6 +796,8 @@ function createDockWindow() {
     hasShadow: false,
     focusable: true,
     title: "Braino Mac",
+    show: false,
+    acceptFirstMouse: true,
     trafficLightPosition: { x: -100, y: -100 },
     webPreferences: {
       preload: PRELOAD_PATH,
@@ -620,9 +810,16 @@ function createDockWindow() {
   });
 
   dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  dockWindow.setAlwaysOnTop(true, "screen-saver");
+  dockWindow.setAlwaysOnTop(true, "screen-saver", 1);
   dockWindow.setIgnoreMouseEvents(true, { forward: true });
-  positionDockWindow();
+  dockWindow.once("ready-to-show", () => {
+    positionDockWindow(initialDisplay, "ready-to-show");
+    dockWindow.showInactive();
+  });
+  dockWindow.on("blur", () => {
+    positionDockWindow(undefined, "blur");
+  });
+  positionDockWindow(initialDisplay, "create");
   dockWindow.loadFile(INDEX_PATH);
 
   dockWindow.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
@@ -1651,20 +1848,18 @@ async function openLocalPath(filePath) {
 }
 
 async function frontWindowSummary() {
-  const script = `
-    tell application "System Events"
-      set frontApp to name of first application process whose frontmost is true
-      set windowTitle to ""
-      try
-        tell process frontApp
-          set windowTitle to name of front window
-        end tell
-      end try
-    end tell
-    return frontApp & " — " & windowTitle
-  `;
-  const { stdout } = await execFileP("osascript", ["-e", script]);
-  return stdout.trim();
+  const context = await readActiveMacContext();
+  if (context && !isBrainoSelfContext(context)) activeMacContext = context;
+  return describeMacContext(activeMacContext || context);
+}
+
+function describeMacContext(context) {
+  if (!context?.appName) return "";
+  const title = context.browserTitle || context.windowTitle || "";
+  const parts = [context.appName];
+  if (title) parts.push(title);
+  if (context.browserUrl) parts.push(context.browserUrl);
+  return parts.join(" - ");
 }
 
 function categoryForFile(fileName) {
@@ -2905,16 +3100,29 @@ async function runMacConversation(prompt) {
   const authToken = await getBrainoAuthToken();
   const auth = authStatusPayload();
   const context = macClientContext();
+  const latestContext = await readActiveMacContext();
+  if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
+  const surface = activeMacContext || latestContext;
+  const surfaceTitle = surface?.browserTitle || surface?.windowTitle || "Mac desktop";
+  const surfaceUrl = surface?.browserUrl || "braino://mac";
+  const surfaceLines = [
+    `Current active Mac app: ${surface?.appName || "unknown"}.`,
+    surfaceTitle ? `Current window/tab title: ${surfaceTitle}.` : "",
+    surface?.browserUrl ? `Current browser URL: ${surface.browserUrl}.` : "",
+    surface?.windowBounds ? `Current active window bounds: x ${surface.windowBounds.x}, y ${surface.windowBounds.y}, width ${surface.windowBounds.width}, height ${surface.windowBounds.height}.` : "",
+  ].filter(Boolean);
   const body = {
     notes: "",
     message: prompt,
     responseMedium: "voice",
     chatHistory: macChatHistory.slice(-14),
     pageContext: {
-      title: "Braino on Mac",
-      url: "braino://mac",
+      title: surface?.appName ? `${surface.appName}: ${surfaceTitle}` : "Braino on Mac",
+      url: surfaceUrl,
       text: [
         "The user is talking to Braino from the Mac desktop companion.",
+        "Braino is a visible OS-level overlay that follows the user's active Mac app and display.",
+        ...surfaceLines,
         "This is normal conversation unless the user asks for a concrete Mac action.",
         "Keep replies short, warm, alive, and natural for spoken voice.",
       ].join("\n"),
@@ -2928,6 +3136,9 @@ async function runMacConversation(prompt) {
     promptChars: prompt.length,
     historyTurns: body.chatHistory.length,
     hasBrainoAuthToken: Boolean(authToken),
+    activeApp: surface?.appName || "",
+    activeTitle: textForLog(surfaceTitle),
+    activeUrl: textForLog(surface?.browserUrl || ""),
   });
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -2979,9 +3190,14 @@ async function runMacConversation(prompt) {
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
   const text = raw.toLowerCase();
+  const latestContext = await readActiveMacContext();
+  if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
   logMac("delegate.intent.start", {
     prompt: textForLog(prompt),
     cleaned: textForLog(raw),
+    activeApp: activeMacContext?.appName || "",
+    activeTitle: textForLog(activeMacContext?.browserTitle || activeMacContext?.windowTitle || ""),
+    activeUrl: textForLog(activeMacContext?.browserUrl || ""),
   });
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
 
@@ -3184,9 +3400,11 @@ async function runDelegate(prompt) {
 
 ipcMain.handle("braino-mac:get-config", () => {
   const auth = authStatusPayload();
+  const display = displayForContext(activeMacContext);
   return {
     appVersion: APP_VERSION,
-    displayMetrics: getDisplayMetrics(),
+    activeContext: activeMacContext,
+    displayMetrics: getDisplayMetrics(display),
     supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
     realtimeConfigured: Boolean((auth.authenticated && SUPABASE_URL && SUPABASE_ANON_KEY) || OPENAI_API_KEY),
     realtimeAuthSource: auth.source === "env" || auth.source === "stored" ? "braino" : OPENAI_API_KEY ? "openai" : "missing",
@@ -3198,6 +3416,15 @@ ipcMain.handle("braino-mac:get-config", () => {
 });
 
 ipcMain.handle("braino-mac:delegate", async (_event, prompt) => runDelegate(prompt));
+
+ipcMain.handle("braino-mac:active-context", async () => {
+  await refreshDesktopOverlayContext("manual");
+  return {
+    ok: true,
+    activeContext: activeMacContext,
+    displayMetrics: getDisplayMetrics(displayForContext(activeMacContext)),
+  };
+});
 
 ipcMain.handle("braino-mac:log", async (_event, payload = {}) => {
   logMac(String(payload?.event || "renderer.log"), payload?.data || {});
@@ -3288,13 +3515,18 @@ app.whenReady().then(() => {
   createDockWindow();
   registerHotkeys();
   startSwiftHotkeyHelper();
-  screen.on("display-metrics-changed", positionDockWindow);
-  screen.on("display-added", positionDockWindow);
-  screen.on("display-removed", positionDockWindow);
+  startDesktopOverlaySync();
+  screen.on("display-metrics-changed", () => void refreshDesktopOverlayContext("display-metrics-changed"));
+  screen.on("display-added", () => void refreshDesktopOverlayContext("display-added"));
+  screen.on("display-removed", () => void refreshDesktopOverlayContext("display-removed"));
 });
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  if (overlaySyncTimer) {
+    clearInterval(overlaySyncTimer);
+    overlaySyncTimer = null;
+  }
   stopNativeSpeech();
   if (swiftHotkey) {
     try { swiftHotkey.kill(); } catch (_) {}

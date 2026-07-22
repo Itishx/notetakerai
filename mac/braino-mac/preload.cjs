@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   getConfig: () => ipcRenderer.invoke("braino-mac:get-config"),
   getWalkerSvg: () => walkerSvg,
   log: (payload) => ipcRenderer.invoke("braino-mac:log", payload),
+  activeContext: () => ipcRenderer.invoke("braino-mac:active-context"),
   authStatus: () => ipcRenderer.invoke("braino-mac:auth-status"),
   authSignOut: () => ipcRenderer.invoke("braino-mac:auth-sign-out"),
   ensureAuth: (reason) => ipcRenderer.invoke("braino-mac:ensure-auth", reason),
@@ -54,5 +55,10 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:helper-status", handler);
     return () => ipcRenderer.removeListener("braino-mac:helper-status", handler);
+  },
+  onOverlayContext: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:overlay-context", handler);
+    return () => ipcRenderer.removeListener("braino-mac:overlay-context", handler);
   },
 });
