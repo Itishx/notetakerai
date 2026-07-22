@@ -392,6 +392,7 @@ serve(async (req) => {
       movieDiscoveryPrompt,
       userId,
       driveConnected,
+      responseMedium,
       clientTimeZone,
       clientUtcOffsetMinutes,
       clientLocalTime,
@@ -538,7 +539,7 @@ ${notes || "(no notes yet)"}`
           xAutoSessionContext,
           movieContext,
           movieDiscoveryPrompt,
-          responseMedium: "text",
+          responseMedium: responseMedium === "voice" ? "voice" : "text",
           languagePolicy: "mirror_user",
           devPulse: devPulseResult?.formatted || null,
           // Emotional Engine: detect the emotional moment from this message so the right traits

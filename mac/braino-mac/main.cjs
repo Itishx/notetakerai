@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.17";
+const APP_VERSION = "12.0.18";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -1424,6 +1424,7 @@ async function runMacConversation(prompt) {
   const body = {
     notes: "",
     message: prompt,
+    responseMedium: "voice",
     chatHistory: macChatHistory.slice(-14),
     pageContext: {
       title: "Braino on Mac",

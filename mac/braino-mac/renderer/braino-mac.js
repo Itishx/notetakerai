@@ -54,6 +54,7 @@ let lastSpokenLine = { text: "", ts: 0 };
 let scriptedWalk = null;
 let authPose = false;
 let startupActive = false;
+let startupPose = null;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -212,6 +213,10 @@ function setAuthPose(on) {
 function flashAuthSuccess() {
   walker.classList.add("authenticated");
   window.setTimeout(() => walker.classList.remove("authenticated"), 1200);
+}
+
+function setStartupPose(pose) {
+  startupPose = pose ? { ...startupPose, ...pose } : null;
 }
 
 function normalizeForVoiceMatch(value) {
@@ -984,51 +989,221 @@ function toggleVoice() {
   void startListening();
 }
 
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function easeOut(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function runWakeupClimb(config = {}) {
+  return new Promise((resolve) => {
+    const dock = getDockBounds();
+    const climbX = clamp(Math.round(window.innerWidth * 0.5 - W / 2), dock.minX, dock.maxX);
+    const entryX = clamp(climbX - 150, dock.minX, dock.maxX);
+    const finalY = dock.y;
+    const floorY = finalY + 74;
+    const startY = finalY + 230;
+    let phase = "pop";
+    let phaseStart = performance.now();
+    let saidAuth = false;
+    let saidHello = false;
+    let authBegun = false;
+    let authResolved = false;
+    let authResult = null;
+    let firstName = "";
+    let raf = 0;
+    let pose = {
+      leftArm: 0,
+      rightArm: 0,
+      leftLeg: 0,
+      rightLeg: 0,
+      eyeScale: 1,
+      gazeX: 0,
+      gazeY: -0.55,
+      rootRot: 0,
+      rootY: 0,
+      rootScale: 1,
+    };
+
+    const next = (name) => {
+      phase = name;
+      phaseStart = performance.now();
+    };
+    const poseTo = (patch) => {
+      pose = { ...pose, ...patch };
+      setStartupPose(pose);
+    };
+    const place = (x, y, rot = 0) => {
+      setPosition(x, y, { allowOffscreen: true });
+      poseTo({ rootRot: rot });
+    };
+    const loadName = async () => {
+      const auth = await window.brainoMac.authStatus().catch(() => null);
+      firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
+    };
+    const startAuth = () => {
+      if (authBegun) return;
+      authBegun = true;
+      setAuthPose(true);
+      window.brainoMac.ensureAuth("startup").then((result) => {
+        authResult = result || { ok: false, error: "Braino sign-in failed." };
+      }).catch((error) => {
+        authResult = { ok: false, error: error?.message || "Braino sign-in failed." };
+      }).finally(async () => {
+        authResolved = true;
+        if (authResult?.ok) await loadName();
+      });
+    };
+    const finish = (result) => {
+      if (raf) window.cancelAnimationFrame(raf);
+      setAuthPose(false);
+      setStartupPose(null);
+      setWave(false);
+      setPosition(climbX, finalY, { allowOffscreen: true });
+      targetX = climbX;
+      targetY = finalY;
+      dirX = 1;
+      resolve(result || authResult || { ok: false, error: "Braino sign-in failed." });
+    };
+
+    void loadName();
+    setPosition(entryX, startY, { allowOffscreen: true });
+    targetX = climbX;
+    targetY = finalY;
+    dirX = 1;
+    walker.classList.add("visible");
+    setStartupPose(pose);
+
+    const step = (now) => {
+      const e = now - phaseStart;
+      if (phase === "pop") {
+        const k = easeOut(Math.min(1, e / 1050));
+        place(entryX, lerp(startY, floorY, k));
+        poseTo({ gazeX: 0, gazeY: -0.4, leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0, eyeScale: 1 });
+        if (k >= 1) next("walk");
+      } else if (phase === "walk") {
+        const k = Math.min(1, e / 1000);
+        const s = (e / 1000) * 9;
+        place(lerp(entryX, climbX, easeInOut(k)), floorY, Math.sin(s) * 3.4);
+        poseTo({
+          leftLeg: Math.max(0, Math.sin(s)) * 16,
+          rightLeg: Math.max(0, Math.sin(s + Math.PI)) * 16,
+          gazeX: 1.6,
+          gazeY: 0,
+        });
+        if (k >= 1) {
+          poseTo({ leftLeg: 0, rightLeg: 0, rootRot: 0 });
+          next("reach");
+        }
+      } else if (phase === "reach") {
+        const k = easeInOut(Math.min(1, e / 600));
+        place(climbX, floorY - lerp(0, 6, k));
+        poseTo({
+          leftArm: lerp(0, -122, k),
+          rightArm: lerp(0, 122, k),
+          gazeX: 0,
+          gazeY: -0.8,
+        });
+        if (k >= 1) next("grip");
+      } else if (phase === "grip") {
+        const k = easeInOut(Math.min(1, e / 800));
+        place(climbX, lerp(floorY - 6, floorY - 44, k));
+        poseTo({
+          leftArm: lerp(-122, -100, k),
+          rightArm: lerp(122, 100, k),
+          leftLeg: lerp(0, 18, k),
+          rightLeg: lerp(0, 18, k),
+        });
+        if (k >= 1) next("mantle");
+      } else if (phase === "mantle") {
+        const k = easeInOut(Math.min(1, e / 800));
+        place(climbX, lerp(floorY - 44, finalY, k));
+        poseTo({
+          leftArm: lerp(-100, -26, k),
+          rightArm: lerp(100, 26, k),
+          leftLeg: lerp(18, 0, easeOut(k)),
+          rightLeg: lerp(18, 0, easeOut(k)),
+        });
+        if (k >= 1) {
+          poseTo({ leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 });
+          next("perch");
+        }
+      } else if (phase === "perch") {
+        place(climbX, finalY);
+        poseTo({
+          rightArm: -28 + Math.sin(e / 45) * 18,
+          leftArm: 0,
+          leftLeg: 0,
+          rightLeg: 0,
+          gazeX: 0,
+          gazeY: 0,
+        });
+        if (e > 300 && !saidAuth) {
+          saidAuth = true;
+          setBubble("allow me to authenticate you", 1500);
+        }
+        if (e >= 1700) {
+          poseTo({ rightArm: 0 });
+          startAuth();
+          next("auth");
+        }
+      } else if (phase === "auth") {
+        place(climbX, finalY);
+        poseTo({
+          eyeScale: lerp(1, 0.06, Math.min(1, e / 350)),
+          gazeX: 0,
+          gazeY: 0,
+        });
+        if (authResolved && e >= 700) {
+          setAuthPose(false);
+          if (authResult?.ok) {
+            flashAuthSuccess();
+            next("hello");
+          } else {
+            finish(authResult);
+            return;
+          }
+        }
+      } else if (phase === "hello") {
+        place(climbX, finalY);
+        poseTo({ eyeScale: lerp(0.06, 1, Math.min(1, e / 350)) });
+        if (!saidHello && (firstName || e > 900)) {
+          saidHello = true;
+          setBubble(`hello, ${firstName || "there"}`, 1500);
+        }
+        if (e >= 1700) {
+          finish(authResult || { ok: true });
+          return;
+        }
+      }
+      raf = window.requestAnimationFrame(step);
+    };
+
+    raf = window.requestAnimationFrame(step);
+  });
+}
+
 async function runStartupSequence(config = {}) {
   startupActive = true;
   try {
     applyDisplayMetrics(config.displayMetrics);
-    const dock = getDockBounds();
     movementMode = "dock";
-
-    const perchX = clamp(Math.round(window.innerWidth * 0.5 - W / 2), dock.minX, dock.maxX);
-    const entryX = clamp(perchX - 142, dock.minX, dock.maxX);
-    const underDockY = Math.min(window.innerHeight + 18, dock.y + 72);
-    setPosition(entryX - 40, window.innerHeight + 24, { allowOffscreen: true });
-    targetX = perchX;
-    targetY = dock.y;
-    dirX = 1;
-    walker.classList.add("visible");
-
     setStatus("connecting", "Starting");
-    await wait(180);
-    await walkTo(entryX, underDockY, { speed: 62, allowOffscreen: true });
-    await walkTo(perchX, underDockY, { speed: 58, allowOffscreen: true });
-    await walkTo(perchX, dock.y, { speed: 54, allowOffscreen: true });
-    setWave(true);
-    await wait(620);
-
-    setAuthPose(true);
-    setStatus("connecting", "Authenticating");
-    setBubble("allow me to authenticate you", 2600);
-
-    const authResult = await window.brainoMac.ensureAuth("startup").catch((error) => ({
-      ok: false,
-      error: error?.message || "Braino sign-in failed.",
-    }));
+    const authResult = await runWakeupClimb(config);
     logRenderer("startup.auth.result", {
       ok: Boolean(authResult?.ok),
       source: authResult?.source || "unknown",
       error: authResult?.error || null,
     });
 
-    setAuthPose(false);
     if (authResult?.ok) {
-      flashAuthSuccess();
-      const auth = await window.brainoMac.authStatus().catch(() => null);
-      const label = auth?.displayName || "";
       setStatus("ready", "Ready");
-      setBubble(label ? `Hello, ${label}.` : "Authenticated. I am on the Dock now.", 1900);
     } else {
       setStatus("error", "Auth needed");
       setBubble(`Sign-in did not finish: ${authResult?.error || "try again when the browser page opens."}`, 4200);
@@ -1168,37 +1343,60 @@ function tick(now) {
   walkerFlip.style.transform = `scaleX(${engaged ? 1 : dirX})`;
   updateFloatingUi();
 
-  const s = t * 4.5;
-  const leftPhase = Math.sin(s);
-  const rightPhase = Math.sin(s + Math.PI);
-  const walkAmount = walkingNow ? 1 : 0;
-  const leftLift = Math.max(0, leftPhase) * 5 * walkAmount;
-  const rightLift = Math.max(0, rightPhase) * 5 * walkAmount;
-  const leftSwing = Math.max(0, leftPhase) * 8 * walkAmount;
-  const rightSwing = Math.max(0, rightPhase) * 8 * walkAmount;
-  const waddle = Math.sin(s) * 3.4 * walkAmount;
-  const walkBob = (-Math.abs(Math.sin(s)) * 2 - 0.4) * walkAmount;
-  const breath = 1 + 0.014 * Math.sin(t * 1.7);
-  const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
-  const blinkPhase = t % 3.4;
-  const blink = blinkPhase < 0.13 ? Math.sin((blinkPhase / 0.13) * Math.PI) : 0;
-  const eyeScale = authPose ? 0.07 : Math.max(0.06, 1 - blink);
-  const rightArmAngle = waving ? (-28 + Math.sin(t * 11) * 16) : 0;
+  if (startupPose) {
+    const pose = startupPose;
+    const leftArmTransform = pose.leftArm ? `rotate(${pose.leftArm} 22 53)` : "";
+    const rightArmTransform = pose.rightArm ? `rotate(${pose.rightArm} 78 53)` : "";
+    root?.setAttribute(
+      "transform",
+      `rotate(${pose.rootRot || 0} 50 50) translate(0 ${pose.rootY || 0}) scale(${pose.rootScale || 1})`
+    );
+    q("#__sbwk_ll__")?.setAttribute("transform", pose.leftLeg ? `rotate(${pose.leftLeg} 44 74)` : "");
+    q("#__sbwk_rl__")?.setAttribute("transform", pose.rightLeg ? `rotate(${pose.rightLeg} 56 74)` : "");
+    q("#__sbwk_la_bg__")?.setAttribute("transform", leftArmTransform);
+    q("#__sbwk_la__")?.setAttribute("transform", leftArmTransform);
+    q("#__sbwk_ra_bg__")?.setAttribute("transform", rightArmTransform);
+    q("#__sbwk_ra__")?.setAttribute("transform", rightArmTransform);
+    q("#__sbwk_eye_l__")?.setAttribute("transform", `translate(38,48) scale(1,${pose.eyeScale || 1}) translate(-38,-48)`);
+    q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(62,48) scale(1,${pose.eyeScale || 1}) translate(-62,-48)`);
+    q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${pose.gazeX || 0} ${pose.gazeY || 0})`);
+    q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${pose.gazeX || 0} ${pose.gazeY || 0})`);
+  } else {
+    const s = t * 4.5;
+    const leftPhase = Math.sin(s);
+    const rightPhase = Math.sin(s + Math.PI);
+    const walkAmount = walkingNow ? 1 : 0;
+    const leftLift = Math.max(0, leftPhase) * 5 * walkAmount;
+    const rightLift = Math.max(0, rightPhase) * 5 * walkAmount;
+    const leftSwing = Math.max(0, leftPhase) * 8 * walkAmount;
+    const rightSwing = Math.max(0, rightPhase) * 8 * walkAmount;
+    const waddle = Math.sin(s) * 3.4 * walkAmount;
+    const walkBob = (-Math.abs(Math.sin(s)) * 2 - 0.4) * walkAmount;
+    const breath = 1 + 0.014 * Math.sin(t * 1.7);
+    const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+    const blinkPhase = t % 3.4;
+    const blink = blinkPhase < 0.13 ? Math.sin((blinkPhase / 0.13) * Math.PI) : 0;
+    const eyeScale = authPose ? 0.07 : Math.max(0.06, 1 - blink);
+    const rightArmAngle = waving ? (-28 + Math.sin(t * 11) * 16) : 0;
 
-  root?.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
-  q("#__sbwk_ll__")?.setAttribute("transform", `translate(0 ${-leftLift}) rotate(${leftSwing} 44 74)`);
-  q("#__sbwk_rl__")?.setAttribute("transform", `translate(0 ${-rightLift}) rotate(${rightSwing} 56 74)`);
-  q("#__sbwk_ra_bg__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} 78 53)` : "");
-  q("#__sbwk_ra__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} 78 53)` : "");
-  q("#__sbwk_eye_l__")?.setAttribute("transform", `translate(38,48) scale(1,${eyeScale}) translate(-38,-48)`);
-  q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(62,48) scale(1,${eyeScale}) translate(-62,-48)`);
+    root?.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+    q("#__sbwk_ll__")?.setAttribute("transform", `translate(0 ${-leftLift}) rotate(${leftSwing} 44 74)`);
+    q("#__sbwk_rl__")?.setAttribute("transform", `translate(0 ${-rightLift}) rotate(${rightSwing} 56 74)`);
+    q("#__sbwk_la_bg__")?.setAttribute("transform", "");
+    q("#__sbwk_la__")?.setAttribute("transform", "");
+    q("#__sbwk_ra_bg__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} 78 53)` : "");
+    q("#__sbwk_ra__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} 78 53)` : "");
+    q("#__sbwk_eye_l__")?.setAttribute("transform", `translate(38,48) scale(1,${eyeScale}) translate(-38,-48)`);
+    q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(62,48) scale(1,${eyeScale}) translate(-62,-48)`);
+
+    const gaze = (engaged || !walkingNow) ? 0 : 2.4;
+    const speechDrift = speaking ? Math.sin(t * 10) * 0.25 : 0;
+    q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${gaze} ${speechDrift})`);
+    q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${gaze} ${speechDrift})`);
+  }
 
   const mouthOpen = speaking && Math.sin(t * 21) > -0.28;
   setTalk(mouthOpen);
-  const gaze = (engaged || !walkingNow) ? 0 : 2.4;
-  const speechDrift = speaking ? Math.sin(t * 10) * 0.25 : 0;
-  q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${gaze} ${speechDrift})`);
-  q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${gaze} ${speechDrift})`);
 
   requestAnimationFrame(tick);
 }
