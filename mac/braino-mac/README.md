@@ -38,6 +38,7 @@ Voice logs are written to:
 ```
 
 The log records credential presence, transport choice, HTTP status, mic permission state, WebRTC state, and fallback transitions with secrets redacted.
+It also records Mac delegate routing for local file/app actions, including cleaned prompts, detected intents, Spotlight counts, fallback folder-search results, app lookup matches, and open failures.
 
 ## First Delegate Actions
 

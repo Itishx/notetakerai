@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.22";
+const APP_VERSION = "12.0.23";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -109,6 +109,12 @@ function logMac(event, payload = {}) {
     fs.appendFileSync(LOG_PATH, line);
   } catch (_) {}
   console.log("[Braino Mac]", event, sanitizeForLog(payload));
+}
+
+function textForLog(value, maxLength = 180) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}…`;
 }
 
 function normalizeAuthSession(data = {}) {
@@ -804,11 +810,19 @@ function runNativeSpeech() {
 }
 
 function cleanPrompt(input) {
-  return String(input || "")
-    .replace(/^(?:hey\s+|ok(?:ay)?\s+|yo\s+)?(?:braino|bruno|breno|reno)[,\s]+/i, "")
-    .replace(/^(?:can|could|will|would)\s+you\s+(?:please\s+)?/i, "")
-    .replace(/^please\s+/i, "")
-    .trim();
+  let text = String(input || "").replace(/\s+/g, " ").trim();
+  for (let index = 0; index < 4; index += 1) {
+    const before = text;
+    text = text
+      .replace(/^(?:hey|hi|hello|ok|okay|yo|so|buddy|bro|brother|dude|my guy)[,\s]+/i, "")
+      .replace(/^(?:braino|bruno|breno|reno|dino)[,\s]+/i, "")
+      .replace(/^(?:can|could|will|would)\s+you\s+(?:please\s+)?/i, "")
+      .replace(/^please\s+/i, "")
+      .replace(/^(?:help me|can you help me)\s+(?:to\s+)?/i, "")
+      .trim();
+    if (text === before) break;
+  }
+  return text.replace(/[.?!]+$/g, "").trim();
 }
 
 function isLikelyUrl(value) {
@@ -913,6 +927,7 @@ function mdfindLiteral(value) {
 function cleanOpenTarget(value) {
   return String(value || "")
     .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/[.?!]+$/g, "")
     .replace(/\s+(?:for me|please|pls)$/i, "")
     .replace(/^(?:the|my|an?|application)\s+/i, "")
     .trim();
@@ -946,41 +961,113 @@ function rankNameMatch(candidateName, query) {
   return hits ? 40 + hits * 8 : 0;
 }
 
+function editDistanceWithin(a, b, maxDistance) {
+  const left = String(a || "");
+  const right = String(b || "");
+  if (Math.abs(left.length - right.length) > maxDistance) return false;
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    let rowMin = current[0];
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      const value = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + cost,
+      );
+      current[j] = value;
+      rowMin = Math.min(rowMin, value);
+    }
+    if (rowMin > maxDistance) return false;
+    previous = current;
+  }
+  return previous[right.length] <= maxDistance;
+}
+
+function fuzzyWordIncluded(candidateWords, queryWord) {
+  if (!queryWord) return true;
+  if (queryWord.length <= 2) return candidateWords.includes(queryWord);
+  return candidateWords.some((candidateWord) => {
+    if (candidateWord.includes(queryWord) || queryWord.includes(candidateWord)) return true;
+    const maxDistance = queryWord.length >= 7 ? 2 : 1;
+    return editDistanceWithin(candidateWord, queryWord, maxDistance);
+  });
+}
+
+function candidateMatchesQuery(candidateText, queryText) {
+  const candidate = normalizeSearchToken(candidateText);
+  const query = normalizeSearchToken(queryText);
+  if (!candidate || !query) return false;
+  if (candidate.includes(query)) return true;
+  const candidateWords = candidate.split(" ").filter(Boolean);
+  const queryWords = query.split(" ").filter(Boolean);
+  if (!queryWords.length) return false;
+  return queryWords.every((word) => fuzzyWordIncluded(candidateWords, word));
+}
+
 async function findInstalledApps(appName) {
   const cleaned = canonicalAppName(appName);
   if (!cleaned) return [];
   if (normalizeSearchToken(cleaned).length < 2) return [];
   const escaped = mdfindLiteral(cleaned);
   const expression = `kMDItemContentType == "com.apple.application-bundle" && (kMDItemDisplayName == "*${escaped}*"cd || kMDItemFSName == "*${escaped}*.app"cd)`;
-  let paths = [];
+  let paths = [
+    path.join("/Applications", `${cleaned}.app`),
+    path.join("/System/Applications", `${cleaned}.app`),
+    path.join(os.homedir(), "Applications", `${cleaned}.app`),
+  ].filter((appPath) => fs.existsSync(appPath));
   try {
     const result = await execFileP("mdfind", [expression], { timeout: 8000 });
-    paths = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const found = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    paths.push(...found);
+    logMac("app.search.mdfind.done", {
+      requested: textForLog(appName),
+      canonical: cleaned,
+      resultCount: found.length,
+      firstResults: found.slice(0, 4).map(appBaseName),
+    });
   } catch (error) {
     logMac("app.search.mdfind.failed", { appName: cleaned, error });
   }
 
+  let scannedCount = 0;
   const scanRoots = ["/Applications", path.join(os.homedir(), "Applications")].filter((rootPath) => fs.existsSync(rootPath));
   for (const rootPath of scanRoots) {
     try {
       const result = await execFileP("find", [rootPath, "-maxdepth", "3", "-name", "*.app", "-print"], { timeout: 8000 });
-      paths.push(...result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+      const found = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      scannedCount += found.length;
+      paths.push(...found);
     } catch (error) {
       logMac("app.search.find.failed", { rootPath, error });
     }
   }
 
-  return Array.from(new Set(paths))
+  const matches = Array.from(new Set(paths))
     .filter((appPath) => appPath.endsWith(".app") && rankNameMatch(appBaseName(appPath), cleaned) > 0)
     .sort((a, b) => rankNameMatch(appBaseName(b), cleaned) - rankNameMatch(appBaseName(a), cleaned))
     .slice(0, 5);
+  logMac("app.search.done", {
+    requested: textForLog(appName),
+    canonical: cleaned,
+    scannedCount,
+    matchCount: matches.length,
+    firstResults: matches.slice(0, 4).map((appPath) => ({ name: appBaseName(appPath), path: appPath })),
+  });
+  return matches;
 }
 
 async function openApp(appName) {
   const canonical = canonicalAppName(appName);
   if (!canonical) return { ok: false, error: "No app name was provided." };
+  logMac("app.open.start", {
+    requested: textForLog(appName),
+    canonical,
+  });
   try {
     await execFileP("open", ["-a", canonical], { timeout: 8000 });
+    logMac("app.open.success", { requested: textForLog(appName), canonical, method: "open-a" });
     return { ok: true, appName: canonical, method: "open-a" };
   } catch (error) {
     logMac("app.open.open_a.failed", { appName: canonical, error });
@@ -989,15 +1076,40 @@ async function openApp(appName) {
   const matches = await findInstalledApps(canonical);
   if (matches.length) {
     const openError = await shell.openPath(matches[0]);
-    if (!openError) return { ok: true, appName: appBaseName(matches[0]), appPath: matches[0], method: "spotlight" };
+    if (!openError) {
+      logMac("app.open.success", {
+        requested: textForLog(appName),
+        canonical,
+        method: "spotlight",
+        appPath: matches[0],
+      });
+      return { ok: true, appName: appBaseName(matches[0]), appPath: matches[0], method: "spotlight" };
+    }
     logMac("app.open.path.failed", { appName: canonical, appPath: matches[0], error: openError });
   }
+  logMac("app.open.not_found", { requested: textForLog(appName), canonical });
   return { ok: false, appName: canonical, error: "App was not found." };
 }
 
 function mdfindExpression(query) {
-  const escaped = mdfindLiteral(query);
-  return `kMDItemDisplayName == "*${escaped}*"cd || kMDItemFSName == "*${escaped}*"cd || kMDItemTextContent == "*${escaped}*"cd`;
+  const variants = searchQueryVariants(query).map(mdfindLiteral).filter(Boolean);
+  const nameClauses = variants.flatMap((escaped) => [
+    `kMDItemDisplayName == "*${escaped}*"cd`,
+    `kMDItemFSName == "*${escaped}*"cd`,
+  ]);
+  const primary = variants[0] || mdfindLiteral(query);
+  return [...nameClauses, `kMDItemTextContent == "*${primary}*"cd`].join(" || ");
+}
+
+function searchQueryVariants(query) {
+  const cleaned = String(query || "").replace(/[.?!]+$/g, "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+  return Array.from(new Set([
+    cleaned,
+    cleaned.replace(/\s+/g, "_"),
+    cleaned.replace(/\s+/g, "-"),
+    cleaned.replace(/\s+/g, ""),
+  ]));
 }
 
 function fileKindForText(text) {
@@ -1097,6 +1209,7 @@ function rankFileMatch(filePath, query, kind) {
   const nameWithoutExt = basename.replace(/\.[^.]+$/, "");
   let score = rankNameMatch(nameWithoutExt, query);
   score = Math.max(score, rankNameMatch(basename, query));
+  if (score === 0 && candidateMatchesQuery(nameWithoutExt, query)) score = 32;
   if (pathMatchesKind(filePath, kind)) score += 18;
   if (filePath.startsWith(path.join(os.homedir(), "Desktop"))) score += 10;
   if (filePath.startsWith(path.join(os.homedir(), "Downloads"))) score += 8;
@@ -1137,7 +1250,7 @@ async function fallbackWalkFileSearch(query, options = {}) {
       const isDirectory = entry.isDirectory();
       const statsLike = { isDirectory: () => isDirectory, isFile: () => entry.isFile() };
       const candidateText = normalizeSearchToken(entry.name.replace(/\.[^.]+$/, ""));
-      if (candidateText.includes(normalizedQuery) && pathMatchesKind(fullPath, options.kind || "", statsLike)) {
+      if (candidateMatchesQuery(candidateText, normalizedQuery) && pathMatchesKind(fullPath, options.kind || "", statsLike)) {
         results.push(fullPath);
       }
       if (isDirectory && depth < maxDepth) await walk(fullPath, depth + 1);
@@ -1154,6 +1267,13 @@ async function fallbackWalkFileSearch(query, options = {}) {
 async function findFiles(query, options = {}) {
   const cleanQuery = cleanFileQuery(query, options.kind || "");
   if (!cleanQuery) return [];
+  const variants = searchQueryVariants(cleanQuery);
+  logMac("file.search.start", {
+    requested: textForLog(query),
+    cleanQuery,
+    kind: options.kind || "",
+    variants,
+  });
   let mdfindPaths = [];
   try {
     const result = await execFileP("mdfind", [mdfindExpression(cleanQuery)], { timeout: 12000 });
@@ -1161,15 +1281,28 @@ async function findFiles(query, options = {}) {
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean);
+    logMac("file.search.mdfind.done", {
+      cleanQuery,
+      kind: options.kind || "",
+      resultCount: mdfindPaths.length,
+      firstResults: mdfindPaths.slice(0, 5).map((filePath) => path.basename(filePath)),
+    });
   } catch (error) {
     logMac("file.search.mdfind.failed", { query: cleanQuery, kind: options.kind || "", error });
   }
   const fallbackPaths = mdfindPaths.length < 4 ? await fallbackWalkFileSearch(cleanQuery, options) : [];
+  logMac("file.search.fallback.done", {
+    cleanQuery,
+    kind: options.kind || "",
+    ranFallback: mdfindPaths.length < 4,
+    resultCount: fallbackPaths.length,
+    firstResults: fallbackPaths.slice(0, 5).map((filePath) => path.basename(filePath)),
+  });
   const seen = new Set();
   const candidates = [...mdfindPaths, ...fallbackPaths]
     .map((line) => String(line || "").trim())
     .filter(Boolean);
-  return candidates
+  const matches = candidates
     .filter((filePath) => {
       if (seen.has(filePath) || shouldSkipSearchPath(filePath)) return false;
       seen.add(filePath);
@@ -1183,6 +1316,23 @@ async function findFiles(query, options = {}) {
     })
     .sort((a, b) => rankFileMatch(b, cleanQuery, options.kind || "") - rankFileMatch(a, cleanQuery, options.kind || ""))
     .slice(0, 8);
+  logMac("file.search.done", {
+    cleanQuery,
+    kind: options.kind || "",
+    matchCount: matches.length,
+    firstResults: matches.slice(0, 5).map((filePath) => ({ name: path.basename(filePath), path: filePath })),
+  });
+  return matches;
+}
+
+async function openLocalPath(filePath) {
+  const error = await shell.openPath(filePath);
+  if (error) {
+    logMac("file.open.failed", { filePath, error });
+    return { ok: false, error };
+  }
+  logMac("file.open.success", { filePath, name: path.basename(filePath) });
+  return { ok: true };
 }
 
 async function frontWindowSummary() {
@@ -1865,6 +2015,10 @@ async function runMacConversation(prompt) {
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
   const text = raw.toLowerCase();
+  logMac("delegate.intent.start", {
+    prompt: textForLog(prompt),
+    cleaned: textForLog(raw),
+  });
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
 
   if (isMacSkillsPrompt(text)) {
@@ -1906,6 +2060,7 @@ async function runDelegate(prompt) {
       applications: "/Applications",
       home: os.homedir(),
     };
+    logMac("delegate.folder_intent", { folder: folder.toLowerCase(), targetPath: folders[folder.toLowerCase()] });
     await shell.openPath(folders[folder.toLowerCase()]);
     return { ok: true, say: `Opened ${folder}.` };
   }
@@ -1915,6 +2070,7 @@ async function runDelegate(prompt) {
   ]);
   if (urlTarget && isLikelyUrl(urlTarget)) {
     const url = toUrl(urlTarget);
+    logMac("delegate.url_intent", { raw: textForLog(raw), url });
     await openChromeUrl(url);
     return { ok: true, say: `Opening ${urlTarget} in Chrome.` };
   }
@@ -1924,16 +2080,24 @@ async function runDelegate(prompt) {
     /\b(?:open chrome and search|search chrome for)\s+(.+)$/i,
   ]);
   if (webQuery) {
+    logMac("delegate.web_search_intent", { query: textForLog(webQuery) });
     await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`);
     return { ok: true, say: `Searching Chrome for ${webQuery}.` };
   }
 
   const fileIntent = parseFileIntent(raw);
   if (fileIntent) {
+    logMac("delegate.file_intent", {
+      raw: textForLog(raw),
+      query: fileIntent.query,
+      kind: fileIntent.kind || "",
+      shouldOpen: fileIntent.shouldOpen,
+    });
     const files = await findFiles(fileIntent.query, { kind: fileIntent.kind });
     if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${fileIntent.query}.` };
     if (fileIntent.shouldOpen) {
-      await shell.openPath(files[0]);
+      const opened = await openLocalPath(files[0]);
+      if (!opened.ok) return { ok: false, say: `I found ${path.basename(files[0])}, but macOS would not open it: ${opened.error}.`, files };
       return { ok: true, say: `Opened ${path.basename(files[0])}.`, files };
     }
     return {
@@ -1947,19 +2111,33 @@ async function runDelegate(prompt) {
     /\b(?:open|launch|start)\s+(?:the\s+)?(?:app\s+)?([A-Za-z][\w\s.&-]{0,60}?)(?:\s+app)?(?:\s+for\s+me)?$/i,
   ]);
   if (appName && !isLikelyUrl(appName)) {
-    const appResult = await openApp(appName);
+    const target = cleanOpenTarget(appName);
+    logMac("delegate.open_intent", { raw: textForLog(raw), target });
+    const appResult = await openApp(target);
     if (appResult.ok) {
-      return { ok: true, say: `Opening ${appResult.appName || cleanOpenTarget(appName)}.` };
+      return { ok: true, say: `Opening ${appResult.appName || target}.` };
     }
-    const website = commonWebTargetFor(appName);
+    const website = commonWebTargetFor(target);
     if (website) {
+      logMac("delegate.open_web_fallback", {
+        target,
+        website,
+        appError: appResult.error || "",
+      });
       await openChromeUrl(website);
       const host = new URL(website).hostname.replace(/^www\./, "");
-      return { ok: true, say: `I did not find a Mac app for ${cleanOpenTarget(appName)}, so I opened ${host}.` };
+      return { ok: true, say: `I did not find a Mac app for ${target}, so I opened ${host}.` };
+    }
+    const files = await findFiles(target, { kind: "" });
+    if (files.length) {
+      const opened = await openLocalPath(files[0]);
+      if (!opened.ok) return { ok: false, say: `I found ${path.basename(files[0])}, but macOS would not open it: ${opened.error}.`, files };
+      return { ok: true, say: `Opened ${path.basename(files[0])}.`, files };
     }
   }
 
   if (/\bchrome\b|\bbrowser\b|\bsearch\b|\bopen\b/.test(text)) {
+    logMac("delegate.generic_browser_fallback", { raw: textForLog(raw) });
     await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(raw)}`);
     return { ok: true, say: "I do not know that exact move yet, so I searched it in Chrome." };
   }
