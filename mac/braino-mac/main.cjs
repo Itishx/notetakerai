@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.10";
+const APP_VERSION = "12.0.11";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -447,7 +447,7 @@ async function startBrowserAuthFlow(reason = "realtime") {
 async function ensureBrainoAuth(reason = "realtime") {
   const existing = await getBrainoAuthToken();
   if (existing) return { ok: true, source: ENV_BRAINO_AUTH_TOKEN ? "env" : "stored" };
-  if (OPENAI_API_KEY) return { ok: true, source: "openai" };
+  if (OPENAI_API_KEY && reason !== "startup") return { ok: true, source: "openai" };
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return { ok: false, error: "Supabase is not configured for Braino auth." };
   }
@@ -506,6 +506,22 @@ function positionDockWindow() {
     width: display.bounds.width,
     height: display.bounds.height,
   }, false);
+}
+
+function getDisplayMetrics() {
+  const display = screen.getPrimaryDisplay();
+  const { bounds, workArea, scaleFactor } = display;
+  const dockHeight = Math.max(0, (bounds.y + bounds.height) - (workArea.y + workArea.height));
+  const dockTop = dockHeight > 0
+    ? workArea.y - bounds.y + workArea.height
+    : bounds.height - 94;
+  return {
+    bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+    workArea: { x: workArea.x, y: workArea.y, width: workArea.width, height: workArea.height },
+    scaleFactor,
+    dockTop,
+    dockHeight,
+  };
 }
 
 function createDockWindow() {
@@ -1314,6 +1330,7 @@ ipcMain.handle("braino-mac:get-config", () => {
   const auth = authStatusPayload();
   return {
     appVersion: APP_VERSION,
+    displayMetrics: getDisplayMetrics(),
     supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
     realtimeConfigured: Boolean((auth.authenticated && SUPABASE_URL && SUPABASE_ANON_KEY) || OPENAI_API_KEY),
     realtimeAuthSource: auth.source === "env" || auth.source === "stored" ? "braino" : OPENAI_API_KEY ? "openai" : "missing",

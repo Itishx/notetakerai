@@ -8,7 +8,8 @@ const statusPill = document.getElementById("status-pill");
 const statusText = document.getElementById("status-text");
 const fileStrip = document.getElementById("file-strip");
 const ESTIMATED_DOCK_HEIGHT = 94;
-const DOCK_FOOT_OVERLAP = 10;
+const DOCK_PERCH_LIFT = 42;
+const START_OFFSCREEN_X = -W - 36;
 
 walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
 const root = walker.querySelector("#__sbwk_root__");
@@ -17,9 +18,10 @@ const q = (selector) => root?.querySelector(selector);
 let start = performance.now();
 let last = start;
 let movementMode = "dock";
-let posX = getDockBounds().minX;
+let displayMetrics = null;
+let posX = START_OFFSCREEN_X;
 let posY = getDockBounds().y;
-let targetX = getDockBounds().maxX;
+let targetX = getDockBounds().minX;
 let targetY = getDockBounds().y;
 let nextTargetAt = start + 4200;
 let dirX = 1;
@@ -28,6 +30,7 @@ let speaking = false;
 let listening = false;
 let processing = false;
 let sayTimer = 0;
+let waveTimer = 0;
 let lastLocalControlTap = 0;
 let listenToken = 0;
 let mousePassthrough = true;
@@ -46,6 +49,8 @@ let voiceTurnInFlight = false;
 let currentSpeechAudio = null;
 let speechGeneration = 0;
 let lastSpokenLine = { text: "", ts: 0 };
+let scriptedWalk = null;
+let authPose = false;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -74,20 +79,50 @@ function getMoveBounds() {
 
 function getDockBounds() {
   const sideInset = Math.max(54, window.innerWidth * 0.03);
-  const dockTop = window.innerHeight - ESTIMATED_DOCK_HEIGHT;
-  const y = clamp(dockTop - H + DOCK_FOOT_OVERLAP, 54, Math.max(54, window.innerHeight - H - 10));
+  const measuredDockTop = Number(displayMetrics?.dockTop || 0);
+  const dockTop = measuredDockTop > 0
+    ? clamp(measuredDockTop, 90, window.innerHeight - 20)
+    : window.innerHeight - ESTIMATED_DOCK_HEIGHT;
+  const y = clamp(dockTop - H - DOCK_PERCH_LIFT, 54, Math.max(54, window.innerHeight - H - 10));
   return {
     minX: sideInset,
     maxX: Math.max(sideInset, window.innerWidth - sideInset - W),
     y,
-    snapThresholdY: dockTop - H - 22,
+    snapThresholdY: dockTop - H - DOCK_PERCH_LIFT - 38,
   };
 }
 
-function setPosition(x, y) {
+function applyDisplayMetrics(metrics) {
+  displayMetrics = metrics && typeof metrics === "object" ? metrics : null;
+  if (movementMode !== "dock" || !displayMetrics) return;
+  const dock = getDockBounds();
+  setPosition(posX, dock.y);
+  targetY = dock.y;
+  targetX = clamp(targetX, dock.minX, dock.maxX);
+  updateFloatingUi();
+}
+
+function setPosition(x, y, options = {}) {
   const bounds = getMoveBounds();
-  posX = clamp(x, bounds.minX, bounds.maxX);
+  const minX = options.allowOffscreen ? START_OFFSCREEN_X : bounds.minX;
+  posX = clamp(x, minX, bounds.maxX);
   posY = clamp(y, bounds.minY, bounds.maxY);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function walkTo(x, y, options = {}) {
+  return new Promise((resolve) => {
+    scriptedWalk = {
+      x,
+      y,
+      speed: options.speed || 70,
+      allowOffscreen: Boolean(options.allowOffscreen),
+      resolve,
+    };
+  });
 }
 
 function pickRoamTarget(now = performance.now()) {
@@ -160,7 +195,18 @@ function setTalk(on) {
 
 function setWave(on) {
   waving = on;
-  if (on) window.setTimeout(() => { waving = false; }, 1500);
+  window.clearTimeout(waveTimer);
+  if (on) waveTimer = window.setTimeout(() => { waving = false; }, 1500);
+}
+
+function setAuthPose(on) {
+  authPose = Boolean(on);
+  walker.classList.toggle("authenticating", authPose);
+}
+
+function flashAuthSuccess() {
+  walker.classList.add("authenticated");
+  window.setTimeout(() => walker.classList.remove("authenticated"), 1200);
 }
 
 function normalizeForVoiceMatch(value) {
@@ -659,6 +705,7 @@ async function startRealtimeVoice() {
     if (!authResult?.ok) {
       throw new Error(authResult?.error || "Braino sign-in is required for realtime voice.");
     }
+    setAuthPose(false);
     await ensureMicrophoneAccess();
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -739,6 +786,7 @@ async function startRealtimeVoice() {
     logRenderer("realtime.ready");
   } catch (error) {
     logRenderer("realtime.start.error", { error: errorForLog(error) });
+    setAuthPose(false);
     stopRealtimeVoice();
     throw error;
   }
@@ -900,6 +948,65 @@ function toggleVoice() {
   void startListening();
 }
 
+async function runStartupSequence(config = {}) {
+  applyDisplayMetrics(config.displayMetrics);
+  const dock = getDockBounds();
+  movementMode = "dock";
+  setPosition(START_OFFSCREEN_X, dock.y, { allowOffscreen: true });
+  targetX = Math.min(dock.minX + 150, dock.maxX);
+  targetY = dock.y;
+  dirX = 1;
+  walker.classList.add("visible");
+
+  setStatus("connecting", "Starting");
+  await wait(160);
+  await walkTo(targetX, targetY, { speed: 58, allowOffscreen: true });
+  setWave(true);
+  await wait(620);
+
+  setAuthPose(true);
+  setStatus("connecting", "Authenticating");
+  setBubble("Let me authenticate you first.", 2600);
+
+  const authResult = await window.brainoMac.ensureAuth("startup").catch((error) => ({
+    ok: false,
+    error: error?.message || "Braino sign-in failed.",
+  }));
+  logRenderer("startup.auth.result", {
+    ok: Boolean(authResult?.ok),
+    source: authResult?.source || "unknown",
+    error: authResult?.error || null,
+  });
+
+  setAuthPose(false);
+  if (authResult?.ok) {
+    flashAuthSuccess();
+    const auth = await window.brainoMac.authStatus().catch(() => null);
+    const label = auth?.email ? auth.email.split("@")[0] : "";
+    setStatus("ready", "Double Space to show/hide");
+    setBubble(label ? `Hello, ${label}.` : "Authenticated. I am on the Dock now.", 1900);
+  } else {
+    setStatus("error", "Auth needed");
+    setBubble(`Sign-in did not finish: ${authResult?.error || "try again when the browser page opens."}`, 4200);
+  }
+
+  await wait(900);
+  let trusted = Boolean(config.accessibilityTrusted);
+  if (!trusted) {
+    const requested = await window.brainoMac.requestAccessibility().catch(() => null);
+    trusted = Boolean(requested?.accessibilityTrusted);
+  }
+
+  if (!trusted) {
+    setStatus("ready", "Grant Accessibility for double Control");
+    setBubble("Give Braino Accessibility permission so double Control works cleanly.", 3400);
+  } else if (authResult?.ok) {
+    setStatus("ready", "Double Control ready");
+  }
+
+  pickRoamTarget();
+}
+
 function handleDragMove(event) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   event.preventDefault();
@@ -975,7 +1082,25 @@ function tick(now) {
   const shouldHoldAttention = listening || realtimeConnecting || processing || speaking;
   let walkingNow = false;
 
-  if (!dragState && !shouldHoldAttention) {
+  if (!dragState && scriptedWalk) {
+    const dx = scriptedWalk.x - posX;
+    const dy = scriptedWalk.y - posY;
+    const dist = Math.max(0.01, Math.hypot(dx, dy));
+    const step = Math.min(dist, scriptedWalk.speed * dt);
+    setPosition(
+      posX + (dx / dist) * step,
+      posY + (dy / dist) * step,
+      { allowOffscreen: scriptedWalk.allowOffscreen }
+    );
+    if (Math.abs(dx) > 0.25) dirX = dx >= 0 ? 1 : -1;
+    walkingNow = step > 0.05 && dist > 0.5;
+    if (dist <= 2.5) {
+      const resolve = scriptedWalk.resolve;
+      scriptedWalk = null;
+      walkingNow = false;
+      resolve();
+    }
+  } else if (!dragState && !shouldHoldAttention) {
     if (movementMode === "dock") {
       targetY = getDockBounds().y;
     }
@@ -992,7 +1117,8 @@ function tick(now) {
   }
 
   walker.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;
-  walkerFlip.style.transform = `scaleX(${dirX})`;
+  const engaged = listening || realtimeConnecting || processing || speaking || authPose;
+  walkerFlip.style.transform = `scaleX(${engaged ? 1 : dirX})`;
   updateFloatingUi();
 
   const s = t * 4.5;
@@ -1009,7 +1135,7 @@ function tick(now) {
   const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
   const blinkPhase = t % 3.4;
   const blink = blinkPhase < 0.13 ? Math.sin((blinkPhase / 0.13) * Math.PI) : 0;
-  const eyeScale = Math.max(0.06, 1 - blink);
+  const eyeScale = authPose ? 0.07 : Math.max(0.06, 1 - blink);
   const rightArmAngle = waving ? (-28 + Math.sin(t * 11) * 16) : 0;
 
   root?.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
@@ -1022,14 +1148,17 @@ function tick(now) {
 
   const mouthOpen = speaking && Math.sin(t * 21) > -0.28;
   setTalk(mouthOpen);
-  q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${2.1} ${speaking ? Math.sin(t * 10) * 0.25 : 0})`);
-  q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${2.1} ${speaking ? Math.sin(t * 10) * 0.25 : 0})`);
+  const gaze = (engaged || !walkingNow) ? 0 : 2.4;
+  const speechDrift = speaking ? Math.sin(t * 10) * 0.25 : 0;
+  q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${gaze} ${speechDrift})`);
+  q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${gaze} ${speechDrift})`);
 
   requestAnimationFrame(tick);
 }
 
 window.brainoMac.onVoiceToggle(() => toggleVoice());
 window.brainoMac.onAuthRequired(() => {
+  setAuthPose(true);
   setStatus("connecting", "Authenticating");
   setBubble("Let me authenticate you first.", 2600);
   setWave(true);
@@ -1065,6 +1194,8 @@ window.brainoMac.onHelperStatus((status) => {
 window.brainoMac.getConfig().then(async (config) => {
   logRenderer("app.config", {
     appVersion: config?.appVersion,
+    dockTop: config?.displayMetrics?.dockTop || null,
+    dockHeight: config?.displayMetrics?.dockHeight || null,
     supabaseConfigured: Boolean(config?.supabaseConfigured),
     realtimeConfigured: Boolean(config?.realtimeConfigured),
     realtimeAuthSource: config?.realtimeAuthSource || "unknown",
@@ -1072,18 +1203,14 @@ window.brainoMac.getConfig().then(async (config) => {
     microphoneStatus: config?.microphoneStatus || "unknown",
     logPath: config?.logPath || "",
   });
-  setStatus("ready", "Double Space to show/hide");
-  let trusted = Boolean(config.accessibilityTrusted);
-  if (!trusted) {
-    const requested = await window.brainoMac.requestAccessibility().catch(() => null);
-    trusted = Boolean(requested?.accessibilityTrusted);
-  }
-  const permissionHint = trusted
-    ? "I am walking on your Dock now. Double Space hides me, double Control talks to me."
-    : "I am walking on your Dock now. Double Space hides me. Control+Space works, and I asked macOS for Accessibility so double Control can work too.";
-  void speak(permissionHint);
+  await runStartupSequence(config || {});
+}).catch((error) => {
+  logRenderer("app.config.error", { error: errorForLog(error) });
+  walker.classList.add("visible");
+  setStatus("error", "Startup error");
+  setBubble(`Startup error: ${error?.message || "Braino could not load config."}`, 4200);
 });
 
-setPosition(posX, posY);
+setPosition(posX, posY, { allowOffscreen: true });
 pickRoamTarget();
 requestAnimationFrame(tick);
