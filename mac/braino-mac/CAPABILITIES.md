@@ -19,6 +19,8 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
   - open Mac apps like WhatsApp, Spotify, Chrome, Cursor, Finder, Terminal
   - fall back to websites when an app does not exist
   - close apps or matching browser tabs
+  - create notes in Apple Notes
+  - send or draft email in Apple Mail using Contacts lookup when possible
 - Spotify Mac app playback for songs, when connected.
 - Basic "what app/window am I looking at?" awareness.
 - Logs for debugging voice, app-opening, file search, auth, and delegate actions.
@@ -40,7 +42,8 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
   - undo every action Braino performs
 - Add app-specific Mac skills:
   - Finder cleanup
-  - Notes search/create
+  - Notes search/edit
+  - Mail reply/thread awareness
   - Calendar open/create event
   - WhatsApp open contact
   - Spotify play/pause/next/search

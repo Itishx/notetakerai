@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.36";
+const APP_VERSION = "12.0.37";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -20,6 +20,7 @@ const AUTH_STORE_DIR = path.join(os.homedir(), "Library", "Application Support",
 const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
 const FILE_ACTION_HISTORY_PATH = path.join(AUTH_STORE_DIR, "file-actions.json");
 const FILE_ACTION_CONFIRM_MS = 120000;
+const MAC_WORKFLOW_CONFIRM_MS = 300000;
 const MAX_FILE_ACTION_HISTORY = 80;
 const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 const {
@@ -37,6 +38,7 @@ let pendingAuthWaiters = [];
 let authBrowserFlow = null;
 let macChatHistory = [];
 let pendingFileConfirmation = null;
+let pendingMacWorkflow = null;
 let activeMacContext = null;
 let overlaySyncTimer = null;
 let lastOverlayDisplayKey = "";
@@ -1172,12 +1174,443 @@ const MAC_SKILLS_REPLY = [
   "10. I can open installed Mac apps by name, and fall back to the right website for common services.",
   "11. I can close apps or matching browser tabs for the services I opened.",
   "12. I can play songs and control playback through the Spotify Mac app when your Spotify account is connected.",
+  "13. I can create notes in Apple Notes, asking what to write if you do not say it upfront.",
+  "14. I can send or draft email in Apple Mail, resolving contact names through Contacts when possible.",
 ].join("\n");
 
 function isMacSkillsPrompt(text) {
   const raw = String(text || "").toLowerCase();
   return /\b(mac skills?|macbook skills?|local skills?|desktop skills?|mac capabilities|what can you do on (?:my\s+)?mac|what can you do locally)\b/.test(raw)
     || (/\bwhat can you do\b/.test(raw) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(raw));
+}
+
+function appleScriptStringLiteral(value) {
+  const lines = String(value || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (!lines.length) return '""';
+  return lines.map((line) => `"${escapeAppleScriptString(line)}"`).join(" & linefeed & ");
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function htmlForNotesBody(value) {
+  const blocks = String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map((block) => block.split("\n").map(escapeHtml).join("<br>"))
+    .filter((block) => block.trim());
+  return `<div>${blocks.length ? blocks.join("</div><div><br></div><div>") : " "}</div>`;
+}
+
+function cleanNoteContent(value) {
+  const text = String(value || "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/^(?:the\s+)?note\s+(?:should\s+)?(?:say|be|read)\s*[:\-]?\s*/i, "")
+    .replace(/^(?:about|that|saying|with|content|body|text)\s+/i, "")
+    .replace(/\s+(?:for me|please|pls)$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /^(?:me|it|this|that|note)$/i.test(text) ? "" : text;
+}
+
+function deriveNoteTitle(body, providedTitle = "") {
+  const explicitTitle = cleanNoteContent(providedTitle);
+  if (explicitTitle) return explicitTitle.slice(0, 70);
+  const firstLine = String(body || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) || "Braino Note";
+  return firstLine
+    .replace(/[.?!]+$/g, "")
+    .split(/\s+/)
+    .slice(0, 8)
+    .join(" ")
+    .slice(0, 70) || "Braino Note";
+}
+
+function parseNoteIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\b(?:notes?|apple notes)\b/i.test(source)) return null;
+  if (!/\b(?:create|make|write|take|add|new)\b/i.test(source)) return null;
+  if (/\b(?:mail|email)\b/i.test(source)) return null;
+
+  let title = "";
+  let body = "";
+  const explicit = source.match(/\btitle\s*[:\-]?\s*(.+?)\s+(?:body|content|text|note)\s*[:\-]?\s*(.+)$/i);
+  if (explicit?.[1] && explicit?.[2]) {
+    title = explicit[1];
+    body = explicit[2];
+  }
+  const calledAbout = !body && source.match(/\b(?:create|make|write|take|add)\s+(?:a\s+)?(?:new\s+)?note\s+(?:called|named|titled)\s+(.+?)\s+(?:about|that|saying|with|for)\s+(.+)$/i);
+  if (calledAbout?.[1] && calledAbout?.[2]) {
+    title = calledAbout[1];
+    body = calledAbout[2];
+  }
+  if (!body) {
+    body = extractAfter(source, [
+      /\b(?:create|make|write|take|add)\s+(?:a\s+)?(?:new\s+)?note(?:\s+(?:in|on)\s+(?:apple\s+)?notes?)?\s+(?:about|that|saying|with|for)\s+(.+)$/i,
+      /\b(?:note|remember)\s+(?:this|that)?\s*[:\-]?\s*(.+)$/i,
+    ]);
+  }
+  if (!title) {
+    title = extractAfter(source, [
+      /\b(?:create|make|write|take|add)\s+(?:a\s+)?(?:new\s+)?note\s+(?:called|named|titled)\s+(.+)$/i,
+    ]);
+  }
+  return {
+    title: cleanNoteContent(title),
+    body: cleanNoteContent(body),
+  };
+}
+
+function setPendingMacWorkflow(workflow) {
+  pendingMacWorkflow = {
+    ...workflow,
+    createdAt: Date.now(),
+  };
+  logMac("mac.workflow.pending", {
+    type: pendingMacWorkflow.type,
+    stage: pendingMacWorkflow.stage,
+    hasRecipient: Boolean(pendingMacWorkflow.data?.recipient),
+    hasBody: Boolean(pendingMacWorkflow.data?.body),
+  });
+}
+
+function clearPendingMacWorkflow() {
+  pendingMacWorkflow = null;
+}
+
+function isWorkflowCancelIntent(text) {
+  return /^(?:cancel|stop|never mind|nevermind|leave it|forget it|no)$/i.test(String(text || "").trim());
+}
+
+async function createAppleNote(note) {
+  if (process.platform !== "darwin") return { ok: false, say: "Apple Notes is only available on macOS." };
+  const body = cleanNoteContent(note?.body || "");
+  if (!body) return { ok: false, say: "Tell me what the note should say." };
+  const title = deriveNoteTitle(body, note?.title || "");
+  const script = `
+set noteName to ${appleScriptStringLiteral(title)}
+set noteBody to ${appleScriptStringLiteral(htmlForNotesBody(body))}
+tell application "Notes"
+  activate
+  set targetFolder to missing value
+  repeat with theAccount in accounts
+    try
+      if exists folder "Notes" of theAccount then
+        set targetFolder to folder "Notes" of theAccount
+        exit repeat
+      end if
+    end try
+  end repeat
+  if targetFolder is missing value then
+    try
+      set targetFolder to folder "Notes" of account 1
+    on error
+      set targetFolder to first folder of account 1
+    end try
+  end if
+  make new note at targetFolder with properties {name:noteName, body:noteBody}
+end tell
+return noteName`;
+
+  sendTaskProgress({ status: "thinking", text: "Creating note" });
+  logMac("notes.create.start", { title: textForLog(title), bodyChars: body.length });
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
+    const createdTitle = stdout.trim() || title;
+    setTimeout(() => ensureDockWindowVisible("notes-create"), 450);
+    logMac("notes.create.done", { title: textForLog(createdTitle), bodyChars: body.length });
+    sendTaskProgress({ status: "done", text: "Created note" });
+    return { ok: true, say: `Done. I created the note in Apple Notes: ${createdTitle}.` };
+  } catch (error) {
+    logMac("notes.create.failed", { title: textForLog(title), error });
+    return { ok: false, say: `I opened Notes, but macOS would not let me create the note yet: ${error?.message || "AppleScript failed"}.` };
+  }
+}
+
+async function startNoteWorkflow(intent = {}) {
+  if (!intent.body) {
+    await openApp("Notes").catch(() => null);
+    setTimeout(() => ensureDockWindowVisible("notes-pending"), 450);
+    setPendingMacWorkflow({
+      type: "note",
+      stage: "note_body",
+      data: { title: intent.title || "" },
+    });
+    return { ok: true, say: "Opening Notes. What should the note say?" };
+  }
+  return createAppleNote(intent);
+}
+
+function extractEmailAddress(value) {
+  const match = String(value || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match?.[0] || "";
+}
+
+function cleanMailRecipient(value) {
+  return String(value || "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/^(?:to|recipient is|send it to|mail it to|email it to)\s+/i, "")
+    .replace(/\s+(?:for me|please|pls)$/i, "")
+    .replace(/[.?!]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isGenericMailRecipient(value) {
+  return /^(?:someone|somebody|someone in my contacts|somebody in my contacts|a contact|one contact|person|him|her|them)$/i
+    .test(cleanMailRecipient(value));
+}
+
+function cleanMailBody(value) {
+  return String(value || "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/^(?:the\s+)?(?:email|mail|message)\s+(?:should\s+)?(?:say|be|read)\s*[:\-]?\s*/i, "")
+    .replace(/^(?:body|message|saying|that|about)\s*[:\-]?\s*/i, "")
+    .replace(/\s+(?:for me|please|pls)$/i, "")
+    .trim();
+}
+
+function deriveMailSubject(body) {
+  const cleaned = String(body || "")
+    .replace(/\r?\n+/g, " ")
+    .replace(/[.?!]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return "Quick note";
+  return titleCaseWords(cleaned.split(/\s+/).slice(0, 7).join(" ")).slice(0, 72) || "Quick note";
+}
+
+function parseMailIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\b(?:mail|email)\b/i.test(source)) return null;
+  if (!/\b(?:send|write|compose|draft|create|mail|email)\b/i.test(source)) return null;
+  const lower = source.toLowerCase();
+  const action = /\b(?:draft|compose|write|create)\b/i.test(source) && !/\bsend\b/i.test(source)
+    ? "draft"
+    : "send";
+
+  const toMatch = source.match(/\bto\s+(.+?)(?=\s+(?:with\s+)?subject\b|\s+(?:body|message|saying|that|about)\b|$)/i)
+    || source.match(/\bemail\s+(.+?)(?=\s+(?:with\s+)?subject\b|\s+(?:body|message|saying|that|about)\b|$)/i);
+  let recipient = cleanMailRecipient(toMatch?.[1] || "");
+  if (isGenericMailRecipient(recipient)) recipient = "";
+
+  const explicitEmail = extractEmailAddress(source);
+  if (explicitEmail && !recipient) recipient = explicitEmail;
+
+  const subjectMatch = source.match(/\b(?:with\s+)?subject\s*[:\-]?\s*(.+?)(?=\s+(?:and\s+)?(?:body|message|saying|that)\b|$)/i);
+  const subject = cleanMailBody(subjectMatch?.[1] || "");
+  let body = extractAfter(source, [
+    /\b(?:body|message)\s*[:\-]?\s*(.+)$/i,
+    /\b(?:saying|that)\s+(.+)$/i,
+    /\babout\s+(.+)$/i,
+  ]);
+  body = cleanMailBody(body);
+  if (subject && body === subject) body = "";
+
+  const asksMail = /\b(?:send|write|compose|draft|create)\s+(?:an?\s+)?(?:mail|email)\b/i.test(source)
+    || /\bemail\s+\S+/i.test(source);
+  if (!asksMail && !/\b(mail|email)\s+(?:to|for)\b/i.test(lower)) return null;
+  return { action, recipient, subject, body };
+}
+
+async function resolveMailRecipient(recipient) {
+  const cleaned = cleanMailRecipient(recipient);
+  const email = extractEmailAddress(cleaned);
+  if (email) return { ok: true, name: cleaned.replace(email, "").trim(), email, source: "typed_email" };
+  if (/^(?:me|myself|itish)$/i.test(cleaned)) {
+    const auth = authStatusPayload();
+    if (auth.email) return { ok: true, name: auth.displayName || "Itish", email: auth.email, source: "braino_auth" };
+  }
+  if (!cleaned || isGenericMailRecipient(cleaned)) {
+    return { ok: false, reason: "missing_recipient" };
+  }
+  if (process.platform !== "darwin") return { ok: false, reason: "contacts_unavailable" };
+
+  const script = `
+set queryName to ${appleScriptStringLiteral(cleaned)}
+tell application "Contacts"
+  repeat with thePerson in people
+    try
+      set personName to name of thePerson as text
+      ignoring case
+        if personName contains queryName then
+          if (count of emails of thePerson) > 0 then
+            set firstEmail to value of item 1 of emails of thePerson as text
+            return personName & tab & firstEmail
+          end if
+        end if
+      end ignoring
+    end try
+  end repeat
+end tell
+return ""`;
+
+  logMac("contacts.lookup.start", { recipient: textForLog(cleaned) });
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });
+    const [name = "", foundEmail = ""] = stdout.trim().split("\t");
+    logMac("contacts.lookup.done", {
+      recipient: textForLog(cleaned),
+      found: Boolean(foundEmail),
+      name: textForLog(name),
+      hasEmail: Boolean(foundEmail),
+    });
+    if (foundEmail) return { ok: true, name: name.trim() || cleaned, email: foundEmail.trim(), source: "contacts" };
+    return { ok: false, reason: "not_found" };
+  } catch (error) {
+    logMac("contacts.lookup.failed", { recipient: textForLog(cleaned), error });
+    return { ok: false, reason: "contacts_failed", error: error?.message || "Contacts lookup failed." };
+  }
+}
+
+async function createAppleMailMessage(mail) {
+  const recipientName = cleanMailRecipient(mail?.recipientName || mail?.recipient || "");
+  const recipientEmail = extractEmailAddress(mail?.recipientEmail || mail?.recipient || "");
+  const body = cleanMailBody(mail?.body || "");
+  const subject = cleanMailBody(mail?.subject || "") || deriveMailSubject(body);
+  const action = mail?.action === "draft" ? "draft" : "send";
+  if (!recipientEmail) return { ok: false, say: `I need an email address for ${recipientName || "that person"}.` };
+  if (!body) return { ok: false, say: "What should the email say?" };
+  const script = `
+set recipientName to ${appleScriptStringLiteral(recipientName || recipientEmail)}
+set recipientEmail to ${appleScriptStringLiteral(recipientEmail)}
+set mailSubject to ${appleScriptStringLiteral(subject)}
+set mailBody to ${appleScriptStringLiteral(body)}
+tell application "Mail"
+  activate
+  set outgoingMessage to make new outgoing message with properties {subject:mailSubject, content:mailBody & linefeed, visible:true}
+  tell outgoingMessage
+    make new to recipient at end of to recipients with properties {name:recipientName, address:recipientEmail}
+    ${action === "send" ? "send" : ""}
+  end tell
+end tell
+return mailSubject`;
+
+  sendTaskProgress({ status: "thinking", text: action === "send" ? "Sending email" : "Drafting email" });
+  logMac("mail.compose.start", {
+    action,
+    recipient: textForLog(recipientName || recipientEmail),
+    hasEmail: Boolean(recipientEmail),
+    subject: textForLog(subject),
+    bodyChars: body.length,
+  });
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 15000 });
+    setTimeout(() => ensureDockWindowVisible("mail-compose"), 450);
+    logMac("mail.compose.done", {
+      action,
+      subject: textForLog(stdout.trim() || subject),
+      recipient: textForLog(recipientName || recipientEmail),
+    });
+    sendTaskProgress({ status: "done", text: action === "send" ? "Sent email" : "Draft ready" });
+    return {
+      ok: true,
+      say: action === "send"
+        ? `Done. I sent the email to ${recipientName || recipientEmail}.`
+        : `Done. I drafted the email to ${recipientName || recipientEmail}.`,
+    };
+  } catch (error) {
+    logMac("mail.compose.failed", {
+      action,
+      recipient: textForLog(recipientName || recipientEmail),
+      subject: textForLog(subject),
+      error,
+    });
+    return { ok: false, say: `I opened Mail, but macOS would not let me ${action === "send" ? "send" : "draft"} it yet: ${error?.message || "AppleScript failed"}.` };
+  }
+}
+
+async function executeMailWorkflow(data = {}) {
+  const mail = {
+    action: data.action === "draft" ? "draft" : "send",
+    recipient: cleanMailRecipient(data.recipient || ""),
+    recipientEmail: extractEmailAddress(data.recipientEmail || data.recipient || ""),
+    recipientName: cleanMailRecipient(data.recipientName || data.recipient || ""),
+    subject: cleanMailBody(data.subject || ""),
+    body: cleanMailBody(data.body || ""),
+  };
+  if (!mail.recipient && !mail.recipientEmail) {
+    setPendingMacWorkflow({ type: "mail", stage: "mail_recipient", data: mail });
+    await openApp("Mail").catch(() => null);
+    return { ok: true, say: "Opening Mail. Who should I send it to?" };
+  }
+  if (!mail.body) {
+    setPendingMacWorkflow({ type: "mail", stage: "mail_body", data: mail });
+    await openApp("Mail").catch(() => null);
+    return { ok: true, say: "What should the email say?" };
+  }
+
+  if (!mail.recipientEmail) {
+    const resolved = await resolveMailRecipient(mail.recipient);
+    if (!resolved.ok) {
+      setPendingMacWorkflow({
+        type: "mail",
+        stage: "mail_email",
+        data: mail,
+      });
+      const targetName = mail.recipient || "that person";
+      return { ok: true, say: `I could not find an email address for ${targetName} in Contacts. Type or say the email address.` };
+    }
+    mail.recipientEmail = resolved.email;
+    mail.recipientName = resolved.name || mail.recipient;
+  }
+
+  clearPendingMacWorkflow();
+  return createAppleMailMessage(mail);
+}
+
+async function startMailWorkflow(intent = {}) {
+  return executeMailWorkflow(intent);
+}
+
+async function handlePendingMacWorkflow(raw) {
+  const pending = pendingMacWorkflow;
+  if (!pending) return null;
+  if (Date.now() - Number(pending.createdAt || 0) > MAC_WORKFLOW_CONFIRM_MS) {
+    clearPendingMacWorkflow();
+    return null;
+  }
+  if (isWorkflowCancelIntent(raw)) {
+    clearPendingMacWorkflow();
+    return { ok: true, say: "Cancelled. I did not do anything." };
+  }
+
+  if (pending.type === "note") {
+    const body = cleanNoteContent(raw);
+    clearPendingMacWorkflow();
+    return createAppleNote({ ...(pending.data || {}), body });
+  }
+
+  if (pending.type === "mail") {
+    const data = { ...(pending.data || {}) };
+    if (pending.stage === "mail_recipient") {
+      data.recipient = cleanMailRecipient(raw);
+      return executeMailWorkflow(data);
+    }
+    if (pending.stage === "mail_body") {
+      const parsed = parseMailIntent(raw);
+      data.subject = parsed?.subject || data.subject || "";
+      data.body = parsed?.body || cleanMailBody(raw);
+      return executeMailWorkflow(data);
+    }
+    if (pending.stage === "mail_email") {
+      const email = extractEmailAddress(raw);
+      if (!email) return { ok: true, say: "I still need the email address. Type it like name@example.com, or say cancel." };
+      data.recipientEmail = email;
+      return executeMailWorkflow(data);
+    }
+  }
+
+  clearPendingMacWorkflow();
+  return null;
 }
 
 async function openChromeUrl(url) {
@@ -3308,6 +3741,9 @@ async function runDelegate(prompt) {
   });
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
 
+  const pendingWorkflowResult = await handlePendingMacWorkflow(raw);
+  if (pendingWorkflowResult) return pendingWorkflowResult;
+
   if (isMacSkillsPrompt(text)) {
     return { ok: true, say: MAC_SKILLS_REPLY };
   }
@@ -3317,6 +3753,28 @@ async function runDelegate(prompt) {
 
   if (isFileActionUndoIntent(text) || isDesktopOrganizeUndoIntent(text)) {
     return undoLastFileAction();
+  }
+
+  const noteIntent = parseNoteIntent(raw);
+  if (noteIntent) {
+    logMac("delegate.notes_intent", {
+      raw: textForLog(raw),
+      hasTitle: Boolean(noteIntent.title),
+      hasBody: Boolean(noteIntent.body),
+    });
+    return startNoteWorkflow(noteIntent);
+  }
+
+  const mailIntent = parseMailIntent(raw);
+  if (mailIntent) {
+    logMac("delegate.mail_intent", {
+      raw: textForLog(raw),
+      action: mailIntent.action,
+      recipient: textForLog(mailIntent.recipient || ""),
+      hasSubject: Boolean(mailIntent.subject),
+      hasBody: Boolean(mailIntent.body),
+    });
+    return startMailWorkflow(mailIntent);
   }
 
   const closeTarget = extractCloseShortcutTarget(raw);
@@ -3373,7 +3831,10 @@ async function runDelegate(prompt) {
   }
 
   if (/^(?:quit|exit|hide|close)$/i.test(text) || /\b(?:quit|exit|close|hide)\s+braino\b/i.test(text)) {
-    if (dockWindow && !dockWindow.isDestroyed()) dockWindow.hide();
+    if (dockWindow && !dockWindow.isDestroyed()) {
+      dockWindowHiddenByUser = true;
+      dockWindow.hide();
+    }
     return { ok: true, say: "Done. I am still around, just hiding." };
   }
 
