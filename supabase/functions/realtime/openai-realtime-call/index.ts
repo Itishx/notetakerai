@@ -92,11 +92,9 @@ serve(async (req) => {
       return json({ error: "Could not start live voice session." }, 500);
     }
 
-    const formData = new FormData();
-    formData.set("sdp", new Blob([sdp], { type: "application/sdp" }), "offer.sdp");
-    formData.set(
-      "session",
-      JSON.stringify({
+    const multipart = buildMultipartFormBody({
+      sdp,
+      session: JSON.stringify({
         type: "realtime",
         model: realtimeModel,
         output_modalities: ["text"],
@@ -113,15 +111,16 @@ serve(async (req) => {
           },
         },
       }),
-    );
+    });
 
     const openAiResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openAiApiKey}`,
+        "Content-Type": multipart.contentType,
         "OpenAI-Safety-Identifier": await hashSafetyIdentifier(user.id),
       },
-      body: formData,
+      body: multipart.body,
     });
 
     const answerSdp = await openAiResponse.text();
@@ -206,6 +205,25 @@ function getSdpDiagnostics(sdp: string) {
     mediaLineCount: (sdp.match(/^m=/gm) || []).length,
     hasAudioLine: /^m=audio\s/m.test(sdp),
     hasApplicationLine: /^m=application\s/m.test(sdp),
+  };
+}
+
+function buildMultipartFormBody(fields: Record<string, string>) {
+  const boundary = `----braino-${crypto.randomUUID()}`;
+  const body =
+    Object.entries(fields)
+      .map(([name, value]) => {
+        return [
+          `--${boundary}`,
+          `Content-Disposition: form-data; name="${name}"`,
+          "",
+          String(value || ""),
+        ].join("\r\n");
+      })
+      .join("\r\n") + `\r\n--${boundary}--\r\n`;
+  return {
+    body,
+    contentType: `multipart/form-data; boundary=${boundary}`,
   };
 }
 

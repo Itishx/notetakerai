@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.12";
+const APP_VERSION = "12.0.13";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -1109,12 +1109,23 @@ function getSdpStats(sdp) {
   };
 }
 
-function appendRealtimeSdp(formData, sdp) {
-  if (typeof Blob === "function") {
-    formData.set("sdp", new Blob([sdp], { type: "application/sdp" }), "offer.sdp");
-    return;
-  }
-  formData.set("sdp", sdp);
+function buildMultipartFormBody(fields) {
+  const boundary = `----braino-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const body =
+    Object.entries(fields)
+      .map(([name, value]) => {
+        return [
+          `--${boundary}`,
+          `Content-Disposition: form-data; name="${name}"`,
+          "",
+          String(value || ""),
+        ].join("\r\n");
+      })
+      .join("\r\n") + `\r\n--${boundary}--\r\n`;
+  return {
+    body,
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
 }
 
 async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
@@ -1203,9 +1214,10 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
     };
   }
 
-  const formData = new FormData();
-  appendRealtimeSdp(formData, sdp);
-  formData.set("session", JSON.stringify({ ...buildRealtimeSessionConfig(), model: requestedModel }));
+  const multipart = buildMultipartFormBody({
+    sdp,
+    session: JSON.stringify({ ...buildRealtimeSessionConfig(), model: requestedModel }),
+  });
 
   logMac("realtime.create.transport", {
     transport: "openai-direct",
@@ -1215,8 +1227,9 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
     method: "POST",
     headers: {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": multipart.contentType,
     },
-    body: formData,
+    body: multipart.body,
   });
   const answerSdp = await response.text();
   if (!response.ok) {
