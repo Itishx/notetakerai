@@ -1,4 +1,4 @@
-# Braino Mac Prototype
+# Braino Mac Companion
 
 Experimental Electron shell for a Mac-native Braino.
 

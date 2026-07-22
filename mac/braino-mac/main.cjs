@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.15";
+const APP_VERSION = "12.0.16";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -1487,12 +1487,12 @@ async function runDelegate(prompt) {
 
   if (/\bchrome\b|\bbrowser\b|\bsearch\b|\bopen\b/.test(text)) {
     await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(raw)}`);
-    return { ok: true, say: `I did not have a specific adapter for that yet, so I searched it in Chrome.` };
+    return { ok: true, say: "I do not know that exact move yet, so I searched it in Chrome." };
   }
 
   return {
     ok: true,
-    say: "For the Mac prototype, I can organize your Desktop, open apps, search the web in Chrome, find documents with Spotlight, open files, and tell you the front window. Give me one of those.",
+    say: "I am here. I can tidy your Desktop, open apps, search Chrome, find documents, open files, or tell you what window is in front. Give me a real task and I will move.",
   };
 }
 
@@ -1610,5 +1610,5 @@ app.on("will-quit", () => {
 });
 
 app.on("window-all-closed", () => {
-  // Keep the menu-barless companion process alive during this prototype.
+  // Keep the menu-barless companion process alive while Braino is on screen.
 });

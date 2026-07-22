@@ -40,6 +40,7 @@ let rtDc = null;
 let rtMic = null;
 let rtRemoteAudio = null;
 let rtUserTranscript = "";
+let rtTranscriptFlushTimer = 0;
 let rtUsageSessionId = null;
 let rtHeartbeatTimer = null;
 let realtimeActive = false;
@@ -256,8 +257,9 @@ function shouldAcceptVoiceTranscript(text) {
   if (!stats.normalized || stats.wordCount === 0) return false;
   if (isSelfEcho(text) && !voiceAddressesBraino(text)) return false;
   if ((speaking || processing || voiceTurnInFlight) && !voiceAddressesBraino(text)) return false;
-  if (stats.wordCount <= 2 && !voiceAddressesBraino(text)) return false;
-  if (stats.normalized.length < 5 && !voiceAddressesBraino(text)) return false;
+  if (/^(hi|hello|hey|yo|braino|bruno|breno|reno)$/i.test(stats.normalized)) return true;
+  if (stats.wordCount === 1 && !voiceAddressesBraino(text)) return false;
+  if (stats.normalized.length < 3 && !voiceAddressesBraino(text)) return false;
   if (/^(uh|um|hmm|huh|yeah|okay|ok|no|yes|thanks?|thank you)$/i.test(stats.normalized)) return false;
   return true;
 }
@@ -484,6 +486,7 @@ function stopRealtimeVoice() {
   rtMic = null;
   rtRemoteAudio = null;
   rtUserTranscript = "";
+  clearRealtimeTranscriptFlush();
   realtimeActive = false;
   realtimeConnecting = false;
   voiceTurnInFlight = false;
@@ -497,6 +500,57 @@ function stopRealtimeVoice() {
   }
   if (hadRealtime) endRealtimeUsageSession("mac_client_stop");
   if (listening) listening = false;
+}
+
+function clearRealtimeTranscriptFlush() {
+  if (rtTranscriptFlushTimer) {
+    window.clearTimeout(rtTranscriptFlushTimer);
+    rtTranscriptFlushTimer = 0;
+  }
+}
+
+function scheduleRealtimeTranscriptFlush(reason, delay = 900) {
+  clearRealtimeTranscriptFlush();
+  rtTranscriptFlushTimer = window.setTimeout(() => {
+    rtTranscriptFlushTimer = 0;
+    flushRealtimeTranscript(reason);
+  }, delay);
+}
+
+function flushRealtimeTranscript(reason) {
+  const transcript = String(rtUserTranscript || "").trim();
+  rtUserTranscript = "";
+  clearRealtimeTranscriptFlush();
+  const accepted = shouldAcceptVoiceTranscript(transcript);
+  logRenderer("realtime.transcript.flush", {
+    reason,
+    transcriptChars: transcript.length,
+    accepted,
+    voiceTurnInFlight,
+  });
+  if (!transcript) {
+    setStatus("listening", "Listening");
+    return;
+  }
+  if (voiceTurnInFlight || !accepted) {
+    if (speaking || processing || voiceTurnInFlight) {
+      setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
+    } else {
+      setStatus("listening", "Listening");
+    }
+    return;
+  }
+  if (speaking) stopSpeechOutput();
+  voiceTurnInFlight = true;
+  setRealtimeMicEnabled(false);
+  void runDelegate(transcript, { keepRealtime: true }).finally(() => {
+    voiceTurnInFlight = false;
+    setRealtimeMicEnabled(true);
+    if (realtimeActive) {
+      listening = true;
+      setStatus("listening", "Listening");
+    }
+  });
 }
 
 function setRealtimeMicEnabled(on) {
@@ -523,6 +577,7 @@ function handleRealtimeEvent(event) {
 
   if (event.type === "input_audio_buffer.speech_started") {
     rtUserTranscript = "";
+    clearRealtimeTranscriptFlush();
     if (speaking || processing || voiceTurnInFlight) {
       setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
       return;
@@ -539,49 +594,23 @@ function handleRealtimeEvent(event) {
     }
     setStatus("captured", "Got it");
     setBubble("Got it.", 900);
+    scheduleRealtimeTranscriptFlush("speech_stopped", 750);
     return;
   }
 
   if (event.type === "conversation.item.input_audio_transcription.delta") {
-    if (typeof event.delta === "string" && event.delta) {
-      rtUserTranscript += event.delta;
+    const delta = typeof event.delta === "string" ? event.delta : "";
+    if (delta) {
+      rtUserTranscript += delta;
       setBubble(rtUserTranscript.trim() || "Listening...", 0);
+      scheduleRealtimeTranscriptFlush("transcript_idle", 1600);
     }
     return;
   }
 
   if (event.type === "conversation.item.input_audio_transcription.completed") {
-    const transcript = String(event.transcript || rtUserTranscript || "").trim();
-    rtUserTranscript = "";
-    logRenderer("realtime.transcript.completed", {
-      transcriptChars: transcript.length,
-      accepted: shouldAcceptVoiceTranscript(transcript),
-      voiceTurnInFlight,
-    });
-    if (!transcript) {
-      setStatus("listening", "Listening");
-      return;
-    }
-    if (voiceTurnInFlight || !shouldAcceptVoiceTranscript(transcript)) {
-      if (speaking || processing || voiceTurnInFlight) {
-        setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
-      } else {
-        setStatus("listening", "Listening");
-        setBubble("Still listening.", 900);
-      }
-      return;
-    }
-    if (speaking) stopSpeechOutput();
-    voiceTurnInFlight = true;
-    setRealtimeMicEnabled(false);
-    void runDelegate(transcript, { keepRealtime: true }).finally(() => {
-      voiceTurnInFlight = false;
-      setRealtimeMicEnabled(true);
-      if (realtimeActive) {
-        listening = true;
-        setStatus("listening", "Listening");
-      }
-    });
+    rtUserTranscript = String(event.transcript || rtUserTranscript || "");
+    flushRealtimeTranscript("completed");
     return;
   }
 
@@ -614,7 +643,7 @@ function getLocalOfferSdp(pc, fallbackOffer = null) {
     pc?.pendingLocalDescription?.sdp ||
     fallbackOffer?.sdp ||
     ""
-  ).trim();
+  );
 }
 
 function isLikelyRealtimeOfferSdp(sdp) {
