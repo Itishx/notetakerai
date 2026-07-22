@@ -51,6 +51,7 @@ let speechGeneration = 0;
 let lastSpokenLine = { text: "", ts: 0 };
 let scriptedWalk = null;
 let authPose = false;
+let startupActive = false;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -105,8 +106,10 @@ function applyDisplayMetrics(metrics) {
 function setPosition(x, y, options = {}) {
   const bounds = getMoveBounds();
   const minX = options.allowOffscreen ? START_OFFSCREEN_X : bounds.minX;
+  const minY = options.allowOffscreen ? -H - 36 : bounds.minY;
+  const maxY = options.allowOffscreen ? window.innerHeight + H + 36 : bounds.maxY;
   posX = clamp(x, minX, bounds.maxX);
-  posY = clamp(y, bounds.minY, bounds.maxY);
+  posY = clamp(y, minY, maxY);
 }
 
 function wait(ms) {
@@ -949,62 +952,73 @@ function toggleVoice() {
 }
 
 async function runStartupSequence(config = {}) {
-  applyDisplayMetrics(config.displayMetrics);
-  const dock = getDockBounds();
-  movementMode = "dock";
-  setPosition(START_OFFSCREEN_X, dock.y, { allowOffscreen: true });
-  targetX = Math.min(dock.minX + 150, dock.maxX);
-  targetY = dock.y;
-  dirX = 1;
-  walker.classList.add("visible");
+  startupActive = true;
+  try {
+    applyDisplayMetrics(config.displayMetrics);
+    const dock = getDockBounds();
+    movementMode = "dock";
 
-  setStatus("connecting", "Starting");
-  await wait(160);
-  await walkTo(targetX, targetY, { speed: 58, allowOffscreen: true });
-  setWave(true);
-  await wait(620);
+    const perchX = clamp(Math.round(window.innerWidth * 0.5 - W / 2), dock.minX, dock.maxX);
+    const entryX = clamp(perchX - 142, dock.minX, dock.maxX);
+    const underDockY = Math.min(window.innerHeight + 18, dock.y + 72);
+    setPosition(entryX - 40, window.innerHeight + 24, { allowOffscreen: true });
+    targetX = perchX;
+    targetY = dock.y;
+    dirX = 1;
+    walker.classList.add("visible");
 
-  setAuthPose(true);
-  setStatus("connecting", "Authenticating");
-  setBubble("Let me authenticate you first.", 2600);
+    setStatus("connecting", "Starting");
+    await wait(180);
+    await walkTo(entryX, underDockY, { speed: 62, allowOffscreen: true });
+    await walkTo(perchX, underDockY, { speed: 58, allowOffscreen: true });
+    await walkTo(perchX, dock.y, { speed: 54, allowOffscreen: true });
+    setWave(true);
+    await wait(620);
 
-  const authResult = await window.brainoMac.ensureAuth("startup").catch((error) => ({
-    ok: false,
-    error: error?.message || "Braino sign-in failed.",
-  }));
-  logRenderer("startup.auth.result", {
-    ok: Boolean(authResult?.ok),
-    source: authResult?.source || "unknown",
-    error: authResult?.error || null,
-  });
+    setAuthPose(true);
+    setStatus("connecting", "Authenticating");
+    setBubble("allow me to authenticate you", 2600);
 
-  setAuthPose(false);
-  if (authResult?.ok) {
-    flashAuthSuccess();
-    const auth = await window.brainoMac.authStatus().catch(() => null);
-    const label = auth?.displayName || "";
-    setStatus("ready", "Double Space to show/hide");
-    setBubble(label ? `Hello, ${label}.` : "Authenticated. I am on the Dock now.", 1900);
-  } else {
-    setStatus("error", "Auth needed");
-    setBubble(`Sign-in did not finish: ${authResult?.error || "try again when the browser page opens."}`, 4200);
+    const authResult = await window.brainoMac.ensureAuth("startup").catch((error) => ({
+      ok: false,
+      error: error?.message || "Braino sign-in failed.",
+    }));
+    logRenderer("startup.auth.result", {
+      ok: Boolean(authResult?.ok),
+      source: authResult?.source || "unknown",
+      error: authResult?.error || null,
+    });
+
+    setAuthPose(false);
+    if (authResult?.ok) {
+      flashAuthSuccess();
+      const auth = await window.brainoMac.authStatus().catch(() => null);
+      const label = auth?.displayName || "";
+      setStatus("ready", "Ready");
+      setBubble(label ? `Hello, ${label}.` : "Authenticated. I am on the Dock now.", 1900);
+    } else {
+      setStatus("error", "Auth needed");
+      setBubble(`Sign-in did not finish: ${authResult?.error || "try again when the browser page opens."}`, 4200);
+    }
+
+    await wait(900);
+    let trusted = Boolean(config.accessibilityTrusted);
+    if (!trusted) {
+      const requested = await window.brainoMac.requestAccessibility().catch(() => null);
+      trusted = Boolean(requested?.accessibilityTrusted);
+    }
+
+    if (!trusted) {
+      setStatus("ready", "Grant Accessibility for double Control");
+      setBubble("Give Braino Accessibility permission so double Control works cleanly.", 3400);
+    } else if (authResult?.ok) {
+      setStatus("ready", "Ready");
+    }
+
+    pickRoamTarget();
+  } finally {
+    startupActive = false;
   }
-
-  await wait(900);
-  let trusted = Boolean(config.accessibilityTrusted);
-  if (!trusted) {
-    const requested = await window.brainoMac.requestAccessibility().catch(() => null);
-    trusted = Boolean(requested?.accessibilityTrusted);
-  }
-
-  if (!trusted) {
-    setStatus("ready", "Grant Accessibility for double Control");
-    setBubble("Give Braino Accessibility permission so double Control works cleanly.", 3400);
-  } else if (authResult?.ok) {
-    setStatus("ready", "Double Control ready");
-  }
-
-  pickRoamTarget();
 }
 
 function handleDragMove(event) {
@@ -1160,7 +1174,7 @@ window.brainoMac.onVoiceToggle(() => toggleVoice());
 window.brainoMac.onAuthRequired(() => {
   setAuthPose(true);
   setStatus("connecting", "Authenticating");
-  setBubble("Let me authenticate you first.", 2600);
+  setBubble("allow me to authenticate you", 2600);
   setWave(true);
 });
 window.brainoMac.onTaskProgress((progress) => {
@@ -1178,9 +1192,12 @@ window.brainoMac.onSpeechTranscript((speech) => {
 });
 window.brainoMac.onHelperStatus((status) => {
   const line = status?.line || "";
+  if (startupActive) {
+    logRenderer("helper.status.deferred", { line, type: status?.type || "" });
+    return;
+  }
   if (line === "braino-control-tap-ready") {
-    setStatus("ready", "Double Control ready");
-    setBubble("Double Control is ready.", 1800);
+    setStatus("ready", "Ready");
     return;
   }
   if (line === "needs-accessibility" || line === "event-tap-unavailable") {

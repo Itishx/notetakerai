@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.13";
+const APP_VERSION = "12.0.14";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -1109,23 +1109,122 @@ function getSdpStats(sdp) {
   };
 }
 
-function buildMultipartFormBody(fields) {
-  const boundary = `----braino-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const body =
-    Object.entries(fields)
-      .map(([name, value]) => {
-        return [
-          `--${boundary}`,
-          `Content-Disposition: form-data; name="${name}"`,
-          "",
-          String(value || ""),
-        ].join("\r\n");
-      })
-      .join("\r\n") + `\r\n--${boundary}--\r\n`;
+function extractRealtimeClientSecret(payload) {
+  if (typeof payload?.clientSecret === "string") return payload.clientSecret;
+  if (typeof payload?.value === "string") return payload.value;
+  const nested = payload?.client_secret;
+  if (typeof nested === "string") return nested;
+  if (nested && typeof nested === "object" && typeof nested.value === "string") return nested.value;
+  return "";
+}
+
+function buildRealtimeClientSecretPayload(requestedModel) {
   return {
-    body,
-    contentType: `multipart/form-data; boundary=${boundary}`,
+    session: {
+      ...buildRealtimeSessionConfig(),
+      model: requestedModel,
+    },
   };
+}
+
+async function createRealtimeClientSecretFromSupabase({ authToken, requestedModel, voiceEngine }) {
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-call`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${authToken}`,
+      "X-Braino-Realtime-Model": requestedModel,
+    },
+    body: JSON.stringify({
+      action: "client_secret",
+      voiceEngine: voiceEngine || "fish",
+    }),
+  });
+  const raw = await response.text();
+  let parsed = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch (_) {}
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: parsed?.details || parsed?.error || raw || `Realtime client secret failed (${response.status}).`,
+    };
+  }
+  const clientSecret = extractRealtimeClientSecret(parsed);
+  if (!clientSecret) {
+    return { ok: false, error: "Realtime client secret response was missing the client secret." };
+  }
+  return {
+    ok: true,
+    clientSecret,
+    sessionId: parsed?.sessionId || null,
+    realtimeModel: parsed?.realtimeModel || requestedModel,
+    transcriptionModel: parsed?.transcriptionModel || "gpt-4o-transcribe",
+  };
+}
+
+async function createRealtimeClientSecretFromOpenAi({ requestedModel }) {
+  const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(buildRealtimeClientSecretPayload(requestedModel)),
+  });
+  const raw = await response.text();
+  let parsed = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch (_) {}
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: parsed?.error?.message || parsed?.message || raw || `OpenAI realtime client secret failed (${response.status}).`,
+    };
+  }
+  const clientSecret = extractRealtimeClientSecret(parsed);
+  if (!clientSecret) {
+    return { ok: false, error: "OpenAI realtime client secret response was missing the client secret." };
+  }
+  return {
+    ok: true,
+    clientSecret,
+    sessionId: null,
+    realtimeModel: requestedModel,
+    transcriptionModel: "gpt-4o-transcribe",
+  };
+}
+
+async function exchangeRealtimeOfferWithOpenAi({ sdp, clientSecret, requestedModel, transport }) {
+  const response = await fetch("https://api.openai.com/v1/realtime/calls", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${clientSecret}`,
+      "Content-Type": "application/sdp",
+    },
+    body: sdp,
+  });
+  const answerSdp = await response.text();
+  if (!response.ok) {
+    let message = `OpenAI realtime failed (${response.status}).`;
+    try {
+      const parsed = JSON.parse(answerSdp);
+      message = parsed?.error?.message || parsed?.message || message;
+    } catch (_) {
+      if (answerSdp) message = answerSdp;
+    }
+    logMac("realtime.create.openai_failed", {
+      status: response.status,
+      error: message,
+      requestedModel,
+      transport,
+    });
+    return { ok: false, error: message };
+  }
+  return { ok: true, answerSdp };
 }
 
 async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
@@ -1157,48 +1256,42 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
 
   if (authToken && SUPABASE_URL && SUPABASE_ANON_KEY) {
     logMac("realtime.create.transport", {
-      transport: "supabase",
+      transport: "supabase-ephemeral",
       requestedModel,
     });
-    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-call`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/sdp",
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${authToken}`,
-        "X-Braino-Realtime-Model": requestedModel,
-      },
-      body: sdp,
+    const secretResult = await createRealtimeClientSecretFromSupabase({
+      authToken,
+      requestedModel,
+      voiceEngine,
     });
-    const answerSdp = await response.text();
-    if (!response.ok) {
-      let message = `Realtime failed (${response.status}).`;
-      try {
-        const parsed = JSON.parse(answerSdp);
-        message = parsed.details || parsed.error || message;
-      } catch (_) {
-        if (answerSdp) message = answerSdp;
-      }
-      logMac("realtime.create.supabase_failed", {
-        status: response.status,
-        error: message,
-        ...getSdpStats(sdp),
+    if (!secretResult?.ok) {
+      logMac("realtime.create.client_secret_failed", {
+        transport: "supabase-ephemeral",
+        error: secretResult?.error || "missing client secret",
       });
-      return { ok: false, error: message };
+      return { ok: false, error: secretResult?.error || "Realtime client secret failed." };
     }
-    logMac("realtime.create.supabase_ok", {
-      status: response.status,
-      sessionId: response.headers.get("x-braino-realtime-session-id") || null,
-      realtimeModel: response.headers.get("x-braino-realtime-model") || requestedModel,
-      transcriptionModel: response.headers.get("x-braino-realtime-transcription-model") || "gpt-4o-transcribe",
+    const exchange = await exchangeRealtimeOfferWithOpenAi({
+      sdp,
+      clientSecret: secretResult.clientSecret,
+      requestedModel: secretResult.realtimeModel || requestedModel,
+      transport: "supabase-ephemeral",
+    });
+    if (!exchange.ok) {
+      return exchange;
+    }
+    logMac("realtime.create.supabase_ephemeral_ok", {
+      sessionId: secretResult.sessionId || null,
+      realtimeModel: secretResult.realtimeModel || requestedModel,
+      transcriptionModel: secretResult.transcriptionModel || "gpt-4o-transcribe",
     });
     return {
       ok: true,
-      answerSdp,
-      transport: "supabase",
-      sessionId: response.headers.get("x-braino-realtime-session-id") || null,
-      realtimeModel: response.headers.get("x-braino-realtime-model") || requestedModel,
-      transcriptionModel: response.headers.get("x-braino-realtime-transcription-model") || "gpt-4o-transcribe",
+      answerSdp: exchange.answerSdp,
+      transport: "supabase-ephemeral",
+      sessionId: secretResult.sessionId || null,
+      realtimeModel: secretResult.realtimeModel || requestedModel,
+      transcriptionModel: secretResult.transcriptionModel || "gpt-4o-transcribe",
     };
   }
 
@@ -1214,47 +1307,37 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
     };
   }
 
-  const multipart = buildMultipartFormBody({
-    sdp,
-    session: JSON.stringify({ ...buildRealtimeSessionConfig(), model: requestedModel }),
-  });
-
   logMac("realtime.create.transport", {
-    transport: "openai-direct",
+    transport: "openai-direct-ephemeral",
     requestedModel,
   });
-  const response = await fetch("https://api.openai.com/v1/realtime/calls", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": multipart.contentType,
-    },
-    body: multipart.body,
+  const secretResult = await createRealtimeClientSecretFromOpenAi({
+    requestedModel,
   });
-  const answerSdp = await response.text();
-  if (!response.ok) {
-    let message = `OpenAI realtime failed (${response.status}).`;
-    try {
-      const parsed = JSON.parse(answerSdp);
-      message = parsed?.error?.message || parsed?.message || message;
-    } catch (_) {
-      if (answerSdp) message = answerSdp;
-    }
-    logMac("realtime.create.openai_failed", {
-      status: response.status,
-      error: message,
+  if (!secretResult?.ok) {
+    logMac("realtime.create.client_secret_failed", {
+      transport: "openai-direct-ephemeral",
+      error: secretResult?.error || "missing client secret",
     });
-    return { ok: false, error: message };
+    return { ok: false, error: secretResult?.error || "OpenAI realtime client secret failed." };
+  }
+  const exchange = await exchangeRealtimeOfferWithOpenAi({
+    sdp,
+    clientSecret: secretResult.clientSecret,
+    requestedModel,
+    transport: "openai-direct-ephemeral",
+  });
+  if (!exchange.ok) {
+    return exchange;
   }
 
   logMac("realtime.create.openai_ok", {
-    status: response.status,
     requestedModel,
   });
   return {
     ok: true,
-    answerSdp,
-    transport: "openai-direct",
+    answerSdp: exchange.answerSdp,
+    transport: "openai-direct-ephemeral",
     sessionId: null,
     realtimeModel: requestedModel,
     transcriptionModel: "gpt-4o-transcribe",
