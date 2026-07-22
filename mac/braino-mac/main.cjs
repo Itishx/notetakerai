@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.16";
+const APP_VERSION = "12.0.17";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -27,6 +27,7 @@ let lastControlTapAt = 0;
 let cachedAuthSession = null;
 let pendingAuthWaiters = [];
 let authBrowserFlow = null;
+let macChatHistory = [];
 
 function loadDotEnv() {
   const out = {};
@@ -1396,6 +1397,99 @@ async function updateRealtimeSession({ action, sessionId, reason } = {}) {
     : { ok: false, error: data?.error || `Realtime session update failed (${response.status}).` };
 }
 
+function rememberMacChat(role, content) {
+  const text = String(content || "").trim();
+  if (!text) return;
+  macChatHistory.push({ role, content: text });
+  if (macChatHistory.length > 18) macChatHistory = macChatHistory.slice(-18);
+}
+
+function macClientContext() {
+  const now = new Date();
+  let clientTimeZone = null;
+  try {
+    clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch (_) {}
+  return {
+    clientTimeZone,
+    clientUtcOffsetMinutes: now.getTimezoneOffset(),
+    clientLocalTime: now.toISOString(),
+  };
+}
+
+async function runMacConversation(prompt) {
+  const authToken = await getBrainoAuthToken();
+  const auth = authStatusPayload();
+  const context = macClientContext();
+  const body = {
+    notes: "",
+    message: prompt,
+    chatHistory: macChatHistory.slice(-14),
+    pageContext: {
+      title: "Braino on Mac",
+      url: "braino://mac",
+      text: [
+        "The user is talking to Braino from the Mac desktop companion.",
+        "This is normal conversation unless the user asks for a concrete Mac action.",
+        "Keep replies short, warm, alive, and natural for spoken voice.",
+      ].join("\n"),
+    },
+    userId: auth.userId || null,
+    driveConnected: false,
+    ...context,
+  };
+
+  logMac("mac.chat.start", {
+    promptChars: prompt.length,
+    historyTurns: body.chatHistory.length,
+    hasBrainoAuthToken: Boolean(authToken),
+  });
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return {
+      ok: true,
+      say: "I am here. The chat line is not connected yet on this Mac build, but I am listening.",
+    };
+  }
+
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      logMac("mac.chat.failed", {
+        status: response.status,
+        error: data?.error || null,
+      });
+      return {
+        ok: true,
+        say: "I am here. That reply got stuck on the way back. Say it again and I will catch it.",
+      };
+    }
+    const reply = String(data?.reply || "").trim() || "I am here.";
+    rememberMacChat("user", prompt);
+    rememberMacChat("assistant", reply);
+    logMac("mac.chat.done", {
+      replyChars: reply.length,
+      historyTurns: macChatHistory.length,
+    });
+    return { ok: true, say: reply };
+  } catch (error) {
+    logMac("mac.chat.error", { error });
+    return {
+      ok: true,
+      say: "I am here. The chat wire slipped for a second, but I am listening.",
+    };
+  }
+}
+
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
   const text = raw.toLowerCase();
@@ -1490,10 +1584,7 @@ async function runDelegate(prompt) {
     return { ok: true, say: "I do not know that exact move yet, so I searched it in Chrome." };
   }
 
-  return {
-    ok: true,
-    say: "I am here. I can tidy your Desktop, open apps, search Chrome, find documents, open files, or tell you what window is in front. Give me a real task and I will move.",
-  };
+  return runMacConversation(raw);
 }
 
 ipcMain.handle("braino-mac:get-config", () => {
