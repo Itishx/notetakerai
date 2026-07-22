@@ -45,6 +45,7 @@ let rtHeartbeatTimer = null;
 let realtimeActive = false;
 let realtimeConnecting = false;
 let realtimeVoiceEngine = "fish";
+let voiceCycleInFlight = false;
 let voiceTurnInFlight = false;
 let currentSpeechAudio = null;
 let speechGeneration = 0;
@@ -927,7 +928,8 @@ async function startLegacyCommandCapture(reason = "") {
 }
 
 async function startListening() {
-  if (processing || realtimeConnecting) return;
+  if (processing || realtimeConnecting || realtimeActive || voiceCycleInFlight) return;
+  voiceCycleInFlight = true;
   logRenderer("voice.toggle.start_listening");
   try {
     await startRealtimeVoice();
@@ -937,6 +939,8 @@ async function startListening() {
     setBubble(`Voice error: ${error?.message || "realtime failed"}`, 3600);
     await new Promise((resolve) => window.setTimeout(resolve, 900));
     await startLegacyCommandCapture(error?.message || "");
+  } finally {
+    voiceCycleInFlight = false;
   }
 }
 

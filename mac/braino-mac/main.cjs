@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.14";
+const APP_VERSION = "12.0.15";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -1106,7 +1106,15 @@ function getSdpStats(sdp) {
     mediaLineCount: (text.match(/^m=/gm) || []).length,
     hasAudioLine: /^m=audio\s/m.test(text),
     hasApplicationLine: /^m=application\s/m.test(text),
+    endsWithLineBreak: /\r?\n$/.test(text),
   };
+}
+
+function normalizeRealtimeSdp(rawSdp) {
+  const text = String(rawSdp || "");
+  if (!text.trim()) return "";
+  const withCrLf = text.replace(/\r?\n/g, "\r\n");
+  return withCrLf.endsWith("\r\n") ? withCrLf : `${withCrLf}\r\n`;
 }
 
 function extractRealtimeClientSecret(payload) {
@@ -1228,7 +1236,7 @@ async function exchangeRealtimeOfferWithOpenAi({ sdp, clientSecret, requestedMod
 }
 
 async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
-  const sdp = String(offerSdp || "").trim();
+  const sdp = normalizeRealtimeSdp(offerSdp);
   let authToken = await getBrainoAuthToken();
   logMac("realtime.create.start", {
     voiceEngine: voiceEngine || "fish",
