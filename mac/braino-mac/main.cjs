@@ -1690,6 +1690,25 @@ async function handlePendingMacWorkflow(raw) {
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
+  if (pending.type === "whatsapp") {
+    clearPendingMacWorkflow();
+    if (pending.stage === "whatsapp_recipient") {
+      const recipient = cleanPrompt(raw).replace(/^(?:to\s+|my\s+)+/i, "").trim();
+      if (!recipient) return { ok: true, say: "I did not catch the name. Who is it for?" };
+      const message = pending.data?.message || "";
+      if (!message) {
+        setPendingMacWorkflow({ type: "whatsapp", stage: "whatsapp_message", data: { recipient } });
+        return { ok: true, say: `What should I say to ${recipient}?` };
+      }
+      return sendWhatsAppMessage(recipient, message);
+    }
+    if (pending.stage === "whatsapp_message") {
+      const message = String(raw || "").trim().replace(/^(?:say|tell (?:her|him|them)|saying)\s+/i, "");
+      if (!message) return { ok: true, say: "I did not catch the message. Say it once more?" };
+      return sendWhatsAppMessage(pending.data?.recipient || "", message);
+    }
+  }
+
   if (pending.type === "spotify_add") {
     clearPendingMacWorkflow();
     const reply = cleanPrompt(raw);
@@ -2151,6 +2170,155 @@ async function runScreenVision(question) {
     logMac("vision.failed", { error });
     return { ok: false, say: "I could not make sense of the screen just now. Try once more." };
   }
+}
+
+const WHATSAPP_CONTACTS_PATH = path.join(AUTH_STORE_DIR, "whatsapp-contacts.json");
+
+function loadWhatsAppContacts() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(WHATSAPP_CONTACTS_PATH, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveWhatsAppContact(alias, entry) {
+  const contacts = loadWhatsAppContacts();
+  contacts[String(alias || "").toLowerCase().trim()] = entry;
+  fs.writeFileSync(WHATSAPP_CONTACTS_PATH, JSON.stringify(contacts, null, 2));
+  logMac("whatsapp.contact.saved", { alias: textForLog(alias), hasPhone: Boolean(entry?.phone), name: textForLog(entry?.name || "") });
+}
+
+function parseWhatsAppRememberIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  const phoneMatch = source.match(/\b(?:remember|save)\s+(?:that\s+)?(?:my\s+)?(.+?)(?:'s)?\s+(?:whatsapp\s+)?(?:phone\s+)?number\s+is\s+([+\d][\d\s\-()]{6,})\s*$/i);
+  if (phoneMatch?.[1] && phoneMatch?.[2]) {
+    return { alias: phoneMatch[1].trim(), phone: phoneMatch[2].replace(/[^\d+]/g, "") };
+  }
+  const nameMatch = source.match(/\bremember\s+(?:that\s+)?my\s+(.+?)\s+is\s+(?:called\s+)?([a-z][a-z .'-]{1,40})\s*$/i);
+  if (nameMatch?.[1] && nameMatch?.[2] && /\b(mom|mum|dad|father|mother|brother|sister|wife|husband|girlfriend|boyfriend|best friend|friend|boss|uncle|aunt|grandma|grandpa)\b/i.test(nameMatch[1])) {
+    return { alias: nameMatch[1].trim(), name: nameMatch[2].trim() };
+  }
+  return null;
+}
+
+function parseWhatsAppIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\bwhats\s*app\b/i.test(source)) return null;
+  const messageMatch = source.match(/\b(?:saying|that says|which says|telling (?:her|him|them)|telling|tell (?:her|him|them))\s+["“]?(.+?)["”]?\s*$/i);
+  const message = messageMatch?.[1]?.trim() || "";
+  let recipient = "";
+  const patterns = [
+    /\bsend\s+(?:a\s+)?(?:whatsapp\s+)?message\s+to\s+(?:my\s+)?(.+?)\s+(?:on\s+whats\s*app\s+)?(?:saying|that says|telling|tell)\b/i,
+    /\bsend\s+(?:my\s+)?(.+?)\s+a\s+(?:whatsapp\s+)?message\b/i,
+    /\b(?:message|whatsapp|text)\s+(?:my\s+)?(.+?)\s+(?:on\s+whats\s*app\s+)?(?:saying|that says|telling|tell)\b/i,
+    /\bsend\s+(?:a\s+)?(?:whatsapp\s+)?message\s+to\s+(?:my\s+)?(.+?)\s*$/i,
+    /\b(?:message|whatsapp|text)\s+(?:my\s+)?([a-z .'-]{2,30})\s*$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    if (match?.[1]) {
+      recipient = match[1].replace(/\bon\s+whats\s*app\b/gi, "").replace(/["“”]/g, "").replace(/\s+/g, " ").trim();
+      break;
+    }
+  }
+  if (!recipient && !message) return null;
+  return { recipient, message, needsMessage: !message, needsRecipient: !recipient };
+}
+
+async function resolveWhatsAppRecipient(recipientRaw) {
+  const key = String(recipientRaw || "").toLowerCase().trim();
+  if (!key) return { ok: false, error: "empty recipient" };
+  const contacts = loadWhatsAppContacts();
+  const alias = contacts[key];
+  if (alias?.phone) return { ok: true, name: alias.name || recipientRaw, phone: alias.phone, source: "alias" };
+
+  const lookupName = alias?.name || recipientRaw;
+  // Contacts must be running or the query throws -600; launch it hidden first.
+  try {
+    await execFileP("/usr/bin/open", ["-gja", "Contacts"], { timeout: 4000 });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  } catch (_) {}
+  const script = `
+tell application "Contacts"
+  set matches to (every person whose name contains "${escapeAppleScriptString(lookupName)}")
+  repeat with p in matches
+    if (count of phones of p) > 0 then
+      return (name of p) & linefeed & (value of first phone of p)
+    end if
+  end repeat
+  return ""
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });
+    const [name = "", phone = ""] = String(stdout || "").trim().split(/\r?\n/);
+    if (phone.trim()) {
+      logMac("whatsapp.contact.resolved", { query: textForLog(lookupName), name: textForLog(name), source: "contacts" });
+      return { ok: true, name: name || lookupName, phone: phone.trim(), source: "contacts" };
+    }
+  } catch (error) {
+    logMac("whatsapp.contacts.lookup_failed", { query: textForLog(lookupName), error });
+  }
+  return { ok: false, error: `no number for ${lookupName}` };
+}
+
+function normalizeWhatsAppPhone(phone) {
+  let digits = String(phone || "").replace(/[^\d+]/g, "");
+  if (digits.startsWith("+")) digits = digits.slice(1);
+  // Bare 10-digit numbers are assumed local Indian mobiles.
+  if (/^\d{10}$/.test(digits)) digits = `91${digits}`;
+  return digits;
+}
+
+async function sendWhatsAppMessage(recipientRaw, message) {
+  const text = String(message || "").trim();
+  if (!text) return { ok: false, say: "Tell me what the message should say." };
+  sendTaskProgress({ status: "thinking", text: `Messaging ${recipientRaw}` });
+
+  const resolved = await resolveWhatsAppRecipient(recipientRaw);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      say: `I could not find a number for ${recipientRaw}. Say "Braino, remember ${recipientRaw}'s number is" and the number, and I will keep it.`,
+    };
+  }
+  const phone = normalizeWhatsAppPhone(resolved.phone);
+  if (!phone || phone.length < 10) {
+    return { ok: false, say: `The number I have for ${resolved.name} does not look complete. Teach me the full number with country code.` };
+  }
+
+  const wasRunning = await isMacApplicationRunning("WhatsApp");
+  await shell.openExternal(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`);
+  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 1600 : 3400));
+
+  const pressEnter = `
+tell application "System Events"
+  if not (exists application process "WhatsApp") then return "no-app"
+  tell application process "WhatsApp"
+    set frontmost to true
+    delay 0.25
+    key code 36
+  end tell
+  return "sent"
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", pressEnter], { timeout: 8000 });
+    if (!/sent/.test(String(stdout))) throw new Error(String(stdout || "WhatsApp is not open."));
+  } catch (error) {
+    logMac("whatsapp.send.enter_failed", { error });
+    return {
+      ok: false,
+      say: `I opened the chat with ${resolved.name} and typed the message, but could not press send. It is sitting in the box, just hit enter.`,
+    };
+  }
+  logMac("whatsapp.sent", {
+    recipient: textForLog(resolved.name),
+    source: resolved.source,
+    messageChars: text.length,
+  });
+  sendTaskProgress({ status: "done", text: `Sent to ${resolved.name}` });
+  return { ok: true, say: `Sent "${text}" to ${resolved.name} on WhatsApp.` };
 }
 
 function parseScreenPointIntent(raw) {
@@ -4916,6 +5084,46 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       hasBody: Boolean(noteIntent.body),
     });
     return startNoteWorkflow(noteIntent);
+  }
+
+  const whatsAppRemember = parseWhatsAppRememberIntent(raw);
+  if (whatsAppRemember) {
+    logMac("delegate.whatsapp_remember_intent", {
+      alias: textForLog(whatsAppRemember.alias),
+      hasPhone: Boolean(whatsAppRemember.phone),
+    });
+    const existing = loadWhatsAppContacts()[whatsAppRemember.alias.toLowerCase()] || {};
+    saveWhatsAppContact(whatsAppRemember.alias, {
+      ...existing,
+      ...(whatsAppRemember.name ? { name: whatsAppRemember.name } : {}),
+      ...(whatsAppRemember.phone ? { phone: whatsAppRemember.phone } : {}),
+    });
+    return {
+      ok: true,
+      say: whatsAppRemember.phone
+        ? `Got it. ${whatsAppRemember.alias} is saved with that number.`
+        : `Got it. Your ${whatsAppRemember.alias} is ${whatsAppRemember.name}.`,
+    };
+  }
+
+  const whatsAppIntent = parseWhatsAppIntent(raw);
+  if (whatsAppIntent) {
+    logMac("delegate.whatsapp_intent", {
+      raw: textForLog(raw),
+      recipient: textForLog(whatsAppIntent.recipient || ""),
+      messageChars: (whatsAppIntent.message || "").length,
+      needsMessage: whatsAppIntent.needsMessage,
+      needsRecipient: whatsAppIntent.needsRecipient,
+    });
+    if (whatsAppIntent.needsRecipient) {
+      setPendingMacWorkflow({ type: "whatsapp", stage: "whatsapp_recipient", data: { message: whatsAppIntent.message || "" } });
+      return { ok: true, say: "Sure. Who should I send it to on WhatsApp?" };
+    }
+    if (whatsAppIntent.needsMessage) {
+      setPendingMacWorkflow({ type: "whatsapp", stage: "whatsapp_message", data: { recipient: whatsAppIntent.recipient } });
+      return { ok: true, say: `What should I say to ${whatsAppIntent.recipient}?` };
+    }
+    return sendWhatsAppMessage(whatsAppIntent.recipient, whatsAppIntent.message);
   }
 
   const mailIntent = parseMailIntent(raw);
