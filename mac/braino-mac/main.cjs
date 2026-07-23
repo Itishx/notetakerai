@@ -2030,6 +2030,129 @@ function parseSpotifyAddTrackIntent(raw) {
   return null;
 }
 
+async function captureScreenBase64() {
+  const filePath = path.join(app.getPath("temp"), `braino-screen-${Date.now()}.png`);
+  try {
+    await execFileP("/usr/sbin/screencapture", ["-x", filePath], { timeout: 8000 });
+    // Downscale before upload: caps image tokens and keeps the JSON body small.
+    try {
+      await execFileP("/usr/bin/sips", ["-Z", "1440", filePath], { timeout: 8000 });
+    } catch (resizeError) {
+      logMac("vision.capture.resize_failed", { error: resizeError });
+    }
+    const buffer = await fs.promises.readFile(filePath);
+    if (!buffer?.length) throw new Error("empty screenshot");
+    logMac("vision.capture.done", { bytes: buffer.length });
+    return { ok: true, base64: buffer.toString("base64") };
+  } catch (error) {
+    logMac("vision.capture.failed", { error });
+    return { ok: false, error: "Screen capture failed. Check Screen Recording permission for Braino." };
+  } finally {
+    fs.promises.unlink(filePath).catch(() => {});
+  }
+}
+
+function parseScreenVisionIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
+  if (!source) return null;
+  const patterns = [
+    /\b(?:read|summarize|summarise|explain|translate)\s+(?:this|that|the)\b/i,
+    /\b(?:read|summarize|summarise)\s+(?:it|this)\s+(?:for me|to me|aloud)\b/i,
+    /\b(?:look at|check)\s+(?:my\s+)?screen\b/i,
+    /\bwhat(?:'s| is)?\s+on\s+(?:my|the)\s+screen\b/i,
+    /\bwhat\s+am\s+i\s+(?:looking at|reading|watching)\b/i,
+    /\bhelp\s+me\s+with\s+(?:this|that)\b/i,
+    /\b(?:can|do)\s+you\s+see\s+(?:this|that|my\s+screen|what\s+i\s+see)\b/i,
+    /\bwhat\s+do\s+you\s+see\b/i,
+    /\bwhat\s+is\s+this\s+(?:page|pdf|document|article|error|code)\b/i,
+  ];
+  if (!patterns.some((pattern) => pattern.test(source))) return null;
+  return { question: String(raw || "").trim() };
+}
+
+async function runScreenVision(question) {
+  const q = String(question || "").trim();
+  const startedAt = Date.now();
+  sendTaskProgress({ status: "thinking", text: "Looking at your screen" });
+
+  const screenStatus = systemPreferences.getMediaAccessStatus?.("screen") || "unknown";
+  if (screenStatus === "denied" || screenStatus === "restricted") {
+    await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
+    return {
+      ok: false,
+      say: "I need Screen Recording permission to see your screen. I opened the setting, turn it on for Braino, then ask me again.",
+    };
+  }
+
+  const shot = await captureScreenBase64();
+  if (!shot.ok) {
+    const summary = await frontWindowSummary();
+    return {
+      ok: true,
+      say: summary
+        ? `I could not capture the screen, but the front window is ${summary}. Check Screen Recording permission so I can actually see it.`
+        : shot.error,
+    };
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, say: "Vision is not configured on this build." };
+  let authToken = await getBrainoAuthToken();
+  if (!authToken) {
+    await ensureBrainoAuth("vision");
+    authToken = await getBrainoAuthToken();
+  }
+
+  const surface = activeMacContext || {};
+  const message = [
+    q || "Describe what is on my screen.",
+    surface.appName
+      ? `Context: the front app is ${surface.appName}${surface.windowTitle ? `, window "${surface.windowTitle}"` : ""}${surface.browserUrl ? `, at ${surface.browserUrl}` : ""}.`
+      : "",
+    "You are looking at a screenshot of the user's Mac screen.",
+    "If asked to read a document or page, read or summarize the visible text faithfully instead of describing the layout.",
+    "Answer for voice: direct and natural, no markdown, no lists.",
+  ].filter(Boolean).join("\n");
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({
+        notes: "",
+        chatHistory: macChatHistory.slice(-6),
+        message,
+        visionMode: "describe",
+        imageBase64: shot.base64,
+        responseMedium: "voice",
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || data?.response || "").trim();
+    if (!response.ok || !reply) throw new Error(data?.error || `vision failed (${response.status}).`);
+    logMac("vision.done", {
+      questionChars: q.length,
+      replyChars: reply.length,
+      durationMs: Date.now() - startedAt,
+      activeApp: surface.appName || "",
+    });
+    rememberMacChat("user", q || "look at my screen");
+    rememberMacChat("assistant", reply);
+    sendTaskProgress({ status: "done", text: "Done" });
+    return { ok: true, say: reply };
+  } catch (error) {
+    logMac("vision.failed", { error });
+    return { ok: false, say: "I could not make sense of the screen just now. Try once more." };
+  }
+}
+
 function stripForSpeech(text) {
   return String(text || "")
     .replace(/\[([^\]]+)\]\((?:[^)]+)\)/g, "$1")
@@ -4786,7 +4909,13 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return { ok: true, say: "Opening Accessibility settings. Give Braino permission there, then double Control gets much cleaner." };
   }
 
-  if (/\b(what do you see|what is open|front window|current app|active app)\b/.test(text)) {
+  const screenVision = parseScreenVisionIntent(raw);
+  if (screenVision) {
+    logMac("delegate.screen_vision_intent", { raw: textForLog(raw) });
+    return runScreenVision(screenVision.question);
+  }
+
+  if (/\b(what is open|front window|current app|active app)\b/.test(text)) {
     const summary = await frontWindowSummary();
     return { ok: true, say: summary ? `I see ${summary}.` : "I could not read the front window yet." };
   }
