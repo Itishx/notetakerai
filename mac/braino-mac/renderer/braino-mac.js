@@ -3079,6 +3079,12 @@ async function pointAtScreen(payload) {
 window.brainoMac.onVoiceToggle(() => toggleVoice());
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
+window.brainoMac.onSpeakLine?.((payload) => {
+  const text = String(payload?.text || "").trim();
+  // Incoming message readouts wait their turn instead of cutting Braino off.
+  if (text && !speaking && !processing) void speak(text);
+  else if (text) window.setTimeout(() => { if (!speaking && !processing) void speak(text); }, 4000);
+});
 window.brainoMac.onAuthRequired(() => {
   setAuthPose(true);
   setStatus("connecting", "Authenticating");

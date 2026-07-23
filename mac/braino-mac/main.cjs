@@ -2190,6 +2190,201 @@ function saveWhatsAppContact(alias, entry) {
   logMac("whatsapp.contact.saved", { alias: textForLog(alias), hasPhone: Boolean(entry?.phone), name: textForLog(entry?.name || "") });
 }
 
+const CONTACTS_CACHE_PATH = path.join(AUTH_STORE_DIR, "contacts-cache.json");
+const WA_LISTENER_STATE_PATH = path.join(AUTH_STORE_DIR, "whatsapp-listener.json");
+const WA_POLL_INTERVAL_MS = 2500;
+let contactsCache = null;
+let waListenerEnabled = false;
+let waLastRecId = 0;
+let waPollTimer = null;
+let waPollBusy = false;
+let lastIncomingWhatsApp = null;
+
+async function importAllContacts(force = false) {
+  try {
+    if (!force) {
+      const stat = await fs.promises.stat(CONTACTS_CACHE_PATH).catch(() => null);
+      if (stat && Date.now() - stat.mtimeMs < 24 * 3600 * 1000) {
+        contactsCache = JSON.parse(await fs.promises.readFile(CONTACTS_CACHE_PATH, "utf8"));
+        logMac("contacts.cache.loaded", { count: Object.keys(contactsCache).length });
+        return;
+      }
+    }
+    await execFileP("/usr/bin/open", ["-gja", "Contacts"], { timeout: 4000 }).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    const script = `
+set out to ""
+tell application "Contacts"
+  repeat with p in every person
+    try
+      if (count of phones of p) > 0 then
+        set out to out & (name of p) & tab & (value of first phone of p) & linefeed
+      end if
+    end try
+  end repeat
+end tell
+return out`;
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 90000, maxBuffer: 8 * 1024 * 1024 });
+    const map = {};
+    for (const line of String(stdout || "").split(/\r?\n/)) {
+      const [name, phone] = line.split("\t");
+      if (name?.trim() && phone?.trim()) map[name.toLowerCase().trim()] = { name: name.trim(), phone: phone.trim() };
+    }
+    if (Object.keys(map).length) {
+      contactsCache = map;
+      await fs.promises.writeFile(CONTACTS_CACHE_PATH, JSON.stringify(map, null, 2));
+      logMac("contacts.imported", { count: Object.keys(map).length });
+    }
+  } catch (error) {
+    logMac("contacts.import_failed", { error });
+  }
+}
+
+function findContactInCache(query) {
+  if (!contactsCache) return null;
+  const q = String(query || "").toLowerCase().trim();
+  if (!q) return null;
+  if (contactsCache[q]) return contactsCache[q];
+  const keys = Object.keys(contactsCache);
+  const starts = keys.find((k) => k.startsWith(q));
+  if (starts) return contactsCache[starts];
+  const contains = keys.find((k) => k.includes(q) || q.includes(k.replace(/[^a-z0-9 ]/g, "").trim()));
+  return contains ? contactsCache[contains] : null;
+}
+
+async function notificationDbPath() {
+  const grouped = path.join(os.homedir(), "Library", "Group Containers", "group.com.apple.usernoted", "db2", "db");
+  if (fs.existsSync(grouped)) return grouped;
+  try {
+    const { stdout } = await execFileP("/usr/bin/getconf", ["DARWIN_USER_DIR"], { timeout: 3000 });
+    return path.join(String(stdout).trim(), "com.apple.notificationcenter", "db2", "db");
+  } catch (_) {
+    return grouped;
+  }
+}
+
+async function queryWhatsAppNotifications(sinceRecId, limit = 8) {
+  const db = await notificationDbPath();
+  const sql = `SELECT r.rec_id || '::' || hex(r.data) FROM record r JOIN app a ON r.app_id = a.app_id WHERE a.identifier LIKE '%whatsapp%' AND r.rec_id > ${Math.max(0, Number(sinceRecId) || 0)} ORDER BY r.rec_id ASC LIMIT ${limit};`;
+  const { stdout } = await execFileP("/usr/bin/sqlite3", ["-readonly", db, sql], { timeout: 6000, maxBuffer: 8 * 1024 * 1024 });
+  const rows = [];
+  for (const line of String(stdout || "").split(/\r?\n/)) {
+    const sep = line.indexOf("::");
+    if (sep < 1) continue;
+    const recId = Number(line.slice(0, sep));
+    const hexData = line.slice(sep + 2).trim();
+    if (!Number.isFinite(recId) || !hexData) continue;
+    const tmp = path.join(app.getPath("temp"), `braino-nc-${recId}.plist`);
+    try {
+      await fs.promises.writeFile(tmp, Buffer.from(hexData, "hex"));
+      const { stdout: jsonOut } = await execFileP("/usr/bin/plutil", ["-convert", "json", "-o", "-", tmp], { timeout: 4000 });
+      const parsed = JSON.parse(jsonOut);
+      const req = parsed?.req || {};
+      rows.push({ recId, sender: String(req.titl || "").trim(), subtitle: String(req.subt || "").trim(), body: String(req.body || "").trim() });
+    } catch (_) {
+    } finally {
+      fs.promises.unlink(tmp).catch(() => {});
+    }
+  }
+  return rows;
+}
+
+function loadWaListenerState() {
+  try {
+    return Boolean(JSON.parse(fs.readFileSync(WA_LISTENER_STATE_PATH, "utf8"))?.enabled);
+  } catch (_) {
+    return false;
+  }
+}
+
+function saveWaListenerState(enabled) {
+  try {
+    fs.writeFileSync(WA_LISTENER_STATE_PATH, JSON.stringify({ enabled: Boolean(enabled) }));
+  } catch (_) {}
+}
+
+async function pollWhatsAppNotifications() {
+  if (waPollBusy || !waListenerEnabled) return;
+  waPollBusy = true;
+  try {
+    const rows = await queryWhatsAppNotifications(waLastRecId);
+    for (const row of rows) {
+      waLastRecId = Math.max(waLastRecId, row.recId);
+      if (!row.body || !row.sender) continue;
+      // Group chats put the group in titl and "Sender: msg" in body; keep it natural.
+      const sender = row.sender.replace(/\s*\(\d+ messages?\)\s*$/i, "");
+      lastIncomingWhatsApp = { name: sender, at: Date.now() };
+      logMac("whatsapp.incoming", { sender: textForLog(sender), bodyChars: row.body.length, recId: row.recId });
+      sendToRenderer("braino-mac:speak-line", { text: `${sender} says: ${row.body}` });
+    }
+  } catch (error) {
+    logMac("whatsapp.listener.poll_failed", { error });
+  } finally {
+    waPollBusy = false;
+  }
+}
+
+async function startWhatsAppListener({ announce = false } = {}) {
+  const db = await notificationDbPath();
+  try {
+    const { stdout } = await execFileP("/usr/bin/sqlite3", ["-readonly", db, "SELECT COALESCE(MAX(rec_id),0) FROM record;"], { timeout: 6000 });
+    waLastRecId = Number(String(stdout).trim()) || 0;
+  } catch (error) {
+    logMac("whatsapp.listener.db_blocked", { error });
+    await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
+    return {
+      ok: false,
+      say: "I need Full Disk Access to hear WhatsApp notifications. I opened the setting, add the app running me, then ask again.",
+    };
+  }
+  let everSeen = 0;
+  try {
+    const { stdout } = await execFileP("/usr/bin/sqlite3", ["-readonly", db, "SELECT COUNT(*) FROM record r JOIN app a ON r.app_id = a.app_id WHERE a.identifier LIKE '%whatsapp%';"], { timeout: 6000 });
+    everSeen = Number(String(stdout).trim()) || 0;
+  } catch (_) {}
+  waListenerEnabled = true;
+  saveWaListenerState(true);
+  if (waPollTimer) clearInterval(waPollTimer);
+  waPollTimer = setInterval(() => void pollWhatsAppNotifications(), WA_POLL_INTERVAL_MS);
+  logMac("whatsapp.listener.started", { fromRecId: waLastRecId, everSeen });
+  if (!announce) return { ok: true, say: "" };
+  if (everSeen === 0) {
+    await shell.openExternal("x-apple.systempreferences:com.apple.preference.notifications");
+    return {
+      ok: true,
+      say: "I am listening for WhatsApp now, but macOS has never shown me a WhatsApp notification. In the settings I just opened, allow notifications for WhatsApp with previews, and check WhatsApp's own notification settings too.",
+    };
+  }
+  return { ok: true, say: "I am listening. When a WhatsApp message comes in, I will read it out, and you can just say reply, then the message." };
+}
+
+function stopWhatsAppListener() {
+  waListenerEnabled = false;
+  saveWaListenerState(false);
+  if (waPollTimer) {
+    clearInterval(waPollTimer);
+    waPollTimer = null;
+  }
+  logMac("whatsapp.listener.stopped", {});
+  return { ok: true, say: "Okay, I stopped reading your WhatsApp messages." };
+}
+
+function parseWaListenerIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (/\b(?:stop|quit|no more|disable|turn off)\b.*\bwhats\s*app/i.test(source) && /\bread|listen|notif/i.test(source)) return { enable: false };
+  if (/\bwhats\s*app\b.*\b(?:reader|listener|notifications?)\s+off\b/i.test(source)) return { enable: false };
+  if (/\b(?:read|speak|announce|listen\s+(?:to|for))\b.*\bwhats\s*app/i.test(source)) return { enable: true };
+  if (/\bwhats\s*app\b.*\b(?:reader|listener|notifications?)\s+on\b/i.test(source)) return { enable: true };
+  return null;
+}
+
+function parseWhatsAppReplyIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  const match = source.match(/^reply(?:\s+to\s+(?:her|him|them))?(?:\s+(?:saying|that|with))?\s+(.+)$/i);
+  if (!match?.[1]) return null;
+  return { message: match[1].trim() };
+}
+
 function parseWhatsAppRememberIntent(raw) {
   const source = cleanPrompt(String(raw || ""));
   const phoneMatch = source.match(/\b(?:remember|save)\s+(?:that\s+)?(?:my\s+)?(.+?)(?:'s)?\s+(?:whatsapp\s+)?(?:phone\s+)?number\s+is\s+([+\d][\d\s\-()]{6,})\s*$/i);
@@ -2233,6 +2428,12 @@ async function resolveWhatsAppRecipient(recipientRaw) {
   const contacts = loadWhatsAppContacts();
   const alias = contacts[key];
   if (alias?.phone) return { ok: true, name: alias.name || recipientRaw, phone: alias.phone, source: "alias" };
+
+  const cached = findContactInCache(alias?.name || recipientRaw);
+  if (cached?.phone) {
+    logMac("whatsapp.contact.resolved", { query: textForLog(recipientRaw), name: textForLog(cached.name), source: "cache" });
+    return { ok: true, name: cached.name, phone: cached.phone, source: "cache" };
+  }
 
   const lookupName = alias?.name || recipientRaw;
   // Contacts must be running or the query throws -600; launch it hidden first.
@@ -5086,6 +5287,18 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return startNoteWorkflow(noteIntent);
   }
 
+  const waListenerIntent = parseWaListenerIntent(raw);
+  if (waListenerIntent) {
+    logMac("delegate.whatsapp_listener_intent", { enable: waListenerIntent.enable });
+    return waListenerIntent.enable ? startWhatsAppListener({ announce: true }) : stopWhatsAppListener();
+  }
+
+  const waReply = parseWhatsAppReplyIntent(raw);
+  if (waReply && lastIncomingWhatsApp && Date.now() - lastIncomingWhatsApp.at < 15 * 60 * 1000) {
+    logMac("delegate.whatsapp_reply_intent", { to: textForLog(lastIncomingWhatsApp.name), messageChars: waReply.message.length });
+    return sendWhatsAppMessage(lastIncomingWhatsApp.name, waReply.message);
+  }
+
   const whatsAppRemember = parseWhatsAppRememberIntent(raw);
   if (whatsAppRemember) {
     logMac("delegate.whatsapp_remember_intent", {
@@ -5569,6 +5782,10 @@ ipcMain.handle("braino-mac:system-say", async (_event, text) => {
 });
 
 app.whenReady().then(() => {
+  setTimeout(() => void importAllContacts(), 8000);
+  if (loadWaListenerState()) {
+    setTimeout(() => void startWhatsAppListener(), 6000);
+  }
   const auth = authStatusPayload();
   logMac("app.ready", {
     appVersion: APP_VERSION,
