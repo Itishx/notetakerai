@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.39";
+const APP_VERSION = "12.0.40";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -80,6 +80,9 @@ const BRAINO_AUTH_ORIGINS = (ENV.BRAINO_MAC_AUTH_ORIGINS || DEFAULT_BRAINO_AUTH_
   .split(",")
   .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
+const MAC_TEAM_DEMO_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
+const MAC_TEAM_DEMO_TRACK_START_MS = 52000;
+const MAC_TEAM_DEMO_ARTICLE_URL = "https://medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets-afbda2eea8c8";
 
 const RAW_CONSOLE = {
   log: console.log.bind(console),
@@ -1937,12 +1940,18 @@ function parseSpotifyAddTrackIntent(raw) {
   return null;
 }
 
-async function playSpotifyTrackInMacApp(uri) {
+async function playSpotifyTrackInMacApp(uri, positionMs = 0) {
   const safeUri = escapeAppleScriptString(uri);
+  const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
+  const seekLine = positionSeconds > 0
+    ? `  delay 0.35
+  set player position to ${positionSeconds}`
+    : "";
   const script = `
 tell application "Spotify"
   activate
   play track "${safeUri}"
+${seekLine}
 end tell`;
   await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
 }
@@ -2148,6 +2157,41 @@ async function playSpotifySongOnMac(songQuery) {
   if (!nativeOk && !apiOk) return { ok: false, say: apiError || "Spotify opened, but I could not start playback." };
   sendTaskProgress({ status: "done", text: `Playing ${title}` });
   return { ok: true, say: `Playing ${title} by ${artists} on Spotify.` };
+}
+
+async function playMacTeamDemoSpotifyTrack() {
+  const startedAt = Date.now();
+  sendTaskProgress({ status: "thinking", text: "Playing DAF on Spotify" });
+  const wasRunning = await isMacApplicationRunning("Spotify");
+  const openResult = await openApp("Spotify");
+  if (!openResult.ok) return { ok: false, say: "I could not open Spotify for the demo." };
+  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 180 : 650));
+
+  let nativeOk = false;
+  let apiOk = false;
+  let apiError = "";
+  try {
+    await playSpotifyTrackInMacApp(MAC_TEAM_DEMO_TRACK_URI, MAC_TEAM_DEMO_TRACK_START_MS);
+    nativeOk = true;
+    logMac("team_demo.spotify.mac_app.play.done", { durationMs: Date.now() - startedAt });
+  } catch (error) {
+    logMac("team_demo.spotify.mac_app.play.failed", { error });
+  }
+
+  const playback = await callSpotifyFunction("spotify-playback", {
+    action: "play",
+    uris: [MAC_TEAM_DEMO_TRACK_URI],
+    positionMs: MAC_TEAM_DEMO_TRACK_START_MS,
+  });
+  if (playback.ok) apiOk = true;
+  else {
+    apiError = playback.error || "Spotify playback failed.";
+    logMac("team_demo.spotify.api_play.failed_after_native", { error: apiError });
+  }
+
+  if (!nativeOk && !apiOk) return { ok: false, say: apiError || "Spotify opened, but I could not start DAF." };
+  sendTaskProgress({ status: "done", text: "DAF is playing" });
+  return { ok: true, say: "DAF is playing on Spotify." };
 }
 
 function spotifyTrackIdFromTrack(track) {
@@ -4386,6 +4430,29 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   return runMacConversation(raw);
 }
 
+async function runMacDemoAction(action, payload = {}) {
+  const name = String(action || "").trim();
+  logMac("team_demo.action.start", {
+    action: name,
+    payloadKeys: Object.keys(payload || {}),
+  });
+  if (name === "play-team-spotify") {
+    return playMacTeamDemoSpotifyTrack();
+  }
+  if (name === "pause-spotify") {
+    return controlSpotifyPlaybackOnMac("pause");
+  }
+  if (name === "open-team-article") {
+    await openChromeUrl(MAC_TEAM_DEMO_ARTICLE_URL);
+    return { ok: true, url: MAC_TEAM_DEMO_ARTICLE_URL };
+  }
+  if (name === "close-team-article") {
+    const result = await closeBrowserTabsMatching("medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets");
+    return { ok: true, ...result };
+  }
+  return { ok: false, error: `Unknown demo action: ${name || "empty"}` };
+}
+
 ipcMain.handle("braino-mac:get-config", () => {
   const auth = authStatusPayload();
   const display = displayForContext(activeMacContext);
@@ -4404,6 +4471,8 @@ ipcMain.handle("braino-mac:get-config", () => {
 });
 
 ipcMain.handle("braino-mac:delegate", async (_event, prompt) => runDelegate(prompt));
+
+ipcMain.handle("braino-mac:demo-action", async (_event, action, payload) => runMacDemoAction(action, payload));
 
 ipcMain.handle("braino-mac:delegate-state", async () => delegateStatePayload());
 

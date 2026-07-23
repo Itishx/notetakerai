@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   authSignOut: () => ipcRenderer.invoke("braino-mac:auth-sign-out"),
   ensureAuth: (reason) => ipcRenderer.invoke("braino-mac:ensure-auth", reason),
   delegate: (prompt) => ipcRenderer.invoke("braino-mac:delegate", prompt),
+  demoAction: (action, payload) => ipcRenderer.invoke("braino-mac:demo-action", action, payload),
   delegateState: () => ipcRenderer.invoke("braino-mac:delegate-state"),
   createRealtimeCall: (payload) => ipcRenderer.invoke("braino-mac:create-realtime-call", payload),
   updateRealtimeSession: (payload) => ipcRenderer.invoke("braino-mac:update-realtime-session", payload),

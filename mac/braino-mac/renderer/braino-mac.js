@@ -18,6 +18,71 @@ const REALTIME_SPEECH_STOP_FLUSH_MS = 220;
 const REALTIME_TRANSCRIPT_IDLE_FLUSH_MS = 520;
 const REALTIME_CHAT_RESPONSE_TIMEOUT_MS = 12000;
 const REALTIME_SURFACE_SYNC_MIN_INTERVAL_MS = 30000;
+const MAC_TEAM_DEMO_SPOTIFY_MS = 5000;
+const MAC_TEAM_DEMO_ARTICLE_MS = 2600;
+const MAC_TEAM_FINAL_THANK_YOU = "Thank you for making Itish's time in Amdocs worth it. Thank you for making him feel as if he was home away from home. He will remember you always.";
+const MAC_TEAM_DEMO_SCRIPT = {
+  intro: [
+    "Okay so, hello there folks, I am Braino.",
+    "I live inside Itish's browser, which is less creepy than it sounds and more useful than it has any right to be.",
+    "I can read pages, write emails, talk to you in real time with little to no latency, search the web, control your tabs, play music, and generally do the browser chores while Itish pretends this was all calm and planned.",
+    "I also happen to look very adorable, and I have Itish to thank for that.",
+    "But let me stop yapping and show you something, for actions speak louder than words. Lets start with playing a song, here we go, watch.",
+  ].join("\n\n"),
+  afterSong: "That was Spotify. Any song you want, I can play, as long as I am able to hear it correctly of course. Now let's say you want to read a machine learning article, watch.",
+  afterSongFallback: "Spotify needed a warmup, but the trick is still the trick. Now let's say you want to read a machine learning article, watch.",
+  beforeArticleSummary: "Now that we have it opened, let's say you do not want to read the whole thing, because like Itish, you are lazy, and want it summarised. Earlier, you would have to copy-paste the contents of this and put it into ChatGPT and ask it to summarize, but I can just do it right here, without you having to leave the page.\n\nWatch.",
+  articleSummary: "So, this article is about Google's TabFM, a foundation model for tabular data. In normal words, it can look at a spreadsheet it has never been trained on and still make predictions in one shot. The core point is simple: this is a serious challenge to the usual XGBoost-style workflow for spreadsheet prediction. And the reason people are paying attention is that Google's benchmark results make the skepticism harder to maintain.",
+  closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while I am Indian at heart, my accent is very English. So here we go. Itish, my guy.\n\nWhich ANZ person is in front of us?",
+};
+const MAC_TEAM_ANZ = {
+  label: "ANZ",
+  aliases: ["anz", "a n z", "a n n", "ann", "a and z", "australia new zealand", "australia and new zealand", "old team", "bank team"],
+  fallbackOrder: ["madhuri", "rahul", "shriya", "palash", "shree"],
+  people: {
+    madhuri: {
+      label: "Madhuri",
+      speechLabel: "Maa-dhoo-ree",
+      aliases: ["madhuri", "maduri", "madhuree", "madhoori", "madhuri maam", "madhuri mam"],
+      opening: "Madhuri, you and him joined on the same day, and if on 31st July 2025, you would have told Itish the true bond you would go onto form, he'd be surprised.",
+      message: "You've been so patient and kind with him. He is very grateful for you, and he is going to miss you.",
+      closing: "Thanks for always giving him the confidence that he could do it, and look, Itish did it. He is going to miss you a lot.",
+      afterResponse: "That makes me really happy to hear.",
+    },
+    rahul: {
+      label: "Rahul",
+      speechLabel: "Raa-hul",
+      aliases: ["rahul", "rahool"],
+      opening: "Rahul. Two words.",
+      message: "Itish has just two words for you: \"My brother\".",
+      closing: "That is the whole message. Perfect as it is. Beyond A.N.Z, always.",
+    },
+    shriya: {
+      label: "Shreeya",
+      speechLabel: "Shree-ya",
+      aliases: ["shriya", "shreya", "shria", "shreeya"],
+      opening: "Hello Shreeya.",
+      message: "You were born and brought up in Amdocs and I was in Itish's browser.",
+      closing: "I hope the new project is keeping you just as busy. P.S. see all that is possible from vibe coding?",
+    },
+    palash: {
+      label: "Palash",
+      speechLabel: "Puh-laash",
+      aliases: ["palash", "palashh", "palaash", "palash bhai"],
+      opening: "Hey Palash, been a while. How are you doing?",
+      message: "Itish wanted me to say thank you for always being there for him. For helping him switch the monitor on when he somehow could not figure it out, and for being supportive like an elder brother.",
+      closing: "You took him to the airport when he broke his leg, and that means more than you can ever know.",
+    },
+    shree: {
+      label: "Shree",
+      speechLabel: "Shree Raksha",
+      aliases: ["shree", "shri", "shri raksha", "shriraksha", "sri raksha", "sriraksha", "raksha", "shree raksha", "sree raksha", "sheeraksha", "she raksha", "shree raksh", "sri raksh"],
+      opening: "Shree, Itish sees you like an elder sister.",
+      message: "You made him realize he cannot always be painfully honest in every moment. He is working on it. At his core, he will probably always be honest, but he is learning how to carry it better.",
+      closing: "Thank you for caring enough to tell him the truth and wanting him to do good. He will always remember you.",
+    },
+  },
+};
 
 walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
 const root = walker.querySelector("#__sbwk_root__");
@@ -75,6 +140,14 @@ let voiceLatencyCounter = 0;
 let voiceLatencyTurn = null;
 let lastSpokenLine = { text: "", ts: 0 };
 let pendingDelegateState = { hasPendingWorkflow: false, hasPendingFileConfirmation: false };
+let macTeamState = {
+  active: false,
+  phase: "idle",
+  roster: [],
+  spoken: [],
+  currentPerson: null,
+  lastLine: "",
+};
 let localChatMemory = [];
 let scriptedWalk = null;
 let authPose = false;
@@ -368,6 +441,335 @@ function recentLocalChatLines(limit = 10) {
     "Recent Mac Braino conversation, use this as live context:",
     ...turns.map((turn) => `${turn.role === "assistant" ? "Braino" : "User"}: ${turn.content}`),
   ];
+}
+
+function macTeamDelay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function macTeamNormalize(value) {
+  return normalizeForVoiceMatch(String(value || "").replace(/&/g, " and "));
+}
+
+function macTeamAliasMatches(normalizedText, alias) {
+  const text = String(normalizedText || "");
+  const needle = macTeamNormalize(alias);
+  if (!text || !needle) return false;
+  if (text === needle) return true;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (new RegExp(`(^|\\s)${escaped}(?=\\s|$)`).test(text)) return true;
+  const compactText = text.replace(/\s+/g, "");
+  const compactNeedle = needle.replace(/\s+/g, "");
+  if (compactNeedle.length >= 3 && compactText === compactNeedle) return true;
+  if (compactNeedle.length >= 5 && compactText.includes(compactNeedle)) return true;
+  const meaningfulParts = needle.split(" ").filter((part) => part.length >= 3);
+  return meaningfulParts.length >= 2 && meaningfulParts.every((part) => text.includes(part));
+}
+
+function macTeamFindPeople(text) {
+  const normalized = macTeamNormalize(text);
+  if (!normalized) return [];
+  const matches = [];
+  const seen = new Set();
+  for (const [personKey, person] of Object.entries(MAC_TEAM_ANZ.people)) {
+    const aliases = [personKey, person.label, ...(person.aliases || [])];
+    if (!aliases.some((alias) => macTeamAliasMatches(normalized, alias))) continue;
+    if (!seen.has(personKey)) {
+      seen.add(personKey);
+      matches.push(personKey);
+    }
+  }
+  return matches;
+}
+
+function macTeamMentionsAnz(text) {
+  const normalized = macTeamNormalize(text);
+  return MAC_TEAM_ANZ.aliases.some((alias) => macTeamAliasMatches(normalized, alias));
+}
+
+function macTeamPersonLabel(personKey) {
+  return MAC_TEAM_ANZ.people?.[personKey]?.label || personKey;
+}
+
+function macTeamJoinLabels(keys) {
+  const labels = (keys || []).map(macTeamPersonLabel).filter(Boolean);
+  if (labels.length <= 1) return labels[0] || "";
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
+
+function macTeamKnownPeopleLine() {
+  return macTeamJoinLabels(MAC_TEAM_ANZ.fallbackOrder);
+}
+
+function macTeamSpeechText(text) {
+  let speech = String(text || "").replace(/\bANZ\b/g, "A. N. Z.");
+  for (const person of Object.values(MAC_TEAM_ANZ.people)) {
+    const label = String(person.label || "").trim();
+    const speechLabel = String(person.speechLabel || "").trim();
+    if (!label || !speechLabel) continue;
+    speech = speech.replace(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), speechLabel);
+  }
+  return speech;
+}
+
+function macTeamSpeechChunks(text) {
+  const chunks = String(text || "")
+    .split(/\n{2,}/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  return chunks.length ? chunks : [String(text || "").trim()].filter(Boolean);
+}
+
+function macTeamReset() {
+  macTeamState = {
+    active: false,
+    phase: "idle",
+    roster: [],
+    spoken: [],
+    currentPerson: null,
+    lastLine: "",
+  };
+}
+
+function macTeamAddRoster(people) {
+  const current = new Set(macTeamState.roster);
+  for (const personKey of people || []) {
+    if (personKey) current.add(personKey);
+  }
+  macTeamState.roster = Array.from(current);
+}
+
+function macTeamBuildPersonMessage(personKey) {
+  const person = MAC_TEAM_ANZ.people?.[personKey];
+  if (!person) return "";
+  return [person.opening, person.message, person.closing]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function macTeamPickFallbackNext() {
+  const spoken = new Set(macTeamState.spoken);
+  const rosterPick = MAC_TEAM_ANZ.fallbackOrder.find((personKey) => macTeamState.roster.includes(personKey) && !spoken.has(personKey));
+  if (rosterPick) return rosterPick;
+  return MAC_TEAM_ANZ.fallbackOrder.find((personKey) => !spoken.has(personKey)) || null;
+}
+
+function macTeamPromptForRoom() {
+  macTeamState.active = true;
+  macTeamState.phase = "collecting_room";
+  return `Okay, ANZ. I have messages for ${macTeamKnownPeopleLine()}. Who is here right now?`;
+}
+
+function macTeamIsIntroPrompt(text) {
+  return /\b(introduce yourself|introduce yourself to (?:my|the) team|show them what you can do|show what you can do|demo yourself|give (?:them|the team) a demo)\b/i.test(String(text || ""));
+}
+
+function macTeamIsStartPrompt(text) {
+  return /\b(say hi to my team|say hello to my team|say hello to the team|talk to my team|talk to the team|meet my team|time to talk to (?:my|the) team|time to say hello to (?:my|the) team|start team messages|start the team messages)\b/i.test(String(text || ""));
+}
+
+function macTeamIsDonePrompt(text) {
+  return /\b(done|that'?s everyone|thats everyone|all done|finished|we are done|wrap it up)\b/i.test(String(text || ""));
+}
+
+function macTeamIsExitPrompt(text) {
+  return /\b(exit team mode|leave team mode|stop team mode|normal mode|go back to normal|exit this mode)\b/i.test(String(text || ""));
+}
+
+function macTeamIsContinuePrompt(text) {
+  return /\b(continue|you choose|pick one|next one|go on|carry on)\b/i.test(String(text || ""));
+}
+
+function macTeamShouldHandlePrompt(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return false;
+  const directPersonRequest = /\b(say|hello|hi|talk|speak|message|tell)\b/i.test(raw) && macTeamFindPeople(raw).length > 0;
+  return macTeamState.active
+    || /\bteam mode\b/i.test(raw)
+    || macTeamIsIntroPrompt(raw)
+    || macTeamIsStartPrompt(raw)
+    || macTeamMentionsAnz(raw)
+    || directPersonRequest;
+}
+
+async function macTeamSpeak(text, options = {}) {
+  const line = String(text || "").trim();
+  if (!line) return;
+  macTeamState.lastLine = line;
+  rememberLocalChat("assistant", line);
+  setWave(true);
+  setStatus("speaking", "Team Mode");
+  const chunks = macTeamSpeechChunks(macTeamSpeechText(line));
+  for (let index = 0; index < chunks.length; index += 1) {
+    await speak(chunks[index]);
+    if (index < chunks.length - 1) await macTeamDelay(options.chunkDelayMs ?? 260);
+  }
+}
+
+async function macTeamDemoAction(action, label) {
+  setStatus("thinking", "Team Demo");
+  if (label) setBubble(label, 1200);
+  try {
+    const result = await window.brainoMac.demoAction(action, { source: "mac-team-demo" });
+    logRenderer("team_demo.action.done", { action, ok: Boolean(result?.ok), error: result?.error || result?.say || "" });
+    return result || { ok: false, error: "No demo action result." };
+  } catch (error) {
+    logRenderer("team_demo.action.error", { action, error: errorForLog(error) });
+    return { ok: false, error: error?.message || "Demo action failed." };
+  }
+}
+
+async function macTeamSpeakPerson(personKey) {
+  const message = macTeamBuildPersonMessage(personKey);
+  if (!message) {
+    await macTeamSpeak("I don't have a message prepared for them yet, but I'm glad they're here.");
+    return true;
+  }
+  macTeamState.active = true;
+  macTeamState.phase = "awaiting_next_person";
+  macTeamState.currentPerson = personKey;
+  macTeamAddRoster([personKey]);
+  if (!macTeamState.spoken.includes(personKey)) macTeamState.spoken.push(personKey);
+  await macTeamSpeak(message);
+  return true;
+}
+
+async function macTeamStartIntroDemo(promptText) {
+  macTeamReset();
+  macTeamState.active = true;
+  macTeamState.phase = "demo_intro";
+  await macTeamSpeak(MAC_TEAM_DEMO_SCRIPT.intro, { chunkDelayMs: 220 });
+
+  macTeamState.phase = "demo_running_song";
+  const playResult = await macTeamDemoAction("play-team-spotify", "Playing DAF on Spotify");
+  await macTeamDelay(MAC_TEAM_DEMO_SPOTIFY_MS);
+  await macTeamDemoAction("pause-spotify", "Stopping Spotify");
+
+  macTeamState.phase = "demo_after_song";
+  await macTeamSpeak(playResult?.ok ? MAC_TEAM_DEMO_SCRIPT.afterSong : MAC_TEAM_DEMO_SCRIPT.afterSongFallback);
+
+  macTeamState.phase = "demo_running_article";
+  await macTeamDemoAction("open-team-article", "Opening the machine learning article");
+  await macTeamDelay(1600);
+  await macTeamSpeak(MAC_TEAM_DEMO_SCRIPT.beforeArticleSummary);
+  await macTeamSpeak(MAC_TEAM_DEMO_SCRIPT.articleSummary);
+  await macTeamDelay(MAC_TEAM_DEMO_ARTICLE_MS);
+  await macTeamDemoAction("close-team-article", "Closing the article");
+
+  macTeamState.phase = "collecting_room";
+  await macTeamSpeak(MAC_TEAM_DEMO_SCRIPT.closing, { chunkDelayMs: 240 });
+  logRenderer("team_demo.intro.done", { promptChars: String(promptText || "").length });
+  return true;
+}
+
+async function runMacTeamInput(rawText, options = {}) {
+  const promptText = String(rawText || "").trim();
+  if (!macTeamShouldHandlePrompt(promptText)) return false;
+
+  const wasProcessing = processing;
+  processing = true;
+  setStatus("thinking", "Team Mode");
+  setWave(true);
+  rememberLocalChat("user", promptText);
+
+  try {
+    if (macTeamIsExitPrompt(promptText)) {
+      macTeamReset();
+      await macTeamSpeak("Team mode is off. Back to normal Braino.");
+      return true;
+    }
+
+    if (/\bpause\b/i.test(promptText) && macTeamState.active) {
+      if (speaking) stopSpeechOutput();
+      macTeamState.phase = "paused";
+      await macTeamSpeak("Paused. Say resume when you want me back.");
+      return true;
+    }
+
+    if (/\b(resume|continue now|come back)\b/i.test(promptText) && macTeamState.phase === "paused") {
+      macTeamState.phase = "awaiting_next_person";
+      await macTeamSpeak("I'm back.");
+      return true;
+    }
+
+    if (/\brepeat\b/i.test(promptText) && macTeamState.active) {
+      await macTeamSpeak(macTeamState.lastLine || "I don't have anything to repeat yet.");
+      return true;
+    }
+
+    if (macTeamIsIntroPrompt(promptText)) {
+      await macTeamStartIntroDemo(promptText);
+      return true;
+    }
+
+    if (macTeamState.phase?.startsWith("demo_running")) {
+      await macTeamSpeak("One second. I'm still doing the demo part.");
+      return true;
+    }
+
+    if (macTeamIsStartPrompt(promptText) || macTeamMentionsAnz(promptText) || /\bteam mode\b/i.test(promptText)) {
+      macTeamState.active = true;
+      macTeamState.roster = [];
+      macTeamState.spoken = [];
+      macTeamState.currentPerson = null;
+      await macTeamSpeak(macTeamPromptForRoom());
+      return true;
+    }
+
+    if (!macTeamState.active) {
+      macTeamState.active = true;
+      macTeamState.phase = "awaiting_next_person";
+    }
+
+    if (macTeamIsDonePrompt(promptText)) {
+      macTeamState.phase = "done";
+      await macTeamSpeak(MAC_TEAM_FINAL_THANK_YOU);
+      return true;
+    }
+
+    if (macTeamIsContinuePrompt(promptText)) {
+      const nextPerson = macTeamPickFallbackNext();
+      if (!nextPerson) {
+        macTeamState.phase = "done";
+        await macTeamSpeak(MAC_TEAM_FINAL_THANK_YOU);
+        return true;
+      }
+      await macTeamSpeakPerson(nextPerson);
+      return true;
+    }
+
+    const people = macTeamFindPeople(promptText);
+    if (people.length === 1) {
+      await macTeamSpeakPerson(people[0]);
+      return true;
+    }
+    if (people.length > 1) {
+      macTeamAddRoster(people);
+      macTeamState.phase = "awaiting_next_person";
+      await macTeamSpeak(`Got it, ${macTeamJoinLabels(macTeamState.roster)} are here. Tell me who to start with.`);
+      return true;
+    }
+
+    const current = MAC_TEAM_ANZ.people?.[macTeamState.currentPerson];
+    if (current?.afterResponse && /\b(thank|thanks|nice|good|great|cool|wow|hello|hi|hey|okay|ok|haha|sweet|love it)\b/i.test(promptText)) {
+      await macTeamSpeak(current.afterResponse);
+      return true;
+    }
+
+    await macTeamSpeak("I don't have a message prepared for them yet, but I'm glad they're here.");
+    return true;
+  } finally {
+    processing = wasProcessing;
+    if (options.keepRealtime && realtimeActive && !processing) {
+      listening = true;
+      setStatus("listening", "Listening");
+      scheduleRealtimeIdleShutdown("team_mode_done");
+    } else if (!processing && !speaking && !listening) {
+      setStatus("ready", "Double Space to show/hide");
+    }
+  }
 }
 
 function hasPendingDelegateFollowup() {
@@ -1009,6 +1411,7 @@ async function speak(text) {
 async function runDelegate(prompt, options = {}) {
   const text = String(prompt || "").trim();
   if (!text) return;
+  if (await runMacTeamInput(text, options)) return;
   const runId = ++delegateGeneration;
   logRenderer("delegate.start", {
     runId,
@@ -1519,6 +1922,7 @@ function flushRealtimeTranscript(reason) {
   voiceTurnInFlight = true;
   void (async () => {
     try {
+      if (await runMacTeamInput(transcript, { keepRealtime: true, fromVoice: true })) return;
       if (shouldUseRealtimeDirectChat(transcript)) {
         const handled = await answerViaRealtimeChat(transcript);
         if (handled) return;
@@ -1992,7 +2396,7 @@ async function startLegacyCommandCapture(reason = "") {
     }
 
     listening = false;
-    void runDelegate(transcript);
+    if (!(await runMacTeamInput(transcript))) void runDelegate(transcript);
   } catch (error) {
     if (token !== listenToken) return;
     logRenderer("voice.fallback.error", { error: errorForLog(error) });
@@ -2000,7 +2404,9 @@ async function startLegacyCommandCapture(reason = "") {
     setStatus("error", "Voice error");
     setBubble(`Voice error: ${error?.message || "native speech failed"}`, 3600);
     const typed = window.prompt("Braino Mac delegate command");
-    if (typed) void runDelegate(typed);
+    if (typed) {
+      if (!(await runMacTeamInput(typed))) void runDelegate(typed);
+    }
   } finally {
     if (token === listenToken && !processing) {
       listening = false;

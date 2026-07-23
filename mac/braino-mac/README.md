@@ -57,6 +57,7 @@ It also records Mac delegate routing for local file/app actions, including clean
 - Apple Notes: “Create a note for me”, then tell Braino what it should say. Or say “Create a note about tomorrow’s demo checklist”.
 - Apple Mail: “Send an email to Renu saying I’ll call you tomorrow” or “Draft an email to Rahul with subject Quick update body I’ll send details tonight”.
 - Spotify: “Play Bargad on Spotify”, “pause Spotify”, “lower the volume”, “set Spotify volume to 40%”, “add this song to liked songs”, or “add Brabus to my gym playlist”.
+- Team demo: “Braino, introduce yourself” runs the ANZ demo flow, plays DAF in the Spotify Mac app, opens the machine learning article, reads the summary, then waits for ANZ names.
 - Front window: “What do you see?” / “What is open?”
 
 ## Desktop Organization
@@ -95,6 +96,7 @@ These are the local Mac-only skills that do not require the browser extension ag
 10. Send or draft email in Apple Mail, with Contacts lookup for recipient names and a follow-up prompt for missing recipient/body details.
 11. Open installed Mac apps by name, with website fallback for common services like Netflix, WhatsApp, YouTube, Gmail, Maps, LinkedIn, Spotify, X, and ChatGPT.
 12. Control Spotify playback, volume, liked songs, and named playlist adds through the Mac app/API bridge.
+13. Run the ANZ Team demo with deterministic scripts for Madhuri, Rahul, Shreeya, Palash, and Shree.
 
 ## Mac Capability Map
 
