@@ -2030,6 +2030,72 @@ function parseSpotifyAddTrackIntent(raw) {
   return null;
 }
 
+function stripForSpeech(text) {
+  return String(text || "")
+    .replace(/\[([^\]]+)\]\((?:[^)]+)\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[*_#`]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function runMacWebSearch(query) {
+  const trimmed = String(query || "").trim();
+  if (!trimmed) return { ok: false, say: "Tell me what to search for." };
+  const startedAt = Date.now();
+  sendTaskProgress({ status: "thinking", text: `Searching the web for ${trimmed}` });
+
+  const googleFallback = async (reason) => {
+    logMac("web_search.fallback_google", { reason, query: textForLog(trimmed) });
+    await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(trimmed)}`);
+    return { ok: true, say: `I opened Google for ${trimmed}.` };
+  };
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return googleFallback("no_supabase");
+  let authToken = await getBrainoAuthToken();
+  if (!authToken) {
+    await ensureBrainoAuth("web_search");
+    authToken = await getBrainoAuthToken();
+  }
+  if (!authToken) return googleFallback("no_auth");
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/web-research`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        query: trimmed,
+        purpose: "answer",
+        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.answer) {
+      throw new Error(data?.error || `web-research failed (${response.status}).`);
+    }
+    const say = stripForSpeech(data.answer);
+    logMac("web_search.done", {
+      query: textForLog(trimmed),
+      answerChars: say.length,
+      sourceCount: Array.isArray(data.sources) ? data.sources.length : 0,
+      durationMs: Date.now() - startedAt,
+    });
+    sendTaskProgress({ status: "done", text: "Found it" });
+    return { ok: true, say: say || `I searched but did not find a clear answer for ${trimmed}.` };
+  } catch (error) {
+    logMac("web_search.failed", { query: textForLog(trimmed), error });
+    return googleFallback(error?.message || "error");
+  }
+}
+
 function parseSpotifyWhatsPlayingIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
   if (!source) return false;
@@ -2599,6 +2665,40 @@ async function resolveSpotifyTrackForAdd(intent) {
   return { ok: true, track, trackId, source: "search" };
 }
 
+async function likeCurrentSpotifyTrackViaMenu() {
+  // Spotify's Web API blocks library writes for development-mode apps (May 2025
+  // policy), but the Mac app's own menu bar still works through Accessibility.
+  const script = `
+tell application "System Events"
+  if not (exists application process "Spotify") then return "no-app"
+  tell application process "Spotify"
+    set playbackMenu to menu "Playback" of menu bar item "Playback" of menu bar 1
+    repeat with mi in menu items of playbackMenu
+      try
+        set itemName to name of mi as text
+        if itemName contains "Liked Songs" or itemName contains "Save to Your Library" then
+          click mi
+          return "clicked:" & itemName
+        end if
+      end try
+    end repeat
+    return "not-found"
+  end tell
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });
+    const result = String(stdout || "").trim();
+    logMac("spotify.like_menu.result", { result });
+    if (result.startsWith("clicked:")) {
+      return { ok: true, removed: /remove/i.test(result) };
+    }
+    return { ok: false, error: result };
+  } catch (error) {
+    logMac("spotify.like_menu.failed", { error });
+    return { ok: false, error: error?.message || "menu click failed" };
+  }
+}
+
 async function addSpotifyTrackOnMac(intent) {
   const playlistName = intent?.playlist ? cleanSpotifyPlaylistName(intent.playlist) : "";
   const destination = playlistName ? `playlist ${playlistName}` : "Liked Songs";
@@ -2608,6 +2708,24 @@ async function addSpotifyTrackOnMac(intent) {
     song: textForLog(intent?.song || ""),
     playlist: textForLog(playlistName),
   });
+
+  // Liking the current song: the Mac app's own menu works even though the Web
+  // API blocks library writes for development-mode apps. Try it first.
+  if (!playlistName && intent?.useCurrent) {
+    const state = await readSpotifyMacState();
+    const menuLike = await likeCurrentSpotifyTrackViaMenu();
+    if (menuLike.ok) {
+      const trackLine = state?.name ? `${state.name}${state.artist ? ` by ${state.artist}` : ""}` : "this song";
+      sendTaskProgress({ status: "done", text: menuLike.removed ? "Removed from Liked Songs" : "Added to Liked Songs" });
+      logMac("spotify.add_track.done", { track: textForLog(state?.name || ""), destination: "Liked Songs", source: "mac_menu" });
+      return {
+        ok: true,
+        say: menuLike.removed
+          ? `Removed ${trackLine} from your Liked Songs.`
+          : `Added ${trackLine} to your Liked Songs.`,
+      };
+    }
+  }
 
   const resolved = await resolveSpotifyTrackForAdd(intent);
   if (!resolved.ok) {
@@ -4705,8 +4823,11 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   ]);
   if (webQuery) {
     logMac("delegate.web_search_intent", { query: textForLog(webQuery) });
-    await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`);
-    return { ok: true, say: `Searching Chrome for ${webQuery}.` };
+    if (/\b(?:chrome|browser|tab)\b/i.test(raw)) {
+      await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`);
+      return { ok: true, say: `Searching Chrome for ${webQuery}.` };
+    }
+    return runMacWebSearch(webQuery);
   }
 
   const spotifyVolume = parseSpotifyVolumeIntent(raw);
