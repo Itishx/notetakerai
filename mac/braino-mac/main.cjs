@@ -1692,8 +1692,34 @@ async function handlePendingMacWorkflow(raw) {
 
   if (pending.type === "spotify_add") {
     clearPendingMacWorkflow();
-    const playlist = cleanSpotifyPlaylistName(raw);
-    if (!playlist) return { ok: true, say: "I did not catch the playlist name. Say it once more?" };
+    const reply = cleanPrompt(raw);
+    // "you can add it to my liked songs" or just "liked songs" → like, not a playlist.
+    if (/\bliked?\s+songs?\b/i.test(reply) || /^liked?$/i.test(reply.trim())) {
+      return addSpotifyTrackOnMac({ ...(pending.data || {}), playlist: null, needsPlaylist: false });
+    }
+    // The reply may itself be a complete add command; reparse before assuming it is a bare name.
+    const reparsed = parseSpotifyAddTrackIntent(raw);
+    if (reparsed && !reparsed.needsPlaylist) {
+      return addSpotifyTrackOnMac({
+        ...reparsed,
+        song: reparsed.song || pending.data?.song || "",
+        useCurrent: reparsed.useCurrent || Boolean(pending.data?.useCurrent),
+      });
+    }
+    // Otherwise treat it as the playlist name, stripping spoken filler around it.
+    const playlist = cleanSpotifyPlaylistName(
+      reply
+        .replace(/^(?:you can\s+|please\s+|just\s+|yeah\s+|yes\s+|ok(?:ay)?\s+)*/i, "")
+        .replace(/^(?:add|put|save)\s+(?:it|this|that|the song)?\s*/i, "")
+        .replace(/^(?:to|in|into|on)\s+/i, "")
+        .replace(/^(?:my|the)\s+/i, "")
+        .replace(/^(?:playlist\s+)?(?:called|named)?\s*/i, "")
+        .replace(/\s+playlist$/i, ""),
+    );
+    if (!playlist) {
+      setPendingMacWorkflow({ type: "spotify_add", stage: "playlist_name", data: pending.data || {} });
+      return { ok: true, say: "I did not catch the playlist name. Just say the name itself." };
+    }
     return addSpotifyTrackOnMac({ ...(pending.data || {}), playlist, needsPlaylist: false });
   }
 
@@ -1813,24 +1839,18 @@ async function callSpotifyFunction(functionName, payload) {
       }
       const errorBlob = `${data?.error || ""} ${data?.details || ""}`;
       if (/"status"\s*:\s*403/.test(errorBlob) || /\bforbidden\b/i.test(errorBlob)) {
-        // A Spotify 403 here usually means the stored token was granted before the
-        // current scope list existed. A fresh connect picks up the new scopes.
+        // Diagnosed 2026-07-24: scopes and token are fine. Spotify returns 403 on
+        // library/playlist writes because the app is in Development Mode and the
+        // account is not in the app's User Management allowlist. Reconnecting
+        // cannot fix that, so do not open the consent page for this.
         logMac("spotify.write_forbidden", {
           functionName,
           grantedScope: data?.grantedScope || "unknown",
           scopeHint: data?.scopeHint || "",
         });
-        if (reconnectAllowed) {
-          lastSpotifyReconnectAt = Date.now();
-          await openSpotifyReconnect(authToken);
-          return {
-            ok: false,
-            error: "Spotify refused that with the current permissions. I opened a Spotify reconnect page, approve it once, and ask me again.",
-          };
-        }
         return {
           ok: false,
-          error: "Spotify is still refusing writes. Finish the reconnect tab from before, or tell Itish to check the braino-mac log for spotify.write_forbidden.",
+          error: "Spotify is blocking saves for this account. It is the developer dashboard allowlist, not sign in. Add your email under User Management for the Braino app on developer dot spotify dot com, then just ask me again.",
         };
       }
       return { ok: false, error: [data?.error, data?.details].filter(Boolean).join(" - ") || `${functionName} failed (${response.status}).` };
@@ -1988,17 +2008,22 @@ function parseSpotifyAddTrackIntent(raw) {
     return { song: cleanSpotifySongQuery(quotedAdd[1]), playlist: cleanSpotifyPlaylistName(quotedAdd[2]), useCurrent: false };
   }
 
-  const namedLiked = source.match(/(?:add|save)\s+(?:the\s+)?(?:song|track|music|tune)?\s*["“]?(.+?)["”]?\s+to\s+(?:my\s+)?liked\s+songs?(?:\s+(?:on|in)\s+spotify)?$/i);
+  const isCurrentTrackWord = (value) => /^(?:this|it|that|current|playing|the song|this song|song|track|music|tune)$/i.test(String(value || "").trim());
+
+  const namedLiked = source.match(/(?:add|save)\s+(?:the\s+)?(?:song|track|music|tune)?\s*["“]?(.+?)["”]?\s+to\s+(?:my\s+)?liked\s+songs?(?:\s+(?:on|in)\s+spotify)?[?.!]?\s*$/i);
   if (namedLiked?.[1]) {
-    return { song: cleanSpotifySongQuery(namedLiked[1]), playlist: null, useCurrent: false };
+    const song = cleanSpotifySongQuery(namedLiked[1]);
+    if (!song || isCurrentTrackWord(song)) return { song: "", playlist: null, useCurrent: true };
+    return { song, playlist: null, useCurrent: false };
   }
 
   const namedPlaylist = source.match(/(?:add|save)\s+(?:the\s+)?(?:song|track|music|tune)?\s*["“]?(.+?)["”]?\s+to\s+(?:my\s+)?(?:playlist\s+)?["“]?(.+?)["”]?(?:\s+(?:on|in)\s+spotify)?$/i);
   if (namedPlaylist?.[1] && namedPlaylist?.[2]) {
+    const song = cleanSpotifySongQuery(namedPlaylist[1]);
     return {
-      song: cleanSpotifySongQuery(namedPlaylist[1]),
+      song: isCurrentTrackWord(song) ? "" : song,
       playlist: cleanSpotifyPlaylistName(namedPlaylist[2]),
-      useCurrent: false,
+      useCurrent: isCurrentTrackWord(song),
     };
   }
 
