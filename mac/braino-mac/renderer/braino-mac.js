@@ -330,6 +330,7 @@ function setStatus(status, text) {
   statusText.textContent = text;
   lastGlowStatus = status;
   updateEdgeGlow();
+  updateNotchFace();
   if (herMode) window.HerMode?.syncStatus(status);
 }
 
@@ -348,6 +349,59 @@ function updateEdgeGlow() {
           ? "think"
           : "";
   edgeGlow.className = voiceState || (musicMode && !herMode ? "music" : "");
+}
+
+// ── Notch Braino: the notch as his face ──
+const notchFace = document.getElementById("notch-face");
+const nfPupilL = document.getElementById("nf-pupil-l");
+const nfPupilR = document.getElementById("nf-pupil-r");
+let notchFaceEnabled = true;
+let nfBlinkTimer = 0;
+
+function updateNotchFace() {
+  if (!notchFace) return;
+  const visible = notchFaceEnabled && !herMode;
+  notchFace.classList.toggle("on", visible);
+  const state = ["listening", "hearing"].includes(lastGlowStatus)
+    ? "listen"
+    : lastGlowStatus === "speaking"
+      ? "speak"
+      : "";
+  notchFace.classList.toggle("listen", visible && state === "listen");
+  notchFace.classList.toggle("speak", visible && state === "speak");
+}
+
+function nfScheduleBlink() {
+  window.clearTimeout(nfBlinkTimer);
+  nfBlinkTimer = window.setTimeout(() => {
+    if (notchFace?.classList.contains("on")) {
+      notchFace.classList.add("blink");
+      window.setTimeout(() => notchFace?.classList.remove("blink"), 260);
+    }
+    nfScheduleBlink();
+  }, 2800 + Math.random() * 3600);
+}
+nfScheduleBlink();
+
+function nfTrackPointer(event) {
+  if (!notchFace?.classList.contains("on") || !nfPupilL || !nfPupilR) return;
+  const faceX = window.innerWidth / 2;
+  const faceY = 42;
+  const dx = event.clientX - faceX;
+  const dy = event.clientY - faceY;
+  const dist = Math.max(1, Math.hypot(dx, dy));
+  const offX = (dx / dist) * Math.min(3, dist / 90);
+  const offY = (dy / dist) * Math.min(2.2, dist / 120);
+  nfPupilL.setAttribute("cx", String(88 + offX));
+  nfPupilL.setAttribute("cy", String(42 + offY));
+  nfPupilR.setAttribute("cx", String(152 + offX));
+  nfPupilR.setAttribute("cy", String(42 + offY));
+}
+window.addEventListener("mousemove", nfTrackPointer, { passive: true });
+
+function setNotchFaceEnabled(on) {
+  notchFaceEnabled = Boolean(on);
+  updateNotchFace();
 }
 
 let notchNotes = null;
@@ -3139,6 +3193,7 @@ window.brainoMac.onVoiceToggle(() => toggleVoice());
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
 window.brainoMac.onMusicState?.((payload) => setMusicMode(Boolean(payload?.playing)));
+window.brainoMac.onNotchFace?.((payload) => setNotchFaceEnabled(Boolean(payload?.on)));
 window.brainoMac.onSpeakLine?.((payload) => {
   const text = String(payload?.text || "").trim();
   // Incoming message readouts wait their turn instead of cutting Braino off.

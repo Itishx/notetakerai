@@ -182,6 +182,68 @@ body {
   animation: edgeBreath 3.4s ease-in-out infinite;
 }
 
+/* Notch Braino — the notch becomes his face: coral pill swallowing the black
+   housing, eyes peeking out below it. States tint and animate the features. */
+#notch-face {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  width: 240px;
+  height: 64px;
+  margin-left: -120px;
+  pointer-events: none;
+  z-index: 57;
+  filter: drop-shadow(0 3px 10px rgba(201, 84, 74, 0.35));
+  transition: opacity 0.5s ease, transform 0.35s ease;
+  opacity: 0;
+  transform: translateY(-14px);
+}
+
+#notch-face.on {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#notch-face.listen {
+  filter: drop-shadow(0 3px 12px rgba(122, 162, 255, 0.55));
+}
+
+#notch-face.speak {
+  filter: drop-shadow(0 4px 14px rgba(243, 154, 66, 0.6));
+}
+
+#notch-face.speak #nf-smile { display: none; }
+#notch-face.speak #nf-talk {
+  display: block !important;
+  animation: nfTalk 0.28s ease-in-out infinite;
+}
+
+#notch-face #nf-eye-l,
+#notch-face #nf-eye-r {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+#notch-face.blink #nf-eye-l,
+#notch-face.blink #nf-eye-r {
+  animation: nfBlink 0.22s ease-in-out;
+}
+
+#notch-face.listen #nf-eye-l,
+#notch-face.listen #nf-eye-r {
+  transform: scaleY(1.08);
+}
+
+@keyframes nfBlink {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.12); }
+}
+
+@keyframes nfTalk {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1.25); }
+}
+
 /* Musical notes drifting out from under the notch while music plays. */
 #notch-notes {
   position: fixed;

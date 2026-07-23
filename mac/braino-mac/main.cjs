@@ -5630,6 +5630,15 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return startCall(callIntent);
   }
 
+  const notchPhrase = cleanPrompt(raw);
+  if (/\bnotch\s*(?:braino|face)?\b/i.test(notchPhrase)
+    && /\b(?:hide|remove|show|bring back|turn\s+(?:on|off)|\bon\b|\boff\b)\b/i.test(notchPhrase)) {
+    const on = !/\b(?:hide|remove|off)\b/i.test(notchPhrase);
+    logMac("delegate.notch_face_intent", { on });
+    sendToRenderer("braino-mac:notch-face", { on });
+    return { ok: true, say: on ? "Notch face is back." : "Okay, leaving the notch alone." };
+  }
+
   const waListenerIntent = parseWaListenerIntent(raw);
   if (waListenerIntent) {
     logMac("delegate.whatsapp_listener_intent", { enable: waListenerIntent.enable });

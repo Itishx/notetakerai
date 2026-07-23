@@ -63,6 +63,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:speak-line", handler);
     return () => ipcRenderer.removeListener("braino-mac:speak-line", handler);
   },
+  onNotchFace: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:notch-face", handler);
+    return () => ipcRenderer.removeListener("braino-mac:notch-face", handler);
+  },
   onMusicState: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:music-state", handler);

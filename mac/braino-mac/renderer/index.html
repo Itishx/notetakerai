@@ -16,6 +16,31 @@
   <body>
     <main id="dock-stage" aria-label="Braino Mac dock companion">
       <div id="edge-glow" aria-hidden="true"></div>
+      <div id="notch-face" aria-hidden="true">
+        <svg viewBox="0 0 240 64" width="240" height="64">
+          <defs>
+            <radialGradient id="nfGrad" cx="50%" cy="18%" r="95%">
+              <stop offset="0%" stop-color="#F2A296" />
+              <stop offset="55%" stop-color="#E8786E" />
+              <stop offset="100%" stop-color="#C9544A" />
+            </radialGradient>
+          </defs>
+          <path d="M 0 0 H 240 V 36 Q 240 58 214 58 H 26 Q 0 58 0 36 Z" fill="url(#nfGrad)" />
+          <path d="M 0 0 H 240 V 36 Q 240 58 214 58 H 26 Q 0 58 0 36 Z" fill="none" stroke="rgba(255,214,198,0.35)" stroke-width="1" />
+          <g id="nf-eye-l">
+            <ellipse cx="88" cy="42" rx="10" ry="9" fill="#FFF6F0" />
+            <circle id="nf-pupil-l" cx="88" cy="42" r="3.4" fill="#1B1713" />
+            <circle cx="90" cy="40" r="1.1" fill="#fff" opacity="0.9" />
+          </g>
+          <g id="nf-eye-r">
+            <ellipse cx="152" cy="42" rx="10" ry="9" fill="#FFF6F0" />
+            <circle id="nf-pupil-r" cx="152" cy="42" r="3.4" fill="#1B1713" />
+            <circle cx="154" cy="40" r="1.1" fill="#fff" opacity="0.9" />
+          </g>
+          <path id="nf-smile" d="M 111 50 Q 120 56 129 50" fill="none" stroke="#1B1713" stroke-width="2" stroke-linecap="round" />
+          <ellipse id="nf-talk" cx="120" cy="52" rx="4.5" ry="3" fill="#8A2F28" style="display:none" />
+        </svg>
+      </div>
       <section id="status-pill">
         <span id="status-dot"></span>
         <span id="status-text">Starting Braino Mac</span>
