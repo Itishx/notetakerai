@@ -16,7 +16,8 @@ type SpotifyPlaybackAction =
   | { action: "play"; deviceId?: string | null; uris?: string[]; contextUri?: string | null; offsetUri?: string | null; positionMs?: number | null }
   | { action: "pause" | "next" | "previous"; deviceId?: string | null }
   | { action: "volume"; volumePercent: number; deviceId?: string | null }
-  | { action: "seek"; positionMs: number; deviceId?: string | null };
+  | { action: "seek"; positionMs: number; deviceId?: string | null }
+  | { action: "queue"; uri: string; deviceId?: string | null };
 
 async function getFirstAvailableDeviceId(accessToken: string): Promise<string | null> {
   try {
@@ -152,6 +153,22 @@ serve(async (req) => {
         "spotify-playback",
       );
       return json({ ok: true, positionMs });
+    }
+
+    if (payload.action === "queue") {
+      const uri = String(payload.uri || "").trim();
+      if (!uri) {
+        return json({ error: "uri required for queue." }, 400);
+      }
+      const deviceId = await resolveDeviceId(payload.deviceId ?? null);
+      const params = new URLSearchParams({ uri });
+      if (deviceId) params.set("device_id", deviceId);
+      await spotifyRequestRaw(
+        `https://api.spotify.com/v1/me/player/queue?${params}`,
+        { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } },
+        "spotify-playback",
+      );
+      return json({ ok: true, queued: uri });
     }
 
     if (payload.action === "volume") {

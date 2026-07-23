@@ -1790,6 +1790,16 @@ async function callSpotifyFunction(functionName, payload) {
         await openSpotifyReconnect(authToken);
         return { ok: false, error: "Spotify needs to be reconnected. I opened the reconnect page." };
       }
+      const errorBlob = `${data?.error || ""} ${data?.details || ""}`;
+      if (/"status"\s*:\s*403/.test(errorBlob) || /\bforbidden\b/i.test(errorBlob)) {
+        // A Spotify 403 here usually means the stored token was granted before the
+        // current scope list existed. A fresh connect picks up the new scopes.
+        await openSpotifyReconnect(authToken);
+        return {
+          ok: false,
+          error: "Spotify refused that with the current permissions. I opened a Spotify reconnect page, sign in there and ask me again.",
+        };
+      }
       return { ok: false, error: [data?.error, data?.details].filter(Boolean).join(" - ") || `${functionName} failed (${response.status}).` };
     }
     logMac("spotify.function.done", { functionName, status: response.status });
@@ -1943,6 +1953,227 @@ function parseSpotifyAddTrackIntent(raw) {
   }
 
   return null;
+}
+
+function parseSpotifyWhatsPlayingIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
+  if (!source) return false;
+  return /(what(?:'s| is)?\s+(?:song|track|music)?\s*(?:is\s+)?(?:this|playing|currently playing)|what\s+song\s+is\s+(?:this|playing|on)|which\s+song\s+is\s+this|what\s+am\s+i\s+listening\s+to|now\s+playing|current(?:ly playing)?\s+song|name\s+of\s+(?:this|the)\s+song|who\s+sings\s+this)/i.test(source);
+}
+
+function parseSpotifyShuffleRepeatIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  const mentionsShuffle = /\bshuffle\b/i.test(source);
+  const mentionsRepeat = /\b(?:repeat|loop)\b/i.test(source);
+  if (!mentionsShuffle && !mentionsRepeat) return null;
+  const off = /\b(?:off|stop|disable|end|cancel)\b/i.test(source) || /\bturn\s+off\b/i.test(source);
+  return { feature: mentionsShuffle ? "shuffling" : "repeating", enable: !off };
+}
+
+function parseSpotifySeekIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (/\b(?:restart|start over|play (?:it|this|the song) again|from the (?:beginning|start|top))\b/i.test(source)
+    && /\b(?:song|track|music|it|this|spotify)\b/i.test(source)) {
+    return { positionSeconds: 0, relativeSeconds: 0 };
+  }
+  const clock = source.match(/\b(?:skip|jump|go|seek)\s+(?:ahead\s+)?to\s+(\d{1,2}):(\d{2})\b/i);
+  if (clock) return { positionSeconds: Number(clock[1]) * 60 + Number(clock[2]), relativeSeconds: 0 };
+  const units = source.match(/\b(?:skip|jump|go|seek)\s+to\s+(\d{1,3})\s+(second|minute)s?\b/i);
+  if (units) return { positionSeconds: Number(units[1]) * (units[2].toLowerCase() === "minute" ? 60 : 1), relativeSeconds: 0 };
+  const rel = source.match(/\b(?:go|skip|jump)\s+(back(?:ward)?s?|forward|ahead)\s+(\d{1,3})\s+seconds?\b/i)
+    || source.match(/\b(rewind|fast forward)\s+(?:by\s+)?(\d{1,3})\s+seconds?\b/i);
+  if (rel) {
+    const direction = /back|rewind/i.test(rel[1]) ? -1 : 1;
+    return { positionSeconds: null, relativeSeconds: direction * Number(rel[2]) };
+  }
+  if (/\brewind\b/i.test(source) && /\b(?:song|track|music|spotify|it|this)\b/i.test(source)) {
+    return { positionSeconds: null, relativeSeconds: -10 };
+  }
+  return null;
+}
+
+function parseSpotifyQueueIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\bqueue\b/i.test(source) && !/\bnext\b/i.test(source)) return null;
+  const match = source.match(/\b(?:add|put)\s+(?:the\s+)?(?:song|track)?\s*["“]?(.+?)["”]?\s+(?:to|in|into|on)\s+(?:the\s+|my\s+)?queue\b/i)
+    || source.match(/\bqueue\s+(?:up\s+)?["“]?(.+?)["”]?(?:\s+(?:on|in)\s+spotify)?\s*$/i)
+    || source.match(/\b(?:play|put on)\s+["“]?(.+?)["”]?\s+next(?:\s+(?:on|in)\s+spotify)?\s*$/i);
+  if (!match?.[1]) return null;
+  const song = cleanSpotifySongQuery(match[1]);
+  if (!song || /^(?:this|it|that|current|song|track|music)$/i.test(song)) return { needsSong: true, song: "" };
+  return { needsSong: false, song };
+}
+
+function parseSpotifyContextPlayIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\b(?:play|put on|start|listen to)\b/i.test(source)) return null;
+  const playlist = source.match(/\b(?:play|put on|start|listen to)\s+(?:my\s+|the\s+)?playlist\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+(?:on|in)\s+spotify)?\s*$/i)
+    || source.match(/\b(?:play|put on|start|listen to)\s+(?:my\s+|the\s+)?["“]?(.+?)["”]?\s+playlist(?:\s+(?:on|in)\s+spotify)?\s*$/i);
+  if (playlist?.[1]) {
+    const name = cleanSpotifyPlaylistName(playlist[1]);
+    if (name) return { kind: "playlist", name };
+  }
+  const album = source.match(/\b(?:play|put on|start|listen to)\s+(?:the\s+)?album\s+["“]?(.+?)["”]?(?:\s+(?:on|in)\s+spotify)?\s*$/i);
+  if (album?.[1]) {
+    const name = cleanSpotifySongQuery(album[1]);
+    if (name) return { kind: "album", name };
+  }
+  const artist = source.match(/\b(?:play|put on|start|listen to)\s+(?:some\s+|(?:songs?|music|tracks?)\s+(?:by|from)\s+|(?:the\s+)?artist\s+)["“]?(.+?)["”]?(?:\s+(?:on|in)\s+spotify)?\s*$/i);
+  if (artist?.[1]) {
+    const name = cleanSpotifySongQuery(artist[1]);
+    if (name) return { kind: "artist", name };
+  }
+  return null;
+}
+
+async function describeSpotifyNowPlaying() {
+  sendTaskProgress({ status: "thinking", text: "Checking Spotify" });
+  const state = await readSpotifyMacState();
+  if (state.ok && state.name) {
+    const paused = /paused/i.test(state.state || "");
+    const artistLine = state.artist ? ` by ${state.artist}` : "";
+    logMac("spotify.now_playing", {
+      source: "mac_app",
+      track: textForLog(state.name),
+      artist: textForLog(state.artist || ""),
+      state: state.state || "",
+    });
+    sendTaskProgress({ status: "done", text: `${state.name}${artistLine}` });
+    return {
+      ok: true,
+      say: paused
+        ? `Spotify is paused on ${state.name}${artistLine}.`
+        : `This is ${state.name}${artistLine}.`,
+    };
+  }
+  const playerState = await callSpotifyFunction("spotify-player-state", {});
+  const track = playerState?.track;
+  if (playerState.ok && track?.name) {
+    const artists = formatSpotifyArtists(track);
+    const artistLine = artists ? ` by ${artists}` : "";
+    logMac("spotify.now_playing", { source: "api", track: textForLog(track.name), artist: textForLog(artists || "") });
+    sendTaskProgress({ status: "done", text: `${track.name}${artistLine}` });
+    return {
+      ok: true,
+      say: playerState.isPlaying
+        ? `This is ${track.name}${artistLine}.`
+        : `Spotify is paused on ${track.name}${artistLine}.`,
+    };
+  }
+  logMac("spotify.now_playing.empty", { macError: state.error || "", apiError: playerState.error || "" });
+  return { ok: false, say: "Nothing seems to be playing on Spotify right now." };
+}
+
+async function setSpotifyModeOnMac(intent) {
+  const label = intent.feature === "shuffling" ? "Shuffle" : "Repeat";
+  sendTaskProgress({ status: "thinking", text: `${label} ${intent.enable ? "on" : "off"}` });
+  const script = `
+tell application "Spotify"
+  set ${intent.feature} to ${intent.enable ? "true" : "false"}
+  return ${intent.feature} as text
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 6000 });
+    const actual = /true/i.test(stdout.trim());
+    logMac("spotify.mode.set", { feature: intent.feature, requested: intent.enable, actual });
+    sendTaskProgress({ status: "done", text: `${label} ${actual ? "on" : "off"}` });
+    return { ok: true, say: `${label} is ${actual ? "on" : "off"}.` };
+  } catch (error) {
+    logMac("spotify.mode.failed", { feature: intent.feature, error });
+    return { ok: false, say: `I could not change ${label.toLowerCase()} on Spotify. Is the Spotify app open?` };
+  }
+}
+
+async function seekSpotifyOnMac(intent) {
+  sendTaskProgress({ status: "thinking", text: "Moving playback" });
+  const relative = Number(intent?.relativeSeconds || 0);
+  let targetSeconds = typeof intent?.positionSeconds === "number" ? Math.max(0, intent.positionSeconds) : null;
+  try {
+    if (targetSeconds == null) {
+      const { stdout } = await execFileP("/usr/bin/osascript", ["-e", 'tell application "Spotify" to return player position as text'], { timeout: 4000 });
+      const current = Number(String(stdout).trim().replace(",", "."));
+      targetSeconds = Math.max(0, (Number.isFinite(current) ? current : 0) + relative);
+    }
+    await execFileP("/usr/bin/osascript", ["-e", `tell application "Spotify" to set player position to ${Math.round(targetSeconds)}`], { timeout: 4000 });
+    logMac("spotify.seek.done", { targetSeconds: Math.round(targetSeconds), relative, source: "mac_app" });
+    sendTaskProgress({ status: "done", text: "Done" });
+    if (targetSeconds === 0) return { ok: true, say: "Took it from the top." };
+    return { ok: true, say: relative ? `Moved ${Math.abs(relative)} seconds ${relative < 0 ? "back" : "ahead"}.` : `Jumped to ${Math.floor(targetSeconds / 60)}:${String(Math.round(targetSeconds % 60)).padStart(2, "0")}.` };
+  } catch (error) {
+    logMac("spotify.seek.native_failed", { error });
+    if (targetSeconds == null) return { ok: false, say: "I could not read where the song is right now." };
+    const api = await callSpotifyFunction("spotify-playback", { action: "seek", positionMs: Math.round(targetSeconds * 1000) });
+    if (api.ok) {
+      logMac("spotify.seek.done", { targetSeconds: Math.round(targetSeconds), relative, source: "api" });
+      return { ok: true, say: targetSeconds === 0 ? "Took it from the top." : "Moved the song." };
+    }
+    return { ok: false, say: api.error || "I could not move the song position." };
+  }
+}
+
+async function queueSpotifyTrackOnMac(songQuery) {
+  const query = String(songQuery || "").trim();
+  if (!query) return { ok: false, say: "Tell me the song to queue and I will line it up on Spotify." };
+  sendTaskProgress({ status: "thinking", text: `Queueing ${query}` });
+  const search = await callSpotifyFunction("spotify-search", { query, limit: 5 });
+  if (!search.ok) return { ok: false, say: search.error || "Spotify search failed." };
+  const track = Array.isArray(search.tracks) ? search.tracks[0] : null;
+  if (!track?.uri) return { ok: false, say: `I could not find ${query} on Spotify.` };
+  const title = String(track.name || query).trim();
+  const artists = formatSpotifyArtists(track);
+  const result = await callSpotifyFunction("spotify-playback", { action: "queue", uri: track.uri });
+  if (!result.ok) {
+    logMac("spotify.queue.failed", { track: textForLog(title), error: result.error || "" });
+    return { ok: false, say: result.error || `I could not queue ${title}. Make sure something is playing first.` };
+  }
+  logMac("spotify.queue.done", { track: textForLog(title), artists: textForLog(artists || ""), uri: track.uri });
+  sendTaskProgress({ status: "done", text: `Queued ${title}` });
+  return { ok: true, say: `Queued ${title}${artists ? ` by ${artists}` : ""} to play next.` };
+}
+
+async function playSpotifyContextOnMac(kind, name) {
+  const query = String(name || "").trim();
+  if (!query) return { ok: false, say: `Tell me the ${kind} name and I will play it on Spotify.` };
+  const startedAt = Date.now();
+  sendTaskProgress({ status: "thinking", text: `Searching Spotify for ${query}` });
+  const wasRunningPromise = isMacApplicationRunning("Spotify");
+  const openPromise = openApp("Spotify");
+  const searchPromise = callSpotifyFunction("spotify-search", { query, limit: 5, types: [kind] });
+  const [wasRunning, openResult, search] = await Promise.all([wasRunningPromise, openPromise, searchPromise]);
+  if (!search.ok) return { ok: false, say: search.error || "Spotify search failed." };
+  const list = kind === "playlist" ? search.playlists : kind === "album" ? search.albums : search.artists;
+  const item = Array.isArray(list) ? list[0] : null;
+  if (!item?.uri) return { ok: false, say: `I could not find a ${kind} called ${query} on Spotify.` };
+  if (!openResult.ok) return { ok: false, say: `I found the ${kind}, but I could not open the Spotify Mac app.` };
+  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 180 : 650));
+
+  const label = kind === "playlist"
+    ? `your playlist ${item.name}${item.ownedByUser === false && item.owner ? ` by ${item.owner}` : ""}`
+    : kind === "album"
+      ? `the album ${item.name}${item.artists ? ` by ${item.artists}` : ""}`
+      : `${item.name}`;
+  sendTaskProgress({ status: "thinking", text: `Playing ${item.name}` });
+
+  let nativeOk = false;
+  let apiOk = false;
+  let apiError = "";
+  try {
+    await playSpotifyTrackInMacApp(item.uri);
+    nativeOk = true;
+    logMac("spotify.context_play.mac_app.done", { kind, name: textForLog(item.name), uri: item.uri, durationMs: Date.now() - startedAt });
+  } catch (error) {
+    logMac("spotify.context_play.mac_app.failed", { kind, name: textForLog(item.name), uri: item.uri, error });
+  }
+  const playback = await callSpotifyFunction("spotify-playback", { action: "play", contextUri: item.uri });
+  if (playback.ok) apiOk = true;
+  else {
+    apiError = playback.error || "Spotify playback failed.";
+    logMac("spotify.context_play.api.failed_after_native", { kind, name: textForLog(item.name), error: apiError });
+  }
+
+  if (!nativeOk && !apiOk) return { ok: false, say: apiError || `Spotify opened, but I could not start the ${kind}.` };
+  sendTaskProgress({ status: "done", text: `Playing ${item.name}` });
+  return { ok: true, say: `Playing ${label} on Spotify.` };
 }
 
 async function playSpotifyTrackInMacApp(uri, positionMs = 0) {
@@ -4342,6 +4573,40 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return controlSpotifyVolumeOnMac(spotifyVolume);
   }
 
+  if (parseSpotifyWhatsPlayingIntent(raw)) {
+    logMac("delegate.spotify_whats_playing_intent", { raw: textForLog(raw) });
+    return describeSpotifyNowPlaying();
+  }
+
+  const spotifyMode = parseSpotifyShuffleRepeatIntent(raw);
+  if (spotifyMode) {
+    logMac("delegate.spotify_mode_intent", { raw: textForLog(raw), feature: spotifyMode.feature, enable: spotifyMode.enable });
+    return setSpotifyModeOnMac(spotifyMode);
+  }
+
+  const spotifySeek = parseSpotifySeekIntent(raw);
+  if (spotifySeek) {
+    logMac("delegate.spotify_seek_intent", {
+      raw: textForLog(raw),
+      positionSeconds: spotifySeek.positionSeconds,
+      relativeSeconds: spotifySeek.relativeSeconds,
+    });
+    return seekSpotifyOnMac(spotifySeek);
+  }
+
+  const spotifyQueue = parseSpotifyQueueIntent(raw);
+  if (spotifyQueue) {
+    logMac("delegate.spotify_queue_intent", {
+      raw: textForLog(raw),
+      song: textForLog(spotifyQueue.song || ""),
+      needsSong: Boolean(spotifyQueue.needsSong),
+    });
+    if (spotifyQueue.needsSong) {
+      return { ok: true, say: "Tell me the song to queue and I will line it up on Spotify." };
+    }
+    return queueSpotifyTrackOnMac(spotifyQueue.song);
+  }
+
   const spotifyAddTrack = parseSpotifyAddTrackIntent(raw);
   if (spotifyAddTrack) {
     logMac("delegate.spotify_add_track_intent", {
@@ -4360,6 +4625,16 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       control: spotifyControl.control,
     });
     return controlSpotifyPlaybackOnMac(spotifyControl.control);
+  }
+
+  const spotifyContext = parseSpotifyContextPlayIntent(raw);
+  if (spotifyContext) {
+    logMac("delegate.spotify_context_play_intent", {
+      raw: textForLog(raw),
+      kind: spotifyContext.kind,
+      name: textForLog(spotifyContext.name),
+    });
+    return playSpotifyContextOnMac(spotifyContext.kind, spotifyContext.name);
   }
 
   const spotifyPlay = parseSpotifyPlayIntent(raw);
