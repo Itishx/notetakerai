@@ -22,7 +22,7 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
   - create notes in Apple Notes
   - send or draft email in Apple Mail using Contacts lookup when possible
 - Spotify Mac app/API playback for songs, pause/resume/skip, volume changes, liked songs, and named playlist adds when connected.
-- ANZ Team demo: Braino introduces himself, plays the DAF Spotify demo through the Mac app, opens the machine learning article, reads the canned summary, and speaks prepared ANZ teammate messages.
+- ANZ Team demo: Braino introduces himself, plays the DAF Spotify demo through the Mac app, opens the machine learning article, reads the short canned summary, speaks Madhuri, Shree, then Palash, and opens trybraino.com.
 - Basic "what app/window am I looking at?" awareness.
 - Logs for debugging voice, app-opening, file search, auth, and delegate actions.
 - Auto-stop listening after idle, so it does not keep burning realtime forever.

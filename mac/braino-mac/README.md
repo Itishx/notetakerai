@@ -57,7 +57,7 @@ It also records Mac delegate routing for local file/app actions, including clean
 - Apple Notes: “Create a note for me”, then tell Braino what it should say. Or say “Create a note about tomorrow’s demo checklist”.
 - Apple Mail: “Send an email to Renu saying I’ll call you tomorrow” or “Draft an email to Rahul with subject Quick update body I’ll send details tonight”.
 - Spotify: “Play Bargad on Spotify”, “pause Spotify”, “lower the volume”, “set Spotify volume to 40%”, “add this song to liked songs”, or “add Brabus to my gym playlist”.
-- Team demo: “Braino, introduce yourself” runs the ANZ demo flow, plays DAF in the Spotify Mac app, opens the machine learning article, reads the summary, then waits for ANZ names.
+- Team demo: “Braino, introduce yourself” runs the ANZ demo flow, plays DAF in the Spotify Mac app, opens the machine learning article, reads the short summary, speaks Madhuri, Shree, then Palash, and opens trybraino.com.
 - Front window: “What do you see?” / “What is open?”
 
 ## Desktop Organization

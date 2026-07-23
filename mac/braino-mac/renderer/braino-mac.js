@@ -19,7 +19,9 @@ const REALTIME_TRANSCRIPT_IDLE_FLUSH_MS = 520;
 const REALTIME_CHAT_RESPONSE_TIMEOUT_MS = 12000;
 const REALTIME_SURFACE_SYNC_MIN_INTERVAL_MS = 30000;
 const MAC_TEAM_DEMO_SPOTIFY_MS = 5000;
-const MAC_TEAM_DEMO_ARTICLE_MS = 2600;
+const MAC_TEAM_DEMO_ARTICLE_MS = 350;
+const MAC_TEAM_PRIMARY_ORDER = ["madhuri", "shree", "palash"];
+const MAC_TEAM_ORDER_LINE = "This is the order I will be following: Madhuri, then Shree, then Palash. Elder comes first, then ladies first, and then comes the gentleman.";
 const MAC_TEAM_FINAL_THANK_YOU = "Thank you for making Itish's time in Amdocs worth it. Thank you for making him feel as if he was home away from home. He will remember you always.";
 const MAC_TEAM_DEMO_SCRIPT = {
   intro: [
@@ -31,14 +33,14 @@ const MAC_TEAM_DEMO_SCRIPT = {
   ].join("\n\n"),
   afterSong: "That was Spotify. Any song you want, I can play, as long as I am able to hear it correctly of course. Now let's say you want to read a machine learning article, watch.",
   afterSongFallback: "Spotify needed a warmup, but the trick is still the trick. Now let's say you want to read a machine learning article, watch.",
-  beforeArticleSummary: "Now that we have it opened, let's say you do not want to read the whole thing, because like Itish, you are lazy, and want it summarised. Earlier, you would have to copy-paste the contents of this and put it into ChatGPT and ask it to summarize, but I can just do it right here, without you having to leave the page.\n\nWatch.",
-  articleSummary: "So, this article is about Google's TabFM, a foundation model for tabular data. In normal words, it can look at a spreadsheet it has never been trained on and still make predictions in one shot. The core point is simple: this is a serious challenge to the usual XGBoost-style workflow for spreadsheet prediction. And the reason people are paying attention is that Google's benchmark results make the skepticism harder to maintain.",
-  closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while I am Indian at heart, my accent is very English. So here we go. Itish, my guy.\n\nWhich ANZ person is in front of us?",
+  beforeArticleSummary: "Now let's say you do not want to read the whole article. Earlier, you would copy-paste it somewhere else. I can just summarize it right here.",
+  articleSummary: "This article is about Google's TabFM, a foundation model for spreadsheet data. Basically, it can look at a new table and make predictions without training on that exact file first. That is why people are comparing it to the usual XGBoost workflow.",
+  closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while I am Indian at heart, my accent is very English. So here we go.",
 };
 const MAC_TEAM_ANZ = {
   label: "ANZ",
   aliases: ["anz", "a n z", "a n n", "ann", "a and z", "australia new zealand", "australia and new zealand", "old team", "bank team"],
-  fallbackOrder: ["madhuri", "rahul", "shriya", "palash", "shree"],
+  fallbackOrder: MAC_TEAM_PRIMARY_ORDER,
   people: {
     madhuri: {
       label: "Madhuri",
@@ -68,7 +70,7 @@ const MAC_TEAM_ANZ = {
     palash: {
       label: "Palash",
       speechLabel: "Puh-laash",
-      aliases: ["palash", "palashh", "palaash", "palash bhai"],
+      aliases: ["palash", "palah", "pala", "palashh", "palaash", "palash bhai"],
       opening: "Hey Palash, been a while. How are you doing?",
       message: "Itish wanted me to say thank you for always being there for him. For helping him switch the monitor on when he somehow could not figure it out, and for being supportive like an elder brother.",
       closing: "You took him to the airport when he broke his leg, and that means more than you can ever know.",
@@ -582,10 +584,14 @@ function macTeamIsContinuePrompt(text) {
   return /\b(continue|you choose|pick one|next one|go on|carry on)\b/i.test(String(text || ""));
 }
 
+function macTeamIsDirectMessagePrompt(text) {
+  return /\b(message\s+(?:for|to)|say\s+(?:hi|hello)\s+to|say\s+hello\s+for|say\s+hi\s+for|talk\s+to|speak\s+to)\b/i.test(String(text || ""));
+}
+
 function macTeamShouldHandlePrompt(text) {
   const raw = String(text || "").trim();
   if (!raw) return false;
-  const directPersonRequest = /\b(say|hello|hi|talk|speak|message|tell)\b/i.test(raw) && macTeamFindPeople(raw).length > 0;
+  const directPersonRequest = macTeamIsDirectMessagePrompt(raw) && macTeamFindPeople(raw).length > 0;
   return macTeamState.active
     || /\bteam mode\b/i.test(raw)
     || macTeamIsIntroPrompt(raw)
@@ -621,7 +627,8 @@ async function macTeamDemoAction(action, label) {
   }
 }
 
-async function macTeamSpeakPerson(personKey) {
+async function macTeamSpeakPerson(personKey, options = {}) {
+  const person = MAC_TEAM_ANZ.people?.[personKey];
   const message = macTeamBuildPersonMessage(personKey);
   if (!message) {
     await macTeamSpeak("I don't have a message prepared for them yet, but I'm glad they're here.");
@@ -632,7 +639,23 @@ async function macTeamSpeakPerson(personKey) {
   macTeamState.currentPerson = personKey;
   macTeamAddRoster([personKey]);
   if (!macTeamState.spoken.includes(personKey)) macTeamState.spoken.push(personKey);
-  await macTeamSpeak(message);
+  const greeting = options.greet && person?.label ? `Hi ${person.label}.\n\n` : "";
+  await macTeamSpeak(`${greeting}${message}`);
+  return true;
+}
+
+async function macTeamRunPrimaryOrder() {
+  macTeamState.active = true;
+  macTeamState.phase = "speaking_person";
+  macTeamState.roster = [...MAC_TEAM_PRIMARY_ORDER];
+  await macTeamSpeak(MAC_TEAM_ORDER_LINE);
+  for (const personKey of MAC_TEAM_PRIMARY_ORDER) {
+    await macTeamSpeakPerson(personKey, { greet: true });
+    await macTeamDelay(180);
+  }
+  macTeamState.phase = "done";
+  await macTeamSpeak(MAC_TEAM_FINAL_THANK_YOU);
+  await macTeamDemoAction("open-braino-launch", "Opening Braino");
   return true;
 }
 
@@ -652,14 +675,15 @@ async function macTeamStartIntroDemo(promptText) {
 
   macTeamState.phase = "demo_running_article";
   await macTeamDemoAction("open-team-article", "Opening the machine learning article");
-  await macTeamDelay(1600);
+  await macTeamDelay(900);
   await macTeamSpeak(MAC_TEAM_DEMO_SCRIPT.beforeArticleSummary);
   await macTeamSpeak(MAC_TEAM_DEMO_SCRIPT.articleSummary);
   await macTeamDelay(MAC_TEAM_DEMO_ARTICLE_MS);
-  await macTeamDemoAction("close-team-article", "Closing the article");
+  void macTeamDemoAction("close-team-article", "Closing the article");
 
-  macTeamState.phase = "collecting_room";
+  macTeamState.phase = "speaking_person";
   await macTeamSpeak(MAC_TEAM_DEMO_SCRIPT.closing, { chunkDelayMs: 240 });
+  await macTeamRunPrimaryOrder();
   logRenderer("team_demo.intro.done", { promptChars: String(promptText || "").length });
   return true;
 }
@@ -710,12 +734,8 @@ async function runMacTeamInput(rawText, options = {}) {
     }
 
     if (macTeamIsStartPrompt(promptText) || macTeamMentionsAnz(promptText) || /\bteam mode\b/i.test(promptText)) {
-      macTeamState.active = true;
-      macTeamState.roster = [];
-      macTeamState.spoken = [];
-      macTeamState.currentPerson = null;
-      await macTeamSpeak(macTeamPromptForRoom());
-      return true;
+      macTeamReset();
+      return macTeamRunPrimaryOrder();
     }
 
     if (!macTeamState.active) {
@@ -742,7 +762,7 @@ async function runMacTeamInput(rawText, options = {}) {
 
     const people = macTeamFindPeople(promptText);
     if (people.length === 1) {
-      await macTeamSpeakPerson(people[0]);
+      await macTeamSpeakPerson(people[0], { greet: macTeamIsDirectMessagePrompt(promptText) });
       return true;
     }
     if (people.length > 1) {

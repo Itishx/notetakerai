@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.40";
+const APP_VERSION = "12.0.41";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -83,6 +83,7 @@ const BRAINO_AUTH_ORIGINS = (ENV.BRAINO_MAC_AUTH_ORIGINS || DEFAULT_BRAINO_AUTH_
 const MAC_TEAM_DEMO_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
 const MAC_TEAM_DEMO_TRACK_START_MS = 52000;
 const MAC_TEAM_DEMO_ARTICLE_URL = "https://medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets-afbda2eea8c8";
+const MAC_TEAM_DEMO_LAUNCH_URL = "https://www.trybraino.com/";
 
 const RAW_CONSOLE = {
   log: console.log.bind(console),
@@ -4449,6 +4450,10 @@ async function runMacDemoAction(action, payload = {}) {
   if (name === "close-team-article") {
     const result = await closeBrowserTabsMatching("medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets");
     return { ok: true, ...result };
+  }
+  if (name === "open-braino-launch") {
+    await openChromeUrl(MAC_TEAM_DEMO_LAUNCH_URL);
+    return { ok: true, url: MAC_TEAM_DEMO_LAUNCH_URL };
   }
   return { ok: false, error: `Unknown demo action: ${name || "empty"}` };
 }
