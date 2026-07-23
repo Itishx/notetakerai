@@ -2643,6 +2643,191 @@ end tell`;
   return { ok: true, say: `Sent "${text}" to ${resolved.name} on WhatsApp.` };
 }
 
+let lastYouTubeList = { items: [], at: 0 };
+
+async function fetchYouTubeResults(query, { limit = 6 } = {}) {
+  const response = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en`, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      "Accept-Language": "en",
+    },
+  });
+  const html = await response.text();
+  const match = html.match(/var ytInitialData = (\{[\s\S]+?\});<\/script>/);
+  if (!match) throw new Error("YouTube results page had no data.");
+  const data = JSON.parse(match[1]);
+  const videos = [];
+  const channels = [];
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.videoRenderer?.videoId) {
+      const v = node.videoRenderer;
+      videos.push({
+        videoId: v.videoId,
+        title: v.title?.runs?.[0]?.text || "",
+        channel: v.ownerText?.runs?.[0]?.text || "",
+        length: v.lengthText?.simpleText || "",
+        views: v.shortViewCountText?.simpleText || "",
+      });
+      return;
+    }
+    if (node.channelRenderer?.channelId) {
+      channels.push({
+        channelId: node.channelRenderer.channelId,
+        title: node.channelRenderer.title?.simpleText || "",
+      });
+      return;
+    }
+    for (const key of Object.keys(node)) walk(node[key]);
+  };
+  walk(data.contents);
+  return { videos: videos.slice(0, limit), channels: channels.slice(0, 3) };
+}
+
+async function fetchYouTubeChannelVideos(channelId, { limit = 4 } = {}) {
+  const response = await fetch(`https://www.youtube.com/channel/${encodeURIComponent(channelId)}/videos?hl=en`, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      "Accept-Language": "en",
+    },
+  });
+  const html = await response.text();
+  const match = html.match(/var ytInitialData = (\{[\s\S]+?\});<\/script>/);
+  if (!match) return [];
+  const videos = [];
+  const walk = (node) => {
+    if (!node || typeof node !== "object" || videos.length >= limit) return;
+    if (node.videoRenderer?.videoId) {
+      const v = node.videoRenderer;
+      videos.push({
+        videoId: v.videoId,
+        title: v.title?.runs?.[0]?.text || "",
+        channel: "",
+        length: v.lengthText?.simpleText || "",
+        views: v.shortViewCountText?.simpleText || "",
+      });
+      return;
+    }
+    for (const key of Object.keys(node)) walk(node[key]);
+  };
+  try {
+    walk(JSON.parse(match[1]).contents);
+  } catch (_) {}
+  return videos;
+}
+
+function parseYouTubeIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
+  if (!source || !/\byou\s*tube\b/i.test(source)) return null;
+  const stripYt = (value) => String(value || "").replace(/\b(?:on|in)\s+you\s*tube\b/gi, "").replace(/\byou\s*tube\b/gi, "").replace(/\s+/g, " ").trim();
+
+  let match = source.match(/\b(?:show|open|see)\s+(?:me\s+)?(?:some\s+(?:of\s+)?)?(?:the\s+)?(?:recent\s+|latest\s+|new\s+)?videos?\s+(?:from|of|by)\s+(.+)$/i)
+    || source.match(/\bopen\s+(.+?)(?:'s)?\s+channel\b.*$/i);
+  if (match?.[1]) {
+    const query = stripYt(match[1]);
+    if (query) return { action: "channel", query };
+  }
+
+  if (/\b(?:find|search|recommend|suggest|tutorials?|help me find)\b/i.test(source)) {
+    match = source.match(/\b(?:find|search(?:\s+for)?|recommend|suggest|help me find)\s+(?:me\s+)?(?:some\s+)?(?:good\s+)?(.+)$/i);
+    const query = stripYt(match?.[1] || "");
+    if (query) return { action: "search", query };
+  }
+
+  match = source.match(/\b(?:play|watch|put on|start)\s+(.+)$/i);
+  if (match?.[1]) {
+    const query = stripYt(match[1]);
+    if (query) return { action: "play", query };
+  }
+  return null;
+}
+
+function parseYouTubePickIntent(raw) {
+  if (!lastYouTubeList.items.length || Date.now() - lastYouTubeList.at > 5 * 60 * 1000) return null;
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
+  const match = source.match(/^(?:play|open|watch)\s+(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th|number\s+\d)\s*(?:one|video)?$/i);
+  if (!match) return null;
+  const word = match[1].toLowerCase();
+  const numberMatch = word.match(/number\s+(\d)/);
+  const map = { first: 0, "1st": 0, second: 1, "2nd": 1, third: 2, "3rd": 2, fourth: 3, "4th": 3, fifth: 4, "5th": 4, last: lastYouTubeList.items.length - 1 };
+  const index = numberMatch ? Number(numberMatch[1]) - 1 : map[word];
+  if (index == null || !lastYouTubeList.items[index]) return null;
+  return { item: lastYouTubeList.items[index] };
+}
+
+function speakableYouTubeList(items, count = 3) {
+  const words = ["First", "Second", "Third", "Fourth", "Fifth"];
+  return items.slice(0, count)
+    .map((item, index) => `${words[index]}, ${item.title}${item.channel ? ` by ${item.channel}` : ""}`)
+    .join(". ");
+}
+
+async function playYouTubeVideo(query) {
+  sendTaskProgress({ status: "thinking", text: `Finding ${query} on YouTube` });
+  try {
+    const { videos } = await fetchYouTubeResults(query, { limit: 5 });
+    const video = videos[0];
+    if (!video) return { ok: false, say: `I could not find ${query} on YouTube.` };
+    lastYouTubeList = { items: videos, at: Date.now() };
+    await openChromeUrl(`https://www.youtube.com/watch?v=${video.videoId}`);
+    logMac("youtube.play", { query: textForLog(query), videoId: video.videoId, title: textForLog(video.title) });
+    sendTaskProgress({ status: "done", text: `Playing ${video.title}` });
+    return { ok: true, say: `Playing ${video.title}${video.channel ? ` by ${video.channel}` : ""} on YouTube.` };
+  } catch (error) {
+    logMac("youtube.play.failed", { query: textForLog(query), error });
+    await openChromeUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+    return { ok: true, say: `YouTube search was moody, so I opened the results for ${query}.` };
+  }
+}
+
+async function openYouTubeChannelFlow(name) {
+  sendTaskProgress({ status: "thinking", text: `Finding ${name} on YouTube` });
+  try {
+    const { channels, videos } = await fetchYouTubeResults(name, { limit: 5 });
+    const channel = channels[0];
+    if (!channel) {
+      if (videos[0]?.channel) {
+        // No channel card, but the top videos tell us who they meant.
+        lastYouTubeList = { items: videos, at: Date.now() };
+        await openChromeUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(name)}`);
+        return { ok: true, say: `I could not pin the channel, but here is what is around. ${speakableYouTubeList(videos)}. Say play the first, second, or third.` };
+      }
+      return { ok: false, say: `I could not find a channel called ${name} on YouTube.` };
+    }
+    const recent = await fetchYouTubeChannelVideos(channel.channelId, { limit: 4 });
+    await openChromeUrl(`https://www.youtube.com/channel/${channel.channelId}/videos`);
+    logMac("youtube.channel", { name: textForLog(channel.title), channelId: channel.channelId, recentCount: recent.length });
+    if (recent.length) {
+      lastYouTubeList = { items: recent, at: Date.now() };
+      sendTaskProgress({ status: "done", text: channel.title });
+      return { ok: true, say: `Opened ${channel.title}. Recent uploads: ${speakableYouTubeList(recent)}. Which one should I play?` };
+    }
+    sendTaskProgress({ status: "done", text: channel.title });
+    return { ok: true, say: `Opened ${channel.title}'s channel on YouTube.` };
+  } catch (error) {
+    logMac("youtube.channel.failed", { name: textForLog(name), error });
+    await openChromeUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(name)}`);
+    return { ok: true, say: `I opened YouTube results for ${name}.` };
+  }
+}
+
+async function searchYouTubeSpoken(query) {
+  sendTaskProgress({ status: "thinking", text: `Searching YouTube for ${query}` });
+  try {
+    const { videos } = await fetchYouTubeResults(query, { limit: 5 });
+    if (!videos.length) return { ok: false, say: `Nothing on YouTube for ${query}.` };
+    lastYouTubeList = { items: videos, at: Date.now() };
+    await openChromeUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+    logMac("youtube.search", { query: textForLog(query), count: videos.length });
+    sendTaskProgress({ status: "done", text: "Found some" });
+    return { ok: true, say: `Here is what looks good for ${query}. ${speakableYouTubeList(videos)}. Say play the first, second, or third.` };
+  } catch (error) {
+    logMac("youtube.search.failed", { query: textForLog(query), error });
+    await openChromeUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+    return { ok: true, say: `I opened YouTube results for ${query}.` };
+  }
+}
+
 function parseScreenPointIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
   if (!source) return null;
@@ -5621,6 +5806,24 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       return { ok: true, say: `Searching Chrome for ${webQuery}.` };
     }
     return runMacWebSearch(webQuery);
+  }
+
+  const youtubePick = parseYouTubePickIntent(raw);
+  if (youtubePick) {
+    logMac("delegate.youtube_pick_intent", { title: textForLog(youtubePick.item.title) });
+    await openChromeUrl(`https://www.youtube.com/watch?v=${youtubePick.item.videoId}`);
+    return { ok: true, say: `Playing ${youtubePick.item.title} on YouTube.` };
+  }
+
+  const youtubeIntent = parseYouTubeIntent(raw);
+  if (youtubeIntent) {
+    logMac("delegate.youtube_intent", {
+      action: youtubeIntent.action,
+      query: textForLog(youtubeIntent.query),
+    });
+    if (youtubeIntent.action === "channel") return openYouTubeChannelFlow(youtubeIntent.query);
+    if (youtubeIntent.action === "search") return searchYouTubeSpoken(youtubeIntent.query);
+    return playYouTubeVideo(youtubeIntent.query);
   }
 
   const spotifyVolume = parseSpotifyVolumeIntent(raw);
