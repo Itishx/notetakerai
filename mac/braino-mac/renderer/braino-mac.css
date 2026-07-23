@@ -127,49 +127,91 @@ body {
   animation: macAuthSuccess 0.95s ease-in-out 1;
 }
 
-/* Notch glow — light the pixels around the (black) notch so the cutout itself
-   appears to breathe. Pure CSS, click-through, driven by voice status. */
+/* Notch glow — from the Claude Design "Braino Notch Glow" concepts.
+   Listening = Ripple (05): blue sonar rings emitting from the notch base.
+   Speaking = Aura Halo (01): a coral bloom under the notch, pulsing with his voice.
+   Thinking = the aura, cooled and faint. Pure CSS, click-through. */
 #notch-glow {
   position: fixed;
-  top: -26px;
+  top: 0;
   left: 50%;
-  width: 340px;
-  height: 58px;
-  margin-left: -170px;
-  border-radius: 0 0 28px 28px;
+  width: 0;
+  height: 0;
   pointer-events: none;
   z-index: 55;
+}
+
+#notch-glow .halo {
+  position: absolute;
+  top: -12px;
+  left: 0;
+  transform: translateX(-50%);
+  width: 330px;
+  height: 165px;
   opacity: 0;
+  transition: opacity 0.5s ease;
+  background: radial-gradient(60% 70% at 50% 0%, rgba(232, 120, 110, 0.95), rgba(232, 120, 110, 0.22) 45%, transparent 72%);
   filter: blur(14px);
-  transition: opacity 0.45s ease;
-  background: radial-gradient(58% 100% at 50% 0%, rgba(255, 122, 89, 0.95), rgba(255, 122, 89, 0.35) 55%, transparent 80%);
 }
 
-#notch-glow.listen {
+#notch-glow .rings {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+#notch-glow .rings i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(122, 162, 255, 0.9);
+  box-shadow: 0 0 12px rgba(122, 162, 255, 0.45);
+  opacity: 0;
+}
+
+#notch-glow.listen .rings {
   opacity: 1;
-  animation: notchBreathe 1.6s ease-in-out infinite;
 }
 
-#notch-glow.speak {
+#notch-glow.listen .rings i {
+  animation: notchRipple 3s ease-out infinite;
+}
+
+#notch-glow.listen .rings i:nth-child(2) { animation-delay: 0.6s; }
+#notch-glow.listen .rings i:nth-child(3) { animation-delay: 1.2s; }
+
+#notch-glow.speak .halo {
   opacity: 1;
-  background: radial-gradient(58% 100% at 50% 0%, rgba(255, 158, 92, 1), rgba(255, 122, 89, 0.45) 55%, transparent 80%);
-  animation: notchTalk 0.42s ease-in-out infinite;
+  animation: notchAuraPulse 1s ease-in-out infinite;
 }
 
-#notch-glow.think {
-  opacity: 0.85;
-  background: radial-gradient(58% 100% at 50% 0%, rgba(122, 162, 255, 0.9), rgba(122, 162, 255, 0.3) 55%, transparent 80%);
-  animation: notchBreathe 2.6s ease-in-out infinite;
+#notch-glow.think .halo {
+  opacity: 0.55;
+  background: radial-gradient(60% 70% at 50% 0%, rgba(122, 162, 255, 0.8), rgba(122, 162, 255, 0.18) 45%, transparent 72%);
+  animation: notchAuraBreath 2.8s ease-in-out infinite;
 }
 
-@keyframes notchBreathe {
-  0%, 100% { transform: scaleX(0.86) scaleY(0.9); opacity: 0.7; }
-  50% { transform: scaleX(1) scaleY(1); opacity: 1; }
+@keyframes notchRipple {
+  0% { width: 22px; height: 22px; opacity: 0.75; border-width: 2.5px; }
+  100% { width: 270px; height: 175px; opacity: 0; border-width: 0.5px; }
 }
 
-@keyframes notchTalk {
-  0%, 100% { transform: scaleX(0.92) scaleY(0.85); }
-  50% { transform: scaleX(1.05) scaleY(1.08); }
+@keyframes notchAuraBreath {
+  0%, 100% { transform: translateX(-50%) scale(0.9); }
+  50% { transform: translateX(-50%) scale(1.05); }
+}
+
+@keyframes notchAuraPulse {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.78; }
+  50% { transform: translateX(-50%) scale(1.22); opacity: 1; }
 }
 
 #point-ring {
