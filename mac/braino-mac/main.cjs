@@ -2200,18 +2200,15 @@ async function runScreenPoint(target, raw) {
     authToken = await getBrainoAuthToken();
   }
 
-  const message = [
-    `Locate this on the user's Mac screen: "${target}".`,
-    `The user said: "${String(raw || "").trim()}".`,
-    'Reply with ONLY compact JSON, no prose, no markdown: {"found":true,"x":0.42,"y":0.18,"label":"Export button","spoken":"one short spoken sentence"}.',
-    "x and y are the CENTER of the target, normalized to the image: x from 0 at the left edge to 1 at the right edge, y from 0 at the top to 1 at the bottom.",
-    'If the target is not visible in the screenshot, reply {"found":false,"spoken":"a brief sentence saying you cannot see it on this screen"}.',
-  ].join("\n");
+  const surface = activeMacContext || {};
+  const pointContext = surface.appName
+    ? `front app ${surface.appName}${surface.windowTitle ? `, window "${surface.windowTitle}"` : ""}`
+    : "";
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
-    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/vision-point`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -2219,18 +2216,16 @@ async function runScreenPoint(target, raw) {
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
       body: JSON.stringify({
-        notes: "",
-        chatHistory: [],
-        message,
-        visionMode: "describe",
+        target,
+        said: String(raw || "").trim(),
+        context: pointContext,
         imageBase64: shot.base64,
-        responseMedium: "voice",
       }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
     const data = await response.json().catch(() => ({}));
-    const reply = String(data?.reply || data?.response || "").trim();
+    const reply = String(data?.reply || "").trim();
     if (!response.ok || !reply) throw new Error(data?.error || `point vision failed (${response.status}).`);
     let parsed = null;
     try {

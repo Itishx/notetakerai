@@ -13,6 +13,10 @@ entrypoint = "./functions/chat/braino-chat/index.ts"
 [functions.chat-about-notes]
 entrypoint = "./functions/chat/chat-about-notes/index.ts"
 
+[functions.vision-point]
+entrypoint = "./functions/chat/vision-point/index.ts"
+verify_jwt = false
+
 [functions.save-note]
 entrypoint = "./functions/chat/save-note/index.ts"
 

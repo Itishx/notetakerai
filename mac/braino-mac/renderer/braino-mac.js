@@ -2069,7 +2069,20 @@ function handleRealtimeEvent(event) {
     rtUserTranscript = "";
     rtTranscriptFinal = false;
     clearRealtimeTranscriptFlush();
-    if (speaking || realtimeResponseInFlight) {
+    // Trust the physical audio state, not just the flags: `speaking` can go
+    // stale while a long Fish stream is still audible, which used to make
+    // interruptions land here and do nothing until the clip finished.
+    const audiblyTalking = speaking || Boolean(currentSpeechAudio) || Boolean(realtimeStreamTts);
+    if (audiblyTalking || realtimeResponseInFlight) {
+      logRenderer("realtime.barge_in", {
+        via: "speech_started",
+        speaking,
+        processing,
+        voiceTurnInFlight,
+        hadAudio: Boolean(currentSpeechAudio),
+        hadStreamTts: Boolean(realtimeStreamTts),
+        responseInFlight: realtimeResponseInFlight,
+      });
       cancelRealtimeResponse("barge_in");
       delegateGeneration += 1;
       voiceTurnInFlight = false;
@@ -2078,7 +2091,6 @@ function handleRealtimeEvent(event) {
       setRealtimeMicEnabled(true);
       setStatus("hearing", "Hearing you");
       setBubble("Listening...", 0);
-      logRenderer("realtime.barge_in", { currentRunId: delegateGeneration });
       return;
     }
     if (processing || voiceTurnInFlight) {
@@ -2106,6 +2118,22 @@ function handleRealtimeEvent(event) {
   if (event.type === "conversation.item.input_audio_transcription.delta") {
     const delta = typeof event.delta === "string" ? event.delta : "";
     if (delta) {
+      // Second tripwire: if user words are arriving while any audio is still
+      // playing, cut the speech even if speech_started was missed or mishandled.
+      if (speaking || currentSpeechAudio || realtimeStreamTts) {
+        logRenderer("realtime.barge_in", {
+          via: "transcript_delta",
+          speaking,
+          hadAudio: Boolean(currentSpeechAudio),
+          hadStreamTts: Boolean(realtimeStreamTts),
+        });
+        cancelRealtimeResponse("barge_in");
+        delegateGeneration += 1;
+        voiceTurnInFlight = false;
+        processing = false;
+        stopSpeechOutput();
+        setRealtimeMicEnabled(true);
+      }
       markRealtimeActivity("transcript_delta", { schedule: false });
       rtTranscriptFinal = false;
       rtUserTranscript += delta;
