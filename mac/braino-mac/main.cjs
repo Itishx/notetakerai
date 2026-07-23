@@ -2153,6 +2153,117 @@ async function runScreenVision(question) {
   }
 }
 
+function parseScreenPointIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
+  if (!source) return null;
+  const FILE_WORDS = /\b(file|files|folder|pdf|document|docs?|image|photo|picture|video|screenshot|download|downloads|resume|receipt|invoice|note|notes)\b/i;
+  const UI_WORDS = /\b(button|icon|menu|setting|settings|option|options|tab|link|field|toggle|slider|checkbox|search bar|address bar|sidebar|toolbar|close|save|export|share|profile|cursor|dock|play button|volume)\b/i;
+
+  let target = "";
+  let explicit = false;
+  let match = source.match(/\b(?:show me where|point (?:to|at)|point out)\s+(?:the\s+|my\s+|this\s+|that\s+|a\s+)?(.+?)(?:\s+(?:is|are))?(?:\s+on\s+(?:the|my)\s+screen)?$/i);
+  if (match?.[1]) {
+    target = match[1];
+    explicit = true;
+  } else {
+    match = source.match(/\bwhere(?:'s| is| are)\s+(?:the\s+|my\s+|this\s+|that\s+)?(.+?)(?:\s+on\s+(?:the|my)\s+screen)?$/i);
+    if (match?.[1]) {
+      target = match[1];
+      // Bare "where is X" only counts as pointing when X sounds like UI or the
+      // user names the screen; otherwise leave it for file search or chat.
+      explicit = /\bon\s+(?:the|my)\s+screen\b/i.test(source) || UI_WORDS.test(match[1]);
+    }
+  }
+  target = String(target || "").replace(/\s+/g, " ").trim();
+  if (!target || !explicit) return null;
+  if (FILE_WORDS.test(target) && !UI_WORDS.test(target)) return null;
+  return { target };
+}
+
+async function runScreenPoint(target, raw) {
+  const startedAt = Date.now();
+  sendTaskProgress({ status: "thinking", text: `Finding ${target}` });
+
+  const screenStatus = systemPreferences.getMediaAccessStatus?.("screen") || "unknown";
+  if (screenStatus === "denied" || screenStatus === "restricted") {
+    await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
+    return { ok: false, say: "I need Screen Recording permission to point at things. I opened the setting for you." };
+  }
+
+  const shot = await captureScreenBase64();
+  if (!shot.ok) return { ok: false, say: shot.error };
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, say: "Vision is not configured on this build." };
+  let authToken = await getBrainoAuthToken();
+  if (!authToken) {
+    await ensureBrainoAuth("vision");
+    authToken = await getBrainoAuthToken();
+  }
+
+  const message = [
+    `Locate this on the user's Mac screen: "${target}".`,
+    `The user said: "${String(raw || "").trim()}".`,
+    'Reply with ONLY compact JSON, no prose, no markdown: {"found":true,"x":0.42,"y":0.18,"label":"Export button","spoken":"one short spoken sentence"}.',
+    "x and y are the CENTER of the target, normalized to the image: x from 0 at the left edge to 1 at the right edge, y from 0 at the top to 1 at the bottom.",
+    'If the target is not visible in the screenshot, reply {"found":false,"spoken":"a brief sentence saying you cannot see it on this screen"}.',
+  ].join("\n");
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({
+        notes: "",
+        chatHistory: [],
+        message,
+        visionMode: "describe",
+        imageBase64: shot.base64,
+        responseMedium: "voice",
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || data?.response || "").trim();
+    if (!response.ok || !reply) throw new Error(data?.error || `point vision failed (${response.status}).`);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(reply.match(/\{[\s\S]*\}/)?.[0] || "");
+    } catch (_) {}
+    logMac("point.result", {
+      target: textForLog(target),
+      found: Boolean(parsed?.found),
+      x: parsed?.x,
+      y: parsed?.y,
+      durationMs: Date.now() - startedAt,
+    });
+    if (parsed?.found && Number.isFinite(Number(parsed.x)) && Number.isFinite(Number(parsed.y))) {
+      sendToRenderer("braino-mac:point-at", {
+        x: Math.min(1, Math.max(0, Number(parsed.x))),
+        y: Math.min(1, Math.max(0, Number(parsed.y))),
+        label: String(parsed.label || target).slice(0, 60),
+      });
+      sendTaskProgress({ status: "done", text: `Pointing at ${parsed.label || target}` });
+      return { ok: true, say: String(parsed.spoken || `Right there. That is the ${parsed.label || target}.`) };
+    }
+    // Not on screen: if it sounds like a UI element just say so, otherwise
+    // the user probably meant the world, so look it up on the web.
+    if (parsed && /\b(button|icon|menu|setting|option|tab|link|field|toolbar)\b/i.test(target)) {
+      return { ok: true, say: String(parsed.spoken || `I do not see ${target} on this screen.`) };
+    }
+    return runMacWebSearch(String(raw || target));
+  } catch (error) {
+    logMac("point.failed", { target: textForLog(target), error });
+    return { ok: false, say: "I could not line that up just now. Try once more." };
+  }
+}
+
 function stripForSpeech(text) {
   return String(text || "")
     .replace(/\[([^\]]+)\]\((?:[^)]+)\)/g, "$1")
@@ -4907,6 +5018,12 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (/\b(accessibility|permissions|input monitoring)\b/.test(text)) {
     await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
     return { ok: true, say: "Opening Accessibility settings. Give Braino permission there, then double Control gets much cleaner." };
+  }
+
+  const screenPoint = parseScreenPointIntent(raw);
+  if (screenPoint) {
+    logMac("delegate.screen_point_intent", { raw: textForLog(raw), target: textForLog(screenPoint.target) });
+    return runScreenPoint(screenPoint.target, raw);
   }
 
   const screenVision = parseScreenVisionIntent(raw);

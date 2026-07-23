@@ -1704,7 +1704,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|reply|write|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -2992,8 +2992,52 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 
+let pointRing = null;
+let pointReturnTimer = 0;
+
+function ensurePointRing() {
+  if (pointRing) return pointRing;
+  pointRing = document.createElement("div");
+  pointRing.id = "point-ring";
+  document.body.appendChild(pointRing);
+  return pointRing;
+}
+
+async function pointAtScreen(payload) {
+  if (herMode) return;
+  const nx = Number(payload?.x);
+  const ny = Number(payload?.y);
+  if (!Number.isFinite(nx) || !Number.isFinite(ny)) return;
+  const tx = clamp(nx, 0, 1) * window.innerWidth;
+  const ty = clamp(ny, 0, 1) * window.innerHeight;
+
+  window.clearTimeout(pointReturnTimer);
+  movementMode = "free";
+  // Stand beside the target, feet slightly below it, so the raised arm lands on it.
+  const standX = clamp(tx + (tx > window.innerWidth / 2 ? -(W + 42) : 42), 8, window.innerWidth - W - 8);
+  const standY = clamp(ty + 20, 8, window.innerHeight - H - 8);
+  logRenderer("point.walk", { tx: Math.round(tx), ty: Math.round(ty), label: payload?.label || "" });
+  await new Promise((resolve) => {
+    scriptedWalk = { x: standX, y: standY, speed: 340, resolve };
+  });
+  dirX = tx >= posX + W / 2 ? 1 : -1;
+  setWave(true);
+  const ring = ensurePointRing();
+  ring.style.left = `${tx}px`;
+  ring.style.top = `${ty}px`;
+  ring.classList.add("show");
+  if (payload?.label) setBubble(payload.label, 3200);
+  window.setTimeout(() => pointRing?.classList.remove("show"), 6500);
+  // After the moment passes, drift back to Dock life.
+  pointReturnTimer = window.setTimeout(() => {
+    movementMode = "dock";
+    pickRoamTarget();
+  }, 14000);
+}
+
 window.brainoMac.onVoiceToggle(() => toggleVoice());
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
+window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
 window.brainoMac.onAuthRequired(() => {
   setAuthPose(true);
   setStatus("connecting", "Authenticating");
