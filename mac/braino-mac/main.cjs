@@ -39,6 +39,8 @@ let authBrowserFlow = null;
 let macChatHistory = [];
 let pendingFileConfirmation = null;
 let pendingMacWorkflow = null;
+let lastSpotifyReconnectAt = 0;
+const SPOTIFY_RECONNECT_COOLDOWN_MS = 10 * 60 * 1000;
 let activeMacContext = null;
 let overlaySyncTimer = null;
 let lastOverlayDisplayKey = "";
@@ -1688,6 +1690,20 @@ async function handlePendingMacWorkflow(raw) {
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
+  if (pending.type === "spotify_add") {
+    clearPendingMacWorkflow();
+    const playlist = cleanSpotifyPlaylistName(raw);
+    if (!playlist) return { ok: true, say: "I did not catch the playlist name. Say it once more?" };
+    return addSpotifyTrackOnMac({ ...(pending.data || {}), playlist, needsPlaylist: false });
+  }
+
+  if (pending.type === "spotify_create_playlist") {
+    clearPendingMacWorkflow();
+    const name = cleanSpotifyPlaylistName(raw);
+    if (!name) return { ok: true, say: "I did not catch the playlist name. Say it once more?" };
+    return createSpotifyPlaylistOnMac(name, pending.data || {});
+  }
+
   if (pending.type === "note") {
     const parsed = parseNoteIntent(raw);
     const body = parsed?.body || cleanNoteContent(raw);
@@ -1786,18 +1802,35 @@ async function callSpotifyFunction(functionName, payload) {
         details: data?.details || null,
         reconnectRequired: Boolean(data?.reconnectRequired),
       });
+      const reconnectAllowed = Date.now() - lastSpotifyReconnectAt > SPOTIFY_RECONNECT_COOLDOWN_MS;
       if (data?.reconnectRequired) {
-        await openSpotifyReconnect(authToken);
-        return { ok: false, error: "Spotify needs to be reconnected. I opened the reconnect page." };
+        if (reconnectAllowed) {
+          lastSpotifyReconnectAt = Date.now();
+          await openSpotifyReconnect(authToken);
+          return { ok: false, error: "Spotify needs to be reconnected. I opened the reconnect page." };
+        }
+        return { ok: false, error: "Spotify still is not connected. Finish the reconnect tab I opened earlier, then ask me again." };
       }
       const errorBlob = `${data?.error || ""} ${data?.details || ""}`;
       if (/"status"\s*:\s*403/.test(errorBlob) || /\bforbidden\b/i.test(errorBlob)) {
         // A Spotify 403 here usually means the stored token was granted before the
         // current scope list existed. A fresh connect picks up the new scopes.
-        await openSpotifyReconnect(authToken);
+        logMac("spotify.write_forbidden", {
+          functionName,
+          grantedScope: data?.grantedScope || "unknown",
+          scopeHint: data?.scopeHint || "",
+        });
+        if (reconnectAllowed) {
+          lastSpotifyReconnectAt = Date.now();
+          await openSpotifyReconnect(authToken);
+          return {
+            ok: false,
+            error: "Spotify refused that with the current permissions. I opened a Spotify reconnect page, approve it once, and ask me again.",
+          };
+        }
         return {
           ok: false,
-          error: "Spotify refused that with the current permissions. I opened a Spotify reconnect page, sign in there and ask me again.",
+          error: "Spotify is still refusing writes. Finish the reconnect tab from before, or tell Itish to check the braino-mac log for spotify.write_forbidden.",
         };
       }
       return { ok: false, error: [data?.error, data?.details].filter(Boolean).join(" - ") || `${functionName} failed (${response.status}).` };
@@ -1888,9 +1921,17 @@ function parseSpotifyVolumeIntent(raw) {
     return { volumePercent: 100, volumeStep: 0 };
   }
   if (/\b(?:mute|silence)\b/i.test(source)) return { volumePercent: 0, volumeStep: 0 };
+  // "reduce/raise the volume by N percent" is a relative step, not an absolute target.
+  const byAmount = source.match(/\b(?:by|down by|up by)\s+(\d{1,3})\s*(?:%|percent)?\b/i);
+  if (byAmount?.[1] && (wantsQuieter || wantsLouder)) {
+    const amount = clampSpotifyVolume(byAmount[1]);
+    return { volumePercent: null, volumeStep: wantsQuieter ? -amount : amount };
+  }
   const exact = source.match(/(?:set|change|put|make)\s+(?:the\s+)?(?:spotify\s+)?(?:volume|vol|sound)\s+(?:to\s+)?(\d{1,3})\s*%?/i)
     || source.match(/\b(?:volume|vol|sound)\s+(?:to\s+|at\s+)?(\d{1,3})\s*%?/i)
-    || source.match(/\b(\d{1,3})\s*%?\s+(?:volume|vol|sound)\b/i);
+    || source.match(/\b(\d{1,3})\s*%?\s+(?:volume|vol|sound)\b/i)
+    || source.match(/\b(?:make|set|put)\s+it\s+(?:to|at|on)?\s*(\d{1,3})\s*(?:%|percent)\b/i)
+    || (hasVolumeWord ? source.match(/\b(\d{1,3})\s*(?:%|percent)\b/i) : null);
   if (exact?.[1]) return { volumePercent: clampSpotifyVolume(exact[1]), volumeStep: 0 };
   if (wantsQuieter) return { volumePercent: null, volumeStep: -20 };
   if (wantsLouder) return { volumePercent: null, volumeStep: 20 };
@@ -1918,6 +1959,15 @@ function parseSpotifyAddTrackIntent(raw) {
   const source = String(raw || "").trim();
   if (!/\b(?:add|save)\b/i.test(source)) return null;
   if (!/\b(?:spotify|playlist|liked songs?|song|track|music|tune)\b/i.test(source)) return null;
+
+  // "add this song to my playlist" with no playlist name: ask which one instead
+  // of guessing (the generic patterns below would misparse "playlist" as a name).
+  if (/\bto\s+(?:my\s+|the\s+|a\s+)?playlist\s*(?:on\s+spotify\s*)?[?.!]?\s*$/i.test(source)) {
+    const songMatch = source.match(/\b(?:add|save)\s+(?:the\s+)?(?:song|track|music|tune)?\s*["“]?(.+?)["”]?\s+to\s+(?:my\s+|the\s+|a\s+)?playlist\s*(?:on\s+spotify\s*)?[?.!]?\s*$/i);
+    const rawSong = songMatch?.[1] ? cleanSpotifySongQuery(songMatch[1]) : "";
+    const song = /^(?:this|it|that|current|playing|song|track|music|tune|this song|the song)$/i.test(rawSong) ? "" : rawSong;
+    return { song, playlist: null, useCurrent: !song, needsPlaylist: true };
+  }
 
   if (/(?:add|save)\s+(?:this|current|playing)(?:\s+(?:song|track|music|tune))?\s+to\s+(?:my\s+)?(?:liked\s+songs?|spotify)\b/i.test(source)) {
     return { song: "", playlist: null, useCurrent: true };
@@ -2176,6 +2226,42 @@ async function playSpotifyContextOnMac(kind, name) {
   return { ok: true, say: `Playing ${label} on Spotify.` };
 }
 
+function parseSpotifyCreatePlaylistIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\b(?:create|make|start)\b/i.test(source) || !/\bplaylist\b/i.test(source)) return null;
+  const addCurrent = /\b(?:and\s+)?(?:add|put|with)\s+(?:this|current|playing)(?:\s+(?:song|track))?\b/i.test(source);
+  const named = source.match(/\b(?:create|make|start)\s+(?:me\s+)?(?:a\s+|the\s+)?(?:new\s+)?playlist\s+(?:called\s+|named\s+)?["“]?(.+?)["”]?(?:\s+(?:on|in)\s+spotify)?(?:\s+and\s+.*)?[?.!]?\s*$/i)
+    || source.match(/\b(?:create|make|start)\s+(?:me\s+)?(?:a\s+|the\s+)?(?:new\s+)?["“]?(.+?)["”]?\s+playlist(?:\s+(?:on|in)\s+spotify)?(?:\s+and\s+.*)?[?.!]?\s*$/i);
+  let name = named?.[1] ? cleanSpotifyPlaylistName(named[1]) : "";
+  if (/^(?:new|a|me|for me|spotify)$/i.test(name)) name = "";
+  return { name, addCurrent, needsName: !name };
+}
+
+async function createSpotifyPlaylistOnMac(name, options = {}) {
+  const playlistName = String(name || "").trim();
+  if (!playlistName) return { ok: false, say: "Tell me the playlist name and I will create it on Spotify." };
+  sendTaskProgress({ status: "thinking", text: `Creating playlist ${playlistName}` });
+  const created = await callSpotifyFunction("spotify-add-track", { action: "createPlaylist", name: playlistName });
+  if (!created.ok) {
+    logMac("spotify.create_playlist.failed", { name: textForLog(playlistName), error: created.error || "" });
+    return { ok: false, say: created.error || `I could not create the playlist ${playlistName}.` };
+  }
+  logMac("spotify.create_playlist.done", {
+    name: textForLog(created.playlistName || playlistName),
+    playlistId: created.playlistId || "",
+    addCurrent: Boolean(options.addCurrent),
+  });
+  if (options.addCurrent) {
+    const added = await addSpotifyTrackOnMac({ song: "", playlist: created.playlistName || playlistName, useCurrent: true });
+    if (added.ok) {
+      return { ok: true, say: `Created the playlist ${created.playlistName || playlistName} and ${added.say.charAt(0).toLowerCase()}${added.say.slice(1)}` };
+    }
+    return { ok: true, say: `Created the playlist ${created.playlistName || playlistName}, but adding the current song failed: ${added.say}` };
+  }
+  sendTaskProgress({ status: "done", text: `Created ${created.playlistName || playlistName}` });
+  return { ok: true, say: `Created the playlist ${created.playlistName || playlistName} on Spotify.` };
+}
+
 async function playSpotifyTrackInMacApp(uri, positionMs = 0) {
   const safeUri = escapeAppleScriptString(uri);
   const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
@@ -2321,16 +2407,32 @@ async function controlSpotifyPlaybackOnMac(control) {
   const startedAt = Date.now();
   sendTaskProgress({ status: "thinking", text: `Spotify ${normalized}` });
   if (normalized === "play") await openApp("Spotify");
+  const isSkip = normalized === "next" || normalized === "previous";
+  const before = isSkip ? await readSpotifyMacState() : null;
   try {
     await execFileP("/usr/bin/osascript", ["-e", `tell application "Spotify" to ${command}`], { timeout: 6000 });
+    if (isSkip) await new Promise((resolve) => setTimeout(resolve, 500));
     const state = await readSpotifyMacState();
     logMac("spotify.mac_app.control.done", {
       control: normalized,
       state: state?.state || "",
       track: state?.name || "",
       artist: state?.artist || "",
+      previousTrack: before?.name || "",
       durationMs: Date.now() - startedAt,
     });
+    if (isSkip && state?.ok && state.name) {
+      const artistLine = state.artist ? ` by ${state.artist}` : "";
+      if (before?.name && state.name === before.name) {
+        return { ok: true, say: `Spotify stayed on ${state.name}${artistLine}. It might be on repeat, want me to turn that off?` };
+      }
+      return {
+        ok: true,
+        say: normalized === "next"
+          ? `Skipped. Now playing ${state.name}${artistLine}.`
+          : `Went back. Now playing ${state.name}${artistLine}.`,
+      };
+    }
     return { ok: true, say: normalized === "pause" ? "Paused Spotify." : normalized === "play" ? "Resumed Spotify." : normalized === "next" ? "Skipped to the next track." : "Went back to the previous track." };
   } catch (error) {
     logMac("spotify.mac_app.control.failed", { control: normalized, error });
@@ -4467,6 +4569,25 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return organizeDesktopFiles({ mode: organizeModeForText(text) });
   }
 
+  const spotifyCreatePlaylist = parseSpotifyCreatePlaylistIntent(raw);
+  if (spotifyCreatePlaylist) {
+    logMac("delegate.spotify_create_playlist_intent", {
+      raw: textForLog(raw),
+      name: textForLog(spotifyCreatePlaylist.name || ""),
+      addCurrent: spotifyCreatePlaylist.addCurrent,
+      needsName: spotifyCreatePlaylist.needsName,
+    });
+    if (spotifyCreatePlaylist.needsName) {
+      setPendingMacWorkflow({
+        type: "spotify_create_playlist",
+        stage: "playlist_name",
+        data: { addCurrent: spotifyCreatePlaylist.addCurrent },
+      });
+      return { ok: true, say: "Sure. What should the playlist be called?" };
+    }
+    return createSpotifyPlaylistOnMac(spotifyCreatePlaylist.name, { addCurrent: spotifyCreatePlaylist.addCurrent });
+  }
+
   const createFolderIntent = parseCreateFolderIntent(raw);
   if (createFolderIntent) {
     logMac("delegate.create_folder_intent", {
@@ -4614,7 +4735,16 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       song: textForLog(spotifyAddTrack.song || ""),
       playlist: textForLog(spotifyAddTrack.playlist || ""),
       useCurrent: Boolean(spotifyAddTrack.useCurrent),
+      needsPlaylist: Boolean(spotifyAddTrack.needsPlaylist),
     });
+    if (spotifyAddTrack.needsPlaylist) {
+      setPendingMacWorkflow({
+        type: "spotify_add",
+        stage: "playlist_name",
+        data: { song: spotifyAddTrack.song || "", useCurrent: Boolean(spotifyAddTrack.useCurrent) },
+      });
+      return { ok: true, say: "Sure. Which playlist should I add it to?" };
+    }
     return addSpotifyTrackOnMac(spotifyAddTrack);
   }
 
