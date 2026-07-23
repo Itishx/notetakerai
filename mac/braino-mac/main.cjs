@@ -1850,7 +1850,7 @@ async function callSpotifyFunction(functionName, payload) {
         });
         return {
           ok: false,
-          error: "Spotify is blocking saves for this account. It is the developer dashboard allowlist, not sign in. Add your email under User Management for the Braino app on developer dot spotify dot com, then just ask me again.",
+          error: "Spotify blocks playlist and library saves for apps like mine since twenty twenty five. Playback still works fine. For liked songs, just play the track and say add this song to my liked songs, and I will use the Spotify app menu instead.",
         };
       }
       return { ok: false, error: [data?.error, data?.details].filter(Boolean).join(" - ") || `${functionName} failed (${response.status}).` };
