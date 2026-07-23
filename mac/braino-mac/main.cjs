@@ -2369,6 +2369,127 @@ function stopWhatsAppListener() {
   return { ok: true, say: "Okay, I stopped reading your WhatsApp messages." };
 }
 
+function parseCallIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
+  if (!source) return null;
+  if (!/\b(?:call|face\s*time|ring|dial)\b/i.test(source)) return null;
+  const facetime = /\bface\s*time\b/i.test(source);
+  const wantsVideo = /\bvideo\b/i.test(source);
+  const onWhatsApp = /\bwhats\s*app\b/i.test(source);
+  const match = source.match(/\b(?:video\s+call|voice\s+call|audio\s+call|call|face\s*time|ring|dial)\s+(?:my\s+)?(.+?)(?:\s+on\s+whats\s*app|\s+on\s+face\s*time|\s+for\s+me)?\s*$/i);
+  let recipient = match?.[1]
+    ?.replace(/\bon\s+whats\s*app\b/gi, "")
+    .replace(/\bon\s+face\s*time\b/gi, "")
+    .replace(/\b(?:please|now|right now)\b/gi, "")
+    .replace(/["“”]/g, "")
+    .replace(/\s+/g, " ")
+    .trim() || "";
+  if (!recipient || recipient.split(/\s+/).length > 4) return null;
+  if (facetime) return { app: "facetime", video: !/\baudio\b/i.test(source), recipient };
+  if (onWhatsApp || wantsVideo) return { app: "whatsapp", video: wantsVideo, recipient };
+  return { app: "phone", video: false, recipient };
+}
+
+async function clickWhatsAppCallMenuItem(video) {
+  const wanted = video ? "Video Call" : "Voice Call";
+  const script = `
+tell application "System Events"
+  if not (exists application process "WhatsApp") then return "no-app"
+  tell application process "WhatsApp"
+    set frontmost to true
+    delay 0.3
+    repeat with mb in menu bar items of menu bar 1
+      try
+        repeat with mi in menu items of menu 1 of mb
+          try
+            set nm to name of mi
+            if nm contains "${wanted}" then
+              click mi
+              return "clicked"
+            end if
+          end try
+        end repeat
+      end try
+    end repeat
+    return "not-found"
+  end tell
+end tell`;
+  const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
+  return /clicked/.test(String(stdout || ""));
+}
+
+async function pressReturnInApp(appName) {
+  const script = `
+tell application "System Events"
+  if not (exists application process "${escapeAppleScriptString(appName)}") then return "no-app"
+  tell application process "${escapeAppleScriptString(appName)}"
+    set frontmost to true
+    delay 0.25
+    key code 36
+  end tell
+  return "ok"
+end tell`;
+  try {
+    await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 6000 });
+  } catch (_) {}
+}
+
+async function startCall(intent) {
+  const label = intent.app === "facetime"
+    ? (intent.video ? "FaceTime" : "FaceTime audio")
+    : intent.app === "phone"
+      ? "your iPhone"
+      : intent.video
+        ? "WhatsApp video"
+        : "WhatsApp voice";
+  sendTaskProgress({ status: "thinking", text: `Calling ${intent.recipient}` });
+
+  const resolved = await resolveWhatsAppRecipient(intent.recipient);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      say: `I could not find a number for ${intent.recipient}. Say "Braino, remember ${intent.recipient}'s number is" and the number.`,
+    };
+  }
+  const phone = normalizeWhatsAppPhone(resolved.phone);
+  if (!phone || phone.length < 10) {
+    return { ok: false, say: `The number I have for ${resolved.name} does not look complete. Teach me the full one with country code.` };
+  }
+
+  if (intent.app === "facetime") {
+    await shell.openExternal(`${intent.video ? "facetime" : "facetime-audio"}://+${phone}`);
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    await pressReturnInApp("FaceTime");
+    logMac("call.started", { app: "facetime", video: intent.video, to: textForLog(resolved.name) });
+    sendTaskProgress({ status: "done", text: `Calling ${resolved.name}` });
+    return { ok: true, say: `Calling ${resolved.name} on ${intent.video ? "FaceTime" : "FaceTime audio"}.` };
+  }
+
+  if (intent.app === "phone") {
+    await shell.openExternal(`tel://+${phone}`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await pressReturnInApp("FaceTime");
+    logMac("call.started", { app: "phone", to: textForLog(resolved.name) });
+    sendTaskProgress({ status: "done", text: `Calling ${resolved.name}` });
+    return { ok: true, say: `Calling ${resolved.name} through your iPhone.` };
+  }
+
+  const wasRunning = await isMacApplicationRunning("WhatsApp");
+  await shell.openExternal(`whatsapp://send?phone=${phone}`);
+  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 1900 : 3800));
+  const clicked = await clickWhatsAppCallMenuItem(intent.video);
+  if (!clicked) {
+    logMac("call.whatsapp.menu_missing", { video: intent.video, to: textForLog(resolved.name) });
+    return {
+      ok: false,
+      say: `I opened ${resolved.name}'s chat but could not reach the ${intent.video ? "video" : "voice"} call button. The chat is up, one click and you are through.`,
+    };
+  }
+  logMac("call.started", { app: "whatsapp", video: intent.video, to: textForLog(resolved.name) });
+  sendTaskProgress({ status: "done", text: `Calling ${resolved.name}` });
+  return { ok: true, say: `Starting a ${intent.video ? "video" : "voice"} call with ${resolved.name} on WhatsApp.` };
+}
+
 function parseWaListenerIntent(raw) {
   const source = cleanPrompt(String(raw || ""));
   if (/\b(?:stop|quit|no more|disable|turn off)\b.*\bwhats\s*app/i.test(source) && /\bread|listen|notif/i.test(source)) return { enable: false };
@@ -5285,6 +5406,16 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       hasBody: Boolean(noteIntent.body),
     });
     return startNoteWorkflow(noteIntent);
+  }
+
+  const callIntent = parseCallIntent(raw);
+  if (callIntent) {
+    logMac("delegate.call_intent", {
+      app: callIntent.app,
+      video: callIntent.video,
+      recipient: textForLog(callIntent.recipient),
+    });
+    return startCall(callIntent);
   }
 
   const waListenerIntent = parseWaListenerIntent(raw);
