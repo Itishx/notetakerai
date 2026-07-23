@@ -9,6 +9,7 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Dock mascot, drag, wakeup climb | ✅ | |
 | Auth via browser relay | ✅ | |
 | Edge glow (screen perimeter radiance) | 🟡 | Blue listen / coral speak / faint think; replaced notch glow |
+| Music mode (headphones + color-cycling glow) | 🟡 | Spotify native state or active YouTube watch tab; 5s poll; voice states take priority |
 | Her mode (Samantha takeover) | 🟡 | Cmd+Shift+H or "her mode"; own Fish voice |
 | Jarvis-style delegate routing + LLM fallthrough | ✅ | |
 

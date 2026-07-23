@@ -182,6 +182,22 @@ body {
   animation: edgeBreath 3.4s ease-in-out infinite;
 }
 
+/* Music mode: a quieter glow than voice, slowly drifting through colors. */
+#edge-glow.music {
+  opacity: 0.85;
+}
+
+#edge-glow.music::before {
+  box-shadow:
+    inset 0 0 64px 12px rgba(232, 120, 110, 0.20),
+    inset 0 0 26px 5px rgba(122, 162, 255, 0.14);
+  animation: edgeBreath 4.2s ease-in-out infinite, musicHue 14s linear infinite;
+}
+
+@keyframes musicHue {
+  to { filter: hue-rotate(360deg); }
+}
+
 @keyframes edgeBreath {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }

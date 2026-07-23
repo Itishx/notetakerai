@@ -95,6 +95,19 @@ walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
 const root = walker.querySelector("#__sbwk_root__");
 const q = (selector) => root?.querySelector(selector);
 
+// Headphones live inside the rig so they bob, breathe, and flip with him.
+const headphones = document.createElementNS("http://www.w3.org/2000/svg", "g");
+headphones.setAttribute("id", "__sbwk_headphones__");
+headphones.innerHTML = [
+  '<path d="M 21 44 C 21 21 79 21 79 44" fill="none" stroke="#23232B" stroke-width="4.5" stroke-linecap="round"/>',
+  '<rect x="15.5" y="39" width="10" height="15" rx="4.5" fill="#23232B"/>',
+  '<rect x="74.5" y="39" width="10" height="15" rx="4.5" fill="#23232B"/>',
+  '<rect x="17.5" y="42" width="2.2" height="9" rx="1.1" fill="#E8786E"/>',
+  '<rect x="80.3" y="42" width="2.2" height="9" rx="1.1" fill="#E8786E"/>',
+].join("");
+headphones.style.display = "none";
+root?.appendChild(headphones);
+
 let start = performance.now();
 let last = start;
 let movementMode = "dock";
@@ -315,19 +328,33 @@ function setStatus(status, text) {
   walker.classList.toggle("captured", status === "captured");
   walker.classList.toggle("speaking", status === "speaking");
   statusText.textContent = text;
-  if (edgeGlow) {
-    const glowState = herMode
-      ? ""
-      : ["listening", "hearing"].includes(status)
-        ? "listen"
-        : status === "speaking"
-          ? "speak"
-          : ["connecting", "thinking", "captured"].includes(status)
-            ? "think"
-            : "";
-    edgeGlow.className = glowState;
-  }
+  lastGlowStatus = status;
+  updateEdgeGlow();
   if (herMode) window.HerMode?.syncStatus(status);
+}
+
+let lastGlowStatus = "ready";
+let musicMode = false;
+
+function updateEdgeGlow() {
+  if (!edgeGlow) return;
+  const voiceState = herMode
+    ? ""
+    : ["listening", "hearing"].includes(lastGlowStatus)
+      ? "listen"
+      : lastGlowStatus === "speaking"
+        ? "speak"
+        : ["connecting", "thinking", "captured"].includes(lastGlowStatus)
+          ? "think"
+          : "";
+  edgeGlow.className = voiceState || (musicMode && !herMode ? "music" : "");
+}
+
+function setMusicMode(on) {
+  musicMode = Boolean(on);
+  headphones.style.display = musicMode ? "" : "none";
+  walker.classList.toggle("music", musicMode);
+  updateEdgeGlow();
 }
 
 function updateFloatingUi() {
@@ -3079,6 +3106,7 @@ async function pointAtScreen(payload) {
 window.brainoMac.onVoiceToggle(() => toggleVoice());
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
+window.brainoMac.onMusicState?.((payload) => setMusicMode(Boolean(payload?.playing)));
 window.brainoMac.onSpeakLine?.((payload) => {
   const text = String(payload?.text || "").trim();
   // Incoming message readouts wait their turn instead of cutting Braino off.

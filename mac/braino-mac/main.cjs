@@ -2644,6 +2644,33 @@ end tell`;
 }
 
 let lastYouTubeList = { items: [], at: 0 };
+let musicPlaying = false;
+let musicSource = "";
+
+async function checkMusicState() {
+  let playing = false;
+  let source = "";
+  try {
+    const state = await readSpotifyMacState();
+    if (state.ok && /playing/i.test(state.state || "")) {
+      playing = true;
+      source = "spotify";
+    }
+  } catch (_) {}
+  if (!playing) {
+    const url = activeMacContext?.browserUrl || "";
+    if (/youtube\.com\/watch|music\.youtube\.com/.test(url)) {
+      playing = true;
+      source = "youtube";
+    }
+  }
+  if (playing !== musicPlaying || source !== musicSource) {
+    musicPlaying = playing;
+    musicSource = source;
+    logMac("music.state", { playing, source });
+    sendToRenderer("braino-mac:music-state", { playing, source });
+  }
+}
 
 async function fetchYouTubeResults(query, { limit = 6 } = {}) {
   const response = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en`, {
@@ -6117,6 +6144,7 @@ ipcMain.handle("braino-mac:system-say", async (_event, text) => {
 
 app.whenReady().then(() => {
   setTimeout(() => void importAllContacts(), 8000);
+  setInterval(() => void checkMusicState(), 5000);
   if (loadWaListenerState()) {
     setTimeout(() => void startWhatsAppListener(), 6000);
   }
