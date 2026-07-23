@@ -98,12 +98,12 @@ const q = (selector) => root?.querySelector(selector);
 // Headphones live inside the rig so they bob, breathe, and flip with him.
 const headphones = document.createElementNS("http://www.w3.org/2000/svg", "g");
 headphones.setAttribute("id", "__sbwk_headphones__");
+// Exact port of the Chrome extension headphones (content.js __sbwk_headphones__).
 headphones.innerHTML = [
-  '<path d="M 21 44 C 21 21 79 21 79 44" fill="none" stroke="#23232B" stroke-width="4.5" stroke-linecap="round"/>',
-  '<rect x="15.5" y="39" width="10" height="15" rx="4.5" fill="#23232B"/>',
-  '<rect x="74.5" y="39" width="10" height="15" rx="4.5" fill="#23232B"/>',
-  '<rect x="17.5" y="42" width="2.2" height="9" rx="1.1" fill="#E8786E"/>',
-  '<rect x="80.3" y="42" width="2.2" height="9" rx="1.1" fill="#E8786E"/>',
+  '<path d="M 12 46 Q 12 6 50 6 Q 88 6 88 46" fill="none" stroke="#1B1713" stroke-width="4.4" stroke-linecap="round"/>',
+  '<path d="M 12 46 Q 12 8 50 8 Q 88 8 88 46" fill="none" stroke="#3a332e" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>',
+  '<rect x="6.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="8.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>',
+  '<rect x="82.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="84.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>',
 ].join("");
 headphones.style.display = "none";
 root?.appendChild(headphones);
@@ -350,10 +350,42 @@ function updateEdgeGlow() {
   edgeGlow.className = voiceState || (musicMode && !herMode ? "music" : "");
 }
 
+let notchNotes = null;
+let noteTimer = 0;
+
+function ensureNotchNotes() {
+  if (notchNotes) return notchNotes;
+  notchNotes = document.createElement("div");
+  notchNotes.id = "notch-notes";
+  document.body.appendChild(notchNotes);
+  return notchNotes;
+}
+
+function spawnNotchNote() {
+  if (!musicMode || herMode) return;
+  const container = ensureNotchNotes();
+  const note = document.createElement("span");
+  note.textContent = Math.random() < 0.5 ? "♪" : "♫";
+  if (Math.random() < 0.4) note.classList.add("blue");
+  const dx0 = Math.random() * 64 - 32;
+  note.style.setProperty("--dx0", `${dx0}px`);
+  note.style.setProperty("--dx", `${dx0 + (Math.random() * 76 - 38)}px`);
+  note.style.setProperty("--rot", `${Math.random() * 44 - 22}deg`);
+  container.appendChild(note);
+  window.setTimeout(() => note.remove(), 3600);
+}
+
 function setMusicMode(on) {
   musicMode = Boolean(on);
   headphones.style.display = musicMode ? "" : "none";
   walker.classList.toggle("music", musicMode);
+  if (musicMode && !noteTimer) {
+    noteTimer = window.setInterval(spawnNotchNote, 1050);
+  } else if (!musicMode && noteTimer) {
+    window.clearInterval(noteTimer);
+    noteTimer = 0;
+    notchNotes?.replaceChildren();
+  }
   updateEdgeGlow();
 }
 
