@@ -11086,6 +11086,7 @@ function __sbSetMusicGear(on) {
   const hp = document.querySelector("#__sbwk_walker__ #__sbwk_headphones__");
   if (hp) hp.setAttribute("display", on ? "inline" : "none");
   document.getElementById("__sb_brain_btn__")?.classList.toggle("sb-headphones", on);
+  __sbSetMusicFx(on);
 }
 function __sbApplyMusicAmbient(on) {
   const bar = document.getElementById("__sb_bar__");
@@ -21245,6 +21246,80 @@ function __sbExitHeadphoneMode() {
 //  - "hearing"   = the USER is actively talking (VAD speech_started→stopped) → Sonar Pulse
 //  - "listening"/"captured" = waiting / processing, nobody talking → calm idle (no glow)
 //  - "speaking"  = Braino is talking → mouth animation
+// ─── Screen edge glow + top music notes (ported from Mac Braino for cross-surface
+//     consistency): viewport perimeter radiates blue while listening, coral while
+//     speaking, faint blue while thinking, and slowly cycles hues while music plays.
+let __sbMusicFxOn = false;
+let __sbNoteTimer = 0;
+let __sbGlowVoice = "";
+
+function __sbEnsureGlowFx() {
+  if (document.getElementById("__sb_edge_glow__")) return;
+  const style = document.createElement("style");
+  style.id = "__sb_glow_fx_css__";
+  style.textContent = `
+#__sb_edge_glow__{position:fixed;inset:0;pointer-events:none;z-index:2147483630;opacity:0;transition:opacity .6s ease;}
+#__sb_edge_glow__::before{content:"";position:absolute;inset:0;}
+#__sb_edge_glow__.listen{opacity:1;}
+#__sb_edge_glow__.listen::before{box-shadow:inset 0 0 70px 14px rgba(122,162,255,.30),inset 0 0 26px 4px rgba(160,190,255,.22);animation:__sb_edge_breath__ 2.6s ease-in-out infinite;}
+#__sb_edge_glow__.speak{opacity:1;}
+#__sb_edge_glow__.speak::before{box-shadow:inset 0 0 110px 26px rgba(232,120,110,.42),inset 0 0 40px 8px rgba(243,154,66,.30);animation:__sb_edge_pulse__ 1s ease-in-out infinite;}
+#__sb_edge_glow__.think{opacity:.5;}
+#__sb_edge_glow__.think::before{box-shadow:inset 0 0 60px 12px rgba(122,162,255,.22);animation:__sb_edge_breath__ 3.4s ease-in-out infinite;}
+#__sb_edge_glow__.music{opacity:.85;}
+#__sb_edge_glow__.music::before{box-shadow:inset 0 0 64px 12px rgba(232,120,110,.20),inset 0 0 26px 5px rgba(122,162,255,.14);animation:__sb_edge_breath__ 4.2s ease-in-out infinite,__sb_music_hue__ 14s linear infinite;}
+@keyframes __sb_music_hue__{to{filter:hue-rotate(360deg);}}
+@keyframes __sb_edge_breath__{0%,100%{opacity:.55;}50%{opacity:1;}}
+@keyframes __sb_edge_pulse__{0%,100%{opacity:.6;}50%{opacity:1;}}
+#__sb_top_notes__{position:fixed;top:0;left:50%;width:0;height:0;z-index:2147483631;pointer-events:none;}
+#__sb_top_notes__ span{position:absolute;top:8px;left:0;font-size:15px;color:rgba(232,120,110,.9);text-shadow:0 0 8px rgba(232,120,110,.55);animation:__sb_note_float__ 3.4s ease-out forwards;}
+#__sb_top_notes__ span.blue{color:rgba(122,162,255,.9);text-shadow:0 0 8px rgba(122,162,255,.55);}
+@keyframes __sb_note_float__{0%{opacity:0;transform:translate(var(--dx0),4px) scale(.7) rotate(0deg);}14%{opacity:.95;}100%{opacity:0;transform:translate(var(--dx),80px) scale(1.08) rotate(var(--rot));}}`;
+  document.head.appendChild(style);
+  const glow = document.createElement("div");
+  glow.id = "__sb_edge_glow__";
+  document.documentElement.appendChild(glow);
+  const notes = document.createElement("div");
+  notes.id = "__sb_top_notes__";
+  document.documentElement.appendChild(notes);
+}
+
+function __sbUpdateEdgeGlowFx(voiceState) {
+  __sbEnsureGlowFx();
+  if (voiceState !== undefined) __sbGlowVoice = voiceState || "";
+  const glow = document.getElementById("__sb_edge_glow__");
+  if (!glow) return;
+  const map = { connecting: "think", listening: "listen", hearing: "listen", captured: "think", speaking: "speak" };
+  glow.className = map[__sbGlowVoice] || (__sbMusicFxOn ? "music" : "");
+}
+
+function __sbSpawnTopNote() {
+  if (!__sbMusicFxOn) return;
+  const wrap = document.getElementById("__sb_top_notes__");
+  if (!wrap) return;
+  const note = document.createElement("span");
+  note.textContent = Math.random() < 0.5 ? "♪" : "♫";
+  if (Math.random() < 0.4) note.classList.add("blue");
+  const dx0 = Math.random() * 64 - 32;
+  note.style.setProperty("--dx0", `${dx0}px`);
+  note.style.setProperty("--dx", `${dx0 + Math.random() * 76 - 38}px`);
+  note.style.setProperty("--rot", `${Math.random() * 44 - 22}deg`);
+  wrap.appendChild(note);
+  setTimeout(() => note.remove(), 3600);
+}
+
+function __sbSetMusicFx(on) {
+  __sbMusicFxOn = !!on;
+  __sbEnsureGlowFx();
+  if (__sbMusicFxOn && !__sbNoteTimer) __sbNoteTimer = setInterval(__sbSpawnTopNote, 1050);
+  if (!__sbMusicFxOn && __sbNoteTimer) {
+    clearInterval(__sbNoteTimer);
+    __sbNoteTimer = 0;
+    document.getElementById("__sb_top_notes__")?.replaceChildren();
+  }
+  __sbUpdateEdgeGlowFx();
+}
+
 function __sbSetHpBrainState(state) {
   const HP = ["hp-connecting", "hp-listening", "hp-hearing", "hp-captured", "hp-speaking"];
   const brain = document.getElementById("__sb_brain_btn__");
@@ -21267,6 +21342,7 @@ function __sbSetHpBrainState(state) {
     wlk.classList.remove(...HP);
     if (state) wlk.classList.add(`hp-${state}`);
   }
+  __sbUpdateEdgeGlowFx(state || "");
   __sbWkEngaged = !!state;          // stand still + look at the user while engaged
   if (state) {
     __sbWkWalking = false;
