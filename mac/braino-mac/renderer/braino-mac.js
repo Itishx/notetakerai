@@ -7,6 +7,7 @@ const bubble = document.getElementById("speech-bubble");
 const statusPill = document.getElementById("status-pill");
 const statusText = document.getElementById("status-text");
 const fileStrip = document.getElementById("file-strip");
+const notchGlow = document.getElementById("notch-glow");
 const ESTIMATED_DOCK_HEIGHT = 94;
 const DOCK_PERCH_LIFT = 42;
 const START_OFFSCREEN_X = -W - 36;
@@ -314,6 +315,18 @@ function setStatus(status, text) {
   walker.classList.toggle("captured", status === "captured");
   walker.classList.toggle("speaking", status === "speaking");
   statusText.textContent = text;
+  if (notchGlow) {
+    const glowState = herMode
+      ? ""
+      : ["listening", "hearing"].includes(status)
+        ? "listen"
+        : status === "speaking"
+          ? "speak"
+          : ["connecting", "thinking", "captured"].includes(status)
+            ? "think"
+            : "";
+    notchGlow.className = glowState;
+  }
   if (herMode) window.HerMode?.syncStatus(status);
 }
 

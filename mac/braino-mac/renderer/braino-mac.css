@@ -127,6 +127,51 @@ body {
   animation: macAuthSuccess 0.95s ease-in-out 1;
 }
 
+/* Notch glow — light the pixels around the (black) notch so the cutout itself
+   appears to breathe. Pure CSS, click-through, driven by voice status. */
+#notch-glow {
+  position: fixed;
+  top: -26px;
+  left: 50%;
+  width: 340px;
+  height: 58px;
+  margin-left: -170px;
+  border-radius: 0 0 28px 28px;
+  pointer-events: none;
+  z-index: 55;
+  opacity: 0;
+  filter: blur(14px);
+  transition: opacity 0.45s ease;
+  background: radial-gradient(58% 100% at 50% 0%, rgba(255, 122, 89, 0.95), rgba(255, 122, 89, 0.35) 55%, transparent 80%);
+}
+
+#notch-glow.listen {
+  opacity: 1;
+  animation: notchBreathe 1.6s ease-in-out infinite;
+}
+
+#notch-glow.speak {
+  opacity: 1;
+  background: radial-gradient(58% 100% at 50% 0%, rgba(255, 158, 92, 1), rgba(255, 122, 89, 0.45) 55%, transparent 80%);
+  animation: notchTalk 0.42s ease-in-out infinite;
+}
+
+#notch-glow.think {
+  opacity: 0.85;
+  background: radial-gradient(58% 100% at 50% 0%, rgba(122, 162, 255, 0.9), rgba(122, 162, 255, 0.3) 55%, transparent 80%);
+  animation: notchBreathe 2.6s ease-in-out infinite;
+}
+
+@keyframes notchBreathe {
+  0%, 100% { transform: scaleX(0.86) scaleY(0.9); opacity: 0.7; }
+  50% { transform: scaleX(1) scaleY(1); opacity: 1; }
+}
+
+@keyframes notchTalk {
+  0%, 100% { transform: scaleX(0.92) scaleY(0.85); }
+  50% { transform: scaleX(1.05) scaleY(1.08); }
+}
+
 #point-ring {
   position: fixed;
   width: 58px;
