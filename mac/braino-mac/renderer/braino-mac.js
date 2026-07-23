@@ -267,7 +267,11 @@ function applyDisplayMetrics(metrics, options = {}) {
   // Menu bar height == the physical notch depth on notched Macs; the face's top
   // that much hides behind the housing so only the chin band shows.
   const menuBarH = Math.max(24, (displayMetrics.workArea?.y ?? 0) - (displayMetrics.bounds?.y ?? 0)) || 32;
-  document.getElementById("notch-face")?.style.setProperty("--nf-notch-h", `${menuBarH}px`);
+  // macOS may quietly seat the panel below the menu bar (getBounds still claims
+  // y=0, but window.screenY tells the truth) — anchor the face to the bar's
+  // bottom edge in SCREEN space, wherever our window actually begins.
+  const faceTop = Math.max(0, menuBarH - (window.screenY || 0));
+  document.getElementById("notch-face")?.style.setProperty("--nf-notch-h", `${faceTop}px`);
   const displayChanged = Boolean(options.displayChanged || (previousDisplayId && nextDisplayId && previousDisplayId !== nextDisplayId));
   const dock = getDockBounds();
   if (movementMode === "dock") {

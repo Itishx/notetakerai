@@ -226,10 +226,11 @@ body {
   box-shadow: 0 0 20px rgba(232, 120, 110, 0.3);
 }
 
+/* Final design: speaking keeps the island size, with a simple talking mouth. */
 #notch-face.speak .nf-pill {
-  width: 300px;
-  height: 74px;
-  border-radius: 0 0 30px 30px;
+  width: 250px;
+  height: 58px;
+  border-radius: 0 0 26px 26px;
   box-shadow: 0 0 34px rgba(232, 120, 110, 0.5);
 }
 
@@ -269,7 +270,17 @@ body {
   height: 22px;
 }
 
-#notch-face.speak .nf-viz { display: flex; }
+#notch-face.speak #nf-mouth-talk {
+  display: block !important;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nfTalk 0.28s ease-in-out infinite;
+}
+
+@keyframes nfTalk {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1.25); }
+}
 
 #notch-face .nf-viz span {
   width: 3px;
