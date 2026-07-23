@@ -837,6 +837,10 @@ function positionDockWindow(display = displayForContext(activeMacContext), reaso
       width: bounds.width,
       height: bounds.height,
     }, false);
+    const actual = dockWindow.getBounds();
+    if (actual.y !== bounds.y || actual.height !== bounds.height) {
+      logMac("overlay.bounds.clamped", { requested: bounds, actual });
+    }
     lastOverlayDisplayKey = key;
   }
   raiseDockWindow(reason);
@@ -890,6 +894,9 @@ function createDockWindow() {
   const initialDisplay = displayForContext(activeMacContext);
   const initialBounds = initialDisplay.bounds;
   dockWindow = new BrowserWindow({
+    // Must stay a panel: only panels join fullscreen Spaces, which is how Braino
+    // stays visible over fullscreen apps. The notch face lives in its own window
+    // because panels get clamped below the menu bar.
     type: "panel",
     width: initialBounds.width,
     height: initialBounds.height,

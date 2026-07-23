@@ -17,29 +17,41 @@
     <main id="dock-stage" aria-label="Braino Mac dock companion">
       <div id="edge-glow" aria-hidden="true"></div>
       <div id="notch-face" aria-hidden="true">
-        <svg viewBox="0 0 240 64" width="240" height="64">
-          <defs>
-            <radialGradient id="nfGrad" cx="50%" cy="18%" r="95%">
-              <stop offset="0%" stop-color="#F2A296" />
-              <stop offset="55%" stop-color="#E8786E" />
-              <stop offset="100%" stop-color="#C9544A" />
-            </radialGradient>
-          </defs>
-          <path d="M 0 0 H 240 V 36 Q 240 58 214 58 H 26 Q 0 58 0 36 Z" fill="url(#nfGrad)" />
-          <path d="M 0 0 H 240 V 36 Q 240 58 214 58 H 26 Q 0 58 0 36 Z" fill="none" stroke="rgba(255,214,198,0.35)" stroke-width="1" />
-          <g id="nf-eye-l">
-            <ellipse cx="88" cy="42" rx="10" ry="9" fill="#FFF6F0" />
-            <circle id="nf-pupil-l" cx="88" cy="42" r="3.4" fill="#1B1713" />
-            <circle cx="90" cy="40" r="1.1" fill="#fff" opacity="0.9" />
-          </g>
-          <g id="nf-eye-r">
-            <ellipse cx="152" cy="42" rx="10" ry="9" fill="#FFF6F0" />
-            <circle id="nf-pupil-r" cx="152" cy="42" r="3.4" fill="#1B1713" />
-            <circle cx="154" cy="40" r="1.1" fill="#fff" opacity="0.9" />
-          </g>
-          <path id="nf-smile" d="M 111 50 Q 120 56 129 50" fill="none" stroke="#1B1713" stroke-width="2" stroke-linecap="round" />
-          <ellipse id="nf-talk" cx="120" cy="52" rx="4.5" ry="3" fill="#8A2F28" style="display:none" />
-        </svg>
+        <div class="nf-sonar"><i></i><i></i><i></i></div>
+        <div class="nf-pill">
+          <svg class="nf-folds" viewBox="0 0 200 74" preserveAspectRatio="none">
+            <path d="M 16 2 Q 23 20 16 37 Q 9 54 16 72" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55" />
+            <path d="M 44 2 Q 37 20 44 37 Q 51 54 44 72" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55" />
+            <path d="M 72 2 Q 79 20 72 37 Q 65 54 72 72" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55" />
+            <path d="M 128 2 Q 121 20 128 37 Q 135 54 128 72" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55" />
+            <path d="M 156 2 Q 163 20 156 37 Q 149 54 156 72" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55" />
+            <path d="M 184 2 Q 177 20 184 37 Q 191 54 184 72" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55" />
+            <path d="M 18.4 2 Q 25.4 20 18.4 37 Q 11.4 54 18.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
+            <path d="M 46.4 2 Q 39.4 20 46.4 37 Q 53.4 54 46.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
+            <path d="M 74.4 2 Q 81.4 20 74.4 37 Q 67.4 54 74.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
+            <path d="M 130.4 2 Q 123.4 20 130.4 37 Q 137.4 54 130.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
+            <path d="M 158.4 2 Q 165.4 20 158.4 37 Q 151.4 54 158.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
+            <path d="M 186.4 2 Q 179.4 20 186.4 37 Q 193.4 54 186.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
+          </svg>
+          <div class="nf-band">
+            <svg class="nf-mini" viewBox="0 0 120 56">
+              <g opacity="0.32"><ellipse cx="38" cy="30" rx="8" ry="4.5" fill="#E14A48" /><ellipse cx="82" cy="30" rx="8" ry="4.5" fill="#E14A48" /></g>
+              <g id="nf-eye-l" class="nf-eye">
+                <circle cx="49" cy="21" r="10" fill="#fff" />
+                <circle id="nf-pupil-l" cx="49" cy="21" r="5.2" fill="#1B1713" />
+                <circle id="nf-glint-l" cx="50.9" cy="18.7" r="1.7" fill="#fff" />
+              </g>
+              <g id="nf-eye-r" class="nf-eye">
+                <circle cx="71" cy="21" r="10" fill="#fff" />
+                <circle id="nf-pupil-r" cx="71" cy="21" r="5.2" fill="#1B1713" />
+                <circle id="nf-glint-r" cx="72.9" cy="18.7" r="1.7" fill="#fff" />
+              </g>
+              <path id="nf-mouth-idle" d="M 52 41 Q 60 49 68 41" fill="none" stroke="#7E2A24" stroke-width="2.6" stroke-linecap="round" />
+              <path id="nf-mouth-listen" d="M 55 43 Q 60 45 65 43" fill="none" stroke="#7E2A24" stroke-width="2.4" stroke-linecap="round" style="display:none" />
+            </svg>
+            <div class="nf-viz"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          </div>
+        </div>
       </div>
       <section id="status-pill">
         <span id="status-dot"></span>

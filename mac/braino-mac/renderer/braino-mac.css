@@ -182,66 +182,167 @@ body {
   animation: edgeBreath 3.4s ease-in-out infinite;
 }
 
-/* Notch Braino — the notch becomes his face: coral pill swallowing the black
-   housing, eyes peeking out below it. States tint and animate the features. */
+/* Notch Braino — ported from the "Braino In The Notch" design: one unified notch.
+   idle = coral head (folds + eyes + smile) · listening = island morph + sonar
+   rings · speaking = bigger island with voice bars. The top --nf-notch-h of the
+   pill hides behind the physical notch; the face band lives below it. */
 #notch-face {
+  /* The macOS menu bar always paints over our overlay, so the face hangs from
+     the bar's bottom edge, fused to the physical notch above it. */
+  --nf-notch-h: 32px;
   position: fixed;
-  top: 0;
+  top: var(--nf-notch-h);
   left: 50%;
-  width: 240px;
-  height: 64px;
-  margin-left: -120px;
+  transform: translateX(-50%);
   pointer-events: none;
   z-index: 57;
-  filter: drop-shadow(0 3px 10px rgba(201, 84, 74, 0.35));
-  transition: opacity 0.5s ease, transform 0.35s ease;
   opacity: 0;
-  transform: translateY(-14px);
+  transition: opacity 0.5s ease;
 }
 
 #notch-face.on {
   opacity: 1;
-  transform: translateY(0);
 }
 
-#notch-face.listen {
-  filter: drop-shadow(0 3px 12px rgba(122, 162, 255, 0.55));
+#notch-face .nf-pill {
+  position: relative;
+  margin: 0 auto;
+  width: 190px;
+  height: 46px;
+  border-radius: 0 0 18px 18px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #F6A8A2, #E8786E 55%, #C9544A);
+  transition:
+    width 0.5s cubic-bezier(0.34, 1.25, 0.4, 1),
+    height 0.5s cubic-bezier(0.34, 1.25, 0.4, 1),
+    border-radius 0.5s ease,
+    box-shadow 0.4s ease;
 }
 
-#notch-face.speak {
-  filter: drop-shadow(0 4px 14px rgba(243, 154, 66, 0.6));
+#notch-face.listen .nf-pill {
+  width: 250px;
+  height: 58px;
+  border-radius: 0 0 26px 26px;
+  box-shadow: 0 0 20px rgba(232, 120, 110, 0.3);
 }
 
-#notch-face.speak #nf-smile { display: none; }
-#notch-face.speak #nf-talk {
-  display: block !important;
-  animation: nfTalk 0.28s ease-in-out infinite;
+#notch-face.speak .nf-pill {
+  width: 300px;
+  height: 74px;
+  border-radius: 0 0 30px 30px;
+  box-shadow: 0 0 34px rgba(232, 120, 110, 0.5);
 }
 
-#notch-face #nf-eye-l,
-#notch-face #nf-eye-r {
+#notch-face .nf-folds {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#notch-face .nf-band {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#notch-face .nf-mini {
+  width: 104px;
+  display: block;
+}
+
+#notch-face.listen #nf-mouth-idle { display: none; }
+#notch-face.listen #nf-mouth-listen { display: block !important; }
+#notch-face.speak #nf-mouth-idle,
+#notch-face.speak #nf-mouth-listen { display: none !important; }
+
+#notch-face .nf-viz {
+  display: none;
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: flex-end;
+  gap: 4px;
+  height: 22px;
+}
+
+#notch-face.speak .nf-viz { display: flex; }
+
+#notch-face .nf-viz span {
+  width: 3px;
+  border-radius: 2px;
+  background: #FFF3EE;
+  box-shadow: 0 0 6px rgba(255, 240, 235, 0.6);
+  height: 6px;
+  animation: nfBars 0.7s ease-in-out infinite;
+}
+
+#notch-face .nf-viz span:nth-child(2) { animation-delay: 0.09s; }
+#notch-face .nf-viz span:nth-child(3) { animation-delay: 0.18s; animation-duration: 0.62s; }
+#notch-face .nf-viz span:nth-child(4) { animation-delay: 0.27s; }
+#notch-face .nf-viz span:nth-child(5) { animation-delay: 0.36s; animation-duration: 0.78s; }
+#notch-face .nf-viz span:nth-child(6) { animation-delay: 0.45s; }
+#notch-face .nf-viz span:nth-child(7) { animation-delay: 0.54s; animation-duration: 0.66s; }
+#notch-face .nf-viz span:nth-child(8) { animation-delay: 0.63s; }
+#notch-face .nf-viz span:nth-child(9) { animation-delay: 0.72s; animation-duration: 0.74s; }
+
+#notch-face .nf-eye {
   transform-box: fill-box;
   transform-origin: center;
 }
 
-#notch-face.blink #nf-eye-l,
-#notch-face.blink #nf-eye-r {
+#notch-face.blink .nf-eye {
   animation: nfBlink 0.22s ease-in-out;
 }
 
-#notch-face.listen #nf-eye-l,
-#notch-face.listen #nf-eye-r {
-  transform: scaleY(1.08);
+#notch-face.listen .nf-eye {
+  transform: scaleY(1.06);
+}
+
+#notch-face .nf-sonar {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+#notch-face.listen .nf-sonar { opacity: 1; }
+
+#notch-face .nf-sonar i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1.5px solid #E8786E;
+  opacity: 0;
+}
+
+#notch-face.listen .nf-sonar i { animation: nfSonar 2.4s ease-out infinite; }
+#notch-face.listen .nf-sonar i:nth-child(2) { animation-delay: 0.8s; }
+#notch-face.listen .nf-sonar i:nth-child(3) { animation-delay: 1.6s; }
+
+@keyframes nfSonar {
+  0% { width: 120px; height: 44px; opacity: 0.6; border-width: 2px; }
+  100% { width: 340px; height: 150px; opacity: 0; border-width: 0.5px; }
+}
+
+@keyframes nfBars {
+  0%, 100% { height: 6px; }
+  50% { height: 20px; }
 }
 
 @keyframes nfBlink {
   0%, 100% { transform: scaleY(1); }
   50% { transform: scaleY(0.12); }
-}
-
-@keyframes nfTalk {
-  0%, 100% { transform: scaleY(0.5); }
-  50% { transform: scaleY(1.25); }
 }
 
 /* Musical notes drifting out from under the notch while music plays. */

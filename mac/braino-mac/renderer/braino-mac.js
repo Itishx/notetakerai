@@ -264,6 +264,10 @@ function applyDisplayMetrics(metrics, options = {}) {
   const nextDisplayId = metrics?.id || null;
   displayMetrics = metrics && typeof metrics === "object" ? metrics : null;
   if (!displayMetrics) return;
+  // Menu bar height == the physical notch depth on notched Macs; the face's top
+  // that much hides behind the housing so only the chin band shows.
+  const menuBarH = Math.max(24, (displayMetrics.workArea?.y ?? 0) - (displayMetrics.bounds?.y ?? 0)) || 32;
+  document.getElementById("notch-face")?.style.setProperty("--nf-notch-h", `${menuBarH}px`);
   const displayChanged = Boolean(options.displayChanged || (previousDisplayId && nextDisplayId && previousDisplayId !== nextDisplayId));
   const dock = getDockBounds();
   if (movementMode === "dock") {
@@ -385,17 +389,19 @@ nfScheduleBlink();
 
 function nfTrackPointer(event) {
   if (!notchFace?.classList.contains("on") || !nfPupilL || !nfPupilR) return;
+  // Design look math: pupil offset = r*0.34 horizontal, r*0.30 vertical (r=10).
   const faceX = window.innerWidth / 2;
-  const faceY = 42;
-  const dx = event.clientX - faceX;
-  const dy = event.clientY - faceY;
-  const dist = Math.max(1, Math.hypot(dx, dy));
-  const offX = (dx / dist) * Math.min(3, dist / 90);
-  const offY = (dy / dist) * Math.min(2.2, dist / 120);
-  nfPupilL.setAttribute("cx", String(88 + offX));
-  nfPupilL.setAttribute("cy", String(42 + offY));
-  nfPupilR.setAttribute("cx", String(152 + offX));
-  nfPupilR.setAttribute("cy", String(42 + offY));
+  const faceY = 30;
+  const lookX = Math.max(-1, Math.min(1, (event.clientX - faceX) / 230));
+  const lookY = Math.max(-0.5, Math.min(1, (event.clientY - faceY) / 300));
+  const offX = lookX * 3.4;
+  const offY = lookY * 3.0;
+  nfPupilL.setAttribute("cx", String(49 + offX));
+  nfPupilL.setAttribute("cy", String(21 + offY));
+  nfPupilR.setAttribute("cx", String(71 + offX));
+  nfPupilR.setAttribute("cy", String(21 + offY));
+  document.getElementById("nf-glint-l")?.setAttribute("cx", String(50.9 + offX * 0.36));
+  document.getElementById("nf-glint-r")?.setAttribute("cx", String(72.9 + offX * 0.36));
 }
 window.addEventListener("mousemove", nfTrackPointer, { passive: true });
 
