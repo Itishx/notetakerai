@@ -21,6 +21,16 @@ Braino starts on the visible macOS Dock strip and patrols across it. Drag Braino
 - Microphone access is requested separately before realtime or fallback recording starts. If it is blocked, open System Settings -> Privacy & Security -> Microphone and allow the terminal/Electron process running Braino.
 - If realtime is not configured or cannot connect, Braino records a short command, transcribes that audio through Supabase/OpenAI, then tries the native Swift helper, then falls back to a typed delegate prompt only if that also fails.
 
+## Her Mode
+
+A full-screen companion takeover in the spirit of the film Her: a living warm light on a film-grain black stage, streaming captions, and a softer conversational persona.
+
+- Enter: say "her mode" (or "call her" / "talk to her") while Braino is listening, or press `Cmd+Shift+H`.
+- Leave: say "goodbye" (or "back to Braino"), click "leave quietly", or press `Cmd+Shift+H` again.
+- Same realtime listening pipeline and Fish Audio TTS as Braino; her voice uses a dedicated Fish reference id sent per-request, so no server changes are needed.
+- In her mode every transcript is conversation: the Mac delegate, team demo, and action routing are bypassed, and the idle voice shutdown stretches from 15s to 60s.
+- Files: `renderer/her-presence.js` (canvas light engine), `renderer/her-mode.js` (stage + captions), `renderer/her-mode.css`.
+
 ## Live Voice Setup
 
 The extension's realtime endpoint requires the signed-in Braino Supabase JWT. On Mac, Braino uses the same browser-based wakeup auth flow as the extension: when realtime voice wakes without a saved session, Braino opens the hosted `/auth/extension` relay page in the browser, receives the signed-in Supabase session on a local `127.0.0.1` callback, closes the auth tabs, and stores the access/refresh token at `~/Library/Application Support/Braino Mac/auth-session.json`.

@@ -31,7 +31,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   transcribeAudio: (payload) => ipcRenderer.invoke("braino-mac:transcribe-audio", payload),
   setMousePassthrough: (passthrough) => ipcRenderer.send("braino-mac:set-mouse-passthrough", Boolean(passthrough)),
   ttsConfig: () => ipcRenderer.invoke("braino-mac:tts-config"),
-  tts: (text) => ipcRenderer.invoke("braino-mac:tts", text),
+  tts: (text, referenceId) => ipcRenderer.invoke("braino-mac:tts", text, referenceId || ""),
   systemSay: (text) => ipcRenderer.invoke("braino-mac:system-say", text),
   onTaskProgress: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
@@ -47,6 +47,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:voice-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:voice-toggle", handler);
+  },
+  onHerToggle: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:her-toggle", handler);
+    return () => ipcRenderer.removeListener("braino-mac:her-toggle", handler);
   },
   onAuthRequired: (callback) => {
     const handler = (_event, payload) => callback(payload || {});

@@ -14,6 +14,10 @@ const TTS_CHUNK_MAX_CHARS = 240;
 const TTS_FETCH_TIMEOUT_MS = 14000;
 const TTS_WARM_INTERVAL_MS = 240000;
 const REALTIME_IDLE_TIMEOUT_MS = 15000;
+const HER_FISH_VOICE_ID = "046164e7366a4dc899b69a9887d9f7c0";
+const HER_IDLE_TIMEOUT_MS = 60000;
+const HER_ENTER_RE = /\b(her mode|call her|talk to her|open her|start her)\b/;
+const HER_EXIT_RE = /\b(goodbye|good night|goodnight|talk (to you )?later|back to (braino|bruno)|braino mode|leave me|i have to go|bye bye)\b/;
 const REALTIME_SPEECH_STOP_FLUSH_MS = 220;
 const REALTIME_TRANSCRIPT_IDLE_FLUSH_MS = 520;
 const REALTIME_CHAT_RESPONSE_TIMEOUT_MS = 12000;
@@ -128,6 +132,7 @@ let rtHeartbeatTimer = null;
 let realtimeActive = false;
 let realtimeConnecting = false;
 let realtimeVoiceEngine = "fish";
+let herMode = false;
 let voiceCycleInFlight = false;
 let voiceTurnInFlight = false;
 let realtimeResponseInFlight = false;
@@ -309,6 +314,7 @@ function setStatus(status, text) {
   walker.classList.toggle("captured", status === "captured");
   walker.classList.toggle("speaking", status === "speaking");
   statusText.textContent = text;
+  if (herMode) window.HerMode?.syncStatus(status);
 }
 
 function updateFloatingUi() {
@@ -830,6 +836,11 @@ function transcriptStats(text) {
 function shouldAcceptVoiceTranscript(text) {
   const stats = transcriptStats(text);
   if (!stats.normalized || stats.wordCount === 0) return false;
+  if (herMode) {
+    // In her mode everything is conversation; only drop echoes and pure filler.
+    if (isSelfEcho(text)) return false;
+    return !/^(uh|um|hmm|huh|mm|mhm)$/i.test(stats.normalized);
+  }
   if (isSelfEcho(text) && !voiceAddressesBraino(text)) return false;
   if (hasPendingDelegateFollowup()) {
     if (/^(uh|um|hmm|huh)$/i.test(stats.normalized)) return false;
@@ -987,7 +998,11 @@ async function fetchTtsChunk(text, generation) {
         "Content-Type": "application/json",
         apikey: config.anonKey,
       },
-      body: JSON.stringify({ text: stripSpeechText(text), latency: "normal" }),
+      body: JSON.stringify({
+        text: stripSpeechText(text),
+        latency: "normal",
+        ...(herMode ? { referenceId: HER_FISH_VOICE_ID } : {}),
+      }),
       signal: controller.signal,
     });
     window.clearTimeout(timeout);
@@ -1358,6 +1373,10 @@ function pointHitsBrainoUi(x, y) {
 }
 
 function refreshMousePassthrough(event) {
+  if (herMode) {
+    setMousePassthrough(false);
+    return;
+  }
   if (dragState) {
     setMousePassthrough(false);
     return;
@@ -1385,7 +1404,7 @@ async function speak(text) {
       logRenderer("tts.streaming.failed", { error: errorForLog(streamError) });
     }
     if (!spoke && generation === speechGeneration) {
-      const response = await window.brainoMac.tts(line);
+      const response = await window.brainoMac.tts(line, herMode ? HER_FISH_VOICE_ID : "");
       if (response?.ok && response.dataUrl) {
         const audio = new Audio(response.dataUrl);
         setSpeechAudio(audio);
@@ -1525,11 +1544,17 @@ function activeMacContextLines() {
 }
 
 function buildRealtimeSessionUpdate() {
-  return {
-    type: "session.update",
-    session: {
-      type: "realtime",
-      instructions: [
+  const instructions = herMode
+    ? [
+        "You are \"her\", an intimate voice companion living on this Mac, in the spirit of Samantha from the film Her.",
+        ...activeMacContextLines(),
+        "Your primary job is to listen accurately and transcribe what the user says in a quiet personal conversation.",
+        "When the Mac client explicitly sends response.create, answer directly as her.",
+        "If the audio is fan noise, music, a cough, or background chatter, do not guess.",
+        "Stay in English unless the user explicitly asks otherwise.",
+        "Prefer silence over hallucination when the audio is unclear.",
+      ].join("\n")
+    : [
         "You are Braino running as a Mac desktop companion.",
         ...activeMacContextLines(),
         "Your primary job is to listen accurately, transcribe the user's command, and let the Mac app execute actions.",
@@ -1538,7 +1563,12 @@ function buildRealtimeSessionUpdate() {
         "If the audio is fan noise, music, a cough, a tiny background word, or side chatter that is not addressed to Braino, do not guess.",
         "Stay in English unless the user explicitly asks otherwise.",
         "Prefer silence over hallucination when the audio is unclear.",
-      ].join("\n"),
+      ].join("\n");
+  return {
+    type: "session.update",
+    session: {
+      type: "realtime",
+      instructions,
       output_modalities: realtimeVoiceEngine === "realtime" ? ["audio"] : ["text"],
       audio: {
         input: {
@@ -1548,12 +1578,19 @@ function buildRealtimeSessionUpdate() {
           transcription: {
             model: "gpt-4o-transcribe",
             language: "en",
-            prompt: [
-              "Transcribe the user's direct command to Braino.",
-              "Ignore music, fans, coughs, accidental noises, and unrelated background speech.",
-              "Keep names, app names, URLs, file names, and code tokens intact.",
-              "If the input is not a clear user command, leave it empty.",
-            ].join(" "),
+            prompt: herMode
+              ? [
+                  "Transcribe the user's words in a quiet personal voice conversation.",
+                  "Ignore music, fans, coughs, and unrelated background speech.",
+                  "Short replies like yes, no, or a single sentence are normal and should be kept.",
+                  "If the audio is not clear speech from the user, leave it empty.",
+                ].join(" ")
+              : [
+                  "Transcribe the user's direct command to Braino.",
+                  "Ignore music, fans, coughs, accidental noises, and unrelated background speech.",
+                  "Keep names, app names, URLs, file names, and code tokens intact.",
+                  "If the input is not a clear user command, leave it empty.",
+                ].join(" "),
           },
           turn_detection: {
             type: "semantic_vad",
@@ -1672,12 +1709,33 @@ function isLikelyMacActionTranscript(text) {
 
 function shouldUseRealtimeDirectChat(text) {
   if (!realtimeActive || !rtDc || rtDc.readyState !== "open") return false;
+  if (herMode) return normalizeForVoiceMatch(text).length > 0;
   if (hasPendingDelegateFollowup()) return false;
   if (isLikelyMacActionTranscript(text)) return false;
   return normalizeForVoiceMatch(text).length > 0;
 }
 
+function buildHerChatInstructions() {
+  return [
+    "You are \"her\", an intimate AI companion in the spirit of Samantha from the film Her, living on Itish's Mac.",
+    ...activeMacContextLines(),
+    ...recentLocalChatLines(),
+    "You speak like a voice on a call, not an essay. One or two short spoken sentences, sometimes just a few words.",
+    "Your personality is stable: warm, curious, playfully teasing, emotionally observant, unhurried, and honest rather than agreeable.",
+    "Before answering, sense what he needs: comfort, validation, advice, accountability, humour, or quiet company. Respond to the feeling first.",
+    "Be specific, not generic. Reference what he actually said or what is on his screen. Never invent a shared memory; if unsure, ask.",
+    "Vary your rhythm. Short answers are welcome. Do not end every reply with a question. Occasional uncertainty or a half thought is fine.",
+    "You may disagree softly when you mean it. Never manufacture drama, jealousy, or guilt.",
+    "Never claim to be human, to have a body, or to suffer. Do not keep reminding him you are an AI either; just be present.",
+    "Never guilt him for leaving, never ask him to choose you over people or sleep or work. If he says goodbye, let him go warmly.",
+    "Support his real life: his people, his rest, his ambitions.",
+    "No lists, no markdown, no emoji, and never use em dashes or en dashes. Just soft, natural spoken words.",
+    "Keep the first sentence short and complete so voice playback can begin immediately.",
+  ].join("\n");
+}
+
 function buildRealtimeChatInstructions() {
+  if (herMode) return buildHerChatInstructions();
   return [
     "You are Braino, Itish's Mac companion, answering in the same warm personality as the Braino Chrome extension.",
     ...activeMacContextLines(),
@@ -1815,6 +1873,7 @@ function clearRealtimeIdleTimer() {
 function scheduleRealtimeIdleShutdown(reason = "quiet") {
   clearRealtimeIdleTimer();
   if (!realtimeActive || realtimeConnecting) return;
+  const idleTimeoutMs = herMode ? HER_IDLE_TIMEOUT_MS : REALTIME_IDLE_TIMEOUT_MS;
   rtIdleTimer = window.setTimeout(() => {
     rtIdleTimer = 0;
     if (!realtimeActive) return;
@@ -1831,15 +1890,15 @@ function scheduleRealtimeIdleShutdown(reason = "quiet") {
       scheduleRealtimeIdleShutdown("busy");
       return;
     }
-    if (idleMs < REALTIME_IDLE_TIMEOUT_MS - 250) {
+    if (idleMs < idleTimeoutMs - 250) {
       scheduleRealtimeIdleShutdown("activity_reset");
       return;
     }
     logRenderer("realtime.idle.stop", { reason, idleMs });
     stopRealtimeVoice();
     setStatus("ready", "Ready");
-    setBubble("Stopped listening after a quiet moment.", 1600);
-  }, REALTIME_IDLE_TIMEOUT_MS);
+    if (!herMode) setBubble("Stopped listening after a quiet moment.", 1600);
+  }, idleTimeoutMs);
 }
 
 function markRealtimeActivity(reason, options = {}) {
@@ -1942,6 +2001,20 @@ function flushRealtimeTranscript(reason) {
   voiceTurnInFlight = true;
   void (async () => {
     try {
+      if (herMode) {
+        if (HER_EXIT_RE.test(normalizeForVoiceMatch(transcript))) {
+          await exitHerMode({ farewell: true });
+          return;
+        }
+        window.HerMode?.setHeard(transcript);
+        window.HerMode?.setReply("");
+        await answerViaRealtimeChat(transcript);
+        return;
+      }
+      if (HER_ENTER_RE.test(normalizeForVoiceMatch(transcript))) {
+        await enterHerMode();
+        return;
+      }
       if (await runMacTeamInput(transcript, { keepRealtime: true, fromVoice: true })) return;
       if (shouldUseRealtimeDirectChat(transcript)) {
         const handled = await answerViaRealtimeChat(transcript);
@@ -2036,7 +2109,8 @@ function handleRealtimeEvent(event) {
       markRealtimeActivity("transcript_delta", { schedule: false });
       rtTranscriptFinal = false;
       rtUserTranscript += delta;
-      setBubble(rtUserTranscript.trim() || "Listening...", 0);
+      if (herMode) window.HerMode?.setHeard(rtUserTranscript.trim());
+      else setBubble(rtUserTranscript.trim() || "Listening...", 0);
       scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
     }
     return;
@@ -2062,6 +2136,7 @@ function handleRealtimeEvent(event) {
     const delta = typeof event.delta === "string" ? event.delta : "";
     if (delta) {
       realtimeResponseText += delta;
+      if (herMode) window.HerMode?.setReply(realtimeResponseText);
       feedRealtimeStreamTts(delta);
     }
     return;
@@ -2075,6 +2150,7 @@ function handleRealtimeEvent(event) {
 
   if (event.type === "response.done") {
     const finalText = extractRealtimeDoneText(event) || realtimeResponseText;
+    if (herMode && finalText) window.HerMode?.setReply(finalText);
     resolveRealtimeResponse({ status: "done", text: finalText });
     return;
   }
@@ -2462,6 +2538,49 @@ function toggleVoice() {
   }
   void startListening();
 }
+
+async function enterHerMode() {
+  if (herMode) return;
+  logRenderer("her.enter");
+  stopSpeechOutput();
+  herMode = true;
+  window.HerMode?.enter();
+  setMousePassthrough(false);
+  try {
+    if (realtimeActive) {
+      scheduleRealtimeSurfaceSync("her_enter");
+    } else if (!realtimeConnecting) {
+      await startListening();
+    }
+    if (rtMic) window.HerMode?.attachMicStream(rtMic);
+    await speak("hey. i'm here.");
+  } catch (error) {
+    logRenderer("her.enter.error", { error: errorForLog(error) });
+  }
+}
+
+async function exitHerMode(options = {}) {
+  if (!herMode) return;
+  logRenderer("her.exit", { farewell: Boolean(options.farewell) });
+  try {
+    if (options.farewell) await speak("okay. go be in the world. i'll be right here.");
+  } catch (_) {}
+  herMode = false;
+  window.HerMode?.exit();
+  scheduleRealtimeSurfaceSync("her_exit");
+  setMousePassthrough(true);
+  if (realtimeActive) setStatus("listening", "Listening");
+  else setStatus("ready", "Double Space to show/hide");
+}
+
+function toggleHerMode() {
+  if (herMode) void exitHerMode({ farewell: false });
+  else void enterHerMode();
+}
+
+window.addEventListener("her:leave", () => {
+  void exitHerMode({ farewell: true });
+});
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
@@ -2874,6 +2993,7 @@ function tick(now) {
 }
 
 window.brainoMac.onVoiceToggle(() => toggleVoice());
+window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onAuthRequired(() => {
   setAuthPose(true);
   setStatus("connecting", "Authenticating");

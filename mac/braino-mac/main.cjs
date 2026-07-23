@@ -994,6 +994,10 @@ function registerHotkeys() {
       sendToRenderer("braino-mac:voice-toggle", { source: "Control+Space" });
       ensureDockWindowVisible("voice-hotkey");
     }),
+    herToggle: globalShortcut.register("CommandOrControl+Shift+H", () => {
+      sendToRenderer("braino-mac:her-toggle", { source: "Command+Shift+H" });
+      ensureDockWindowVisible("her-hotkey");
+    }),
     bareControl: false,
   };
 
@@ -4534,17 +4538,18 @@ ipcMain.handle("braino-mac:tts-config", () => ({
   anonKey: SUPABASE_ANON_KEY || "",
 }));
 
-ipcMain.handle("braino-mac:tts", async (_event, text) => {
+ipcMain.handle("braino-mac:tts", async (_event, text, referenceId) => {
   const speakable = String(text || "").trim();
   if (!speakable) return { ok: false, error: "empty" };
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, error: "missing_supabase" };
+  const voiceReferenceId = String(referenceId || "").trim();
   const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/fish-audio-tts`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       apikey: SUPABASE_ANON_KEY,
     },
-    body: JSON.stringify({ text: speakable }),
+    body: JSON.stringify({ text: speakable, ...(voiceReferenceId ? { referenceId: voiceReferenceId } : {}) }),
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
