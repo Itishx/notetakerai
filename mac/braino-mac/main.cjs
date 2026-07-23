@@ -11,7 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
-const APP_VERSION = "12.0.38";
+const APP_VERSION = "12.0.39";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -1173,7 +1173,7 @@ const MAC_SKILLS_REPLY = [
   "9. I can open the best matching file when you ask for it.",
   "10. I can open installed Mac apps by name, and fall back to the right website for common services.",
   "11. I can close apps or matching browser tabs for the services I opened.",
-  "12. I can play songs and control playback through the Spotify Mac app when your Spotify account is connected.",
+  "12. I can play songs, pause/resume, skip, change volume, and add tracks to liked songs or playlists through Spotify.",
   "13. I can create notes in Apple Notes, asking what to write if you do not say it upfront.",
   "14. I can send or draft email in Apple Mail, resolving contact names through Contacts when possible.",
 ].join("\n");
@@ -1209,16 +1209,37 @@ function htmlForNotesBody(value) {
 }
 
 function cleanNoteContent(value) {
-  const text = String(value || "")
+  let text = String(value || "")
     .replace(/^["'`]+|["'`]+$/g, "")
-    .replace(/^(?:i\s+(?:would\s+)?like\s+(?:the\s+)?note\s+to\s+(?:say|be|read))\s*[:\-]?\s*/i, "")
-    .replace(/^(?:i\s+(?:would\s+)?like\s+to\s+)?(?:create|make|write|take|add)\s+(?:a\s+)?(?:new\s+)?note\s+(?:about|that|saying|with|for)?\s*/i, "")
+    .replace(/\bnode\b/gi, "note")
+    .replace(/\bnodes\b/gi, "notes")
     .replace(/^(?:i\s+(?:would\s+)?like\s+to\s+)?(?:talk|write|remember)\s+(?:about|that)\s*/i, "")
-    .replace(/^(?:the\s+)?note\s+(?:should\s+)?(?:say|be|read)\s*[:\-]?\s*/i, "")
     .replace(/^(?:about|that|saying|with|content|body|text)\s+/i, "")
     .replace(/\s+(?:for me|please|pls)$/i, "")
     .replace(/\s+/g, " ")
     .trim();
+  for (let index = 0; index < 4; index += 1) {
+    const before = text;
+    text = text
+      .replace(/^(?:i\s+(?:would\s+)?like\s+(?:the\s+)?note\s+to\s+(?:say|be|read))\s*[:\-]?\s*/i, "")
+      .replace(/^(?:the\s+)?note\s+(?:should\s+)?(?:say|be|read)\s*[:\-]?\s*/i, "")
+      .replace(/^(?:say|write|put)\s+(?:in\s+)?(?:the\s+)?note\s*[:\-]?\s*/i, "")
+      .replace(/^(?:i\s+(?:would\s+)?like\s+to\s+)?(?:create|make|write|take|add)\s+(?:a\s+)?(?:new\s+)?note\s+(?:about|that|saying|with|for)?\s*/i, "")
+      .replace(/^(?:the\s+)?(?:note|content|body|text)\s+(?:is|should be)\s*[:\-]?\s*/i, "")
+      .trim();
+    if (text === before) break;
+  }
+  text = text
+    .replace(/\b(?:the\s+)?note\s+(?:should\s+)?(?:say|be|read)\s*[:\-]?\s*/ig, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length > 1 && words.length % 2 === 0) {
+    const midpoint = words.length / 2;
+    const left = words.slice(0, midpoint).join(" ");
+    const right = words.slice(midpoint).join(" ");
+    if (normalizeSearchToken(left) === normalizeSearchToken(right)) text = left;
+  }
   return /^(?:me|it|this|that|note)$/i.test(text) ? "" : text;
 }
 
@@ -1238,7 +1259,7 @@ function deriveNoteTitle(body, providedTitle = "") {
 }
 
 function parseNoteIntent(raw) {
-  const source = String(raw || "").trim();
+  const source = String(raw || "").replace(/\bnode\b/gi, "note").replace(/\bnodes\b/gi, "notes").trim();
   if (!/\b(?:notes?|apple notes)\b/i.test(source)) return null;
   if (!/\b(?:create|make|write|take|add|new)\b/i.test(source)) return null;
   if (/\b(?:mail|email)\b/i.test(source)) return null;
@@ -1827,6 +1848,95 @@ function parseSpotifyControlIntent(raw) {
   return null;
 }
 
+function clampSpotifyVolume(value) {
+  return Math.min(100, Math.max(0, Math.round(Number(value) || 0)));
+}
+
+function parseSpotifyVolumeIntent(raw) {
+  const source = String(raw || "").trim();
+  const hasVolumeWord = /\b(?:volume|vol|sound)\b/i.test(source);
+  const wantsLouder = /\b(louder|raise|increase|boost|higher)\b/i.test(source)
+    || /\bturn\s+up\b/i.test(source)
+    || /\bturn\s+(?:it|the\s+(?:music|sound|volume))\s+up\b/i.test(source)
+    || /\b(full|max(?:imum)?)\s+(?:volume|vol|sound)\b/i.test(source)
+    || /\b(?:volume|vol|sound)\s+(?:up|higher|full|max)\b/i.test(source);
+  const wantsQuieter = /\b(quieter|softer|dimmer|lower|decrease|reduce)\b/i.test(source)
+    || /\bturn\s+down\b/i.test(source)
+    || /\bturn\s+(?:it|the\s+(?:music|sound|volume))\s+down\b/i.test(source)
+    || /\b(mute|silence)\b/i.test(source);
+  if (!hasVolumeWord && !wantsLouder && !wantsQuieter) return null;
+
+  if (/\b(?:full|max(?:imum)?)\s*(?:volume|vol|sound)?$|\b(?:volume|vol|sound)\s+(?:full|max)\b/i.test(source)) {
+    return { volumePercent: 100, volumeStep: 0 };
+  }
+  if (/\b(?:mute|silence)\b/i.test(source)) return { volumePercent: 0, volumeStep: 0 };
+  const exact = source.match(/(?:set|change|put|make)\s+(?:the\s+)?(?:spotify\s+)?(?:volume|vol|sound)\s+(?:to\s+)?(\d{1,3})\s*%?/i)
+    || source.match(/\b(?:volume|vol|sound)\s+(?:to\s+|at\s+)?(\d{1,3})\s*%?/i)
+    || source.match(/\b(\d{1,3})\s*%?\s+(?:volume|vol|sound)\b/i);
+  if (exact?.[1]) return { volumePercent: clampSpotifyVolume(exact[1]), volumeStep: 0 };
+  if (wantsQuieter) return { volumePercent: null, volumeStep: -20 };
+  if (wantsLouder) return { volumePercent: null, volumeStep: 20 };
+  return null;
+}
+
+function cleanSpotifySongQuery(value) {
+  return cleanOpenTarget(value)
+    .replace(/^(?:the\s+)?(?:song|track|music|tune)\s+/i, "")
+    .replace(/\b(?:on|in|with)\s+spotify\b/gi, " ")
+    .replace(/\b(?:for me|please|pls|right now|now)\b$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanSpotifyPlaylistName(value) {
+  return cleanOpenTarget(value)
+    .replace(/\s+(?:playlist|on spotify|in spotify|with spotify)$/i, "")
+    .replace(/^(?:my\s+)?(?:playlist\s+)?/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseSpotifyAddTrackIntent(raw) {
+  const source = String(raw || "").trim();
+  if (!/\b(?:add|save)\b/i.test(source)) return null;
+  if (!/\b(?:spotify|playlist|liked songs?|song|track|music|tune)\b/i.test(source)) return null;
+
+  if (/(?:add|save)\s+(?:this|current|playing)(?:\s+(?:song|track|music|tune))?\s+to\s+(?:my\s+)?(?:liked\s+songs?|spotify)\b/i.test(source)) {
+    return { song: "", playlist: null, useCurrent: true };
+  }
+
+  const currentQuotedPlaylist = source.match(/(?:add|save)\s+(?:this|current|playing)(?:\s+(?:song|track|music|tune))?\s+to\s+(?:my\s+)?(?:playlist\s+)?["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
+  if (currentQuotedPlaylist?.[1]) {
+    return { song: "", playlist: cleanSpotifyPlaylistName(currentQuotedPlaylist[1]), useCurrent: true };
+  }
+
+  const currentNamedPlaylist = source.match(/(?:add|save)\s+(?:this|current|playing)(?:\s+(?:song|track|music|tune))?\s+to\s+(?:my\s+)?(.+?)\s+playlist(?:\s+(?:on|in)\s+spotify)?$/i);
+  if (currentNamedPlaylist?.[1]) {
+    return { song: "", playlist: cleanSpotifyPlaylistName(currentNamedPlaylist[1]), useCurrent: true };
+  }
+
+  const quotedAdd = source.match(/(?:add|save)\s+["“](.+?)["”]\s+to\s+(?:my\s+)?(?:playlist\s+)?["“](.+?)["”](?:\s+(?:on|in)\s+spotify)?$/i);
+  if (quotedAdd?.[1] && quotedAdd?.[2]) {
+    return { song: cleanSpotifySongQuery(quotedAdd[1]), playlist: cleanSpotifyPlaylistName(quotedAdd[2]), useCurrent: false };
+  }
+
+  const namedLiked = source.match(/(?:add|save)\s+(?:the\s+)?(?:song|track|music|tune)?\s*["“]?(.+?)["”]?\s+to\s+(?:my\s+)?liked\s+songs?(?:\s+(?:on|in)\s+spotify)?$/i);
+  if (namedLiked?.[1]) {
+    return { song: cleanSpotifySongQuery(namedLiked[1]), playlist: null, useCurrent: false };
+  }
+
+  const namedPlaylist = source.match(/(?:add|save)\s+(?:the\s+)?(?:song|track|music|tune)?\s*["“]?(.+?)["”]?\s+to\s+(?:my\s+)?(?:playlist\s+)?["“]?(.+?)["”]?(?:\s+(?:on|in)\s+spotify)?$/i);
+  if (namedPlaylist?.[1] && namedPlaylist?.[2]) {
+    return {
+      song: cleanSpotifySongQuery(namedPlaylist[1]),
+      playlist: cleanSpotifyPlaylistName(namedPlaylist[2]),
+      useCurrent: false,
+    };
+  }
+
+  return null;
+}
+
 async function playSpotifyTrackInMacApp(uri) {
   const safeUri = escapeAppleScriptString(uri);
   const script = `
@@ -1862,23 +1972,95 @@ if spotifyRunning then
     set stateText to player state as text
     set trackName to ""
     set artistName to ""
+    set volumeLevel to ""
+    set trackUrl to ""
     try
       set trackName to name of current track
       set artistName to artist of current track
+      set trackUrl to spotify url of current track
     end try
-    return stateText & linefeed & trackName & linefeed & artistName
+    try
+      set volumeLevel to sound volume as text
+    end try
+    return stateText & linefeed & trackName & linefeed & artistName & linefeed & volumeLevel & linefeed & trackUrl
   end tell
 else
   return "not running"
 end if`;
   try {
     const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 4000 });
-    const [state = "", name = "", artist = ""] = stdout.trim().split(/\r?\n/);
-    return { ok: true, state, name, artist };
+    const [state = "", name = "", artist = "", volume = "", uri = ""] = stdout.trim().split(/\r?\n/);
+    const volumePercent = Number.isFinite(Number(volume)) ? clampSpotifyVolume(volume) : null;
+    return { ok: true, state, name, artist, volumePercent, uri };
   } catch (error) {
     logMac("spotify.mac_app.state.failed", { error });
     return { ok: false, error: error?.message || "Could not read Spotify state." };
   }
+}
+
+async function setSpotifyVolumeInMacApp(volumePercent) {
+  const nextVolume = clampSpotifyVolume(volumePercent);
+  const script = `
+tell application "Spotify"
+  activate
+  set sound volume to ${nextVolume}
+  return sound volume as text
+end tell`;
+  const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 6000 });
+  return clampSpotifyVolume(stdout.trim() || nextVolume);
+}
+
+async function getSpotifyApiVolumeFallback() {
+  const playerState = await callSpotifyFunction("spotify-player-state", {});
+  if (!playerState.ok) return { ok: false, error: playerState.error || "Could not read Spotify volume." };
+  const activeVolume = playerState?.activeDevice?.volumePercent;
+  const firstDeviceVolume = Array.isArray(playerState.devices)
+    ? playerState.devices.find((device) => typeof device?.volumePercent === "number")?.volumePercent
+    : null;
+  const current = typeof activeVolume === "number"
+    ? activeVolume
+    : typeof firstDeviceVolume === "number"
+      ? firstDeviceVolume
+      : 50;
+  return { ok: true, volumePercent: clampSpotifyVolume(current) };
+}
+
+async function controlSpotifyVolumeOnMac(volumeIntent) {
+  const startedAt = Date.now();
+  let target = typeof volumeIntent?.volumePercent === "number" ? clampSpotifyVolume(volumeIntent.volumePercent) : null;
+  const step = Number(volumeIntent?.volumeStep || 0);
+  sendTaskProgress({ status: "thinking", text: "Adjusting Spotify volume" });
+
+  if (target == null) {
+    const state = await readSpotifyMacState();
+    if (typeof state?.volumePercent === "number") {
+      target = clampSpotifyVolume(state.volumePercent + step);
+    } else {
+      const apiVolume = await getSpotifyApiVolumeFallback();
+      if (!apiVolume.ok) return { ok: false, say: apiVolume.error || "I could not read Spotify volume yet." };
+      target = clampSpotifyVolume(apiVolume.volumePercent + step);
+    }
+  }
+
+  let nativeOk = false;
+  try {
+    const actual = await setSpotifyVolumeInMacApp(target);
+    nativeOk = true;
+    logMac("spotify.mac_app.volume.done", { requested: target, actual, durationMs: Date.now() - startedAt });
+    sendTaskProgress({ status: "done", text: `Volume ${actual}%` });
+    return { ok: true, say: `Spotify volume set to ${actual}%.` };
+  } catch (error) {
+    logMac("spotify.mac_app.volume.failed", { requested: target, error });
+  }
+
+  const api = await callSpotifyFunction("spotify-playback", { action: "volume", volumePercent: target });
+  if (api.ok) {
+    logMac("spotify.api_volume.done", { requested: target, nativeOk, durationMs: Date.now() - startedAt });
+    sendTaskProgress({ status: "done", text: `Volume ${target}%` });
+    return { ok: true, say: `Spotify volume set to ${target}%.` };
+  }
+  logMac("spotify.api_volume.failed_after_native", { requested: target, error: api.error || "" });
+  return { ok: false, say: api.error || "Spotify did not accept the volume change." };
 }
 
 async function controlSpotifyPlaybackOnMac(control) {
@@ -1966,6 +2148,98 @@ async function playSpotifySongOnMac(songQuery) {
   if (!nativeOk && !apiOk) return { ok: false, say: apiError || "Spotify opened, but I could not start playback." };
   sendTaskProgress({ status: "done", text: `Playing ${title}` });
   return { ok: true, say: `Playing ${title} by ${artists} on Spotify.` };
+}
+
+function spotifyTrackIdFromTrack(track) {
+  const id = String(track?.id || "").trim();
+  if (id) return id;
+  const uri = String(track?.uri || "").trim();
+  const uriMatch = uri.match(/spotify:track:([A-Za-z0-9]+)/i);
+  if (uriMatch?.[1]) return uriMatch[1];
+  const externalUrl = String(track?.externalUrl || track?.external_url || "").trim();
+  const urlMatch = externalUrl.match(/open\.spotify\.com\/track\/([A-Za-z0-9]+)/i);
+  return urlMatch?.[1] || "";
+}
+
+async function resolveSpotifyTrackForAdd(intent) {
+  if (intent?.useCurrent) {
+    const playerState = await callSpotifyFunction("spotify-player-state", {});
+    if (playerState.ok && playerState.track) {
+      const trackId = spotifyTrackIdFromTrack(playerState.track);
+      if (trackId) return { ok: true, track: playerState.track, trackId, source: "api_current" };
+    }
+
+    const state = await readSpotifyMacState();
+    if (state.ok && state.name) {
+      const query = [state.name, state.artist].filter(Boolean).join(" ");
+      const search = await callSpotifyFunction("spotify-search", { query, limit: 3 });
+      if (!search.ok) return { ok: false, error: search.error || "Spotify search failed." };
+      const track = Array.isArray(search.tracks) ? search.tracks[0] : null;
+      const trackId = spotifyTrackIdFromTrack(track);
+      if (trackId) return { ok: true, track, trackId, source: "mac_current_search" };
+    }
+
+    return { ok: false, error: "I could not read the currently playing Spotify track." };
+  }
+
+  const query = cleanSpotifySongQuery(intent?.song || "");
+  if (!query) return { ok: false, error: "Tell me which song to add." };
+  const search = await callSpotifyFunction("spotify-search", { query, limit: 5 });
+  if (!search.ok) return { ok: false, error: search.error || "Spotify search failed." };
+  const track = Array.isArray(search.tracks) ? search.tracks[0] : null;
+  const trackId = spotifyTrackIdFromTrack(track);
+  if (!trackId) return { ok: false, error: `I could not find ${query} on Spotify.` };
+  return { ok: true, track, trackId, source: "search" };
+}
+
+async function addSpotifyTrackOnMac(intent) {
+  const playlistName = intent?.playlist ? cleanSpotifyPlaylistName(intent.playlist) : "";
+  const destination = playlistName ? `playlist ${playlistName}` : "Liked Songs";
+  sendTaskProgress({ status: "thinking", text: `Adding to ${destination}` });
+  logMac("spotify.add_track.start", {
+    useCurrent: Boolean(intent?.useCurrent),
+    song: textForLog(intent?.song || ""),
+    playlist: textForLog(playlistName),
+  });
+
+  const resolved = await resolveSpotifyTrackForAdd(intent);
+  if (!resolved.ok) {
+    logMac("spotify.add_track.resolve_failed", {
+      useCurrent: Boolean(intent?.useCurrent),
+      song: textForLog(intent?.song || ""),
+      error: resolved.error || "",
+    });
+    return { ok: false, say: resolved.error || "I could not resolve that Spotify track." };
+  }
+
+  const track = resolved.track;
+  const title = String(track?.name || intent?.song || "that track").trim();
+  const artists = formatSpotifyArtists(track);
+  const payload = playlistName
+    ? { action: "addToPlaylist", trackId: resolved.trackId, playlistName }
+    : { action: "like", trackId: resolved.trackId };
+  const result = await callSpotifyFunction("spotify-add-track", payload);
+  if (!result.ok) {
+    logMac("spotify.add_track.failed", {
+      track: textForLog(title),
+      playlist: textForLog(playlistName),
+      error: result.error || "",
+    });
+    return { ok: false, say: result.error || `I could not add ${title} to ${destination}.` };
+  }
+
+  const finalDestination = playlistName
+    ? `playlist ${result.playlistName || playlistName}`
+    : "Liked Songs";
+  logMac("spotify.add_track.done", {
+    track: textForLog(title),
+    artists: textForLog(artists),
+    destination: textForLog(finalDestination),
+    source: resolved.source,
+  });
+  sendTaskProgress({ status: "done", text: `Added to ${finalDestination}` });
+  const artistLine = artists ? ` by ${artists}` : "";
+  return { ok: true, say: `Added ${title}${artistLine} to ${finalDestination} on Spotify.` };
 }
 
 const FILE_KIND_EXTENSIONS = {
@@ -4007,6 +4281,27 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     logMac("delegate.web_search_intent", { query: textForLog(webQuery) });
     await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`);
     return { ok: true, say: `Searching Chrome for ${webQuery}.` };
+  }
+
+  const spotifyVolume = parseSpotifyVolumeIntent(raw);
+  if (spotifyVolume) {
+    logMac("delegate.spotify_volume_intent", {
+      raw: textForLog(raw),
+      volumePercent: spotifyVolume.volumePercent,
+      volumeStep: spotifyVolume.volumeStep,
+    });
+    return controlSpotifyVolumeOnMac(spotifyVolume);
+  }
+
+  const spotifyAddTrack = parseSpotifyAddTrackIntent(raw);
+  if (spotifyAddTrack) {
+    logMac("delegate.spotify_add_track_intent", {
+      raw: textForLog(raw),
+      song: textForLog(spotifyAddTrack.song || ""),
+      playlist: textForLog(spotifyAddTrack.playlist || ""),
+      useCurrent: Boolean(spotifyAddTrack.useCurrent),
+    });
+    return addSpotifyTrackOnMac(spotifyAddTrack);
   }
 
   const spotifyControl = parseSpotifyControlIntent(raw);

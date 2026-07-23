@@ -351,7 +351,7 @@ function voiceAddressesBraino(text) {
   const normalized = normalizeForVoiceMatch(text);
   if (!normalized) return false;
   if (/\b(braino|bruno|breno|reno|dino)\b/.test(normalized)) return true;
-  return /\b(stop|pause|wait|hold on|listen|repeat|cancel|enough|organize|organise|open|search|find|clean|undo|create|make|note|notes|mail|gmail|email|send|draft|compose)\b/.test(normalized);
+  return /\b(stop|pause|wait|hold on|listen|repeat|cancel|enough|organize|organise|open|search|find|clean|undo|create|make|note|notes|mail|gmail|email|send|draft|compose|volume|sound|louder|quieter|mute|spotify|playlist|song|music)\b/.test(normalized);
 }
 
 function rememberLocalChat(role, content) {
@@ -1244,7 +1244,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|pause|resume|spotify|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|reply|write|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|reply|write|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {

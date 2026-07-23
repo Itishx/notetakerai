@@ -21,7 +21,7 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
   - close apps or matching browser tabs
   - create notes in Apple Notes
   - send or draft email in Apple Mail using Contacts lookup when possible
-- Spotify Mac app playback for songs, when connected.
+- Spotify Mac app/API playback for songs, pause/resume/skip, volume changes, liked songs, and named playlist adds when connected.
 - Basic "what app/window am I looking at?" awareness.
 - Logs for debugging voice, app-opening, file search, auth, and delegate actions.
 - Auto-stop listening after idle, so it does not keep burning realtime forever.
@@ -46,7 +46,7 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
   - Mail reply/thread awareness
   - Calendar open/create event
   - WhatsApp open contact
-  - Spotify play/pause/next/search
+  - Spotify play/pause/next/search/volume/playlist add
   - Chrome tab open/close/search
 - Add clipboard skills:
   - copy selected text
