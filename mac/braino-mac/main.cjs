@@ -11,6 +11,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
+const TOUCH_ID_HELPER_PATH = path.join(__dirname, "native", "BrainoTouchID.swift");
 const APP_VERSION = "12.0.41";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
@@ -2592,6 +2593,30 @@ function reminderSeconds(amount, unit) {
 const AMOUNT_RE = "(\\d+|[a-z]+(?:[ -][a-z]+)?)";
 const UNIT_RE = "(seconds?|secs?|minutes?|mins?|hours?|hrs?)";
 
+// Touch ID (or the account password on Macs without the sensor — same
+// .deviceOwnerAuthentication policy System Preferences itself uses, so one
+// code path covers every Mac). Returns true/false/null (null = hardware or
+// LocalAuthentication itself unavailable, e.g. no Swift toolchain).
+async function requireTouchId(reason) {
+  try {
+    const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", TOUCH_ID_HELPER_PATH, reason], { timeout: 30000 });
+    const result = String(stdout || "").trim();
+    logMac("touchid.result", { reason: textForLog(reason), result });
+    if (result === "ok") return true;
+    if (result === "denied") return false;
+    return null;
+  } catch (error) {
+    logMac("touchid.failed", { error });
+    return null;
+  }
+}
+
+function parseTouchIdTestIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  return /\b(?:verify|confirm|authenticate)\b.*\b(?:it'?s me|its me|my identity|me)\b/i.test(source)
+    || /\btouch\s*id\b/i.test(source);
+}
+
 function parseReminderIntent(raw) {
   const source = cleanPrompt(String(raw || ""))
     .replace(/[?.!]+\s*$/, "")
@@ -2895,15 +2920,66 @@ async function fetchAudioFeaturesForUri(uri) {
 // active device is actually this class of device ("Computer" — the type
 // Spotify uses for both the native app and the browser web player) before
 // trusting it; phones/speakers/TVs are definitively elsewhere.
+let remoteDeviceStreak = 0;
+
 async function isSpotifyOnThisMac() {
   try {
     const result = await callSpotifyFunction("spotify-player-state", {});
-    if (!result.ok) return null; // API hiccup — don't punish a real local play for it
+    if (!result.ok) { remoteDeviceStreak = 0; return null; } // API hiccup — don't punish a real local play for it
     const device = result.activeDevice;
-    if (!device) return null;
-    return device.type === "Computer";
+    if (!device) { remoteDeviceStreak = 0; return null; }
+    const isRemote = device.type !== "Computer";
+    if (!isRemote) { remoteDeviceStreak = 0; return true; }
+    // Spotify's Connect device state has known momentary staleness — a single
+    // "remote" read can be a stale echo even while audio is genuinely local.
+    // Require two consecutive remote reads (this poll is every 5s, so ~10s)
+    // before believing it, or a single flaky read used to flip Braino home
+    // and back out repeatedly (looked like him randomly appearing/vanishing).
+    remoteDeviceStreak += 1;
+    return remoteDeviceStreak >= 2 ? false : null;
   } catch (_) {
+    remoteDeviceStreak = 0;
     return null;
+  }
+}
+
+// The active-tab check alone missed a YouTube video still playing in a
+// BACKGROUND tab (switch tabs and the music state used to just vanish, since
+// activeMacContext only reflects the frontmost tab's URL). This scans every
+// Chrome tab across every window and asks each YouTube candidate directly,
+// via injected JS, whether its <video> is actually unpaused — not just open.
+// Needs "Allow JavaScript from Apple Events" in Chrome's View menu; if that
+// is off the whole script throws and we fall back to the old active-tab-only
+// behavior further down, so nothing regresses for people without it enabled.
+async function findPlayingYouTubeTab() {
+  const script = `
+tell application "Google Chrome"
+  if (count of windows) = 0 then return ""
+  repeat with w in windows
+    repeat with t in tabs of w
+      set tURL to ""
+      try
+        set tURL to URL of t
+      end try
+      if tURL contains "youtube.com/watch" or tURL contains "music.youtube.com" then
+        try
+          set isPlaying to execute t javascript "(function(){var v=document.querySelector('video');return !!(v && !v.paused && !v.ended && v.currentTime > 0);})()"
+          if isPlaying is true then
+            return (title of t)
+          end if
+        end try
+      end if
+    end repeat
+  end repeat
+  return ""
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 6000 });
+    const title = String(stdout || "").trim();
+    return title || null;
+  } catch (error) {
+    logMac("music.youtube_scan.unavailable", { error });
+    return undefined; // distinct from null: means "could not scan," caller should use the old fallback
   }
 }
 
@@ -2929,13 +3005,26 @@ async function checkMusicState() {
     }
   } catch (_) {}
   if (!playing) {
-    const url = activeMacContext?.browserUrl || "";
-    if (/youtube\.com\/watch|music\.youtube\.com/.test(url)) {
-      playing = true;
-      source = "youtube";
-      track = String(activeMacContext?.browserTitle || "")
-        .replace(/\s*-\s*YouTube.*$/i, "")
-        .trim();
+    const scanned = await findPlayingYouTubeTab().catch(() => undefined);
+    if (typeof scanned === "string") {
+      // A real cross-tab result: trust it fully, present or absent, even if
+      // the playing tab is currently in the background.
+      if (scanned) {
+        playing = true;
+        source = "youtube";
+        track = scanned.replace(/\s*-\s*YouTube.*$/i, "").trim();
+      }
+    } else {
+      // Scan unavailable (JS-from-Apple-Events off) — fall back to the old,
+      // weaker active-tab-only check so this never regresses to nothing.
+      const url = activeMacContext?.browserUrl || "";
+      if (/youtube\.com\/watch|music\.youtube\.com/.test(url)) {
+        playing = true;
+        source = "youtube";
+        track = String(activeMacContext?.browserTitle || "")
+          .replace(/\s*-\s*YouTube.*$/i, "")
+          .trim();
+      }
     }
   }
   const key = `${playing}|${source}|${track}|${artist}`;
@@ -5918,6 +6007,18 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       recipient: textForLog(callIntent.recipient),
     });
     return startCall(callIntent);
+  }
+
+  if (parseTouchIdTestIntent(raw)) {
+    logMac("delegate.touchid_intent", {});
+    sendTaskProgress({ status: "thinking", text: "Waiting for Touch ID" });
+    const granted = await requireTouchId("verify it's really you");
+    if (granted === true) {
+      sendTaskProgress({ status: "done", text: "Verified" });
+      return { ok: true, say: "Verified. That's really you." };
+    }
+    if (granted === false) return { ok: true, say: "Not verified. Try again whenever." };
+    return { ok: true, say: "Touch ID is not available on this Mac right now." };
   }
 
   const reminderIntent = parseReminderIntent(raw);

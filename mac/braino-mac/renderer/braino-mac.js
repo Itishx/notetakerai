@@ -537,7 +537,7 @@ function updateEdgeGlow() {
         : ["connecting", "thinking", "captured"].includes(lastGlowStatus)
           ? "think"
           : "";
-  edgeGlow.className = voiceState || (musicMode && !herMode ? "music" : "");
+  edgeGlow.className = voiceState || (musicTheatricsReady && !herMode ? "music" : "");
 }
 
 // ── Notch Braino: the notch as his face ──
@@ -597,7 +597,7 @@ function updateNotchFace() {
   } else if (nfWaBadge.count > 0) {
     line = `${nfWaBadge.sender || "whatsapp"} · ${nfWaBadge.count} new`;
     live = true;
-  } else if (musicMode) {
+  } else if (musicTheatricsReady) {
     line = [lastMusicInfo.track, lastMusicInfo.artist].filter(Boolean).join(" · ");
     music = true;
   }
@@ -611,12 +611,20 @@ window.setInterval(() => {
   if (nfTimers.length || nfCalendarNext || nfWaBadge.count) updateNotchFace();
 }, 1000);
 
-async function walkerGoHome() {
-  if (walkerHome) return;
+async function walkerGoHomeAnimated(opts = {}) {
   walkerHome = true;
+  logRenderer("walker.home", { style: opts.style || "walk" });
+  // Music-triggered retreat: he already has his headphones on (setMusicMode
+  // puts them on first) — he just fades out in place rather than walking.
+  if (opts.style === "fade") {
+    walker.classList.add("fading-home");
+    await wait(620);
+    walker.classList.remove("visible", "fading-home");
+    updateNotchFace();
+    return;
+  }
   const startX = Math.round(window.innerWidth / 2 - W / 2);
   const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
-  logRenderer("walker.home", {});
   await new Promise((resolve) => {
     scriptedWalk = { x: startX, y: faceH + 6, speed: 360, resolve, allowOffscreen: true };
   });
@@ -624,8 +632,7 @@ async function walkerGoHome() {
   updateNotchFace();
 }
 
-async function walkerLeaveHome() {
-  if (!walkerHome) return;
+async function walkerLeaveHomeAnimated() {
   walkerHome = false;
   const dock = getDockBounds();
   const startX = Math.round(window.innerWidth / 2 - W / 2);
@@ -641,9 +648,44 @@ async function walkerLeaveHome() {
   pickRoamTarget();
 }
 
+// Home/away used to race: walkerGoHome set walkerHome=true synchronously then
+// awaited its walk, so a flapping caller mid-animation saw "already home" and
+// barged in with walkerLeaveHome, overwriting the SAME scriptedWalk object the
+// first call was still waiting on — two directed walks fighting one animation
+// slot, which read as Braino flickering in and out of the notch. Now only one
+// transition ever runs; anything that arrives mid-flight is coalesced into
+// "whatever was asked most recently" and applied once the current one ends.
+let walkerHomeBusy = false;
+let walkerHomeQueued = null;
+
+async function setWalkerHomeState(wantHome, opts = {}) {
+  if (walkerHomeBusy) {
+    walkerHomeQueued = wantHome;
+    return;
+  }
+  if (wantHome === walkerHome) return;
+  walkerHomeBusy = true;
+  try {
+    if (wantHome) await walkerGoHomeAnimated(opts);
+    else await walkerLeaveHomeAnimated();
+  } finally {
+    walkerHomeBusy = false;
+    const queued = walkerHomeQueued;
+    walkerHomeQueued = null;
+    if (queued !== null && queued !== walkerHome) void setWalkerHomeState(queued);
+  }
+}
+
+function walkerGoHome(opts) {
+  return setWalkerHomeState(true, opts);
+}
+
+function walkerLeaveHome() {
+  return setWalkerHomeState(false);
+}
+
 function toggleWalkerHome() {
-  if (walkerHome) void walkerLeaveHome();
-  else void walkerGoHome();
+  void setWalkerHomeState(!walkerHome);
 }
 
 function nfSetStatusText(text) {
@@ -669,18 +711,16 @@ function nfSetStatusText(text) {
   status.classList.toggle("show", Boolean(value));
 }
 
+// Four beats, per spec: closed eyes fade in -> authenticating (~1s) ->
+// eyes open + glow + spoken greeting, together -> he pops out of the notch.
 async function runNotchBoot() {
   walkerHome = true; // he is born inside the notch
   setNotchFaceEnabled(true);
   updateNotchFace();
   notchFace?.classList.add("asleep");
-  // Act 1: darkness. Something is in there.
-  await wait(700);
-  // Act 2: the notch begins to glow — life stirring before a single word.
-  notchFace?.classList.add("nf-wake");
-  await wait(2000);
-  notchFace?.classList.remove("nf-wake");
-  // Act 3: the island extends and speaks its first word.
+  // Beat 1: closed eyes fade in (the .on opacity transition IS the fade-in).
+  await wait(500);
+  // Beat 2: authenticating, held to roughly one second even for an instant token.
   notchFace?.classList.add("nf-auth");
   nfSetStatusText("authenticating");
   const authStarted = Date.now();
@@ -690,44 +730,54 @@ async function runNotchBoot() {
   } catch (error) {
     result = { ok: false, error: error?.message || "Braino sign-in failed." };
   }
-  // Even an instant token gets a real authenticating beat.
   const elapsed = Date.now() - authStarted;
-  if (elapsed < 2100) await wait(2100 - elapsed);
+  if (elapsed < 1000) await wait(1000 - elapsed);
   notchFace?.classList.remove("nf-auth");
   notchFace?.classList.add(result?.ok ? "nf-auth-ok" : "nf-auth-err");
   nfSetStatusText(result?.ok ? "authenticated" : "auth failed");
-  await wait(1200);
+  await wait(500);
   notchFace?.classList.remove("nf-auth-ok", "nf-auth-err");
   nfSetStatusText("");
-  if (result?.ok) {
-    // Act 4: his eyes open.
-    notchFace?.classList.remove("asleep");
-    await wait(850);
-  }
   return result || { ok: false, error: "Braino sign-in failed." };
 }
 
-async function runNotchDescent(authResult) {
+async function runNotchPopOut(authResult) {
   const dock = getDockBounds();
-  const startX = Math.round(window.innerWidth / 2 - W / 2);
   const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
-  walkerHome = false; // he steps out: notch eyes hand off to the walker
+  const popX = Math.round(window.innerWidth / 2 - W / 2);
+
+  // Beat 3: eyes open, the island flashes a bright greeting glow, he says hi —
+  // all at once, not gated on the walk that follows.
+  notchFace?.classList.remove("asleep");
+  if (authResult?.ok) {
+    notchFace?.classList.add("nf-greet");
+    window.setTimeout(() => notchFace?.classList.remove("nf-greet"), 1100);
+    const auth = await window.brainoMac.authStatus().catch(() => null);
+    const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
+    const greeting = firstName ? `Hey, ${firstName}.` : "Hey.";
+    setBubble(greeting.toLowerCase(), 2400);
+    void speak(greeting);
+  }
+
+  // Beat 4: he pops out from under the notch — a quick drop past rest, then a
+  // small bounce back up to settle, all via the existing scriptedWalk motion
+  // system (no fighting the tick loop's own transform writes with CSS).
+  walkerHome = false;
   updateNotchFace();
   walker.classList.add("visible");
-  setPosition(startX, faceH + 42, { allowOffscreen: true });
   dirX = 1;
-  const landingX = clamp(startX, dock.minX, dock.maxX);
+  setPosition(popX, faceH - 4, { allowOffscreen: true });
+  const restY = faceH + 34;
   await new Promise((resolve) => {
-    scriptedWalk = { x: landingX, y: dock.y, speed: 290, resolve };
+    scriptedWalk = { x: popX, y: restY + 14, speed: 1400, resolve, allowOffscreen: true };
   });
+  await new Promise((resolve) => {
+    scriptedWalk = { x: popX, y: restY, speed: 260, resolve, allowOffscreen: true };
+  });
+  if (authResult?.ok) setWave(true);
+  const landingX = clamp(popX, dock.minX, dock.maxX);
   targetX = landingX;
   targetY = dock.y;
-  const auth = await window.brainoMac.authStatus().catch(() => null);
-  const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
-  if (authResult?.ok) {
-    setBubble(firstName ? `hello, ${firstName}.` : "hello.", 2400);
-    setWave(true);
-  }
 }
 
 function nfScheduleBlink() {
@@ -777,7 +827,7 @@ function ensureNotchNotes() {
 }
 
 function spawnNotchNote() {
-  if (!musicMode || herMode) return;
+  if (!musicTheatricsReady || herMode) return;
   const container = ensureNotchNotes();
   const note = document.createElement("span");
   note.textContent = Math.random() < 0.5 ? "♪" : "♫";
@@ -791,26 +841,45 @@ function spawnNotchNote() {
 }
 
 let walkerAutoHomedByMusic = false;
+// Gates every visible theatric (edge glow, notch dance, light show, falling
+// notes, now-playing marquee): stays false until he has ACTUALLY finished
+// walking home, never flips on the instant music is merely detected.
+let musicTheatricsReady = false;
+
+function beginMusicTheatrics() {
+  musicTheatricsReady = true;
+  startNotchDance();
+  void startLightShow();
+  if (!noteTimer) noteTimer = window.setInterval(spawnNotchNote, 1050);
+  updateEdgeGlow();
+  updateNotchFace();
+}
 
 // When music starts he retreats into the notch first ("music's on, let me
-// rest a bit"), and only once he is actually home do the dance + light show
-// begin — never simultaneous with him roaming the screen.
+// rest a bit"), and only once he is actually home does anything visual begin
+// — never simultaneous with him roaming the screen.
 async function reactToMusicStart() {
   if (herMode || walkerHome || speaking || processing || voiceTurnInFlight) {
-    startNotchDance();
-    void startLightShow();
+    beginMusicTheatrics();
     return;
   }
   walkerAutoHomedByMusic = true;
   try { await speak("Music's on. Let me rest for a bit."); } catch (_) {}
-  await walkerGoHome();
-  startNotchDance();
-  void startLightShow();
+  await walkerGoHome({ style: "fade" });
+  beginMusicTheatrics();
 }
 
 function reactToMusicStop() {
+  musicTheatricsReady = false;
   stopNotchDance();
   stopLightShow();
+  if (noteTimer) {
+    window.clearInterval(noteTimer);
+    noteTimer = 0;
+    notchNotes?.replaceChildren();
+  }
+  updateEdgeGlow();
+  updateNotchFace();
   if (walkerAutoHomedByMusic && walkerHome) {
     walkerAutoHomedByMusic = false;
     void walkerLeaveHome();
@@ -823,15 +892,6 @@ function setMusicMode(on) {
   walker.classList.toggle("music", musicMode);
   if (musicMode) void reactToMusicStart();
   else reactToMusicStop();
-  if (musicMode && !noteTimer) {
-    noteTimer = window.setInterval(spawnNotchNote, 1050);
-  } else if (!musicMode && noteTimer) {
-    window.clearInterval(noteTimer);
-    noteTimer = 0;
-    notchNotes?.replaceChildren();
-  }
-  updateEdgeGlow();
-  updateNotchFace();
 }
 
 function updateFloatingUi() {
@@ -2221,7 +2281,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -3376,15 +3436,15 @@ async function runStartupSequence(config = {}) {
     applyDisplayMetrics(config.displayMetrics);
     movementMode = "dock";
     setStatus("connecting", "Starting");
-    // He is born from the notch: fill → authenticate (island pulse, green or
-    // red verdict) → eyes open → step out and walk down to the Dock.
+    // He is born from the notch: closed eyes fade in → authenticate (~1s,
+    // green or red verdict) → eyes open + glow + spoken hello → pops out.
     const authResult = await runNotchBoot();
     logRenderer("startup.auth.result", {
       ok: Boolean(authResult?.ok),
       source: authResult?.source || "unknown",
       error: authResult?.error || null,
     });
-    await runNotchDescent(authResult);
+    await runNotchPopOut(authResult);
     notchBootDone = true;
     updateNotchFace();
 

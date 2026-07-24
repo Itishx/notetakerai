@@ -72,6 +72,13 @@ body {
   opacity: 1;
 }
 
+/* Music retreat: he already has headphones on, he just fades out in place —
+   no walk. Higher specificity than .visible so it wins while both are set. */
+#walker.visible.fading-home {
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+
 #walker.dragging {
   cursor: grabbing;
 }
@@ -455,16 +462,15 @@ body {
   d: path("M 54 44 Q 60 46.5 66 44");
 }
 
-/* Boot act 2: the notch stirs — glow builds from nothing before any words. */
-#notch-face.nf-wake .nf-pill {
-  animation: nfWakeGlow 2s ease-in-out forwards;
+/* Beat 3: eyes-open greeting glow — one bright warm pulse, then settle. */
+#notch-face.nf-greet .nf-pill {
+  animation: nfGreetGlow 1.1s ease-out 1;
 }
 
-@keyframes nfWakeGlow {
+@keyframes nfGreetGlow {
   0% { box-shadow: 0 0 0 rgba(232, 120, 110, 0); }
-  35% { box-shadow: 0 0 10px rgba(232, 120, 110, 0.25); }
-  65% { box-shadow: 0 0 22px rgba(232, 120, 110, 0.5), 0 0 44px rgba(243, 154, 66, 0.18); }
-  100% { box-shadow: 0 0 30px rgba(232, 120, 110, 0.7), 0 0 60px rgba(243, 154, 66, 0.3); }
+  30% { box-shadow: 0 0 34px rgba(232, 120, 110, 0.85), 0 0 60px rgba(243, 154, 66, 0.4); }
+  100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
 }
 
 /* Boot: authenticating — island extends, cool pulse, status caption. */
