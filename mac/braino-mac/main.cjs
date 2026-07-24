@@ -5840,6 +5840,43 @@ end if`;
   }
 }
 
+const TAB_DOMAIN_NAMES = {
+  "claude.ai": "Claude", "youtube.com": "YouTube", "mail.google.com": "Gmail",
+  "docs.google.com": "Google Docs", "github.com": "GitHub", "x.com": "X",
+  "twitter.com": "X", "chatgpt.com": "ChatGPT", "netflix.com": "Netflix",
+  "open.spotify.com": "Spotify", "mesaschool.co": "Mesa", "notion.so": "Notion",
+  "linkedin.com": "LinkedIn", "supabase.com": "Supabase",
+};
+
+async function describeOpenTabs() {
+  sendTaskProgress({ status: "thinking", text: "Reading your tabs" });
+  const tabs = await listAllChromeTabs();
+  if (!tabs.length) return { ok: true, say: "Chrome has nothing open right now." };
+  const groups = new Map();
+  for (const tab of tabs) {
+    let key = "other";
+    try {
+      const host = new URL(tab.url).hostname.replace(/^www\./, "");
+      const known = Object.keys(TAB_DOMAIN_NAMES).find((domain) => host === domain || host.endsWith(`.${domain}`) || host.includes(domain.split(".")[0]));
+      key = known ? TAB_DOMAIN_NAMES[known] : host.split(".").slice(-2, -1)[0] || "other";
+    } catch (_) {}
+    const group = groups.get(key) || { name: key, count: 0, sample: "" };
+    group.count += 1;
+    if (!group.sample && tab.title) group.sample = tab.title.slice(0, 50);
+    groups.set(key, group);
+  }
+  const ranked = [...groups.values()].sort((a, b) => b.count - a.count);
+  const described = ranked.slice(0, 4).map((g) => (g.count > 1 ? `${g.count} on ${g.name}` : `one on ${g.name}`)).join(", ");
+  const rest = ranked.slice(4).reduce((sum, g) => sum + g.count, 0);
+  const lead = ranked[0];
+  const doing = lead && lead.count > 1 && lead.sample ? ` Mostly ${lead.name} — looks like ${lead.sample}.` : "";
+  logMac("tabs.census", { total: tabs.length, groups: ranked.map((g) => `${g.name}:${g.count}`).join(",") });
+  return {
+    ok: true,
+    say: `${tabs.length} tabs: ${described}${rest ? `, and ${rest} more` : ""}.${doing} Say close the tabs and I will clear the lot, or close the ${(ranked[1] || ranked[0])?.name || "YouTube"} tabs for just those.`,
+  };
+}
+
 async function closeAllBrowserTabs() {
   sendTaskProgress({ status: "thinking", text: "Closing every tab" });
   const browsers = ["Google Chrome", "Brave Browser", "Microsoft Edge", "Safari"];
@@ -7701,10 +7738,18 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return startMailWorkflow(mailIntent);
   }
 
-  // "Close the tabs" = wipe them all, no enumeration, no questions.
-  if (/\bclose\b.*\b(?:all\s+)?(?:the\s+|my\s+)?tabs\b/i.test(cleanPrompt(raw))) {
+  // "Close the tabs" = wipe them all. Anchored so "close the YOUTUBE tabs"
+  // stays a site-specific close, not a scorched-earth one.
+  if (/^close\s+(?:all\s+)?(?:the\s+|my\s+)?(?:browser\s+)?tabs$/i.test(cleanPrompt(raw).replace(/[?.!]+\s*$/, ""))) {
     logMac("delegate.close_all_tabs_intent", {});
     return closeAllBrowserTabs();
+  }
+
+  // "How many tabs do I have open?" — count AND understand: he groups them by
+  // what you're actually doing, not just a number.
+  if (/\bhow many\b.*\btabs\b/i.test(cleanPrompt(raw)) || /\bwhat(?:'s| is| are)\b.*\b(?:my\s+)?tabs\b.*\b(?:open|about)\b/i.test(cleanPrompt(raw))) {
+    logMac("delegate.tab_census_intent", {});
+    return describeOpenTabs();
   }
 
   const closeTarget = extractCloseShortcutTarget(raw);
