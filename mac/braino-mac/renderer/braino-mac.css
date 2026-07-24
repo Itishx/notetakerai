@@ -346,10 +346,9 @@ body {
   height: 22px;
 }
 
-/* Speaking: equalizer bars are the voice. Music: he dances instead. */
-#notch-face.speak .nf-viz { display: flex; }
-
-#notch-face.speak #nf-mouth-talk { display: none !important; }
+/* Speaking: ONE animation only — the talking mouth (rule further down).
+   Bars stay off (they read as a second voice on top of the mouth); music
+   mode has its own dancer instead. */
 
 /* Music: the actual mascot (a live clone of his real rig), grooving in the
    island. Limb animation is driven in JS via the same transform-attribute
