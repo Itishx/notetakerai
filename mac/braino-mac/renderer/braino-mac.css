@@ -327,6 +327,12 @@ body {
   width: 260px;
   height: calc(var(--nf-notch-h) + 34px);
   border-radius: 0 0 22px 22px;
+  animation: nfIslandBreath 3.8s ease-in-out infinite;
+}
+
+@keyframes nfIslandBreath {
+  0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
+  50% { box-shadow: 0 0 22px rgba(232, 120, 110, 0.34), 0 0 46px rgba(243, 154, 66, 0.14); }
 }
 
 /* Timer done: the island celebrates for a beat. */
