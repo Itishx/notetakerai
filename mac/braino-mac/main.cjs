@@ -2037,7 +2037,12 @@ function parseSpotifyPlayIntent(raw) {
 
 function parseSpotifyControlIntent(raw) {
   const source = String(raw || "").trim();
+  // "resume WATCHING Little Brother on Netflix" is not a Spotify command —
+  // any video-context mention wins over a bare control verb unless the user
+  // explicitly names Spotify/music.
   const mentionsSpotifyPlayback = /\b(spotify|song|track|music|tune|playlist)\b/i.test(source);
+  const mentionsVideoContext = /\b(netflix|prime\s*video|hotstar|disney|hulu|apple\s*tv|watching|watch|episode|series|season|show|movie|film|video)\b/i.test(source);
+  if (mentionsVideoContext && !mentionsSpotifyPlayback) return null;
   const shortControl = /^(?:pause|resume|continue|play|next|skip|previous|prev|back|stop)\b/i.test(cleanPrompt(source));
   if (!mentionsSpotifyPlayback && !shortControl) return null;
   if (/\b(?:pause|stop)\b/i.test(source)) return { control: "pause" };
@@ -3401,6 +3406,51 @@ async function searchYouTubeSpoken(query) {
     await openChromeUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
     return { ok: true, say: `I opened YouTube results for ${query}.` };
   }
+}
+
+function parseNetflixWatchIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
+  if (!source) return null;
+  // "resume watching Little Brother on Netflix" / "continue Little Brother" /
+  // "watch Little Brother on netflix" / "play Wednesday on netflix"
+  let match = source.match(/\b(?:resume|continue|keep)\s+(?:watching\s+)?(.+?)(?:\s+on\s+netflix)?$/i);
+  if (match && !/\bnetflix\b/i.test(source) && !match[0].includes("watching")) match = null;
+  if (!match) match = source.match(/\b(?:watch|play|put on|start)\s+(.+?)\s+on\s+netflix$/i);
+  const title = String(match?.[1] || "").replace(/^\s*(?:the\s+show\s+|the\s+movie\s+|the\s+series\s+)/i, "").trim();
+  if (!title || /^netflix$/i.test(title)) return null;
+  return { title };
+}
+
+async function resumeNetflixOnMac(title) {
+  const searchUrl = `https://www.netflix.com/search?q=${encodeURIComponent(title)}`;
+  sendTaskProgress({ status: "thinking", text: `Opening ${title} on Netflix` });
+  await openChromeUrl(searchUrl);
+  // Netflix search cards link straight to /watch/<id>, and a watch URL
+  // auto-resumes from where you left off — so clicking the first card IS the
+  // whole "resume" flow. Best-effort: needs JS-from-Apple-Events; if that's
+  // off the search page is already open and one manual click finishes it.
+  const clickJs = "(function(){var a=document.querySelector('a[href*=\\\"/watch/\\\"]');if(a){a.click();return 'clicked';}return 'no_card';})()";
+  const script = `
+tell application "Google Chrome"
+  if (count of windows) = 0 then return "no_window"
+  set t to active tab of front window
+  try
+    return execute t javascript "${clickJs.replace(/"/g, '\\"')}"
+  on error
+    return "js_off"
+  end try
+end tell`;
+  await new Promise((resolve) => setTimeout(resolve, 4500));
+  let clicked = "unavailable";
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });
+    clicked = String(stdout || "").trim();
+  } catch (_) {}
+  logMac("netflix.resume", { title: textForLog(title), clicked });
+  if (clicked === "clicked") {
+    return { ok: true, say: `${title} is back on, right where you left it.` };
+  }
+  return { ok: true, say: `Netflix is open with ${title} right there. Hit the first one and you are back in.` };
 }
 
 function parseScreenPointIntent(raw) {
@@ -6526,6 +6576,12 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       return { ok: true, say: "Sure. Which playlist should I add it to?" };
     }
     return addSpotifyTrackOnMac(spotifyAddTrack);
+  }
+
+  const netflixWatch = parseNetflixWatchIntent(raw);
+  if (netflixWatch) {
+    logMac("delegate.netflix_watch_intent", { raw: textForLog(raw), title: textForLog(netflixWatch.title) });
+    return resumeNetflixOnMac(netflixWatch.title);
   }
 
   const spotifyControl = parseSpotifyControlIntent(raw);

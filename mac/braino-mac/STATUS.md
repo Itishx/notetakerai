@@ -60,6 +60,11 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Search/tutorials with spoken top picks | 🟡 | Top 3 spoken + results tab opened |
 | Ordinal follow-up ("play the second one") | 🟡 | 5-min memory of last list |
 
+## Netflix
+| Capability | Status | Notes |
+|---|---|---|
+| Resume/watch by title ("resume watching Little Brother on Netflix") | 🟡 | Mac-way v1: opens netflix.com/search?q=title, then best-effort JS click on the first `/watch/` card — Netflix watch URLs auto-resume from your last position, so one click IS the whole resume flow. Needs Chrome "Allow JavaScript from Apple Events"; without it the search page opens and he asks for one manual click. Intent guard added: video-context words (netflix/watching/episode/show...) now block the bare "resume"/"pause" Spotify control unless spotify/music is named — "resume watching X" no longer restarts Spotify |
+
 ## Files / Apps / Web
 | Capability | Status | Notes |
 |---|---|---|
