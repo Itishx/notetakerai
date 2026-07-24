@@ -662,8 +662,9 @@ function updateNotchFace() {
     if (nfXStats.likes != null) bits.push(`${nfXStats.likes} likes`);
     line = bits.join(" · ");
     live = true;
-  } else if (nfXStats && now - nfXStats.at < 90 * 1000) {
-    // Fresh X pulse rides the ticker briefly after each poll, then yields.
+  } else if (nfXStats && !nfXStats.panelUntil && now - nfXStats.at < 90 * 1000) {
+    // Ambient-poll pulse only — an asked-for panel ends cleanly at its
+    // expiry instead of lingering another minute as a pulse.
     line = `@brainosays · ${nfXStats.followers}${nfXStats.delta7d ? ` (${nfXStats.delta7d > 0 ? "+" : ""}${nfXStats.delta7d} this week)` : ""}`;
     live = true;
   } else if (musicTheatricsReady) {
@@ -692,6 +693,12 @@ function updateNotchFace() {
 
 window.setInterval(() => {
   if (nfTimers.length || nfCalendarNext || nfWaBadge.count || nfXStats) updateNotchFace();
+  // Hard expiry: once both the panel window and the pulse window are done,
+  // the stats object dies — nothing left to accidentally re-render forever.
+  if (nfXStats && Date.now() > Math.max(nfXStats.panelUntil || 0, nfXStats.at + 90 * 1000)) {
+    nfXStats = null;
+    updateNotchFace();
+  }
 }, 1000);
 
 async function walkerGoHomeAnimated(opts = {}) {
