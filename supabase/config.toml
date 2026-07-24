@@ -121,6 +121,10 @@ verify_jwt = false
 entrypoint = "./functions/spotify/spotify-player-state/index.ts"
 verify_jwt = false
 
+[functions.spotify-audio-features]
+entrypoint = "./functions/spotify/spotify-audio-features/index.ts"
+verify_jwt = false
+
 [functions.spotify-search]
 entrypoint = "./functions/spotify/spotify-search/index.ts"
 verify_jwt = false

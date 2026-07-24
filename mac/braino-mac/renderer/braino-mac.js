@@ -168,20 +168,30 @@ function stopNotchDance() {
     .forEach((sel) => nfRoot.querySelector(sel)?.setAttribute("transform", ""));
 }
 
-// ── Music light show: the notch + edge glow pulse and cycle color on a beat
-//    clock while music plays. A real system-audio capture path was attempted
-//    (Electron's legacy getUserMedia desktop-audio constraint) and crash-
-//    tested BAD: it kills the renderer on this Chromium version ("Terminating
-//    renderer for bad IPC message"). True audio-reactive analysis needs
-//    desktopCapturer.getSources() + a video constraint carrying the source id
-//    (real follow-up work). Until then: a humanized procedural beat clock,
-//    ~118bpm with wobble, drives the same hue/flash the real detector would.
+// ── Music light show: the notch + edge glow pulse and cycle color on the
+//    song's ACTUAL beat. Live waveform capture was tried (Electron's legacy
+//    getUserMedia desktop-audio constraint) and crash-tested BAD: it kills the
+//    renderer on this Chromium version ("Terminating renderer for bad IPC
+//    message"). Real audio-reactive FFT analysis needs desktopCapturer +
+//    a video constraint carrying the source id (real follow-up work).
+//    Instead: Spotify's own audio-features data for the exact playing track
+//    (tempo/energy/valence, main.cjs fetchAudioFeaturesForUri) locks the beat
+//    clock to the song's true declared BPM, scales flash intensity to its
+//    energy, and biases hue warmth to its valence — genuinely track-aware,
+//    not audio-analyzed but not generic either. Falls back to a humanized
+//    ~118bpm groove only when no track data is available (e.g. YouTube).
 const lightShow = {
   mode: "off", // "off" | "procedural" (see note below on why "audio" isn't here)
   raf: 0,
   hue: 10,
   flash: 0,
   proceduralNextBeatAt: 0,
+  // Real per-track data from Spotify's audio-features (the actual declared
+  // tempo/energy/mood of the song, not a guess): when present, the beat clock
+  // locks to the song's real BPM instead of a generic groove.
+  tempo: null,
+  energy: null,
+  valence: null,
 };
 
 function lightShowSetVars() {
@@ -201,12 +211,20 @@ function lightShowFrame(now) {
 
   if (lightShow.mode === "procedural") {
     if (now >= lightShow.proceduralNextBeatAt) {
-      // ~122bpm with a little human wobble so it never feels metronomic.
-      const bpm = 118 + Math.sin(now / 5000) * 8;
-      lightShow.proceduralNextBeatAt = now + (60000 / bpm) * (0.92 + Math.random() * 0.16);
-      lightShowTriggerBeat(0.75);
+      const hasRealTempo = Number.isFinite(lightShow.tempo);
+      // Locked to the song's actual declared tempo when we have it (Spotify's
+      // audio-features BPM); a light generic groove with wobble otherwise.
+      const bpm = hasRealTempo ? lightShow.tempo : 118 + Math.sin(now / 5000) * 8;
+      const wobble = hasRealTempo ? 1 : 0.92 + Math.random() * 0.16;
+      lightShow.proceduralNextBeatAt = now + (60000 / bpm) * wobble;
+      // Higher-energy tracks hit harder; low-energy tracks barely flash.
+      const energyBoost = Number.isFinite(lightShow.energy) ? 0.4 + lightShow.energy * 0.6 : 0.75;
+      lightShowTriggerBeat(energyBoost);
     }
-    lightShow.hue = (lightShow.hue + dt * 14) % 360;
+    // Happier songs (high valence) drift warmer/coral, sadder songs drift
+    // cooler/blue — a gentle bias on top of the free-running hue cycle.
+    const valenceBias = Number.isFinite(lightShow.valence) ? (lightShow.valence - 0.5) * 40 : 0;
+    lightShow.hue = (lightShow.hue + dt * 14 + valenceBias * dt * 0.3 + 360) % 360;
   }
 
   lightShow.flash = Math.max(0, lightShow.flash - dt * 2.6);
@@ -764,17 +782,39 @@ function spawnNotchNote() {
   window.setTimeout(() => note.remove(), 3600);
 }
 
+let walkerAutoHomedByMusic = false;
+
+// When music starts he retreats into the notch first ("music's on, let me
+// rest a bit"), and only once he is actually home do the dance + light show
+// begin — never simultaneous with him roaming the screen.
+async function reactToMusicStart() {
+  if (herMode || walkerHome || speaking || processing || voiceTurnInFlight) {
+    startNotchDance();
+    void startLightShow();
+    return;
+  }
+  walkerAutoHomedByMusic = true;
+  try { await speak("Music's on. Let me rest for a bit."); } catch (_) {}
+  await walkerGoHome();
+  startNotchDance();
+  void startLightShow();
+}
+
+function reactToMusicStop() {
+  stopNotchDance();
+  stopLightShow();
+  if (walkerAutoHomedByMusic && walkerHome) {
+    walkerAutoHomedByMusic = false;
+    void walkerLeaveHome();
+  }
+}
+
 function setMusicMode(on) {
   musicMode = Boolean(on);
   headphones.style.display = musicMode ? "" : "none";
   walker.classList.toggle("music", musicMode);
-  if (musicMode) {
-    startNotchDance();
-    void startLightShow();
-  } else {
-    stopNotchDance();
-    stopLightShow();
-  }
+  if (musicMode) void reactToMusicStart();
+  else reactToMusicStop();
   if (musicMode && !noteTimer) {
     noteTimer = window.setInterval(spawnNotchNote, 1050);
   } else if (!musicMode && noteTimer) {
@@ -3589,6 +3629,9 @@ window.brainoMac.onMusicState?.((payload) => {
     artist: String(payload?.artist || ""),
     source: String(payload?.source || ""),
   };
+  lightShow.tempo = Number.isFinite(payload?.tempo) && payload.tempo > 40 && payload.tempo < 220 ? payload.tempo : null;
+  lightShow.energy = Number.isFinite(payload?.energy) ? payload.energy : null;
+  lightShow.valence = Number.isFinite(payload?.valence) ? payload.valence : null;
   setMusicMode(Boolean(payload?.playing));
 });
 window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());

@@ -2872,11 +2872,28 @@ let musicSource = "";
 
 let musicTrackKey = "";
 
+const audioFeaturesCache = new Map(); // trackUri -> {tempo, energy, valence}
+
+async function fetchAudioFeaturesForUri(uri) {
+  const trackId = String(uri || "").match(/spotify:track:([A-Za-z0-9]+)/)?.[1];
+  if (!trackId) return null;
+  if (audioFeaturesCache.has(trackId)) return audioFeaturesCache.get(trackId);
+  const result = await callSpotifyFunction("spotify-audio-features", { trackId });
+  const features = result.ok && typeof result.tempo === "number"
+    ? { tempo: result.tempo, energy: result.energy, valence: result.valence }
+    : null;
+  audioFeaturesCache.set(trackId, features);
+  if (audioFeaturesCache.size > 200) audioFeaturesCache.delete(audioFeaturesCache.keys().next().value);
+  logMac("music.tempo.fetched", { trackId, tempo: features?.tempo ?? null });
+  return features;
+}
+
 async function checkMusicState() {
   let playing = false;
   let source = "";
   let track = "";
   let artist = "";
+  let uri = "";
   try {
     const state = await readSpotifyMacState();
     if (state.ok && /playing/i.test(state.state || "")) {
@@ -2884,6 +2901,7 @@ async function checkMusicState() {
       source = "spotify";
       track = String(state.name || "").trim();
       artist = String(state.artist || "").trim();
+      uri = String(state.uri || "").trim();
     }
   } catch (_) {}
   if (!playing) {
@@ -2902,7 +2920,19 @@ async function checkMusicState() {
     musicPlaying = playing;
     musicSource = source;
     logMac("music.state", { playing, source, track: textForLog(track) });
-    sendToRenderer("braino-mac:music-state", { playing, source, track, artist });
+    let features = null;
+    if (playing && source === "spotify" && uri) {
+      features = await fetchAudioFeaturesForUri(uri).catch(() => null);
+    }
+    sendToRenderer("braino-mac:music-state", {
+      playing,
+      source,
+      track,
+      artist,
+      tempo: features?.tempo ?? null,
+      energy: features?.energy ?? null,
+      valence: features?.valence ?? null,
+    });
   }
 }
 
