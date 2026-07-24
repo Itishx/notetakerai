@@ -3123,15 +3123,22 @@ tell application "Google Chrome"
           if probeResult is not "" and probeResult is not missing value then
             return probeResult
           end if
+        on error errMsg
+          if errMsg contains "turned off" then set jsOff to true
         end try
       end if
     end repeat
   end repeat
+  if jsOff then return "__jsoff__"
   return ""
 end tell`;
   try {
-    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 6000 });
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", "set jsOff to false\n" + script], { timeout: 6000 });
     const result = String(stdout || "").trim();
+    if (result === "__jsoff__") {
+      logMac("music.youtube_scan.js_off", {});
+      return undefined; // same as "could not scan": caller falls back to the title heuristic
+    }
     if (!result) return null;
     const sep = result.indexOf("|");
     if (sep < 0) return { kind: "video", title: result };
@@ -3177,16 +3184,17 @@ async function checkMusicState() {
         logMac("music.youtube.non_music_video", { title: textForLog(scanned.title) });
       }
     } else {
-      // Scan unavailable (JS-from-Apple-Events off) — the old active-tab URL
-      // fallback can't classify music vs talk video, so it stays quiet rather
-      // than throwing a dance party over a podcast.
+      // Scan unavailable (JS-from-Apple-Events off) — can't read the video's
+      // category, so classify by TITLE instead: song uploads almost always
+      // carry a marker ("Official Audio/Video", "Lyrics", "[Audio]"...).
+      // Podcasts/reactions don't, so they stay quiet.
       const url = activeMacContext?.browserUrl || "";
-      if (/music\.youtube\.com/.test(url)) {
+      const title = String(activeMacContext?.browserTitle || "").replace(/\s*-\s*YouTube.*$/i, "").trim();
+      const titleLooksLikeSong = /official\s+(?:music\s+)?(?:audio|video)|\blyric(?:s|al)?\b|\[(?:audio|video|4k)\]|music\s+video|visuali[sz]er|full\s+song/i.test(title);
+      if (/music\.youtube\.com/.test(url) || (/youtube\.com\/watch/.test(url) && titleLooksLikeSong)) {
         playing = true;
         source = "youtube";
-        track = String(activeMacContext?.browserTitle || "")
-          .replace(/\s*-\s*YouTube.*$/i, "")
-          .trim();
+        track = title;
       }
     }
   }
