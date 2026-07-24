@@ -383,6 +383,13 @@ body {
   animation: nfAuthPulse 1.6s ease-in-out infinite;
 }
 
+/* Thinking text lives in the caption wings — busy's narrow pill was defined
+   later and beat captioning's 560px, crushing the wing into a 3-character
+   sliver. When both apply, the wide island wins (pulse kept). */
+#notch-face.busy.captioning .nf-pill {
+  width: 560px;
+}
+
 #notch-face.music .nf-pill,
 #notch-face.live .nf-pill {
   width: 260px;
