@@ -567,28 +567,21 @@ function fmtCountdown(ms) {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// Notch wing captions: the island stretches sideways during a conversation —
-// what we heard goes in the left wing, his reply in the right, eyes centred.
+// Notch wing captions: the island stretches sideways during a conversation.
+// ONLY what we heard is captioned (left wing) — his replies are voice + the
+// talking mouth, never text (user call: no response captions).
 const nfCapLeftEl = document.querySelector("#notch-face .nf-cap-l");
-const nfCapRightEl = document.querySelector("#notch-face .nf-cap-r");
 let nfHeardText = "";
-let nfReplyText = "";
 let nfCaptionClearTimer = 0;
 
 function nfSetHeard(text) {
   nfHeardText = String(text || "").trim();
   if (nfCapLeftEl) nfCapLeftEl.textContent = nfHeardText;
-  updateNotchFace();
-}
-
-function nfSetReply(text) {
-  nfReplyText = String(text || "").trim();
-  if (nfCapRightEl) nfCapRightEl.textContent = nfReplyText;
   window.clearTimeout(nfCaptionClearTimer);
-  if (nfReplyText) {
+  if (nfHeardText) {
     nfCaptionClearTimer = window.setTimeout(
       () => nfClearCaptions(),
-      Math.max(3600, Math.min(9000, nfReplyText.length * 58)),
+      Math.max(3600, Math.min(9000, nfHeardText.length * 58)),
     );
   }
   updateNotchFace();
@@ -597,9 +590,7 @@ function nfSetReply(text) {
 function nfClearCaptions() {
   window.clearTimeout(nfCaptionClearTimer);
   nfHeardText = "";
-  nfReplyText = "";
   if (nfCapLeftEl) nfCapLeftEl.textContent = "";
-  if (nfCapRightEl) nfCapRightEl.textContent = "";
   updateNotchFace();
 }
 
@@ -648,7 +639,13 @@ function updateNotchFace() {
   // takes over the visual for listening/speaking.
   notchFace.classList.toggle("awake", visible && sessionEngaged);
   notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !live && !music);
-  notchFace.classList.toggle("captioning", visible && Boolean(nfHeardText || nfReplyText));
+  notchFace.classList.toggle("captioning", visible && Boolean(nfHeardText));
+  // While he's home the notch IS the conversation surface: sonar rings while
+  // listening, talking mouth + bars while speaking. When he's out on screen,
+  // the walker owns the voice theatrics and the notch stays quiet.
+  const notchVoice = visible && walkerHome && !herMode;
+  notchFace.classList.toggle("listen", notchVoice && ["listening", "hearing"].includes(lastGlowStatus));
+  notchFace.classList.toggle("speak", notchVoice && lastGlowStatus === "speaking");
   nfSetStatusText(line);
 }
 
@@ -957,12 +954,9 @@ function updateFloatingUi() {
 }
 
 function setBubble(text, ms = 2600) {
-  // While he's home the right notch wing is his speech surface — the floating
-  // bubble only exists when he's physically out on screen.
-  if (walkerHome && notchFaceEnabled && !herMode) {
-    nfSetReply(text);
-    return;
-  }
+  // While he's home his voice + the notch mouth ARE the reply surface —
+  // no text bubble anywhere (user call: don't caption his responses).
+  if (walkerHome && notchFaceEnabled && !herMode) return;
   window.clearTimeout(sayTimer);
   bubble.textContent = text;
   updateFloatingUi();
@@ -2686,7 +2680,6 @@ function flushRealtimeTranscript(reason) {
   if (speaking) stopSpeechOutput();
   voiceTurnInFlight = true;
   nfSetHeard(transcript);
-  nfSetReply("");
   void (async () => {
     try {
       if (herMode) {
@@ -2854,7 +2847,6 @@ function handleRealtimeEvent(event) {
     if (delta) {
       realtimeResponseText += delta;
       if (herMode) window.HerMode?.setReply(realtimeResponseText);
-      nfSetReply(realtimeResponseText);
       feedRealtimeStreamTts(delta);
     }
     return;
@@ -2869,7 +2861,6 @@ function handleRealtimeEvent(event) {
   if (event.type === "response.done") {
     const finalText = extractRealtimeDoneText(event) || realtimeResponseText;
     if (herMode && finalText) window.HerMode?.setReply(finalText);
-    if (finalText) nfSetReply(finalText);
     resolveRealtimeResponse({ status: "done", text: finalText });
     return;
   }

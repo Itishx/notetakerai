@@ -268,8 +268,8 @@ body {
 }
 
 /* Captions: the island stretches SIDEWAYS only — height untouched, eyes stay
-   centred over the housing. Your words live in the left wing, his reply in
-   the right, both clipped inside the pill so the silhouette never breaks. */
+   centred over the housing. Only what we HEARD is captioned (left wing) —
+   his replies are voice + the talking mouth, never text. */
 #notch-face.captioning .nf-pill {
   width: 560px;
 }
@@ -298,15 +298,6 @@ body {
   font-size: 9px;
   letter-spacing: 0.04em;
   color: rgba(255, 240, 235, 0.5);
-}
-
-#notch-face .nf-cap-r {
-  right: 14px;
-  text-align: left;
-  font-family: Georgia, 'Newsreader', serif;
-  font-style: italic;
-  font-size: 10.5px;
-  color: rgba(255, 244, 240, 0.95);
 }
 
 #notch-face .nf-folds {
