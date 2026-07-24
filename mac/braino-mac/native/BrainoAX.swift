@@ -101,11 +101,21 @@ func frontAppElement() -> (AXUIElement, pid_t)? {
   return (AXUIElementCreateApplication(app.processIdentifier), app.processIdentifier)
 }
 
+// Electron/Chromium apps (Cursor, Chrome, Claude, WhatsApp...) keep their AX
+// tree EMPTY until an assistive client announces itself — without this, the
+// clicker and selection reader are blind exactly where the user lives.
+func wakeLazyAccessibility(_ appElement: AXUIElement) {
+  AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+  AXUIElementSetAttributeValue(appElement, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+  usleep(400_000) // give Chromium a beat to build the tree
+}
+
 func runPress(query: String) {
   guard let (appElement, _) = frontAppElement() else {
     out("error\tno front app")
     return
   }
+  wakeLazyAccessibility(appElement)
   var roots: [AXUIElement] = []
   if let window = axAttr(appElement, kAXFocusedWindowAttribute as String) {
     roots.append(window as! AXUIElement)
@@ -148,6 +158,7 @@ func focusedElement() -> AXUIElement? {
 }
 
 func runSelected() {
+  if let (appElement, _) = frontAppElement() { wakeLazyAccessibility(appElement) }
   guard let element = focusedElement() else {
     out("no_focus")
     return
@@ -158,6 +169,22 @@ func runSelected() {
     return
   }
   out("selected\t\(Data(text.utf8).base64EncodedString())")
+}
+
+func runClickAt(x: Double, y: Double) {
+  let point = CGPoint(x: x, y: y)
+  guard let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left),
+        let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left),
+        let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left) else {
+    out("error\tevent create failed")
+    return
+  }
+  move.post(tap: .cghidEventTap)
+  usleep(120_000)
+  down.post(tap: .cghidEventTap)
+  usleep(60_000)
+  up.post(tap: .cghidEventTap)
+  out("clicked\t\(Int(x)),\(Int(y))")
 }
 
 func runReplace(base64: String) {
@@ -241,9 +268,11 @@ func runWindow(action: String, appQuery: String) {
     out("error\tvalue create failed")
     return
   }
-  // Un-minimize / make sure it can move, then set size AFTER position so
-  // snapping to a half never leaves a stale width.
+  // Un-minimize, then size → position → size again: many apps clamp the
+  // first size set while the window still hangs off-screen (the classic
+  // "maximize only changed the width" failure).
   AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+  AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue)
   let posResult = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue)
   let sizeResult = AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue)
   if posResult == .success && sizeResult == .success {
@@ -273,6 +302,10 @@ case "window":
   let action = arguments.count > 2 ? arguments[2] : ""
   let appQuery = arguments.dropFirst(3).joined(separator: " ")
   runWindow(action: action, appQuery: appQuery.isEmpty ? "front" : appQuery)
+case "clickat":
+  let x = arguments.count > 2 ? (Double(arguments[2]) ?? -1) : -1
+  let y = arguments.count > 3 ? (Double(arguments[3]) ?? -1) : -1
+  if x < 0 || y < 0 { out("error\tbad coordinates") } else { runClickAt(x: x, y: y) }
 default:
   out("error\tunknown command")
 }

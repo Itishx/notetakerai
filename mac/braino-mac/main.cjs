@@ -2306,6 +2306,7 @@ async function runScreenVision(question) {
       : "",
     "You are looking at a screenshot of the user's Mac screen.",
     "If asked to read a document or page, read or summarize the visible text faithfully instead of describing the layout.",
+    "If asked for your opinion, preference, or which option is better, COMMIT to one clear choice and say why in a sentence — never turn the question back on the user.",
     "Answer for voice: direct and natural, no markdown, no lists.",
   ].filter(Boolean).join("\n");
 
@@ -2787,13 +2788,25 @@ function parseAxClickIntent(raw) {
   const match = source.match(/^(?:click|press|hit|tap)\s+(?:on\s+)?(?:the\s+)?(.+)$/i);
   if (!match) return null;
   const target = match[1].replace(/\s+(?:button|link)$/i, "").trim();
-  if (!target || target.length < 2) return null;
+  if (!target) return null;
+  // "click it/that/there" right after he pointed at something.
+  if (/^(?:it|that|there|this|on it)$/i.test(target)) return { target: "", clickLastPointed: true };
+  if (target.length < 2) return null;
   // Media-control words stay with the music intents.
   if (/^(?:play|pause|stop|next|previous|skip)$/i.test(target)) return null;
   return { target };
 }
 
-async function axClick(target) {
+async function axClick({ target, clickLastPointed }) {
+  if (clickLastPointed) {
+    if (!lastPointedAt || Date.now() - lastPointedAt.at > 2 * 60 * 1000) {
+      return { ok: false, say: "Point me at something first — say show me where it is, then click it." };
+    }
+    const clicked = await clickAtNormalized(lastPointedAt.x, lastPointedAt.y, lastPointedAt.label);
+    return clicked
+      ? { ok: true, say: `Clicked the ${lastPointedAt.label}.` }
+      : { ok: false, say: "The click did not land. Try once more." };
+  }
   sendTaskProgress({ status: "thinking", text: `Looking for "${target}" to click` });
   const result = await runAxHelper(["press", target]);
   logMac("ax.press", { target: textForLog(target), status: result.status, detail: textForLog(result.detail) });
@@ -2802,13 +2815,20 @@ async function axClick(target) {
     const options = result.detail.split("|").filter(Boolean).slice(0, 3).join(", or ");
     return { ok: true, say: `I see a few: ${options}. Which one?` };
   }
-  if (result.status === "no_match" || result.status === "no_elements") {
-    return { ok: false, say: `I could not find anything called ${target} in this window. I can point at things too if that helps.` };
-  }
   if (result.status === "needs-accessibility") {
     return { ok: false, say: "I need Accessibility permission for that — it should already be on for my hotkeys, check System Settings." };
   }
-  return { ok: false, say: `I found ${result.detail || target} but the press did not take.` };
+  // AX came up dry (blind tree, canvas UI, web content) — find it with VISION
+  // and land a real mouse click. This is what makes the clicker universal.
+  sendTaskProgress({ status: "thinking", text: `Eyes on: finding ${target}` });
+  const pointed = await runScreenPoint(target, `click ${target}`);
+  if (lastPointedAt && Date.now() - lastPointedAt.at < 15000) {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    const clicked = await clickAtNormalized(lastPointedAt.x, lastPointedAt.y, lastPointedAt.label);
+    if (clicked) return { ok: true, say: `Clicked the ${lastPointedAt.label}.` };
+  }
+  if (pointed?.ok) return { ok: true, say: `I can see ${target} but the click did not land. Say click it to retry.` };
+  return { ok: false, say: `I could not find ${target} on this screen.` };
 }
 
 function parseWindowManageIntent(raw) {
@@ -2848,21 +2868,46 @@ async function axManageWindow({ action, appQuery }) {
 
 function parseSelectedTextIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
-  if (!/\b(?:selection|selected|highlighted|this (?:sentence|text|paragraph|line|word|bit|message|email))\b/i.test(source)) return null;
-  const verb = source.match(/\b(fix|correct|improve|rewrite|rephrase|polish|shorten|expand|translate|summari[sz]e|explain)\b/i)?.[1]?.toLowerCase();
+  if (!/\b(?:selection|selected|highlighted|what i (?:have |just )?(?:selected|highlighted)|this (?:sentence|text|paragraph|line|word|bit|message|email))\b/i.test(source)) return null;
+  const verb = source.match(/\b(read|fix|correct|improve|rewrite|rephrase|polish|shorten|expand|translate|summari[sz]e|explain)\b/i)?.[1]?.toLowerCase();
   if (!verb) return null;
+  if (verb === "read") return { verb: "read", language: "", speakOnly: true };
   const language = source.match(/\btranslate\b.*?\b(?:to|into)\s+([a-z]+)\b/i)?.[1] || "";
   const speakOnly = /^summari|^explain/.test(verb);
   return { verb, language, speakOnly };
 }
 
+async function readSelectionViaCopy() {
+  // Universal fallback: Cmd+C into the clipboard. Works everywhere a human
+  // can copy, including web content where the AX tree is blind.
+  const before = clipboard.readText();
+  try {
+    await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to keystroke "c" using command down'], { timeout: 4000 });
+  } catch (_) { return ""; }
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const after = clipboard.readText();
+  return after && after !== before ? after : "";
+}
+
 async function actOnSelectedText({ verb, language, speakOnly }) {
   sendTaskProgress({ status: "thinking", text: "Reading your selection" });
   const grabbed = await runAxHelper(["selected"]);
-  if (grabbed.status !== "selected" || !grabbed.detail) {
+  let text = grabbed.status === "selected" && grabbed.detail
+    ? Buffer.from(grabbed.detail, "base64").toString("utf8")
+    : "";
+  let viaCopy = false;
+  if (!text.trim()) {
+    text = await readSelectionViaCopy();
+    viaCopy = true;
+    logMac("ax.selection.copy_fallback", { got: Boolean(text.trim()) });
+  }
+  if (!text.trim()) {
     return { ok: false, say: "I do not see any text selected. Highlight it and ask again." };
   }
-  const text = Buffer.from(grabbed.detail, "base64").toString("utf8");
+  if (verb === "read") {
+    const spoken = text.trim().slice(0, 900);
+    return { ok: true, say: spoken.length < text.trim().length ? `${spoken}... and it goes on.` : spoken };
+  }
   const instruction = verb === "translate"
     ? `Translate the following text into ${language || "English"}.`
     : speakOnly
@@ -2890,11 +2935,20 @@ async function actOnSelectedText({ verb, language, speakOnly }) {
     const reply = String(data?.reply || "").trim();
     if (!response.ok || !reply) throw new Error(data?.error || `selection ${verb} failed (${response.status})`);
     if (speakOnly) return { ok: true, say: reply };
-    const replaced = await runAxHelper(["replace", Buffer.from(reply, "utf8").toString("base64")]);
-    logMac("ax.selection", { verb, chars: text.length, replyChars: reply.length, replaced: replaced.status });
-    if (replaced.status === "replaced") return { ok: true, say: "Done, swapped in." };
+    if (!viaCopy) {
+      const replaced = await runAxHelper(["replace", Buffer.from(reply, "utf8").toString("base64")]);
+      logMac("ax.selection", { verb, chars: text.length, replyChars: reply.length, replaced: replaced.status });
+      if (replaced.status === "replaced") return { ok: true, say: "Done, swapped in." };
+    }
+    // Paste over the still-highlighted selection — the universal write path.
     clipboard.writeText(reply);
-    return { ok: true, say: "The app would not let me type it in, so it is on your clipboard — just paste." };
+    try {
+      await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to keystroke "v" using command down'], { timeout: 4000 });
+      logMac("ax.selection.paste_fallback", { verb, replyChars: reply.length });
+      return { ok: true, say: "Done, swapped in." };
+    } catch (_) {
+      return { ok: true, say: "It is on your clipboard — just paste." };
+    }
   } catch (error) {
     logMac("ax.selection.failed", { verb, error });
     return { ok: false, say: "That did not go through. Try once more." };
@@ -4379,6 +4433,17 @@ function parseScreenPointIntent(raw) {
   return { target };
 }
 
+let lastPointedAt = null; // { x, y (normalized), label, at }
+
+async function clickAtNormalized(x, y, label) {
+  const bounds = screen.getPrimaryDisplay().bounds;
+  const px = Math.round(bounds.x + x * bounds.width);
+  const py = Math.round(bounds.y + y * bounds.height);
+  const result = await runAxHelper(["clickat", String(px), String(py)]);
+  logMac("ax.clickat", { label: textForLog(label || ""), px, py, status: result.status });
+  return result.status === "clicked";
+}
+
 async function runScreenPoint(target, raw) {
   const startedAt = Date.now();
   sendTaskProgress({ status: "thinking", text: `Finding ${target}` });
@@ -4439,10 +4504,16 @@ async function runScreenPoint(target, raw) {
       durationMs: Date.now() - startedAt,
     });
     if (parsed?.found && Number.isFinite(Number(parsed.x)) && Number.isFinite(Number(parsed.y))) {
-      sendToRenderer("braino-mac:point-at", {
+      lastPointedAt = {
         x: Math.min(1, Math.max(0, Number(parsed.x))),
         y: Math.min(1, Math.max(0, Number(parsed.y))),
         label: String(parsed.label || target).slice(0, 60),
+        at: Date.now(),
+      };
+      sendToRenderer("braino-mac:point-at", {
+        x: lastPointedAt.x,
+        y: lastPointedAt.y,
+        label: lastPointedAt.label,
       });
       sendTaskProgress({ status: "done", text: `Pointing at ${parsed.label || target}` });
       return { ok: true, say: String(parsed.spoken || `Right there. That is the ${parsed.label || target}.`) };
@@ -7321,7 +7392,9 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return renameMacFile(renameFileIntent);
   }
 
-  const moveFileIntent = parseMoveFileIntent(raw);
+  // "move cursor to the left" is a WINDOW command, not a file move — the
+  // window intent parses later but must win here.
+  const moveFileIntent = parseWindowManageIntent(raw) ? null : parseMoveFileIntent(raw);
   if (moveFileIntent) {
     logMac("delegate.move_file_intent", {
       raw: textForLog(raw),
@@ -7373,7 +7446,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   const axClickIntent = parseAxClickIntent(raw);
   if (axClickIntent) {
     logMac("delegate.ax_click_intent", { raw: textForLog(raw), target: textForLog(axClickIntent.target) });
-    return axClick(axClickIntent.target);
+    return axClick(axClickIntent);
   }
 
   const screenPoint = parseScreenPointIntent(raw);
