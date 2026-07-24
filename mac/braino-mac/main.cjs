@@ -2871,9 +2871,28 @@ async function pollXStats() {
 }
 
 function startXStatsPolling() {
+  // X's free tier caps users/me at ~25 calls/DAY — a 45-minute poll was
+  // eating the whole budget and starving manual asks with 429s. Four ambient
+  // polls a day leaves headroom for the user actually asking.
   if (xPollTimer) clearInterval(xPollTimer);
   setTimeout(() => void pollXStats(), 2 * 60 * 1000);
-  xPollTimer = setInterval(() => void pollXStats(), 45 * 60 * 1000);
+  xPollTimer = setInterval(() => void pollXStats(), 6 * 60 * 60 * 1000);
+}
+
+async function fetchLatestFollowerSnapshot() {
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return null;
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/x_follower_snapshots?select=captured_on,followers_count&order=captured_on.desc&limit=1`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` } },
+    );
+    const rows = await response.json().catch(() => []);
+    if (!response.ok || !Array.isArray(rows) || !rows.length) return null;
+    return { capturedOn: rows[0].captured_on, followers: rows[0].followers_count };
+  } catch (_) {
+    return null;
+  }
 }
 
 async function speakXStats() {
@@ -2901,7 +2920,18 @@ async function speakXStats() {
   if (status.mentions?.length) {
     parts.push(`${status.mentions.length} recent mention${status.mentions.length > 1 ? "s" : ""} — ask me for mentions and I will read them.`);
   }
-  if (!parts.length) parts.push("Connected, but X is being quiet about the numbers right now.");
+  if (!parts.length) {
+    // Live calls rate-limited — fall back to the newest daily snapshot so he
+    // still answers with a REAL number instead of shrugging.
+    const snapshot = await fetchLatestFollowerSnapshot();
+    if (snapshot?.followers != null) {
+      sendToRenderer("braino-mac:x-stats", { followers: snapshot.followers, delta7d: null, mentions: 0, likes: null, panel: true });
+      const when = new Date(snapshot.capturedOn).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      logMac("x.stats.snapshot_fallback", { followers: snapshot.followers, capturedOn: snapshot.capturedOn });
+      return { ok: true, say: `X is rate-limiting live numbers right now, but as of ${when} you have ${snapshot.followers} followers. Fresh numbers when their meter resets.` };
+    }
+    parts.push("Connected, but X is rate-limiting the numbers right now. Ask me again in a bit.");
+  }
   return { ok: true, say: parts.join(" ") };
 }
 
