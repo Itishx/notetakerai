@@ -335,13 +335,8 @@ function pickRoamTarget(now = performance.now()) {
 
 function setStatus(status, text) {
   statusPill.className = status;
-  lane.className = status;
-  walker.classList.toggle("voice-active", ["connecting", "listening", "hearing", "captured", "speaking"].includes(status));
-  walker.classList.toggle("connecting", status === "connecting");
-  walker.classList.toggle("listening", status === "listening");
-  walker.classList.toggle("hearing", status === "hearing");
-  walker.classList.toggle("captured", status === "captured");
-  walker.classList.toggle("speaking", status === "speaking");
+  // Voice visuals live on the notch (island + sonar) and the edge glow only:
+  // the walker keeps strolling and talking without duplicate listening cues.
   statusText.textContent = text;
   lastGlowStatus = status;
   updateEdgeGlow();

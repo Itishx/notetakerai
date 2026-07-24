@@ -235,13 +235,7 @@ body {
   opacity: 1;
 }
 
-#notch-face.listen .nf-pill::after,
-#notch-face.speak .nf-pill::after,
-#notch-face.nf-auth .nf-pill::after,
-#notch-face.nf-auth-ok .nf-pill::after,
-#notch-face.nf-auth-err .nf-pill::after {
-  opacity: 0;
-}
+/* The notch stays black in every state — the island extends, never fills. */
 
 #notch-face .nf-folds { z-index: 1; }
 #notch-face .nf-band { z-index: 3; }
