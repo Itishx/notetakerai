@@ -2849,6 +2849,8 @@ function parseWaListenerIntent(raw) {
   if (/\bwhats\s*app\b.*\b(?:reader|listener|notifications?)\s+off\b/i.test(source)) return { enable: false };
   if (/\b(?:read|speak|announce|listen\s+(?:to|for))\b.*\bwhats\s*app/i.test(source)) return { enable: true };
   if (/\bwhats\s*app\b.*\b(?:reader|listener|notifications?)\s+on\b/i.test(source)) return { enable: true };
+  if (/\bwhats\s*app\b.*\b(?:notifs?|notifications?|messages?)\b/i.test(source)
+    && /\b(?:on|start|enable|fix|working|work)\b/i.test(source)) return { enable: true };
   return null;
 }
 
@@ -3457,6 +3459,299 @@ end tell`;
     return { ok: true, say: `${title} is back on, right where you left it.` };
   }
   return { ok: true, say: `Netflix is open with ${title} right there. Hit the first one and you are back in.` };
+}
+
+// ── MESA School of Business: Itish is in the PGP in Venture Building. ──
+// The student portal lives in the "Itish" Chrome profile, so opening it means
+// launching Chrome with that specific profile directory, not the default one.
+const MESA_URL = "https://students.mesaschool.co/?redirect=0";
+const MESA_PROFILE_CANDIDATES = ["mesaschool", "mesa", "itish"];
+const MESA_STATE_PATH = path.join(AUTH_STORE_DIR, "mesa.json");
+
+function loadMesaState() {
+  try { return JSON.parse(fs.readFileSync(MESA_STATE_PATH, "utf8")) || {}; } catch (_) { return {}; }
+}
+
+function saveMesaState(patch) {
+  try { fs.writeFileSync(MESA_STATE_PATH, JSON.stringify({ ...loadMesaState(), ...patch }, null, 2)); } catch (_) {}
+}
+
+function mesaContextLines() {
+  const state = loadMesaState();
+  const lines = [
+    "The user (Itish) is enrolled at Mesa School of Business in the PGP in Venture Building course. Braino tracks his coursework and keeps him accountable.",
+  ];
+  if (state.lastSummary) {
+    const when = state.lastCheckAt ? new Date(state.lastCheckAt).toLocaleString() : "recently";
+    lines.push(`Last Mesa portal check (${when}): ${String(state.lastSummary).slice(0, 500)}`);
+  }
+  return lines;
+}
+
+function findChromeProfileDir(candidates) {
+  // Chrome keeps human profile names in Local State's info_cache, NOT in the
+  // per-profile Preferences (those all say "Your Chrome" here). Candidates are
+  // matched in priority order against both the display name and account name.
+  try {
+    const statePath = path.join(os.homedir(), "Library", "Application Support", "Google", "Chrome", "Local State");
+    const cache = JSON.parse(fs.readFileSync(statePath, "utf8"))?.profile?.info_cache || {};
+    const list = Array.isArray(candidates) ? candidates : [candidates];
+    for (const candidate of list) {
+      const want = String(candidate || "").toLowerCase();
+      if (!want) continue;
+      for (const [dir, info] of Object.entries(cache)) {
+        const haystack = `${info?.name || ""} ${info?.gaia_name || ""} ${info?.gaia_given_name || ""}`.toLowerCase();
+        if (haystack.includes(want)) return dir;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function openUrlInChromeProfile(url, profileCandidates) {
+  const dir = findChromeProfileDir(profileCandidates);
+  const args = dir
+    ? ["-na", "Google Chrome", "--args", `--profile-directory=${dir}`, url]
+    : ["-a", "Google Chrome", url];
+  await execFileP("/usr/bin/open", args, { timeout: 8000 });
+  logMac("chrome.profile_open", { profileDir: dir || "not_found", url: textForLog(url) });
+  return Boolean(dir);
+}
+
+async function scrapeChromeTabText(urlFragment) {
+  const js = "(function(){return (document.body && document.body.innerText || '').slice(0, 9000);})()";
+  const script = `
+tell application "Google Chrome"
+  if (count of windows) = 0 then return ""
+  repeat with w in windows
+    repeat with t in tabs of w
+      set tURL to ""
+      try
+        set tURL to URL of t
+      end try
+      if tURL contains "${urlFragment}" then
+        try
+          return execute t javascript "${js.replace(/"/g, '\\"')}"
+        on error
+          return "__jsoff__"
+        end try
+      end if
+    end repeat
+  end repeat
+  return ""
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
+    return String(stdout || "").trim();
+  } catch (_) {
+    return "";
+  }
+}
+
+async function runMesaCheckIn() {
+  sendTaskProgress({ status: "thinking", text: "Opening your Mesa portal" });
+  const foundProfile = await openUrlInChromeProfile(MESA_URL, MESA_PROFILE_CANDIDATES);
+  await new Promise((resolve) => setTimeout(resolve, 7000));
+  const pageText = await scrapeChromeTabText("mesaschool.co");
+  if (pageText === "__jsoff__") {
+    return { ok: true, say: "Your Mesa portal is open, but Chrome will not let me read pages — flip on Allow JavaScript from Apple Events in View, Developer, then ask me again." };
+  }
+  if (!pageText || pageText.length < 120) {
+    return { ok: true, say: `Your Mesa portal is open${foundProfile ? " in your Itish profile" : ""}. The page has not finished loading for me to read — give it a moment and say Mesa check again.` };
+  }
+  const prior = loadMesaState();
+  const authToken = await getBrainoAuthToken();
+  const message = [
+    "This text is scraped from Itish's Mesa School of Business student portal (PGP in Venture Building).",
+    prior.lastSummary ? `Previous status from ${prior.lastCheckAt ? new Date(prior.lastCheckAt).toDateString() : "earlier"}: ${prior.lastSummary}` : "This is the first check.",
+    "Summarize where he stands: current module, pending coursework or assignments, upcoming deadlines, and progress since the previous status.",
+    "Keep him accountable — call out anything that looks overdue or untouched, kindly but directly.",
+    "Answer for voice: natural, no markdown, under 90 words.",
+  ].join("\n");
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({ notes: pageText, message, chatHistory: [], responseMedium: "voice" }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    if (!response.ok || !reply) throw new Error(data?.error || `mesa summary failed (${response.status})`);
+    saveMesaState({ lastSummary: reply, lastCheckAt: Date.now(), lastPageChars: pageText.length });
+    logMac("mesa.checkin.done", { pageChars: pageText.length, replyChars: reply.length });
+    rememberMacChat("user", "mesa coursework check");
+    rememberMacChat("assistant", reply);
+    return { ok: true, say: reply };
+  } catch (error) {
+    logMac("mesa.checkin.failed", { error });
+    return { ok: true, say: "Your Mesa portal is open and I read the page, but the summary got stuck. Ask me again in a moment." };
+  }
+}
+
+function parseMesaIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (!/\bmesa\b/i.test(source)) return null;
+  if (/\b(open|check|status|progress|coursework|course|update|portal|school|assignments?|deadlines?|due|how am i doing|accountab)/i.test(source)) return {};
+  if (/^\s*mesa\s*$/i.test(source)) return {};
+  return null;
+}
+
+// ── File retention advisor: what is safe to let go of. ──
+const REVIEW_BIN_PATH = path.join(os.homedir(), "Desktop", "Braino Review Bin");
+let pendingReviewBin = null; // { files: [names], at }
+
+async function suggestFileCleanup() {
+  const desktop = path.join(os.homedir(), "Desktop");
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  let candidates = [];
+  try {
+    for (const entry of fs.readdirSync(desktop, { withFileTypes: true })) {
+      if (!entry.isFile() || entry.name.startsWith(".")) continue;
+      const full = path.join(desktop, entry.name);
+      let stat;
+      try { stat = fs.statSync(full); } catch (_) { continue; }
+      const lastTouched = Math.max(stat.mtimeMs, stat.atimeMs || 0);
+      const ageDays = (now - lastTouched) / DAY;
+      const isCapture = /^(screenshot|screen recording)/i.test(entry.name);
+      const big = stat.size > 100 * 1024 * 1024;
+      if ((isCapture && ageDays > 3) || ageDays > 45 || (big && ageDays > 14)) {
+        candidates.push({ name: entry.name, full, size: stat.size, ageDays: Math.round(ageDays), isCapture });
+      }
+    }
+  } catch (error) {
+    logMac("files.cleanup.scan_failed", { error });
+    return { ok: false, say: "I could not scan the desktop just now." };
+  }
+  if (!candidates.length) {
+    return { ok: true, say: "Honestly, your desktop looks fine — nothing old or heavy enough that I would push you to delete." };
+  }
+  candidates.sort((a, b) => b.size - a.size);
+  candidates = candidates.slice(0, 20);
+  try { fs.mkdirSync(REVIEW_BIN_PATH, { recursive: true }); } catch (_) {}
+  const moved = [];
+  for (const file of candidates) {
+    try {
+      fs.renameSync(file.full, path.join(REVIEW_BIN_PATH, file.name));
+      moved.push(file);
+    } catch (_) {}
+  }
+  if (!moved.length) return { ok: false, say: "I found candidates but could not move them for review." };
+  pendingReviewBin = { files: moved.map((f) => f.name), at: Date.now() };
+  await shell.openPath(REVIEW_BIN_PATH);
+  const captures = moved.filter((f) => f.isCapture).length;
+  const totalMb = Math.round(moved.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024));
+  logMac("files.cleanup.suggested", { count: moved.length, captures, totalMb });
+  const parts = [`I pulled ${moved.length} files you have not touched in a while into a review folder on your desktop — about ${totalMb} megabytes.`];
+  if (captures) parts.push(`${captures} are old screenshots and screen recordings.`);
+  parts.push("Look them over. Say delete them all and I will trash the lot, or say put them back.");
+  return { ok: true, say: parts.join(" ") };
+}
+
+async function deleteReviewBin() {
+  if (!pendingReviewBin || Date.now() - pendingReviewBin.at > 30 * 60 * 1000) {
+    return { ok: false, say: "There is no cleanup waiting on your call right now. Ask me what is worth deleting first." };
+  }
+  const count = pendingReviewBin.files.length;
+  try {
+    await execFileP("/usr/bin/osascript", ["-e",
+      `tell application "Finder" to delete (every item of folder (POSIX file "${REVIEW_BIN_PATH}"))`,
+    ], { timeout: 15000 });
+    try { fs.rmdirSync(REVIEW_BIN_PATH); } catch (_) {}
+    pendingReviewBin = null;
+    logMac("files.cleanup.deleted", { count });
+    return { ok: true, say: `Done — ${count} files are in the Trash, so you can still fish anything back out.` };
+  } catch (error) {
+    logMac("files.cleanup.delete_failed", { error });
+    return { ok: false, say: "The delete did not go through. The review folder is still on your desktop." };
+  }
+}
+
+async function restoreReviewBin() {
+  if (!pendingReviewBin) return { ok: false, say: "Nothing is parked for review right now." };
+  const desktop = path.join(os.homedir(), "Desktop");
+  let restored = 0;
+  for (const name of pendingReviewBin.files) {
+    try {
+      fs.renameSync(path.join(REVIEW_BIN_PATH, name), path.join(desktop, name));
+      restored += 1;
+    } catch (_) {}
+  }
+  try { fs.rmdirSync(REVIEW_BIN_PATH); } catch (_) {}
+  pendingReviewBin = null;
+  logMac("files.cleanup.restored", { restored });
+  return { ok: true, say: `Put ${restored} files back where they were. Nothing deleted.` };
+}
+
+function parseFileCleanupIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (pendingReviewBin && /\b(?:yes[,\s]+)?(?:delete|trash)\s+(?:them|these|those|all|them all|everything)\b/i.test(source)) return { action: "delete" };
+  if (pendingReviewBin && /\bput (?:them|those|these|it) back\b|\brestore (?:them|those|the files)\b/i.test(source)) return { action: "restore" };
+  if (/\b(?:what|which|anything)\b.*\b(?:worth deleting|should i delete|can i delete|to delete)\b/i.test(source)
+    || /\b(?:scan|review|check)\b.*\b(?:files|desktop)\b.*\b(?:delete|clean|old|stale)\b/i.test(source)
+    || /\bfiles?\b.*\bworth (?:deleting|keeping)\b/i.test(source)) return { action: "suggest" };
+  return null;
+}
+
+// ── Task-manager awareness: who is eating the machine. ──
+let pendingTaskHogs = null; // { apps: [names], at }
+const TASK_HOG_PROTECTED = new Set(["Finder", "WindowServer", "loginwindow", "kernel_task", "Electron", "Braino Mac", "Cursor", "Terminal"]);
+
+async function reportTaskHogs() {
+  let rows = [];
+  try {
+    const { stdout } = await execFileP("/bin/ps", ["-Aceo", "rss,pcpu,comm", "-r"], { timeout: 6000 });
+    rows = String(stdout || "").split("\n").slice(1).map((line) => {
+      const match = line.trim().match(/^(\d+)\s+([\d.]+)\s+(.+)$/);
+      return match ? { rss: Number(match[1]), cpu: Number(match[2]), name: match[3].trim() } : null;
+    }).filter(Boolean);
+  } catch (error) {
+    logMac("tasks.scan_failed", { error });
+    return { ok: false, say: "I could not read the process list just now." };
+  }
+  const byApp = new Map();
+  for (const row of rows) {
+    const key = row.name.replace(/ Helper.*$/i, "");
+    const entry = byApp.get(key) || { name: key, rss: 0, cpu: 0 };
+    entry.rss += row.rss;
+    entry.cpu += row.cpu;
+    byApp.set(key, entry);
+  }
+  const top = [...byApp.values()].sort((a, b) => b.rss - a.rss).slice(0, 6);
+  const fmt = (kb) => (kb > 1024 * 1024 ? `${(kb / (1024 * 1024)).toFixed(1)} gigs` : `${Math.round(kb / 1024)} megs`);
+  const spokenTop = top.map((t) => `${t.name} at ${fmt(t.rss)}`).join(", ");
+  const closable = top.filter((t) => !TASK_HOG_PROTECTED.has(t.name) && t.name !== (activeMacContext?.appName || "")).map((t) => t.name);
+  pendingTaskHogs = { apps: closable, at: Date.now() };
+  logMac("tasks.hogs", { top: top.map((t) => `${t.name}:${Math.round(t.rss / 1024)}mb`).join(",") });
+  const closeLine = closable.length ? ` If you want room back, say close them and I will quit ${closable.join(" and ")}.` : "";
+  return { ok: true, say: `Heaviest right now: ${spokenTop}.${closeLine}` };
+}
+
+async function closeTaskHogs() {
+  if (!pendingTaskHogs || Date.now() - pendingTaskHogs.at > 10 * 60 * 1000 || !pendingTaskHogs.apps.length) {
+    return { ok: false, say: "Ask me what is eating the machine first, then I will know what to close." };
+  }
+  const closed = [];
+  for (const app of pendingTaskHogs.apps) {
+    const result = await quitMacApplication(app).catch(() => null);
+    if (result?.ok) closed.push(app);
+  }
+  pendingTaskHogs = null;
+  if (!closed.length) return { ok: false, say: "None of those would close cleanly." };
+  return { ok: true, say: `Closed ${closed.join(" and ")}. Breathing room reclaimed.` };
+}
+
+function parseTaskHogIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (pendingTaskHogs && /\bclose (?:them|those|these|all|them all)\b/i.test(source)) return { action: "close" };
+  if (/\b(?:task manager|activity monitor)\b/i.test(source)
+    || /\b(?:what|which|who)\b.*\b(?:eating|hogging|consuming|using|slowing)\b.*\b(?:ram|memory|cpu|machine|mac|resources|space)\b/i.test(source)
+    || /\bheavy (?:apps|tasks|processes)\b/i.test(source)) return { action: "report" };
+  return null;
 }
 
 function parseScreenPointIntent(raw) {
@@ -6109,6 +6404,7 @@ async function runMacConversation(prompt) {
         "The user is talking to Braino from the Mac desktop companion.",
         "Braino is a visible OS-level overlay that follows the user's active Mac app and display.",
         ...surfaceLines,
+        ...mesaContextLines(),
         "This is normal conversation unless the user asks for a concrete Mac action.",
         "Keep replies short, warm, alive, and natural for spoken voice.",
       ].join("\n"),
@@ -6590,6 +6886,26 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       return { ok: true, say: "Sure. Which playlist should I add it to?" };
     }
     return addSpotifyTrackOnMac(spotifyAddTrack);
+  }
+
+  const mesaIntent = parseMesaIntent(raw);
+  if (mesaIntent) {
+    logMac("delegate.mesa_intent", { raw: textForLog(raw) });
+    return runMesaCheckIn();
+  }
+
+  const cleanupIntent = parseFileCleanupIntent(raw);
+  if (cleanupIntent) {
+    logMac("delegate.file_cleanup_intent", { raw: textForLog(raw), action: cleanupIntent.action });
+    if (cleanupIntent.action === "delete") return deleteReviewBin();
+    if (cleanupIntent.action === "restore") return restoreReviewBin();
+    return suggestFileCleanup();
+  }
+
+  const taskHogIntent = parseTaskHogIntent(raw);
+  if (taskHogIntent) {
+    logMac("delegate.task_hog_intent", { raw: textForLog(raw), action: taskHogIntent.action });
+    return taskHogIntent.action === "close" ? closeTaskHogs() : reportTaskHogs();
   }
 
   const netflixWatch = parseNetflixWatchIntent(raw);

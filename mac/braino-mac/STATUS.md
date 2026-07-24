@@ -46,7 +46,7 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Send message by name ("message mom saying…") | 🟡 | URL scheme + Enter; mom→Ilu seeded |
 | All-contacts knowledge (Apple Contacts bulk import) | 🟡 | Daily refresh; fuzzy match |
 | Teach contacts by voice ("remember my X is Y / number is N") | 🟡 | |
-| Incoming message readout (notification DB listener) | 🟡 | Opt-in "read my WhatsApps"; needs Full Disk Access + WhatsApp notifications ON with previews |
+| Incoming message readout (notification DB listener) | 🟡 | Opt-in "read my WhatsApps"; needs Full Disk Access + WhatsApp notifications ON with previews. 07-24 "not working" debug: DB readable, listener polling fine — the readout toggle was simply never enabled (whatsapp-listener.json absent, spoken:false in every log). Fix = say "read my WhatsApps" once; enable phrases widened ("whatsapp notifs on/fix/working") |
 | "Reply saying…" to last sender | 🟡 | 15-min window |
 | WhatsApp voice/video call (menu click) | 🟡 | Chat > Voice/Video Call probed live |
 | FaceTime / FaceTime audio | 🟡 | facetime:// schemes |
@@ -64,6 +64,17 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Capability | Status | Notes |
 |---|---|---|
 | Resume/watch by title ("resume watching Little Brother on Netflix") | 🟡 | Mac-way v1: opens netflix.com/search?q=title, then best-effort JS click on the first `/watch/` card — Netflix watch URLs auto-resume from your last position, so one click IS the whole resume flow. Needs Chrome "Allow JavaScript from Apple Events"; without it the search page opens and he asks for one manual click. Intent guard added: video-context words (netflix/watching/episode/show...) now block the bare "resume"/"pause" Spotify control unless spotify/music is named — "resume watching X" no longer restarts Spotify |
+
+## MESA (school accountability)
+| Capability | Status | Notes |
+|---|---|---|
+| Mesa check-in ("mesa update / how's my coursework") | 🟡 | Knows Itish is in Mesa School of Business PGP in Venture Building. Opens students.mesaschool.co in the RIGHT Chrome profile (resolved via Local State info_cache — matches "mesaschool" → Profile 3 first, falls back to "Itish"; per-profile Preferences all say "Your Chrome" and are useless). Waits 7s, scrapes page text via injected JS, summarizes through chat-about-notes with the PREVIOUS check-in as comparison baseline, speaks progress + calls out overdue work. State persisted in mesa.json; last summary is injected into every casual chat's context so he can hold Itish accountable unprompted |
+
+## Awareness / Hygiene
+| Capability | Status | Notes |
+|---|---|---|
+| File retention advisor ("what's worth deleting") | 🟡 | Scans Desktop: old screenshots/recordings (>3d), untouched >45d, or >100MB untouched >14d. Moves top 20 (by size) into "Braino Review Bin" on Desktop, opens it, speaks count+MB. "delete them all" → Finder Trash (recoverable), "put them back" → restores. Pending state expires 30min |
+| Task-manager awareness ("what's eating my ram") | 🟡 | ps -Aceo aggregated by app (Helper processes folded in — verified live: Cursor 2.3GB, Chrome 2.1GB). Speaks top 6 by memory; "close them" quits the closable ones (protected: Finder/WindowServer/Braino/Cursor/Terminal + current front app) |
 
 ## Files / Apps / Web
 | Capability | Status | Notes |
