@@ -975,15 +975,16 @@ function nfScheduleBlink() {
 }
 nfScheduleBlink();
 
-function nfTrackPointer(event) {
-  if (!notchFace?.classList.contains("on") || !nfPupilL || !nfPupilR) return;
-  // Design look math: pupil offset = r*0.34 horizontal, r*0.30 vertical (r=10).
-  const faceX = window.innerWidth / 2;
-  const faceY = 30;
-  const lookX = Math.max(-1, Math.min(1, (event.clientX - faceX) / 230));
-  const lookY = Math.max(-0.5, Math.min(1, (event.clientY - faceY) / 300));
-  const offX = lookX * 3.4;
-  const offY = lookY * 3.0;
+// Eyes: he looks around on his own — up, down, sideways, little darts — and
+// only LOCKS ONTO the cursor when it comes near the notch. A creature has
+// its own gaze; it isn't a cursor-following widget.
+const NF_CURSOR_NEAR_PX = 200;
+let nfCursorNear = false;
+let nfGazeTarget = { x: 0, y: 0 };
+let nfGazeCurrent = { x: 0, y: 0 };
+
+function nfApplyGaze(offX, offY) {
+  if (!nfPupilL || !nfPupilR) return;
   nfPupilL.setAttribute("cx", String(49 + offX));
   nfPupilL.setAttribute("cy", String(21 + offY));
   nfPupilR.setAttribute("cx", String(71 + offX));
@@ -991,7 +992,46 @@ function nfTrackPointer(event) {
   document.getElementById("nf-glint-l")?.setAttribute("cx", String(50.9 + offX * 0.36));
   document.getElementById("nf-glint-r")?.setAttribute("cx", String(72.9 + offX * 0.36));
 }
+
+function nfTrackPointer(event) {
+  if (!notchFace?.classList.contains("on")) return;
+  const faceX = window.innerWidth / 2;
+  const faceY = 30;
+  const distance = Math.hypot(event.clientX - faceX, event.clientY - faceY);
+  nfCursorNear = distance < NF_CURSOR_NEAR_PX;
+  if (!nfCursorNear) return; // far away: he keeps his own wandering gaze
+  // Design look math: pupil offset = r*0.34 horizontal, r*0.30 vertical (r=10).
+  const lookX = Math.max(-1, Math.min(1, (event.clientX - faceX) / 230));
+  const lookY = Math.max(-0.5, Math.min(1, (event.clientY - faceY) / 300));
+  nfGazeTarget = { x: lookX * 3.4, y: lookY * 3.0 };
+}
 window.addEventListener("mousemove", nfTrackPointer, { passive: true });
+
+// Idle wander: named glances so the moves read as intentional — a look up,
+// a look down-left, a sideways check, back to center.
+const NF_GLANCES = [
+  { x: 0, y: 0 }, { x: 0, y: 0 },            // centre (weighted — resting gaze)
+  { x: 3.0, y: 0 }, { x: -3.0, y: 0 },       // side eye
+  { x: 0, y: -2.6 }, { x: 1.8, y: -2.2 },    // looking up / up-right
+  { x: 0, y: 2.4 }, { x: -1.8, y: 2.0 },     // looking down / down-left
+  { x: -2.6, y: -1.8 }, { x: 2.4, y: 1.6 },  // diagonals
+];
+let nfNextGlanceAt = 0;
+
+window.setInterval(() => {
+  if (!notchFace?.classList.contains("on")) return;
+  const now = Date.now();
+  if (!nfCursorNear && now >= nfNextGlanceAt && !notchFace.classList.contains("dozing")) {
+    nfGazeTarget = NF_GLANCES[Math.floor(Math.random() * NF_GLANCES.length)];
+    nfNextGlanceAt = now + 1400 + Math.random() * 3200;
+  }
+  // Ease toward the target — quick dart when following the cursor, softer
+  // drift for his own glances.
+  const ease = nfCursorNear ? 0.5 : 0.18;
+  nfGazeCurrent.x += (nfGazeTarget.x - nfGazeCurrent.x) * ease;
+  nfGazeCurrent.y += (nfGazeTarget.y - nfGazeCurrent.y) * ease;
+  nfApplyGaze(nfGazeCurrent.x, nfGazeCurrent.y);
+}, 80);
 
 function setNotchFaceEnabled(on) {
   notchFaceEnabled = Boolean(on);
