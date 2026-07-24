@@ -209,10 +209,12 @@ body {
 #notch-face .nf-pill {
   position: relative;
   margin: 0 auto;
-  /* Idle hides exactly behind the physical notch (measured at runtime). */
+  /* Idle: pure black, exactly notch-width — it merges with the physical
+     housing into one bigger notch, and his eyes float in the black. The
+     coral head is revealed by the wake morph. */
   width: var(--nf-notch-w, 190px);
-  height: calc(var(--nf-notch-h) + 24px);
-  border-radius: 0 0 18px 18px;
+  height: calc(var(--nf-notch-h) + 22px);
+  border-radius: 0 0 16px 16px;
   overflow: hidden;
   background: linear-gradient(180deg, #F6A8A2, #E8786E 55%, #C9544A);
   transition:
@@ -221,6 +223,33 @@ body {
     border-radius 0.5s ease,
     box-shadow 0.4s ease;
 }
+
+/* Black cover that makes idle read as "inside the notch"; fades on wake. */
+#notch-face .nf-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #000;
+  z-index: 2;
+  transition: opacity 0.45s ease;
+  opacity: 1;
+}
+
+#notch-face.listen .nf-pill::after,
+#notch-face.speak .nf-pill::after,
+#notch-face.nf-auth .nf-pill::after,
+#notch-face.nf-auth-ok .nf-pill::after,
+#notch-face.nf-auth-err .nf-pill::after {
+  opacity: 0;
+}
+
+#notch-face .nf-folds { z-index: 1; }
+#notch-face .nf-band { z-index: 3; }
+#notch-face #nf-status { z-index: 4; }
+
+/* Idle is eyes-only in the dark: ears and mouth surface with the coral. */
+#notch-face:not(.listen):not(.speak) .nf-ears { opacity: 0; }
+#notch-face:not(.listen):not(.speak) #nf-mouth-idle { display: none; }
 
 #notch-face.listen .nf-pill {
   width: 250px;
