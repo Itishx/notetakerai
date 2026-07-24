@@ -6287,6 +6287,14 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     sendToRenderer("braino-mac:summon", {});
     return { ok: true, say: "" };
   }
+  // The reverse: "go back", "you can go home", "back in the notch", "tuck in".
+  // Without this the LLM would happily SAY "okay, going back" and do nothing.
+  if (/\b(?:go|get|head)\s+(?:back|home)\b|\bback\s+(?:in|into|to)\s+(?:the\s+)?notch\b|\btuck\s+(?:yourself\s+)?in\b|\breturn\s+home\b/i.test(summonPhrase)
+    && !/\b(?:tab|page|song|track|music|video|window|screen|file|folder)\b/i.test(summonPhrase)) {
+    logMac("delegate.summon_home_intent", {});
+    sendToRenderer("braino-mac:summon-home", {});
+    return { ok: true, say: "" };
+  }
 
   const notchPhrase = cleanPrompt(raw);
   if (/\bnotch\s*(?:braino|face)?\b/i.test(notchPhrase)
