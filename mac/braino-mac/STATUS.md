@@ -20,7 +20,7 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Touch ID / password confirm ("verify it's me", "touch id") | 🟡 | LocalAuthentication via Swift helper (native/BrainoTouchID.swift), .deviceOwnerAuthentication policy = Touch ID with automatic password fallback. NOW GATES EVERY DELETE: single-file voice deletes (executeConfirmedDelete) and redundant-folder bulk deletes both require granted===true — denied OR unavailable = nothing deleted |
 | Notch live activities: timers, calendar peek, WA badge, privacy dot | 🔨 | "remind me in 20 min…"; EventKit probe 5-min poll; badge when listener off |
 | Her mode (Samantha takeover) | 🟡 | Cmd+Shift+H or "her mode"; own Fish voice |
-| Jarvis-style delegate routing + LLM fallthrough | ✅ | |
+| Jarvis-style delegate routing + LLM fallthrough | ✅ | Rule zero added 07-25 and USER-CONFIRMED WORKING: consequence/hypothetical questions ("if I delete X, will I also lose Y?") route to conversation before any action intent can hijack them — this also un-broke the "can't interrupt him" complaint (barge-in was fine; misrouted questions kept spawning fresh wrong answers) |
 | Ambient awareness (now-playing + all open Chrome tabs in casual chat) | 🟡 | Free-text context only (titles/URLs, 8s poll across ALL windows/tabs), no vision cost; fixes "music's on but he doesn't know" for free-form chat (dedicated "what's playing" intent already worked). Actual screen PIXELS deliberately stay on-demand only (cost per look) — this is text-only |
 
 ## Spotify — DONE end-to-end
@@ -46,7 +46,7 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Send message by name ("message mom saying…") | 🟡 | URL scheme + Enter; mom→Ilu seeded |
 | All-contacts knowledge (Apple Contacts bulk import) | 🟡 | Daily refresh; fuzzy match |
 | Teach contacts by voice ("remember my X is Y / number is N") | 🟡 | |
-| Incoming message readout (notification DB listener) | 🟡 | Opt-in "read my WhatsApps"; needs Full Disk Access + WhatsApp notifications ON with previews. 07-24 "not working" debug: DB readable, listener polling fine — the readout toggle was simply never enabled (whatsapp-listener.json absent, spoken:false in every log). Fix = say "read my WhatsApps" once; enable phrases widened ("whatsapp notifs on/fix/working") |
+| Incoming message readout (notification DB listener) | 🟡 | Now DEFAULT ON (07-25 — the opt-in was never discovered; "turn off whatsapp reader" persists off). Needs Full Disk Access + WhatsApp notifications allowed with previews ALWAYS + no Focus mode; WhatsApp mutes its own banners while it is the front app, so messages read while you're inside WhatsApp never reach the DB. New self-diagnosis: "why aren't you reading my whatsapps" → speaks reader state + DB health + freshest-row check |
 | "Reply saying…" to last sender | 🟡 | 15-min window |
 | WhatsApp voice/video call (menu click) | 🟡 | Chat > Voice/Video Call probed live |
 | FaceTime / FaceTime audio | 🟡 | facetime:// schemes |

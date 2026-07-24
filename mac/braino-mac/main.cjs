@@ -2526,10 +2526,12 @@ async function queryWhatsAppNotifications(sinceRecId, limit = 8) {
 }
 
 function loadWaListenerState() {
+  // Default ON: the user expects incoming WhatsApps spoken without having to
+  // discover an opt-in phrase. "turn off whatsapp reader" persists false.
   try {
     return Boolean(JSON.parse(fs.readFileSync(WA_LISTENER_STATE_PATH, "utf8"))?.enabled);
   } catch (_) {
-    return false;
+    return true;
   }
 }
 
@@ -2563,6 +2565,37 @@ async function pollWhatsAppNotifications() {
   } finally {
     waPollBusy = false;
   }
+}
+
+async function whatsAppListenerDiagnostics() {
+  const db = await notificationDbPath();
+  let dbOk = false;
+  let waCount = 0;
+  let waMax = 0;
+  let globalMax = 0;
+  try {
+    const { stdout } = await execFileP("/usr/bin/sqlite3", ["-readonly", db,
+      "SELECT (SELECT COUNT(*) FROM record r JOIN app a ON r.app_id=a.app_id WHERE a.identifier LIKE '%whatsapp%') || '|' || (SELECT COALESCE(MAX(r2.rec_id),0) FROM record r2 JOIN app a2 ON r2.app_id=a2.app_id WHERE a2.identifier LIKE '%whatsapp%') || '|' || (SELECT COALESCE(MAX(rec_id),0) FROM record);",
+    ], { timeout: 6000 });
+    const [count, waMaxRaw, globalMaxRaw] = String(stdout || "").trim().split("|").map(Number);
+    dbOk = true;
+    waCount = count || 0;
+    waMax = waMaxRaw || 0;
+    globalMax = globalMaxRaw || 0;
+  } catch (_) {}
+  logMac("whatsapp.diagnostics", { dbOk, waCount, waMax, globalMax, enabled: waListenerEnabled, fromRecId: waLastRecId });
+  const parts = [];
+  parts.push(waListenerEnabled ? "My reader is on." : "My reader is off — say read my whatsapps to turn it on.");
+  if (!dbOk) {
+    parts.push("But macOS is hiding the notification database from me — I need Full Disk Access in System Settings.");
+  } else if (!waCount) {
+    parts.push("And macOS has no WhatsApp notifications recorded at all — check WhatsApp notifications are allowed with previews always shown.");
+  } else if (waMax <= waLastRecId) {
+    parts.push("The plumbing is fine — macOS just has not recorded a new WhatsApp notification since I started. Mind that WhatsApp mutes its own banners while it is the front app, and a Focus mode silences everything.");
+  } else {
+    parts.push("There are fresh notifications I have not caught yet — tell me if the next one stays silent.");
+  }
+  return { ok: true, say: parts.join(" ") };
 }
 
 async function startWhatsAppListener({ announce = false, enable = true } = {}) {
@@ -7347,6 +7380,14 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     logMac("delegate.notch_face_intent", { on });
     sendToRenderer("braino-mac:notch-face", { on });
     return { ok: true, say: on ? "Notch face is back." : "Okay, leaving the notch alone." };
+  }
+
+  // Diagnostics first — "why aren't you reading my whatsapps" would otherwise
+  // match the enable phrasing below.
+  if (/\b(?:why|test|check|debug)\b.*\bwhats\s*app\b.*\b(?:notifs?|notifications?|read|reader|messages?)\b/i.test(cleanPrompt(raw))
+    || /\bwhats\s*app\b.*\bnot\s+(?:working|reading|speaking)\b/i.test(cleanPrompt(raw))) {
+    logMac("delegate.wa_diagnostics_intent", {});
+    return whatsAppListenerDiagnostics();
   }
 
   const waListenerIntent = parseWaListenerIntent(raw);
