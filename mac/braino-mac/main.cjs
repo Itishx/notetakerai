@@ -2297,6 +2297,68 @@ function parseScreenVisionIntent(raw) {
   return { question: String(raw || "").trim() };
 }
 
+// The LLM understanding gate: when no regex intent claims a command, a real
+// model decides what the user MEANT — no more phrase-by-phrase hardcoding.
+async function classifyIntentLLM(raw) {
+  const authToken = await getBrainoAuthToken();
+  if (!authToken || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const surface = activeMacContext || {};
+  const message = [
+    "Classify this Mac voice command into EXACTLY one tool. Reply with ONLY strict JSON, no prose, no markdown.",
+    `Command: "${String(raw || "").trim()}"`,
+    surface.appName ? `Front app: ${surface.appName}${surface.windowTitle ? ` ("${surface.windowTitle}")` : ""}.` : "",
+    'Tools: {"tool":"open_app","arg":"app name"} | {"tool":"open_website","arg":"domain or url"} | {"tool":"find_file","arg":"file query"} | {"tool":"amazon","arg":"product"} | {"tool":"youtube","arg":"video"} | {"tool":"drive","arg":"document name"} | {"tool":"web_search","arg":"query"} | {"tool":"chat","arg":""}',
+    "find_file = the user's own documents (resume, notes, invoices, screenshots). chat = talking TO Braino, not commanding. amazon = products/books to buy.",
+  ].filter(Boolean).join("\n");
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ notes: "", message, chatHistory: [], responseMedium: "text" }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    const parsed = JSON.parse(reply.match(/\{[\s\S]*\}/)?.[0] || "null");
+    if (!parsed?.tool) return null;
+    logMac("intent.llm", { raw: textForLog(raw), tool: parsed.tool, arg: textForLog(String(parsed.arg || "")) });
+    return { tool: String(parsed.tool), arg: String(parsed.arg || "").trim() };
+  } catch (error) {
+    logMac("intent.llm.failed", { error });
+    return null;
+  }
+}
+
+async function executeClassifiedIntent(classified, raw) {
+  const { tool, arg } = classified;
+  if (tool === "open_app" && arg) {
+    const result = await openApp(arg);
+    if (result.ok) return { ok: true, say: `Opening ${result.appName || arg}.` };
+    return { ok: false, say: `I could not find an app called ${arg}.` };
+  }
+  if (tool === "open_website" && arg) {
+    const url = /^https?:\/\//i.test(arg) ? arg : `https://${arg.includes(".") ? arg : `www.${arg}.com`}`;
+    await openChromeUrl(url);
+    return { ok: true, say: `Opening ${arg.replace(/^https?:\/\//, "")}.` };
+  }
+  if (tool === "find_file" && arg) {
+    const files = await findFiles(arg, { kind: "" });
+    if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${arg}.` };
+    const opened = await openLocalPath(files[0]);
+    return opened.ok
+      ? { ok: true, say: `Opened ${path.basename(files[0])}.`, files }
+      : { ok: false, say: `Found ${path.basename(files[0])} but it would not open.`, files };
+  }
+  if (tool === "amazon" && arg) { await openChromeUrl(SEMANTIC_SITES.amazon.search(arg)); return { ok: true, say: `${arg} on Amazon, coming up.` }; }
+  if (tool === "youtube" && arg) { await openChromeUrl(SEMANTIC_SITES.youtube.search(arg)); return { ok: true, say: `${arg} on YouTube.` }; }
+  if (tool === "drive" && arg) { await openChromeUrl(SEMANTIC_SITES["google drive"].search(arg)); return { ok: true, say: `Looking for ${arg} in your Drive.` }; }
+  if (tool === "web_search" && arg) return runMacWebSearch(arg);
+  return runMacConversation(raw);
+}
+
 // Ambient companion glance: unprompted look at the screen, one short warm
 // line back. Called by the renderer's ambient loop while he's awake-idle.
 async function runAmbientObserve() {
@@ -5976,7 +6038,7 @@ async function findInstalledApps(appName) {
   return matches;
 }
 
-async function openApp(appName) {
+async function openApp(appName, { allowFuzzy = true } = {}) {
   const canonical = canonicalAppName(appName);
   if (!canonical) return { ok: false, error: "No app name was provided." };
   logMac("app.open.start", {
@@ -6002,6 +6064,10 @@ async function openApp(appName) {
     logMac("app.open.open_a.failed", { appName: canonical, error });
   }
 
+  if (!allowFuzzy) {
+    logMac("app.open.no_fuzzy_miss", { canonical });
+    return { ok: false, appName: canonical, error: "No exact app match." };
+  }
   const matches = await findInstalledApps(canonical);
   if (matches.length) {
     const openError = await shell.openPath(matches[0]);
@@ -8363,26 +8429,29 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (appName && !isLikelyUrl(appName)) {
     const target = cleanOpenTarget(appName);
     logMac("delegate.open_intent", { raw: textForLog(raw), target });
-    const appResult = await openApp(target);
+    // Order matters: exact app -> KNOWN website -> user's files -> fuzzy app.
+    // Fuzzy app used to run first and "win" on garbage (google docs ->
+    // Google Chrome), starving the correct web/file fallbacks.
+    const appResult = await openApp(target, { allowFuzzy: false });
     if (appResult.ok) {
       return { ok: true, say: `Opening ${appResult.appName || target}.` };
     }
     const website = commonWebTargetFor(target);
     if (website) {
-      logMac("delegate.open_web_fallback", {
-        target,
-        website,
-        appError: appResult.error || "",
-      });
+      logMac("delegate.open_web_fallback", { target, website });
       await openChromeUrl(website);
       const host = new URL(website).hostname.replace(/^www\./, "");
-      return { ok: true, say: `I did not find a Mac app for ${target}, so I opened ${host}.` };
+      return { ok: true, say: `Opening ${host}.` };
     }
     const files = await findFiles(target, { kind: "" });
     if (files.length) {
       const opened = await openLocalPath(files[0]);
       if (!opened.ok) return { ok: false, say: `I found ${path.basename(files[0])}, but macOS would not open it: ${opened.error}.`, files };
       return { ok: true, say: `Opened ${path.basename(files[0])}.`, files };
+    }
+    const fuzzyResult = await openApp(target);
+    if (fuzzyResult.ok) {
+      return { ok: true, say: `Opening ${fuzzyResult.appName || target}.` };
     }
   }
 
@@ -8396,6 +8465,11 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       logMac("delegate.open_screen_first", { target: textForLog(openTarget), status: pressed.status, detail: textForLog(pressed.detail) });
       if (pressed.status === "pressed") return { ok: true, say: `Opened ${pressed.detail}.` };
     }
+    // No regex claimed it — ask a real model what the user MEANT instead of
+    // blindly googling the raw sentence.
+    sendTaskProgress({ status: "thinking", text: "understanding what you meant..." });
+    const classified = await classifyIntentLLM(raw);
+    if (classified) return executeClassifiedIntent(classified, raw);
     logMac("delegate.generic_browser_fallback", { raw: textForLog(raw) });
     await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(raw)}`);
     return { ok: true, say: "I do not know that exact move yet, so I searched it in Chrome." };
