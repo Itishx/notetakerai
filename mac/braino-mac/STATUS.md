@@ -10,6 +10,8 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Auth via browser relay | ✅ | |
 | Edge glow (screen perimeter radiance) | 🟡 | Blue listen / coral speak / faint think; replaced notch glow |
 | Music mode (headphones + color-cycling glow) | 🟡 | Spotify native state or active YouTube watch tab; 5s poll; voice states take priority |
+| Notch (home eyes, now-playing marquee, birth sequence) | 🟡 | Black island fused to measured housing; double-Space = walker goes home |
+| Notch live activities: timers, calendar peek, WA badge, privacy dot | 🔨 | "remind me in 20 min…"; EventKit probe 5-min poll; badge when listener off |
 | Her mode (Samantha takeover) | 🟡 | Cmd+Shift+H or "her mode"; own Fish voice |
 | Jarvis-style delegate routing + LLM fallthrough | ✅ | |
 

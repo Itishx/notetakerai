@@ -286,7 +286,7 @@ body {
 }
 
 /* Eyes appear only while the walker is home inside the notch, at rest. */
-#notch-face.home:not(.listen):not(.speak):not(.music):not(.busy) .nf-mini {
+#notch-face.home:not(.music):not(.live) .nf-mini {
   display: block;
 }
 
@@ -322,10 +322,45 @@ body {
   animation: nfAuthPulse 1.6s ease-in-out infinite;
 }
 
-#notch-face.music .nf-pill {
+#notch-face.music .nf-pill,
+#notch-face.live .nf-pill {
   width: 260px;
   height: calc(var(--nf-notch-h) + 34px);
   border-radius: 0 0 22px 22px;
+}
+
+/* Timer done: the island celebrates for a beat. */
+#notch-face.nf-flash .nf-pill {
+  animation: nfFlash 0.65s ease-in-out 4;
+}
+
+@keyframes nfFlash {
+  0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.3); }
+  50% { box-shadow: 0 0 34px rgba(84, 222, 138, 0.85); }
+}
+
+/* Privacy dot: a quiet coral point whenever the mic session is live. */
+#notch-face .nf-privacy {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #E8786E;
+  box-shadow: 0 0 6px rgba(232, 120, 110, 0.9);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#notch-face.mic-live .nf-privacy {
+  opacity: 1;
+  animation: nfPrivacyPulse 2.2s ease-in-out infinite;
+}
+
+@keyframes nfPrivacyPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 /* The notch ticker replaces the floating status pill. */

@@ -2357,9 +2357,10 @@ function saveWaListenerState(enabled) {
 }
 
 async function pollWhatsAppNotifications() {
-  if (waPollBusy || !waListenerEnabled) return;
+  if (waPollBusy) return;
   waPollBusy = true;
   try {
+    if (waBadgeCount && activeMacContext?.appName === "WhatsApp") clearWaBadge();
     const rows = await queryWhatsAppNotifications(waLastRecId);
     for (const row of rows) {
       waLastRecId = Math.max(waLastRecId, row.recId);
@@ -2367,8 +2368,12 @@ async function pollWhatsAppNotifications() {
       // Group chats put the group in titl and "Sender: msg" in body; keep it natural.
       const sender = row.sender.replace(/\s*\(\d+ messages?\)\s*$/i, "");
       lastIncomingWhatsApp = { name: sender, at: Date.now() };
-      logMac("whatsapp.incoming", { sender: textForLog(sender), bodyChars: row.body.length, recId: row.recId });
-      sendToRenderer("braino-mac:speak-line", { text: `${sender} says: ${row.body}` });
+      logMac("whatsapp.incoming", { sender: textForLog(sender), bodyChars: row.body.length, recId: row.recId, spoken: waListenerEnabled });
+      if (waListenerEnabled) {
+        sendToRenderer("braino-mac:speak-line", { text: `${sender} says: ${row.body}` });
+      } else {
+        updateWaBadge(sender);
+      }
     }
   } catch (error) {
     logMac("whatsapp.listener.poll_failed", { error });
@@ -2377,13 +2382,14 @@ async function pollWhatsAppNotifications() {
   }
 }
 
-async function startWhatsAppListener({ announce = false } = {}) {
+async function startWhatsAppListener({ announce = false, enable = true } = {}) {
   const db = await notificationDbPath();
   try {
     const { stdout } = await execFileP("/usr/bin/sqlite3", ["-readonly", db, "SELECT COALESCE(MAX(rec_id),0) FROM record;"], { timeout: 6000 });
     waLastRecId = Number(String(stdout).trim()) || 0;
   } catch (error) {
     logMac("whatsapp.listener.db_blocked", { error });
+    if (!announce) return { ok: false, say: "" };
     await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
     return {
       ok: false,
@@ -2395,11 +2401,13 @@ async function startWhatsAppListener({ announce = false } = {}) {
     const { stdout } = await execFileP("/usr/bin/sqlite3", ["-readonly", db, "SELECT COUNT(*) FROM record r JOIN app a ON r.app_id = a.app_id WHERE a.identifier LIKE '%whatsapp%';"], { timeout: 6000 });
     everSeen = Number(String(stdout).trim()) || 0;
   } catch (_) {}
-  waListenerEnabled = true;
-  saveWaListenerState(true);
+  if (enable) {
+    waListenerEnabled = true;
+    saveWaListenerState(true);
+  }
   if (waPollTimer) clearInterval(waPollTimer);
   waPollTimer = setInterval(() => void pollWhatsAppNotifications(), WA_POLL_INTERVAL_MS);
-  logMac("whatsapp.listener.started", { fromRecId: waLastRecId, everSeen });
+  logMac("whatsapp.listener.started", { fromRecId: waLastRecId, everSeen, spoken: waListenerEnabled });
   if (!announce) return { ok: true, say: "" };
   if (everSeen === 0) {
     await shell.openExternal("x-apple.systempreferences:com.apple.preference.notifications");
@@ -2541,6 +2549,129 @@ async function startCall(intent) {
   logMac("call.started", { app: "whatsapp", video: intent.video, to: textForLog(resolved.name) });
   sendTaskProgress({ status: "done", text: `Calling ${resolved.name}` });
   return { ok: true, say: `Starting a ${intent.video ? "video" : "voice"} call with ${resolved.name} on WhatsApp.` };
+}
+
+// ── Notch live activities: timers/reminders, calendar peek, unread badge ──
+let activeTimers = [];
+let waBadgeCount = 0;
+let waBadgeSender = "";
+let calendarNext = null;
+
+function broadcastTimers() {
+  sendToRenderer("braino-mac:timers", { timers: activeTimers.map(({ id, label, endAt }) => ({ id, label, endAt })) });
+}
+
+function reminderSeconds(amount, unit) {
+  const n = Number(amount) || 0;
+  if (/^h/i.test(unit)) return n * 3600;
+  if (/^m/i.test(unit)) return n * 60;
+  return n;
+}
+
+function parseReminderIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (/\b(?:cancel|stop|clear|remove)\b.*\b(?:timer|reminder|countdown)s?\b/i.test(source)) return { cancel: true };
+  let match = source.match(/\b(?:set\s+)?(?:a\s+)?timer\s+(?:for\s+)?(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b(?:\s+(?:for|to|called)\s+(.+))?$/i);
+  if (match) return { seconds: reminderSeconds(match[1], match[2]), label: (match[3] || "timer").trim() };
+  match = source.match(/\bremind\s+me\s+in\s+(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\s+(?:to\s+|about\s+|that\s+)?(.+)$/i);
+  if (match) return { seconds: reminderSeconds(match[1], match[2]), label: match[3].trim() };
+  match = source.match(/\bremind\s+me\s+(?:to\s+|about\s+)?(.+?)\s+in\s+(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)$/i);
+  if (match) return { seconds: reminderSeconds(match[2], match[3]), label: match[1].trim() };
+  return null;
+}
+
+function startReminder(seconds, label) {
+  const clamped = Math.min(12 * 3600, Math.max(5, seconds));
+  const timer = {
+    id: crypto.randomUUID(),
+    label: String(label || "timer").slice(0, 28),
+    endAt: Date.now() + clamped * 1000,
+  };
+  activeTimers.push(timer);
+  timer.handle = setTimeout(() => {
+    activeTimers = activeTimers.filter((t) => t.id !== timer.id);
+    broadcastTimers();
+    sendToRenderer("braino-mac:timer-fired", { id: timer.id, label: timer.label });
+    sendToRenderer("braino-mac:speak-line", { text: `Reminder. ${timer.label}.` });
+    logMac("reminder.fired", { label: textForLog(timer.label) });
+  }, clamped * 1000);
+  broadcastTimers();
+  logMac("reminder.set", { label: textForLog(timer.label), seconds: clamped });
+  const minutes = Math.round(clamped / 60);
+  return {
+    ok: true,
+    say: clamped < 90
+      ? `Done. ${clamped} seconds on the clock for ${timer.label}.`
+      : `Done. I will remind you about ${timer.label} in ${minutes} minute${minutes === 1 ? "" : "s"}. It is counting in the notch.`,
+  };
+}
+
+function cancelReminders() {
+  const count = activeTimers.length;
+  for (const timer of activeTimers) clearTimeout(timer.handle);
+  activeTimers = [];
+  broadcastTimers();
+  logMac("reminder.cancelled", { count });
+  return { ok: true, say: count ? "Cancelled. The notch is clear." : "There was nothing running." };
+}
+
+async function checkCalendarNext() {
+  const swiftSource = [
+    "import EventKit",
+    "import Foundation",
+    "let store = EKEventStore()",
+    "let sem = DispatchSemaphore(value: 0)",
+    "var granted = false",
+    "if #available(macOS 14.0, *) {",
+    "  store.requestFullAccessToEvents { g, _ in granted = g; sem.signal() }",
+    "} else {",
+    "  store.requestAccess(to: .event) { g, _ in granted = g; sem.signal() }",
+    "}",
+    "sem.wait()",
+    "if granted {",
+    "  let start = Date(); let end = start.addingTimeInterval(24*3600)",
+    "  let pred = store.predicateForEvents(withStart: start, end: end, calendars: nil)",
+    "  let events = store.events(matching: pred).filter { !$0.isAllDay }.sorted { $0.startDate < $1.startDate }",
+    "  if let e = events.first {",
+    "    print(\"\\(Int(e.startDate.timeIntervalSince1970))\\t\\(e.title ?? \"Event\")\")",
+    "  }",
+    "}",
+  ].join("\n");
+  const tmpPath = path.join(app.getPath("temp"), "braino-cal-next.swift");
+  try {
+    await fs.promises.writeFile(tmpPath, swiftSource);
+    const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", tmpPath], { timeout: 60000 });
+    const line = String(stdout || "").trim().split(/\r?\n/).pop() || "";
+    const [epoch, ...titleParts] = line.split("\t");
+    const startAt = Number(epoch) * 1000;
+    const title = titleParts.join(" ").trim();
+    const next = Number.isFinite(startAt) && startAt > Date.now() - 60000 && title
+      ? { title: title.slice(0, 30), startAt }
+      : null;
+    const changed = JSON.stringify(next) !== JSON.stringify(calendarNext);
+    calendarNext = next;
+    if (changed) {
+      logMac("calendar.next", next || { none: true });
+      sendToRenderer("braino-mac:calendar-next", { next });
+    }
+  } catch (error) {
+    logMac("calendar.check.failed", { error });
+  } finally {
+    fs.promises.unlink(tmpPath).catch(() => {});
+  }
+}
+
+function updateWaBadge(sender) {
+  waBadgeCount += 1;
+  waBadgeSender = String(sender || "").slice(0, 20);
+  sendToRenderer("braino-mac:wa-badge", { count: waBadgeCount, sender: waBadgeSender });
+}
+
+function clearWaBadge() {
+  if (!waBadgeCount) return;
+  waBadgeCount = 0;
+  waBadgeSender = "";
+  sendToRenderer("braino-mac:wa-badge", { count: 0, sender: "" });
 }
 
 function parseWaListenerIntent(raw) {
@@ -5697,6 +5828,18 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return startCall(callIntent);
   }
 
+  const reminderIntent = parseReminderIntent(raw);
+  if (reminderIntent) {
+    logMac("delegate.reminder_intent", {
+      cancel: Boolean(reminderIntent.cancel),
+      seconds: reminderIntent.seconds || 0,
+      label: textForLog(reminderIntent.label || ""),
+    });
+    if (reminderIntent.cancel) return cancelReminders();
+    if (!reminderIntent.seconds) return { ok: false, say: "Tell me how long, like remind me in twenty minutes to stretch." };
+    return startReminder(reminderIntent.seconds, reminderIntent.label);
+  }
+
   const notchPhrase = cleanPrompt(raw);
   if (/\bnotch\s*(?:braino|face)?\b/i.test(notchPhrase)
     && /\b(?:hide|remove|show|bring back|turn\s+(?:on|off)|\bon\b|\boff\b)\b/i.test(notchPhrase)) {
@@ -6222,9 +6365,11 @@ app.whenReady().then(() => {
   setTimeout(() => void importAllContacts(), 8000);
   setInterval(() => void checkMusicState(), 5000);
   void measureNotch();
-  if (loadWaListenerState()) {
-    setTimeout(() => void startWhatsAppListener(), 6000);
-  }
+  // Poll WhatsApp notifications regardless: spoken when the listener is on,
+  // stacked as an unread badge in the notch when it is off.
+  setTimeout(() => void startWhatsAppListener({ enable: loadWaListenerState() }), 6000);
+  setTimeout(() => void checkCalendarNext(), 20000);
+  setInterval(() => void checkCalendarNext(), 5 * 60 * 1000);
   const auth = authStatusPayload();
   logMac("app.ready", {
     appVersion: APP_VERSION,

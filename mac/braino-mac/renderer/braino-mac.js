@@ -380,23 +380,63 @@ let currentTaskLabel = "";
 let taskLabelClearTimer = 0;
 let lastMusicInfo = { track: "", artist: "", source: "" };
 
+let nfTimers = [];
+let nfCalendarNext = null;
+let nfWaBadge = { count: 0, sender: "" };
+
+function fmtCountdown(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m >= 60
+    ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function updateNotchFace() {
   if (!notchFace) return;
   const visible = notchFaceEnabled && !herMode;
   notchFace.classList.toggle("on", visible);
-  // The notch only carries what persists: his home (eyes) and now-playing.
-  // Voice and task moments belong to the walker's bubble, not here.
-  const music = musicMode;
-  notchFace.classList.toggle("music", visible && music);
   notchFace.classList.toggle("home", walkerHome);
   if (!notchBootDone) return;
   notchFace.classList.remove("asleep");
-  if (music) {
-    nfSetStatusText([lastMusicInfo.track, lastMusicInfo.artist].filter(Boolean).join(" · "));
-  } else {
-    nfSetStatusText("");
+
+  // Live activities, by urgency: timer → imminent calendar → unread messages
+  // → now-playing. The notch carries only what persists.
+  const now = Date.now();
+  const timer = nfTimers.filter((t) => t.endAt > now).sort((a, b) => a.endAt - b.endAt)[0];
+  const calImminent = nfCalendarNext
+    && nfCalendarNext.startAt - now < 15 * 60 * 1000
+    && nfCalendarNext.startAt > now - 60 * 1000
+    ? nfCalendarNext
+    : null;
+
+  let line = "";
+  let live = false;
+  let music = false;
+  if (timer) {
+    line = `${timer.label} · ${fmtCountdown(timer.endAt - now)}`;
+    live = true;
+  } else if (calImminent) {
+    const minutes = Math.max(1, Math.ceil((calImminent.startAt - now) / 60000));
+    line = `${calImminent.title} · in ${minutes} min`;
+    live = true;
+  } else if (nfWaBadge.count > 0) {
+    line = `${nfWaBadge.sender || "whatsapp"} · ${nfWaBadge.count} new`;
+    live = true;
+  } else if (musicMode) {
+    line = [lastMusicInfo.track, lastMusicInfo.artist].filter(Boolean).join(" · ");
+    music = true;
   }
+  notchFace.classList.toggle("live", visible && live);
+  notchFace.classList.toggle("music", visible && music);
+  notchFace.classList.toggle("mic-live", visible && (realtimeActive || realtimeConnecting));
+  nfSetStatusText(line);
 }
+
+window.setInterval(() => {
+  if (nfTimers.length || nfCalendarNext || nfWaBadge.count) updateNotchFace();
+}, 1000);
 
 async function walkerGoHome() {
   if (walkerHome) return;
@@ -1968,7 +2008,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -3362,6 +3402,23 @@ window.brainoMac.onMusicState?.((payload) => {
   setMusicMode(Boolean(payload?.playing));
 });
 window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());
+window.brainoMac.onTimers?.((payload) => {
+  nfTimers = Array.isArray(payload?.timers) ? payload.timers : [];
+  updateNotchFace();
+});
+window.brainoMac.onTimerFired?.(() => {
+  notchFace?.classList.add("nf-flash");
+  window.setTimeout(() => notchFace?.classList.remove("nf-flash"), 2600);
+  updateNotchFace();
+});
+window.brainoMac.onCalendarNext?.((payload) => {
+  nfCalendarNext = payload?.next || null;
+  updateNotchFace();
+});
+window.brainoMac.onWaBadge?.((payload) => {
+  nfWaBadge = { count: Number(payload?.count) || 0, sender: String(payload?.sender || "") };
+  updateNotchFace();
+});
 window.brainoMac.onNotchFace?.((payload) => setNotchFaceEnabled(Boolean(payload?.on)));
 window.brainoMac.onSpeakLine?.((payload) => {
   const text = String(payload?.text || "").trim();
