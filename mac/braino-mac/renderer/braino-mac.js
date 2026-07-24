@@ -636,14 +636,14 @@ function updateNotchFace() {
   // and activity tickers all yield so the expanded island belongs to the
   // words — they come right back the moment the caption clears.
   const conversationOwnsNotch = sessionEngaged && Boolean(nfHeardText);
+  // Thinking lives in the caption wing (same spot as your words), not the
+  // bottom ticker — the island expands and the step text reads like a caption.
+  if (nfCapLeftEl) nfCapLeftEl.textContent = nfThinkingText || nfHeardText;
   let line = "";
   let live = false;
   let music = false;
-  if (nfThinkingText) {
-    // Active thinking outranks everything — you always see what he's doing.
-    line = nfThinkingText;
-  } else if (conversationOwnsNotch) {
-    // nothing else renders in the notch this frame
+  if (nfThinkingText || conversationOwnsNotch) {
+    // nothing else renders in the ticker this frame
   } else if (timer) {
     line = `${timer.label} · ${fmtCountdown(timer.endAt - now)}`;
     live = true;
@@ -680,7 +680,7 @@ function updateNotchFace() {
   // takes over the visual for listening/speaking.
   notchFace.classList.toggle("awake", visible && sessionEngaged);
   notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !live && !music);
-  notchFace.classList.toggle("captioning", visible && conversationOwnsNotch);
+  notchFace.classList.toggle("captioning", visible && (conversationOwnsNotch || Boolean(nfThinkingText)));
   // While he's home the notch IS the conversation surface: sonar rings while
   // listening, talking mouth + bars while speaking. When he's out on screen,
   // the walker owns the voice theatrics and the notch stays quiet.

@@ -5840,6 +5840,34 @@ end if`;
   }
 }
 
+async function closeAllBrowserTabs() {
+  sendTaskProgress({ status: "thinking", text: "Closing every tab" });
+  const browsers = ["Google Chrome", "Brave Browser", "Microsoft Edge", "Safari"];
+  let closedIn = [];
+  for (const browser of browsers) {
+    try {
+      const { stdout } = await execFileP("/usr/bin/osascript", ["-e", `
+tell application "System Events"
+  if not (exists process "${browser}") then return "not_running"
+end tell
+tell application "${browser}"
+  set tabTotal to 0
+  repeat with w in windows
+    set tabTotal to tabTotal + (count of tabs of w)
+  end repeat
+  close every tab of every window
+  return tabTotal as text
+end tell`], { timeout: 10000 });
+      const count = Number(String(stdout || "").trim());
+      if (Number.isFinite(count) && count > 0) closedIn.push({ browser, count });
+    } catch (_) {}
+  }
+  const total = closedIn.reduce((sum, entry) => sum + entry.count, 0);
+  logMac("tabs.close_all", { total, browsers: closedIn.map((e) => `${e.browser}:${e.count}`).join(",") });
+  if (!total) return { ok: true, say: "No tabs open anywhere. Already clean." };
+  return { ok: true, say: `Closed ${total} tab${total > 1 ? "s" : ""}. Clean slate.` };
+}
+
 async function closeOpenTarget(target) {
   const cleaned = cleanOpenTarget(target);
   if (!cleaned) return { ok: false, say: "Tell me what to close." };
@@ -7671,6 +7699,12 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       hasBody: Boolean(mailIntent.body),
     });
     return startMailWorkflow(mailIntent);
+  }
+
+  // "Close the tabs" = wipe them all, no enumeration, no questions.
+  if (/\bclose\b.*\b(?:all\s+)?(?:the\s+|my\s+)?tabs\b/i.test(cleanPrompt(raw))) {
+    logMac("delegate.close_all_tabs_intent", {});
+    return closeAllBrowserTabs();
   }
 
   const closeTarget = extractCloseShortcutTarget(raw);
