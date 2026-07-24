@@ -94,6 +94,12 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Ambient notch pulse | 🟡 | Polls x-status 2min after boot then every 45min; "@brainosays · N (+Δ this week)" rides the notch ticker for 90s after each poll, priority below WhatsApp badge |
 | Clip-and-tweet ("record a clip of 20 seconds" → "tweet it saying ...") | 🟡 | screencapture -v -V records main display (5-60s, default 15) to app-support/clips; caption read back + confirmed ("ship it?") → upload to x-post-media storage bucket → insert scheduled_x_posts (now) → dispatch-scheduled-x-posts fires it. KNOWN RISK: dispatch uses X's simple media upload (built for images) — larger/longer videos may be rejected by X; failure is reported honestly and the post stays queued on the dashboard |
 
+## Voice latency
+| Capability | Status | Notes |
+|---|---|---|
+| LIVE captions while speaking (BrainoLiveCaption.swift) | 🟡 | OpenAI's server transcription only sends deltas AFTER audio commit — captions could never stream from it. New continuous on-device SFSpeechRecognizer (requiresOnDeviceRecognition, 45s task cycling, same pattern as wake word) runs alongside the realtime session and streams partials to the caption wing as words are spoken; OpenAI transcript overwrites on completion and stays authoritative for routing. Started/stopped with the session, off in her mode |
+| Per-turn latency summary (voice.latency.turn_summary) | ✅ | Chrome-style single line at first audible reply: captionFirstMs / sttMs / routeMs / thinkMs / ttsMs / totalFromStopMs — every pipeline segment side by side for optimization |
+
 ## Observability
 | Capability | Status | Notes |
 |---|---|---|

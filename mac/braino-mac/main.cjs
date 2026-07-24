@@ -14,6 +14,7 @@ const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
 const TOUCH_ID_HELPER_PATH = path.join(__dirname, "native", "BrainoTouchID.swift");
 const WAKE_WORD_HELPER_PATH = path.join(__dirname, "native", "BrainoWakeWord.swift");
 const AX_HELPER_PATH = path.join(__dirname, "native", "BrainoAX.swift");
+const LIVE_CAPTION_HELPER_PATH = path.join(__dirname, "native", "BrainoLiveCaption.swift");
 const APP_VERSION = "12.0.41";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
@@ -2833,6 +2834,52 @@ async function requireTouchId(reason) {
     return null;
   }
 }
+
+// ── Live captions: on-device partial STT while a realtime session runs, so
+// the user's words form on screen AS they speak. Display-only — OpenAI's
+// transcript stays authoritative for routing. ──
+let swiftLiveCaption = null;
+
+function startLiveCaptions() {
+  if (swiftLiveCaption || !fs.existsSync(LIVE_CAPTION_HELPER_PATH)) return;
+  swiftLiveCaption = spawn("xcrun", ["swift", LIVE_CAPTION_HELPER_PATH], {
+    cwd: ROOT_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  logMac("caption.helper.start", {});
+  swiftLiveCaption.stdout.on("data", (chunk) => {
+    String(chunk || "").split(/\r?\n/).forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      const sep = trimmed.indexOf("\t");
+      const kind = sep < 0 ? trimmed : trimmed.slice(0, sep);
+      const text = sep < 0 ? "" : trimmed.slice(sep + 1);
+      if (kind === "caption" || kind === "caption-final") {
+        sendToRenderer("braino-mac:live-caption", { text, final: kind === "caption-final" });
+      } else if (kind === "unavailable") {
+        logMac("caption.helper.unavailable", { reason: textForLog(text) });
+      } else if (kind === "caption-ready") {
+        logMac("caption.helper.ready", {});
+      }
+    });
+  });
+  swiftLiveCaption.on("exit", (code) => {
+    logMac("caption.helper.exit", { code });
+    swiftLiveCaption = null;
+  });
+}
+
+function stopLiveCaptions() {
+  if (!swiftLiveCaption) return;
+  try { swiftLiveCaption.kill(); } catch (_) {}
+  swiftLiveCaption = null;
+  logMac("caption.helper.stop", {});
+}
+
+ipcMain.on("braino-mac:live-captions", (_event, on) => {
+  if (on) startLiveCaptions();
+  else stopLiveCaptions();
+});
 
 // ── X (@brainosays): stats, mentions, clip-and-tweet — thin voice layers
 // over the existing edge functions (x-status, x-post-media, dispatch). ──

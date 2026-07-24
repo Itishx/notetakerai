@@ -407,6 +407,21 @@ function markVoiceLatency(stage, data = {}) {
     ...voiceLatencySnapshot(),
     ...data,
   });
+  // One Chrome-style summary per turn, at first audible reply: every segment
+  // of the pipeline in ms, side by side, ready for optimization.
+  if (stage === "first_audio") {
+    const t = voiceLatencyTurn;
+    const seg = (from, to) => (from && to ? Math.round(to - from) : null);
+    logRenderer("voice.latency.turn_summary", {
+      turnId: t.id,
+      captionFirstMs: seg(t.speechStartedAt, t.captionFirstAt),
+      sttMs: seg(t.speechStoppedAt, t.transcriptCompletedAt),
+      routeMs: seg(t.transcriptCompletedAt, t.delegateStartedAt),
+      thinkMs: seg(t.delegateStartedAt, t.delegateDoneAt),
+      ttsMs: seg(t.delegateDoneAt, t.firstAudioAt),
+      totalFromStopMs: seg(t.speechStoppedAt, t.firstAudioAt),
+    });
+  }
 }
 
 function getMoveBounds() {
@@ -2686,6 +2701,7 @@ function stopRealtimeVoice() {
   realtimeActive = false;
   realtimeConnecting = false;
   voiceTurnInFlight = false;
+  window.brainoMac.setLiveCaptions?.(false);
   // Don't wipe captions here — the reply's own timer clears them, so his
   // last line lingers briefly after the session hangs up instead of vanishing.
   updateNotchFace();
@@ -3148,6 +3164,9 @@ async function startRealtimeVoice() {
     realtimeConnecting = false;
     listening = true;
     markRealtimeActivity("realtime_ready");
+    // Live on-device captions run alongside the session — words form as
+    // they're spoken instead of after the server commits the audio.
+    if (!herMode) window.brainoMac.setLiveCaptions?.(true);
     startFishWarmKeepAlive();
     setStatus("listening", "Listening");
     setBubble("I am listening.", 1400);
@@ -3864,6 +3883,18 @@ window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());
 window.brainoMac.onSummon?.(() => { void handleSummon(); });
 window.brainoMac.onSummonToggle?.(() => { void handleSummonToggle(); });
 window.brainoMac.onSummonHome?.(() => { void handleSummonHome(); });
+window.brainoMac.onLiveCaption?.((payload) => {
+  const text = String(payload?.text || "").trim();
+  if (!text || !realtimeActive || herMode) return;
+  // Live partial: show it forming NOW. OpenAI's authoritative transcript
+  // overwrites when it lands; the live stream is display-only.
+  nfSetHeard(text);
+  if (voiceLatencyTurn && !voiceLatencyTurn.captionFirstAt) {
+    voiceLatencyTurn.captionFirstAt = performance.now();
+    markVoiceLatency("caption_first", { captionChars: text.length });
+  }
+});
+
 window.brainoMac.onXStats?.((payload) => {
   nfXStats = {
     followers: payload?.followers ?? 0,
