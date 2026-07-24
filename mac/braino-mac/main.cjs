@@ -1818,6 +1818,29 @@ async function handlePendingMacWorkflow(raw) {
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
+  if (pending.type === "cleanup" && pending.stage === "count_style") {
+    clearPendingMacWorkflow();
+    const brief = /\b(?:point|short|quick|cut|straight|just|tldr|summary)\b/i.test(cleanPrompt(raw));
+    const counted = await countAllHomeItems();
+    const total = String(counted?.say || "");
+    const say = brief
+      ? `${total.split(".")[0]}. Want me to create a redundant folder of what is worth letting go, so you can review, delete or recover?`
+      : `${total} Want me to create a redundant folder of what is worth letting go?`;
+    setPendingMacWorkflow({ type: "cleanup", stage: "cleanup_offer", data: {} });
+    return { ok: true, say };
+  }
+
+  if (pending.type === "cleanup" && pending.stage === "cleanup_offer") {
+    clearPendingMacWorkflow();
+    if (/\b(?:yes|yeah|yep|sure|go|do it|create|make it|please)\b/i.test(cleanPrompt(raw))) {
+      sendTaskProgress({ status: "thinking", text: "Scanning for what you don't need" });
+      const items = await scanCleanupCandidates();
+      if (!items.length) return { ok: true, say: "Nothing is stale enough to park right now. You are clean." };
+      return createRedundantFolder(items.map((c) => ({ name: c.name, full: c.full, size: c.size, isDir: c.isDir, isCapture: c.isCapture })));
+    }
+    return { ok: true, say: "Alright, just the numbers then." };
+  }
+
   if (pending.type === "cleanup" && pending.stage === "cleanup_confirm") {
     clearPendingMacWorkflow();
     const answer = cleanPrompt(raw);
@@ -3994,7 +4017,7 @@ function normalizeFileWords(value) {
 
 function scoreRedundantMatch(item, phrase) {
   const hay = normalizeFileWords(item.binName);
-  const want = normalizeFileWords(phrase).replace(/\b(?:the|that|this|my|a|an|folder|file|one|thing|please)\b/g, " ").replace(/\s+/g, " ").trim();
+  const want = normalizeFileWords(phrase).replace(/\b(?:the|that|this|my|a|an|folder|file|one|thing|please|movie|video|clip|image|picture)\b/g, " ").replace(/\s+/g, " ").trim();
   if (!want) return 0;
   if (hay === want) return 2;
   const wantWords = want.split(" ").filter((w) => w.length > 1);
@@ -4005,9 +4028,11 @@ function scoreRedundantMatch(item, phrase) {
     if (hayWords.has(word)) hit += 1;
     else if (hay.includes(word)) hit += 0.7;
     else {
-      // transcript fuzz: accept a close prefix ("brain" for "braino")
+      // transcript fuzz: accept a close prefix ("brain" for "braino",
+      // "movie" for "mov", "pipeline" for the typo "pipleine")
       for (const hayWord of hayWords) {
-        if (hayWord.length > 3 && word.length > 3 && (hayWord.startsWith(word.slice(0, 4)) || word.startsWith(hayWord.slice(0, 4)))) { hit += 0.5; break; }
+        const shorter = Math.min(hayWord.length, word.length, 4);
+        if (shorter >= 3 && hayWord.slice(0, shorter) === word.slice(0, shorter)) { hit += 0.5; break; }
       }
     }
   }
@@ -4020,7 +4045,7 @@ function closestRedundantItems(phrase) {
   if (!pendingReviewBin?.files?.length) return [];
   return pendingReviewBin.files
     .map((item) => ({ item, score: scoreRedundantMatch(item, phrase) }))
-    .filter((entry) => entry.score >= 0.4)
+    .filter((entry) => entry.score >= 0.3)
     .sort((a, b) => b.score - a.score);
 }
 
@@ -4077,28 +4102,66 @@ function listRedundantContents() {
 }
 
 async function deleteReviewBin() {
-  if (!pendingReviewBin?.files?.length) {
-    return { ok: false, say: "There is no cleanup waiting on your call right now. Ask me what is worth deleting first." };
+  // Truth lives on DISK, not in the manifest — after a partial delete or a
+  // restart the folder can exist with a stale/empty manifest, and "delete the
+  // redundant folder" must still just work.
+  if (!fs.existsSync(REVIEW_BIN_PATH)) {
+    pendingReviewBin = null;
+    saveRedundantManifest(null);
+    return { ok: false, say: "There is no redundant folder right now. Ask me what is worth deleting first." };
   }
-  const count = pendingReviewBin.files.length;
-  // Sensitive action: bulk delete only after Touch ID says it is really you.
-  sendTaskProgress({ status: "thinking", text: `Deleting ${count} redundant files - Touch ID please` });
-  const granted = await requireTouchId(`delete ${count} redundant files`);
+  let count = 0;
+  try { count = fs.readdirSync(REVIEW_BIN_PATH).filter((n) => !n.startsWith(".")).length; } catch (_) {}
+  sendTaskProgress({ status: "thinking", text: `Deleting the redundant folder - Touch ID please` });
+  const granted = await requireTouchId(count ? `delete the redundant folder (${count} items)` : "delete the redundant folder");
   if (granted !== true) {
     return { ok: false, say: granted === false ? "Touch ID said no, so everything stays put." : "I could not verify it is you, so everything stays put." };
   }
   try {
+    // Trash the WHOLE folder — item-by-item used to leave an empty shell
+    // behind (a .DS_Store made the rmdir fail silently).
     await execFileP("/usr/bin/osascript", ["-e",
-      `tell application "Finder" to delete (every item of folder (POSIX file "${REVIEW_BIN_PATH}"))`,
+      `tell application "Finder" to delete (POSIX file "${REVIEW_BIN_PATH}" as alias)`,
     ], { timeout: 15000 });
-    try { fs.rmdirSync(REVIEW_BIN_PATH); } catch (_) {}
     pendingReviewBin = null;
     saveRedundantManifest(null);
     logMac("files.cleanup.deleted", { count });
-    return { ok: true, say: `Done — ${count} things are in the Trash, so you can still fish anything back out.` };
+    return { ok: true, say: count ? `Done — the folder and its ${count} things are in the Trash.` : "Done — the folder is in the Trash." };
   } catch (error) {
     logMac("files.cleanup.delete_failed", { error });
     return { ok: false, say: "The delete did not go through. The redundant folder is still on your desktop." };
+  }
+}
+
+// Vague on purpose: "delete this folder" while a Finder window is front —
+// resolve the actual open folder from context instead of hunting by name.
+async function deleteCurrentFinderFolder() {
+  const folder = await getFinderFrontFolder();
+  if (!folder) return { ok: false, say: "I do not see a Finder window open — which folder do you mean?" };
+  const clean = folder.replace(/\/$/, "");
+  const name = path.basename(clean);
+  const home = os.homedir();
+  const protectedPaths = new Set([home, path.join(home, "Desktop"), path.join(home, "Documents"), path.join(home, "Downloads"), "/"]);
+  if (protectedPaths.has(clean) || clean.split("/").length < 4) {
+    return { ok: false, say: `That window is ${name} — I am not deleting that one from voice.` };
+  }
+  let count = 0;
+  try { count = fs.readdirSync(clean).filter((n) => !n.startsWith(".")).length; } catch (_) {}
+  sendTaskProgress({ status: "thinking", text: `Deleting ${name} - Touch ID please` });
+  const granted = await requireTouchId(`delete the folder ${name}`);
+  if (granted !== true) {
+    return { ok: false, say: granted === false ? "Touch ID said no, so it stays." : "I could not verify it is you, so it stays." };
+  }
+  try {
+    await execFileP("/usr/bin/osascript", ["-e",
+      `tell application "Finder" to delete (POSIX file "${clean}" as alias)`,
+    ], { timeout: 15000 });
+    if (clean === REVIEW_BIN_PATH) { pendingReviewBin = null; saveRedundantManifest(null); }
+    logMac("files.delete_current_folder", { folder: textForLog(clean), count });
+    return { ok: true, say: `${name} is in the Trash, ${count} things and all.` };
+  } catch (error) {
+    logMac("files.delete_current_folder.failed", { error });
+    return { ok: false, say: `I could not trash ${name}.` };
   }
 }
 
@@ -4121,6 +4184,11 @@ async function restoreReviewBin() {
 function parseFileCleanupIntent(raw) {
   const source = cleanPrompt(String(raw || ""));
   if (/\b(?:open|show|reveal)\b.*\b(?:redundant|review)\b.*\bfolder\b/i.test(source)) return { action: "open" };
+  // Deterministic one-shot: "create a folder for the files I don't need" /
+  // "make a redundant folder" — scan and build it, no twenty questions.
+  if (/\b(?:create|make|build)\b.*\bfolder\b.*\b(?:don'?t need|useless|junk|redundant|worth deleting|not needed|old stuff)\b/i.test(source)
+    || /\b(?:create|make|build)\b.*\b(?:redundant|cleanup|junk)\b.*\bfolder\b/i.test(source)) return { action: "create_direct" };
+  if (/\b(?:delete|trash|remove)\s+(?:this|the (?:open|current))\s+folder\b/i.test(source)) return { action: "delete_current" };
   // Any delete-verb aimed at the redundant/review folder counts — people say
   // "delete the files in the redundant folder", not "delete them all".
   if (/\b(?:delete|trash|clear|empty|remove|erase)\b.*\b(?:redundant|review)\b.*\bfolder\b/i.test(source)
@@ -4294,7 +4362,11 @@ async function countCurrentFolderItems(term) {
 
 async function countMatchingItems({ term, kind, scope }) {
   if (scope === "current") return countCurrentFolderItems(term);
-  if (!term) return countAllHomeItems();
+  if (!term) {
+    // Per spec: ask how they want it first, then the number, then the offer.
+    setPendingMacWorkflow({ type: "cleanup", stage: "count_style", data: {} });
+    return { ok: true, say: "Sure — full breakdown, or straight to the point?" };
+  }
   const safeTerm = term.replace(/["\\]/g, "");
   logMac("files.count.start", { term: textForLog(term), kind });
   let paths = [];
@@ -7371,7 +7443,9 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return createSpotifyPlaylistOnMac(spotifyCreatePlaylist.name, { addCurrent: spotifyCreatePlaylist.addCurrent });
   }
 
-  const createFolderIntent = parseCreateFolderIntent(raw);
+  // "create a redundant folder for the useless files" is the cleanup skill,
+  // not a request for an empty folder.
+  const createFolderIntent = parseFileCleanupIntent(raw) ? null : parseCreateFolderIntent(raw);
   if (createFolderIntent) {
     logMac("delegate.create_folder_intent", {
       raw: textForLog(raw),
@@ -7607,6 +7681,13 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     if (cleanupIntent.action === "recover") return recoverRedundantItem(cleanupIntent.phrase);
     if (cleanupIntent.action === "list") return listRedundantContents();
     if (cleanupIntent.action === "open") return openRedundantFolder();
+    if (cleanupIntent.action === "delete_current") return deleteCurrentFinderFolder();
+    if (cleanupIntent.action === "create_direct") {
+      sendTaskProgress({ status: "thinking", text: "Scanning for what you don't need" });
+      const items = await scanCleanupCandidates();
+      if (!items.length) return { ok: true, say: "I looked — nothing is stale enough to park. Your stuff is in use." };
+      return createRedundantFolder(items.map((c) => ({ name: c.name, full: c.full, size: c.size, isDir: c.isDir, isCapture: c.isCapture })));
+    }
     if (cleanupIntent.action === "screenshots") return cleanScreenshots();
     return suggestFileCleanup();
   }
