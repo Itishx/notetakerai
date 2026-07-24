@@ -1818,6 +1818,14 @@ async function handlePendingMacWorkflow(raw) {
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
+  if (pending.type === "xclip" && pending.stage === "xclip_confirm") {
+    clearPendingMacWorkflow();
+    if (/\b(?:yes|yeah|yep|ship|send|post|go|do it)\b/i.test(cleanPrompt(raw))) {
+      return postClipToX(pending.data?.caption || "");
+    }
+    return { ok: true, say: "Holding it. The clip stays with me if you change your mind." };
+  }
+
   if (pending.type === "cleanup" && pending.stage === "count_style") {
     clearPendingMacWorkflow();
     const brief = /\b(?:point|short|quick|cut|straight|just|tldr|summary)\b/i.test(cleanPrompt(raw));
@@ -2823,6 +2831,174 @@ async function requireTouchId(reason) {
   } catch (error) {
     logMac("touchid.failed", { error });
     return null;
+  }
+}
+
+// ── X (@brainosays): stats, mentions, clip-and-tweet — thin voice layers
+// over the existing edge functions (x-status, x-post-media, dispatch). ──
+let lastXStats = null; // { followers, delta7d, at }
+let lastClip = null; // { path, at, seconds }
+let xPollTimer = null;
+
+async function fetchXStatus() {
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return null;
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/x-status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || `x-status ${response.status}`);
+    return data;
+  } catch (error) {
+    logMac("x.status.failed", { error });
+    return null;
+  }
+}
+
+async function pollXStats() {
+  const status = await fetchXStatus();
+  if (!status?.connected || status.followers?.count == null) return;
+  lastXStats = { followers: status.followers.count, delta7d: status.followers.delta7d ?? null, at: Date.now() };
+  sendToRenderer("braino-mac:x-stats", lastXStats);
+  logMac("x.stats", { followers: lastXStats.followers, delta7d: lastXStats.delta7d });
+}
+
+function startXStatsPolling() {
+  if (xPollTimer) clearInterval(xPollTimer);
+  setTimeout(() => void pollXStats(), 2 * 60 * 1000);
+  xPollTimer = setInterval(() => void pollXStats(), 45 * 60 * 1000);
+}
+
+async function speakXStats() {
+  sendTaskProgress({ status: "thinking", text: "Checking the X account" });
+  const status = await fetchXStatus();
+  if (!status) return { ok: false, say: "I could not reach X just now." };
+  if (!status.connected) return { ok: false, say: "The X account is not linked — connect it on the dashboard and I will keep the pulse." };
+  const parts = [];
+  if (status.followers?.count != null) {
+    const delta = status.followers.delta7d;
+    parts.push(`You are at ${status.followers.count} followers${delta != null && delta !== 0 ? `, ${delta > 0 ? "up" : "down"} ${Math.abs(delta)} this week` : ""}.`);
+  }
+  if (status.lastTweet) {
+    parts.push(`The last tweet has ${status.lastTweet.likes ?? 0} likes and ${status.lastTweet.replies ?? 0} replies.`);
+  }
+  if (status.mentions?.length) {
+    parts.push(`${status.mentions.length} recent mention${status.mentions.length > 1 ? "s" : ""} — ask me for mentions and I will read them.`);
+  }
+  if (!parts.length) parts.push("Connected, but X is being quiet about the numbers right now.");
+  return { ok: true, say: parts.join(" ") };
+}
+
+async function speakXMentions() {
+  sendTaskProgress({ status: "thinking", text: "Reading X mentions" });
+  const status = await fetchXStatus();
+  if (!status?.connected) return { ok: false, say: "The X account is not linked yet." };
+  const mentions = status.mentions || [];
+  if (!mentions.length) return { ok: true, say: "No fresh mentions. Quiet on the timeline." };
+  const spoken = mentions.slice(0, 3).map((m) => `${m.handle} says: ${String(m.text || "").replace(/https?:\/\/\S+/g, "").slice(0, 140)}`).join(". Next. ");
+  return { ok: true, say: `${mentions.length} mention${mentions.length > 1 ? "s" : ""}. ${spoken}` };
+}
+
+function parseXIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (/\b(?:any\s+)?mentions\b/i.test(source) || /\bwho(?:'s| is)? (?:talking|replying)\b.*\b(?:x|twitter)\b/i.test(source)) return { action: "mentions" };
+  if (/\b(?:how(?:'s| is| are)?|hows)\b.*\b(?:x account|twitter|followers?)\b/i.test(source)
+    || /\b(?:x|twitter)\b.*\b(?:stats|doing|numbers|followers?)\b/i.test(source)
+    || /\bfollower (?:count|numbers?)\b/i.test(source)) return { action: "stats" };
+  const clipMatch = source.match(/\b(?:record|take|grab|start)\s+(?:a\s+)?clip(?:\s+(?:of|for)\s+(\d{1,2})\s*seconds?)?/i);
+  if (clipMatch) return { action: "clip", seconds: Math.min(60, Math.max(5, Number(clipMatch[1]) || 15)) };
+  const tweetClip = source.match(/\b(?:tweet|post)\s+(?:it|the clip|that)\s+(?:saying|with caption|with the caption|captioned)\s+(.+)$/i);
+  if (tweetClip) return { action: "tweet_clip", caption: tweetClip[1].trim() };
+  return null;
+}
+
+async function recordScreenClip(seconds) {
+  const dir = path.join(AUTH_STORE_DIR, "clips");
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+  const clipPath = path.join(dir, `clip-${Date.now()}.mp4`);
+  sendTaskProgress({ status: "thinking", text: `Recording ${seconds}s of screen` });
+  try {
+    await execFileP("/usr/sbin/screencapture", ["-x", "-v", "-V", String(seconds), clipPath], { timeout: (seconds + 20) * 1000 });
+    if (!fs.existsSync(clipPath)) throw new Error("no clip file");
+    const mb = Math.round(fs.statSync(clipPath).size / (1024 * 1024));
+    lastClip = { path: clipPath, at: Date.now(), seconds };
+    logMac("x.clip.recorded", { seconds, mb });
+    return { ok: true, say: `Clip is in the can, ${seconds} seconds. Say tweet it saying, and then your caption.` };
+  } catch (error) {
+    logMac("x.clip.failed", { error });
+    return { ok: false, say: "The recording did not take. Screen Recording permission may need a look." };
+  }
+}
+
+async function tweetLastClip(caption) {
+  if (!lastClip || Date.now() - lastClip.at > 30 * 60 * 1000) {
+    return { ok: false, say: "There is no fresh clip. Say record a clip first." };
+  }
+  if (!caption) return { ok: false, say: "Give me the caption — tweet it saying, then your words." };
+  setPendingMacWorkflow({ type: "xclip", stage: "xclip_confirm", data: { caption } });
+  return { ok: true, say: `Caption reads: ${caption}. Ship it to X?` };
+}
+
+async function postClipToX(caption) {
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, say: "I am not signed in enough to post." };
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  sendTaskProgress({ status: "thinking", text: "Uploading the clip" });
+  try {
+    const bytes = fs.readFileSync(lastClip.path);
+    const objectPath = `mac-clips/${path.basename(lastClip.path)}`;
+    const uploadResponse = await fetch(`${base}/storage/v1/object/x-post-media/${objectPath}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "video/mp4",
+        "x-upsert": "true",
+      },
+      body: bytes,
+    });
+    if (!uploadResponse.ok) throw new Error(`storage upload ${uploadResponse.status}`);
+    const mediaUrl = `${base}/storage/v1/object/public/x-post-media/${objectPath}`;
+    const auth = authStatusPayload();
+    sendTaskProgress({ status: "thinking", text: "Posting to X" });
+    const insertResponse = await fetch(`${base}/rest/v1/scheduled_x_posts`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        user_id: auth?.userId || undefined,
+        content: caption,
+        scheduled_at: new Date().toISOString(),
+        media_url: mediaUrl,
+        thread_mode: false,
+      }),
+    });
+    const inserted = await insertResponse.json().catch(() => null);
+    if (!insertResponse.ok) throw new Error(`insert ${insertResponse.status}: ${JSON.stringify(inserted)?.slice(0, 120)}`);
+    const dispatchResponse = await fetch(`${base}/functions/v1/dispatch-scheduled-x-posts`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const dispatched = await dispatchResponse.json().catch(() => ({}));
+    logMac("x.clip.posted", { caption: textForLog(caption), posted: dispatched?.posted, failed: dispatched?.failed });
+    if (dispatched?.posted >= 1) return { ok: true, say: "It is live on X. Clip and all." };
+    if (dispatched?.failed >= 1) return { ok: false, say: "The post reached the queue but X rejected it — video uploads can be picky. It will retry from the dashboard." };
+    return { ok: true, say: "Queued for X — it will fire on the next dispatch pass." };
+  } catch (error) {
+    logMac("x.clip.post_failed", { error });
+    return { ok: false, say: "Posting stumbled. The clip is safe, try tweet it again." };
   }
 }
 
@@ -7716,6 +7892,15 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return runMacConversation(raw);
   }
 
+  const xIntent = parseXIntent(raw);
+  if (xIntent) {
+    logMac("delegate.x_intent", { raw: textForLog(raw), action: xIntent.action });
+    if (xIntent.action === "stats") return speakXStats();
+    if (xIntent.action === "mentions") return speakXMentions();
+    if (xIntent.action === "clip") return recordScreenClip(xIntent.seconds);
+    if (xIntent.action === "tweet_clip") return tweetLastClip(xIntent.caption);
+  }
+
   const mesaIntent = parseMesaIntent(raw);
   if (mesaIntent) {
     logMac("delegate.mesa_intent", { raw: textForLog(raw) });
@@ -7904,7 +8089,33 @@ ipcMain.handle("braino-mac:get-config", () => {
   };
 });
 
-ipcMain.handle("braino-mac:delegate", async (_event, prompt) => runDelegate(prompt));
+// Every feature run gets one complete audit line: what was heard, what was
+// answered, how long it took, and a deterministic efficiency score —
+// 100 base for a clean fast run, docked for slowness, floored on failure.
+function featureEfficiencyPct(ok, durationMs) {
+  if (!ok) return 25;
+  if (durationMs <= 2000) return 100;
+  if (durationMs <= 5000) return 92;
+  if (durationMs <= 10000) return 82;
+  if (durationMs <= 20000) return 70;
+  return 60;
+}
+
+ipcMain.handle("braino-mac:delegate", async (_event, prompt) => {
+  const startedAt = Date.now();
+  const result = await runDelegate(prompt);
+  const durationMs = Date.now() - startedAt;
+  const ok = Boolean(result?.ok);
+  logMac("feature.executed", {
+    heard: textForLog(String(prompt || "").slice(0, 160)),
+    responded: textForLog(String(result?.say || "").slice(0, 160)),
+    ok,
+    durationMs,
+    efficiencyPct: featureEfficiencyPct(ok, durationMs),
+    pendingWorkflow: result?.delegateState?.workflowStage || "",
+  });
+  return result;
+});
 
 ipcMain.handle("braino-mac:demo-action", async (_event, action, payload) => runMacDemoAction(action, payload));
 
@@ -8055,6 +8266,7 @@ app.whenReady().then(() => {
   registerHotkeys();
   startSwiftHotkeyHelper();
   if (loadWakeWordState()) startBrainoWakeWord();
+  startXStatsPolling();
   startDesktopOverlaySync();
   screen.on("display-metrics-changed", () => void refreshDesktopOverlayContext("display-metrics-changed"));
   screen.on("display-added", () => void refreshDesktopOverlayContext("display-added"));

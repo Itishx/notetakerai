@@ -86,6 +86,19 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Voice window manager ("put chrome on the left", "maximize this", "snap cursor to the right") | 🟡 | Fixed: "move cursor to the left" was hijacked by the move-FILE intent upstream (guard added); maximize half-applying fixed with the size→position→size double-set (apps clamp the first size while off-screen). Dictation guard: app names capped at 2 words |
 | Selected-text superpowers ("fix/rewrite/translate/summarize/read ... selected/highlighted/this sentence") | 🟡 | AXSelectedText first; when blind (web content — the exact case that failed in Claude), falls back to Cmd+C clipboard capture, and write-back falls back to Cmd+V paste over the still-live selection. "read the selected text" speaks it verbatim. Vision-describe prompt now COMMITS to opinions when asked ("which design do you like") instead of deflecting |
 
+## X (@brainosays) — shipped 07-25, thin voice layer over existing edge stack
+| Capability | Status | Notes |
+|---|---|---|
+| Stats by voice ("how's the X account doing", "how many followers") | 🟡 | One x-status call: followers + 7-day delta, last-tweet likes/replies, mention count |
+| Mentions readout ("any mentions") | 🟡 | Speaks top 3 recent mentions (handle + text, links stripped) from the same x-status payload |
+| Ambient notch pulse | 🟡 | Polls x-status 2min after boot then every 45min; "@brainosays · N (+Δ this week)" rides the notch ticker for 90s after each poll, priority below WhatsApp badge |
+| Clip-and-tweet ("record a clip of 20 seconds" → "tweet it saying ...") | 🟡 | screencapture -v -V records main display (5-60s, default 15) to app-support/clips; caption read back + confirmed ("ship it?") → upload to x-post-media storage bucket → insert scheduled_x_posts (now) → dispatch-scheduled-x-posts fires it. KNOWN RISK: dispatch uses X's simple media upload (built for images) — larger/longer videos may be rejected by X; failure is reported honestly and the post stays queued on the dashboard |
+
+## Observability
+| Capability | Status | Notes |
+|---|---|---|
+| Feature audit log with efficiency score | ✅ | Every delegate run logs one `feature.executed` line: heard (verbatim transcript), responded (spoken reply), ok, durationMs, efficiencyPct (100 ≤2s clean / 92 ≤5s / 82 ≤10s / 70 ≤20s / 60 slow / 25 failed), pending workflow stage. `grep feature.executed` in braino-mac.log = the whole session story |
+
 ## Files / Apps / Web
 | Capability | Status | Notes |
 |---|---|---|
