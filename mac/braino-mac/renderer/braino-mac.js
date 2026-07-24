@@ -335,8 +335,14 @@ function pickRoamTarget(now = performance.now()) {
 
 function setStatus(status, text) {
   statusPill.className = status;
-  // Voice visuals live on the notch (island + sonar) and the edge glow only:
-  // the walker keeps strolling and talking without duplicate listening cues.
+  lane.className = status;
+  // The walker owns the voice theatrics again — the notch stays out of voice.
+  walker.classList.toggle("voice-active", ["connecting", "listening", "hearing", "captured", "speaking"].includes(status));
+  walker.classList.toggle("connecting", status === "connecting");
+  walker.classList.toggle("listening", status === "listening");
+  walker.classList.toggle("hearing", status === "hearing");
+  walker.classList.toggle("captured", status === "captured");
+  walker.classList.toggle("speaking", status === "speaking");
   statusText.textContent = text;
   lastGlowStatus = status;
   updateEdgeGlow();
@@ -378,45 +384,18 @@ function updateNotchFace() {
   if (!notchFace) return;
   const visible = notchFaceEnabled && !herMode;
   notchFace.classList.toggle("on", visible);
-  const state = ["listening", "hearing"].includes(lastGlowStatus)
-    ? "listen"
-    : lastGlowStatus === "speaking"
-      ? "speak"
-      : "";
-  const busy = !state && Boolean(currentTaskLabel);
-  const music = !state && !busy && musicMode;
-  notchFace.classList.toggle("listen", visible && state === "listen");
-  notchFace.classList.toggle("speak", visible && state === "speak");
-  notchFace.classList.toggle("busy", visible && busy);
+  // The notch only carries what persists: his home (eyes) and now-playing.
+  // Voice and task moments belong to the walker's bubble, not here.
+  const music = musicMode;
   notchFace.classList.toggle("music", visible && music);
   notchFace.classList.toggle("home", walkerHome);
   if (!notchBootDone) return;
   notchFace.classList.remove("asleep");
-  // The notch is his instrument panel: the ticker says what matters now.
-  if (state === "listen") {
-    nfSetStatusText("listening");
-  } else if (state === "speak") {
-    nfSetStatusText("");
-  } else if (busy) {
-    nfSetStatusText(currentTaskLabel);
-  } else if (music) {
-    const line = [lastMusicInfo.track, lastMusicInfo.artist].filter(Boolean).join(" — ");
-    nfSetStatusText(line.slice(0, 42));
+  if (music) {
+    nfSetStatusText([lastMusicInfo.track, lastMusicInfo.artist].filter(Boolean).join(" · "));
   } else {
     nfSetStatusText("");
   }
-}
-
-function setTaskLabel(text, { linger = 0 } = {}) {
-  window.clearTimeout(taskLabelClearTimer);
-  currentTaskLabel = String(text || "").slice(0, 40);
-  if (linger > 0 && currentTaskLabel) {
-    taskLabelClearTimer = window.setTimeout(() => {
-      currentTaskLabel = "";
-      updateNotchFace();
-    }, linger);
-  }
-  updateNotchFace();
 }
 
 async function walkerGoHome() {
@@ -457,8 +436,24 @@ function toggleWalkerHome() {
 function nfSetStatusText(text) {
   const status = document.getElementById("nf-status");
   if (!status) return;
-  status.textContent = String(text || "");
-  status.classList.toggle("show", Boolean(text));
+  const value = String(text || "");
+  if (status.dataset.line !== value) {
+    status.dataset.line = value;
+    status.innerHTML = "";
+    const inner = document.createElement("span");
+    inner.className = "nf-status-inner";
+    inner.textContent = value;
+    status.appendChild(inner);
+    // Long titles glide back and forth instead of cramming.
+    requestAnimationFrame(() => {
+      const overflow = inner.scrollWidth - status.clientWidth;
+      if (overflow > 6) {
+        inner.style.setProperty("--nf-scroll", `-${overflow + 10}px`);
+        inner.classList.add("marquee");
+      }
+    });
+  }
+  status.classList.toggle("show", Boolean(value));
 }
 
 async function runNotchBoot() {
@@ -2267,8 +2262,6 @@ function flushRealtimeTranscript(reason) {
   clearRealtimeIdleTimer();
   markRealtimeActivity("accepted_transcript", { schedule: false });
   if (speaking) stopSpeechOutput();
-  // Heard-echo: flash your own words in the notch ticker so you know he got it.
-  if (!herMode) setTaskLabel(`“${transcript.slice(0, 34)}”`, { linger: 1700 });
   voiceTurnInFlight = true;
   void (async () => {
     try {
@@ -3385,10 +3378,6 @@ window.brainoMac.onAuthRequired(() => {
 window.brainoMac.onTaskProgress((progress) => {
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
   if (progress.text) setBubble(progress.text, 1200);
-  // Mission control: the notch ticker mirrors what he is doing.
-  if (progress.status === "thinking" && progress.text) setTaskLabel(progress.text);
-  else if (progress.status === "done") setTaskLabel(progress.text || "done", { linger: 1600 });
-  else if (["ready", "error"].includes(progress.status)) setTaskLabel("");
 });
 window.brainoMac.onSpeechTranscript((speech) => {
   if (speech.status === "ready") {

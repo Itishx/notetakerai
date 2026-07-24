@@ -401,18 +401,33 @@ body {
 
 #nf-status {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 5px;
+  left: 16px;
+  right: 16px;
+  bottom: 6px;
   text-align: center;
   font-family: ui-monospace, Menlo, monospace;
-  font-size: 8.5px;
-  letter-spacing: 0.2em;
+  font-size: 9px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(255, 240, 235, 0.85);
-  text-shadow: 0 1px 3px rgba(120, 30, 24, 0.5);
+  color: rgba(255, 240, 235, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
   opacity: 0;
   transition: opacity 0.3s ease;
+}
+
+#nf-status .nf-status-inner {
+  display: inline-block;
+}
+
+#nf-status .nf-status-inner.marquee {
+  animation: nfMarquee 7s ease-in-out infinite alternate;
+}
+
+@keyframes nfMarquee {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(var(--nf-scroll, -40px)); }
 }
 
 #nf-status.show {
