@@ -6363,6 +6363,42 @@ ipcMain.on("braino-mac:set-mouse-passthrough", (_event, passthrough) => {
   dockWindow.setIgnoreMouseEvents(Boolean(passthrough), { forward: true });
 });
 
+let personaBundleCache = { at: 0, data: null };
+
+ipcMain.handle("braino-mac:persona-bundle", async () => {
+  if (personaBundleCache.data && Date.now() - personaBundleCache.at < 10 * 60 * 1000) {
+    return personaBundleCache.data;
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return null;
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/persona-bundle`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: "{}",
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.persona) {
+      logMac("persona.bundle.failed", { status: response.status, error: data?.error || null });
+      return personaBundleCache.data;
+    }
+    personaBundleCache = { at: Date.now(), data };
+    logMac("persona.bundle.loaded", {
+      personaChars: String(data.persona || "").length,
+      contextChars: String(data.userContext || "").length,
+    });
+    return data;
+  } catch (error) {
+    logMac("persona.bundle.error", { error });
+    return personaBundleCache.data;
+  }
+});
+
 ipcMain.handle("braino-mac:tts-config", () => ({
   ok: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
   endpoint: SUPABASE_URL ? `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/fish-audio-tts` : "",

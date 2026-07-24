@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   stopNativeListen: () => ipcRenderer.invoke("braino-mac:native-listen-stop"),
   transcribeAudio: (payload) => ipcRenderer.invoke("braino-mac:transcribe-audio", payload),
   setMousePassthrough: (passthrough) => ipcRenderer.send("braino-mac:set-mouse-passthrough", Boolean(passthrough)),
+  personaBundle: () => ipcRenderer.invoke("braino-mac:persona-bundle"),
   ttsConfig: () => ipcRenderer.invoke("braino-mac:tts-config"),
   tts: (text, referenceId) => ipcRenderer.invoke("braino-mac:tts", text, referenceId || ""),
   systemSay: (text) => ipcRenderer.invoke("braino-mac:system-say", text),

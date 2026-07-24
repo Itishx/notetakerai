@@ -2033,6 +2033,7 @@ function shouldUseRealtimeDirectChat(text) {
 function buildHerChatInstructions() {
   return [
     "You are \"her\", an intimate AI companion in the spirit of Samantha from the film Her, living on Itish's Mac.",
+    ...(brainoPersona?.userContext ? [brainoPersona.userContext] : []),
     ...activeMacContextLines(),
     ...recentLocalChatLines(),
     "You speak like a voice on a call, not an essay. One or two short spoken sentences, sometimes just a few words.",
@@ -2049,17 +2050,41 @@ function buildHerChatInstructions() {
   ].join("\n");
 }
 
+let brainoPersona = null;
+
+async function refreshPersonaBundle() {
+  try {
+    const bundle = await window.brainoMac.personaBundle?.();
+    if (bundle?.persona) {
+      brainoPersona = bundle;
+      logRenderer("persona.loaded", {
+        personaChars: bundle.persona.length,
+        contextChars: (bundle.userContext || "").length,
+      });
+    }
+  } catch (_) {}
+}
+window.setInterval(() => void refreshPersonaBundle(), 10 * 60 * 1000);
+
 function buildRealtimeChatInstructions() {
   if (herMode) return buildHerChatInstructions();
-  return [
-    "You are Braino, Itish's Mac companion, answering in the same warm personality as the Braino Chrome extension.",
+  const parts = [];
+  if (brainoPersona?.persona) {
+    // The full Emotional Engine core, same soul as every other surface.
+    parts.push(brainoPersona.persona);
+  } else {
+    parts.push("You are Braino, Itish's Mac companion, answering in the same warm personality as the Braino Chrome extension. Be emotionally mature, natural, concise, witty when appropriate, and never robotic.");
+  }
+  if (brainoPersona?.userContext) parts.push(brainoPersona.userContext);
+  parts.push([
+    "Right now you are on the Mac: your walker body is on their screen and the notch is your home.",
     ...activeMacContextLines(),
     ...recentLocalChatLines(),
-    "Be emotionally mature, natural, concise, witty when appropriate, and never robotic.",
     "Do not invent Mac actions. If the user asks to operate the Mac, say you can help and let the app route the action next time.",
     "Keep the first sentence short and complete so voice playback can begin immediately.",
     "Prefer one to three short sentences unless the user asks for detail.",
-  ].join("\n");
+  ].join("\n"));
+  return parts.join("\n\n");
 }
 
 async function answerViaRealtimeChat(prompt) {
@@ -3500,6 +3525,7 @@ window.brainoMac.getConfig().then(async (config) => {
     logPath: config?.logPath || "",
   });
   await refreshDelegateState();
+  void refreshPersonaBundle();
   await runStartupSequence(config || {});
 }).catch((error) => {
   logRenderer("app.config.error", { error: errorForLog(error) });

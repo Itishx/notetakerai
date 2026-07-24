@@ -17,6 +17,10 @@ entrypoint = "./functions/chat/chat-about-notes/index.ts"
 entrypoint = "./functions/chat/vision-point/index.ts"
 verify_jwt = false
 
+[functions.persona-bundle]
+entrypoint = "./functions/chat/persona-bundle/index.ts"
+verify_jwt = false
+
 [functions.save-note]
 entrypoint = "./functions/chat/save-note/index.ts"
 

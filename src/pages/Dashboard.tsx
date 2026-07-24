@@ -5518,10 +5518,10 @@ export default function Dashboard() {
                     <div className="mb-4 flex items-start justify-between gap-4">
                       <div>
                         <h3 style={serifStyle} className="text-[24px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
-                          Overall <em className="text-[var(--sb-accent-deep)]">memory.</em>
+                          What Braino should <em className="text-[var(--sb-accent-deep)]">know about you.</em>
                         </h3>
                         <p className="mt-2 max-w-[520px] text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
-                          This is Braino&apos;s always-on understanding of who you are outside of any single integration.
+                          Tell him as much or as little as you want. The more real it is, the more he feels like yours: he will reference it, tease you with it, and keep you accountable to it.
                         </p>
                       </div>
                       <Badge
@@ -5539,9 +5539,16 @@ export default function Dashboard() {
                         if (overallMemorySaved) setOverallMemorySaved(false);
                         if (overallMemoryError) setOverallMemoryError(null);
                       }}
-                      placeholder={"Who are you? What should Braino consistently know about you?\n\nExample:\nI’m a CS student building AI products. I prefer concise answers, direct feedback, and practical examples. I care about startups, product design, and growth. If X automation is enabled, treat that persona as an extension of this broader identity."}
+                      placeholder={"Who are you, really? What are you building, what are you afraid of, what should he hold you to?\n\nYou can keep it practical (“I prefer concise answers and direct feedback”) or go deeper (“I struggle to ship, call me out when I start rebuilding instead of launching”). He works with whatever you give him."}
                       className="min-h-[240px] rounded-[16px] border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13.5px] leading-relaxed"
                     />
+
+                    <div className="mt-3 rounded-[14px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                      <p className="text-[12.5px] leading-relaxed text-[var(--sb-ink-3)]">
+                        <span className="font-medium text-[var(--sb-ink-2)]">We don&apos;t care about your data.</span>{" "}
+                        Truly. Nobody here reads this and nobody ever will; it exists so Braino knows you and you feel a little lighter having said it somewhere. This is not about forming a dependency on an app. It is about a companion who actually knows the person he sits with. The founder filled his in first.
+                      </p>
+                    </div>
 
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                       <div style={monoStyle} className="text-[11px] text-[var(--sb-ink-4)]">
