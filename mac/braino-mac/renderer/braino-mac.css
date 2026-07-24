@@ -420,9 +420,12 @@ body {
   50% { box-shadow: 0 0 34px rgba(84, 222, 138, 0.85); }
 }
 
-/* Privacy dot: a quiet coral point whenever the mic session is live. */
+/* Privacy dot: a quiet coral point whenever the mic session is live.
+   z-index matters: without it the dot paints UNDER the black cover (z2)
+   and is invisible in every state — which is exactly how it shipped broken. */
 #notch-face .nf-privacy {
   position: absolute;
+  z-index: 5;
   right: 10px;
   bottom: 10px;
   width: 5px;
@@ -444,6 +447,14 @@ body {
 /* Armed for the wake word: dim, steady, gray — a deliberately different look
    from the bright coral pulse, so it reads as "listening on-device, nothing
    sent" rather than "a live cloud session is streaming your voice." */
+/* Over the music light show a 5px dot drowns in the glow — go bigger with a
+   dark halo so "realtime is live" stays legible mid-party. */
+#notch-face.music.mic-live .nf-privacy {
+  width: 8px;
+  height: 8px;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.6), 0 0 10px rgba(232, 120, 110, 1);
+}
+
 #notch-face.wake-armed:not(.mic-live) .nf-privacy {
   opacity: 0.7;
   background: rgba(210, 210, 210, 0.8);
