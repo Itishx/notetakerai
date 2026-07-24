@@ -501,24 +501,35 @@ async function runNotchBoot() {
   setNotchFaceEnabled(true);
   updateNotchFace();
   notchFace?.classList.add("asleep");
-  await wait(650);
+  // Act 1: darkness. Something is in there.
+  await wait(700);
+  // Act 2: the notch begins to glow — life stirring before a single word.
+  notchFace?.classList.add("nf-wake");
+  await wait(2000);
+  notchFace?.classList.remove("nf-wake");
+  // Act 3: the island extends and speaks its first word.
   notchFace?.classList.add("nf-auth");
   nfSetStatusText("authenticating");
+  const authStarted = Date.now();
   let result;
   try {
     result = await window.brainoMac.ensureAuth("startup");
   } catch (error) {
     result = { ok: false, error: error?.message || "Braino sign-in failed." };
   }
+  // Even an instant token gets a real authenticating beat.
+  const elapsed = Date.now() - authStarted;
+  if (elapsed < 2100) await wait(2100 - elapsed);
   notchFace?.classList.remove("nf-auth");
   notchFace?.classList.add(result?.ok ? "nf-auth-ok" : "nf-auth-err");
   nfSetStatusText(result?.ok ? "authenticated" : "auth failed");
-  await wait(950);
+  await wait(1200);
   notchFace?.classList.remove("nf-auth-ok", "nf-auth-err");
   nfSetStatusText("");
   if (result?.ok) {
+    // Act 4: his eyes open.
     notchFace?.classList.remove("asleep");
-    await wait(750);
+    await wait(850);
   }
   return result || { ok: false, error: "Braino sign-in failed." };
 }

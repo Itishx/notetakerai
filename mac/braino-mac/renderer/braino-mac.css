@@ -413,6 +413,18 @@ body {
   d: path("M 54 44 Q 60 46.5 66 44");
 }
 
+/* Boot act 2: the notch stirs — glow builds from nothing before any words. */
+#notch-face.nf-wake .nf-pill {
+  animation: nfWakeGlow 2s ease-in-out forwards;
+}
+
+@keyframes nfWakeGlow {
+  0% { box-shadow: 0 0 0 rgba(232, 120, 110, 0); }
+  35% { box-shadow: 0 0 10px rgba(232, 120, 110, 0.25); }
+  65% { box-shadow: 0 0 22px rgba(232, 120, 110, 0.5), 0 0 44px rgba(243, 154, 66, 0.18); }
+  100% { box-shadow: 0 0 30px rgba(232, 120, 110, 0.7), 0 0 60px rgba(243, 154, 66, 0.3); }
+}
+
 /* Boot: authenticating — island extends, cool pulse, status caption. */
 #notch-face.nf-auth .nf-pill {
   width: 250px;
