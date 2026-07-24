@@ -9,7 +9,7 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Dock mascot, drag, wakeup climb | ✅ | |
 | Auth via browser relay | ✅ | |
 | Edge glow (screen perimeter radiance) | 🟡 | Blue listen / coral speak / faint think; replaced notch glow |
-| Music mode (headphones + real-tempo light show + walker auto-homes) | 🟡 | Walker says "let me rest," retreats into notch, THEN dance+glow start; real mascot dances the Twist in notch via Spotify's own audio-features tempo/energy/valence (verified live: 96-130bpm tracks); YouTube has no tempo data so falls back to generic groove |
+| Music mode (headphones + real-tempo light show + walker auto-homes) | 🟡 | Walker says "let me rest," retreats into notch, THEN dance+glow start; real mascot dances the Twist in notch via Spotify's own audio-features tempo/energy/valence (verified live: 96-130bpm tracks); YouTube has no tempo data so falls back to generic groove; cross-checks Spotify's active-device type so a phone/speaker elsewhere on the account doesn't falsely trigger it, falls through to the YouTube-tab check when Spotify is confirmed remote |
 | Notch (home eyes, now-playing marquee, birth sequence) | 🟡 | Black island fused to measured housing; double-Space = walker goes home |
 | Notch live activities: timers, calendar peek, WA badge, privacy dot | 🔨 | "remind me in 20 min…"; EventKit probe 5-min poll; badge when listener off |
 | Her mode (Samantha takeover) | 🟡 | Cmd+Shift+H or "her mode"; own Fish voice |

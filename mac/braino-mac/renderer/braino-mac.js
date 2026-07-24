@@ -108,7 +108,15 @@ function ensureNotchDancer() {
   if (nfDanceRoot) return nfDanceRoot;
   const host = document.querySelector("#notch-face .nf-dancer");
   if (!host) return null;
-  host.innerHTML = String(window.brainoMac.getWalkerSvg() || "").replaceAll("__sbwk_", "__nfd_");
+  // Rename BOTH the element ids (__sbwk_ -> __nfd_, already done) AND the
+  // gradient defs (sbwk-fill/dark/glow) — the gradients are unprefixed and
+  // were colliding with the big walker's own defs of the same name, which is
+  // why he rendered white/uncolored the moment music mode cloned this in.
+  host.innerHTML = String(window.brainoMac.getWalkerSvg() || "")
+    .replaceAll("__sbwk_", "__nfd_")
+    .replaceAll("sbwk-fill", "nfd-sbwk-fill")
+    .replaceAll("sbwk-dark", "nfd-sbwk-dark")
+    .replaceAll("sbwk-glow", "nfd-sbwk-glow");
   const svg = host.querySelector("svg");
   svg?.removeAttribute("width");
   svg?.removeAttribute("height");

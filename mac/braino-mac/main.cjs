@@ -2888,6 +2888,25 @@ async function fetchAudioFeaturesForUri(uri) {
   return features;
 }
 
+// The Mac Spotify app's own AppleScript "player state" mirrors the whole
+// Spotify Connect session, not this machine specifically: if playback moved
+// to an iPhone, a speaker, or another computer, the local app can still say
+// "playing" with zero sound coming out of this Mac. Confirm the account's
+// active device is actually this class of device ("Computer" — the type
+// Spotify uses for both the native app and the browser web player) before
+// trusting it; phones/speakers/TVs are definitively elsewhere.
+async function isSpotifyOnThisMac() {
+  try {
+    const result = await callSpotifyFunction("spotify-player-state", {});
+    if (!result.ok) return null; // API hiccup — don't punish a real local play for it
+    const device = result.activeDevice;
+    if (!device) return null;
+    return device.type === "Computer";
+  } catch (_) {
+    return null;
+  }
+}
+
 async function checkMusicState() {
   let playing = false;
   let source = "";
@@ -2897,11 +2916,16 @@ async function checkMusicState() {
   try {
     const state = await readSpotifyMacState();
     if (state.ok && /playing/i.test(state.state || "")) {
-      playing = true;
-      source = "spotify";
-      track = String(state.name || "").trim();
-      artist = String(state.artist || "").trim();
-      uri = String(state.uri || "").trim();
+      const onThisMac = await isSpotifyOnThisMac();
+      if (onThisMac === false) {
+        logMac("music.spotify.remote_device", { track: textForLog(state.name || "") });
+      } else {
+        playing = true;
+        source = "spotify";
+        track = String(state.name || "").trim();
+        artist = String(state.artist || "").trim();
+        uri = String(state.uri || "").trim();
+      }
     }
   } catch (_) {}
   if (!playing) {
