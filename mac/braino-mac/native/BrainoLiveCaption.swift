@@ -105,4 +105,5 @@ final class BrainoLiveCaption: NSObject {
   }
 }
 
-BrainoLiveCaption().start()
+let captioner = BrainoLiveCaption()
+captioner.start()

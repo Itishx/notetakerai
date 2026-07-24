@@ -2839,10 +2839,42 @@ async function requireTouchId(reason) {
 // the user's words form on screen AS they speak. Display-only — OpenAI's
 // transcript stays authoritative for routing. ──
 let swiftLiveCaption = null;
+const LIVE_CAPTION_BIN_PATH = path.join(__dirname, "native", "bin", "braino-live-caption");
+const LIVE_CAPTION_PLIST_PATH = path.join(__dirname, "native", "BrainoLiveCaption-Info.plist");
+
+async function ensureLiveCaptionBinary() {
+  // SFSpeechRecognizer under `xcrun swift` gets TCC-killed instantly: the
+  // interpreter has no NSSpeechRecognitionUsageDescription. A compiled binary
+  // with an embedded Info.plist has its own TCC identity and can prompt.
+  try {
+    const sourceStat = fs.statSync(LIVE_CAPTION_HELPER_PATH);
+    const binStat = fs.existsSync(LIVE_CAPTION_BIN_PATH) ? fs.statSync(LIVE_CAPTION_BIN_PATH) : null;
+    if (binStat && binStat.mtimeMs >= sourceStat.mtimeMs) return true;
+    fs.mkdirSync(path.dirname(LIVE_CAPTION_BIN_PATH), { recursive: true });
+    await execFileP("/usr/bin/swiftc", [
+      LIVE_CAPTION_HELPER_PATH, "-o", LIVE_CAPTION_BIN_PATH,
+      "-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", LIVE_CAPTION_PLIST_PATH,
+      "-O",
+    ], { timeout: 120000 });
+    await execFileP("/usr/bin/codesign", ["-s", "-", "-f", LIVE_CAPTION_BIN_PATH], { timeout: 20000 });
+    logMac("caption.binary.built", {});
+    return true;
+  } catch (error) {
+    logMac("caption.binary.build_failed", { error });
+    return fs.existsSync(LIVE_CAPTION_BIN_PATH);
+  }
+}
 
 function startLiveCaptions() {
-  if (swiftLiveCaption || !fs.existsSync(LIVE_CAPTION_HELPER_PATH)) return;
-  swiftLiveCaption = spawn("xcrun", ["swift", LIVE_CAPTION_HELPER_PATH], {
+  if (swiftLiveCaption) return;
+  void (async () => {
+    if (swiftLiveCaption || !(await ensureLiveCaptionBinary())) return;
+    startLiveCaptionProcess();
+  })();
+}
+
+function startLiveCaptionProcess() {
+  swiftLiveCaption = spawn(LIVE_CAPTION_BIN_PATH, [], {
     cwd: ROOT_DIR,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -3675,6 +3707,8 @@ async function checkAllTabsSnapshot() {
   sendToRenderer("braino-mac:tabs-snapshot", { tabs });
 }
 
+let lastJsOffLogAt = 0;
+
 async function findPlayingYouTubeTab() {
   // Returns "<kind>|<title>" where kind is "music" or "video" — a playing
   // reaction video / podcast must NOT start the dance party, only songs do.
@@ -3709,7 +3743,12 @@ end tell`;
     const { stdout } = await execFileP("/usr/bin/osascript", ["-e", "set jsOff to false\n" + script], { timeout: 6000 });
     const result = String(stdout || "").trim();
     if (result === "__jsoff__") {
-      logMac("music.youtube_scan.js_off", {});
+      // Polled constantly — remind once per 10 minutes, not every 8 seconds.
+      const now = Date.now();
+      if (now - lastJsOffLogAt > 10 * 60 * 1000) {
+        lastJsOffLogAt = now;
+        logMac("music.youtube_scan.js_off", {});
+      }
       return undefined; // same as "could not scan": caller falls back to the title heuristic
     }
     if (!result) return null;
@@ -4979,8 +5018,31 @@ function parseSpotifyShuffleRepeatIntent(raw) {
   const mentionsShuffle = /\bshuffle\b/i.test(source);
   const mentionsRepeat = /\b(?:repeat|loop)\b/i.test(source);
   if (!mentionsShuffle && !mentionsRepeat) return null;
+  // "repeat IT / that / what you said / the prompt" is asking Braino to say
+  // something again — it toggled Spotify repeat twice in the live logs.
+  // Music repeat needs music context or a bare on/off form.
+  if (mentionsRepeat && !mentionsShuffle) {
+    const speechRepeat = /\brepeat\s+(?:it|that|this|yourself|what you|the (?:prompt|question|answer|last))\b/i.test(source)
+      || /\bsay (?:it|that) again\b/i.test(source);
+    if (speechRepeat) return null;
+    const musicContext = /\b(?:song|track|music|playlist|spotify|mode)\b/i.test(source)
+      || /^(?:repeat|loop)(?:\s+(?:on|off))?$/i.test(source)
+      || /\bturn\s+(?:on|off)\b.*\b(?:repeat|loop)\b/i.test(source)
+      || /\b(?:repeat|loop)\b\s*(?:on|off)\b/i.test(source);
+    if (!musicContext) return null;
+  }
   const off = /\b(?:off|stop|disable|end|cancel)\b/i.test(source) || /\bturn\s+off\b/i.test(source);
   return { feature: mentionsShuffle ? "shuffling" : "repeating", enable: !off };
+}
+
+// "Repeat it" / "say that again" — re-speak the last thing he said.
+let lastDelegateSay = "";
+
+function parseRepeatSpeechIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  return /\brepeat\s+(?:it|that|this|yourself|what you (?:just )?said|the (?:prompt|question|answer|last (?:thing|one)))\b/i.test(source)
+    || /\bsay (?:it|that) again\b/i.test(source)
+    || /^(?:come again|what did you say)$/i.test(source);
 }
 
 function parseSpotifySeekIntent(raw) {
@@ -8061,6 +8123,13 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return runMacConversation(raw);
   }
 
+  if (parseRepeatSpeechIntent(raw)) {
+    logMac("delegate.repeat_speech_intent", { hasLast: Boolean(lastDelegateSay) });
+    return lastDelegateSay
+      ? { ok: true, say: lastDelegateSay }
+      : { ok: true, say: "I have not said anything worth repeating yet." };
+  }
+
   const xIntent = parseXIntent(raw);
   if (xIntent) {
     logMac("delegate.x_intent", { raw: textForLog(raw), action: xIntent.action });
@@ -8275,6 +8344,7 @@ ipcMain.handle("braino-mac:delegate", async (_event, prompt) => {
   const result = await runDelegate(prompt);
   const durationMs = Date.now() - startedAt;
   const ok = Boolean(result?.ok);
+  if (result?.say && String(result.say).trim()) lastDelegateSay = String(result.say).trim();
   logMac("feature.executed", {
     heard: textForLog(String(prompt || "").slice(0, 160)),
     responded: textForLog(String(result?.say || "").slice(0, 160)),

@@ -402,14 +402,18 @@ function markVoiceLatency(stage, data = {}) {
   if (stage === "transcript_completed") voiceLatencyTurn.transcriptCompletedAt = now;
   if (stage === "delegate_started") voiceLatencyTurn.delegateStartedAt = now;
   if (stage === "delegate_done") voiceLatencyTurn.delegateDoneAt = now;
-  if (stage === "first_audio" && !voiceLatencyTurn.firstAudioAt) voiceLatencyTurn.firstAudioAt = now;
+  let firstAudioJustSet = false;
+  if (stage === "first_audio" && !voiceLatencyTurn.firstAudioAt) {
+    voiceLatencyTurn.firstAudioAt = now;
+    firstAudioJustSet = true;
+  }
   logRenderer(`voice.latency.${stage}`, {
     ...voiceLatencySnapshot(),
     ...data,
   });
   // One Chrome-style summary per turn, at first audible reply: every segment
   // of the pipeline in ms, side by side, ready for optimization.
-  if (stage === "first_audio") {
+  if (firstAudioJustSet) {
     const t = voiceLatencyTurn;
     const seg = (from, to) => (from && to ? Math.round(to - from) : null);
     logRenderer("voice.latency.turn_summary", {
