@@ -804,23 +804,14 @@ async function runNotchBoot() {
 // announce itself and emerge). This keeps his physical appearance meaningful
 // instead of incidental, and sidesteps any hotkey conflict entirely since the
 // summon is voice-only, never bound to double-Control.
+// Kept simple on purpose (user call): boot is silent — no spoken greeting, no
+// auto-started session. Double-Control is the one and only way in and out of
+// realtime. The eyes opening after auth IS the greeting.
 async function runNotchGreeting(authResult) {
   notchFace?.classList.remove("asleep");
   if (!authResult?.ok) return;
   notchFace?.classList.add("nf-greet");
   window.setTimeout(() => notchFace?.classList.remove("nf-greet"), 1100);
-  const auth = await window.brainoMac.authStatus().catch(() => null);
-  const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
-  const greeting = firstName
-    ? `Hey, ${firstName}. How are you doing? Say come out whenever you want me out here with you.`
-    : "Hey. How are you doing? Say come out whenever you want me out here with you.";
-  setBubble(greeting.toLowerCase().slice(0, 60), 2600);
-  await speak(greeting);
-  // Back to basics: after the greeting he is ALREADY listening — you just
-  // answer him, no first double-Control needed. From here double-Control is
-  // purely the stop/start toggle. The greeting is awaited first so the mic
-  // can't hear his own voice and trip the barge-in.
-  if (!realtimeActive && !realtimeConnecting && !herMode) void startListening();
 }
 
 function nfScheduleBlink() {
@@ -3522,9 +3513,9 @@ async function runStartupSequence(config = {}) {
     movementMode = "dock";
     setStatus("connecting", "Starting");
     // He is born from the notch: closed eyes fade in → authenticate (~1s,
-    // green or red verdict) → eyes open + glow + spoken greeting, asking how
-    // the user is and how to summon him. He STAYS home until asked — no more
-    // automatic pop-out.
+    // green or red verdict) → eyes open. Silent boot — no spoken greeting, no
+    // auto voice session; Double-Control starts realtime. He STAYS home until
+    // summoned by voice.
     const authResult = await runNotchBoot();
     logRenderer("startup.auth.result", {
       ok: Boolean(authResult?.ok),
