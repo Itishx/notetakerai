@@ -187,11 +187,13 @@ body {
    rings · speaking = bigger island with voice bars. The top --nf-notch-h of the
    pill hides behind the physical notch; the face band lives below it. */
 #notch-face {
-  /* The macOS menu bar always paints over our overlay, so the face hangs from
-     the bar's bottom edge, fused to the physical notch above it. */
-  --nf-notch-h: 32px;
+  /* The window truly starts at screen y=0 (enableLargerThanScreen defeats the
+     menu-bar constraint) and our level is above the bar, so the pill occupies
+     the notch strip itself: its top --nf-notch-h hides behind the physical
+     housing, the face band lives on the chin below. */
+  --nf-notch-h: 33px;
   position: fixed;
-  top: var(--nf-notch-h);
+  top: 0;
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;
@@ -208,7 +210,7 @@ body {
   position: relative;
   margin: 0 auto;
   width: 190px;
-  height: 46px;
+  height: calc(var(--nf-notch-h) + 36px);
   border-radius: 0 0 18px 18px;
   overflow: hidden;
   background: linear-gradient(180deg, #F6A8A2, #E8786E 55%, #C9544A);
@@ -221,7 +223,7 @@ body {
 
 #notch-face.listen .nf-pill {
   width: 250px;
-  height: 58px;
+  height: calc(var(--nf-notch-h) + 44px);
   border-radius: 0 0 26px 26px;
   box-shadow: 0 0 20px rgba(232, 120, 110, 0.3);
 }
@@ -229,7 +231,7 @@ body {
 /* Final design: speaking keeps the island size, with a simple talking mouth. */
 #notch-face.speak .nf-pill {
   width: 250px;
-  height: 58px;
+  height: calc(var(--nf-notch-h) + 44px);
   border-radius: 0 0 26px 26px;
   box-shadow: 0 0 34px rgba(232, 120, 110, 0.5);
 }
@@ -243,7 +245,10 @@ body {
 
 #notch-face .nf-band {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: var(--nf-notch-h);
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -303,6 +308,59 @@ body {
 #notch-face .nf-eye {
   transform-box: fill-box;
   transform-origin: center;
+  transition: transform 0.55s ease;
+}
+
+/* Asleep / dozing: eyes closed. Used during boot (before auth completes) and
+   whenever the walker is out roaming with nothing happening — one soul, so the
+   home face rests while the body is away. */
+#notch-face.asleep .nf-eye {
+  transform: scaleY(0.08);
+}
+
+#notch-face.asleep #nf-mouth-idle {
+  d: path("M 54 44 Q 60 46.5 66 44");
+}
+
+/* Boot: authenticating — island extends, cool pulse, status caption. */
+#notch-face.nf-auth .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  animation: nfAuthPulse 1.3s ease-in-out infinite;
+}
+
+#notch-face.nf-auth-ok .nf-pill {
+  box-shadow: 0 0 30px rgba(84, 222, 138, 0.75);
+}
+
+#notch-face.nf-auth-err .nf-pill {
+  box-shadow: 0 0 30px rgba(255, 92, 92, 0.75);
+}
+
+@keyframes nfAuthPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(122, 162, 255, 0.35); }
+  50% { box-shadow: 0 0 30px rgba(122, 162, 255, 0.7); }
+}
+
+#nf-status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 5px;
+  text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 235, 0.85);
+  text-shadow: 0 1px 3px rgba(120, 30, 24, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#nf-status.show {
+  opacity: 1;
 }
 
 #notch-face.blink .nf-eye {
@@ -315,7 +373,7 @@ body {
 
 #notch-face .nf-sonar {
   position: absolute;
-  top: 30px;
+  top: calc(var(--nf-notch-h) + 10px);
   left: 50%;
   width: 2px;
   height: 2px;

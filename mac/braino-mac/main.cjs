@@ -898,6 +898,9 @@ function createDockWindow() {
     // stays visible over fullscreen apps. The notch face lives in its own window
     // because panels get clamped below the menu bar.
     type: "panel",
+    // Without this, any setBounds after show lets macOS constrain the frame
+    // below the menu bar (verified empirically) — which exiles notch UI.
+    enableLargerThanScreen: true,
     width: initialBounds.width,
     height: initialBounds.height,
     x: initialBounds.x,

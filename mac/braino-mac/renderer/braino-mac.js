@@ -267,11 +267,15 @@ function applyDisplayMetrics(metrics, options = {}) {
   // Menu bar height == the physical notch depth on notched Macs; the face's top
   // that much hides behind the housing so only the chin band shows.
   const menuBarH = Math.max(24, (displayMetrics.workArea?.y ?? 0) - (displayMetrics.bounds?.y ?? 0)) || 32;
-  // macOS may quietly seat the panel below the menu bar (getBounds still claims
-  // y=0, but window.screenY tells the truth) — anchor the face to the bar's
-  // bottom edge in SCREEN space, wherever our window actually begins.
-  const faceTop = Math.max(0, menuBarH - (window.screenY || 0));
-  document.getElementById("notch-face")?.style.setProperty("--nf-notch-h", `${faceTop}px`);
+  // One formula, both worlds: the pill starts at the window top; its inner
+  // "hidden behind the physical notch" offset is however much of the menu bar
+  // strip our window actually covers (window.screenY is the truth; with
+  // enableLargerThanScreen we sit at 0 and truly swallow the notch, and if
+  // macOS ever seats us lower the face gracefully hangs below the bar).
+  const winY = Math.max(0, window.screenY || 0);
+  const inner = Math.max(0, menuBarH - winY);
+  document.getElementById("notch-face")?.style.setProperty("--nf-notch-h", `${inner}px`);
+  logRenderer("nf.anchor", { menuBarH, winY, inner });
   const displayChanged = Boolean(options.displayChanged || (previousDisplayId && nextDisplayId && previousDisplayId !== nextDisplayId));
   const dock = getDockBounds();
   if (movementMode === "dock") {
@@ -366,6 +370,8 @@ const nfPupilR = document.getElementById("nf-pupil-r");
 let notchFaceEnabled = true;
 let nfBlinkTimer = 0;
 
+let notchBootDone = false;
+
 function updateNotchFace() {
   if (!notchFace) return;
   const visible = notchFaceEnabled && !herMode;
@@ -377,6 +383,65 @@ function updateNotchFace() {
       : "";
   notchFace.classList.toggle("listen", visible && state === "listen");
   notchFace.classList.toggle("speak", visible && state === "speak");
+  // One soul: while the walker is out roaming and nothing is happening, the
+  // home face dozes. Voice or music snaps it awake. Boot manages sleep itself.
+  if (notchBootDone) {
+    notchFace.classList.toggle("asleep", visible && !state && !musicMode);
+  }
+}
+
+function nfSetStatusText(text) {
+  const status = document.getElementById("nf-status");
+  if (!status) return;
+  status.textContent = String(text || "");
+  status.classList.toggle("show", Boolean(text));
+}
+
+async function runNotchBoot() {
+  setNotchFaceEnabled(true);
+  updateNotchFace();
+  notchFace?.classList.add("asleep");
+  await wait(650);
+  notchFace?.classList.add("nf-auth");
+  nfSetStatusText("authenticating");
+  let result;
+  try {
+    result = await window.brainoMac.ensureAuth("startup");
+  } catch (error) {
+    result = { ok: false, error: error?.message || "Braino sign-in failed." };
+  }
+  notchFace?.classList.remove("nf-auth");
+  notchFace?.classList.add(result?.ok ? "nf-auth-ok" : "nf-auth-err");
+  nfSetStatusText(result?.ok ? "authenticated" : "auth failed");
+  await wait(950);
+  notchFace?.classList.remove("nf-auth-ok", "nf-auth-err");
+  nfSetStatusText("");
+  if (result?.ok) {
+    notchFace?.classList.remove("asleep");
+    await wait(750);
+  }
+  return result || { ok: false, error: "Braino sign-in failed." };
+}
+
+async function runNotchDescent(authResult) {
+  const dock = getDockBounds();
+  const startX = Math.round(window.innerWidth / 2 - W / 2);
+  const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
+  walker.classList.add("visible");
+  setPosition(startX, faceH + 42, { allowOffscreen: true });
+  dirX = 1;
+  const landingX = clamp(startX, dock.minX, dock.maxX);
+  await new Promise((resolve) => {
+    scriptedWalk = { x: landingX, y: dock.y, speed: 290, resolve };
+  });
+  targetX = landingX;
+  targetY = dock.y;
+  const auth = await window.brainoMac.authStatus().catch(() => null);
+  const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
+  if (authResult?.ok) {
+    setBubble(firstName ? `hello, ${firstName}.` : "hello.", 2400);
+    setWave(true);
+  }
 }
 
 function nfScheduleBlink() {
@@ -451,6 +516,7 @@ function setMusicMode(on) {
     notchNotes?.replaceChildren();
   }
   updateEdgeGlow();
+  updateNotchFace();
 }
 
 function updateFloatingUi() {
@@ -2952,12 +3018,17 @@ async function runStartupSequence(config = {}) {
     applyDisplayMetrics(config.displayMetrics);
     movementMode = "dock";
     setStatus("connecting", "Starting");
-    const authResult = await runWakeupClimb(config);
+    // He is born from the notch: fill → authenticate (island pulse, green or
+    // red verdict) → eyes open → step out and walk down to the Dock.
+    const authResult = await runNotchBoot();
     logRenderer("startup.auth.result", {
       ok: Boolean(authResult?.ok),
       source: authResult?.source || "unknown",
       error: authResult?.error || null,
     });
+    await runNotchDescent(authResult);
+    notchBootDone = true;
+    updateNotchFace();
 
     if (authResult?.ok) {
       setStatus("ready", "Ready");
