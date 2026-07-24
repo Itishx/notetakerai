@@ -168,6 +168,80 @@ function stopNotchDance() {
     .forEach((sel) => nfRoot.querySelector(sel)?.setAttribute("transform", ""));
 }
 
+// ── Music light show: the notch + edge glow pulse and cycle color on a beat
+//    clock while music plays. A real system-audio capture path was attempted
+//    (Electron's legacy getUserMedia desktop-audio constraint) and crash-
+//    tested BAD: it kills the renderer on this Chromium version ("Terminating
+//    renderer for bad IPC message"). True audio-reactive analysis needs
+//    desktopCapturer.getSources() + a video constraint carrying the source id
+//    (real follow-up work). Until then: a humanized procedural beat clock,
+//    ~118bpm with wobble, drives the same hue/flash the real detector would.
+const lightShow = {
+  mode: "off", // "off" | "procedural" (see note below on why "audio" isn't here)
+  raf: 0,
+  hue: 10,
+  flash: 0,
+  proceduralNextBeatAt: 0,
+};
+
+function lightShowSetVars() {
+  document.documentElement.style.setProperty("--music-hue", String(Math.round(lightShow.hue)));
+  document.documentElement.style.setProperty("--music-flash", lightShow.flash.toFixed(3));
+}
+
+function lightShowTriggerBeat(strength = 1) {
+  lightShow.flash = Math.min(1, lightShow.flash + strength);
+  lightShow.hue = (lightShow.hue + 34 + Math.random() * 40) % 360;
+}
+
+function lightShowFrame(now) {
+  lightShow.raf = requestAnimationFrame(lightShowFrame);
+  const dt = Math.min(0.05, (now - (lightShow._last || now)) / 1000);
+  lightShow._last = now;
+
+  if (lightShow.mode === "procedural") {
+    if (now >= lightShow.proceduralNextBeatAt) {
+      // ~122bpm with a little human wobble so it never feels metronomic.
+      const bpm = 118 + Math.sin(now / 5000) * 8;
+      lightShow.proceduralNextBeatAt = now + (60000 / bpm) * (0.92 + Math.random() * 0.16);
+      lightShowTriggerBeat(0.75);
+    }
+    lightShow.hue = (lightShow.hue + dt * 14) % 360;
+  }
+
+  lightShow.flash = Math.max(0, lightShow.flash - dt * 2.6);
+  lightShowSetVars();
+}
+
+// NOTE: a real system-audio capture path (Electron's legacy `mandatory:
+// {chromeMediaSource:"desktop"}` getUserMedia constraint) was tried here and
+// crash-tested BAD: modern Chromium's IPC layer kills the renderer on that
+// constraint shape ("Terminating renderer for bad IPC message, reason 263").
+// Real audio-reactive capture needs desktopCapturer.getSources() + a video
+// constraint carrying the source id (+ likely a session display-media-request
+// handler), which is real follow-up work, not a five-minute add. Shipping
+// only the crash-free procedural beat clock below until that is built properly.
+function lightShowStartProcedural() {
+  lightShow.mode = "procedural";
+  lightShow.proceduralNextBeatAt = performance.now() + 200;
+  logRenderer("lightshow.procedural.started", {});
+}
+
+async function startLightShow() {
+  if (lightShow.mode !== "off") return;
+  lightShowStartProcedural();
+  if (!lightShow.raf) lightShow.raf = requestAnimationFrame(lightShowFrame);
+}
+
+function stopLightShow() {
+  if (lightShow.raf) cancelAnimationFrame(lightShow.raf);
+  lightShow.raf = 0;
+  lightShow.mode = "off";
+  lightShow.flash = 0;
+  lightShow._last = 0;
+  lightShowSetVars();
+}
+
 // Headphones live inside the rig so they bob, breathe, and flip with him.
 const headphones = document.createElementNS("http://www.w3.org/2000/svg", "g");
 headphones.setAttribute("id", "__sbwk_headphones__");
@@ -694,8 +768,13 @@ function setMusicMode(on) {
   musicMode = Boolean(on);
   headphones.style.display = musicMode ? "" : "none";
   walker.classList.toggle("music", musicMode);
-  if (musicMode) startNotchDance();
-  else stopNotchDance();
+  if (musicMode) {
+    startNotchDance();
+    void startLightShow();
+  } else {
+    stopNotchDance();
+    stopLightShow();
+  }
   if (musicMode && !noteTimer) {
     noteTimer = window.setInterval(spawnNotchNote, 1050);
   } else if (!musicMode && noteTimer) {

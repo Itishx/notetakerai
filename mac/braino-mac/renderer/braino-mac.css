@@ -349,12 +349,26 @@ body {
   width: 260px;
   height: calc(var(--nf-notch-h) + 34px);
   border-radius: 0 0 22px 22px;
+}
+
+#notch-face.live .nf-pill {
   animation: nfIslandBreath 3.8s ease-in-out infinite;
 }
 
 @keyframes nfIslandBreath {
   0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
   50% { box-shadow: 0 0 22px rgba(232, 120, 110, 0.34), 0 0 46px rgba(243, 154, 66, 0.14); }
+}
+
+/* Music light show: box-shadow is driven live in JS (--music-hue/--music-flash),
+   beat-synced when real system audio is readable, procedural otherwise. No CSS
+   keyframe here on purpose, it would fight the per-frame values. */
+#notch-face.music .nf-pill {
+  box-shadow:
+    0 0 calc(14px + 46px * var(--music-flash, 0)) calc(3px + 10px * var(--music-flash, 0))
+      hsla(var(--music-hue, 10), 82%, 66%, calc(0.26 + 0.6 * var(--music-flash, 0))),
+    0 0 calc(30px + 60px * var(--music-flash, 0))
+      hsla(calc(var(--music-hue, 10) + 45), 78%, 60%, calc(0.14 + 0.35 * var(--music-flash, 0)));
 }
 
 /* Timer done: the island celebrates for a beat. */
@@ -592,20 +606,19 @@ body {
   100% { opacity: 0; transform: translate(var(--dx), 80px) scale(1.08) rotate(var(--rot)); }
 }
 
-/* Music mode: a quieter glow than voice, slowly drifting through colors. */
+/* Music mode: a full light show, driven live in JS via --music-hue/--music-flash
+   (real beat-detected system audio when readable, a humanized procedural beat
+   clock otherwise — always something, never silent). */
 #edge-glow.music {
-  opacity: 0.85;
+  opacity: calc(0.55 + 0.35 * var(--music-flash, 0));
 }
 
 #edge-glow.music::before {
   box-shadow:
-    inset 0 0 64px 12px rgba(232, 120, 110, 0.20),
-    inset 0 0 26px 5px rgba(122, 162, 255, 0.14);
-  animation: edgeBreath 4.2s ease-in-out infinite, musicHue 14s linear infinite;
-}
-
-@keyframes musicHue {
-  to { filter: hue-rotate(360deg); }
+    inset 0 0 calc(64px + 90px * var(--music-flash, 0)) calc(12px + 22px * var(--music-flash, 0))
+      hsla(var(--music-hue, 10), 78%, 62%, calc(0.20 + 0.5 * var(--music-flash, 0))),
+    inset 0 0 calc(26px + 40px * var(--music-flash, 0)) calc(5px + 8px * var(--music-flash, 0))
+      hsla(calc(var(--music-hue, 10) + 55), 74%, 60%, calc(0.14 + 0.34 * var(--music-flash, 0)));
 }
 
 @keyframes edgeBreath {
