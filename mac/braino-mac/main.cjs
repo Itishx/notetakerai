@@ -3724,25 +3724,108 @@ function parseFileCleanupIntent(raw) {
   const source = cleanPrompt(String(raw || ""));
   if (pendingReviewBin && /\b(?:yes[,\s]+)?(?:delete|trash)\s+(?:them|these|those|all|them all|everything)\b/i.test(source)) return { action: "delete" };
   if (pendingReviewBin && /\bput (?:them|those|these|it) back\b|\brestore (?:them|those|the files)\b/i.test(source)) return { action: "restore" };
+  if (/\b(?:clean|clear|delete|trash|get rid of|remove)\b.*\bscreen\s*(?:shots?|recordings?)\b/i.test(source)
+    || /\bscreen\s*shots?\b.*\b(?:clean|delete|useless|clear)\b/i.test(source)) return { action: "screenshots" };
   if (/\b(?:what|which|anything)\b.*\b(?:worth deleting|should i delete|can i delete|to delete)\b/i.test(source)
     || /\b(?:scan|review|check)\b.*\b(?:files|desktop)\b.*\b(?:delete|clean|old|stale)\b/i.test(source)
     || /\bfiles?\b.*\bworth (?:deleting|keeping)\b/i.test(source)) return { action: "suggest" };
   return null;
 }
 
+function collectDesktopCaptures() {
+  const desktop = path.join(os.homedir(), "Desktop");
+  const captures = [];
+  try {
+    for (const entry of fs.readdirSync(desktop, { withFileTypes: true })) {
+      if (!entry.isFile() || !/^(screenshot|screen recording)/i.test(entry.name)) continue;
+      const full = path.join(desktop, entry.name);
+      try {
+        const stat = fs.statSync(full);
+        captures.push({ name: entry.name, full, size: stat.size, mtimeMs: stat.mtimeMs });
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return captures;
+}
+
+function desktopHygieneLines() {
+  const captures = collectDesktopCaptures();
+  if (captures.length < 3) return [];
+  const mb = Math.round(captures.reduce((sum, c) => sum + c.size, 0) / (1024 * 1024));
+  return [`Desktop hygiene: ${captures.length} screenshots and screen recordings are piling up on the user's Desktop (~${mb} MB). Braino knows this and can clean them if the user wants ("clean my screenshots").`];
+}
+
+async function cleanScreenshots() {
+  const captures = collectDesktopCaptures();
+  if (!captures.length) return { ok: true, say: "Your desktop has no screenshots or recordings on it. Clean already." };
+  try { fs.mkdirSync(REVIEW_BIN_PATH, { recursive: true }); } catch (_) {}
+  const desktop = path.join(os.homedir(), "Desktop");
+  const moved = [];
+  for (const capture of captures) {
+    try {
+      fs.renameSync(capture.full, path.join(REVIEW_BIN_PATH, capture.name));
+      moved.push({ binName: capture.name, origRoot: desktop });
+    } catch (_) {}
+  }
+  if (!moved.length) return { ok: false, say: "I could not move the screenshots just now." };
+  pendingReviewBin = { files: moved, at: Date.now() };
+  await shell.openPath(REVIEW_BIN_PATH);
+  const mb = Math.round(captures.reduce((sum, c) => sum + c.size, 0) / (1024 * 1024));
+  logMac("files.screenshots.collected", { count: moved.length, mb });
+  return { ok: true, say: `All ${moved.length} screenshots and recordings — about ${mb} megabytes — are in the review folder I just opened. Say delete them all, or put them back.` };
+}
+
 // "How many filegen folders do I have?" — a real everything-scan via
 // Spotlight, not a polite guess.
 function parseCountItemsIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
-  const match = source.match(/\bhow many\b\s+(?:total\s+)?(.+?)\s+(folders?|files?|items?)\b(?:\s+(?:do|have)\b.*)?$/i);
+  const match = source.match(/\bhow many\b\s+(?:total\s+)?(.*?)\s*(folders?|files?|items?|screenshots?|screen recordings?)\b(?:\s+(?:do|have|are)\b.*)?$/i);
   if (!match) return null;
-  const term = String(match[1] || "").replace(/^(?:of\s+)?(?:the\s+)?/i, "").trim();
-  if (!term || term.length < 2) return null;
-  return { term, kind: match[2].toLowerCase() };
+  const kind = match[2].toLowerCase();
+  let term = String(match[1] || "").replace(/^(?:of\s+)?(?:the\s+)?/i, "").trim();
+  if (/^(?:total|all|my|the)$/i.test(term)) term = "";
+  if (/^screen/.test(kind)) return { term: "screenshot", kind: "files" };
+  // No term = "how many folders/files do I have" = count EVERYTHING.
+  return { term, kind };
+}
+
+async function countAllHomeItems() {
+  const roots = ["Desktop", "Downloads", "Documents"];
+  const perRoot = [];
+  let totalFiles = 0;
+  let totalDirs = 0;
+  for (const rootName of roots) {
+    const full = path.join(os.homedir(), rootName);
+    const countType = async (type) => {
+      try {
+        const { stdout } = await execFileP("/usr/bin/find", [
+          full,
+          "(", "-path", "*/node_modules", "-o", "-path", "*/.git", "-o", "-name", ".*", ")", "-prune",
+          "-o", "-type", type, "-print",
+        ], { timeout: 45000, maxBuffer: 32 * 1024 * 1024 });
+        return String(stdout || "").split("\n").filter(Boolean).length;
+      } catch (error) {
+        logMac("files.count_all.root_failed", { root: rootName, type, error });
+        return 0;
+      }
+    };
+    const [files, dirs] = await Promise.all([countType("f"), countType("d")]);
+    logMac("files.count_all.root", { root: rootName, files, dirs });
+    perRoot.push(`${rootName} has ${files} files in ${Math.max(0, dirs - 1)} folders`);
+    totalFiles += files;
+    totalDirs += Math.max(0, dirs - 1);
+  }
+  logMac("files.count_all.done", { totalFiles, totalDirs });
+  return {
+    ok: true,
+    say: `I walked everything: ${totalFiles} files across ${totalDirs} folders. ${perRoot.join(". ")}. That skips hidden stuff and code dependencies, which nobody wants counted.`,
+  };
 }
 
 async function countMatchingItems({ term, kind }) {
+  if (!term) return countAllHomeItems();
   const safeTerm = term.replace(/["\\]/g, "");
+  logMac("files.count.start", { term: textForLog(term), kind });
   let paths = [];
   try {
     const { stdout } = await execFileP("/usr/bin/mdfind", [`kMDItemDisplayName == "*${safeTerm}*"cd`], { timeout: 15000 });
@@ -3759,9 +3842,12 @@ async function countMatchingItems({ term, kind }) {
         "-o", "-iname", `*${safeTerm}*`, "-print",
       ], { timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
       paths = String(stdout || "").split("\n").filter(Boolean);
+      logMac("files.count.find_fallback", { term: textForLog(term), found: paths.length });
     } catch (error) {
       logMac("files.count.failed", { term: textForLog(term), error });
     }
+  } else {
+    logMac("files.count.mdfind", { term: textForLog(term), found: paths.length });
   }
   let dirs = 0;
   let files = 0;
@@ -6491,6 +6577,7 @@ async function runMacConversation(prompt) {
         "Braino is a visible OS-level overlay that follows the user's active Mac app and display.",
         ...surfaceLines,
         ...mesaContextLines(),
+        ...desktopHygieneLines(),
         "This is normal conversation unless the user asks for a concrete Mac action.",
         "Keep replies short, warm, alive, and natural for spoken voice.",
       ].join("\n"),
@@ -6991,6 +7078,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     logMac("delegate.file_cleanup_intent", { raw: textForLog(raw), action: cleanupIntent.action });
     if (cleanupIntent.action === "delete") return deleteReviewBin();
     if (cleanupIntent.action === "restore") return restoreReviewBin();
+    if (cleanupIntent.action === "screenshots") return cleanScreenshots();
     return suggestFileCleanup();
   }
 
