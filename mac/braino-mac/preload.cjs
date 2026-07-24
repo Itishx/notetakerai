@@ -94,6 +94,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:notch-face", handler);
     return () => ipcRenderer.removeListener("braino-mac:notch-face", handler);
   },
+  onTabsSnapshot: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:tabs-snapshot", handler);
+    return () => ipcRenderer.removeListener("braino-mac:tabs-snapshot", handler);
+  },
   onMusicState: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:music-state", handler);

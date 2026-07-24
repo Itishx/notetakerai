@@ -855,17 +855,28 @@ function beginMusicTheatrics() {
   updateNotchFace();
 }
 
-// When music starts he retreats into the notch first ("music's on, let me
-// rest a bit"), and only once he is actually home does anything visual begin
-// — never simultaneous with him roaming the screen.
-async function reactToMusicStart() {
+// reactToMusicStart is asynchronous (a spoken line, then a fade — a couple of
+// real seconds) with nothing stopping it from being called again mid-flight
+// if the music state flips again in that window. Without a session token, a
+// stop that lands during that gap used to yank the walker back out and clear
+// musicTheatricsReady before beginMusicTheatrics() ever got a chance to
+// stick — which read as "he went home AND the notch went home too": the
+// whole theatrics sequence started, then got unwound by a stale race,
+// settling back to plain idle. Every entry point bumps musicSessionId and
+// captures it; anywhere reactToMusicStart resumes after an await, it checks
+// whether it is still the current session before doing anything visible.
+let musicSessionId = 0;
+
+async function reactToMusicStart(session) {
   if (herMode || walkerHome || speaking || processing || voiceTurnInFlight) {
-    beginMusicTheatrics();
+    if (session === musicSessionId) beginMusicTheatrics();
     return;
   }
   walkerAutoHomedByMusic = true;
   try { await speak("Music's on. Let me rest for a bit."); } catch (_) {}
+  if (session !== musicSessionId) return; // superseded mid-speech
   await walkerGoHome({ style: "fade" });
+  if (session !== musicSessionId) return; // superseded mid-fade
   beginMusicTheatrics();
 }
 
@@ -888,9 +899,11 @@ function reactToMusicStop() {
 
 function setMusicMode(on) {
   musicMode = Boolean(on);
+  musicSessionId += 1;
+  const session = musicSessionId;
   headphones.style.display = musicMode ? "" : "none";
   walker.classList.toggle("music", musicMode);
-  if (musicMode) void reactToMusicStart();
+  if (musicMode) void reactToMusicStart(session);
   else reactToMusicStop();
 }
 
@@ -2108,8 +2121,27 @@ function stopRecognition() {
 
 function activeMacContextLines() {
   const context = activeMacContext;
+  // Music awareness: this is ambient context for CASUAL conversation ("do you
+  // hear this?", "who sings this", "turn it up") — the dedicated "what's
+  // playing" voice intent already answers deterministically via Spotify
+  // itself and doesn't need this, but free-form chat had zero idea a song was
+  // even on, since only the delegate router knew.
+  const musicLine = musicMode
+    ? `Music is currently playing in the background (${musicSource === "youtube" ? "YouTube" : "Spotify"}): "${lastMusicInfo.track || "unknown title"}"${lastMusicInfo.artist ? ` by ${lastMusicInfo.artist}` : ""}. You can hear it and may reference it naturally if relevant; you do not need to announce it unprompted.`
+    : "";
+  // Ambient tab awareness — free text (titles/URLs from AppleScript, no
+  // screenshot, no model call), refreshed every ~8s regardless of which tab
+  // is frontmost. This is deliberately NOT vision: knowing what's open costs
+  // nothing, so it runs always; actually SEEING the screen costs real money
+  // per look, so that stays behind the explicit "what's on my screen" ask.
+  const otherTabs = allOpenTabs
+    .filter((t) => t.title && t.title !== (context?.browserTitle || ""))
+    .slice(0, 8);
+  const tabsLine = otherTabs.length
+    ? `Other open browser tabs (not the active one): ${otherTabs.map((t) => t.title).join(" | ")}${allOpenTabs.length > otherTabs.length + 1 ? `, and more` : ""}. You can reference these if relevant, but you cannot see their contents, only titles/URLs.`
+    : "";
   if (!context?.appName) {
-    return ["Current Mac surface: unknown yet; answer generally unless the user asks for a concrete Mac action."];
+    return [musicLine, tabsLine, "Current Mac surface: unknown yet; answer generally unless the user asks for a concrete Mac action."].filter(Boolean);
   }
   const title = context.browserTitle || context.windowTitle || "";
   return [
@@ -2117,6 +2149,8 @@ function activeMacContextLines() {
     title ? `Current window/tab title: ${title}.` : "",
     context.browserUrl ? `Current browser URL: ${context.browserUrl}.` : "",
     context.isBrowser ? "The user is in a browser window, but Mac Braino does not have live DOM bridge access yet; use the title/URL and route concrete browser actions through delegate." : "",
+    musicLine,
+    tabsLine,
   ].filter(Boolean);
 }
 
@@ -3691,6 +3725,10 @@ async function pointAtScreen(payload) {
 window.brainoMac.onVoiceToggle(() => toggleVoice());
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
+let allOpenTabs = [];
+window.brainoMac.onTabsSnapshot?.((payload) => {
+  allOpenTabs = Array.isArray(payload?.tabs) ? payload.tabs : [];
+});
 window.brainoMac.onMusicState?.((payload) => {
   lastMusicInfo = {
     track: String(payload?.track || ""),

@@ -16,6 +16,7 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Notch live activities: timers, calendar peek, WA badge, privacy dot | 🔨 | "remind me in 20 min…"; EventKit probe 5-min poll; badge when listener off |
 | Her mode (Samantha takeover) | 🟡 | Cmd+Shift+H or "her mode"; own Fish voice |
 | Jarvis-style delegate routing + LLM fallthrough | ✅ | |
+| Ambient awareness (now-playing + all open Chrome tabs in casual chat) | 🟡 | Free-text context only (titles/URLs, 8s poll across ALL windows/tabs), no vision cost; fixes "music's on but he doesn't know" for free-form chat (dedicated "what's playing" intent already worked). Actual screen PIXELS deliberately stay on-demand only (cost per look) — this is text-only |
 
 ## Spotify — DONE end-to-end
 | Capability | Status | Notes |

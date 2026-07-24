@@ -2951,6 +2951,62 @@ async function isSpotifyOnThisMac() {
 // Needs "Allow JavaScript from Apple Events" in Chrome's View menu; if that
 // is off the whole script throws and we fall back to the old active-tab-only
 // behavior further down, so nothing regresses for people without it enabled.
+// Ambient tab awareness: "he is the all-seeing" — but cheaply. This is plain
+// text (window/tab titles + URLs, all free from AppleScript) polled on its
+// own slow cadence, kept entirely separate from actual screen PIXELS: vision
+// (captureScreenBase64 -> a model call) costs real money per look, so that
+// stays strictly on-demand ("what's on my screen", "read this"). Ambient
+// awareness of what's simply OPEN can run continuously for free.
+let lastTabsSnapshotKey = "";
+
+async function listAllChromeTabs(limitPerWindow = 12) {
+  const script = `
+tell application "Google Chrome"
+  if (count of windows) = 0 then return ""
+  set out to ""
+  repeat with w in windows
+    set tabCount to count of tabs of w
+    set upper to tabCount
+    if upper > ${limitPerWindow} then set upper to ${limitPerWindow}
+    repeat with i from 1 to upper
+      set t to tab i of w
+      set tTitle to ""
+      set tURL to ""
+      try
+        set tTitle to title of t
+      end try
+      try
+        set tURL to URL of t
+      end try
+      set out to out & tTitle & "\t" & tURL & linefeed
+    end repeat
+  end repeat
+  return out
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 6000 });
+    const tabs = [];
+    for (const line of String(stdout || "").split(/\r?\n/)) {
+      const [title, url] = line.split("\t");
+      if (title?.trim() || url?.trim()) tabs.push({ title: (title || "").trim(), url: (url || "").trim() });
+      if (tabs.length >= 40) break;
+    }
+    return tabs;
+  } catch (error) {
+    logMac("tabs.scan.failed", { error });
+    return [];
+  }
+}
+
+async function checkAllTabsSnapshot() {
+  const tabs = await listAllChromeTabs();
+  const key = JSON.stringify(tabs);
+  if (key === lastTabsSnapshotKey) return;
+  lastTabsSnapshotKey = key;
+  logMac("tabs.snapshot", { count: tabs.length });
+  sendToRenderer("braino-mac:tabs-snapshot", { tabs });
+}
+
 async function findPlayingYouTubeTab() {
   const script = `
 tell application "Google Chrome"
@@ -6593,6 +6649,7 @@ ipcMain.handle("braino-mac:system-say", async (_event, text) => {
 app.whenReady().then(() => {
   setTimeout(() => void importAllContacts(), 8000);
   setInterval(() => void checkMusicState(), 5000);
+  setInterval(() => void checkAllTabsSnapshot(), 8000);
   void measureNotch();
   // Poll WhatsApp notifications regardless: spoken when the listener is on,
   // stacked as an unread badge in the notch when it is off.
