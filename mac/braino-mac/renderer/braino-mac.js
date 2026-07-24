@@ -815,7 +815,12 @@ async function runNotchGreeting(authResult) {
     ? `Hey, ${firstName}. How are you doing? Say come out whenever you want me out here with you.`
     : "Hey. How are you doing? Say come out whenever you want me out here with you.";
   setBubble(greeting.toLowerCase().slice(0, 60), 2600);
-  void speak(greeting);
+  await speak(greeting);
+  // Back to basics: after the greeting he is ALREADY listening — you just
+  // answer him, no first double-Control needed. From here double-Control is
+  // purely the stop/start toggle. The greeting is awaited first so the mic
+  // can't hear his own voice and trip the barge-in.
+  if (!realtimeActive && !realtimeConnecting && !herMode) void startListening();
 }
 
 function nfScheduleBlink() {
