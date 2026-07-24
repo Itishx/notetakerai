@@ -766,16 +766,18 @@ function nfSetStatusText(text) {
   status.classList.toggle("show", Boolean(value));
 }
 
-// Four beats, per spec: closed eyes fade in -> authenticating (~1s) ->
-// eyes open + glow + spoken greeting, together -> he pops out of the notch.
+// Boot beats, per spec: open eyes pop up -> they close -> "authenticating"
+// with the island glowing -> verdict glows green and the eyes open with it.
 async function runNotchBoot() {
   walkerHome = true; // he is born inside the notch
   setNotchFaceEnabled(true);
   updateNotchFace();
+  // Beat 1: eyes pop up OPEN (the .on opacity transition IS the fade-in).
+  await wait(900);
+  // Beat 2: they close.
   notchFace?.classList.add("asleep");
-  // Beat 1: closed eyes fade in (the .on opacity transition IS the fade-in).
-  await wait(500);
-  // Beat 2: authenticating, held to roughly one second even for an instant token.
+  await wait(700);
+  // Beat 3: authenticating — island extends and pulses, eyes stay shut.
   notchFace?.classList.add("nf-auth");
   nfSetStatusText("authenticating");
   const authStarted = Date.now();
@@ -786,11 +788,13 @@ async function runNotchBoot() {
     result = { ok: false, error: error?.message || "Braino sign-in failed." };
   }
   const elapsed = Date.now() - authStarted;
-  if (elapsed < 1000) await wait(1000 - elapsed);
+  if (elapsed < 1200) await wait(1200 - elapsed);
+  // Beat 4: verdict glow — on green his eyes open WITH the glow.
   notchFace?.classList.remove("nf-auth");
   notchFace?.classList.add(result?.ok ? "nf-auth-ok" : "nf-auth-err");
   nfSetStatusText(result?.ok ? "authenticated" : "auth failed");
-  await wait(500);
+  if (result?.ok) notchFace?.classList.remove("asleep");
+  await wait(700);
   notchFace?.classList.remove("nf-auth-ok", "nf-auth-err");
   nfSetStatusText("");
   return result || { ok: false, error: "Braino sign-in failed." };
