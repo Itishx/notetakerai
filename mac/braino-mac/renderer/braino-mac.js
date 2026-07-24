@@ -2017,7 +2017,11 @@ async function speak(text) {
   const generation = ++speechGeneration;
   const startedAt = performance.now();
   noteSpoken(line);
-  setBubble(line, Math.max(2400, Math.min(7200, line.length * 58)));
+  // While he's home (the default now), the notch caption is the reply
+  // surface — the floating bubble used to double it up in the exact spot
+  // he used to stand, which read as a stray leftover once he stopped popping out.
+  if (walkerHome) nfSetReply(line);
+  else setBubble(line, Math.max(2400, Math.min(7200, line.length * 58)));
   speaking = true;
   setStatus("speaking", "Speaking");
   setTalk(true);
@@ -2767,7 +2771,7 @@ function handleRealtimeEvent(event) {
       stopSpeechOutput();
       setRealtimeMicEnabled(true);
       setStatus("hearing", "Hearing you");
-      setBubble("Listening...", 0);
+      if (!walkerHome) setBubble("Listening...", 0);
       return;
     }
     if (processing || voiceTurnInFlight) {
@@ -2775,7 +2779,7 @@ function handleRealtimeEvent(event) {
       return;
     }
     setStatus("hearing", "Hearing you");
-    setBubble("Listening...", 0);
+    if (!walkerHome) setBubble("Listening...", 0);
     return;
   }
 
@@ -2787,7 +2791,7 @@ function handleRealtimeEvent(event) {
       return;
     }
     setStatus("captured", "Got it");
-    setBubble("Got it.", 900);
+    if (!walkerHome) setBubble("Got it.", 900);
     scheduleRealtimeTranscriptFlush("speech_stopped", REALTIME_SPEECH_STOP_FLUSH_MS);
     return;
   }
@@ -2815,7 +2819,7 @@ function handleRealtimeEvent(event) {
       rtTranscriptFinal = false;
       rtUserTranscript += delta;
       if (herMode) window.HerMode?.setHeard(rtUserTranscript.trim());
-      else setBubble(rtUserTranscript.trim() || "Listening...", 0);
+      else if (!walkerHome) setBubble(rtUserTranscript.trim() || "Listening...", 0);
       nfSetHeard(rtUserTranscript.trim());
       scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
     }
@@ -3843,7 +3847,8 @@ window.brainoMac.onSpeechTranscript((speech) => {
     return;
   }
   if (speech.status === "partial" && speech.text) {
-    setBubble(speech.text, 0);
+    if (walkerHome) nfSetHeard(speech.text);
+    else setBubble(speech.text, 0);
   }
 });
 window.brainoMac.onHelperStatus((status) => {
