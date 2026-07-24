@@ -2156,6 +2156,7 @@ async function runScreenVision(question) {
   }
 
   const shot = await captureScreenBase64();
+  if (shot.ok) sendTaskProgress({ status: "thinking", text: "Reading your screen" });
   if (!shot.ok) {
     const summary = await frontWindowSummary();
     return {
@@ -2664,6 +2665,7 @@ async function sendWhatsAppMessage(recipientRaw, message) {
 
   const wasRunning = await isMacApplicationRunning("WhatsApp");
   await shell.openExternal(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`);
+  sendTaskProgress({ status: "thinking", text: `Typing to ${resolved.name}`.slice(0, 36) });
   await new Promise((resolve) => setTimeout(resolve, wasRunning ? 1600 : 3400));
 
   const pressEnter = `
@@ -2957,6 +2959,7 @@ async function runScreenPoint(target, raw) {
 
   const shot = await captureScreenBase64();
   if (!shot.ok) return { ok: false, say: shot.error };
+  sendTaskProgress({ status: "thinking", text: `Locating ${target}` });
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, say: "Vision is not configured on this build." };
   let authToken = await getBrainoAuthToken();
@@ -3075,6 +3078,7 @@ async function runMacWebSearch(query) {
     if (!response.ok || !data?.answer) {
       throw new Error(data?.error || `web-research failed (${response.status}).`);
     }
+    sendTaskProgress({ status: "thinking", text: "Writing the answer" });
     const say = stripForSpeech(data.answer);
     logMac("web_search.done", {
       query: textForLog(trimmed),

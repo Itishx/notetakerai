@@ -2267,6 +2267,8 @@ function flushRealtimeTranscript(reason) {
   clearRealtimeIdleTimer();
   markRealtimeActivity("accepted_transcript", { schedule: false });
   if (speaking) stopSpeechOutput();
+  // Heard-echo: flash your own words in the notch ticker so you know he got it.
+  if (!herMode) setTaskLabel(`“${transcript.slice(0, 34)}”`, { linger: 1700 });
   voiceTurnInFlight = true;
   void (async () => {
     try {
