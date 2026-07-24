@@ -567,26 +567,23 @@ function fmtCountdown(ms) {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// Live captions in the notch — this is now the PRIMARY visible surface for a
-// conversation, since he stays home (invisible) by default and no longer
-// pops out automatically. Without this, a real conversation with an
-// invisible character showed nothing but a stray floating bubble.
-const nfCaptionHeardEl = document.querySelector("#notch-face .nf-caption-heard");
-const nfCaptionReplyEl = document.querySelector("#notch-face .nf-caption-reply");
+// Notch wing captions: the island stretches sideways during a conversation —
+// what we heard goes in the left wing, his reply in the right, eyes centred.
+const nfCapLeftEl = document.querySelector("#notch-face .nf-cap-l");
+const nfCapRightEl = document.querySelector("#notch-face .nf-cap-r");
 let nfHeardText = "";
 let nfReplyText = "";
+let nfCaptionClearTimer = 0;
 
 function nfSetHeard(text) {
   nfHeardText = String(text || "").trim();
-  if (nfCaptionHeardEl) nfCaptionHeardEl.textContent = nfHeardText;
+  if (nfCapLeftEl) nfCapLeftEl.textContent = nfHeardText;
   updateNotchFace();
 }
 
-let nfCaptionClearTimer = 0;
-
 function nfSetReply(text) {
   nfReplyText = String(text || "").trim();
-  if (nfCaptionReplyEl) nfCaptionReplyEl.textContent = nfReplyText;
+  if (nfCapRightEl) nfCapRightEl.textContent = nfReplyText;
   window.clearTimeout(nfCaptionClearTimer);
   if (nfReplyText) {
     nfCaptionClearTimer = window.setTimeout(
@@ -601,8 +598,8 @@ function nfClearCaptions() {
   window.clearTimeout(nfCaptionClearTimer);
   nfHeardText = "";
   nfReplyText = "";
-  if (nfCaptionHeardEl) nfCaptionHeardEl.textContent = "";
-  if (nfCaptionReplyEl) nfCaptionReplyEl.textContent = "";
+  if (nfCapLeftEl) nfCapLeftEl.textContent = "";
+  if (nfCapRightEl) nfCapRightEl.textContent = "";
   updateNotchFace();
 }
 
@@ -651,11 +648,7 @@ function updateNotchFace() {
   // takes over the visual for listening/speaking.
   notchFace.classList.toggle("awake", visible && sessionEngaged);
   notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !live && !music);
-  // Captions are the only visible trace of a conversation when he's home
-  // (invisible) — extend the pill whenever there's live heard/reply text,
-  // session or not (delegate replies can land after the mic yields).
-  const hasCaption = Boolean(nfHeardText || nfReplyText);
-  notchFace.classList.toggle("captioning", visible && hasCaption);
+  notchFace.classList.toggle("captioning", visible && Boolean(nfHeardText || nfReplyText));
   nfSetStatusText(line);
 }
 
@@ -964,10 +957,8 @@ function updateFloatingUi() {
 }
 
 function setBubble(text, ms = 2600) {
-  // Single choke-point: while he's home (invisible), EVERYTHING that would
-  // have gone to the floating bubble lands in the notch caption instead —
-  // gating individual call sites kept missing paths and left text floating
-  // where his body used to be.
+  // While he's home the right notch wing is his speech surface — the floating
+  // bubble only exists when he's physically out on screen.
   if (walkerHome && notchFaceEnabled && !herMode) {
     nfSetReply(text);
     return;

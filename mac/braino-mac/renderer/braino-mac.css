@@ -267,49 +267,46 @@ body {
   box-shadow: 0 0 34px rgba(232, 120, 110, 0.5);
 }
 
-/* Captions: a further extension underneath the eyes/mouth, only while there
-   is actually something heard or said — you should never lose track of a
-   conversation just because his body isn't visible on screen. */
+/* Captions: the island stretches SIDEWAYS only — height untouched, eyes stay
+   centred over the housing. Your words live in the left wing, his reply in
+   the right, both clipped inside the pill so the silhouette never breaks. */
 #notch-face.captioning .nf-pill {
-  width: 250px;
-  height: calc(var(--nf-notch-h) + 84px);
-  border-radius: 0 0 30px 30px;
+  width: 560px;
 }
 
-#notch-face .nf-caption {
-  display: none;
+#notch-face .nf-cap {
   position: absolute;
-  left: 14px;
-  right: 14px;
-  top: calc(var(--nf-notch-h) + 46px);
-  text-align: center;
-  line-height: 1.32;
-}
-
-#notch-face.captioning .nf-caption {
-  display: block;
-}
-
-#notch-face .nf-caption-heard {
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.05em;
-  color: rgba(255, 240, 235, 0.55);
-  white-space: nowrap;
+  z-index: 4;
+  top: 0;
+  height: 100%;
+  width: calc(50% - var(--nf-notch-w, 190px) / 2 - 22px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   overflow: hidden;
-  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 0.3s ease 0.18s;
+  line-height: 1.3;
 }
 
-#notch-face .nf-caption-reply {
+#notch-face.captioning .nf-cap { opacity: 1; }
+
+#notch-face .nf-cap-l {
+  left: 14px;
+  text-align: right;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 240, 235, 0.5);
+}
+
+#notch-face .nf-cap-r {
+  right: 14px;
+  text-align: left;
   font-family: Georgia, 'Newsreader', serif;
   font-style: italic;
-  font-size: 12.5px;
-  color: rgba(255, 244, 240, 0.96);
-  margin-top: 2px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-size: 10.5px;
+  color: rgba(255, 244, 240, 0.95);
 }
 
 #notch-face .nf-folds {
