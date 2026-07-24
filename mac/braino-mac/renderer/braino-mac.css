@@ -281,13 +281,13 @@ body {
 #notch-face .nf-mini {
   width: 78px;
   margin-top: -4px;
-  display: block;
+  display: none;
   transition: width 0.5s cubic-bezier(0.34, 1.25, 0.4, 1);
 }
 
-#notch-face.listen .nf-mini,
-#notch-face.speak .nf-mini {
-  width: 104px;
+/* Eyes appear only while the walker is home inside the notch, at rest. */
+#notch-face.home:not(.listen):not(.speak):not(.music):not(.busy) .nf-mini {
+  display: block;
 }
 
 #notch-face.listen #nf-mouth-idle { display: none; }
@@ -305,6 +305,31 @@ body {
   gap: 4px;
   height: 22px;
 }
+
+/* Speaking: equalizer bars are the voice. Music: same bars, gentler, with the
+   track ticker beneath. */
+#notch-face.speak .nf-viz { display: flex; }
+#notch-face.music .nf-viz { display: flex; bottom: 18px; height: 14px; }
+#notch-face.music .nf-viz span { animation-duration: 1.1s; }
+
+#notch-face.speak #nf-mouth-talk { display: none !important; }
+
+/* Busy (mission control) and music islands: modest stretch, ticker visible. */
+#notch-face.busy .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 26px);
+  border-radius: 0 0 20px 20px;
+  animation: nfAuthPulse 1.6s ease-in-out infinite;
+}
+
+#notch-face.music .nf-pill {
+  width: 260px;
+  height: calc(var(--nf-notch-h) + 34px);
+  border-radius: 0 0 22px 22px;
+}
+
+/* The notch ticker replaces the floating status pill. */
+#status-pill { display: none !important; }
 
 #notch-face.speak #nf-mouth-talk {
   display: block !important;

@@ -369,6 +369,10 @@ let notchFaceEnabled = true;
 let nfBlinkTimer = 0;
 
 let notchBootDone = false;
+let walkerHome = false;
+let currentTaskLabel = "";
+let taskLabelClearTimer = 0;
+let lastMusicInfo = { track: "", artist: "", source: "" };
 
 function updateNotchFace() {
   if (!notchFace) return;
@@ -379,10 +383,75 @@ function updateNotchFace() {
     : lastGlowStatus === "speaking"
       ? "speak"
       : "";
+  const busy = !state && Boolean(currentTaskLabel);
+  const music = !state && !busy && musicMode;
   notchFace.classList.toggle("listen", visible && state === "listen");
   notchFace.classList.toggle("speak", visible && state === "speak");
-  // Eyes stay open and watching once boot ends; sleep is a boot-only state.
-  if (notchBootDone) notchFace.classList.remove("asleep");
+  notchFace.classList.toggle("busy", visible && busy);
+  notchFace.classList.toggle("music", visible && music);
+  notchFace.classList.toggle("home", walkerHome);
+  if (!notchBootDone) return;
+  notchFace.classList.remove("asleep");
+  // The notch is his instrument panel: the ticker says what matters now.
+  if (state === "listen") {
+    nfSetStatusText("listening");
+  } else if (state === "speak") {
+    nfSetStatusText("");
+  } else if (busy) {
+    nfSetStatusText(currentTaskLabel);
+  } else if (music) {
+    const line = [lastMusicInfo.track, lastMusicInfo.artist].filter(Boolean).join(" — ");
+    nfSetStatusText(line.slice(0, 42));
+  } else {
+    nfSetStatusText("");
+  }
+}
+
+function setTaskLabel(text, { linger = 0 } = {}) {
+  window.clearTimeout(taskLabelClearTimer);
+  currentTaskLabel = String(text || "").slice(0, 40);
+  if (linger > 0 && currentTaskLabel) {
+    taskLabelClearTimer = window.setTimeout(() => {
+      currentTaskLabel = "";
+      updateNotchFace();
+    }, linger);
+  }
+  updateNotchFace();
+}
+
+async function walkerGoHome() {
+  if (walkerHome) return;
+  walkerHome = true;
+  const startX = Math.round(window.innerWidth / 2 - W / 2);
+  const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
+  logRenderer("walker.home", {});
+  await new Promise((resolve) => {
+    scriptedWalk = { x: startX, y: faceH + 6, speed: 360, resolve, allowOffscreen: true };
+  });
+  walker.classList.remove("visible");
+  updateNotchFace();
+}
+
+async function walkerLeaveHome() {
+  if (!walkerHome) return;
+  walkerHome = false;
+  const dock = getDockBounds();
+  const startX = Math.round(window.innerWidth / 2 - W / 2);
+  const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
+  setPosition(startX, faceH + 8, { allowOffscreen: true });
+  walker.classList.add("visible");
+  logRenderer("walker.leave_home", {});
+  updateNotchFace();
+  await new Promise((resolve) => {
+    scriptedWalk = { x: clamp(startX, dock.minX, dock.maxX), y: dock.y, speed: 300, resolve };
+  });
+  movementMode = "dock";
+  pickRoamTarget();
+}
+
+function toggleWalkerHome() {
+  if (walkerHome) void walkerLeaveHome();
+  else void walkerGoHome();
 }
 
 function nfSetStatusText(text) {
@@ -393,6 +462,7 @@ function nfSetStatusText(text) {
 }
 
 async function runNotchBoot() {
+  walkerHome = true; // he is born inside the notch
   setNotchFaceEnabled(true);
   updateNotchFace();
   notchFace?.classList.add("asleep");
@@ -422,6 +492,8 @@ async function runNotchDescent(authResult) {
   const dock = getDockBounds();
   const startX = Math.round(window.innerWidth / 2 - W / 2);
   const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
+  walkerHome = false; // he steps out: notch eyes hand off to the walker
+  updateNotchFace();
   walker.classList.add("visible");
   setPosition(startX, faceH + 42, { allowOffscreen: true });
   dirX = 1;
@@ -3286,7 +3358,15 @@ async function pointAtScreen(payload) {
 window.brainoMac.onVoiceToggle(() => toggleVoice());
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
-window.brainoMac.onMusicState?.((payload) => setMusicMode(Boolean(payload?.playing)));
+window.brainoMac.onMusicState?.((payload) => {
+  lastMusicInfo = {
+    track: String(payload?.track || ""),
+    artist: String(payload?.artist || ""),
+    source: String(payload?.source || ""),
+  };
+  setMusicMode(Boolean(payload?.playing));
+});
+window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());
 window.brainoMac.onNotchFace?.((payload) => setNotchFaceEnabled(Boolean(payload?.on)));
 window.brainoMac.onSpeakLine?.((payload) => {
   const text = String(payload?.text || "").trim();
@@ -3303,6 +3383,10 @@ window.brainoMac.onAuthRequired(() => {
 window.brainoMac.onTaskProgress((progress) => {
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
   if (progress.text) setBubble(progress.text, 1200);
+  // Mission control: the notch ticker mirrors what he is doing.
+  if (progress.status === "thinking" && progress.text) setTaskLabel(progress.text);
+  else if (progress.status === "done") setTaskLabel(progress.text || "done", { linger: 1600 });
+  else if (["ready", "error"].includes(progress.status)) setTaskLabel("");
 });
 window.brainoMac.onSpeechTranscript((speech) => {
   if (speech.status === "ready") {

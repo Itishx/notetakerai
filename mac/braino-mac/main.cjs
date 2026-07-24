@@ -1029,8 +1029,9 @@ function markControlTap(source) {
 function toggleDockWindowVisibility(source) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   if (dockWindow.isVisible()) {
-    dockWindowHiddenByUser = true;
-    dockWindow.hide();
+    // Double-Space no longer hides the overlay: the walker goes home to the
+    // notch instead (his eyes appear there while he is inside).
+    sendToRenderer("braino-mac:walker-toggle", { source });
     return;
   }
   ensureDockWindowVisible("visibility-toggle");
@@ -2698,14 +2699,20 @@ let lastYouTubeList = { items: [], at: 0 };
 let musicPlaying = false;
 let musicSource = "";
 
+let musicTrackKey = "";
+
 async function checkMusicState() {
   let playing = false;
   let source = "";
+  let track = "";
+  let artist = "";
   try {
     const state = await readSpotifyMacState();
     if (state.ok && /playing/i.test(state.state || "")) {
       playing = true;
       source = "spotify";
+      track = String(state.name || "").trim();
+      artist = String(state.artist || "").trim();
     }
   } catch (_) {}
   if (!playing) {
@@ -2713,13 +2720,18 @@ async function checkMusicState() {
     if (/youtube\.com\/watch|music\.youtube\.com/.test(url)) {
       playing = true;
       source = "youtube";
+      track = String(activeMacContext?.browserTitle || "")
+        .replace(/\s*-\s*YouTube.*$/i, "")
+        .trim();
     }
   }
-  if (playing !== musicPlaying || source !== musicSource) {
+  const key = `${playing}|${source}|${track}|${artist}`;
+  if (key !== musicTrackKey) {
+    musicTrackKey = key;
     musicPlaying = playing;
     musicSource = source;
-    logMac("music.state", { playing, source });
-    sendToRenderer("braino-mac:music-state", { playing, source });
+    logMac("music.state", { playing, source, track: textForLog(track) });
+    sendToRenderer("braino-mac:music-state", { playing, source, track, artist });
   }
 }
 
