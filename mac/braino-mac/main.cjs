@@ -2561,22 +2561,60 @@ function broadcastTimers() {
   sendToRenderer("braino-mac:timers", { timers: activeTimers.map(({ id, label, endAt }) => ({ id, label, endAt })) });
 }
 
+const NUMBER_WORDS = {
+  a: 1, an: 1, one: 1, two: 2, to: 2, too: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+  sixty: 60, ninety: 90, couple: 2, few: 3,
+};
+
+function spokenAmount(raw) {
+  const text = String(raw || "").toLowerCase().trim();
+  if (/^\d+$/.test(text)) return Number(text);
+  let total = 0;
+  for (const part of text.split(/[\s-]+/)) {
+    if (part === "of") continue;
+    if (NUMBER_WORDS[part] == null) return NaN;
+    total += NUMBER_WORDS[part];
+  }
+  return total || NaN;
+}
+
 function reminderSeconds(amount, unit) {
-  const n = Number(amount) || 0;
+  const n = spokenAmount(amount);
+  if (!Number.isFinite(n)) return 0;
   if (/^h/i.test(unit)) return n * 3600;
   if (/^m/i.test(unit)) return n * 60;
   return n;
 }
 
+const AMOUNT_RE = "(\\d+|[a-z]+(?:[ -][a-z]+)?)";
+const UNIT_RE = "(seconds?|secs?|minutes?|mins?|hours?|hrs?)";
+
 function parseReminderIntent(raw) {
-  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  const source = cleanPrompt(String(raw || ""))
+    .replace(/[?.!]+\s*$/, "")
+    // Spoken durations arrive as words; normalize the idioms first.
+    .replace(/\bhalf\s+an?\s+hour\b/gi, "30 minutes")
+    .replace(/\ban?\s+hour\s+and\s+a\s+half\b/gi, "90 minutes")
+    .replace(/\bquarter\s+of\s+an?\s+hour\b/gi, "15 minutes");
   if (/\b(?:cancel|stop|clear|remove)\b.*\b(?:timer|reminder|countdown)s?\b/i.test(source)) return { cancel: true };
-  let match = source.match(/\b(?:set\s+)?(?:a\s+)?timer\s+(?:for\s+)?(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b(?:\s+(?:for|to|called)\s+(.+))?$/i);
-  if (match) return { seconds: reminderSeconds(match[1], match[2]), label: (match[3] || "timer").trim() };
-  match = source.match(/\bremind\s+me\s+in\s+(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\s+(?:to\s+|about\s+|that\s+)?(.+)$/i);
-  if (match) return { seconds: reminderSeconds(match[1], match[2]), label: match[3].trim() };
-  match = source.match(/\bremind\s+me\s+(?:to\s+|about\s+)?(.+?)\s+in\s+(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)$/i);
-  if (match) return { seconds: reminderSeconds(match[2], match[3]), label: match[1].trim() };
+  let match = source.match(new RegExp(`\\b(?:set\\s+)?(?:a\\s+)?(?:timer|reminder|countdown)\\s+(?:for\\s+|in\\s+|of\\s+)?${AMOUNT_RE}\\s*${UNIT_RE}\\b(?:\\s+(?:for|to|about|called)\\s+(.+))?$`, "i"));
+  if (match) {
+    const seconds = reminderSeconds(match[1], match[2]);
+    if (seconds) return { seconds, label: (match[3] || "timer").trim() };
+  }
+  match = source.match(new RegExp(`\\bremind\\s+me\\s+in\\s+${AMOUNT_RE}\\s*${UNIT_RE}\\s+(?:to\\s+|about\\s+|that\\s+)?(.+)$`, "i"));
+  if (match) {
+    const seconds = reminderSeconds(match[1], match[2]);
+    if (seconds) return { seconds, label: match[3].trim() };
+  }
+  match = source.match(new RegExp(`\\bremind\\s+me\\s+(?:to\\s+|about\\s+)?(.+?)\\s+in\\s+${AMOUNT_RE}\\s*${UNIT_RE}$`, "i"));
+  if (match) {
+    const seconds = reminderSeconds(match[2], match[3]);
+    if (seconds) return { seconds, label: match[1].trim() };
+  }
   return null;
 }
 
