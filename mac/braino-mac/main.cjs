@@ -644,6 +644,37 @@ function splitHelperLines(onLine) {
   };
 }
 
+let cachedNotchMetrics = null;
+
+async function measureNotch() {
+  const swiftSource = [
+    "import AppKit",
+    "if let s = NSScreen.main {",
+    "  let f = s.frame",
+    "  let tl = s.auxiliaryTopLeftArea?.width ?? 0",
+    "  let tr = s.auxiliaryTopRightArea?.width ?? 0",
+    "  print(\"\\(f.width - tl - tr) \\(s.safeAreaInsets.top)\")",
+    "}",
+  ].join("\n");
+  const tmpPath = path.join(app.getPath("temp"), "braino-notch-measure.swift");
+  try {
+    await fs.promises.writeFile(tmpPath, swiftSource);
+    const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", tmpPath], { timeout: 90000 });
+    const [width, height] = String(stdout || "").trim().split(/\s+/).map(Number);
+    if (Number.isFinite(width) && width > 40 && width < 600 && Number.isFinite(height) && height > 0) {
+      cachedNotchMetrics = { width: Math.round(width), height: Math.round(height) };
+      logMac("notch.measured", cachedNotchMetrics);
+      sendOverlayState("notch_measured");
+    } else {
+      logMac("notch.measure.no_notch", { raw: String(stdout || "").trim() });
+    }
+  } catch (error) {
+    logMac("notch.measure.failed", { error });
+  } finally {
+    fs.promises.unlink(tmpPath).catch(() => {});
+  }
+}
+
 function getDisplayMetrics(display = screen.getPrimaryDisplay()) {
   const { bounds, workArea, scaleFactor } = display;
   const dockHeight = Math.max(0, (bounds.y + bounds.height) - (workArea.y + workArea.height));
@@ -657,6 +688,7 @@ function getDisplayMetrics(display = screen.getPrimaryDisplay()) {
     scaleFactor,
     dockTop,
     dockHeight,
+    notch: cachedNotchMetrics,
   };
 }
 
@@ -6164,6 +6196,7 @@ ipcMain.handle("braino-mac:system-say", async (_event, text) => {
 app.whenReady().then(() => {
   setTimeout(() => void importAllContacts(), 8000);
   setInterval(() => void checkMusicState(), 5000);
+  void measureNotch();
   if (loadWaListenerState()) {
     setTimeout(() => void startWhatsAppListener(), 6000);
   }

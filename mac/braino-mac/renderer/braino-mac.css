@@ -209,7 +209,8 @@ body {
 #notch-face .nf-pill {
   position: relative;
   margin: 0 auto;
-  width: 190px;
+  /* Idle hides exactly behind the physical notch (measured at runtime). */
+  width: var(--nf-notch-w, 190px);
   height: calc(var(--nf-notch-h) + 36px);
   border-radius: 0 0 18px 18px;
   overflow: hidden;

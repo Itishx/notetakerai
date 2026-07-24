@@ -273,9 +273,12 @@ function applyDisplayMetrics(metrics, options = {}) {
   // enableLargerThanScreen we sit at 0 and truly swallow the notch, and if
   // macOS ever seats us lower the face gracefully hangs below the bar).
   const winY = Math.max(0, window.screenY || 0);
-  const inner = Math.max(0, menuBarH - winY);
+  const inner = Math.max(0, (displayMetrics.notch?.height || menuBarH) - winY);
   document.getElementById("notch-face")?.style.setProperty("--nf-notch-h", `${inner}px`);
-  logRenderer("nf.anchor", { menuBarH, winY, inner });
+  if (displayMetrics.notch?.width) {
+    document.getElementById("notch-face")?.style.setProperty("--nf-notch-w", `${displayMetrics.notch.width}px`);
+  }
+  logRenderer("nf.anchor", { menuBarH, winY, inner, notch: displayMetrics.notch || null });
   const displayChanged = Boolean(options.displayChanged || (previousDisplayId && nextDisplayId && previousDisplayId !== nextDisplayId));
   const dock = getDockBounds();
   if (movementMode === "dock") {
