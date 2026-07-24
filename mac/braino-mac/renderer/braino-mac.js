@@ -95,6 +95,79 @@ walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
 const root = walker.querySelector("#__sbwk_root__");
 const q = (selector) => root?.querySelector(selector);
 
+// ── Notch dancer: a live clone of the real mascot rig, grooving in the notch
+//    while music plays. Ids are remapped so they never collide with the big
+//    walker's ids; limbs are driven by rAF + transform attributes, same
+//    technique the rest of the rig uses, using the actual "Braino Twist"
+//    dance-mode pose math ported verbatim from the Chrome extension.
+let nfDanceRoot = null;
+let nfDanceRaf = 0;
+let nfDanceStart = 0;
+
+function ensureNotchDancer() {
+  if (nfDanceRoot) return nfDanceRoot;
+  const host = document.querySelector("#notch-face .nf-dancer");
+  if (!host) return null;
+  host.innerHTML = String(window.brainoMac.getWalkerSvg() || "").replaceAll("__sbwk_", "__nfd_");
+  const svg = host.querySelector("svg");
+  svg?.removeAttribute("width");
+  svg?.removeAttribute("height");
+  nfDanceRoot = host.querySelector("#__nfd_root__");
+  return nfDanceRoot;
+}
+
+// Verbatim port of poseTwist from the extension's dance-mode rig (BrainoDanceGrid.tsx
+// time constants): a sway-and-groove step, the simplest of the dance set and the
+// best fit for a 24px icon.
+function nfDanceTwistPose(t) {
+  const b = t * 3.4;
+  const sway = Math.sin(b);
+  const knee = Math.abs(Math.sin(b));
+  return {
+    tx: sway * 4, sy: 1 - knee * 0.06,
+    la: 42 + sway * 26, ra: -42 + sway * 26,
+    ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+    ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7,
+  };
+}
+
+function nfDanceFrame(now) {
+  nfDanceRaf = requestAnimationFrame(nfDanceFrame);
+  const nfRoot = ensureNotchDancer();
+  if (!nfRoot) return;
+  if (!nfDanceStart) nfDanceStart = now;
+  const t = (now - nfDanceStart) / 1000;
+  const pose = nfDanceTwistPose(t);
+  const nq = (sel) => nfRoot.querySelector(sel);
+  nfRoot.setAttribute("transform", `translate(${pose.tx} 0) scale(1 ${pose.sy})`);
+  const armL = nq("#__nfd_la__"), armLBg = nq("#__nfd_la_bg__");
+  const armR = nq("#__nfd_ra__"), armRBg = nq("#__nfd_ra_bg__");
+  const armTx = (deg, cx) => (deg ? `rotate(${deg} ${cx} 53)` : "");
+  if (armL) armL.setAttribute("transform", armTx(pose.la, 22));
+  if (armLBg) armLBg.setAttribute("transform", armTx(pose.la, 22));
+  if (armR) armR.setAttribute("transform", armTx(pose.ra, 78));
+  if (armRBg) armRBg.setAttribute("transform", armTx(pose.ra, 78));
+  nq("#__nfd_ll__")?.setAttribute("transform", `translate(0 ${-pose.ll}) rotate(${pose.ls} 44 74)`);
+  nq("#__nfd_rl__")?.setAttribute("transform", `translate(0 ${-pose.rl}) rotate(${pose.rs} 56 74)`);
+}
+
+function startNotchDance() {
+  if (nfDanceRaf) return;
+  nfDanceStart = 0;
+  nfDanceRaf = requestAnimationFrame(nfDanceFrame);
+}
+
+function stopNotchDance() {
+  if (nfDanceRaf) cancelAnimationFrame(nfDanceRaf);
+  nfDanceRaf = 0;
+  nfDanceStart = 0;
+  const nfRoot = ensureNotchDancer();
+  if (!nfRoot) return;
+  nfRoot.setAttribute("transform", "");
+  ["#__nfd_la__", "#__nfd_la_bg__", "#__nfd_ra__", "#__nfd_ra_bg__", "#__nfd_ll__", "#__nfd_rl__"]
+    .forEach((sel) => nfRoot.querySelector(sel)?.setAttribute("transform", ""));
+}
+
 // Headphones live inside the rig so they bob, breathe, and flip with him.
 const headphones = document.createElementNS("http://www.w3.org/2000/svg", "g");
 headphones.setAttribute("id", "__sbwk_headphones__");
@@ -621,6 +694,8 @@ function setMusicMode(on) {
   musicMode = Boolean(on);
   headphones.style.display = musicMode ? "" : "none";
   walker.classList.toggle("music", musicMode);
+  if (musicMode) startNotchDance();
+  else stopNotchDance();
   if (musicMode && !noteTimer) {
     noteTimer = window.setInterval(spawnNotchNote, 1050);
   } else if (!musicMode && noteTimer) {

@@ -311,73 +311,29 @@ body {
 
 #notch-face.speak #nf-mouth-talk { display: none !important; }
 
-/* Music: the tiniest Braino, grooving in the island while a song plays. */
+/* Music: the actual mascot (a live clone of his real rig), grooving in the
+   island. Limb animation is driven in JS via the same transform-attribute
+   technique the big walker uses, not CSS keyframes, since it is the real SVG. */
 #notch-face .nf-dancer {
   display: none;
   position: absolute;
-  top: 3px;
+  top: 2px;
   left: 50%;
-  width: 30px;
-  height: 30px;
-  margin-left: -15px;
-  transform-box: fill-box;
-  transform-origin: 50% 85%;
+  width: 24px;
+  height: 29px;
+  margin-left: -12px;
+  overflow: visible;
+}
+
+#notch-face .nf-dancer svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
 #notch-face.music .nf-dancer {
   display: block;
-  animation: nfDanceBody 1.35s ease-in-out infinite;
-}
-
-#notch-face.music .nf-dancer #nf-dance-arm-l {
-  transform-box: fill-box;
-  transform-origin: 100% 0%;
-  animation: nfDanceArmL 1.35s ease-in-out infinite;
-}
-
-#notch-face.music .nf-dancer #nf-dance-arm-r {
-  transform-box: fill-box;
-  transform-origin: 0% 0%;
-  animation: nfDanceArmR 1.35s ease-in-out infinite;
-}
-
-#notch-face.music .nf-dancer #nf-dance-leg-l {
-  transform-box: fill-box;
-  transform-origin: 50% 0%;
-  animation: nfDanceLegL 1.35s ease-in-out infinite;
-}
-
-#notch-face.music .nf-dancer #nf-dance-leg-r {
-  transform-box: fill-box;
-  transform-origin: 50% 0%;
-  animation: nfDanceLegR 1.35s ease-in-out infinite;
-}
-
-@keyframes nfDanceBody {
-  0%, 100% { transform: translateY(0) rotate(-6deg); }
-  25% { transform: translateY(-2.5px) rotate(0deg); }
-  50% { transform: translateY(0) rotate(6deg); }
-  75% { transform: translateY(-2.5px) rotate(0deg); }
-}
-
-@keyframes nfDanceArmL {
-  0%, 100% { transform: rotate(-18deg); }
-  50% { transform: rotate(34deg); }
-}
-
-@keyframes nfDanceArmR {
-  0%, 100% { transform: rotate(18deg); }
-  50% { transform: rotate(-34deg); }
-}
-
-@keyframes nfDanceLegL {
-  0%, 100% { transform: rotate(14deg); }
-  50% { transform: rotate(-10deg); }
-}
-
-@keyframes nfDanceLegR {
-  0%, 100% { transform: rotate(-14deg); }
-  50% { transform: rotate(10deg); }
 }
 
 /* Busy (mission control) and music islands: modest stretch, ticker visible. */
