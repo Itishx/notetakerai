@@ -3871,6 +3871,15 @@ async function recoverRedundantItem(phrase) {
   return { ok: true, say: `Closest matches: ${options.join(", or ")}. Which one?` };
 }
 
+async function openRedundantFolder() {
+  if (!fs.existsSync(REVIEW_BIN_PATH)) {
+    return { ok: true, say: "There is no redundant folder right now — ask me what is worth deleting and I will build one." };
+  }
+  await shell.openPath(REVIEW_BIN_PATH);
+  const count = pendingReviewBin?.files?.length || 0;
+  return { ok: true, say: count ? `Open. ${count} things inside — ask me what is in there, or recover anything by name.` : "Open." };
+}
+
 function listRedundantContents() {
   if (!pendingReviewBin?.files?.length) return { ok: true, say: "My redundant folder is empty right now — nothing parked." };
   const files = pendingReviewBin.files;
@@ -3924,6 +3933,7 @@ async function restoreReviewBin() {
 
 function parseFileCleanupIntent(raw) {
   const source = cleanPrompt(String(raw || ""));
+  if (/\b(?:open|show|reveal)\b.*\b(?:redundant|review)\b.*\bfolder\b/i.test(source)) return { action: "open" };
   // Any delete-verb aimed at the redundant/review folder counts — people say
   // "delete the files in the redundant folder", not "delete them all".
   if (/\b(?:delete|trash|clear|empty|remove|erase)\b.*\b(?:redundant|review)\b.*\bfolder\b/i.test(source)
@@ -4003,9 +4013,18 @@ function parseCountItemsIntent(raw) {
   const kind = match[2].toLowerCase();
   let term = String(match[1] || "").replace(/^(?:of\s+)?(?:the\s+)?/i, "").trim();
   if (/^(?:total|all|my|the)$/i.test(term)) term = "";
-  if (/^screen/.test(kind)) return { term: "screenshot", kind: "files" };
+  // "how many FILES AND folders" — the leading noun is part of the question,
+  // not a search term. Same for any bare files/folders remnant.
+  if (/^(?:files?|folders?|items?)(?:\s+and)?$/i.test(term)) term = "";
+  // "in this folder" / "in here" is vague on purpose — the user is looking
+  // at something. Resolve against the frontmost Finder window instead of
+  // guessing or counting the world.
+  const scope = /\b(?:in|inside)\s+(?:this|the current|that|the open)\s+folder\b|\bin here\b/i.test(source)
+    ? "current"
+    : undefined;
+  if (/^screen/.test(kind)) return { term: "screenshot", kind: "files", scope };
   // No term = "how many folders/files do I have" = count EVERYTHING.
-  return { term, kind };
+  return { term, kind, scope };
 }
 
 // iCloud Drive lives INSIDE ~/Library, which every sane scan prunes — so it
@@ -4050,7 +4069,44 @@ async function countAllHomeItems() {
   };
 }
 
-async function countMatchingItems({ term, kind }) {
+async function getFinderFrontFolder() {
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e",
+      'tell application "Finder" to get POSIX path of (target of front window as alias)',
+    ], { timeout: 4000 });
+    const folder = String(stdout || "").trim();
+    return folder || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function countCurrentFolderItems(term) {
+  const folder = await getFinderFrontFolder();
+  if (!folder) {
+    return { ok: true, say: "I do not see a Finder window open right now — open the folder you mean and ask again." };
+  }
+  let files = 0;
+  let dirs = 0;
+  let matched = 0;
+  try {
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      if (entry.name.startsWith(".")) continue;
+      if (entry.isDirectory()) dirs += 1; else files += 1;
+      if (term && normalizeFileWords(entry.name).includes(normalizeFileWords(term))) matched += 1;
+    }
+  } catch (error) {
+    logMac("files.count_current.failed", { folder: textForLog(folder), error });
+    return { ok: false, say: "I could not read that folder." };
+  }
+  const name = path.basename(folder.replace(/\/$/, "")) || "that folder";
+  logMac("files.count_current", { folder: textForLog(folder), files, dirs, term: textForLog(term || "") });
+  if (term) return { ok: true, say: `In ${name}: ${matched} things matching ${term}, out of ${files} files and ${dirs} folders.` };
+  return { ok: true, say: `${name} has ${files} files and ${dirs} folders in it.` };
+}
+
+async function countMatchingItems({ term, kind, scope }) {
+  if (scope === "current") return countCurrentFolderItems(term);
   if (!term) return countAllHomeItems();
   const safeTerm = term.replace(/["\\]/g, "");
   logMac("files.count.start", { term: textForLog(term), kind });
@@ -7143,7 +7199,10 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return moveMacFile(moveFileIntent);
   }
 
-  const deleteFileIntent = parseDeleteFileIntent(raw);
+  // The redundant-folder intents parse later in this router but MUST win over
+  // the generic find-and-delete path — "delete the files in the redundant
+  // folder" is folder management, not a Spotlight hunt.
+  const deleteFileIntent = parseFileCleanupIntent(raw) ? null : parseDeleteFileIntent(raw);
   if (deleteFileIntent) {
     logMac("delegate.delete_file_intent", {
       raw: textForLog(raw),
@@ -7323,6 +7382,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     if (cleanupIntent.action === "restore") return restoreReviewBin();
     if (cleanupIntent.action === "recover") return recoverRedundantItem(cleanupIntent.phrase);
     if (cleanupIntent.action === "list") return listRedundantContents();
+    if (cleanupIntent.action === "open") return openRedundantFolder();
     if (cleanupIntent.action === "screenshots") return cleanScreenshots();
     return suggestFileCleanup();
   }
