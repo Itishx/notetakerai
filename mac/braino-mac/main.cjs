@@ -4015,6 +4015,52 @@ async function searchYouTubeSpoken(query) {
   }
 }
 
+// "Open the amazon page for X" / "open X from google docs" — resolve the
+// DESTINATION and the SUBJECT before anything fires. Layer one: understand.
+const SEMANTIC_SITES = {
+  amazon: { name: "Amazon", search: (q) => `https://www.amazon.in/s?k=${encodeURIComponent(q)}` },
+  youtube: { name: "YouTube", search: (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` },
+  "google docs": { name: "Google Docs", search: (q) => `https://drive.google.com/drive/search?q=${encodeURIComponent(q)}` },
+  "google drive": { name: "Google Drive", search: (q) => `https://drive.google.com/drive/search?q=${encodeURIComponent(q)}` },
+  wikipedia: { name: "Wikipedia", search: (q) => `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(q)}` },
+  google: { name: "Google", search: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}` },
+  flipkart: { name: "Flipkart", search: (q) => `https://www.flipkart.com/search?q=${encodeURIComponent(q)}` },
+};
+
+function parseSemanticOpenIntent(raw) {
+  // Voice corrections ride along — strip "no, I said" style prefixes so the
+  // retry doesn't pollute the query.
+  const source = cleanPrompt(String(raw || ""))
+    .replace(/^(?:no[,\s]+)?(?:i said|i asked(?: you)?(?: to)?|listen)[,\s]+/i, "")
+    .replace(/[?.!]+\s*$/, "").trim();
+  const siteNames = Object.keys(SEMANTIC_SITES).sort((a, b) => b.length - a.length);
+  const sitePattern = siteNames.join("|").replace(/ /g, "\\s+");
+
+  // "open the <site> page for <subject>"
+  let match = source.match(new RegExp(`^open\\s+(?:the\\s+)?(${sitePattern})\\s+(?:web\\s+)?(?:page|link|listing|result)\\s+(?:for|of|about)\\s+(.+)$`, "i"));
+  // "open <subject> from/on/in <site>"
+  if (!match) {
+    const alt = source.match(new RegExp(`^open\\s+(?:the\\s+)?(.+?)\\s+(?:from|on|in)\\s+(${sitePattern})$`, "i"));
+    if (alt) match = [alt[0], alt[2], alt[1]];
+  }
+  // "open the page for <subject>" — no site named: books/products lean Amazon,
+  // everything else leans Google.
+  if (!match) {
+    const bare = source.match(/^open\s+(?:the\s+)?(?:web\s+)?page\s+(?:for|of|about)\s+(.+)$/i);
+    if (bare) {
+      const subject = bare[1].trim();
+      const site = /\b(?:book|buy|order|product)\b/i.test(source) || /\bbook\b/i.test(subject) ? "amazon" : "google";
+      match = [bare[0], site, subject];
+    }
+  }
+  if (!match) return null;
+  const siteKey = match[1].toLowerCase().replace(/\s+/g, " ");
+  const site = SEMANTIC_SITES[siteKey];
+  const subject = match[2].replace(/^(?:the\s+)?(?:book|movie|song|video)\s+/i, "").trim();
+  if (!site || !subject || subject.length < 2) return null;
+  return { site: siteKey, siteName: site.name, subject, url: site.search(subject) };
+}
+
 function parseNetflixWatchIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
   if (!source) return null;
@@ -5828,6 +5874,14 @@ function nativeBundleIdForApp(appName) {
 }
 
 async function findInstalledApps(appName) {
+  // Nobody names a Mac app with a whole sentence. A long target means the
+  // user is describing a THING, not an app — fuzzy-matching it against
+  // /Applications is how "open the Amazon page for the book..." opened
+  // Pages.app. Refuse, so the caller falls through to smarter handling.
+  if (String(appName || "").trim().split(/\s+/).length > 3) {
+    logMac("app.search.skipped_long_target", { requested: textForLog(appName) });
+    return [];
+  }
   const cleaned = canonicalAppName(appName);
   if (!cleaned) return [];
   if (normalizeSearchToken(cleaned).length < 2) return [];
@@ -8234,6 +8288,17 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       say: `I found ${files.length} match${files.length === 1 ? "" : "es"}. The first one is ${path.basename(files[0])}.`,
       files,
     };
+  }
+
+  // First-layer understanding for "open ...": figure out WHAT the user wants
+  // before firing anything. "the amazon page for <book>" is a product page,
+  // not an app named "Amazon page for...".
+  const semanticOpen = parseSemanticOpenIntent(raw);
+  if (semanticOpen) {
+    logMac("delegate.semantic_open_intent", { site: semanticOpen.site, subject: textForLog(semanticOpen.subject) });
+    sendTaskProgress({ status: "thinking", text: `${semanticOpen.siteName}: ${semanticOpen.subject.slice(0, 40)}` });
+    await openChromeUrl(semanticOpen.url);
+    return { ok: true, say: `${semanticOpen.subject} on ${semanticOpen.siteName}, coming up.` };
   }
 
   const appName = extractAfter(raw, [
