@@ -78,6 +78,13 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Counting ("how many files/folders do I have", "how many X folders") | ✅ | Generic count walks Desktop+Downloads+Documents+iCloud Drive (verified live: 5779 files/889 folders); named count = mdfind + raw find fallback. "files AND folders" combined ask handled |
 | Vague-context resolution v1 ("how many files in THIS folder") | ✅ | The intelligence-layer principle: vague reference → look at what the user has open. Resolves the frontmost Finder window via AppleScript (free, no vision call), counts direct children, supports term filter ("how many braino files in here"). Non-Finder front app → says so instead of guessing. NEXT BRICK: same principle for other vague asks (screen vision as fallback for non-Finder surfaces) |
 
+## Accessibility hands (native/BrainoAX.swift — Tier 1 shipped 07-25)
+| Capability | Status | Notes |
+|---|---|---|
+| Universal clicker ("click send", "press the subscribe button") | 🟡 | Walks the front app's AX tree (windows only, 8k-node/3.5s cap), fuzzy-matches pressable roles (buttons/links/checkboxes/cells...) by title/description, AXPress. Ambiguous → asks with options; no match → suggests pointing instead. Media words (play/pause/next) deliberately left to Spotify intents |
+| Voice window manager ("put chrome on the left", "maximize this", "snap cursor to the right") | 🟡 | AX position+size on the focused window, main-screen visibleFrame with top-left coordinate conversion; left/right halves, maximize, minimize, center; works on the front window or any named running app. Dictation guard: app names capped at 2 words ("minimize the risk of failure" is not a window command) |
+| Selected-text superpowers ("fix this sentence", "translate the selected text to hindi", "summarize the highlighted part") | 🟡 | AXSelectedText read from the system-wide focused element (base64 through the CLI so newlines/quotes survive) → chat-about-notes rewrite → AXSelectedText write-back replaces in place; if the app refuses the write, result lands on the clipboard. summarize/explain speak instead of replacing |
+
 ## Files / Apps / Web
 | Capability | Status | Notes |
 |---|---|---|

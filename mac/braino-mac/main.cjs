@@ -13,6 +13,7 @@ const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swif
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
 const TOUCH_ID_HELPER_PATH = path.join(__dirname, "native", "BrainoTouchID.swift");
 const WAKE_WORD_HELPER_PATH = path.join(__dirname, "native", "BrainoWakeWord.swift");
+const AX_HELPER_PATH = path.join(__dirname, "native", "BrainoAX.swift");
 const APP_VERSION = "12.0.41";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
@@ -2765,6 +2766,138 @@ async function requireTouchId(reason) {
   } catch (error) {
     logMac("touchid.failed", { error });
     return null;
+  }
+}
+
+// ── Accessibility hands: press buttons, manage windows, act on selection. ──
+async function runAxHelper(args, timeout = 15000) {
+  try {
+    const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", AX_HELPER_PATH, ...args], { timeout });
+    const line = String(stdout || "").trim().split("\n")[0] || "";
+    const sep = line.indexOf("\t");
+    return sep < 0 ? { status: line, detail: "" } : { status: line.slice(0, sep), detail: line.slice(sep + 1) };
+  } catch (error) {
+    logMac("ax.helper_failed", { args: args[0], error });
+    return { status: "error", detail: error?.message || "helper failed" };
+  }
+}
+
+function parseAxClickIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  const match = source.match(/^(?:click|press|hit|tap)\s+(?:on\s+)?(?:the\s+)?(.+)$/i);
+  if (!match) return null;
+  const target = match[1].replace(/\s+(?:button|link)$/i, "").trim();
+  if (!target || target.length < 2) return null;
+  // Media-control words stay with the music intents.
+  if (/^(?:play|pause|stop|next|previous|skip)$/i.test(target)) return null;
+  return { target };
+}
+
+async function axClick(target) {
+  sendTaskProgress({ status: "thinking", text: `Looking for "${target}" to click` });
+  const result = await runAxHelper(["press", target]);
+  logMac("ax.press", { target: textForLog(target), status: result.status, detail: textForLog(result.detail) });
+  if (result.status === "pressed") return { ok: true, say: `Clicked ${result.detail}.` };
+  if (result.status === "ambiguous") {
+    const options = result.detail.split("|").filter(Boolean).slice(0, 3).join(", or ");
+    return { ok: true, say: `I see a few: ${options}. Which one?` };
+  }
+  if (result.status === "no_match" || result.status === "no_elements") {
+    return { ok: false, say: `I could not find anything called ${target} in this window. I can point at things too if that helps.` };
+  }
+  if (result.status === "needs-accessibility") {
+    return { ok: false, say: "I need Accessibility permission for that — it should already be on for my hotkeys, check System Settings." };
+  }
+  return { ok: false, say: `I found ${result.detail || target} but the press did not take.` };
+}
+
+function parseWindowManageIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  let action = null;
+  if (/\bmaximi[sz]e\b|\bfull\s*screen\b/i.test(source)) action = "maximize";
+  else if (/\bminimi[sz]e\b/i.test(source)) action = "minimize";
+  else if (/\bcent(?:er|re)\b.*\bwindow\b|\bwindow\b.*\bcent(?:er|re)\b/i.test(source)) action = "center";
+  else if (/\b(?:left|right)\s+half\b/i.test(source) || /\b(?:snap|put|move)\b.*\b(?:to\s+the\s+)?(?:left|right)\b/i.test(source)) {
+    action = /\bleft\b/i.test(source) ? "left" : "right";
+  }
+  if (!action) return null;
+  // Needs to be about a window/app — not "minimize the risk" in dictation.
+  const appMatch = source.match(/\b(?:maximi[sz]e|minimi[sz]e|snap|put|move|cent(?:er|re))\s+(?!the\s+window|this|that|it\b)(?:the\s+)?([a-z][a-z ]{1,24}?)(?:\s+(?:window|app))?(?:\s+(?:on|to|in)\b|$)/i);
+  let appQuery = "front";
+  if (appMatch?.[1] && !/^(?:window|screen|this|that|it|left|right)$/i.test(appMatch[1].trim())) {
+    const candidate = appMatch[1].trim();
+    // Real app names are short — "risk of failure" is dictation, not an app.
+    if (candidate.split(/\s+/).length > 2) return null;
+    appQuery = candidate;
+  }
+  if (appQuery === "front" && !/\bwindow\b|\bscreen\b|\bthis\b|\bit\b|\bchrome|safari|cursor|spotify|whatsapp|finder|notes\b/i.test(source)) return null;
+  return { action, appQuery };
+}
+
+async function axManageWindow({ action, appQuery }) {
+  sendTaskProgress({ status: "thinking", text: `Window: ${action}${appQuery !== "front" ? ` ${appQuery}` : ""}` });
+  const result = await runAxHelper(["window", action, appQuery]);
+  logMac("ax.window", { action, appQuery: textForLog(appQuery), status: result.status, detail: textForLog(result.detail) });
+  if (result.status === "done") {
+    const label = { left: "on the left half", right: "on the right half", maximize: "maximized", minimize: "minimized", center: "centered" }[action] || action;
+    return { ok: true, say: appQuery === "front" ? `Done, ${label}.` : `${appQuery} is ${label}.` };
+  }
+  if (result.status === "needs-accessibility") return { ok: false, say: "I need Accessibility permission to move windows." };
+  return { ok: false, say: appQuery === "front" ? "I could not grab that window." : `I do not see ${appQuery} running with a window.` };
+}
+
+function parseSelectedTextIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (!/\b(?:selection|selected|highlighted|this (?:sentence|text|paragraph|line|word|bit|message|email))\b/i.test(source)) return null;
+  const verb = source.match(/\b(fix|correct|improve|rewrite|rephrase|polish|shorten|expand|translate|summari[sz]e|explain)\b/i)?.[1]?.toLowerCase();
+  if (!verb) return null;
+  const language = source.match(/\btranslate\b.*?\b(?:to|into)\s+([a-z]+)\b/i)?.[1] || "";
+  const speakOnly = /^summari|^explain/.test(verb);
+  return { verb, language, speakOnly };
+}
+
+async function actOnSelectedText({ verb, language, speakOnly }) {
+  sendTaskProgress({ status: "thinking", text: "Reading your selection" });
+  const grabbed = await runAxHelper(["selected"]);
+  if (grabbed.status !== "selected" || !grabbed.detail) {
+    return { ok: false, say: "I do not see any text selected. Highlight it and ask again." };
+  }
+  const text = Buffer.from(grabbed.detail, "base64").toString("utf8");
+  const instruction = verb === "translate"
+    ? `Translate the following text into ${language || "English"}.`
+    : speakOnly
+      ? `${verb === "explain" ? "Explain" : "Summarize"} the following text, briefly, for voice.`
+      : `${verb.charAt(0).toUpperCase()}${verb.slice(1)} the following text. Keep the original meaning, tone appropriate, same language unless asked otherwise.`;
+  const message = [
+    instruction,
+    speakOnly ? "" : "Return ONLY the replacement text — no preamble, no quotes, no markdown.",
+    "---",
+    text.slice(0, 6000),
+  ].filter(Boolean).join("\n");
+  sendTaskProgress({ status: "thinking", text: `${verb} ${text.length} chars` });
+  const authToken = await getBrainoAuthToken();
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({ notes: "", message, chatHistory: [], responseMedium: speakOnly ? "voice" : "text" }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    if (!response.ok || !reply) throw new Error(data?.error || `selection ${verb} failed (${response.status})`);
+    if (speakOnly) return { ok: true, say: reply };
+    const replaced = await runAxHelper(["replace", Buffer.from(reply, "utf8").toString("base64")]);
+    logMac("ax.selection", { verb, chars: text.length, replyChars: reply.length, replaced: replaced.status });
+    if (replaced.status === "replaced") return { ok: true, say: "Done, swapped in." };
+    clipboard.writeText(reply);
+    return { ok: true, say: "The app would not let me type it in, so it is on your clipboard — just paste." };
+  } catch (error) {
+    logMac("ax.selection.failed", { verb, error });
+    return { ok: false, say: "That did not go through. Try once more." };
   }
 }
 
@@ -7223,6 +7356,24 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (/\b(accessibility|permissions|input monitoring)\b/.test(text)) {
     await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
     return { ok: true, say: "Opening Accessibility settings. Give Braino permission there, then double Control gets much cleaner." };
+  }
+
+  const selectedTextIntent = parseSelectedTextIntent(raw);
+  if (selectedTextIntent) {
+    logMac("delegate.ax_selection_intent", { raw: textForLog(raw), verb: selectedTextIntent.verb });
+    return actOnSelectedText(selectedTextIntent);
+  }
+
+  const windowIntent = parseWindowManageIntent(raw);
+  if (windowIntent) {
+    logMac("delegate.ax_window_intent", { raw: textForLog(raw), action: windowIntent.action, appQuery: textForLog(windowIntent.appQuery) });
+    return axManageWindow(windowIntent);
+  }
+
+  const axClickIntent = parseAxClickIntent(raw);
+  if (axClickIntent) {
+    logMac("delegate.ax_click_intent", { raw: textForLog(raw), target: textForLog(axClickIntent.target) });
+    return axClick(axClickIntent.target);
   }
 
   const screenPoint = parseScreenPointIntent(raw);
