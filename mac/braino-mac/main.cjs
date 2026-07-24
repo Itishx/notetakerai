@@ -3604,51 +3604,83 @@ function parseMesaIntent(raw) {
 const REVIEW_BIN_PATH = path.join(os.homedir(), "Desktop", "Braino Review Bin");
 let pendingReviewBin = null; // { files: [names], at }
 
+async function dirIsStale(full, days) {
+  // True when NOT ONE file inside was modified in the last <days> days.
+  try {
+    const { stdout } = await execFileP("/usr/bin/find", [full, "-type", "f", "-mtime", `-${days}`, "-print", "-quit"], { timeout: 10000 });
+    return !String(stdout || "").trim();
+  } catch (_) {
+    return false;
+  }
+}
+
+async function dirSizeBytes(full) {
+  try {
+    const { stdout } = await execFileP("/usr/bin/du", ["-sk", full], { timeout: 20000 });
+    return (Number(String(stdout || "").trim().split(/\s+/)[0]) || 0) * 1024;
+  } catch (_) {
+    return 0;
+  }
+}
+
 async function suggestFileCleanup() {
-  const desktop = path.join(os.homedir(), "Desktop");
   const now = Date.now();
   const DAY = 24 * 60 * 60 * 1000;
+  const roots = ["Desktop", "Downloads", "Documents"].map((name) => path.join(os.homedir(), name));
   let candidates = [];
-  try {
-    for (const entry of fs.readdirSync(desktop, { withFileTypes: true })) {
-      if (!entry.isFile() || entry.name.startsWith(".")) continue;
-      const full = path.join(desktop, entry.name);
+  for (const root of roots) {
+    let entries;
+    try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (_) { continue; }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".") || entry.name === "Braino Review Bin") continue;
+      const full = path.join(root, entry.name);
       let stat;
       try { stat = fs.statSync(full); } catch (_) { continue; }
-      const lastTouched = Math.max(stat.mtimeMs, stat.atimeMs || 0);
-      const ageDays = (now - lastTouched) / DAY;
-      const isCapture = /^(screenshot|screen recording)/i.test(entry.name);
-      const big = stat.size > 100 * 1024 * 1024;
-      if ((isCapture && ageDays > 3) || ageDays > 45 || (big && ageDays > 14)) {
-        candidates.push({ name: entry.name, full, size: stat.size, ageDays: Math.round(ageDays), isCapture });
+      if (entry.isDirectory()) {
+        // A folder is a candidate when nothing inside moved in 45 days —
+        // checked recursively, so year-old project folders can't hide.
+        if (!(await dirIsStale(full, 45))) continue;
+        const size = await dirSizeBytes(full);
+        const ageDays = Math.round((now - stat.mtimeMs) / DAY);
+        candidates.push({ name: entry.name, full, size, ageDays: Math.max(ageDays, 45), isCapture: false, isDir: true });
+      } else if (entry.isFile()) {
+        const lastTouched = Math.max(stat.mtimeMs, stat.atimeMs || 0);
+        const ageDays = (now - lastTouched) / DAY;
+        const isCapture = /^(screenshot|screen recording)/i.test(entry.name);
+        const big = stat.size > 100 * 1024 * 1024;
+        if ((isCapture && ageDays > 3) || ageDays > 45 || (big && ageDays > 14)) {
+          candidates.push({ name: entry.name, full, size: stat.size, ageDays: Math.round(ageDays), isCapture, isDir: false });
+        }
       }
     }
-  } catch (error) {
-    logMac("files.cleanup.scan_failed", { error });
-    return { ok: false, say: "I could not scan the desktop just now." };
   }
   if (!candidates.length) {
-    return { ok: true, say: "Honestly, your desktop looks fine — nothing old or heavy enough that I would push you to delete." };
+    return { ok: true, say: "I went through Desktop, Downloads and Documents — folders included — and nothing has gone stale enough to push you on. Ask me again in a few weeks." };
   }
   candidates.sort((a, b) => b.size - a.size);
-  candidates = candidates.slice(0, 20);
+  candidates = candidates.slice(0, 25);
   try { fs.mkdirSync(REVIEW_BIN_PATH, { recursive: true }); } catch (_) {}
   const moved = [];
-  for (const file of candidates) {
+  for (const item of candidates) {
     try {
-      fs.renameSync(file.full, path.join(REVIEW_BIN_PATH, file.name));
-      moved.push(file);
+      let dest = path.join(REVIEW_BIN_PATH, item.name);
+      if (fs.existsSync(dest)) dest = path.join(REVIEW_BIN_PATH, `${path.basename(item.name, path.extname(item.name))} (${path.basename(path.dirname(item.full))})${path.extname(item.name)}`);
+      fs.renameSync(item.full, dest);
+      moved.push({ ...item, binName: path.basename(dest), origRoot: path.dirname(item.full) });
     } catch (_) {}
   }
   if (!moved.length) return { ok: false, say: "I found candidates but could not move them for review." };
-  pendingReviewBin = { files: moved.map((f) => f.name), at: Date.now() };
+  pendingReviewBin = { files: moved.map((f) => ({ binName: f.binName, origRoot: f.origRoot })), at: Date.now() };
   await shell.openPath(REVIEW_BIN_PATH);
+  const folders = moved.filter((f) => f.isDir).length;
   const captures = moved.filter((f) => f.isCapture).length;
   const totalMb = Math.round(moved.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024));
-  logMac("files.cleanup.suggested", { count: moved.length, captures, totalMb });
-  const parts = [`I pulled ${moved.length} files you have not touched in a while into a review folder on your desktop — about ${totalMb} megabytes.`];
-  if (captures) parts.push(`${captures} are old screenshots and screen recordings.`);
-  parts.push("Look them over. Say delete them all and I will trash the lot, or say put them back.");
+  const sizeSpoken = totalMb > 1024 ? `${(totalMb / 1024).toFixed(1)} gigs` : `${totalMb} megabytes`;
+  logMac("files.cleanup.suggested", { count: moved.length, folders, captures, totalMb });
+  const parts = [`From Desktop, Downloads and Documents I pulled ${moved.length} things you have not touched in ages into a review folder — about ${sizeSpoken}.`];
+  if (folders) parts.push(`${folders} are whole folders nothing inside has moved in over a month and a half.`);
+  if (captures) parts.push(`${captures} are old screenshots and recordings.`);
+  parts.push("Look them over. Say delete them all, or put them back.");
   return { ok: true, say: parts.join(" ") };
 }
 
@@ -3673,18 +3705,19 @@ async function deleteReviewBin() {
 
 async function restoreReviewBin() {
   if (!pendingReviewBin) return { ok: false, say: "Nothing is parked for review right now." };
-  const desktop = path.join(os.homedir(), "Desktop");
   let restored = 0;
-  for (const name of pendingReviewBin.files) {
+  for (const item of pendingReviewBin.files) {
+    const binName = typeof item === "string" ? item : item.binName;
+    const origRoot = typeof item === "string" ? path.join(os.homedir(), "Desktop") : item.origRoot;
     try {
-      fs.renameSync(path.join(REVIEW_BIN_PATH, name), path.join(desktop, name));
+      fs.renameSync(path.join(REVIEW_BIN_PATH, binName), path.join(origRoot, binName));
       restored += 1;
     } catch (_) {}
   }
   try { fs.rmdirSync(REVIEW_BIN_PATH); } catch (_) {}
   pendingReviewBin = null;
   logMac("files.cleanup.restored", { restored });
-  return { ok: true, say: `Put ${restored} files back where they were. Nothing deleted.` };
+  return { ok: true, say: `Put ${restored} things back where they came from. Nothing deleted.` };
 }
 
 function parseFileCleanupIntent(raw) {
@@ -3695,6 +3728,59 @@ function parseFileCleanupIntent(raw) {
     || /\b(?:scan|review|check)\b.*\b(?:files|desktop)\b.*\b(?:delete|clean|old|stale)\b/i.test(source)
     || /\bfiles?\b.*\bworth (?:deleting|keeping)\b/i.test(source)) return { action: "suggest" };
   return null;
+}
+
+// "How many filegen folders do I have?" — a real everything-scan via
+// Spotlight, not a polite guess.
+function parseCountItemsIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  const match = source.match(/\bhow many\b\s+(?:total\s+)?(.+?)\s+(folders?|files?|items?)\b(?:\s+(?:do|have)\b.*)?$/i);
+  if (!match) return null;
+  const term = String(match[1] || "").replace(/^(?:of\s+)?(?:the\s+)?/i, "").trim();
+  if (!term || term.length < 2) return null;
+  return { term, kind: match[2].toLowerCase() };
+}
+
+async function countMatchingItems({ term, kind }) {
+  const safeTerm = term.replace(/["\\]/g, "");
+  let paths = [];
+  try {
+    const { stdout } = await execFileP("/usr/bin/mdfind", [`kMDItemDisplayName == "*${safeTerm}*"cd`], { timeout: 15000 });
+    paths = String(stdout || "").split("\n").filter(Boolean)
+      .filter((p) => p.startsWith(os.homedir()) && !/\/Library\/|\/node_modules\//.test(p));
+  } catch (_) {}
+  if (!paths.length) {
+    // Spotlight often can't (or won't) see the home folder from here — walk it
+    // for real instead of shrugging. Depth-capped, junk dirs pruned.
+    try {
+      const { stdout } = await execFileP("/usr/bin/find", [
+        os.homedir(), "-maxdepth", "8",
+        "(", "-path", "*/Library", "-o", "-path", "*/node_modules", "-o", "-path", "*/.git", "-o", "-path", "*/.Trash", ")", "-prune",
+        "-o", "-iname", `*${safeTerm}*`, "-print",
+      ], { timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
+      paths = String(stdout || "").split("\n").filter(Boolean);
+    } catch (error) {
+      logMac("files.count.failed", { term: textForLog(term), error });
+    }
+  }
+  let dirs = 0;
+  let files = 0;
+  const parents = new Map();
+  for (const p of paths) {
+    try {
+      const stat = fs.statSync(p);
+      if (stat.isDirectory()) dirs += 1; else files += 1;
+      const parent = path.basename(path.dirname(p));
+      parents.set(parent, (parents.get(parent) || 0) + 1);
+    } catch (_) {}
+  }
+  const wantFolders = kind.startsWith("folder");
+  const count = wantFolders ? dirs : kind.startsWith("file") ? files : dirs + files;
+  const topSpots = [...parents.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name]) => name).join(", ");
+  logMac("files.count", { term: textForLog(term), dirs, files });
+  if (!count) return { ok: true, say: `I searched everywhere Spotlight can see — no ${term} ${kind} in your home folder.` };
+  const other = wantFolders ? `${files} matching files` : `${dirs} matching folders`;
+  return { ok: true, say: `You have ${count} ${term} ${wantFolders ? "folders" : "files"}${(wantFolders ? files : dirs) ? ` plus ${other}` : ""}, mostly under ${topSpots}.` };
 }
 
 // ── Task-manager awareness: who is eating the machine. ──
@@ -6892,6 +6978,12 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (mesaIntent) {
     logMac("delegate.mesa_intent", { raw: textForLog(raw) });
     return runMesaCheckIn();
+  }
+
+  const countIntent = parseCountItemsIntent(raw);
+  if (countIntent) {
+    logMac("delegate.count_items_intent", { term: textForLog(countIntent.term), kind: countIntent.kind });
+    return countMatchingItems(countIntent);
   }
 
   const cleanupIntent = parseFileCleanupIntent(raw);
