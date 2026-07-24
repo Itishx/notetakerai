@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.braino.livecaption</string>
+  <key>CFBundleName</key>
+  <string>Braino Live Caption</string>
+  <key>CFBundleExecutable</key>
+  <string>braino-live-caption</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Braino listens so your words can appear as live captions while you speak.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Braino transcribes on-device so captions form in real time. Nothing leaves this Mac.</string>
+</dict>
+</plist>

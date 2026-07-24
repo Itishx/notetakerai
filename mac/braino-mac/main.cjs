@@ -2943,73 +2943,88 @@ async function requireTouchId(reason) {
 // ── Live captions: on-device partial STT while a realtime session runs, so
 // the user's words form on screen AS they speak. Display-only — OpenAI's
 // transcript stays authoritative for routing. ──
-let swiftLiveCaption = null;
-const LIVE_CAPTION_BIN_PATH = path.join(__dirname, "native", "bin", "braino-live-caption");
+// TCC lesson learned the hard way: a helper SPAWNED by Electron inherits
+// Electron's permission identity, and Electron's plist has no speech key —
+// instant kill. Launched via `open` as its own .app, the helper IS its own
+// TCC client: it prompts once under "Braino Live Caption" and works forever.
+// stdout is lost with `open`, so captions append to a file we tail.
+const LIVE_CAPTION_APP_PATH = path.join(__dirname, "native", "bin", "BrainoLiveCaption.app");
+const LIVE_CAPTION_APP_BIN = path.join(LIVE_CAPTION_APP_PATH, "Contents", "MacOS", "braino-live-caption");
 const LIVE_CAPTION_PLIST_PATH = path.join(__dirname, "native", "BrainoLiveCaption-Info.plist");
+const LIVE_CAPTION_OUT_PATH = path.join(AUTH_STORE_DIR, "live-captions.txt");
+let liveCaptionTailTimer = null;
+let liveCaptionTailOffset = 0;
+let liveCaptionRunning = false;
 
-async function ensureLiveCaptionBinary() {
-  // SFSpeechRecognizer under `xcrun swift` gets TCC-killed instantly: the
-  // interpreter has no NSSpeechRecognitionUsageDescription. A compiled binary
-  // with an embedded Info.plist has its own TCC identity and can prompt.
+async function ensureLiveCaptionApp() {
   try {
     const sourceStat = fs.statSync(LIVE_CAPTION_HELPER_PATH);
-    const binStat = fs.existsSync(LIVE_CAPTION_BIN_PATH) ? fs.statSync(LIVE_CAPTION_BIN_PATH) : null;
+    const binStat = fs.existsSync(LIVE_CAPTION_APP_BIN) ? fs.statSync(LIVE_CAPTION_APP_BIN) : null;
     if (binStat && binStat.mtimeMs >= sourceStat.mtimeMs) return true;
-    fs.mkdirSync(path.dirname(LIVE_CAPTION_BIN_PATH), { recursive: true });
-    await execFileP("/usr/bin/swiftc", [
-      LIVE_CAPTION_HELPER_PATH, "-o", LIVE_CAPTION_BIN_PATH,
-      "-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", LIVE_CAPTION_PLIST_PATH,
-      "-O",
-    ], { timeout: 120000 });
-    await execFileP("/usr/bin/codesign", ["-s", "-", "-f", LIVE_CAPTION_BIN_PATH], { timeout: 20000 });
-    logMac("caption.binary.built", {});
+    fs.mkdirSync(path.dirname(LIVE_CAPTION_APP_BIN), { recursive: true });
+    fs.copyFileSync(LIVE_CAPTION_PLIST_PATH, path.join(LIVE_CAPTION_APP_PATH, "Contents", "Info.plist"));
+    await execFileP("/usr/bin/swiftc", [LIVE_CAPTION_HELPER_PATH, "-o", LIVE_CAPTION_APP_BIN, "-O"], { timeout: 120000 });
+    await execFileP("/usr/bin/codesign", ["-s", "-", "-f", "--deep", LIVE_CAPTION_APP_PATH], { timeout: 20000 });
+    logMac("caption.app.built", {});
     return true;
   } catch (error) {
-    logMac("caption.binary.build_failed", { error });
-    return fs.existsSync(LIVE_CAPTION_BIN_PATH);
+    logMac("caption.app.build_failed", { error });
+    return fs.existsSync(LIVE_CAPTION_APP_BIN);
   }
 }
 
+function tailLiveCaptions() {
+  if (liveCaptionTailTimer) return;
+  liveCaptionTailOffset = 0;
+  liveCaptionTailTimer = setInterval(() => {
+    try {
+      const stat = fs.statSync(LIVE_CAPTION_OUT_PATH);
+      if (stat.size <= liveCaptionTailOffset) return;
+      const fd = fs.openSync(LIVE_CAPTION_OUT_PATH, "r");
+      const buffer = Buffer.alloc(stat.size - liveCaptionTailOffset);
+      fs.readSync(fd, buffer, 0, buffer.length, liveCaptionTailOffset);
+      fs.closeSync(fd);
+      liveCaptionTailOffset = stat.size;
+      for (const line of buffer.toString("utf8").split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const sep = trimmed.indexOf("\t");
+        const kind = sep < 0 ? trimmed : trimmed.slice(0, sep);
+        const text = sep < 0 ? "" : trimmed.slice(sep + 1);
+        if (kind === "caption" || kind === "caption-final") {
+          sendToRenderer("braino-mac:live-caption", { text, final: kind === "caption-final" });
+        } else if (kind === "unavailable") {
+          logMac("caption.helper.unavailable", { reason: textForLog(text) });
+        } else if (kind === "caption-ready") {
+          logMac("caption.helper.ready", {});
+        }
+      }
+    } catch (_) {}
+  }, 120);
+}
+
 function startLiveCaptions() {
-  if (swiftLiveCaption) return;
+  if (liveCaptionRunning) return;
+  liveCaptionRunning = true;
   void (async () => {
-    if (swiftLiveCaption || !(await ensureLiveCaptionBinary())) return;
-    startLiveCaptionProcess();
+    if (!(await ensureLiveCaptionApp())) { liveCaptionRunning = false; return; }
+    try {
+      try { fs.writeFileSync(LIVE_CAPTION_OUT_PATH, ""); } catch (_) {}
+      await execFileP("/usr/bin/open", ["-g", "-a", LIVE_CAPTION_APP_PATH, "--args", "--out", LIVE_CAPTION_OUT_PATH, "--parent", String(process.pid)], { timeout: 15000 });
+      tailLiveCaptions();
+      logMac("caption.helper.start", { via: "open-app" });
+    } catch (error) {
+      liveCaptionRunning = false;
+      logMac("caption.helper.launch_failed", { error });
+    }
   })();
 }
 
-function startLiveCaptionProcess() {
-  swiftLiveCaption = spawn(LIVE_CAPTION_BIN_PATH, [], {
-    cwd: ROOT_DIR,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  logMac("caption.helper.start", {});
-  swiftLiveCaption.stdout.on("data", (chunk) => {
-    String(chunk || "").split(/\r?\n/).forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      const sep = trimmed.indexOf("\t");
-      const kind = sep < 0 ? trimmed : trimmed.slice(0, sep);
-      const text = sep < 0 ? "" : trimmed.slice(sep + 1);
-      if (kind === "caption" || kind === "caption-final") {
-        sendToRenderer("braino-mac:live-caption", { text, final: kind === "caption-final" });
-      } else if (kind === "unavailable") {
-        logMac("caption.helper.unavailable", { reason: textForLog(text) });
-      } else if (kind === "caption-ready") {
-        logMac("caption.helper.ready", {});
-      }
-    });
-  });
-  swiftLiveCaption.on("exit", (code) => {
-    logMac("caption.helper.exit", { code });
-    swiftLiveCaption = null;
-  });
-}
-
 function stopLiveCaptions() {
-  if (!swiftLiveCaption) return;
-  try { swiftLiveCaption.kill(); } catch (_) {}
-  swiftLiveCaption = null;
+  if (!liveCaptionRunning) return;
+  liveCaptionRunning = false;
+  if (liveCaptionTailTimer) { clearInterval(liveCaptionTailTimer); liveCaptionTailTimer = null; }
+  execFileP("/usr/bin/pkill", ["-f", "braino-live-caption"], { timeout: 5000 }).catch(() => {});
   logMac("caption.helper.stop", {});
 }
 

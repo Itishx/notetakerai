@@ -6,6 +6,12 @@
   <string>com.braino.livecaption</string>
   <key>CFBundleName</key>
   <string>Braino Live Caption</string>
+  <key>CFBundleExecutable</key>
+  <string>braino-live-caption</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSUIElement</key>
+  <true/>
   <key>NSMicrophoneUsageDescription</key>
   <string>Braino listens so your words can appear as live captions while you speak.</string>
   <key>NSSpeechRecognitionUsageDescription</key>

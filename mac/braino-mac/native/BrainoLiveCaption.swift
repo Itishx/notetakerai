@@ -19,6 +19,26 @@ final class BrainoLiveCaption: NSObject {
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
   private var cycleTimer: Timer?
+  // Launched as its OWN .app via `open` (so TCC treats it as its own client,
+  // not Electron's child) — stdout goes nowhere, so lines append to a file
+  // the main process tails. --parent lets it die with the app.
+  private var outHandle: FileHandle?
+  private var parentPid: Int32 = 0
+
+  func configure(outPath: String?, parent: Int32) {
+    parentPid = parent
+    if let outPath {
+      FileManager.default.createFile(atPath: outPath, contents: Data())
+      outHandle = FileHandle(forWritingAtPath: outPath)
+      outHandle?.seekToEndOfFile()
+    }
+    if parentPid > 0 {
+      Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        guard let self, self.parentPid > 0 else { return }
+        if kill(self.parentPid, 0) != 0 { exit(0) }
+      }
+    }
+  }
 
   func start() {
     SFSpeechRecognizer.requestAuthorization { [weak self] status in
@@ -100,10 +120,24 @@ final class BrainoLiveCaption: NSObject {
   }
 
   private func out(_ line: String) {
-    print(line)
-    fflush(stdout)
+    if let handle = outHandle {
+      handle.write(Data("\(line)\n".utf8))
+    } else {
+      print(line)
+      fflush(stdout)
+    }
   }
 }
 
 let captioner = BrainoLiveCaption()
+var outPath: String? = nil
+var parentPid: Int32 = 0
+var index = 1
+let args = CommandLine.arguments
+while index < args.count - 1 {
+  if args[index] == "--out" { outPath = args[index + 1]; index += 2; continue }
+  if args[index] == "--parent" { parentPid = Int32(args[index + 1]) ?? 0; index += 2; continue }
+  index += 1
+}
+captioner.configure(outPath: outPath, parent: parentPid)
 captioner.start()

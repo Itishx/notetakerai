@@ -589,7 +589,9 @@ const AMBIENT_AWAKE_WINDOW_MS = 30 * 60 * 1000;
 // Real-life pacing (user call after the 30s demo proved out): every 15 min.
 const AMBIENT_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 let lastEngagedAt = 0;
-let lastAmbientAt = 0;
+// Initialized to "now" so the FIRST glance waits a full interval — he used
+// to deliver a 12-second monologue the moment the app booted.
+let lastAmbientAt = Date.now();
 let ambientEnabled = true;
 let ambientBusy = false;
 
