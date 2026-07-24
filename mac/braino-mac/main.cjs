@@ -1809,6 +1809,15 @@ async function handlePendingMacWorkflow(raw) {
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
+  if (pending.type === "cleanup" && pending.stage === "cleanup_confirm") {
+    clearPendingMacWorkflow();
+    const answer = cleanPrompt(raw);
+    if (/\b(?:yes|yeah|yep|sure|go|do it|create|make it|please)\b/i.test(answer)) {
+      return createRedundantFolder(pending.data?.items || []);
+    }
+    return { ok: true, say: "Alright, leaving everything exactly where it is." };
+  }
+
   if (pending.type === "whatsapp") {
     clearPendingMacWorkflow();
     if (pending.stage === "whatsapp_recipient") {
@@ -3601,8 +3610,27 @@ function parseMesaIntent(raw) {
 }
 
 // ── File retention advisor: what is safe to let go of. ──
-const REVIEW_BIN_PATH = path.join(os.homedir(), "Desktop", "Braino Review Bin");
-let pendingReviewBin = null; // { files: [names], at }
+// Step-2 flow (user spec): scan → review oldest-first (creation date +
+// Spotlight last-used/use-count) → ASK before touching anything → create a
+// "Redundant Files" folder → persistent manifest so Braino always knows
+// exactly what he moved and can recover any single item by name.
+const REVIEW_BIN_PATH = path.join(os.homedir(), "Desktop", "Redundant Files");
+const REDUNDANT_MANIFEST_PATH = path.join(AUTH_STORE_DIR, "redundant-folder.json");
+let pendingReviewBin = loadRedundantManifest(); // survives restarts
+
+function loadRedundantManifest() {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(REDUNDANT_MANIFEST_PATH, "utf8"));
+    return manifest && Array.isArray(manifest.files) && manifest.files.length ? manifest : null;
+  } catch (_) { return null; }
+}
+
+function saveRedundantManifest(manifest) {
+  try {
+    if (!manifest) fs.unlinkSync(REDUNDANT_MANIFEST_PATH);
+    else fs.writeFileSync(REDUNDANT_MANIFEST_PATH, JSON.stringify(manifest, null, 2));
+  } catch (_) {}
+}
 
 async function dirIsStale(full, days) {
   // True when NOT ONE file inside was modified in the last <days> days.
@@ -3623,69 +3651,149 @@ async function dirSizeBytes(full) {
   }
 }
 
-async function suggestFileCleanup() {
+async function fileUsageMeta(full) {
+  // Spotlight metadata: when was it last OPENED and how often — much closer
+  // to "relevance" than mtime alone.
+  try {
+    const { stdout } = await execFileP("/usr/bin/mdls", ["-name", "kMDItemLastUsedDate", "-name", "kMDItemUseCount", full], { timeout: 4000 });
+    const lastRaw = stdout.match(/kMDItemLastUsedDate\s*=\s*(.+)/)?.[1]?.trim() || "";
+    const countRaw = stdout.match(/kMDItemUseCount\s*=\s*(\d+)/)?.[1] || "";
+    const lastUsedMs = lastRaw && lastRaw !== "(null)"
+      ? (Date.parse(lastRaw.replace(" ", "T").replace(" +0000", "+0000")) || 0)
+      : 0;
+    return { lastUsedMs, useCount: Number(countRaw) || 0 };
+  } catch (_) {
+    return { lastUsedMs: 0, useCount: 0 };
+  }
+}
+
+async function scanCleanupCandidates() {
   const now = Date.now();
   const DAY = 24 * 60 * 60 * 1000;
   const roots = ["Desktop", "Downloads", "Documents"].map((name) => path.join(os.homedir(), name));
-  let candidates = [];
+  const candidates = [];
   for (const root of roots) {
     let entries;
     try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (_) { continue; }
     for (const entry of entries) {
-      if (entry.name.startsWith(".") || entry.name === "Braino Review Bin") continue;
+      if (entry.name.startsWith(".") || entry.name === "Redundant Files" || entry.name === "Braino Review Bin") continue;
       const full = path.join(root, entry.name);
       let stat;
       try { stat = fs.statSync(full); } catch (_) { continue; }
       if (entry.isDirectory()) {
-        // A folder is a candidate when nothing inside moved in 45 days —
-        // checked recursively, so year-old project folders can't hide.
         if (!(await dirIsStale(full, 45))) continue;
         const size = await dirSizeBytes(full);
-        const ageDays = Math.round((now - stat.mtimeMs) / DAY);
-        candidates.push({ name: entry.name, full, size, ageDays: Math.max(ageDays, 45), isCapture: false, isDir: true });
+        const bornMs = stat.birthtimeMs || stat.mtimeMs;
+        candidates.push({ name: entry.name, full, size, bornMs, lastUsedMs: stat.mtimeMs, useCount: 0, isCapture: false, isDir: true });
       } else if (entry.isFile()) {
         const lastTouched = Math.max(stat.mtimeMs, stat.atimeMs || 0);
         const ageDays = (now - lastTouched) / DAY;
         const isCapture = /^(screenshot|screen recording)/i.test(entry.name);
         const big = stat.size > 100 * 1024 * 1024;
         if ((isCapture && ageDays > 3) || ageDays > 45 || (big && ageDays > 14)) {
-          candidates.push({ name: entry.name, full, size: stat.size, ageDays: Math.round(ageDays), isCapture, isDir: false });
+          const usage = await fileUsageMeta(full);
+          candidates.push({
+            name: entry.name, full, size: stat.size,
+            bornMs: stat.birthtimeMs || stat.mtimeMs,
+            lastUsedMs: Math.max(usage.lastUsedMs, lastTouched),
+            useCount: usage.useCount, isCapture, isDir: false,
+          });
         }
       }
     }
   }
+  // Oldest first — least recently touched leads, rarely-opened breaks ties.
+  candidates.sort((a, b) => (a.lastUsedMs - b.lastUsedMs) || (a.useCount - b.useCount));
+  return candidates.slice(0, 25);
+}
+
+async function suggestFileCleanup() {
+  sendTaskProgress({ status: "thinking", text: "Reviewing your files" });
+  const candidates = await scanCleanupCandidates();
   if (!candidates.length) {
     return { ok: true, say: "I went through Desktop, Downloads and Documents — folders included — and nothing has gone stale enough to push you on. Ask me again in a few weeks." };
   }
-  candidates.sort((a, b) => b.size - a.size);
-  candidates = candidates.slice(0, 25);
+  const DAY = 24 * 60 * 60 * 1000;
+  const totalMb = Math.round(candidates.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024));
+  const sizeSpoken = totalMb > 1024 ? `${(totalMb / 1024).toFixed(1)} gigs` : `${totalMb} megabytes`;
+  const oldest = candidates.slice(0, 3).map((c) => {
+    const months = Math.max(1, Math.round((Date.now() - c.lastUsedMs) / (30 * DAY)));
+    return `${c.name}, untouched about ${months} month${months > 1 ? "s" : ""}`;
+  }).join("; ");
+  setPendingMacWorkflow({ type: "cleanup", stage: "cleanup_confirm", data: { items: candidates.map((c) => ({ name: c.name, full: c.full, size: c.size, isDir: c.isDir, isCapture: c.isCapture })) } });
+  logMac("files.cleanup.proposed", { count: candidates.length, totalMb });
+  return {
+    ok: true,
+    say: `Going oldest first: ${candidates.length} things worth letting go, about ${sizeSpoken}. The oldest are ${oldest}. Want me to create a redundant folder with all of them so you can review?`,
+  };
+}
+
+async function createRedundantFolder(items) {
   try { fs.mkdirSync(REVIEW_BIN_PATH, { recursive: true }); } catch (_) {}
   const moved = [];
-  for (const item of candidates) {
+  for (const item of items) {
     try {
       let dest = path.join(REVIEW_BIN_PATH, item.name);
       if (fs.existsSync(dest)) dest = path.join(REVIEW_BIN_PATH, `${path.basename(item.name, path.extname(item.name))} (${path.basename(path.dirname(item.full))})${path.extname(item.name)}`);
       fs.renameSync(item.full, dest);
-      moved.push({ ...item, binName: path.basename(dest), origRoot: path.dirname(item.full) });
+      moved.push({ binName: path.basename(dest), origRoot: path.dirname(item.full), size: item.size, isDir: Boolean(item.isDir) });
     } catch (_) {}
   }
-  if (!moved.length) return { ok: false, say: "I found candidates but could not move them for review." };
-  pendingReviewBin = { files: moved.map((f) => ({ binName: f.binName, origRoot: f.origRoot })), at: Date.now() };
+  if (!moved.length) return { ok: false, say: "I could not move anything into the folder. Nothing changed." };
+  pendingReviewBin = { files: moved, at: Date.now(), folder: REVIEW_BIN_PATH };
+  saveRedundantManifest(pendingReviewBin);
   await shell.openPath(REVIEW_BIN_PATH);
-  const folders = moved.filter((f) => f.isDir).length;
-  const captures = moved.filter((f) => f.isCapture).length;
-  const totalMb = Math.round(moved.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024));
-  const sizeSpoken = totalMb > 1024 ? `${(totalMb / 1024).toFixed(1)} gigs` : `${totalMb} megabytes`;
-  logMac("files.cleanup.suggested", { count: moved.length, folders, captures, totalMb });
-  const parts = [`From Desktop, Downloads and Documents I pulled ${moved.length} things you have not touched in ages into a review folder — about ${sizeSpoken}.`];
-  if (folders) parts.push(`${folders} are whole folders nothing inside has moved in over a month and a half.`);
-  if (captures) parts.push(`${captures} are old screenshots and recordings.`);
-  parts.push("Look them over. Say delete them all, or put them back.");
-  return { ok: true, say: parts.join(" ") };
+  logMac("files.cleanup.folder_created", { count: moved.length });
+  return {
+    ok: true,
+    say: `Done. Redundant Files is on your desktop with ${moved.length} things inside, and I know every one of them by name. Review it — say delete them all, put them back, or recover something specific like recover the braino extension folder.`,
+  };
+}
+
+function matchRedundantItems(phrase) {
+  if (!pendingReviewBin?.files?.length) return [];
+  const wanted = String(phrase || "").toLowerCase().replace(/\b(?:the|that|my|folder|file|one)\b/g, " ").replace(/\s+/g, " ").trim();
+  if (!wanted) return [];
+  const words = wanted.split(" ").filter((w) => w.length > 1);
+  if (!words.length) return [];
+  return pendingReviewBin.files.filter((item) => {
+    const hay = item.binName.toLowerCase();
+    return words.every((w) => hay.includes(w)) || hay.includes(wanted);
+  });
+}
+
+async function recoverRedundantItem(phrase) {
+  if (!pendingReviewBin?.files?.length) return { ok: false, say: "There is no redundant folder of mine holding anything right now." };
+  const matches = matchRedundantItems(phrase);
+  if (!matches.length) {
+    const names = pendingReviewBin.files.slice(0, 6).map((f) => f.binName).join(", ");
+    return { ok: true, say: `Nothing in there matches that. The folder holds things like ${names}. Which one?` };
+  }
+  let restored = 0;
+  for (const item of matches) {
+    try {
+      fs.renameSync(path.join(REVIEW_BIN_PATH, item.binName), path.join(item.origRoot, item.binName));
+      restored += 1;
+    } catch (_) {}
+  }
+  pendingReviewBin.files = pendingReviewBin.files.filter((f) => !matches.includes(f));
+  if (!pendingReviewBin.files.length) { pendingReviewBin = null; try { fs.rmdirSync(REVIEW_BIN_PATH); } catch (_) {} }
+  saveRedundantManifest(pendingReviewBin);
+  logMac("files.cleanup.recovered", { restored, phrase: textForLog(phrase) });
+  return { ok: true, say: restored === 1 ? `Recovered ${matches[0].binName}, back where it came from.` : `Recovered ${restored} things, all back where they came from.` };
+}
+
+function listRedundantContents() {
+  if (!pendingReviewBin?.files?.length) return { ok: true, say: "My redundant folder is empty right now — nothing parked." };
+  const files = pendingReviewBin.files;
+  const folders = files.filter((f) => f.isDir).length;
+  const names = files.slice(0, 10).map((f) => f.binName).join(", ");
+  const more = files.length > 10 ? ` and ${files.length - 10} more` : "";
+  return { ok: true, say: `The redundant folder holds ${files.length} things${folders ? `, ${folders} of them folders` : ""}: ${names}${more}.` };
 }
 
 async function deleteReviewBin() {
-  if (!pendingReviewBin || Date.now() - pendingReviewBin.at > 30 * 60 * 1000) {
+  if (!pendingReviewBin?.files?.length) {
     return { ok: false, say: "There is no cleanup waiting on your call right now. Ask me what is worth deleting first." };
   }
   const count = pendingReviewBin.files.length;
@@ -3695,27 +3803,27 @@ async function deleteReviewBin() {
     ], { timeout: 15000 });
     try { fs.rmdirSync(REVIEW_BIN_PATH); } catch (_) {}
     pendingReviewBin = null;
+    saveRedundantManifest(null);
     logMac("files.cleanup.deleted", { count });
-    return { ok: true, say: `Done — ${count} files are in the Trash, so you can still fish anything back out.` };
+    return { ok: true, say: `Done — ${count} things are in the Trash, so you can still fish anything back out.` };
   } catch (error) {
     logMac("files.cleanup.delete_failed", { error });
-    return { ok: false, say: "The delete did not go through. The review folder is still on your desktop." };
+    return { ok: false, say: "The delete did not go through. The redundant folder is still on your desktop." };
   }
 }
 
 async function restoreReviewBin() {
-  if (!pendingReviewBin) return { ok: false, say: "Nothing is parked for review right now." };
+  if (!pendingReviewBin?.files?.length) return { ok: false, say: "Nothing is parked for review right now." };
   let restored = 0;
   for (const item of pendingReviewBin.files) {
-    const binName = typeof item === "string" ? item : item.binName;
-    const origRoot = typeof item === "string" ? path.join(os.homedir(), "Desktop") : item.origRoot;
     try {
-      fs.renameSync(path.join(REVIEW_BIN_PATH, binName), path.join(origRoot, binName));
+      fs.renameSync(path.join(REVIEW_BIN_PATH, item.binName), path.join(item.origRoot, item.binName));
       restored += 1;
     } catch (_) {}
   }
   try { fs.rmdirSync(REVIEW_BIN_PATH); } catch (_) {}
   pendingReviewBin = null;
+  saveRedundantManifest(null);
   logMac("files.cleanup.restored", { restored });
   return { ok: true, say: `Put ${restored} things back where they came from. Nothing deleted.` };
 }
@@ -3723,7 +3831,11 @@ async function restoreReviewBin() {
 function parseFileCleanupIntent(raw) {
   const source = cleanPrompt(String(raw || ""));
   if (pendingReviewBin && /\b(?:yes[,\s]+)?(?:delete|trash)\s+(?:them|these|those|all|them all|everything)\b/i.test(source)) return { action: "delete" };
-  if (pendingReviewBin && /\bput (?:them|those|these|it) back\b|\brestore (?:them|those|the files)\b/i.test(source)) return { action: "restore" };
+  if (pendingReviewBin && /\bput (?:them|those|these|it) back\b|\brestore (?:them|those|the files|everything)\b/i.test(source)) return { action: "restore" };
+  const recoverMatch = source.match(/\b(?:recover|bring back|take out|pull out|get back)\s+(.+?)\s*$/i);
+  if (pendingReviewBin && recoverMatch && !/\bthem all\b|\beverything\b/i.test(recoverMatch[1])) return { action: "recover", phrase: recoverMatch[1] };
+  if (/\b(?:what(?:'s| is) (?:in|inside))\b.*\b(?:redundant|review)\b.*\bfolder\b/i.test(source)
+    || /\bredundant folder\b.*\b(?:contents?|holding|inside|what)\b/i.test(source)) return { action: "list" };
   if (/\b(?:clean|clear|delete|trash|get rid of|remove)\b.*\bscreen\s*(?:shots?|recordings?)\b/i.test(source)
     || /\bscreen\s*shots?\b.*\b(?:clean|delete|useless|clear)\b/i.test(source)) return { action: "screenshots" };
   if (/\b(?:what|which|anything)\b.*\b(?:worth deleting|should i delete|can i delete|to delete)\b/i.test(source)
@@ -3749,10 +3861,17 @@ function collectDesktopCaptures() {
 }
 
 function desktopHygieneLines() {
+  const lines = [];
   const captures = collectDesktopCaptures();
-  if (captures.length < 3) return [];
-  const mb = Math.round(captures.reduce((sum, c) => sum + c.size, 0) / (1024 * 1024));
-  return [`Desktop hygiene: ${captures.length} screenshots and screen recordings are piling up on the user's Desktop (~${mb} MB). Braino knows this and can clean them if the user wants ("clean my screenshots").`];
+  if (captures.length >= 3) {
+    const mb = Math.round(captures.reduce((sum, c) => sum + c.size, 0) / (1024 * 1024));
+    lines.push(`Desktop hygiene: ${captures.length} screenshots and screen recordings are piling up on the user's Desktop (~${mb} MB). Braino knows this and can clean them if the user wants ("clean my screenshots").`);
+  }
+  if (pendingReviewBin?.files?.length) {
+    const names = pendingReviewBin.files.slice(0, 12).map((f) => f.binName).join(", ");
+    lines.push(`Braino created a "Redundant Files" folder on the Desktop and knows exactly what is inside (${pendingReviewBin.files.length} items): ${names}. The user can say delete them all, put them back, or recover a specific one by name.`);
+  }
+  return lines;
 }
 
 async function cleanScreenshots() {
@@ -3768,11 +3887,12 @@ async function cleanScreenshots() {
     } catch (_) {}
   }
   if (!moved.length) return { ok: false, say: "I could not move the screenshots just now." };
-  pendingReviewBin = { files: moved, at: Date.now() };
+  pendingReviewBin = { files: moved, at: Date.now(), folder: REVIEW_BIN_PATH };
+  saveRedundantManifest(pendingReviewBin);
   await shell.openPath(REVIEW_BIN_PATH);
   const mb = Math.round(captures.reduce((sum, c) => sum + c.size, 0) / (1024 * 1024));
   logMac("files.screenshots.collected", { count: moved.length, mb });
-  return { ok: true, say: `All ${moved.length} screenshots and recordings — about ${mb} megabytes — are in the review folder I just opened. Say delete them all, or put them back.` };
+  return { ok: true, say: `All ${moved.length} screenshots and recordings — about ${mb} megabytes — are in the Redundant Files folder I just opened. Say delete them all, put them back, or recover one by name.` };
 }
 
 // "How many filegen folders do I have?" — a real everything-scan via
@@ -7096,6 +7216,8 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     logMac("delegate.file_cleanup_intent", { raw: textForLog(raw), action: cleanupIntent.action });
     if (cleanupIntent.action === "delete") return deleteReviewBin();
     if (cleanupIntent.action === "restore") return restoreReviewBin();
+    if (cleanupIntent.action === "recover") return recoverRedundantItem(cleanupIntent.phrase);
+    if (cleanupIntent.action === "list") return listRedundantContents();
     if (cleanupIntent.action === "screenshots") return cleanScreenshots();
     return suggestFileCleanup();
   }

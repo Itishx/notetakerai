@@ -73,7 +73,7 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 ## Awareness / Hygiene
 | Capability | Status | Notes |
 |---|---|---|
-| File retention advisor ("what's worth deleting") | 🟡 | Scans Desktop: old screenshots/recordings (>3d), untouched >45d, or >100MB untouched >14d. Moves top 20 (by size) into "Braino Review Bin" on Desktop, opens it, speaks count+MB. "delete them all" → Finder Trash (recoverable), "put them back" → restores. Pending state expires 30min |
+| File retention advisor v2 ("what's worth deleting") — ask-first, oldest-first, persistent memory | 🟡 | Scans Desktop+Downloads+Documents (files AND stale folders). Ranks OLDEST FIRST by Spotlight kMDItemLastUsedDate/kMDItemUseCount (real "when did I last open this"), speaks the 3 oldest by name, then ASKS "want me to create a redundant folder?" (pendingMacWorkflow confirm — bare "yes" routes correctly). On yes: creates Desktop/"Redundant Files", moves everything, opens it, and persists a manifest (redundant-folder.json, survives restarts) so he knows every item by name. "recover the braino extension folder" → fuzzy-matched single-item restore to its ORIGINAL location (verified against realistic phrases); "what's in the redundant folder" → speaks contents; "delete them all" → Trash; "put them back" → full restore. Manifest is injected into chat context so he knows the folder's contents unprompted |
 | Task-manager awareness ("what's eating my ram") | 🟡 | ps -Aceo aggregated by app (Helper processes folded in — verified live: Cursor 2.3GB, Chrome 2.1GB). Speaks top 6 by memory; "close them" quits the closable ones (protected: Finder/WindowServer/Braino/Cursor/Terminal + current front app) |
 
 ## Files / Apps / Web
