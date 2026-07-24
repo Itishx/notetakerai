@@ -592,8 +592,8 @@ function fmtCountdown(ms) {
 // then STARTS a realtime conversation himself, since he opened his mouth.
 // "Braino, don't disturb me" turns it off; "you can disturb me" back on.
 const AMBIENT_AWAKE_WINDOW_MS = 30 * 60 * 1000;
-// Demo pacing per the user: glance every ~30s. Raise for real life later.
-const AMBIENT_CHECK_INTERVAL_MS = 30 * 1000;
+// Real-life pacing (user call after the 30s demo proved out): every 15 min.
+const AMBIENT_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 let lastEngagedAt = 0;
 let lastAmbientAt = 0;
 let ambientEnabled = true;
