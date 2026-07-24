@@ -1090,6 +1090,12 @@ function startSwiftHotkeyHelper() {
         toggleDockWindowVisibility("double Space");
         return;
       }
+      if (trimmed === "double-command") {
+        logMac("hotkey.double_command", {});
+        sendToRenderer("braino-mac:summon-toggle", { source: "double Command" });
+        ensureDockWindowVisible("summon-hotkey");
+        return;
+      }
       sendToRenderer("braino-mac:helper-status", { type: "swift", line: trimmed });
     });
   });

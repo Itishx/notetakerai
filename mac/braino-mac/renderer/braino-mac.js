@@ -749,6 +749,19 @@ async function handleSummon() {
   setWave(true);
 }
 
+// Double-Command: the hotkey twin of the voice summon — out if he's home,
+// back into the notch if he's out. Silent on the way home, no theatrics.
+async function handleSummonToggle() {
+  if (herMode) return;
+  if (walkerHome) {
+    void speak("Coming out, watch out.");
+    await setWalkerHomeState(false);
+    setWave(true);
+    return;
+  }
+  await setWalkerHomeState(true);
+}
+
 function nfSetStatusText(text) {
   const status = document.getElementById("nf-status");
   if (!status) return;
@@ -3796,6 +3809,7 @@ window.brainoMac.onMusicState?.((payload) => {
 });
 window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());
 window.brainoMac.onSummon?.(() => { void handleSummon(); });
+window.brainoMac.onSummonToggle?.(() => { void handleSummonToggle(); });
 window.brainoMac.onWakeStatus?.((payload) => {
   wakeWordArmed = Boolean(payload?.armed);
   updateNotchFace();

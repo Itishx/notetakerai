@@ -8,6 +8,9 @@ final class BrainoControlTap {
   private var lastControlDown: TimeInterval = 0
   private var lastSpaceDown: TimeInterval = 0
   private var controlIsDown = false
+  private var commandIsDown = false
+  private var commandTapPoisoned = false
+  private var lastCommandTap: TimeInterval = 0
   private var lastUnavailableLogAt: TimeInterval = 0
 
   func start() {
@@ -81,9 +84,34 @@ final class BrainoControlTap {
       }
     }
     controlIsDown = isControl
+
+    // Command double-tap = summon toggle. Only BARE taps count: any key or
+    // extra modifier while command is held (a real shortcut like Cmd+C or
+    // Cmd+Shift+S) poisons the tap so normal usage never triggers it.
+    let isCommand = event.flags.contains(.maskCommand)
+    if isCommand && !commandIsDown {
+      commandIsDown = true
+      let otherMods: CGEventFlags = [.maskShift, .maskControl, .maskAlternate]
+      commandTapPoisoned = !event.flags.intersection(otherMods).isEmpty
+    } else if isCommand && commandIsDown {
+      // Another modifier changed while command stayed down — chorded shortcut.
+      commandTapPoisoned = true
+    } else if !isCommand && commandIsDown {
+      commandIsDown = false
+      if !commandTapPoisoned {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastCommandTap < 0.52 {
+          printLine("double-command")
+          lastCommandTap = 0
+        } else {
+          lastCommandTap = now
+        }
+      }
+    }
   }
 
   private func handleKeyDown(_ event: CGEvent) {
+    if commandIsDown { commandTapPoisoned = true }
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     let isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
     guard keyCode == 49, !isAutoRepeat else { return }

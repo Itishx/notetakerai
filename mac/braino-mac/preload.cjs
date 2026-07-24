@@ -99,6 +99,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:summon", handler);
     return () => ipcRenderer.removeListener("braino-mac:summon", handler);
   },
+  onSummonToggle: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:summon-toggle", handler);
+    return () => ipcRenderer.removeListener("braino-mac:summon-toggle", handler);
+  },
   onWalkerToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:walker-toggle", handler);
