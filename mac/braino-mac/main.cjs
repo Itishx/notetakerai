@@ -7661,6 +7661,20 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return addSpotifyTrackOnMac(spotifyAddTrack);
   }
 
+  // Intelligence layer, rule zero: a QUESTION is not a command. "If I delete
+  // the dmg, will I also lose the app?" contains "delete the dmg" but the
+  // user is asking about consequences — action intents must never see it.
+  const questionProbe = cleanPrompt(raw);
+  const isConsequenceQuestion = /^if\s+(?!you\b)/i.test(questionProbe)
+    || /\bwill (?:i|it|this|that|we)\b/i.test(questionProbe)
+    || /\bwhat (?:happens|would happen)\b/i.test(questionProbe)
+    || /\bdoes (?:that|this|it) (?:mean|also|affect|break|delete|remove)\b/i.test(questionProbe)
+    || /\b(?:is it safe|would that|am i going to)\b/i.test(questionProbe);
+  if (isConsequenceQuestion) {
+    logMac("delegate.question_not_command", { raw: textForLog(raw) });
+    return runMacConversation(raw);
+  }
+
   const mesaIntent = parseMesaIntent(raw);
   if (mesaIntent) {
     logMac("delegate.mesa_intent", { raw: textForLog(raw) });
