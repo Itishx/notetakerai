@@ -7707,6 +7707,15 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   }
 
   if (/\bchrome\b|\bbrowser\b|\bsearch\b|\bopen\b/.test(text)) {
+    // Before shrugging to a web search: the thing the user wants to open is
+    // very often ON SCREEN right now (a project in Cursor's welcome list, an
+    // item in a picker). Try clicking it where they're looking first.
+    const openTarget = cleanPrompt(raw).match(/\bopen\s+(?:the\s+)?(.+?)(?:\s+project)?[?.!]*$/i)?.[1]?.trim();
+    if (openTarget && openTarget.length > 2) {
+      const pressed = await runAxHelper(["press", openTarget]);
+      logMac("delegate.open_screen_first", { target: textForLog(openTarget), status: pressed.status, detail: textForLog(pressed.detail) });
+      if (pressed.status === "pressed") return { ok: true, say: `Opened ${pressed.detail}.` };
+    }
     logMac("delegate.generic_browser_fallback", { raw: textForLog(raw) });
     await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(raw)}`);
     return { ok: true, say: "I do not know that exact move yet, so I searched it in Chrome." };

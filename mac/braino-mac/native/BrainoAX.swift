@@ -143,6 +143,13 @@ func runPress(query: String) {
     out("ambiguous\t\(options)")
     return
   }
+  // A weak solo match ("open project" -> "Open Cursor Settings") must NOT be
+  // pressed on confidence it doesn't have — report no_match so the caller
+  // escalates to vision, which can see what AX can't.
+  if best.score < 0.8 {
+    out("no_match\t\(best.candidate.label)")
+    return
+  }
   let result = AXUIElementPerformAction(best.candidate.element, kAXPressAction as CFString)
   if result == .success {
     out("pressed\t\(best.candidate.label)")
