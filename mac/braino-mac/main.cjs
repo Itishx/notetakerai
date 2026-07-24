@@ -3853,6 +3853,7 @@ async function moveRedundantItemsBack(items) {
 
 async function recoverRedundantItem(phrase) {
   if (!pendingReviewBin?.files?.length) return { ok: false, say: "There is no redundant folder of mine holding anything right now." };
+  sendTaskProgress({ status: "thinking", text: `Matching "${String(phrase).slice(0, 32)}" in the redundant folder` });
   const ranked = closestRedundantItems(phrase);
   if (!ranked.length) {
     const names = pendingReviewBin.files.slice(0, 6).map((f) => f.binName).join(", ");
@@ -3885,6 +3886,7 @@ async function deleteReviewBin() {
   }
   const count = pendingReviewBin.files.length;
   // Sensitive action: bulk delete only after Touch ID says it is really you.
+  sendTaskProgress({ status: "thinking", text: `Deleting ${count} redundant files - Touch ID please` });
   const granted = await requireTouchId(`delete ${count} redundant files`);
   if (granted !== true) {
     return { ok: false, say: granted === false ? "Touch ID said no, so everything stays put." : "I could not verify it is you, so everything stays put." };
@@ -3922,7 +3924,12 @@ async function restoreReviewBin() {
 
 function parseFileCleanupIntent(raw) {
   const source = cleanPrompt(String(raw || ""));
+  // Any delete-verb aimed at the redundant/review folder counts — people say
+  // "delete the files in the redundant folder", not "delete them all".
+  if (/\b(?:delete|trash|clear|empty|remove|erase)\b.*\b(?:redundant|review)\b.*\bfolder\b/i.test(source)
+    || /\b(?:redundant|review)\s*folder\b.*\b(?:delete|trash|clear|empty)\b/i.test(source)) return { action: "delete" };
   if (pendingReviewBin && /\b(?:yes[,\s]+)?(?:delete|trash)\s+(?:them|these|those|all|them all|everything)\b/i.test(source)) return { action: "delete" };
+  if (/\b(?:put|move)\b.*\b(?:back|home)\b.*\b(?:redundant|review)\b.*\bfolder\b/i.test(source)) return { action: "restore" };
   if (pendingReviewBin && /\bput (?:them|those|these|it) back\b|\brestore (?:them|those|the files|everything)\b/i.test(source)) return { action: "restore" };
   const recoverMatch = source.match(/\b(?:recover|bring back|take out|pull out|get back)\s+(.+?)\s*$/i);
   if (pendingReviewBin && recoverMatch && !/\bthem all\b|\beverything\b/i.test(recoverMatch[1])) return { action: "recover", phrase: recoverMatch[1] };

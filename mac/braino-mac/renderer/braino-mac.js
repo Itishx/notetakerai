@@ -594,6 +594,24 @@ function nfClearCaptions() {
   updateNotchFace();
 }
 
+// Braino's thinking, shown live in the notch ticker while he works a task —
+// the same principle as the extension's dynamic-island step display. You
+// should always be able to SEE what he understood and what he's doing.
+let nfThinkingText = "";
+let nfThinkingTimer = 0;
+
+function nfSetThinking(text) {
+  nfThinkingText = String(text || "").trim();
+  window.clearTimeout(nfThinkingTimer);
+  if (nfThinkingText) {
+    nfThinkingTimer = window.setTimeout(() => {
+      nfThinkingText = "";
+      updateNotchFace();
+    }, 6000);
+  }
+  updateNotchFace();
+}
+
 function updateNotchFace() {
   if (!notchFace) return;
   const visible = notchFaceEnabled && !herMode;
@@ -620,7 +638,10 @@ function updateNotchFace() {
   let line = "";
   let live = false;
   let music = false;
-  if (conversationOwnsNotch) {
+  if (nfThinkingText) {
+    // Active thinking outranks everything — you always see what he's doing.
+    line = nfThinkingText;
+  } else if (conversationOwnsNotch) {
     // nothing else renders in the notch this frame
   } else if (timer) {
     line = `${timer.label} · ${fmtCountdown(timer.endAt - now)}`;
@@ -638,6 +659,7 @@ function updateNotchFace() {
   }
   notchFace.classList.toggle("live", visible && live);
   notchFace.classList.toggle("music", visible && music);
+  notchFace.classList.toggle("busy", visible && walkerHome && Boolean(nfThinkingText));
   notchFace.classList.toggle("mic-live", visible && sessionEngaged);
   notchFace.classList.toggle("wake-armed", visible && wakeWordArmed);
   // Sleepy shade by default whenever he's home with nothing going on; a real
@@ -3869,7 +3891,10 @@ window.brainoMac.onAuthRequired(() => {
 });
 window.brainoMac.onTaskProgress((progress) => {
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
-  if (progress.text) setBubble(progress.text, 1200);
+  if (progress.text) {
+    if (walkerHome && notchFaceEnabled && !herMode) nfSetThinking(progress.text);
+    else setBubble(progress.text, 1200);
+  }
 });
 window.brainoMac.onSpeechTranscript((speech) => {
   if (speech.status === "ready") {
