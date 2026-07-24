@@ -644,7 +644,15 @@ function splitHelperLines(onLine) {
   };
 }
 
-let cachedNotchMetrics = null;
+const NOTCH_CACHE_PATH = path.join(AUTH_STORE_DIR, "notch-metrics.json");
+let cachedNotchMetrics = (() => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(NOTCH_CACHE_PATH, "utf8"));
+    return Number.isFinite(parsed?.width) ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+})();
 
 async function measureNotch() {
   const swiftSource = [
@@ -663,6 +671,7 @@ async function measureNotch() {
     const [width, height] = String(stdout || "").trim().split(/\s+/).map(Number);
     if (Number.isFinite(width) && width > 40 && width < 600 && Number.isFinite(height) && height > 0) {
       cachedNotchMetrics = { width: Math.round(width), height: Math.round(height) };
+      fs.promises.writeFile(NOTCH_CACHE_PATH, JSON.stringify(cachedNotchMetrics)).catch(() => {});
       logMac("notch.measured", cachedNotchMetrics);
       sendOverlayState("notch_measured");
     } else {

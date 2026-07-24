@@ -386,11 +386,8 @@ function updateNotchFace() {
       : "";
   notchFace.classList.toggle("listen", visible && state === "listen");
   notchFace.classList.toggle("speak", visible && state === "speak");
-  // One soul: while the walker is out roaming and nothing is happening, the
-  // home face dozes. Voice or music snaps it awake. Boot manages sleep itself.
-  if (notchBootDone) {
-    notchFace.classList.toggle("asleep", visible && !state && !musicMode);
-  }
+  // Eyes stay open and watching once boot ends; sleep is a boot-only state.
+  if (notchBootDone) notchFace.classList.remove("asleep");
 }
 
 function nfSetStatusText(text) {

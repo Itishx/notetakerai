@@ -211,7 +211,7 @@ body {
   margin: 0 auto;
   /* Idle hides exactly behind the physical notch (measured at runtime). */
   width: var(--nf-notch-w, 190px);
-  height: calc(var(--nf-notch-h) + 36px);
+  height: calc(var(--nf-notch-h) + 24px);
   border-radius: 0 0 18px 18px;
   overflow: hidden;
   background: linear-gradient(180deg, #F6A8A2, #E8786E 55%, #C9544A);
@@ -251,13 +251,20 @@ body {
   top: var(--nf-notch-h);
   bottom: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
 }
 
 #notch-face .nf-mini {
-  width: 104px;
+  width: 78px;
+  margin-top: -4px;
   display: block;
+  transition: width 0.5s cubic-bezier(0.34, 1.25, 0.4, 1);
+}
+
+#notch-face.listen .nf-mini,
+#notch-face.speak .nf-mini {
+  width: 104px;
 }
 
 #notch-face.listen #nf-mouth-idle { display: none; }
