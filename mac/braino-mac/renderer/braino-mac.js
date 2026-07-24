@@ -612,10 +612,17 @@ function updateNotchFace() {
     ? nfCalendarNext
     : null;
 
+  const sessionEngaged = realtimeActive || realtimeConnecting;
+  // Conversation OWNS the notch while a caption is live: the dancer, marquee
+  // and activity tickers all yield so the expanded island belongs to the
+  // words — they come right back the moment the caption clears.
+  const conversationOwnsNotch = sessionEngaged && Boolean(nfHeardText);
   let line = "";
   let live = false;
   let music = false;
-  if (timer) {
+  if (conversationOwnsNotch) {
+    // nothing else renders in the notch this frame
+  } else if (timer) {
     line = `${timer.label} · ${fmtCountdown(timer.endAt - now)}`;
     live = true;
   } else if (calImminent) {
@@ -631,7 +638,6 @@ function updateNotchFace() {
   }
   notchFace.classList.toggle("live", visible && live);
   notchFace.classList.toggle("music", visible && music);
-  const sessionEngaged = realtimeActive || realtimeConnecting;
   notchFace.classList.toggle("mic-live", visible && sessionEngaged);
   notchFace.classList.toggle("wake-armed", visible && wakeWordArmed);
   // Sleepy shade by default whenever he's home with nothing going on; a real
@@ -639,7 +645,7 @@ function updateNotchFace() {
   // takes over the visual for listening/speaking.
   notchFace.classList.toggle("awake", visible && sessionEngaged);
   notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !live && !music);
-  notchFace.classList.toggle("captioning", visible && Boolean(nfHeardText));
+  notchFace.classList.toggle("captioning", visible && conversationOwnsNotch);
   // While he's home the notch IS the conversation surface: sonar rings while
   // listening, talking mouth + bars while speaking. When he's out on screen,
   // the walker owns the voice theatrics and the notch stays quiet.
