@@ -3789,13 +3789,22 @@ function parseCountItemsIntent(raw) {
   return { term, kind };
 }
 
+// iCloud Drive lives INSIDE ~/Library, which every sane scan prunes — so it
+// must be an explicit root or the user's real Documents are invisible
+// (locally their Documents folder is empty; the actual files sync to iCloud).
+const ICLOUD_DRIVE_PATH = path.join(os.homedir(), "Library", "Mobile Documents", "com~apple~CloudDocs");
+
 async function countAllHomeItems() {
-  const roots = ["Desktop", "Downloads", "Documents"];
+  const roots = [
+    { name: "Desktop", full: path.join(os.homedir(), "Desktop") },
+    { name: "Downloads", full: path.join(os.homedir(), "Downloads") },
+    { name: "Documents", full: path.join(os.homedir(), "Documents") },
+    { name: "iCloud Drive", full: ICLOUD_DRIVE_PATH },
+  ];
   const perRoot = [];
   let totalFiles = 0;
   let totalDirs = 0;
-  for (const rootName of roots) {
-    const full = path.join(os.homedir(), rootName);
+  for (const { name: rootName, full } of roots) {
     const countType = async (type) => {
       try {
         const { stdout } = await execFileP("/usr/bin/find", [
@@ -3830,18 +3839,27 @@ async function countMatchingItems({ term, kind }) {
   try {
     const { stdout } = await execFileP("/usr/bin/mdfind", [`kMDItemDisplayName == "*${safeTerm}*"cd`], { timeout: 15000 });
     paths = String(stdout || "").split("\n").filter(Boolean)
-      .filter((p) => p.startsWith(os.homedir()) && !/\/Library\/|\/node_modules\//.test(p));
+      .filter((p) => p.startsWith(os.homedir()) && !/\/node_modules\//.test(p)
+        && (p.includes("/Mobile Documents/") || !/\/Library\//.test(p)));
   } catch (_) {}
   if (!paths.length) {
     // Spotlight often can't (or won't) see the home folder from here — walk it
-    // for real instead of shrugging. Depth-capped, junk dirs pruned.
+    // for real instead of shrugging. Depth-capped, junk dirs pruned, and
+    // iCloud Drive searched explicitly since the Library prune hides it.
     try {
-      const { stdout } = await execFileP("/usr/bin/find", [
-        os.homedir(), "-maxdepth", "8",
-        "(", "-path", "*/Library", "-o", "-path", "*/node_modules", "-o", "-path", "*/.git", "-o", "-path", "*/.Trash", ")", "-prune",
-        "-o", "-iname", `*${safeTerm}*`, "-print",
-      ], { timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
-      paths = String(stdout || "").split("\n").filter(Boolean);
+      const [homeOut, icloudOut] = await Promise.all([
+        execFileP("/usr/bin/find", [
+          os.homedir(), "-maxdepth", "8",
+          "(", "-path", "*/Library", "-o", "-path", "*/node_modules", "-o", "-path", "*/.git", "-o", "-path", "*/.Trash", ")", "-prune",
+          "-o", "-iname", `*${safeTerm}*`, "-print",
+        ], { timeout: 30000, maxBuffer: 4 * 1024 * 1024 }).then(({ stdout }) => stdout).catch(() => ""),
+        execFileP("/usr/bin/find", [
+          ICLOUD_DRIVE_PATH, "-maxdepth", "8",
+          "(", "-path", "*/node_modules", "-o", "-path", "*/.git", ")", "-prune",
+          "-o", "-iname", `*${safeTerm}*`, "-print",
+        ], { timeout: 30000, maxBuffer: 4 * 1024 * 1024 }).then(({ stdout }) => stdout).catch(() => ""),
+      ]);
+      paths = `${homeOut}\n${icloudOut}`.split("\n").filter(Boolean);
       logMac("files.count.find_fallback", { term: textForLog(term), found: paths.length });
     } catch (error) {
       logMac("files.count.failed", { term: textForLog(term), error });
@@ -3864,7 +3882,7 @@ async function countMatchingItems({ term, kind }) {
   const count = wantFolders ? dirs : kind.startsWith("file") ? files : dirs + files;
   const topSpots = [...parents.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name]) => name).join(", ");
   logMac("files.count", { term: textForLog(term), dirs, files });
-  if (!count) return { ok: true, say: `I searched everywhere Spotlight can see — no ${term} ${kind} in your home folder.` };
+  if (!count) return { ok: true, say: `I walked your whole home folder and iCloud Drive by hand — there is genuinely nothing named ${term} on this Mac. Tell me what it might actually be called and I will hunt again.` };
   const other = wantFolders ? `${files} matching files` : `${dirs} matching folders`;
   return { ok: true, say: `You have ${count} ${term} ${wantFolders ? "folders" : "files"}${(wantFolders ? files : dirs) ? ` plus ${other}` : ""}, mostly under ${topSpots}.` };
 }
