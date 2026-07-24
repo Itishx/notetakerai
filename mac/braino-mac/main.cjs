@@ -2881,6 +2881,15 @@ async function speakXStats() {
   const status = await fetchXStatus();
   if (!status) return { ok: false, say: "I could not reach X just now." };
   if (!status.connected) return { ok: false, say: "The X account is not linked — connect it on the dashboard and I will keep the pulse." };
+  // The numbers belong in the island, not just in his mouth.
+  sendToRenderer("braino-mac:x-stats", {
+    followers: status.followers?.count ?? null,
+    delta7d: status.followers?.delta7d ?? null,
+    mentions: status.mentions?.length ?? 0,
+    likes: status.lastTweet?.likes ?? null,
+    replies: status.lastTweet?.replies ?? null,
+    panel: true,
+  });
   const parts = [];
   if (status.followers?.count != null) {
     const delta = status.followers.delta7d;
@@ -2908,9 +2917,13 @@ async function speakXMentions() {
 
 function parseXIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
-  if (/\b(?:any\s+)?mentions\b/i.test(source) || /\bwho(?:'s| is)? (?:talking|replying)\b.*\b(?:x|twitter)\b/i.test(source)) return { action: "mentions" };
-  if (/\b(?:how(?:'s| is| are)?|hows)\b.*\b(?:x account|twitter|followers?)\b/i.test(source)
-    || /\b(?:x|twitter)\b.*\b(?:stats|doing|numbers|followers?)\b/i.test(source)
+  // Voice transcribes "X" as "ex" constantly — "my ex account" is the bird
+  // app, not a former partner. Treat ex/X/twitter as one token here.
+  const X_WORD = "(?:x|ex|twitter)";
+  if (/\b(?:any\s+)?mentions\b/i.test(source) || new RegExp(`\\bwho(?:'s| is)? (?:talking|replying)\\b.*\\b${X_WORD}\\b`, "i").test(source)) return { action: "mentions" };
+  if (new RegExp(`\\b(?:how(?:'s| is| are)?|hows)\\b.*\\b${X_WORD}(?:\\s+account)?\\b.*\\b(?:doing|going|performing|looking)\\b`, "i").test(source)
+    || new RegExp(`\\b(?:how(?:'s| is| are)?|hows)\\b.*\\b(?:${X_WORD}\\s+account|twitter|followers?)\\b`, "i").test(source)
+    || new RegExp(`\\b${X_WORD}\\b.*\\b(?:stats|doing|numbers|followers?)\\b`, "i").test(source)
     || /\bfollower (?:count|numbers?)\b/i.test(source)) return { action: "stats" };
   const clipMatch = source.match(/\b(?:record|take|grab|start)\s+(?:a\s+)?clip(?:\s+(?:of|for)\s+(\d{1,2})\s*seconds?)?/i);
   if (clipMatch) return { action: "clip", seconds: Math.min(60, Math.max(5, Number(clipMatch[1]) || 15)) };

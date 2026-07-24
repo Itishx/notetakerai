@@ -654,6 +654,14 @@ function updateNotchFace() {
   } else if (nfWaBadge.count > 0) {
     line = `${nfWaBadge.sender || "whatsapp"} · ${nfWaBadge.count} new`;
     live = true;
+  } else if (nfXStats && now < (nfXStats.panelUntil || 0)) {
+    // Asked-for stats panel: the full numbers hold the island for a while.
+    const bits = [`${nfXStats.followers ?? "—"} followers`];
+    if (nfXStats.delta7d) bits.push(`${nfXStats.delta7d > 0 ? "+" : ""}${nfXStats.delta7d} wk`);
+    if (nfXStats.mentions) bits.push(`${nfXStats.mentions} mentions`);
+    if (nfXStats.likes != null) bits.push(`${nfXStats.likes} likes`);
+    line = bits.join(" · ");
+    live = true;
   } else if (nfXStats && now - nfXStats.at < 90 * 1000) {
     // Fresh X pulse rides the ticker briefly after each poll, then yields.
     line = `@brainosays · ${nfXStats.followers}${nfXStats.delta7d ? ` (${nfXStats.delta7d > 0 ? "+" : ""}${nfXStats.delta7d} this week)` : ""}`;
@@ -683,7 +691,7 @@ function updateNotchFace() {
 }
 
 window.setInterval(() => {
-  if (nfTimers.length || nfCalendarNext || nfWaBadge.count) updateNotchFace();
+  if (nfTimers.length || nfCalendarNext || nfWaBadge.count || nfXStats) updateNotchFace();
 }, 1000);
 
 async function walkerGoHomeAnimated(opts = {}) {
@@ -2413,7 +2421,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -3850,7 +3858,14 @@ window.brainoMac.onSummon?.(() => { void handleSummon(); });
 window.brainoMac.onSummonToggle?.(() => { void handleSummonToggle(); });
 window.brainoMac.onSummonHome?.(() => { void handleSummonHome(); });
 window.brainoMac.onXStats?.((payload) => {
-  nfXStats = { followers: payload?.followers ?? 0, delta7d: payload?.delta7d ?? null, at: Date.now() };
+  nfXStats = {
+    followers: payload?.followers ?? 0,
+    delta7d: payload?.delta7d ?? null,
+    mentions: payload?.mentions ?? 0,
+    likes: payload?.likes ?? null,
+    at: Date.now(),
+    panelUntil: payload?.panel ? Date.now() + 22 * 1000 : 0,
+  };
   updateNotchFace();
 });
 window.brainoMac.onWakeStatus?.((payload) => {
