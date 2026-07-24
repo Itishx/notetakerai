@@ -6286,7 +6286,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   }
 
   const closeTarget = extractCloseShortcutTarget(raw);
-  if (closeTarget && !/\bbraino\b/i.test(closeTarget)) {
+  if (closeTarget && !/\bbraino\b/i.test(closeTarget) && !parseSpotifyControlIntent(raw)) {
     return closeOpenTarget(closeTarget);
   }
 

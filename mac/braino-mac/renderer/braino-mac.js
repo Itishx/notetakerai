@@ -582,17 +582,28 @@ function nfSetHeard(text) {
   updateNotchFace();
 }
 
+let nfCaptionClearTimer = 0;
+
 function nfSetReply(text) {
   nfReplyText = String(text || "").trim();
   if (nfCaptionReplyEl) nfCaptionReplyEl.textContent = nfReplyText;
+  window.clearTimeout(nfCaptionClearTimer);
+  if (nfReplyText) {
+    nfCaptionClearTimer = window.setTimeout(
+      () => nfClearCaptions(),
+      Math.max(3600, Math.min(9000, nfReplyText.length * 58)),
+    );
+  }
   updateNotchFace();
 }
 
 function nfClearCaptions() {
+  window.clearTimeout(nfCaptionClearTimer);
   nfHeardText = "";
   nfReplyText = "";
   if (nfCaptionHeardEl) nfCaptionHeardEl.textContent = "";
   if (nfCaptionReplyEl) nfCaptionReplyEl.textContent = "";
+  updateNotchFace();
 }
 
 function updateNotchFace() {
@@ -641,10 +652,10 @@ function updateNotchFace() {
   notchFace.classList.toggle("awake", visible && sessionEngaged);
   notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !live && !music);
   // Captions are the only visible trace of a conversation when he's home
-  // (invisible) — extend the pill further whenever there's live heard/reply
-  // text so the transcript is never floating with no source on screen.
+  // (invisible) — extend the pill whenever there's live heard/reply text,
+  // session or not (delegate replies can land after the mic yields).
   const hasCaption = Boolean(nfHeardText || nfReplyText);
-  notchFace.classList.toggle("captioning", visible && sessionEngaged && hasCaption);
+  notchFace.classList.toggle("captioning", visible && hasCaption);
   nfSetStatusText(line);
 }
 
@@ -953,6 +964,14 @@ function updateFloatingUi() {
 }
 
 function setBubble(text, ms = 2600) {
+  // Single choke-point: while he's home (invisible), EVERYTHING that would
+  // have gone to the floating bubble lands in the notch caption instead —
+  // gating individual call sites kept missing paths and left text floating
+  // where his body used to be.
+  if (walkerHome && notchFaceEnabled && !herMode) {
+    nfSetReply(text);
+    return;
+  }
   window.clearTimeout(sayTimer);
   bubble.textContent = text;
   updateFloatingUi();
@@ -2017,11 +2036,7 @@ async function speak(text) {
   const generation = ++speechGeneration;
   const startedAt = performance.now();
   noteSpoken(line);
-  // While he's home (the default now), the notch caption is the reply
-  // surface — the floating bubble used to double it up in the exact spot
-  // he used to stand, which read as a stray leftover once he stopped popping out.
-  if (walkerHome) nfSetReply(line);
-  else setBubble(line, Math.max(2400, Math.min(7200, line.length * 58)));
+  setBubble(line, Math.max(2400, Math.min(7200, line.length * 58)));
   speaking = true;
   setStatus("speaking", "Speaking");
   setTalk(true);
@@ -2614,7 +2629,8 @@ function stopRealtimeVoice() {
   realtimeActive = false;
   realtimeConnecting = false;
   voiceTurnInFlight = false;
-  nfClearCaptions();
+  // Don't wipe captions here — the reply's own timer clears them, so his
+  // last line lingers briefly after the session hangs up instead of vanishing.
   updateNotchFace();
   try { dc?.close(); } catch (_) {}
   try { pc?.close(); } catch (_) {}

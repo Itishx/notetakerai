@@ -270,8 +270,8 @@ body {
 /* Captions: a further extension underneath the eyes/mouth, only while there
    is actually something heard or said — you should never lose track of a
    conversation just because his body isn't visible on screen. */
-#notch-face.listen.captioning .nf-pill,
-#notch-face.speak.captioning .nf-pill {
+#notch-face.captioning .nf-pill {
+  width: 250px;
   height: calc(var(--nf-notch-h) + 84px);
   border-radius: 0 0 30px 30px;
 }
