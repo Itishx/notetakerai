@@ -404,7 +404,19 @@ body {
 
 #notch-face.mic-live .nf-privacy {
   opacity: 1;
+  background: #E8786E;
+  box-shadow: 0 0 6px rgba(232, 120, 110, 0.9);
   animation: nfPrivacyPulse 2.2s ease-in-out infinite;
+}
+
+/* Armed for the wake word: dim, steady, gray — a deliberately different look
+   from the bright coral pulse, so it reads as "listening on-device, nothing
+   sent" rather than "a live cloud session is streaming your voice." */
+#notch-face.wake-armed:not(.mic-live) .nf-privacy {
+  opacity: 0.7;
+  background: rgba(210, 210, 210, 0.8);
+  box-shadow: 0 0 3px rgba(210, 210, 210, 0.5);
+  animation: none;
 }
 
 @keyframes nfPrivacyPulse {
@@ -535,6 +547,18 @@ body {
 
 #notch-face.listen .nf-eye {
   transform: scaleY(1.06);
+}
+
+/* The iPhone "Hey Siri" pattern: armed but idle = a sleepy half-lidded
+   shade (still there, still listening for the wake word locally, just
+   resting), not the wide-open idle look. A live session snaps them open —
+   "he wakes up" — before the island itself takes over the visual. */
+#notch-face.dozing .nf-eye {
+  transform: scaleY(0.25);
+}
+
+#notch-face.awake .nf-eye {
+  transform: scaleY(1.1);
 }
 
 #notch-face .nf-sonar {

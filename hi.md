@@ -1,53 +1,74 @@
 # Session context — 2026-07-24 (branch: `her`)
 
-Saved before Cursor restart (Screen Recording permission). Resume from here.
+Living doc. Update whenever things get complex. If chat resets, read this first.
 
 ## Where we are
 
-Working on **Mac Braino** (`mac/braino-mac/`, Electron, `npm run mac:dev`) on branch **`her`** (pushed to origin). Strategy decided: **Mac app = Braino's brain/body, Chrome extension = his hands in the browser.** Hybrid is the moat. Browser work is second priority; Mac first. ~1 month to launch.
+**Mac Braino** (`mac/braino-mac/`, Electron, `npm run mac:dev`), branch `her`, pushed to origin.
+Strategy: Mac app = Braino's brain/body, Chrome extension = his hands in browser. ~1 month to launch.
+Full capability tracker lives in **`mac/braino-mac/STATUS.md`** — always check that for what's done/pending.
 
-## What was built this session (all committed + pushed on `her`)
+## Tonight's arc (chronological, so you can see what depends on what)
 
-1. **Her mode** (movie "Her" companion): full-screen takeover, canvas light engine (`renderer/her-presence.js`, `her-mode.js/.css` from Claude Design project fb4c6286, file Her.html). Enter: say "her mode" / Cmd+Shift+H. Exit: "goodbye" / same hotkey / "leave quietly" button. Her Fish voice `046164e7366a4dc899b69a9887d9f7c0` sent per-request as `referenceId` (fish-audio-tts already supports it, no deploy needed). Persona = `buildHerChatInstructions()` in renderer. All transcripts → realtime chat (delegate bypassed), idle timeout 60s in her mode.
+1. Her mode, Spotify full skill set, WhatsApp v1+v2 (contacts/calls/listener), YouTube v1, music mode v1, edge glow, notch v1 (basic face) — all shipped earlier, see STATUS.md.
+2. **Notch redesign saga**: went through several iterations (coral head → black-merge idea → final: **idle = black pill fused to housing with just eyes** (measured via Swift NSScreen probe, cached to disk), **listening/speaking = black island extends** with sonar rings / equalizer bars, never fills coral). Overlay window MUST stay `type:"panel"` (removing it breaks fullscreen visibility — learned this the hard way, reverted once already).
+3. **Identity resolution**: walker = the only face/character. Notch = home (eyes only when walker is "home"/hidden) + instrument panel (mission-control ticker experiment, REMOVED per user feedback — notch only shows things that PERSIST: home eyes, now-playing, live activities. Voice/task moments stay on the walker's bubble, not the notch).
+4. **Notch live activities shipped**: timers/reminders (spoken numbers parsed: "two minutes" etc.), calendar peek (EventKit probe, 15-min-out window), WhatsApp unread badge (when reader is off), privacy dot (pulses while mic session live). Priority order: timer > calendar > messages > music.
+5. **Cinematic boot sequence**, rewritten to exact 4-beat spec: closed eyes fade in → ~1s authenticating (green/red verdict) → eyes open + bright glow + **spoken** "Hey, {name}" → he **pops out** from under the notch (quick drop+bounce via 2-leg scriptedWalk, not a long walk).
+6. **Music mode v2**: headphones on, **fades out in place** (no walk — redesigned per feedback), notch dance uses the REAL mascot (cloned walker SVG, ids namespaced `__nfd_` + gradients renamed to avoid collision) doing the real "Twist" pose math ported from the Chrome extension's dance mode. Tempo-locked to the actual song via new `spotify-audio-features` edge function (verified live, 96-130bpm). Everything gated behind one `musicTheatricsReady` flag so nothing shows before he's actually home (was leaking early — fixed).
+7. **Ambient awareness added**: current music track + ALL open Chrome tabs (titles/URLs, free, no vision cost) now injected into `activeMacContextLines()` so casual voice chat knows about them (was previously blind — "music playing but he doesn't know" bug).
+8. **Touch ID** built (`native/BrainoTouchID.swift`, LocalAuthentication `.deviceOwnerAuthentication` = Touch ID + automatic password fallback). Wired as standalone "verify it's me" test command only — not yet gating anything sensitive.
 
-2. **Spotify skill set** (Mac): what's-playing, shuffle/repeat (AppleScript), seek/restart, queue (new `queue` action in spotify-playback), playlist/album/artist playback via contextUri (spotify-search now takes `types` + prioritizes user's own playlists), create playlist (new `createPlaylist` action in spotify-add-track), volume "by N%" relative steps, skip announces new track + notices repeats, "add this to my playlist" asks which playlist (pending workflow, natural replies parsed). Deployed: spotify-search, spotify-playback, spotify-add-track, web-research.
+## Real bugs found + fixed tonight (all pushed)
 
-3. **Spotify write 403 — SOLVED (root cause)**: Spotify policy since May 2025 blocks library/playlist WRITES for ALL development-mode apps (even owner, even with full scopes — verified by direct API tests). Allowlist/reconnect/scope/new-app cannot fix. Extended Quota needs registered business + 250k MAU. **Playback writes all work** (play/queue/seek/volume verified live). Workaround shipped: like-current-song clicks Spotify's **Playback menu** via Accessibility (`likeCurrentSpotifyTrackViaMenu`). Playlist add/create via API stay blocked → honest voice message. Launch note: Spotify = playback-only + menu likes.
+- **Gradient-id collision**: notch dancer clone duplicated the mascot's `<defs>` (sbwk-fill/dark/glow) unnamespaced → walker rendered white. Fixed by renaming gradients too, verified visually.
+- **Walker home/away race**: `walkerGoHome()` set `walkerHome=true` synchronously before its animation finished; an overlapping call mid-flight saw "already home" and barged in, overwriting the same `scriptedWalk` object → looked like him randomly flickering in/out of the notch. Fixed with a single-flight queue (`setWalkerHomeState`, coalesces overlapping requests).
+- **Music theatrics race** (same family, one layer up): `reactToMusicStart()` is async (speak + fade, real seconds) with no guard against re-entry; a stop landing mid-flight cleared `musicTheatricsReady` before it ever stuck → "he went home and so did the notch" (nothing crashed, theatrics just never engaged). Fixed with a monotonic `musicSessionId`, checked after every `await`.
+- **Spotify remote-device false positive**: Mac Spotify app's AppleScript state mirrors the WHOLE Connect session, so it can say "playing" while audio is actually on a phone. Now cross-checks the Web API's active-device `type` (`Computer` vs `Smartphone`), debounced 2 consecutive reads to survive API staleness.
+- **YouTube background-tab bug**: only checked the frontmost tab's URL, so switching tabs away from a playing video dropped the music state. Now scans ALL tabs in ALL Chrome windows via injected JS (`video.paused` check), falls back to old behavior if "Allow JavaScript from Apple Events" is off.
+- **Real audio-capture crash** (caught before shipping): tried true system-audio FFT beat detection via Electron's legacy `getUserMedia` desktop-audio constraint — crashes the renderer outright on this Chromium version. Reverted to a procedural beat clock (now tempo-locked via Spotify's own data instead, see #6 above) — real fallback discussed: `desktopCapturer.getSources()` + video constraint carrying source id, not attempted yet.
+- **"Random launch" bug** — was ME (Claude) launching the real Electron app via Bash for smoke-testing and failing to clean up one instance. Confirmed zero orphans now. **Committed to not doing this again** — syntax checks + log verification only, no more live-launching the app myself.
+- Found (unrelated, NOT a bug): `com.brainotrade.server.plist` LaunchAgent auto-runs a Python trading bot (`~/Desktop/tradebot/BrainoTrade/app.py`) on login — separate project, not touched.
 
-4. **Spotify secret rotated** (same app `b9776b7ea4cb4d61ad052bd46196d581`; new SECRET `888a1b1a...` — both Supabase secrets set via Management API, verified working via forced refresh + search. No reconnect needed.)
+## DONE (was "in progress", finished same session) — wake word + deterministic pop-out
 
-5. **Web search fast lane on Mac**: "search the web for X" → `web-research` edge fn (purpose "answer", OpenAI web_search, mini/low) → spoken cited answer. "chrome/browser" in the ask → still opens Google in Chrome. Fallback to Google on error. Deployed.
+All of the below is now BUILT, syntax/type-checked clean, committed and pushed. NOT live-tested against a real mic yet (no live app launches per the new rule — first real test is the user's job). If something's off when tested, start here.
 
-6. **Screen vision (Clicky-inspired)**: "read this for me / what's on my screen / what do you see / summarize this / help me with this / explain this" → `screencapture -x` → `sips -Z 1440` → bare-base64 PNG → `chat-about-notes` `visionMode:"describe"` (routes to gpt-5.5 server-side, ~1-2¢/call) → spoken reply. Functions: `captureScreenBase64`, `runScreenVision`, `parseScreenVisionIntent` in main.cjs. Front-window title = fallback. Reads one visible page at a time (long-PDF file-extraction skill = future idea).
+**Original design** (kept verbatim below for context; this is what was implemented):
 
-## IMMEDIATE next step (why we're restarting)
+User's design (their words, refined over two messages):
 
-Screen Recording permission for dev: System Settings → Privacy & Security → Screen & System Audio Recording → **+** → add **Cursor** (and optionally `node_modules/electron/dist/Electron.app`) → toggle on → **fully quit + reopen Cursor** → `npm run mac:dev` → open a PDF → "Braino, read this for me". If he describes the wallpaper, the relaunch was skipped. macOS checks the app at the TOP of the process tree (Cursor → npm → Electron → screencapture), which is why Cursor needs the permission in dev; a packaged Braino.app will prompt as itself.
+1. **Always listening, reacts only to wake word.** Braino's eyes should be watching (open) by default is WRONG per user — actually: **eyes CLOSED/sleeping-shade when idle** (armed, listening locally, nothing sent), eyes OPEN when a real session is engaged ("he wakes up"). This is the iPhone/"Hey Siri" wake pattern.
+2. **Wake phrase**: "hey braino" / "braino" / fuzzy variants — reuse the EXISTING fuzzy list already in `voiceAddressesBraino()`: `braino|bruno|breno|reno|dino`, PLUS add **"raino"** (user's own casual pronunciation).
+3. **Privacy requirement (explicit)**: must be provably on-device — "no data goes in unless the system flags hey braino or raino." Solution: Apple's `SFSpeechRecognizer` with `requiresOnDeviceRecognition = true` (real Apple API guarantee, on-device only, refuses cloud fallback). If the Mac doesn't support on-device recognition, do NOT silently fall back to cloud — surface it and let the user rely on the manual hotkey instead.
+4. **Only after wake fires** does the real (paid) OpenAI Realtime session connect — same session as today's double-Control path. Wake word and double-Control are two alternative TRIGGERS for the same "start listening" action — no conflict, confirmed with the user.
+5. **15s idle timeout** (`REALTIME_IDLE_TIMEOUT_MS`, already exists) still disconnects the realtime session after inactivity — that's fine/unchanged, it's just "hang up the expensive call," not "stop listening for the wake word" (the wake-word layer is separate and stays armed).
+6. **Pop-out must be DETERMINISTIC, not automatic on every voice turn** (user's correction after their first message) — this REVERSES my earlier plan of "any voice engagement = auto pop out." Correct design:
+   - Default: conversation happens **entirely in the notch** (island grows, sonar/bars, mouth) — same as it already does for listening/speaking states. No physical walker needed for a normal chat.
+   - Walker physically comes OUT only for **specific, deliberate reasons**: (a) an explicit ask — new intent needed for "come out" / "come here" / "show yourself" / "come on my screen for a bit"; (b) pointing at something on-screen (already exists, makes sense, keep as-is); (c) an occasional **announced flourish during music/dance** — he can say "I'm coming out, watch out!" mid-dance and then emerge, NOT every time, as a fun surprise beat.
 
-## Test checklist (pending user verification)
+### What got built (final)
+- `mac/braino-mac/native/BrainoWakeWord.swift` — continuous on-device wake listener, `requiresOnDeviceRecognition = true` (real Apple guarantee, refuses cloud fallback — if unsupported it prints `unavailable` and gives up rather than silently downgrading privacy), cycles the recognition task every 45s to stay under Apple's task-duration ceiling. Wake list: `braino|bruno|breno|reno|dino|raino`. Compiled clean via `swiftc -typecheck`.
+- main.cjs: `startBrainoWakeWord()`/`stopBrainoWakeWord()` (spawn/kill, auto-restart on unexpected exit UNLESS it gave up for permission/hardware reasons), **opt-in** persisted like the WhatsApp listener (`wake-word.json`, default OFF — voice command "turn on wake word" / "turn off wake word" toggles + persists it, loaded at startup). On `wake` line → `braino-mac:wake-detected` → renderer calls the same `startListening()` double-Control already uses.
+- Renderer: `wakeWordArmed` state, notch eyes now **dozing** (sleepy half-lidded shade, `scaleY(0.25)`) by default whenever home+idle, **awake** (`scaleY(1.1)`) the instant a real session engages. Privacy dot has a third state: dim gray/steady = armed on-device, bright coral pulsing = live cloud session (existing `.mic-live` untouched, new `.wake-armed:not(.mic-live)`).
+- **Deterministic summon** shipped: new delegate intent "come out"/"come here"/"come on my screen"/"show yourself"/"step out"/"join me" → `braino-mac:summon` IPC → renderer `handleSummon()` → speaks "Coming out, watch out." then `setWalkerHomeState(false)`. Voice-only, no hotkey, cannot conflict with double-Control.
+- **Boot no longer auto-pops-out**: `runNotchPopOut` renamed to `runNotchGreeting`, drop-and-bounce emergence code deleted entirely. He now says (spoken, not just a bubble): "Hey, {name}. How are you doing? Say come out whenever you want me out here with you." and stays home. `walkerHome` simply never gets set false during boot anymore.
+- **Deliberately NOT built** (scoping call, not forgotten): the mid-dance "I'm coming out, watch out!" flourish announcement. Judged as adding another async state-machine interaction on a night that already found 3 race conditions in this exact family of code (walker home/away, music theatrics) — safer to ship the core deterministic redesign solid and add the flourish later as its own small change. Noted in backlog below.
 
-- Screen vision: PDF read, "what's on my screen", "help me with this error"
-- Web search: "search the web for who won the game last night" (watch `web_search.done` latency)
-- Like via menu: "add this song to my liked songs" (expect menu click, `spotify.add_track.done` source mac_menu)
-- Playlist add/create: expect honest "Spotify is blocking saves" message (API blocked by policy)
-- Queue/context play: "queue Brabus", "play my New playlist", "play the album After Hours", "play songs by Drake"
-- Her mode end-to-end (voice + look)
-- Follow-up flows: "add this song to my playlist" → he asks → answer "liked songs" or a name
+### Verification status
+Everything above is `node --check` + `swiftc -typecheck` clean. **Not live-tested against a real mic** — per this session's new rule (no more launching the live app via Bash for verification, see "Real bugs found" section above for why). First real test — does wake-word actually fire, do the eye states look right, does summon work — is the user's job next.
 
-## Key facts / tools
+## Backlog / ideas not yet built
+- **Dance-flourish**: mid-dance, occasionally, "I'm coming out, watch out!" then emerge — deliberately deferred tonight (see above), small standalone addition when picked back up.
+- **Demo idea**: for the launch video, trigger a 40-second timer in the Mac notch as a visual beat (the timer feature already works generically — "set a timer for 40 seconds" — just needs to be in the demo script).
+- Extension bridge (Mac → `agent_commands` → Chrome extension executes) — THE hybrid moat, still the big next architecture piece after wake-word settles.
+- Real audio-reactive light show (desktopCapturer + video constraint) — deferred, tempo-lock from Spotify data covers most of the need already.
+- Long-PDF read from disk (no vision cost), Emotional/Memory Engine port to Mac chat (partially done — persona-bundle function exists and is wired into Mac realtime chat), isPremium gates, electron-builder packaging.
+- Spotify Extended Quota request (business + 250k MAU) — needed before Spotify writes (playlist add/create) can ever work for real users; playback-only + native-menu-likes is the honest v1 scope.
 
-- Logs: `~/Library/Logs/Braino Mac/braino-mac.log` — grep `delegate\.|spotify\.|vision\.|web_search\.`
-- Deploy: `npx supabase functions deploy <name>` with `SUPABASE_ACCESS_TOKEN` from `.env` (works; classifier may block — export token first)
-- Supabase Management API works for SQL + secrets: `api.supabase.com/v1/projects/suwhgaxxdizowbyjlljj/...` (needs User-Agent header; secrets endpoint returns hashed values)
-- Force Spotify token refresh: set `token_expires_at` to past in `spotify_connections`
-- Mac auth session: `~/Library/Application Support/Braino Mac/auth-session.json` (key `access_token`)
-- Vision cost: ~1-2¢/call on gpt-5.5; optimization idea: route describe to gpt-5.4/5.6-Terra (halves it) after verifying image support
-
-## Backlog (agreed, not started)
-
-1. **Extension bridge** (week-1 plan): Mac Braino writes `agent_commands`, extension executes — Gmail/DOM skills from the desktop. THE hybrid moat.
-2. Screen pointing (Clicky `[POINT:x,y]` style): vision returns coords → mascot walks there and points (Jump & Point pose exists).
-3. Long-PDF read: find file on disk → extract text (no vision cost).
-4. Startup `desktopCapturer` request so "Braino" appears in Screen Recording list by itself.
-5. Spotify Extended Quota request (needs business entity — launch blocker for user-facing Spotify writes).
-6. Port Emotional/Memory Engine into Mac chat paths; isPremium gates; electron-builder packaging (weeks 2-3 of the month plan).
+## Key tools / facts (still true)
+- Logs: `~/Library/Logs/Braino Mac/braino-mac.log`
+- Deploy: `npx supabase functions deploy <name>` with `SUPABASE_ACCESS_TOKEN` from `.env`
+- Supabase Management API: `api.supabase.com/v1/projects/suwhgaxxdizowbyjlljj/...` (needs `User-Agent` header)
+- Mac auth session: `~/Library/Application Support/Braino Mac/auth-session.json` (key `access_token`, `refresh_token`)
+- **DO NOT launch the live Electron app via Bash for testing** — caused two separate confusion incidents tonight (a crash-test artifact and an orphaned process left visible on the user's screen). Use `node --check` + log/API verification instead.

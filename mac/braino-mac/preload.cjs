@@ -84,6 +84,21 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:wa-badge", handler);
     return () => ipcRenderer.removeListener("braino-mac:wa-badge", handler);
   },
+  onWakeDetected: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:wake-detected", handler);
+    return () => ipcRenderer.removeListener("braino-mac:wake-detected", handler);
+  },
+  onWakeStatus: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:wake-status", handler);
+    return () => ipcRenderer.removeListener("braino-mac:wake-status", handler);
+  },
+  onSummon: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:summon", handler);
+    return () => ipcRenderer.removeListener("braino-mac:summon", handler);
+  },
   onWalkerToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:walker-toggle", handler);

@@ -12,6 +12,7 @@ const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
 const TOUCH_ID_HELPER_PATH = path.join(__dirname, "native", "BrainoTouchID.swift");
+const WAKE_WORD_HELPER_PATH = path.join(__dirname, "native", "BrainoWakeWord.swift");
 const APP_VERSION = "12.0.41";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
@@ -32,6 +33,9 @@ const {
 
 let dockWindow = null;
 let swiftHotkey = null;
+let swiftWakeWord = null;
+let wakeWordGaveUp = false; // true once "unavailable" fires — don't keep respawning a dead end
+let wakeWordRestartTimer = null;
 let activeSpeech = null;
 let lastControlTapAt = 0;
 let cachedAuthSession = null;
@@ -1098,6 +1102,62 @@ function startSwiftHotkeyHelper() {
   swiftHotkey.on("exit", (code) => {
     sendToRenderer("braino-mac:helper-status", { type: "swift-exit", code });
     swiftHotkey = null;
+  });
+}
+
+// The wake-word helper is meant to run forever ("always listening"). Unlike
+// the hotkey tap, if it dies unexpectedly we DO want to bring it back — but
+// only if the reason wasn't "unavailable" (permission denied / on-device
+// recognition unsupported), since respawning into the same wall is pointless
+// noise and the user should just fall back to double-Control / wake voice
+// commands via the manual hotkey instead.
+function startBrainoWakeWord() {
+  if (!fs.existsSync(WAKE_WORD_HELPER_PATH) || wakeWordGaveUp) return;
+  if (wakeWordRestartTimer) {
+    clearTimeout(wakeWordRestartTimer);
+    wakeWordRestartTimer = null;
+  }
+  swiftWakeWord = spawn("xcrun", ["swift", WAKE_WORD_HELPER_PATH], {
+    cwd: ROOT_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  swiftWakeWord.stdout.on("data", (chunk) => {
+    String(chunk || "").split(/\r?\n/).forEach((raw) => {
+      const line = raw.trim();
+      if (!line) return;
+      if (line === "armed") {
+        logMac("wakeword.armed", {});
+        sendToRenderer("braino-mac:wake-status", { armed: true });
+        return;
+      }
+      if (line.startsWith("wake\t")) {
+        const transcript = line.slice(5).trim();
+        logMac("wakeword.detected", { transcript: textForLog(transcript) });
+        sendToRenderer("braino-mac:wake-detected", { transcript });
+        ensureDockWindowVisible("wake-word");
+        return;
+      }
+      if (line.startsWith("unavailable\t")) {
+        wakeWordGaveUp = true;
+        const reason = line.slice(12).trim();
+        logMac("wakeword.unavailable", { reason });
+        sendToRenderer("braino-mac:wake-status", { armed: false, unavailable: true, reason });
+      }
+    });
+  });
+
+  swiftWakeWord.stderr.on("data", (chunk) => {
+    const line = String(chunk || "").trim();
+    if (line) logMac("wakeword.stderr", { line });
+  });
+
+  swiftWakeWord.on("exit", (code) => {
+    swiftWakeWord = null;
+    logMac("wakeword.exit", { code, gaveUp: wakeWordGaveUp });
+    if (wakeWordGaveUp) return;
+    // Transient crash (not a permission/hardware dead end) — try again shortly.
+    wakeWordRestartTimer = setTimeout(() => startBrainoWakeWord(), 5000);
   });
 }
 
@@ -2246,6 +2306,41 @@ function saveWhatsAppContact(alias, entry) {
 
 const CONTACTS_CACHE_PATH = path.join(AUTH_STORE_DIR, "contacts-cache.json");
 const WA_LISTENER_STATE_PATH = path.join(AUTH_STORE_DIR, "whatsapp-listener.json");
+const WAKE_WORD_STATE_PATH = path.join(AUTH_STORE_DIR, "wake-word.json");
+
+function loadWakeWordState() {
+  try {
+    return Boolean(JSON.parse(fs.readFileSync(WAKE_WORD_STATE_PATH, "utf8"))?.enabled);
+  } catch (_) {
+    return false;
+  }
+}
+
+function saveWakeWordState(enabled) {
+  try {
+    fs.writeFileSync(WAKE_WORD_STATE_PATH, JSON.stringify({ enabled: Boolean(enabled) }));
+  } catch (_) {}
+}
+
+function stopBrainoWakeWord() {
+  if (wakeWordRestartTimer) {
+    clearTimeout(wakeWordRestartTimer);
+    wakeWordRestartTimer = null;
+  }
+  if (swiftWakeWord) {
+    swiftWakeWord.kill();
+    swiftWakeWord = null;
+  }
+  sendToRenderer("braino-mac:wake-status", { armed: false });
+}
+
+function parseWakeWordToggleIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (/\b(?:turn off|stop|disable)\b.*\b(?:wake word|always listen(?:ing)?|hey braino)\b/i.test(source)) return { enable: false };
+  if (/\b(?:turn on|enable|start)\b.*\b(?:wake word|always listen(?:ing)?|hey braino)\b/i.test(source)) return { enable: true };
+  if (/\balways listen for me\b/i.test(source)) return { enable: true };
+  return null;
+}
 const WA_POLL_INTERVAL_MS = 2500;
 let contactsCache = null;
 let waListenerEnabled = false;
@@ -6065,6 +6160,22 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return startCall(callIntent);
   }
 
+  const wakeToggle = parseWakeWordToggleIntent(raw);
+  if (wakeToggle) {
+    logMac("delegate.wakeword_toggle_intent", { enable: wakeToggle.enable });
+    saveWakeWordState(wakeToggle.enable);
+    if (wakeToggle.enable) {
+      wakeWordGaveUp = false;
+      startBrainoWakeWord();
+      return {
+        ok: true,
+        say: "Always listening is on. I stay armed for hey braino on-device, nothing leaves this Mac until I hear it.",
+      };
+    }
+    stopBrainoWakeWord();
+    return { ok: true, say: "Okay, back to double Control only." };
+  }
+
   if (parseTouchIdTestIntent(raw)) {
     logMac("delegate.touchid_intent", {});
     sendTaskProgress({ status: "thinking", text: "Waiting for Touch ID" });
@@ -6087,6 +6198,18 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     if (reminderIntent.cancel) return cancelReminders();
     if (!reminderIntent.seconds) return { ok: false, say: "Tell me how long, like remind me in twenty minutes to stretch." };
     return startReminder(reminderIntent.seconds, reminderIntent.label);
+  }
+
+  // Deterministic, voice-only summon: the ONLY way the walker physically
+  // steps out of the notch on request. Deliberately not bound to any hotkey
+  // (double-Control is reserved for starting a conversation, which now
+  // happens entirely inside the notch by default) so the two can never
+  // collide — asking him out is its own explicit, separate action.
+  const summonPhrase = cleanPrompt(raw);
+  if (/\b(?:come out|come here|come on (?:my|the) screen|show yourself|step out|join me)\b/i.test(summonPhrase)) {
+    logMac("delegate.summon_intent", {});
+    sendToRenderer("braino-mac:summon", {});
+    return { ok: true, say: "" };
   }
 
   const notchPhrase = cleanPrompt(raw);
@@ -6671,6 +6794,7 @@ app.whenReady().then(() => {
   createDockWindow();
   registerHotkeys();
   startSwiftHotkeyHelper();
+  if (loadWakeWordState()) startBrainoWakeWord();
   startDesktopOverlaySync();
   screen.on("display-metrics-changed", () => void refreshDesktopOverlayContext("display-metrics-changed"));
   screen.on("display-added", () => void refreshDesktopOverlayContext("display-added"));

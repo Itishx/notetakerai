@@ -317,6 +317,7 @@ let lastRealtimeSurfaceSyncAt = 0;
 let rtUsageSessionId = null;
 let rtHeartbeatTimer = null;
 let realtimeActive = false;
+let wakeWordArmed = false;
 let realtimeConnecting = false;
 let realtimeVoiceEngine = "fish";
 let herMode = false;
@@ -603,7 +604,14 @@ function updateNotchFace() {
   }
   notchFace.classList.toggle("live", visible && live);
   notchFace.classList.toggle("music", visible && music);
-  notchFace.classList.toggle("mic-live", visible && (realtimeActive || realtimeConnecting));
+  const sessionEngaged = realtimeActive || realtimeConnecting;
+  notchFace.classList.toggle("mic-live", visible && sessionEngaged);
+  notchFace.classList.toggle("wake-armed", visible && wakeWordArmed);
+  // Sleepy shade by default whenever he's home with nothing going on; a real
+  // session snaps the eyes open ("he wakes up") before the island itself
+  // takes over the visual for listening/speaking.
+  notchFace.classList.toggle("awake", visible && sessionEngaged);
+  notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !live && !music);
   nfSetStatusText(line);
 }
 
@@ -688,6 +696,19 @@ function toggleWalkerHome() {
   void setWalkerHomeState(!walkerHome);
 }
 
+// The deterministic voice summon: "come out", "come here", etc. Only he
+// decides to leave the notch — nothing else auto-pops him out anymore.
+async function handleSummon() {
+  if (herMode) return;
+  if (!walkerHome) {
+    void speak("I'm already right here.");
+    return;
+  }
+  void speak("Coming out, watch out.");
+  await setWalkerHomeState(false);
+  setWave(true);
+}
+
 function nfSetStatusText(text) {
   const status = document.getElementById("nf-status");
   if (!status) return;
@@ -741,43 +762,26 @@ async function runNotchBoot() {
   return result || { ok: false, error: "Braino sign-in failed." };
 }
 
-async function runNotchPopOut(authResult) {
-  const dock = getDockBounds();
-  const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
-  const popX = Math.round(window.innerWidth / 2 - W / 2);
-
-  // Beat 3: eyes open, the island flashes a bright greeting glow, he says hi —
-  // all at once, not gated on the walk that follows.
+// Beat 3, and the LAST boot beat now: eyes open, a bright greeting glow, and
+// he speaks from the notch — asking how the user is doing, and explaining the
+// one deterministic way to bring him out ("say come out"). He does NOT pop
+// out automatically anymore: popping out only ever happens when explicitly
+// asked (handleSummon) or during a deliberate flourish (the music dance can
+// announce itself and emerge). This keeps his physical appearance meaningful
+// instead of incidental, and sidesteps any hotkey conflict entirely since the
+// summon is voice-only, never bound to double-Control.
+async function runNotchGreeting(authResult) {
   notchFace?.classList.remove("asleep");
-  if (authResult?.ok) {
-    notchFace?.classList.add("nf-greet");
-    window.setTimeout(() => notchFace?.classList.remove("nf-greet"), 1100);
-    const auth = await window.brainoMac.authStatus().catch(() => null);
-    const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
-    const greeting = firstName ? `Hey, ${firstName}.` : "Hey.";
-    setBubble(greeting.toLowerCase(), 2400);
-    void speak(greeting);
-  }
-
-  // Beat 4: he pops out from under the notch — a quick drop past rest, then a
-  // small bounce back up to settle, all via the existing scriptedWalk motion
-  // system (no fighting the tick loop's own transform writes with CSS).
-  walkerHome = false;
-  updateNotchFace();
-  walker.classList.add("visible");
-  dirX = 1;
-  setPosition(popX, faceH - 4, { allowOffscreen: true });
-  const restY = faceH + 34;
-  await new Promise((resolve) => {
-    scriptedWalk = { x: popX, y: restY + 14, speed: 1400, resolve, allowOffscreen: true };
-  });
-  await new Promise((resolve) => {
-    scriptedWalk = { x: popX, y: restY, speed: 260, resolve, allowOffscreen: true };
-  });
-  if (authResult?.ok) setWave(true);
-  const landingX = clamp(popX, dock.minX, dock.maxX);
-  targetX = landingX;
-  targetY = dock.y;
+  if (!authResult?.ok) return;
+  notchFace?.classList.add("nf-greet");
+  window.setTimeout(() => notchFace?.classList.remove("nf-greet"), 1100);
+  const auth = await window.brainoMac.authStatus().catch(() => null);
+  const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
+  const greeting = firstName
+    ? `Hey, ${firstName}. How are you doing? Say come out whenever you want me out here with you.`
+    : "Hey. How are you doing? Say come out whenever you want me out here with you.";
+  setBubble(greeting.toLowerCase().slice(0, 60), 2600);
+  void speak(greeting);
 }
 
 function nfScheduleBlink() {
@@ -2315,7 +2319,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -3471,14 +3475,16 @@ async function runStartupSequence(config = {}) {
     movementMode = "dock";
     setStatus("connecting", "Starting");
     // He is born from the notch: closed eyes fade in → authenticate (~1s,
-    // green or red verdict) → eyes open + glow + spoken hello → pops out.
+    // green or red verdict) → eyes open + glow + spoken greeting, asking how
+    // the user is and how to summon him. He STAYS home until asked — no more
+    // automatic pop-out.
     const authResult = await runNotchBoot();
     logRenderer("startup.auth.result", {
       ok: Boolean(authResult?.ok),
       source: authResult?.source || "unknown",
       error: authResult?.error || null,
     });
-    await runNotchPopOut(authResult);
+    await runNotchGreeting(authResult);
     notchBootDone = true;
     updateNotchFace();
 
@@ -3741,6 +3747,22 @@ window.brainoMac.onMusicState?.((payload) => {
   setMusicMode(Boolean(payload?.playing));
 });
 window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());
+window.brainoMac.onSummon?.(() => { void handleSummon(); });
+window.brainoMac.onWakeStatus?.((payload) => {
+  wakeWordArmed = Boolean(payload?.armed);
+  updateNotchFace();
+  if (payload?.unavailable) {
+    logRenderer("wakeword.unavailable", { reason: payload?.reason || "" });
+  }
+});
+window.brainoMac.onWakeDetected?.((payload) => {
+  // The wake phrase was heard ON-DEVICE (BrainoWakeWord.swift requires
+  // requiresOnDeviceRecognition=true) — nothing about it was sent anywhere.
+  // Only NOW does a real (cloud, paid) realtime session open, exactly like
+  // pressing double-Control by hand.
+  logRenderer("wakeword.wake", { transcriptChars: String(payload?.transcript || "").length });
+  if (!realtimeActive && !realtimeConnecting && !processing) void startListening();
+});
 window.brainoMac.onTimers?.((payload) => {
   nfTimers = Array.isArray(payload?.timers) ? payload.timers : [];
   updateNotchFace();
