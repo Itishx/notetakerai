@@ -782,10 +782,18 @@ return {frontApp, "", windowTitle, windowPositionText, windowSizeText, "", ""} a
     }
     return context;
   } catch (error) {
-    logMac("desktop.context.read_failed", { error });
+    // Transient by nature (System Events busy, secure-input moments) and
+    // polled constantly — log at most once every 5 minutes, keep last context.
+    const now = Date.now();
+    if (now - lastContextReadFailLogAt > 5 * 60 * 1000) {
+      lastContextReadFailLogAt = now;
+      logMac("desktop.context.read_failed", { error });
+    }
     return null;
   }
 }
+
+let lastContextReadFailLogAt = 0;
 
 async function readActiveBrowserContext(appName) {
   const browser = String(appName || "").trim();
@@ -1816,6 +1824,40 @@ async function handlePendingMacWorkflow(raw) {
       return createRedundantFolder(pending.data?.items || []);
     }
     return { ok: true, say: "Alright, leaving everything exactly where it is." };
+  }
+
+  if (pending.type === "cleanup" && pending.stage === "recover_confirm") {
+    clearPendingMacWorkflow();
+    const answer = cleanPrompt(raw);
+    if (/\b(?:yes|yeah|yep|sure|do it|bring it|recover|please)\b/i.test(answer)) {
+      const item = pendingReviewBin?.files?.find((f) => f.binName === pending.data?.binName);
+      if (!item) return { ok: false, say: "Odd — that one is not in the folder anymore." };
+      const restored = await moveRedundantItemsBack([item]);
+      logMac("files.cleanup.recovered", { restored, binName: textForLog(item.binName) });
+      return { ok: true, say: restored ? `Recovered ${item.binName}, back where it came from.` : "It would not move. It is still in the folder." };
+    }
+    return { ok: true, say: "Okay, leaving it in the folder." };
+  }
+
+  if (pending.type === "cleanup" && pending.stage === "recover_pick") {
+    clearPendingMacWorkflow();
+    const options = pending.data?.options || [];
+    const answer = cleanPrompt(raw);
+    const ordinal = answer.match(/\b(first|second|third|1|2|3)\b/i)?.[1]?.toLowerCase();
+    const ordinalIndex = { first: 0, 1: 0, second: 1, 2: 1, third: 2, 3: 2 }[ordinal];
+    let chosen = ordinalIndex !== undefined ? options[ordinalIndex] : null;
+    if (!chosen) {
+      const ranked = options
+        .map((name) => ({ name, score: scoreRedundantMatch({ binName: name }, answer) }))
+        .sort((a, b) => b.score - a.score);
+      if (ranked[0]?.score >= 0.4) chosen = ranked[0].name;
+    }
+    if (!chosen) return { ok: true, say: "I did not catch which one. Say recover and the name once more." };
+    const item = pendingReviewBin?.files?.find((f) => f.binName === chosen);
+    if (!item) return { ok: false, say: "That one is not in the folder anymore." };
+    const restored = await moveRedundantItemsBack([item]);
+    logMac("files.cleanup.recovered", { restored, binName: textForLog(item.binName) });
+    return { ok: true, say: restored ? `Recovered ${item.binName}, back where it came from.` : "It would not move. It is still in the folder." };
   }
 
   if (pending.type === "whatsapp") {
@@ -3750,37 +3792,82 @@ async function createRedundantFolder(items) {
   };
 }
 
-function matchRedundantItems(phrase) {
-  if (!pendingReviewBin?.files?.length) return [];
-  const wanted = String(phrase || "").toLowerCase().replace(/\b(?:the|that|my|folder|file|one)\b/g, " ").replace(/\s+/g, " ").trim();
-  if (!wanted) return [];
-  const words = wanted.split(" ").filter((w) => w.length > 1);
-  if (!words.length) return [];
-  return pendingReviewBin.files.filter((item) => {
-    const hay = item.binName.toLowerCase();
-    return words.every((w) => hay.includes(w)) || hay.includes(wanted);
-  });
+// File names arrive full of underscores, dashes and dots; voice transcripts
+// arrive full of guesses. Normalize both sides to plain words, score every
+// item, take the CLOSEST — then confirm before touching anything.
+function normalizeFileWords(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{2,4}$/i, "")
+    .replace(/[_\-.]+/g, " ")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-async function recoverRedundantItem(phrase) {
-  if (!pendingReviewBin?.files?.length) return { ok: false, say: "There is no redundant folder of mine holding anything right now." };
-  const matches = matchRedundantItems(phrase);
-  if (!matches.length) {
-    const names = pendingReviewBin.files.slice(0, 6).map((f) => f.binName).join(", ");
-    return { ok: true, say: `Nothing in there matches that. The folder holds things like ${names}. Which one?` };
+function scoreRedundantMatch(item, phrase) {
+  const hay = normalizeFileWords(item.binName);
+  const want = normalizeFileWords(phrase).replace(/\b(?:the|that|this|my|a|an|folder|file|one|thing|please)\b/g, " ").replace(/\s+/g, " ").trim();
+  if (!want) return 0;
+  if (hay === want) return 2;
+  const wantWords = want.split(" ").filter((w) => w.length > 1);
+  if (!wantWords.length) return 0;
+  const hayWords = new Set(hay.split(" "));
+  let hit = 0;
+  for (const word of wantWords) {
+    if (hayWords.has(word)) hit += 1;
+    else if (hay.includes(word)) hit += 0.7;
+    else {
+      // transcript fuzz: accept a close prefix ("brain" for "braino")
+      for (const hayWord of hayWords) {
+        if (hayWord.length > 3 && word.length > 3 && (hayWord.startsWith(word.slice(0, 4)) || word.startsWith(hayWord.slice(0, 4)))) { hit += 0.5; break; }
+      }
+    }
   }
+  let score = hit / wantWords.length;
+  if (hay.includes(want)) score += 0.5;
+  return score;
+}
+
+function closestRedundantItems(phrase) {
+  if (!pendingReviewBin?.files?.length) return [];
+  return pendingReviewBin.files
+    .map((item) => ({ item, score: scoreRedundantMatch(item, phrase) }))
+    .filter((entry) => entry.score >= 0.4)
+    .sort((a, b) => b.score - a.score);
+}
+
+async function moveRedundantItemsBack(items) {
   let restored = 0;
-  for (const item of matches) {
+  for (const item of items) {
     try {
       fs.renameSync(path.join(REVIEW_BIN_PATH, item.binName), path.join(item.origRoot, item.binName));
       restored += 1;
     } catch (_) {}
   }
-  pendingReviewBin.files = pendingReviewBin.files.filter((f) => !matches.includes(f));
+  pendingReviewBin.files = pendingReviewBin.files.filter((f) => !items.includes(f));
   if (!pendingReviewBin.files.length) { pendingReviewBin = null; try { fs.rmdirSync(REVIEW_BIN_PATH); } catch (_) {} }
   saveRedundantManifest(pendingReviewBin);
-  logMac("files.cleanup.recovered", { restored, phrase: textForLog(phrase) });
-  return { ok: true, say: restored === 1 ? `Recovered ${matches[0].binName}, back where it came from.` : `Recovered ${restored} things, all back where they came from.` };
+  return restored;
+}
+
+async function recoverRedundantItem(phrase) {
+  if (!pendingReviewBin?.files?.length) return { ok: false, say: "There is no redundant folder of mine holding anything right now." };
+  const ranked = closestRedundantItems(phrase);
+  if (!ranked.length) {
+    const names = pendingReviewBin.files.slice(0, 6).map((f) => f.binName).join(", ");
+    return { ok: true, say: `Nothing in there sounds like that. The folder holds things like ${names}. Which one?` };
+  }
+  const best = ranked[0];
+  const runnerUp = ranked[1];
+  // Clear winner + strong score: still confirm — transcription is guesswork.
+  if (best.score >= 1.2 && (!runnerUp || best.score - runnerUp.score > 0.4)) {
+    setPendingMacWorkflow({ type: "cleanup", stage: "recover_confirm", data: { binName: best.item.binName } });
+    return { ok: true, say: `That sounds like ${best.item.binName}. Bring it back?` };
+  }
+  const options = ranked.slice(0, 3).map((entry) => entry.item.binName);
+  setPendingMacWorkflow({ type: "cleanup", stage: "recover_pick", data: { options } });
+  return { ok: true, say: `Closest matches: ${options.join(", or ")}. Which one?` };
 }
 
 function listRedundantContents() {
@@ -3797,6 +3884,11 @@ async function deleteReviewBin() {
     return { ok: false, say: "There is no cleanup waiting on your call right now. Ask me what is worth deleting first." };
   }
   const count = pendingReviewBin.files.length;
+  // Sensitive action: bulk delete only after Touch ID says it is really you.
+  const granted = await requireTouchId(`delete ${count} redundant files`);
+  if (granted !== true) {
+    return { ok: false, say: granted === false ? "Touch ID said no, so everything stays put." : "I could not verify it is you, so everything stays put." };
+  }
   try {
     await execFileP("/usr/bin/osascript", ["-e",
       `tell application "Finder" to delete (every item of folder (POSIX file "${REVIEW_BIN_PATH}"))`,
@@ -5998,6 +6090,12 @@ async function executeConfirmedDelete(confirmation) {
   if (!confirmation?.filePath || !safePathExists(confirmation.filePath)) {
     pendingFileConfirmation = null;
     return { ok: false, say: "That file is not there anymore, so I did not delete anything." };
+  }
+  // Deleting is sensitive — every delete is Touch ID verified, no exceptions.
+  const granted = await requireTouchId(`delete ${path.basename(confirmation.filePath)}`);
+  if (granted !== true) {
+    pendingFileConfirmation = null;
+    return { ok: false, say: granted === false ? "Touch ID said no, so nothing was deleted." : "I could not verify it is you, so nothing was deleted." };
   }
   const sourcePath = confirmation.filePath;
   if (isDangerousFileOperationPath(sourcePath)) {
