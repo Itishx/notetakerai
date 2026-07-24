@@ -2759,7 +2759,25 @@ async function startListening() {
 }
 
 function toggleVoice() {
+  // Stage 1: if he is audibly talking, the tap means "stop talking NOW" —
+  // cut the audio mid-word but stay listening for the follow-up.
+  if (speaking || currentSpeechAudio || realtimeStreamTts) {
+    delegateGeneration += 1;
+    voiceTurnInFlight = false;
+    processing = false;
+    cancelRealtimeResponse("manual_stop");
+    stopSpeechOutput();
+    logRenderer("voice.manual_stop", { stillListening: realtimeActive });
+    if (realtimeActive) {
+      listening = true;
+      setStatus("listening", "Listening");
+      scheduleRealtimeIdleShutdown("manual_stop");
+      return;
+    }
+  }
+  // Stage 2: not talking (or voice already off) — normal on/off toggle.
   if (realtimeActive || realtimeConnecting || listening) {
+    stopSpeechOutput();
     stopRealtimeVoice();
     stopRecognition();
     setStatus("ready", "Double Space to show/hide");
