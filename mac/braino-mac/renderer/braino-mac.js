@@ -548,16 +548,10 @@ let musicMode = false;
 
 function updateEdgeGlow() {
   if (!edgeGlow) return;
-  const voiceState = herMode
-    ? ""
-    : ["listening", "hearing"].includes(lastGlowStatus)
-      ? "listen"
-      : lastGlowStatus === "speaking"
-        ? "speak"
-        : ["connecting", "thinking", "captured"].includes(lastGlowStatus)
-          ? "think"
-          : "";
-  edgeGlow.className = voiceState || (musicTheatricsReady && !herMode ? "music" : "");
+  // Screen-perimeter glow is a MUSIC-only theatric now (user call): voice
+  // states live entirely in the notch — sonar while listening, mouth while
+  // speaking, pill glow instead of the whole screen.
+  edgeGlow.className = musicTheatricsReady && !herMode ? "music" : "";
 }
 
 // ── Notch Braino: the notch as his face ──

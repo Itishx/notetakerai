@@ -653,8 +653,9 @@ body {
   transition: opacity 0.4s ease;
 }
 
-/* Sonar retired (user call): the edge glow already says "listening" — rings
-   on top read as redundant noise. Base opacity stays 0, never activated. */
+/* Sonar is BACK (user call): with the screen glow now music-only, the rings
+   are the listening signal again — notch-local, no full-screen anything. */
+#notch-face.listen .nf-sonar { opacity: 1; }
 
 #notch-face .nf-sonar i {
   position: absolute;
@@ -666,6 +667,19 @@ body {
   border-radius: 999px;
   border: 1.5px solid #E8786E;
   opacity: 0;
+}
+
+#notch-face.listen .nf-sonar i { animation: nfSonar 2.4s ease-out infinite; }
+#notch-face.listen .nf-sonar i:nth-child(2) { animation-delay: 0.8s; }
+#notch-face.listen .nf-sonar i:nth-child(3) { animation-delay: 1.6s; }
+
+@keyframes nfSonar {
+  0% { width: 120px; height: 44px; opacity: 0.6; border-width: 2px; }
+  100% { width: 340px; height: 150px; opacity: 0; border-width: 0.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.listen .nf-sonar i { animation: none; opacity: 0.4; }
 }
 
 @keyframes nfBars {
