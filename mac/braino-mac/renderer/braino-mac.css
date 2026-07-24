@@ -390,6 +390,25 @@ body {
   width: 560px;
 }
 
+/* Ambient glance: eyes dart around while he reads the screen. */
+#notch-face.scanning #nf-pupil-l,
+#notch-face.scanning #nf-pupil-r,
+#notch-face.scanning #nf-glint-l,
+#notch-face.scanning #nf-glint-r {
+  animation: nfScanLook 2s ease-in-out infinite;
+}
+
+@keyframes nfScanLook {
+  0%, 100% { transform: translateX(0); }
+  22% { transform: translateX(-3.4px); }
+  48% { transform: translateX(3.2px) translateY(-1.4px); }
+  74% { transform: translateX(-1.6px) translateY(1.2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.scanning #nf-pupil-l, #notch-face.scanning #nf-pupil-r { animation: none; }
+}
+
 #notch-face.music .nf-pill,
 #notch-face.live .nf-pill {
   width: 260px;

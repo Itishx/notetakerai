@@ -94,6 +94,14 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Ambient notch pulse | 🟡 | Polls x-status 2min after boot then every 45min; "@brainosays · N (+Δ this week)" rides the notch ticker for 90s after each poll, priority below WhatsApp badge |
 | Clip-and-tweet ("record a clip of 20 seconds" → "tweet it saying ...") | 🟡 | screencapture -v -V records main display (5-60s, default 15) to app-support/clips; caption read back + confirmed ("ship it?") → upload to x-post-media storage bucket → insert scheduled_x_posts (now) → dispatch-scheduled-x-posts fires it. KNOWN RISK: dispatch uses X's simple media upload (built for images) — larger/longer videos may be rejected by X; failure is reported honestly and the post stays queued on the dashboard |
 
+## Ambient companion (07-25 — "truly alive")
+| Capability | Status | Notes |
+|---|---|---|
+| 30-min awake window | 🟡 | Ending a session (Ctrl×2 off) no longer closes his eyes — he stays awake (eyes open) for 30 min after the last engagement (boot, session start/end, or his own ambient line each reset the clock); dozes only after that stretch of silence |
+| Ambient glances + unprompted offers | 🟡 | While awake-idle: every 30s (demo pacing — constant AMBIENT_CHECK_INTERVAL_MS, raise to ~2min for real life), the notch captions "seeing what you're up to...", eyes dart around (.scanning anim), screenshot → vision → ONE short warm suggestion/offer (≤22 words) spoken aloud EVEN with realtime off |
+| Auto realtime invocation | 🟡 | Because HE started the conversation, realtime connects right after his ambient line — the user just answers. Guards: skips during her mode, music theatrics, any active session/speech/processing |
+| "Don't disturb me" valve | 🟡 | "braino don't disturb/bother me" mutes ambient (session-scoped); "you can disturb me" / "start checking on me" re-enables. COST NOTE: each glance is one vision call — 30s pacing is demo-only |
+
 ## Voice latency
 | Capability | Status | Notes |
 |---|---|---|

@@ -2297,6 +2297,49 @@ function parseScreenVisionIntent(raw) {
   return { question: String(raw || "").trim() };
 }
 
+// Ambient companion glance: unprompted look at the screen, one short warm
+// line back. Called by the renderer's ambient loop while he's awake-idle.
+async function runAmbientObserve() {
+  const startedAt = Date.now();
+  const shot = await captureScreenBase64();
+  if (!shot.ok) return { ok: false, say: "" };
+  const authToken = await getBrainoAuthToken();
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !authToken) return { ok: false, say: "" };
+  const surface = activeMacContext || {};
+  const message = [
+    "You are Braino, glancing at your human's screen unprompted, as a companion who lives on this Mac.",
+    surface.appName ? `Front app: ${surface.appName}${surface.windowTitle ? `, window "${surface.windowTitle}"` : ""}.` : "",
+    "In ONE short spoken sentence (22 words max): either a specific, genuinely useful observation or tip about what they are doing right now, or a warm offer to help with it.",
+    "Casual, warm, zero preamble, no questions about permission, never mention screenshots or that you are an AI.",
+  ].filter(Boolean).join("\n");
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ notes: "", chatHistory: macChatHistory.slice(-4), message, visionMode: "describe", imageBase64: shot.base64, responseMedium: "voice" }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    if (!response.ok || !reply) throw new Error(data?.error || `ambient observe failed (${response.status})`);
+    logMac("ambient.observe", { activeApp: surface.appName || "", replyChars: reply.length, durationMs: Date.now() - startedAt });
+    rememberMacChat("assistant", reply);
+    return { ok: true, say: reply };
+  } catch (error) {
+    logMac("ambient.observe.failed", { error });
+    return { ok: false, say: "" };
+  }
+}
+
+ipcMain.handle("braino-mac:ambient-observe", async () => runAmbientObserve());
+
 async function runScreenVision(question) {
   const q = String(question || "").trim();
   const startedAt = Date.now();
@@ -8175,6 +8218,19 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (isConsequenceQuestion) {
     logMac("delegate.question_not_command", { raw: textForLog(raw) });
     return runMacConversation(raw);
+  }
+
+  const ambientProbe = cleanPrompt(raw);
+  if (/\b(?:don'?t|do not|stop)\s+(?:disturb|bother|interrupt)(?:ing)?\s*(?:me)?\b/i.test(ambientProbe)) {
+    logMac("delegate.ambient_mute_intent", {});
+    sendToRenderer("braino-mac:ambient-toggle", { enabled: false });
+    return { ok: true, say: "Understood. I will keep my eyes to myself until you say otherwise." };
+  }
+  if (/\b(?:you can|feel free to)\s+(?:disturb|bother|interrupt|check (?:in )?on) me\b/i.test(ambientProbe)
+    || /\b(?:start|resume)\s+(?:checking (?:in )?on|watching over) me\b/i.test(ambientProbe)) {
+    logMac("delegate.ambient_unmute_intent", {});
+    sendToRenderer("braino-mac:ambient-toggle", { enabled: true });
+    return { ok: true, say: "Good. I like keeping you company." };
   }
 
   if (parseRepeatSpeechIntent(raw)) {

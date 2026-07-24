@@ -587,6 +587,60 @@ function fmtCountdown(ms) {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// ── Ambient companion: after a session ends he stays present for 30 minutes,
+// glancing at the screen on an interval and offering something unprompted —
+// then STARTS a realtime conversation himself, since he opened his mouth.
+// "Braino, don't disturb me" turns it off; "you can disturb me" back on.
+const AMBIENT_AWAKE_WINDOW_MS = 30 * 60 * 1000;
+// Demo pacing per the user: glance every ~30s. Raise for real life later.
+const AMBIENT_CHECK_INTERVAL_MS = 30 * 1000;
+let lastEngagedAt = 0;
+let lastAmbientAt = 0;
+let ambientEnabled = true;
+let ambientBusy = false;
+
+async function runAmbientGlance() {
+  if (ambientBusy || !ambientEnabled || herMode) return;
+  if (realtimeActive || realtimeConnecting || speaking || processing || voiceTurnInFlight) return;
+  if (musicTheatricsReady) return;
+  const now = Date.now();
+  if (now - lastEngagedAt > AMBIENT_AWAKE_WINDOW_MS) return; // asleep
+  if (now - lastAmbientAt < AMBIENT_CHECK_INTERVAL_MS) return;
+  ambientBusy = true;
+  lastAmbientAt = now;
+  try {
+    // The theatric beat first: the notch says what he's doing, eyes scan.
+    nfSetThinking("seeing what you're up to...");
+    notchFace?.classList.add("scanning");
+    const result = await window.brainoMac.ambientObserve?.();
+    notchFace?.classList.remove("scanning");
+    nfSetThinking("");
+    if (!result?.ok || !result.say) return;
+    // He speaks even with realtime off — and because HE started talking,
+    // realtime comes up right after so the user can just answer.
+    lastEngagedAt = Date.now();
+    await speak(result.say);
+    if (ambientEnabled && !realtimeActive && !realtimeConnecting && !herMode) {
+      logRenderer("ambient.auto_realtime", {});
+      void startListening();
+    }
+  } catch (error) {
+    logRenderer("ambient.glance.failed", { error: errorForLog(error) });
+    notchFace?.classList.remove("scanning");
+    nfSetThinking("");
+  } finally {
+    ambientBusy = false;
+  }
+}
+
+window.setInterval(() => void runAmbientGlance(), 5000);
+
+window.brainoMac.onAmbientToggle?.((payload) => {
+  ambientEnabled = Boolean(payload?.enabled);
+  logRenderer("ambient.toggle", { enabled: ambientEnabled });
+  if (ambientEnabled) lastEngagedAt = Date.now();
+});
+
 // Notch wing captions: the island stretches sideways during a conversation.
 // ONLY what we heard is captioned (left wing) — his replies are voice + the
 // talking mouth, never text (user call: no response captions).
@@ -698,8 +752,12 @@ function updateNotchFace() {
   // Sleepy shade by default whenever he's home with nothing going on; a real
   // session snaps the eyes open ("he wakes up") before the island itself
   // takes over the visual for listening/speaking.
-  notchFace.classList.toggle("awake", visible && sessionEngaged);
-  notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !live && !music);
+  // Awake window: ending a session does NOT put him to sleep — he stays
+  // present (eyes open, ambient glances running) for 30 minutes after the
+  // last engagement, and only dozes after that stretch of silence.
+  const withinAwakeWindow = now - lastEngagedAt < AMBIENT_AWAKE_WINDOW_MS;
+  notchFace.classList.toggle("awake", visible && (sessionEngaged || withinAwakeWindow));
+  notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !withinAwakeWindow && !live && !music);
   notchFace.classList.toggle("captioning", visible && (conversationOwnsNotch || Boolean(nfThinkingText)));
   // While he's home the notch IS the conversation surface: sonar rings while
   // listening, talking mouth + bars while speaking. When he's out on screen,
@@ -2447,7 +2505,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -2705,6 +2763,7 @@ function stopRealtimeVoice() {
   realtimeActive = false;
   realtimeConnecting = false;
   voiceTurnInFlight = false;
+  lastEngagedAt = Date.now(); // session over, but he stays PRESENT for 30 min
   window.brainoMac.setLiveCaptions?.(false);
   // Don't wipe captions here — the reply's own timer clears them, so his
   // last line lingers briefly after the session hangs up instead of vanishing.
@@ -3167,6 +3226,7 @@ async function startRealtimeVoice() {
     realtimeActive = true;
     realtimeConnecting = false;
     listening = true;
+    lastEngagedAt = Date.now();
     markRealtimeActivity("realtime_ready");
     // Live on-device captions run alongside the session — words form as
     // they're spoken instead of after the server commits the audio.
@@ -3623,6 +3683,7 @@ async function runStartupSequence(config = {}) {
     });
     await runNotchGreeting(authResult);
     notchBootDone = true;
+    lastEngagedAt = Date.now(); // awake + ambient from birth
     updateNotchFace();
 
     if (authResult?.ok) {
