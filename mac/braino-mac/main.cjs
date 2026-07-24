@@ -3103,6 +3103,11 @@ async function checkAllTabsSnapshot() {
 }
 
 async function findPlayingYouTubeTab() {
+  // Returns "<kind>|<title>" where kind is "music" or "video" — a playing
+  // reaction video / podcast must NOT start the dance party, only songs do.
+  // Classification comes from YouTube's own page data (category === "Music"),
+  // guarded against SPA staleness by matching the videoId to the URL.
+  const probeJs = "(function(){var v=document.querySelector('video');if(!(v && !v.paused && !v.ended && v.currentTime > 0))return '';if(location.hostname==='music.youtube.com')return 'music|'+document.title;var cat='';try{var pr=window.ytInitialPlayerResponse;var vid=(new URLSearchParams(location.search)).get('v');if(pr && pr.videoDetails && pr.videoDetails.videoId===vid){cat=(pr.microformat && pr.microformat.playerMicroformatRenderer && pr.microformat.playerMicroformatRenderer.category)||'';}}catch(e){}return (cat==='Music'?'music':'video')+'|'+document.title;})()";
   const script = `
 tell application "Google Chrome"
   if (count of windows) = 0 then return ""
@@ -3114,9 +3119,9 @@ tell application "Google Chrome"
       end try
       if tURL contains "youtube.com/watch" or tURL contains "music.youtube.com" then
         try
-          set isPlaying to execute t javascript "(function(){var v=document.querySelector('video');return !!(v && !v.paused && !v.ended && v.currentTime > 0);})()"
-          if isPlaying is true then
-            return (title of t)
+          set probeResult to execute t javascript "${probeJs.replace(/"/g, '\\"')}"
+          if probeResult is not "" and probeResult is not missing value then
+            return probeResult
           end if
         end try
       end if
@@ -3126,8 +3131,11 @@ tell application "Google Chrome"
 end tell`;
   try {
     const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 6000 });
-    const title = String(stdout || "").trim();
-    return title || null;
+    const result = String(stdout || "").trim();
+    if (!result) return null;
+    const sep = result.indexOf("|");
+    if (sep < 0) return { kind: "video", title: result };
+    return { kind: result.slice(0, sep) === "music" ? "music" : "video", title: result.slice(sep + 1).trim() };
   } catch (error) {
     logMac("music.youtube_scan.unavailable", { error });
     return undefined; // distinct from null: means "could not scan," caller should use the old fallback
@@ -3157,19 +3165,23 @@ async function checkMusicState() {
   } catch (_) {}
   if (!playing) {
     const scanned = await findPlayingYouTubeTab().catch(() => undefined);
-    if (typeof scanned === "string") {
+    if (scanned !== undefined) {
       // A real cross-tab result: trust it fully, present or absent, even if
-      // the playing tab is currently in the background.
-      if (scanned) {
+      // the playing tab is currently in the background. Only actual MUSIC
+      // starts music mode — a reaction video or podcast is not a concert.
+      if (scanned && scanned.kind === "music") {
         playing = true;
         source = "youtube";
-        track = scanned.replace(/\s*-\s*YouTube.*$/i, "").trim();
+        track = scanned.title.replace(/\s*-\s*YouTube.*$/i, "").trim();
+      } else if (scanned) {
+        logMac("music.youtube.non_music_video", { title: textForLog(scanned.title) });
       }
     } else {
-      // Scan unavailable (JS-from-Apple-Events off) — fall back to the old,
-      // weaker active-tab-only check so this never regresses to nothing.
+      // Scan unavailable (JS-from-Apple-Events off) — the old active-tab URL
+      // fallback can't classify music vs talk video, so it stays quiet rather
+      // than throwing a dance party over a podcast.
       const url = activeMacContext?.browserUrl || "";
-      if (/youtube\.com\/watch|music\.youtube\.com/.test(url)) {
+      if (/music\.youtube\.com/.test(url)) {
         playing = true;
         source = "youtube";
         track = String(activeMacContext?.browserTitle || "")
