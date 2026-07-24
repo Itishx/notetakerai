@@ -58,6 +58,18 @@ User's design (their words, refined over two messages):
 ### Verification status
 Everything above is `node --check` + `swiftc -typecheck` clean. **Not live-tested against a real mic** — per this session's new rule (no more launching the live app via Bash for verification, see "Real bugs found" section above for why). First real test — does wake-word actually fire, do the eye states look right, does summon work — is the user's job next.
 
+## DONE (latest) — eye redesign + notch live captions
+
+User feedback: "design of the eyes is bad" (screenshot showed tiny flat dozing eyes) + "we also should see our captions in the notch, below the eyes... right now we might not see Braino anywhere, but we still see his floating captions."
+
+- **Eyes**: enlarged (r=10→12, pupil r=5.2→6.2, glint r=1.7→2). Dozing look rebuilt from a `scaleY(0.25)` squash (looked like flat broken dots) to a proper opacity cross-fade: new `<path class="nf-lid">` closed-eyelid curves fade in as `.nf-eye` fades out.
+- **Captions**: new `.nf-caption` block (`.nf-caption-heard` monospace transcript line, `.nf-caption-reply` italic serif reply line) sits below the eyes/mouth. New `.captioning` class extends the pill height by +84px, only while a real session is engaged AND there's live heard/reply text (`nfSetHeard`/`nfSetReply`/`nfClearCaptions` in braino-mac.js, driven off the existing realtime transcript-delta/response-delta/response.done handlers plus the accepted-transcript turn start; cleared in `stopRealtimeVoice()`). This is now the primary visible surface for a conversation — since he stays home by default (per the deterministic-summon redesign), captions were the only thing left showing anything was happening.
+- `node --check` clean. **Not live-tested** — per the standing "no live Electron launches via Bash" rule, first real test is the user's job.
+
+### Still unresolved from the same feedback message
+- **"he came out anyway + went back in: bug"** — root cause NOT found. Checked all `walkerHome = false` call sites and `.classList.add("visible")` sites via grep; ruled out `runWakeupClimb()` (dead code, zero callers) and the `app.config.error` handler (only fires on load failure). One candidate flagged but unconfirmed: the boot greeting text itself contains the phrase "come out" ("say come out whenever you want me out here with you") — if wake word were ever armed and picked up Braino's own TTS output as a live mic transcript, that phrase could self-trigger the deterministic summon. Couldn't confirm this is actually happening (wake word is opt-in / probably off, and no realtime session should be listening during boot) — needs a precise repro from the user to pin down.
+- **"no i wanted the always listening bro no wake word, hes listening but eacts only when we say hey braino"** — user seems to be rejecting "wake word" as a separate opt-in toggle concept; wants it to just be the default described plainly as "he's listening but only reacts to his name," not a feature you turn on. Currently built as opt-in (persisted, "turn on wake word" voice command). Not yet reconciled — likely just needs the default flipped to ON (or the framing changed) while keeping the same on-device `SFSpeechRecognizer` implementation underneath, since the privacy guarantee there is solid and shouldn't change.
+
 ## Backlog / ideas not yet built
 - **Dance-flourish**: mid-dance, occasionally, "I'm coming out, watch out!" then emerge — deliberately deferred tonight (see above), small standalone addition when picked back up.
 - **Demo idea**: for the launch video, trigger a 40-second timer in the Mac notch as a visual beat (the timer feature already works generically — "set a timer for 40 seconds" — just needs to be in the demo script).

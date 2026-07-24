@@ -567,6 +567,34 @@ function fmtCountdown(ms) {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// Live captions in the notch — this is now the PRIMARY visible surface for a
+// conversation, since he stays home (invisible) by default and no longer
+// pops out automatically. Without this, a real conversation with an
+// invisible character showed nothing but a stray floating bubble.
+const nfCaptionHeardEl = document.querySelector("#notch-face .nf-caption-heard");
+const nfCaptionReplyEl = document.querySelector("#notch-face .nf-caption-reply");
+let nfHeardText = "";
+let nfReplyText = "";
+
+function nfSetHeard(text) {
+  nfHeardText = String(text || "").trim();
+  if (nfCaptionHeardEl) nfCaptionHeardEl.textContent = nfHeardText;
+  updateNotchFace();
+}
+
+function nfSetReply(text) {
+  nfReplyText = String(text || "").trim();
+  if (nfCaptionReplyEl) nfCaptionReplyEl.textContent = nfReplyText;
+  updateNotchFace();
+}
+
+function nfClearCaptions() {
+  nfHeardText = "";
+  nfReplyText = "";
+  if (nfCaptionHeardEl) nfCaptionHeardEl.textContent = "";
+  if (nfCaptionReplyEl) nfCaptionReplyEl.textContent = "";
+}
+
 function updateNotchFace() {
   if (!notchFace) return;
   const visible = notchFaceEnabled && !herMode;
@@ -612,6 +640,11 @@ function updateNotchFace() {
   // takes over the visual for listening/speaking.
   notchFace.classList.toggle("awake", visible && sessionEngaged);
   notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !live && !music);
+  // Captions are the only visible trace of a conversation when he's home
+  // (invisible) — extend the pill further whenever there's live heard/reply
+  // text so the transcript is never floating with no source on screen.
+  const hasCaption = Boolean(nfHeardText || nfReplyText);
+  notchFace.classList.toggle("captioning", visible && sessionEngaged && hasCaption);
   nfSetStatusText(line);
 }
 
@@ -2577,6 +2610,8 @@ function stopRealtimeVoice() {
   realtimeActive = false;
   realtimeConnecting = false;
   voiceTurnInFlight = false;
+  nfClearCaptions();
+  updateNotchFace();
   try { dc?.close(); } catch (_) {}
   try { pc?.close(); } catch (_) {}
   mic?.getTracks().forEach((track) => track.stop());
@@ -2639,6 +2674,8 @@ function flushRealtimeTranscript(reason) {
   markRealtimeActivity("accepted_transcript", { schedule: false });
   if (speaking) stopSpeechOutput();
   voiceTurnInFlight = true;
+  nfSetHeard(transcript);
+  nfSetReply("");
   void (async () => {
     try {
       if (herMode) {
@@ -2779,6 +2816,7 @@ function handleRealtimeEvent(event) {
       rtUserTranscript += delta;
       if (herMode) window.HerMode?.setHeard(rtUserTranscript.trim());
       else setBubble(rtUserTranscript.trim() || "Listening...", 0);
+      nfSetHeard(rtUserTranscript.trim());
       scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
     }
     return;
@@ -2805,6 +2843,7 @@ function handleRealtimeEvent(event) {
     if (delta) {
       realtimeResponseText += delta;
       if (herMode) window.HerMode?.setReply(realtimeResponseText);
+      nfSetReply(realtimeResponseText);
       feedRealtimeStreamTts(delta);
     }
     return;
@@ -2819,6 +2858,7 @@ function handleRealtimeEvent(event) {
   if (event.type === "response.done") {
     const finalText = extractRealtimeDoneText(event) || realtimeResponseText;
     if (herMode && finalText) window.HerMode?.setReply(finalText);
+    if (finalText) nfSetReply(finalText);
     resolveRealtimeResponse({ status: "done", text: finalText });
     return;
   }

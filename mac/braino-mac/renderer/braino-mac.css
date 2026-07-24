@@ -267,6 +267,51 @@ body {
   box-shadow: 0 0 34px rgba(232, 120, 110, 0.5);
 }
 
+/* Captions: a further extension underneath the eyes/mouth, only while there
+   is actually something heard or said — you should never lose track of a
+   conversation just because his body isn't visible on screen. */
+#notch-face.listen.captioning .nf-pill,
+#notch-face.speak.captioning .nf-pill {
+  height: calc(var(--nf-notch-h) + 84px);
+  border-radius: 0 0 30px 30px;
+}
+
+#notch-face .nf-caption {
+  display: none;
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: calc(var(--nf-notch-h) + 46px);
+  text-align: center;
+  line-height: 1.32;
+}
+
+#notch-face.captioning .nf-caption {
+  display: block;
+}
+
+#notch-face .nf-caption-heard {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: rgba(255, 240, 235, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#notch-face .nf-caption-reply {
+  font-family: Georgia, 'Newsreader', serif;
+  font-style: italic;
+  font-size: 12.5px;
+  color: rgba(255, 244, 240, 0.96);
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 #notch-face .nf-folds {
   position: absolute;
   inset: 0;
@@ -460,7 +505,8 @@ body {
 #notch-face .nf-eye {
   transform-box: fill-box;
   transform-origin: center;
-  transition: transform 0.55s ease;
+  opacity: 1;
+  transition: transform 0.55s ease, opacity 0.5s ease;
 }
 
 /* Asleep / dozing: eyes closed. Used during boot (before auth completes) and
@@ -553,8 +599,20 @@ body {
    shade (still there, still listening for the wake word locally, just
    resting), not the wide-open idle look. A live session snaps them open —
    "he wakes up" — before the island itself takes over the visual. */
+/* Dozing: a proper closed eyelid curve replaces the open eye, rather than
+   squashing it flat (a squash read as broken, not sleepy). */
+#notch-face .nf-lid {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
 #notch-face.dozing .nf-eye {
-  transform: scaleY(0.25);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+#notch-face.dozing .nf-lid {
+  opacity: 1;
 }
 
 #notch-face.awake .nf-eye {
