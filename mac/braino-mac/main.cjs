@@ -3840,12 +3840,13 @@ async function startScreenRecording() {
   const dir = path.join(os.homedir(), "Desktop");
   screenRecPath = path.join(dir, `Screen Recording ${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.mov`);
   screenRecStartedAt = Date.now();
-  // -v = video, -x = no sound cue; records until we send SIGINT.
-  screenRecProc = spawn("/usr/sbin/screencapture", ["-v", "-x", screenRecPath], { stdio: "ignore" });
+  // -v = video, -g = capture default-input audio (mic), -x = no sound cue;
+  // records until we send SIGINT.
+  screenRecProc = spawn("/usr/sbin/screencapture", ["-v", "-g", "-x", screenRecPath], { stdio: "ignore" });
   screenRecProc.on("exit", () => { screenRecProc = null; });
   sendToRenderer("braino-mac:screen-rec", { action: "start", startedAt: screenRecStartedAt });
   logMac("screenrec.start", { path: textForLog(screenRecPath) });
-  return { ok: true, say: "Recording your screen. Say stop recording, or hit Done in the notch, when you're finished." };
+  return { ok: true, say: "Recording your screen with audio. Say stop recording when you're finished." };
 }
 
 async function stopScreenRecording() {
@@ -3865,6 +3866,30 @@ async function stopScreenRecording() {
     return { ok: true, say: `Saved — ${secs} seconds, about ${mb} megabytes, on your Desktop. I opened it in Finder.` };
   }
   return { ok: true, say: `Stopped after ${secs} seconds. The recording is saving to your Desktop.` };
+}
+
+async function takeScreenshot() {
+  const dir = path.join(os.homedir(), "Desktop");
+  const shotPath = path.join(dir, `Screenshot ${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.png`);
+  try {
+    await execFileP("/usr/sbin/screencapture", ["-x", shotPath], { timeout: 6000 });
+    if (!fs.existsSync(shotPath)) throw new Error("no file");
+    await execFileP("/usr/bin/open", ["-R", shotPath]).catch(() => {});
+    logMac("screenshot.taken", { path: textForLog(shotPath) });
+    return { ok: true, say: "Screenshot saved to your Desktop." };
+  } catch (error) {
+    logMac("screenshot.failed", { error });
+    return { ok: false, say: "The screenshot didn't take — check Screen Recording permission." };
+  }
+}
+
+function parseScreenshotIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  // "take a screenshot" / "take a ss" / "grab a screenshot" / "screenshot this"
+  if (/\b(?:take|grab|capture|snap|get)\s+(?:a\s+)?(?:screenshot|screen shot|ss)\b/i.test(source)
+    || /\bscreenshot\s+(?:this|it|the screen|my screen)\b/i.test(source)
+    || /^(?:screenshot|screen shot)$/i.test(source)) return {};
+  return null;
 }
 
 function parseScreenRecordIntent(raw) {
@@ -9320,6 +9345,11 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     if (wallpaperIntent.mode === "restore") return restoreWallpaper();
     if (wallpaperIntent.mode === "web") return setWallpaperFromWeb(wallpaperIntent.subject);
     return setRandomOfficialWallpaper();
+  }
+
+  if (parseScreenshotIntent(raw)) {
+    logMac("delegate.screenshot_intent", {});
+    return takeScreenshot();
   }
 
   // Screen recording first — bare "record this" is video, not a meeting.

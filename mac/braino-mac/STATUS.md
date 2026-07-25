@@ -82,7 +82,8 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 ## Screen recording (07-25)
 | Capability | Status | Notes |
 |---|---|---|
-| Screen video recording ("record this", "record my screen") | 🟡 | screencapture -v -x (open-ended) → SIGINT saves the .mov to Desktop, reveals in Finder, speaks duration+size. Verified live: valid QuickTime out. Notch shows "● SCREEN m:ss" while recording. DISAMBIGUATED from meeting: "record this/my screen" = video; "record this call/meeting" = meeting recorder. FUTURE: island Done-button + save-as-mp4/gif picker (voice stop works now) |
+| Screen video recording WITH AUDIO ("record this", "record my screen") | 🟡 | screencapture -v -g -x — the -g captures default-input (mic) audio (verified: 1MB silent → 3.8MB with audio). SIGINT saves the .mov to Desktop, reveals in Finder, speaks duration+size. Notch shows "● SCREEN m:ss". DISAMBIGUATED from meeting: bare record=video; "record this call/meeting"=notes. FUTURE: island Done-button + save-as picker; system-audio (not just mic) would need ScreenCaptureKit |
+| Screenshot on command ("take a screenshot", "take a ss") | 🟡 | screencapture -x → PNG on Desktop, revealed in Finder |
 
 ## Maps · Shopping · Research · Phone (07-25)
 | Capability | Status | Notes |
