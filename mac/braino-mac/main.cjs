@@ -37,6 +37,7 @@ let dockWindow = null;
 let swiftHotkey = null;
 let swiftWakeWord = null;
 let wakeWordGaveUp = false; // true once "unavailable" fires — don't keep respawning a dead end
+let wakeWordCrashCount = 0;  // consecutive crashy exits; give up after 3 (TCC dead end)
 let wakeWordRestartTimer = null;
 let activeSpeech = null;
 let lastControlTapAt = 0;
@@ -1178,10 +1179,21 @@ function startBrainoWakeWord() {
 
   swiftWakeWord.on("exit", (code) => {
     swiftWakeWord = null;
-    logMac("wakeword.exit", { code, gaveUp: wakeWordGaveUp });
-    if (wakeWordGaveUp) return;
-    // Transient crash (not a permission/hardware dead end) — try again shortly.
-    wakeWordRestartTimer = setTimeout(() => startBrainoWakeWord(), 5000);
+    // A TCC privacy-violation abort kills the process before it can print
+    // "unavailable" on stdout, so gaveUp never trips and the old code
+    // respawned it every 5s forever (flooding the log, burning CPU). Count
+    // consecutive crashy exits and give up after a few — a denied Speech
+    // Recognition permission is a dead end, not a transient hiccup.
+    const crashed = code === null || code !== 0;
+    wakeWordCrashCount = crashed ? wakeWordCrashCount + 1 : 0;
+    if (crashed && wakeWordCrashCount >= 3) wakeWordGaveUp = true;
+    logMac("wakeword.exit", { code, gaveUp: wakeWordGaveUp, crashCount: wakeWordCrashCount });
+    if (wakeWordGaveUp) {
+      sendToRenderer("braino-mac:wake-status", { armed: false, unavailable: true, reason: "wake word needs Speech Recognition permission" });
+      return;
+    }
+    // Transient crash — back off progressively, don't hammer every 5s.
+    wakeWordRestartTimer = setTimeout(() => startBrainoWakeWord(), 5000 * wakeWordCrashCount + 5000);
   });
 }
 
@@ -2331,8 +2343,9 @@ async function classifyIntentLLM(raw) {
     "Classify this Mac voice command into EXACTLY one tool. Reply with ONLY strict JSON, no prose, no markdown.",
     `Command: "${String(raw || "").trim()}"`,
     surface.appName ? `Front app: ${surface.appName}${surface.windowTitle ? ` ("${surface.windowTitle}")` : ""}.` : "",
-    'Tools: {"tool":"open_app","arg":"app name"} | {"tool":"open_website","arg":"domain or url"} | {"tool":"find_file","arg":"file query"} | {"tool":"amazon","arg":"product"} | {"tool":"youtube","arg":"video"} | {"tool":"drive","arg":"document name"} | {"tool":"web_search","arg":"query"} | {"tool":"chat","arg":""}',
-    "find_file = the user's own documents (resume, notes, invoices, screenshots). chat = talking TO Braino, not commanding. amazon = products/books to buy.",
+    'Tools: {"tool":"open_app","arg":"app name"} | {"tool":"open_website","arg":"domain or url"} | {"tool":"find_file","arg":"file query"} | {"tool":"amazon","arg":"product"} | {"tool":"youtube","arg":"video"} | {"tool":"drive","arg":"document name"} | {"tool":"web_search","arg":"query"} | {"tool":"design_cowork","arg":""} | {"tool":"chat","arg":""}',
+    "find_file = the user's own documents (resume, notes, invoices, screenshots). chat = talking TO Braino, not commanding. amazon = physical products/books to BUY only — articles, blogs, essays, news, videos and anything to READ online is web_search, never amazon.",
+    "design_cowork = the user wants help making a BETTER DESIGN of what's on their screen, or wants Claude Design to improve a website/UI they are looking at (even vaguely: 'help me design something better', 'make this look nicer', 'ask Claude to redesign this'). This looks at the screen, captures the site, and hands it to Claude Design.",
   ].filter(Boolean).join("\n");
   try {
     const controller = new AbortController();
@@ -2380,6 +2393,7 @@ async function executeClassifiedIntent(classified, raw) {
   if (tool === "youtube" && arg) { await openChromeUrl(SEMANTIC_SITES.youtube.search(arg)); return { ok: true, say: `${arg} on YouTube.` }; }
   if (tool === "drive" && arg) { await openChromeUrl(SEMANTIC_SITES["google drive"].search(arg)); return { ok: true, say: `Looking for ${arg} in your Drive.` }; }
   if (tool === "web_search" && arg) return runMacWebSearch(arg);
+  if (tool === "design_cowork") return runDesignCowork(raw);
   return runMacConversation(raw);
 }
 
@@ -2546,6 +2560,228 @@ function saveWakeWordState(enabled) {
     fs.writeFileSync(WAKE_WORD_STATE_PATH, JSON.stringify({ enabled: Boolean(enabled) }));
   } catch (_) {}
 }
+
+// ── Braino Cowork: opt-in coworking mode. He checks the screen on a short
+// interval (default 90s, tunable by voice: "check on me every 30 seconds"),
+// and only speaks when he has ONE concrete way to help — the model answers
+// "SKIP" otherwise and he stays quiet. "Start cowork mode" / "stop cowork
+// mode". State persists like the wake-word toggle. The dedicated human
+// intelligence layer comes later; v1 is watch -> offer -> (user says yes)
+// -> the normal delegate routing does the task.
+const COWORK_STATE_PATH = path.join(AUTH_STORE_DIR, "cowork.json");
+const COWORK_DEFAULT_INTERVAL_MS = 90 * 1000;
+const COWORK_MIN_INTERVAL_MS = 15 * 1000;
+const COWORK_MAX_INTERVAL_MS = 10 * 60 * 1000;
+
+function loadCoworkState() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(COWORK_STATE_PATH, "utf8")) || {};
+    return {
+      enabled: Boolean(parsed.enabled),
+      intervalMs: Math.min(COWORK_MAX_INTERVAL_MS, Math.max(COWORK_MIN_INTERVAL_MS, Number(parsed.intervalMs) || COWORK_DEFAULT_INTERVAL_MS)),
+    };
+  } catch (_) {
+    return { enabled: false, intervalMs: COWORK_DEFAULT_INTERVAL_MS };
+  }
+}
+
+let coworkState = loadCoworkState();
+let coworkRecentSuggestions = [];
+
+function saveCoworkState() {
+  try { fs.writeFileSync(COWORK_STATE_PATH, JSON.stringify(coworkState)); } catch (_) {}
+}
+
+function setCoworkState(patch) {
+  coworkState = { ...coworkState, ...patch };
+  if (!coworkState.enabled) coworkRecentSuggestions = [];
+  saveCoworkState();
+  sendToRenderer("braino-mac:cowork", coworkState);
+  logMac("cowork.state", coworkState);
+}
+
+// One cowork glance: screenshot -> vision -> either "" (nothing worth
+// interrupting for) or one short offer to help. The recent-suggestion list
+// keeps him from repeating himself every interval.
+async function runCoworkObserve() {
+  const startedAt = Date.now();
+  const shot = await captureScreenBase64();
+  if (!shot.ok) return { ok: false, say: "" };
+  const authToken = await getBrainoAuthToken();
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !authToken) return { ok: false, say: "" };
+  const surface = activeMacContext || {};
+  const message = [
+    "You are Braino in COWORK MODE: a coworking buddy who has been watching your human work on this Mac, checking in every minute or two.",
+    surface.appName ? `Front app: ${surface.appName}${surface.windowTitle ? `, window "${surface.windowTitle}"` : ""}${surface.browserUrl ? `, at ${surface.browserUrl}` : ""}.` : "",
+    coworkRecentSuggestions.length ? `You already offered recently (do NOT repeat or rephrase these): ${coworkRecentSuggestions.join(" | ")}` : "",
+    "Look at the screen. If there is ONE concrete, genuinely useful thing you could DO for them right now (draft the reply, tidy the file, look something up, fix the error on screen, queue the next step), offer it in ONE short spoken sentence, max 20 words, phrased so they can accept by just saying yes.",
+    "Only speak when it is truly worth interrupting focused work. If nothing new or useful, reply with exactly: SKIP",
+    "Casual, warm, zero preamble, never mention screenshots or that you are an AI.",
+  ].filter(Boolean).join("\n");
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ notes: "", chatHistory: macChatHistory.slice(-4), message, visionMode: "describe", imageBase64: shot.base64, responseMedium: "voice" }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    if (!response.ok) throw new Error(data?.error || `cowork observe failed (${response.status})`);
+    const skipped = !reply || /^skip[.!]?$/i.test(reply);
+    logMac("cowork.observe", { activeApp: surface.appName || "", skipped, replyChars: reply.length, durationMs: Date.now() - startedAt });
+    if (skipped) return { ok: true, say: "" };
+    coworkRecentSuggestions = [...coworkRecentSuggestions.slice(-4), reply];
+    rememberMacChat("assistant", reply);
+    return { ok: true, say: reply };
+  } catch (error) {
+    logMac("cowork.observe.failed", { error });
+    return { ok: false, say: "" };
+  }
+}
+
+ipcMain.handle("braino-mac:cowork-observe", async () => runCoworkObserve());
+ipcMain.handle("braino-mac:cowork-state", async () => coworkState);
+
+// ── The island's cowork label ("co-work", "capturing", "uploading"…). Sent to
+// the renderer, which shows it in the notch ticker while the ability runs. ──
+function setNotchCoworkLabel(label, thinking) {
+  sendToRenderer("braino-mac:cowork-label", { label: String(label || ""), thinking: String(thinking || "") });
+}
+
+// ── Cowork Ability #1: the Claude Design handoff. The step machine lives in
+// cowork-design.cjs; here we inject the real primitives it drives. ──
+const { makeDesignCowork } = require("./cowork-design.cjs");
+
+// screencapture straight to a file we keep (the run archive on the Desktop).
+async function captureScreenToFile(destPath) {
+  try {
+    await execFileP("/usr/sbin/screencapture", ["-x", destPath], { timeout: 8000 });
+    await execFileP("/usr/bin/sips", ["-Z", "2000", destPath], { timeout: 8000 }).catch(() => {});
+    const stat = await fs.promises.stat(destPath).catch(() => null);
+    return { ok: Boolean(stat && stat.size > 0) };
+  } catch (error) {
+    logMac("cowork.capture_file.failed", { error });
+    return { ok: false };
+  }
+}
+
+async function fileToBase64(p) {
+  try { return (await fs.promises.readFile(p)).toString("base64"); } catch { return ""; }
+}
+
+// One vision question against an already-captured base64 shot.
+async function askVision(question, base64) {
+  const authToken = await getBrainoAuthToken();
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !authToken) return { ok: false, say: "" };
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ notes: "", chatHistory: [], message: question, visionMode: "describe", imageBase64: base64, responseMedium: "voice" }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    return reply ? { ok: true, say: reply } : { ok: false, say: "" };
+  } catch (error) {
+    logMac("cowork.vision.failed", { error });
+    return { ok: false, say: "" };
+  }
+}
+
+// osascript key press / typing via System Events.
+async function pressKey(keyCode, mod) {
+  const using = mod ? ` using ${mod} down` : "";
+  await execFileP("/usr/bin/osascript", ["-e", `tell application "System Events" to key code ${keyCode}${using}`], { timeout: 5000 }).catch(() => {});
+}
+async function typeText(text) {
+  await execFileP("/usr/bin/osascript", ["-e", `tell application "System Events" to keystroke ${JSON.stringify(String(text))}`], { timeout: 8000 }).catch(() => {});
+}
+
+// Vision-locate a described UI element and click it (reuses the vision-point
+// edge function + AX click). Returns true if it found and clicked something.
+async function clickTargetByVision(description) {
+  const shot = await captureScreenBase64();
+  if (!shot.ok) return false;
+  const authToken = await getBrainoAuthToken();
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !authToken) return false;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/vision-point`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ target: description, said: description, context: "", imageBase64: shot.base64 }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const parsed = JSON.parse(String(data?.reply || "").match(/\{[\s\S]*\}/)?.[0] || "null");
+    if (parsed?.found && Number.isFinite(Number(parsed.x)) && Number.isFinite(Number(parsed.y))) {
+      const ok = await clickAtNormalized(Number(parsed.x), Number(parsed.y), description);
+      logMac("cowork.click", { target: textForLog(description), x: parsed.x, y: parsed.y, ok });
+      return ok;
+    }
+    logMac("cowork.click.notfound", { target: textForLog(description) });
+    return false;
+  } catch (error) {
+    logMac("cowork.click.failed", { error });
+    return false;
+  }
+}
+
+// Attach a folder of files to whatever input just opened a native file dialog:
+// click the attach affordance, then drive the Open panel with Go-to-Folder
+// (Cmd+Shift+G), type the folder path, select all, and open. Deterministic.
+async function attachFilesViaDialog(dir, files) {
+  // 1 — click the "+" / attach / paperclip button (vision-located).
+  const clicked = await clickTargetByVision("the plus, attach, or paperclip button that adds files to the message input");
+  if (!clicked) { logMac("cowork.attach.no_button", {}); return false; }
+  await new Promise((r) => setTimeout(r, 1400));
+  // Some UIs show a menu ("Upload from computer"); try to click it, harmless if absent.
+  await clickTargetByVision("the 'Upload a file' or 'Upload from computer' menu option").catch(() => {});
+  await new Promise((r) => setTimeout(r, 1400));
+  // 2 — drive the macOS Open panel: Go to Folder → type path → Enter.
+  await pressKey(5, "command down, shift down"); // Cmd+Shift+G
+  await new Promise((r) => setTimeout(r, 700));
+  await typeText(dir);
+  await new Promise((r) => setTimeout(r, 500));
+  await pressKey(36); // Enter — go to folder
+  await new Promise((r) => setTimeout(r, 900));
+  // 3 — select every screenshot and open.
+  await pressKey(0, "command"); // Cmd+A — select all in the listing
+  await new Promise((r) => setTimeout(r, 500));
+  await pressKey(36); // Enter — open the selection
+  logMac("cowork.attach.done", { dir, count: files.length });
+  return true;
+}
+
+const runDesignCowork = makeDesignCowork({
+  path, fs,
+  wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  homeDir: app.getPath("home"),
+  attachFiles: attachFilesViaDialog,
+  clickTarget: clickTargetByVision,
+  captureFile: captureScreenToFile,
+  captureB64: captureScreenBase64,
+  fileToB64: fileToBase64,
+  vision: askVision,
+  key: pressKey,
+  type: typeText,
+  openChromeUrl,
+  frontApp: () => (activeMacContext && activeMacContext.appName) || "Google Chrome",
+  activate: (name) => execFileP("/usr/bin/osascript", ["-e", `tell application ${JSON.stringify(name)} to activate`], { timeout: 5000 }).catch(() => {}),
+  notch: setNotchCoworkLabel,
+  say: async (line) => { sendToRenderer("braino-mac:speak-line", { text: String(line || "") }); },
+  log: logMac,
+});
 
 function stopBrainoWakeWord() {
   if (wakeWordRestartTimer) {
@@ -2806,31 +3042,92 @@ function parseCallIntent(raw) {
 }
 
 async function clickWhatsAppCallMenuItem(video) {
-  const wanted = video ? "Video Call" : "Voice Call";
+  if (process.platform !== "darwin") return false;
+  const axTargets = video
+    ? ["Video call", "Start video call", "Video Call"]
+    : ["Voice call", "Audio call", "Start voice call", "Voice Call"];
+  const menuTargets = video
+    ? ["Video Call", "Video call", "Start Video Call", "Start video call"]
+    : ["Voice Call", "Voice call", "Audio Call", "Audio call", "Start Voice Call", "Start voice call"];
+  const targetList = menuTargets.map((target) => `"${escapeAppleScriptString(target)}"`).join(", ");
+
+  const focusScript = `
+tell application "System Events"
+  if not (exists application process "WhatsApp") then return "no-app"
+end tell
+tell application "WhatsApp" to activate
+delay 0.35
+return "ok"`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", focusScript], { timeout: 6000 });
+    if (/no-app/i.test(String(stdout || ""))) return false;
+  } catch (error) {
+    logMac("call.whatsapp.focus_failed", { video, error });
+  }
+
+  // WhatsApp exposes the call controls as toolbar buttons in current builds.
+  // Use the native AX helper first so we click what the user can actually see.
+  for (const target of axTargets) {
+    const result = await runAxHelper(["press", target], 12000);
+    logMac("call.whatsapp.ax_press", {
+      video,
+      target: textForLog(target),
+      status: result.status,
+      detail: textForLog(result.detail),
+    });
+    if (result.status === "pressed") return true;
+    if (result.status === "needs-accessibility") break;
+  }
+
+  // Backup for older WhatsApp builds where calls are only exposed through
+  // app menus. Open each menu before reading it; direct `menu 1 of mb` access
+  // can throw and used to leak a raw Delegate error into the UI.
   const script = `
+on textMatches(valueText, wantedNames)
+  ignoring case
+    repeat with wantedName in wantedNames
+      if valueText contains (wantedName as text) then return true
+    end repeat
+  end ignoring
+  return false
+end textMatches
+
 tell application "System Events"
   if not (exists application process "WhatsApp") then return "no-app"
   tell application process "WhatsApp"
     set frontmost to true
-    delay 0.3
+    delay 0.25
+    set wantedNames to {${targetList}}
     repeat with mb in menu bar items of menu bar 1
       try
-        repeat with mi in menu items of menu 1 of mb
-          try
-            set nm to name of mi
-            if nm contains "${wanted}" then
-              click mi
-              return "clicked"
-            end if
-          end try
-        end repeat
+        click mb
+        delay 0.08
+        if exists menu 1 of mb then
+          repeat with mi in menu items of menu 1 of mb
+            try
+              set nm to name of mi as text
+              if my textMatches(nm, wantedNames) then
+                click mi
+                return "clicked-menu"
+              end if
+            end try
+          end repeat
+        end if
       end try
     end repeat
+    key code 53
     return "not-found"
   end tell
 end tell`;
-  const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
-  return /clicked/.test(String(stdout || ""));
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
+    const status = String(stdout || "").trim();
+    logMac("call.whatsapp.menu_press", { video, status });
+    return /clicked/i.test(status);
+  } catch (error) {
+    logMac("call.whatsapp.menu_press_failed", { video, error });
+    return false;
+  }
 }
 
 async function pressReturnInApp(appName) {
@@ -3143,16 +3440,28 @@ async function runAmazonSearch(product) {
   return { ok: true, say: `Here are options for ${product}. Say click the first one, or the second, and I'll open it — then add to cart when you're ready.` };
 }
 
+// Web-content asks are NOT products: "find me some articles by Mark Manson"
+// used to ride the "find me" branch straight into a literal Amazon search
+// (zero results, verbatim filler and all). These words route to web research.
+const AMAZON_CONTENT_WORDS_RE = /\b(?:articles?|blogs?|blog posts?|essays?|posts?|news|videos?|interviews?|podcasts?|papers?|pdfs?|tutorials?|recipes?|lyrics|quotes?)\b/i;
+
+function cleanAmazonQuery(text) {
+  // Strip spoken filler so the search term reads like something a human
+  // would type: "some articles by..." → "articles by...".
+  return String(text || "").replace(/^(?:some|a few|a couple of|any|me some)\s+/i, "").trim();
+}
+
 function parseAmazonIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (AMAZON_CONTENT_WORDS_RE.test(source) && !/\bamazon\b/i.test(source)) return null;
   const onAmazon = /amazon\.(?:in|com)/.test(activeMacContext?.browserUrl || "");
   let m = source.match(/\b(?:show me options for|options for|search amazon for|find me|shop for)\s+(.+)$/i);
-  if (m) return { mode: "search", product: m[1].trim() };
+  if (m) return { mode: "search", product: cleanAmazonQuery(m[1]) };
   m = source.match(/\bamazon\b.*\bfor\s+(.+)$/i);
-  if (m) return { mode: "search", product: m[1].trim() };
+  if (m) return { mode: "search", product: cleanAmazonQuery(m[1]) };
   if (onAmazon) {
     m = source.match(/\bsearch\s+for\s+(.+)$/i) || source.match(/\bshow me\s+(.+)$/i);
-    if (m) return { mode: "search", product: m[1].trim() };
+    if (m) return { mode: "search", product: cleanAmazonQuery(m[1]) };
   }
   return null;
 }
@@ -3514,9 +3823,58 @@ async function stopMeetingRecording() {
 function parseMeetingIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
   if (/\bstop\b.*\brecord/i.test(source) || /\brecord(?:ing)?\b.*\bstop\b/i.test(source)) return { action: "stop" };
+  // Meeting = a CALL/MEETING specifically. Bare "record this" / "record my
+  // screen" is screen recording, handled separately.
   if (/\brecord\b.*\b(?:this|the)\s+(?:call|meeting|meet)\b/i.test(source)
-    || /\bstart\s+recording\b/i.test(source)
-    || /\brecord\s+(?:it|this)$/i.test(source)) return { action: "start" };
+    || /\brecord\s+(?:the\s+)?(?:call|meeting)\b/i.test(source)) return { action: "start" };
+  return null;
+}
+
+// ── Screen video recording (Command-Shift-5 equivalent via screencapture). ──
+let screenRecProc = null;
+let screenRecPath = "";
+let screenRecStartedAt = 0;
+
+async function startScreenRecording() {
+  if (screenRecProc) return { ok: true, say: "Already rolling. Say stop when you're done." };
+  const dir = path.join(os.homedir(), "Desktop");
+  screenRecPath = path.join(dir, `Screen Recording ${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.mov`);
+  screenRecStartedAt = Date.now();
+  // -v = video, -x = no sound cue; records until we send SIGINT.
+  screenRecProc = spawn("/usr/sbin/screencapture", ["-v", "-x", screenRecPath], { stdio: "ignore" });
+  screenRecProc.on("exit", () => { screenRecProc = null; });
+  sendToRenderer("braino-mac:screen-rec", { action: "start", startedAt: screenRecStartedAt });
+  logMac("screenrec.start", { path: textForLog(screenRecPath) });
+  return { ok: true, say: "Recording your screen. Say stop recording, or hit Done in the notch, when you're finished." };
+}
+
+async function stopScreenRecording() {
+  if (!screenRecProc) return { ok: false, say: "Nothing is being screen-recorded right now." };
+  const proc = screenRecProc;
+  const outPath = screenRecPath;
+  const secs = Math.max(1, Math.round((Date.now() - screenRecStartedAt) / 1000));
+  try { proc.kill("SIGINT"); } catch (_) {} // SIGINT makes screencapture flush + save
+  sendToRenderer("braino-mac:screen-rec", { action: "stop" });
+  // Give it a moment to finalize the file, then reveal it.
+  await new Promise((r) => setTimeout(r, 1200));
+  screenRecProc = null;
+  logMac("screenrec.stop", { seconds: secs, path: textForLog(outPath) });
+  if (fs.existsSync(outPath)) {
+    await execFileP("/usr/bin/open", ["-R", outPath]).catch(() => {});
+    const mb = Math.round(fs.statSync(outPath).size / (1024 * 1024));
+    return { ok: true, say: `Saved — ${secs} seconds, about ${mb} megabytes, on your Desktop. I opened it in Finder.` };
+  }
+  return { ok: true, say: `Stopped after ${secs} seconds. The recording is saving to your Desktop.` };
+}
+
+function parseScreenRecordIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (screenRecProc && (/\bstop\b.*\brecord/i.test(source) || /\b(?:done|stop)\s+recording\b/i.test(source) || /\bstop\b.*\bscreen\b/i.test(source))) return { action: "stop" };
+  if (/\brecord\s+(?:my|the)\s+screen\b/i.test(source)
+    || /\bscreen\s*record(?:ing)?\b/i.test(source)
+    || /\bstart\s+(?:a\s+)?screen\s+recording\b/i.test(source)
+    || /\brecord\s+(?:this|it|my|the)\b(?!\s+(?:call|meeting|meet))/i.test(source)
+    || /^record$/i.test(source)) return { action: "start" };
   return null;
 }
 
@@ -8509,6 +8867,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     saveWakeWordState(wakeToggle.enable);
     if (wakeToggle.enable) {
       wakeWordGaveUp = false;
+      wakeWordCrashCount = 0;
       startBrainoWakeWord();
       return {
         ok: true,
@@ -8963,12 +9322,62 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return setRandomOfficialWallpaper();
   }
 
+  // Screen recording first — bare "record this" is video, not a meeting.
+  const screenRecIntent = parseScreenRecordIntent(raw);
+  if (screenRecIntent) {
+    logMac("delegate.screenrec_intent", { action: screenRecIntent.action });
+    return screenRecIntent.action === "start" ? startScreenRecording() : stopScreenRecording();
+  }
+
   const meetingIntent = parseMeetingIntent(raw);
   if (meetingIntent) {
     logMac("delegate.meeting_intent", { action: meetingIntent.action });
     return meetingIntent.action === "start"
       ? startMeetingRecording(/\bcall\b/i.test(cleanPrompt(raw)) ? "call" : "meeting")
       : stopMeetingRecording();
+  }
+
+  // ── Braino Cowork intents (before the ambient ones, so "stop watching my
+  // work" lands here and not on the ambient mute) ──
+  const coworkProbe = cleanPrompt(raw);
+  const coworkEvery = coworkProbe.match(/\b(?:check (?:in )?on me|watch(?: my work| me)?|look at my screen)\s+every\s+(\d+)\s*(seconds?|secs?|minutes?|mins?)\b/i);
+  if (coworkEvery) {
+    const n = Number(coworkEvery[1]);
+    const ms = /min/i.test(coworkEvery[2]) ? n * 60000 : n * 1000;
+    const clamped = Math.min(COWORK_MAX_INTERVAL_MS, Math.max(COWORK_MIN_INTERVAL_MS, ms));
+    logMac("delegate.cowork_interval_intent", { requestedMs: ms, clampedMs: clamped });
+    setCoworkState({ enabled: true, intervalMs: clamped });
+    const cadence = clamped >= 60000
+      ? `${Math.round(clamped / 60000)} minute${clamped >= 120000 ? "s" : ""}`
+      : `${Math.round(clamped / 1000)} seconds`;
+    return { ok: true, say: `Cowork mode on. I will check on your work every ${cadence}.` };
+  }
+  if (/\b(?:start|begin|enter|turn on|enable)\s+(?:braino\s+)?co-?work(?:ing)?(?:\s+mode)?(?:\s+simple)?\b/i.test(coworkProbe)
+    || /\b(?:co-?work|work)\s+with\s+me\b/i.test(coworkProbe)
+    || /\blet'?s\s+work\s+together\b/i.test(coworkProbe)
+    || /\bwatch\s+(?:me\s+work|my\s+work)\b/i.test(coworkProbe)) {
+    logMac("delegate.cowork_on_intent", {});
+    setCoworkState({ enabled: true });
+    setNotchCoworkLabel("co-work"); // the island wears the label
+    return { ok: true, say: "Cowork mode on. I will keep an eye on your work and speak up when I can actually help. Say stop cowork whenever." };
+  }
+  if (/\b(?:stop|end|exit|turn off|disable)\s+(?:braino\s+)?co-?work(?:ing)?(?:\s+mode)?\b/i.test(coworkProbe)
+    || /\bstop\s+watching\s+(?:me|my\s+work)\b/i.test(coworkProbe)) {
+    logMac("delegate.cowork_off_intent", {});
+    setCoworkState({ enabled: false });
+    setNotchCoworkLabel("");
+    return { ok: true, say: "Cowork mode off. Back to minding my own business." };
+  }
+
+  // Cowork Ability #1 — design handoff. Explicit trigger OR a vague design ask
+  // that the intelligence layer will route here (see classifyIntentLLM's
+  // design_cowork tool). Deterministic once it fires; every step is
+  // vision-gated inside runDesignCowork.
+  if (/\b(?:ask|get)\s+claude\s+design\b/i.test(coworkProbe)
+    || /\b(?:make|build|design)\s+(?:me\s+)?(?:a\s+)?better\s+(?:version|design)\b/i.test(coworkProbe)
+    || /\blook\s+at\s+(?:this|my\s+(?:site|website|design|screen))\b.*\b(?:design|better|redesign|claude)\b/i.test(coworkProbe)) {
+    logMac("delegate.cowork_design_intent", {});
+    return runDesignCowork(raw);
   }
 
   const ambientProbe = cleanPrompt(raw);
@@ -9387,6 +9796,64 @@ async function pollNowPlaying() {
     nowPlayingPollBusy = false;
   }
 }
+
+// Voice ducking: music through the speakers drowns the mic — VAD fires on
+// Spotify, the user's words never survive a turn, and realtime feels broken.
+// So the moment a voice session starts, the PLAYER volume dips to ~20% (his
+// own TTS rides system volume, untouched) and is restored on session end.
+let musicDuckState = null; // { source, volume }
+
+async function readAppleMusicVolume() {
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", 'tell application "Music" to sound volume as text'], { timeout: 3000 });
+    const volume = Number(String(stdout).trim());
+    return Number.isFinite(volume) ? volume : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function setPlayerVolume(source, volume) {
+  const appName = source === "music" ? "Music" : "Spotify";
+  await execFileP("/usr/bin/osascript", ["-e", `tell application "${appName}" to set sound volume to ${Math.max(0, Math.min(100, Math.round(volume)))}`], { timeout: 4000 });
+}
+
+ipcMain.handle("braino-mac:music-duck", async (_event, payload = {}) => {
+  const wantDuck = Boolean(payload?.duck);
+  try {
+    if (wantDuck) {
+      if (musicDuckState) return { ok: true, already: true };
+      const spotify = await readSpotifyMacState().catch(() => null);
+      if (spotify?.ok && /playing/i.test(spotify.state || "") && spotify.volumePercent != null) {
+        musicDuckState = { source: "spotify", volume: spotify.volumePercent };
+        await setPlayerVolume("spotify", Math.max(8, Math.round(spotify.volumePercent * 0.2)));
+        logMac("music.duck", musicDuckState);
+        return { ok: true, ducked: "spotify" };
+      }
+      const music = await readAppleMusicState().catch(() => null);
+      if (music?.ok && /playing/i.test(music.state || "")) {
+        const volume = await readAppleMusicVolume();
+        if (volume != null) {
+          musicDuckState = { source: "music", volume };
+          await setPlayerVolume("music", Math.max(8, Math.round(volume * 0.2)));
+          logMac("music.duck", musicDuckState);
+          return { ok: true, ducked: "music" };
+        }
+      }
+      return { ok: true, ducked: "" };
+    }
+    if (!musicDuckState) return { ok: true };
+    const restore = musicDuckState;
+    musicDuckState = null;
+    await setPlayerVolume(restore.source, restore.volume);
+    logMac("music.unduck", restore);
+    return { ok: true, restored: restore.source };
+  } catch (error) {
+    logMac("music.duck.failed", { wantDuck, error });
+    musicDuckState = null;
+    return { ok: false };
+  }
+});
 
 ipcMain.handle("braino-mac:media-control", async (_event, payload = {}) => {
   const action = String(payload?.action || "").toLowerCase();

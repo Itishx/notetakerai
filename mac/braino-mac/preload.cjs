@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -106,10 +106,27 @@ contextBridge.exposeInMainWorld("brainoMac", {
   },
   setLiveCaptions: (on) => ipcRenderer.send("braino-mac:live-captions", Boolean(on)),
   ambientObserve: () => ipcRenderer.invoke("braino-mac:ambient-observe"),
+  coworkObserve: () => ipcRenderer.invoke("braino-mac:cowork-observe"),
+  coworkState: () => ipcRenderer.invoke("braino-mac:cowork-state"),
+  onCowork: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:cowork", handler);
+    return () => ipcRenderer.removeListener("braino-mac:cowork", handler);
+  },
+  onCoworkLabel: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:cowork-label", handler);
+    return () => ipcRenderer.removeListener("braino-mac:cowork-label", handler);
+  },
   onMeeting: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:meeting", handler);
     return () => ipcRenderer.removeListener("braino-mac:meeting", handler);
+  },
+  onScreenRec: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:screen-rec", handler);
+    return () => ipcRenderer.removeListener("braino-mac:screen-rec", handler);
   },
   onAmbientToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
@@ -165,5 +182,35 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:overlay-context", handler);
     return () => ipcRenderer.removeListener("braino-mac:overlay-context", handler);
+  },
+  // ── Notch tray ──
+  mediaControl: (payload) => ipcRenderer.invoke("braino-mac:media-control", payload),
+  musicDuck: (payload) => ipcRenderer.invoke("braino-mac:music-duck", payload),
+  systemVolume: (payload) => ipcRenderer.invoke("braino-mac:system-volume", payload),
+  calendarJoin: () => ipcRenderer.invoke("braino-mac:calendar-join"),
+  shelfFile: (payload) => ipcRenderer.invoke("braino-mac:shelf-file", payload),
+  pathForFile: (file) => {
+    try { return webUtils.getPathForFile(file); } catch (_) { return ""; }
+  },
+  onNowPlaying: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:nowplaying", handler);
+    return () => ipcRenderer.removeListener("braino-mac:nowplaying", handler);
+  },
+  onPower: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:power", handler);
+    return () => ipcRenderer.removeListener("braino-mac:power", handler);
+  },
+  setNotchZone: (payload) => ipcRenderer.send("braino-mac:notch-zone-size", payload || {}),
+  onNotchZone: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:notch-zone", handler);
+    return () => ipcRenderer.removeListener("braino-mac:notch-zone", handler);
+  },
+  onBtAudio: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:bt-audio", handler);
+    return () => ipcRenderer.removeListener("braino-mac:bt-audio", handler);
   },
 });
