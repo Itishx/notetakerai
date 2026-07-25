@@ -2028,9 +2028,23 @@ function transcriptStats(text) {
   return { normalized, words, wordCount: words.length };
 }
 
+// While recording (screen or meeting), the mic also picks up tab/system
+// audio, which OpenAI transcribes — and Braino must NOT treat that as a
+// command. The intelligence layer: during recording, ONLY act on speech that
+// addresses him by name OR is a recording control. Everything else is just
+// audio being recorded, not an instruction.
+const RECORDING_CONTROL_RE = /\b(?:stop|end|finish|pause|done)\b.*\b(?:record|recording|screen|meeting)\b|\b(?:stop|done)\s+recording\b|\bthat'?s (?:enough|it)\b/i;
+
 function shouldAcceptVoiceTranscript(text) {
   const stats = transcriptStats(text);
   if (!stats.normalized || stats.wordCount === 0) return false;
+  if ((screenRecording || meetingRecording) && !herMode) {
+    // Only his name or a stop/control command breaks through the recording.
+    if (!voiceAddressesBraino(text) && !RECORDING_CONTROL_RE.test(text)) {
+      logRenderer("voice.recording_ignored", { chars: stats.normalized.length });
+      return false;
+    }
+  }
   if (herMode) {
     // In her mode everything is conversation; only drop echoes and pure filler.
     if (isSelfEcho(text)) return false;

@@ -84,6 +84,7 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 |---|---|---|
 | Screen video recording WITH AUDIO ("record this", "record my screen") | 🟡 | screencapture -v -g -x — the -g captures default-input (mic) audio (verified: 1MB silent → 3.8MB with audio). SIGINT saves the .mov to Desktop, reveals in Finder, speaks duration+size. Notch shows "● SCREEN m:ss". DISAMBIGUATED from meeting: bare record=video; "record this call/meeting"=notes. FUTURE: island Done-button + save-as picker; system-audio (not just mic) would need ScreenCaptureKit |
 | Screenshot on command ("take a screenshot", "take a ss") | 🟡 | screencapture -x → PNG on Desktop, revealed in Finder |
+| Recording-mode command gate (intelligence layer) | 🟡 | While screen/meeting recording, the mic also transcribes tab/system audio — Braino must NOT treat that as commands. shouldAcceptVoiceTranscript now, during recording, accepts ONLY speech that addresses him by name (voiceAddressesBraino) OR is a stop/control command (RECORDING_CONTROL_RE). Ambient chatter/tab audio is ignored (logged voice.recording_ignored). Verified 7-case matrix |
 
 ## Maps · Shopping · Research · Phone (07-25)
 | Capability | Status | Notes |
