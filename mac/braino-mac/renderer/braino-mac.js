@@ -1081,6 +1081,46 @@ async function runNotchGreeting(authResult) {
   if (!authResult?.ok) return;
   notchFace?.classList.add("nf-greet");
   window.setTimeout(() => notchFace?.classList.remove("nf-greet"), 1100);
+  // The new boot flow (user spec): eyes open → he LOOKS at the screen and
+  // greets with a real observation → realtime is already on (the glance
+  // invoked it) so you can just talk back → then he says "Control twice to
+  // reach me" and stops LISTENING, but stays awake (eyes open, present).
+  void runBootGreetingFlow();
+}
+
+async function runBootGreetingFlow() {
+  if (herMode) return;
+  try {
+    const auth = await window.brainoMac.authStatus().catch(() => null);
+    const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
+    // Beat: eyes scan the screen while he takes a look.
+    nfSetThinking("taking a look...");
+    notchFace?.classList.add("scanning");
+    const observed = await window.brainoMac.ambientObserve?.().catch(() => null);
+    notchFace?.classList.remove("scanning");
+    nfSetThinking("");
+    lastEngagedAt = Date.now();
+    // Realtime up FIRST so the reply streams into a live session he's already
+    // listening on — you can answer his greeting immediately.
+    if (!realtimeActive && !realtimeConnecting) await startListening();
+    const hello = firstName ? `Hey ${firstName}.` : "Hey.";
+    const line = observed?.ok && observed.say
+      ? `${hello} Let me take a quick look. ${observed.say}`
+      : `${hello} Good to see you. I'm right here whenever you need me.`;
+    await speak(line);
+    // He offered the conversation; give a short window to reply, then hand
+    // back control: announce the hotkey and hang up the mic — but stay awake.
+    await wait(9000);
+    if (realtimeActive && !voiceTurnInFlight && !speaking && !processing) {
+      await speak("Anytime you want me, just press Control twice. I'll stop listening for now.");
+      stopRealtimeVoice();
+      lastEngagedAt = Date.now(); // still present — eyes stay open, ambient runs
+    }
+  } catch (error) {
+    notchFace?.classList.remove("scanning");
+    nfSetThinking("");
+    logRenderer("boot.greeting.failed", { error: errorForLog(error) });
+  }
 }
 
 function nfScheduleBlink() {
@@ -2661,7 +2701,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {

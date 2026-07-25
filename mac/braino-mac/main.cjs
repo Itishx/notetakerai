@@ -802,9 +802,12 @@ async function readActiveBrowserContext(appName) {
   if (!["Google Chrome", "Brave Browser", "Microsoft Edge", "Safari"].includes(browser)) {
     return null;
   }
+  // A browser with zero open windows throws "Invalid index -1719" — guard for
+  // it instead of logging a stack trace on every 8s poll while Chrome is
+  // running windowless.
   const script = browser === "Safari"
-    ? 'tell application "Safari" to return (name of front document as text) & (ASCII character 9) & (URL of front document as text)'
-    : `tell application "${escapeAppleScriptString(browser)}" to return (title of active tab of window 1 as text) & (ASCII character 9) & (URL of active tab of window 1 as text)`;
+    ? 'tell application "Safari"\n  if (count of documents) = 0 then return ""\n  return (name of front document as text) & (ASCII character 9) & (URL of front document as text)\nend tell'
+    : `tell application "${escapeAppleScriptString(browser)}"\n  if (count of windows) = 0 then return ""\n  return (title of active tab of window 1 as text) & (ASCII character 9) & (URL of active tab of window 1 as text)\nend tell`;
   try {
     const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 2500 });
     const [browserTitle = "", browserUrl = ""] = String(stdout || "").trimEnd().split("\t");
@@ -813,10 +816,15 @@ async function readActiveBrowserContext(appName) {
       browserUrl: browserUrl.trim(),
     };
   } catch (error) {
-    logMac("desktop.browser_context.read_failed", { appName: browser, error });
+    const now = Date.now();
+    if (now - lastBrowserReadFailLogAt > 5 * 60 * 1000) {
+      lastBrowserReadFailLogAt = now;
+      logMac("desktop.browser_context.read_failed", { appName: browser, error });
+    }
     return null;
   }
 }
+let lastBrowserReadFailLogAt = 0;
 
 function displayForContext(context) {
   if (context?.windowBounds) {
@@ -2951,6 +2959,96 @@ async function requireTouchId(reason) {
 // ── Live captions: on-device partial STT while a realtime session runs, so
 // the user's words form on screen AS they speak. Display-only — OpenAI's
 // transcript stays authoritative for routing. ──
+// ── Wallpaper: random official macOS picture, or fetch an image by name and
+// set it. Reversible — the previous wallpaper is snapshotted first. ──
+const WALLPAPER_DIR = "/System/Library/Desktop Pictures";
+const WALLPAPER_STATE_PATH = path.join(AUTH_STORE_DIR, "wallpaper-prev.json");
+
+async function currentWallpaperPath() {
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e",
+      'tell application "System Events" to get picture of current desktop'], { timeout: 4000 });
+    const value = String(stdout || "").trim();
+    // Some macOS builds return "missing value" here — not a usable path.
+    return value && value !== "missing value" && fs.existsSync(value) ? value : "";
+  } catch (_) { return ""; }
+}
+
+async function setWallpaper(imagePath) {
+  const prev = await currentWallpaperPath();
+  if (prev) { try { fs.writeFileSync(WALLPAPER_STATE_PATH, JSON.stringify({ path: prev })); } catch (_) {} }
+  await execFileP("/usr/bin/osascript", ["-e",
+    `tell application "System Events" to set picture of every desktop to "${imagePath.replace(/"/g, '\\"')}"`,
+  ], { timeout: 6000 });
+  logMac("wallpaper.set", { path: textForLog(imagePath) });
+}
+
+async function setRandomOfficialWallpaper() {
+  let pics = [];
+  try {
+    pics = fs.readdirSync(WALLPAPER_DIR)
+      .filter((n) => /\.(heic|jpg|jpeg|png)$/i.test(n))
+      .map((n) => path.join(WALLPAPER_DIR, n));
+  } catch (_) {}
+  if (!pics.length) return { ok: false, say: "I could not find the built-in Mac wallpapers." };
+  const pick = pics[Math.floor(Math.random() * pics.length)];
+  try {
+    await setWallpaper(pick);
+    return { ok: true, say: `Fresh look — that's ${path.basename(pick).replace(/\.[^.]+$/, "")}.` };
+  } catch (error) {
+    logMac("wallpaper.set.failed", { error });
+    return { ok: false, say: "macOS blocked the wallpaper change — it may want Automation permission for System Events. Check System Settings, Privacy, Automation." };
+  }
+}
+
+async function setWallpaperFromWeb(subject) {
+  sendTaskProgress({ status: "thinking", text: `Finding a ${subject} wallpaper` });
+  // Free source: an image search that returns a direct file. Unsplash's source
+  // endpoint hands back a real photo for any query, no key, no cost.
+  const url = `https://source.unsplash.com/2560x1440/?${encodeURIComponent(subject)}`;
+  try {
+    const response = await fetch(url, { redirect: "follow" });
+    if (!response.ok) throw new Error(`image fetch ${response.status}`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length < 8000) throw new Error("image too small");
+    const dir = path.join(AUTH_STORE_DIR, "wallpapers");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${subject.replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}-${Date.now()}.jpg`);
+    fs.writeFileSync(file, buffer);
+    await setWallpaper(file);
+    return { ok: true, say: `Done — your desktop is ${subject} now.` };
+  } catch (error) {
+    logMac("wallpaper.web.failed", { subject: textForLog(subject), error });
+    return { ok: false, say: `I could not pull a ${subject} image just now. Try once more, or say random wallpaper for a built-in one.` };
+  }
+}
+
+async function restoreWallpaper() {
+  try {
+    const prev = JSON.parse(fs.readFileSync(WALLPAPER_STATE_PATH, "utf8"))?.path;
+    if (!prev || !fs.existsSync(prev)) return { ok: false, say: "I do not have your previous wallpaper saved." };
+    await setWallpaper(prev);
+    return { ok: true, say: "Put your old wallpaper back." };
+  } catch (_) {
+    return { ok: false, say: "I could not restore the previous wallpaper." };
+  }
+}
+
+function parseWallpaperIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (!/\b(?:wallpaper|desktop background|background image)\b/i.test(source)) return null;
+  if (/^(?:what|which|whats|what'?s)\b/i.test(source)) return null; // a question, not a command
+  if (/\b(?:back|previous|restore|undo|old)\b/i.test(source)) return { mode: "restore" };
+  if (/\b(?:random|different|new|change|switch|another|surprise)\b/i.test(source)
+    && !/\bto\b/i.test(source)) return { mode: "random" };
+  // "set my wallpaper to spider man" / "make spider man my wallpaper"
+  let subject = source.match(/\bwallpaper\s+to\s+(?:a|an|the\s+)?(.+)$/i)?.[1]
+    || source.match(/\bmake\s+(.+?)\s+my\s+(?:wallpaper|desktop background)\b/i)?.[1]
+    || source.match(/\bset\s+(.+?)\s+as\s+(?:my\s+)?wallpaper\b/i)?.[1];
+  if (subject) return { mode: "web", subject: subject.replace(/^(?:a|an|the)\s+/i, "").trim() };
+  return { mode: "random" };
+}
+
 // ── Meeting recorder: detect the meeting, offer, record (on-device
 // transcription + periodic context screenshots), live notes every 2 min in a
 // glass panel, stop → summary synced to the dashboard. The overlay goes
@@ -8470,6 +8568,14 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (isConsequenceQuestion) {
     logMac("delegate.question_not_command", { raw: textForLog(raw) });
     return runMacConversation(raw);
+  }
+
+  const wallpaperIntent = parseWallpaperIntent(raw);
+  if (wallpaperIntent) {
+    logMac("delegate.wallpaper_intent", { mode: wallpaperIntent.mode, subject: textForLog(wallpaperIntent.subject || "") });
+    if (wallpaperIntent.mode === "restore") return restoreWallpaper();
+    if (wallpaperIntent.mode === "web") return setWallpaperFromWeb(wallpaperIntent.subject);
+    return setRandomOfficialWallpaper();
   }
 
   const meetingIntent = parseMeetingIntent(raw);

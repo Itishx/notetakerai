@@ -60,6 +60,16 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Search/tutorials with spoken top picks | 🟡 | Top 3 spoken + results tab opened |
 | Ordinal follow-up ("play the second one") | 🟡 | 5-min memory of last list |
 
+## Wallpaper
+| Capability | Status | Notes |
+|---|---|---|
+| Change wallpaper ("random wallpaper", "make spider man my wallpaper", "put it back") | 🟡 | Random = a real built-in from /System/Library/Desktop Pictures (verified set works live). Named subject = fetch from source.unsplash.com (free, no key, no Higgs cost) → save → set. Previous wallpaper snapshotted for restore (guards macOS "missing value" quirk). May need one-time Automation permission for System Events. Question guard: "what wallpaper is this" doesn't change it |
+
+## Boot flow (07-25 rewrite — "look and greet")
+| Capability | Status | Notes |
+|---|---|---|
+| Look-and-greet boot | 🟡 | Notch appears → auth (green/red) → eyes open + wake chime → he SCANS the screen ("taking a look..."), realtime auto-connects, and he greets WITH an observation ("Hey Itish. Let me take a quick look. [what he sees]") → you can answer immediately → after ~9s he says "press Control twice anytime, I'll stop listening for now", hangs up the mic but STAYS AWAKE (eyes open, ambient running). Runs as `void runBootGreetingFlow()` so it never blocks the startup critical path (the lesson from the last time this broke) |
+
 ## Netflix
 | Capability | Status | Notes |
 |---|---|---|
