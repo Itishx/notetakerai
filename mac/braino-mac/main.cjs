@@ -3337,15 +3337,31 @@ function parseWallpaperIntent(raw) {
 // window never reaches the capture pipeline), fully visible to the user. ──
 let meetingState = null; // { startedAt, source, transcript:[{t,text}], notes:[], lastNoteIndex, shots:[], lastShotB64, noteTimer, shotTimer }
 let lastMeetingOfferAt = 0;
+let meetingSeenUrls = new Set(); // Meet URLs already present — never offered
+const meetingAppReadyAt = Date.now();
 
 function meetingDetectFromTabs(tabs) {
-  if (meetingState || Date.now() - lastMeetingOfferAt < 10 * 60 * 1000) return;
-  const meetTab = (tabs || []).find((tab) => /meet\.google\.com\/[a-z0-9-]{6,}/i.test(tab.url || ""));
-  if (!meetTab) return;
+  const meetUrls = (tabs || []).map((t) => t.url || "").filter((u) => /meet\.google\.com\/[a-z0-9-]{6,}/i.test(u));
+  // A Meet that was already open when Braino started (or during the first
+  // ~30s of boot) is NOT a "going into a meeting" moment — record it silently
+  // so we never greet the user with a meeting offer at launch.
+  if (Date.now() - meetingAppReadyAt < 30 * 1000) {
+    meetUrls.forEach((u) => meetingSeenUrls.add(u));
+    return;
+  }
+  if (meetingState || Date.now() - lastMeetingOfferAt < 10 * 60 * 1000) {
+    meetUrls.forEach((u) => meetingSeenUrls.add(u));
+    return;
+  }
+  // Offer only for a Meet URL that JUST appeared (a real join), not one that
+  // has been sitting open.
+  const fresh = meetUrls.find((u) => !meetingSeenUrls.has(u));
+  meetUrls.forEach((u) => meetingSeenUrls.add(u));
+  if (!fresh) return;
   lastMeetingOfferAt = Date.now();
   setPendingMacWorkflow({ type: "meeting", stage: "meeting_offer", data: { source: "Google Meet" } });
   sendToRenderer("braino-mac:speak-line", { text: "Oh, going into a meeting. Want me to record it and take notes?" });
-  logMac("meeting.offer", { url: textForLog(meetTab.url || "") });
+  logMac("meeting.offer", { url: textForLog(fresh) });
 }
 
 function startMeetingRecording(source) {
