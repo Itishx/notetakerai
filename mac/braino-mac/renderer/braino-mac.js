@@ -641,23 +641,64 @@ function fmtMeetingClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+let meetingRecording = false;
+
+// Drag the panel anywhere by its header (same feel as the extension bubble).
+(function makeMeetingPanelDraggable() {
+  const head = meetingPanel?.querySelector(".mp-head");
+  if (!head || !meetingPanel) return;
+  let dragging = false;
+  let startX = 0, startY = 0, baseX = 0, baseY = 0;
+  head.addEventListener("mousedown", (e) => {
+    if (e.target.closest(".mp-stop")) return;
+    dragging = true;
+    head.classList.add("dragging");
+    const rect = meetingPanel.getBoundingClientRect();
+    baseX = rect.left; baseY = rect.top;
+    startX = e.clientX; startY = e.clientY;
+    meetingPanel.style.right = "auto";
+    meetingPanel.style.bottom = "auto";
+    meetingPanel.style.left = `${baseX}px`;
+    meetingPanel.style.top = `${baseY}px`;
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const x = Math.max(6, Math.min(window.innerWidth - 60, baseX + (e.clientX - startX)));
+    const y = Math.max(6, Math.min(window.innerHeight - 40, baseY + (e.clientY - startY)));
+    meetingPanel.style.left = `${x}px`;
+    meetingPanel.style.top = `${y}px`;
+  }, { passive: true });
+  window.addEventListener("mouseup", () => { dragging = false; head.classList.remove("dragging"); });
+})();
+
+meetingPanel?.querySelector(".mp-stop")?.addEventListener("click", () => {
+  void window.brainoMac.delegate?.("stop recording");
+});
+
 window.brainoMac.onMeeting?.((payload) => {
   const action = payload?.action;
   if (action === "start") {
+    meetingRecording = true;
     meetingStartedAt = payload.startedAt || Date.now();
     meetingPanel?.querySelector(".mp-title")?.replaceChildren(document.createTextNode(payload.source || "Recording"));
     meetingPanel?.querySelector(".mp-notes")?.replaceChildren();
     meetingPanel?.classList.add("on");
     if (meetingPanel) meetingPanel.setAttribute("aria-hidden", "false");
+    notchFace?.classList.add("recording");
     window.clearInterval(meetingClockTimer);
     meetingClockTimer = window.setInterval(() => {
       const el = meetingPanel?.querySelector(".mp-time");
       if (el) el.textContent = fmtMeetingClock(Date.now() - meetingStartedAt);
+      updateNotchFace(); // refreshes the notch REC clock too
     }, 1000);
   } else if (action === "stop") {
+    meetingRecording = false;
     meetingPanel?.classList.remove("on");
     if (meetingPanel) meetingPanel.setAttribute("aria-hidden", "true");
+    notchFace?.classList.remove("recording");
     window.clearInterval(meetingClockTimer);
+    nfSetStatusText("");
   } else if (action === "notes") {
     const wrap = meetingPanel?.querySelector(".mp-notes");
     if (wrap) {
@@ -756,7 +797,12 @@ function updateNotchFace() {
   let line = "";
   let live = false;
   let music = false;
-  if (nfThinkingText || conversationOwnsNotch) {
+  if (meetingRecording) {
+    // Recording outranks everything — the red REC clock owns the notch so you
+    // can glance up and stop from the panel any time.
+    line = `● REC ${fmtMeetingClock(Date.now() - meetingStartedAt)}`;
+    live = true;
+  } else if (nfThinkingText || conversationOwnsNotch) {
     // nothing else renders in the ticker this frame
   } else if (timer) {
     line = `${timer.label} · ${fmtCountdown(timer.endAt - now)}`;
@@ -983,11 +1029,40 @@ async function runNotchBoot() {
   notchFace?.classList.remove("nf-auth");
   notchFace?.classList.add(result?.ok ? "nf-auth-ok" : "nf-auth-err");
   nfSetStatusText(result?.ok ? "authenticated" : "auth failed");
-  if (result?.ok) notchFace?.classList.remove("asleep");
+  if (result?.ok) { notchFace?.classList.remove("asleep"); playWakeChime(); }
   await wait(700);
   notchFace?.classList.remove("nf-auth-ok", "nf-auth-err");
   nfSetStatusText("");
   return result || { ok: false, error: "Braino sign-in failed." };
+}
+
+// A subtle wake sound the instant his eyes open — a soft two-note rising
+// chime (like a gentle notification), synthesized so there's no asset to
+// bundle and nothing the CSP can block.
+let wakeAudioCtx = null;
+function playWakeChime() {
+  try {
+    wakeAudioCtx = wakeAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = wakeAudioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const now = ctx.currentTime;
+    // Two soft sine notes, E5 -> B5, with a bell-like fade.
+    [{ f: 659.25, t: 0 }, { f: 987.77, t: 0.11 }].forEach(({ f, t }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.5);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + t);
+      osc.stop(now + t + 0.55);
+    });
+    logRenderer("wake.chime", {});
+  } catch (error) {
+    logRenderer("wake.chime.failed", { error: errorForLog(error) });
+  }
 }
 
 // Beat 3, and the LAST boot beat now: eyes open, a bright greeting glow, and
@@ -2845,7 +2920,6 @@ function stopRealtimeVoice() {
   realtimeConnecting = false;
   voiceTurnInFlight = false;
   lastEngagedAt = Date.now(); // session over, but he stays PRESENT for 30 min
-  window.brainoMac.setLiveCaptions?.(false);
   // Don't wipe captions here — the reply's own timer clears them, so his
   // last line lingers briefly after the session hangs up instead of vanishing.
   updateNotchFace();
@@ -3310,9 +3384,6 @@ async function startRealtimeVoice() {
     listening = true;
     lastEngagedAt = Date.now();
     markRealtimeActivity("realtime_ready");
-    // Live on-device captions run alongside the session — words form as
-    // they're spoken instead of after the server commits the audio.
-    if (!herMode) window.brainoMac.setLiveCaptions?.(true);
     startFishWarmKeepAlive();
     setStatus("listening", "Listening");
     setBubble("I am listening.", 1400);
@@ -4030,41 +4101,11 @@ window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());
 window.brainoMac.onSummon?.(() => { void handleSummon(); });
 window.brainoMac.onSummonToggle?.(() => { void handleSummonToggle(); });
 window.brainoMac.onSummonHome?.(() => { void handleSummonHome(); });
-let liveCapDisplayed = "";
-let liveCapLastReviseAt = 0;
-
-window.brainoMac.onLiveCaption?.((payload) => {
-  const text = String(payload?.text || "").trim();
-  // During a meeting the transcript is the whole point — let it flow even
-  // with realtime off. Otherwise captions only matter during a live session.
-  if (!text || herMode) return;
-  const meetingLive = meetingPanel?.classList.contains("on");
-  if (!meetingLive && !realtimeActive) return;
-  // His own voice is NOT a caption: the on-device recognizer hears the
-  // speakers too, so anything transcribed while Braino audio plays is him
-  // hearing himself — drop it.
-  if (speaking || currentSpeechAudio || realtimeStreamTts) return;
-  if (payload?.final) {
-    liveCapDisplayed = "";
-    return; // segment closed — OpenAI's authoritative transcript takes over
-  }
-  // Dampen the guess-flip-flop: appends show instantly; a mid-guess REVISION
-  // only lands if it's meaningfully longer or 600ms have passed — no more
-  // words visibly "autocorrecting" three times a second. The authoritative
-  // OpenAI transcript still overwrites everything at the end of the turn.
-  const grows = !liveCapDisplayed || text.toLowerCase().startsWith(liveCapDisplayed.toLowerCase());
-  if (!grows) {
-    const now = Date.now();
-    if (text.length <= liveCapDisplayed.length + 2 && now - liveCapLastReviseAt < 600) return;
-    liveCapLastReviseAt = now;
-  }
-  liveCapDisplayed = text;
-  nfSetHeard(text);
-  if (voiceLatencyTurn && !voiceLatencyTurn.captionFirstAt) {
-    voiceLatencyTurn.captionFirstAt = performance.now();
-    markVoiceLatency("caption_first", { captionChars: text.length });
-  }
-});
+// Live captions in the notch during VOICE were removed (they fed back on his
+// own audio and churned). The notch "heard" text now comes purely from
+// OpenAI's authoritative transcript. The on-device caption helper survives
+// ONLY as the meeting recorder's transcript feed — its output goes to the
+// meeting panel via the "meeting" channel, never to the notch during a chat.
 
 window.brainoMac.onXStats?.((payload) => {
   nfXStats = {

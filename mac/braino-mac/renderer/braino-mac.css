@@ -1054,3 +1054,27 @@ body {
   color: rgba(243, 236, 228, 0.42);
   min-height: 14px;
 }
+
+/* Meeting panel: draggable (grab the header), a stop button, pointer-events
+   on so it's interactive — the rest of the overlay stays click-through. */
+#meeting-panel { pointer-events: auto; }
+#meeting-panel .mp-head { cursor: grab; user-select: none; }
+#meeting-panel .mp-head.dragging { cursor: grabbing; }
+#meeting-panel .mp-stop {
+  border: 1px solid rgba(255, 92, 92, 0.5);
+  background: rgba(255, 92, 92, 0.14);
+  color: #FF8A82;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+#meeting-panel .mp-stop:hover { background: rgba(255, 92, 92, 0.26); }
+#meeting-panel .mp-stop:focus-visible { outline: 2px solid #FF8A82; outline-offset: 2px; }
+
+/* Notch recording pill: a red dot + timer live in the notch ticker while a
+   meeting records, so you can glance up and see it — and stop from there. */
+#notch-face.recording .nf-pill { box-shadow: 0 0 24px rgba(255, 92, 92, 0.5); }

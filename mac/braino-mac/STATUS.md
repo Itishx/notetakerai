@@ -105,7 +105,8 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 ## Voice latency
 | Capability | Status | Notes |
 |---|---|---|
-| LIVE captions while speaking (BrainoLiveCaption.swift) | 🟡 | OpenAI's server transcription only sends deltas AFTER audio commit — captions could never stream from it. New continuous on-device SFSpeechRecognizer (requiresOnDeviceRecognition, 45s task cycling, same pattern as wake word) runs alongside the realtime session and streams partials to the caption wing as words are spoken; OpenAI transcript overwrites on completion and stays authoritative for routing. Started/stopped with the session, off in her mode |
+| LIVE captions during VOICE — REMOVED 07-25 | ❌ | Fed back on his own speaker audio and churned; user pulled it. Notch "heard" text now comes purely from OpenAI's authoritative transcript (the pre-caption behavior that always worked). BrainoLiveCaption.app SURVIVES but ONLY as the meeting recorder's transcript feed |
+| Wake chime | 🟡 | Soft two-note rising sine chime (E5→B5, Web Audio synthesized — no asset, CSP-safe) the instant his eyes open on successful auth |
 | Per-turn latency summary (voice.latency.turn_summary) | ✅ | Chrome-style single line at first audible reply: captionFirstMs / sttMs / routeMs / thinkMs / ttsMs / totalFromStopMs — every pipeline segment side by side for optimization |
 
 ## Observability
