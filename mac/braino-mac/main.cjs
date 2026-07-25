@@ -3824,15 +3824,26 @@ async function runAxHelper(args, timeout = 15000) {
 
 function parseAxClickIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
-  const match = source.match(/^(?:click|press|hit|tap)\s+(?:on\s+)?(?:the\s+)?(.+)$/i);
+  // Bare shopping actions with no click verb — "add to cart", "buy now".
+  if (/^(?:add (?:this |it )?to (?:the )?cart|buy now|proceed to (?:buy|checkout)|place (?:the |your )?order|checkout)$/i.test(source)) {
+    return { target: source.replace(/^(?:add (?:this |it )?to (?:the )?cart)$/i, "add to cart") };
+  }
+  // Match the click verb ANYWHERE, not just at the start — "now click on
+  // proceed to buy", "look at the screen and click the yellow button".
+  const match = source.match(/\b(?:click|press|tap|hit|select|choose)\s+(?:on\s+)?(?:the\s+)?(.+)$/i);
   if (!match) return null;
-  const target = match[1].replace(/\s+(?:button|link)$/i, "").trim();
-  if (!target) return null;
+  // Trim trailing chrome: "button", "link", "for me", "on the screen/page".
+  let target = match[1]
+    .replace(/\s+(?:button|link|option|listing)\b/i, "")
+    .replace(/\s+(?:for me|please|now)\b.*$/i, "")
+    .replace(/\s+on (?:the\s+)?(?:screen|page)\b.*$/i, "")
+    .trim();
   // "click it/that/there" right after he pointed at something.
   if (/^(?:it|that|there|this|on it)$/i.test(target)) return { target: "", clickLastPointed: true };
   if (target.length < 2) return null;
   // Media-control words stay with the music intents.
   if (/^(?:play|pause|stop|next|previous|skip)$/i.test(target)) return null;
+  // Ordinals into the vision-clicker as-is ("the second one").
   return { target };
 }
 
@@ -4079,7 +4090,9 @@ async function checkCalendarNext() {
     "  let pred = store.predicateForEvents(withStart: start, end: end, calendars: nil)",
     "  let events = store.events(matching: pred).filter { !$0.isAllDay }.sorted { $0.startDate < $1.startDate }",
     "  if let e = events.first {",
-    "    print(\"\\(Int(e.startDate.timeIntervalSince1970))\\t\\(e.title ?? \"Event\")\")",
+    "    let clean: (String?) -> String = { ($0 ?? \"\").replacingOccurrences(of: \"\\t\", with: \" \").replacingOccurrences(of: \"\\n\", with: \" \") }",
+    "    let blob = [e.url?.absoluteString ?? \"\", clean(e.location), String(clean(e.notes).prefix(600))].joined(separator: \" \")",
+    "    print(\"\\(Int(e.startDate.timeIntervalSince1970))\\t\\(e.title ?? \"Event\")\\t\\(blob)\")",
     "  }",
     "}",
   ].join("\n");
@@ -4088,11 +4101,12 @@ async function checkCalendarNext() {
     await fs.promises.writeFile(tmpPath, swiftSource);
     const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", tmpPath], { timeout: 60000 });
     const line = String(stdout || "").trim().split(/\r?\n/).pop() || "";
-    const [epoch, ...titleParts] = line.split("\t");
+    const [epoch, title = "", blob = ""] = line.split("\t");
     const startAt = Number(epoch) * 1000;
-    const title = titleParts.join(" ").trim();
-    const next = Number.isFinite(startAt) && startAt > Date.now() - 60000 && title
-      ? { title: title.slice(0, 30), startAt }
+    // Video-call link buried in the event's url/location/notes → one-click Join.
+    const joinMatch = blob.match(/https?:\/\/[^\s<>"',;)]*(?:zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/l\/meetup-join|webex\.com\/(?:meet|join)\/)[^\s<>"',;)]*/i);
+    const next = Number.isFinite(startAt) && startAt > Date.now() - 60000 && title.trim()
+      ? { title: title.trim().slice(0, 30), startAt, joinUrl: joinMatch ? joinMatch[0] : "" }
       : null;
     const changed = JSON.stringify(next) !== JSON.stringify(calendarNext);
     calendarNext = next;
@@ -4279,6 +4293,8 @@ end tell`;
 let lastYouTubeList = { items: [], at: 0 };
 let musicPlaying = false;
 let musicSource = "";
+let lastMusicTrack = "";
+let lastMusicArtist = "";
 
 let musicTrackKey = "";
 
@@ -4501,6 +4517,8 @@ async function checkMusicState() {
     musicTrackKey = key;
     musicPlaying = playing;
     musicSource = source;
+    lastMusicTrack = track;
+    lastMusicArtist = artist;
     logMac("music.state", { playing, source, track: textForLog(track) });
     let features = null;
     if (playing && source === "spotify" && uri) {
@@ -6062,24 +6080,37 @@ if spotifyRunning then
     set artistName to ""
     set volumeLevel to ""
     set trackUrl to ""
+    set artUrl to ""
+    set posText to ""
+    set durText to ""
     try
       set trackName to name of current track
       set artistName to artist of current track
       set trackUrl to spotify url of current track
     end try
     try
+      set artUrl to artwork url of current track
+      set durText to (duration of current track) as text
+    end try
+    try
+      set posText to player position as text
+    end try
+    try
       set volumeLevel to sound volume as text
     end try
-    return stateText & linefeed & trackName & linefeed & artistName & linefeed & volumeLevel & linefeed & trackUrl
+    return stateText & linefeed & trackName & linefeed & artistName & linefeed & volumeLevel & linefeed & trackUrl & linefeed & artUrl & linefeed & posText & linefeed & durText
   end tell
 else
   return "not running"
 end if`;
   try {
     const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 4000 });
-    const [state = "", name = "", artist = "", volume = "", uri = ""] = stdout.trim().split(/\r?\n/);
+    const [state = "", name = "", artist = "", volume = "", uri = "", artworkUrl = "", posText = "", durText = ""] = stdout.trim().split(/\r?\n/);
     const volumePercent = Number.isFinite(Number(volume)) ? clampSpotifyVolume(volume) : null;
-    return { ok: true, state, name, artist, volumePercent, uri };
+    const positionSec = Number.isFinite(Number(posText)) ? Number(posText) : null;
+    // Spotify reports duration in milliseconds.
+    const durationSec = Number.isFinite(Number(durText)) && Number(durText) > 0 ? Number(durText) / 1000 : null;
+    return { ok: true, state, name, artist, volumePercent, uri, artworkUrl, positionSec, durationSec };
   } catch (error) {
     logMac("spotify.mac_app.state.failed", { error });
     return { ok: false, error: error?.message || "Could not read Spotify state." };
@@ -8717,6 +8748,20 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return axManageWindow(windowIntent);
   }
 
+  // Maps + Amazon must beat the generic screen-point/click intents: "show me
+  // where X is on the map" is Maps, not vision-pointing at the screen.
+  const mapsIntentEarly = parseMapsIntent(raw);
+  if (mapsIntentEarly) {
+    logMac("delegate.maps_intent", { mode: mapsIntentEarly.mode, dest: textForLog(mapsIntentEarly.destination || mapsIntentEarly.place || "") });
+    return mapsIntentEarly.mode === "show" ? runMapsShow(mapsIntentEarly.place) : runMapsDirections(mapsIntentEarly);
+  }
+
+  const amazonIntentEarly = parseAmazonIntent(raw);
+  if (amazonIntentEarly) {
+    logMac("delegate.amazon_intent", { mode: amazonIntentEarly.mode, product: textForLog(amazonIntentEarly.product || "") });
+    return runAmazonSearch(amazonIntentEarly.product);
+  }
+
   const axClickIntent = parseAxClickIntent(raw);
   if (axClickIntent) {
     logMac("delegate.ax_click_intent", { raw: textForLog(raw), target: textForLog(axClickIntent.target) });
@@ -8875,12 +8920,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return runMacConversation(raw);
   }
 
-  const mapsIntent = parseMapsIntent(raw);
-  if (mapsIntent) {
-    logMac("delegate.maps_intent", { mode: mapsIntent.mode, dest: textForLog(mapsIntent.destination || mapsIntent.place || "") });
-    return mapsIntent.mode === "show" ? runMapsShow(mapsIntent.place) : runMapsDirections(mapsIntent);
-  }
-
+  // (maps + amazon intents moved earlier, before screen-point/click)
   if (parseSendToPhoneIntent(raw)) {
     logMac("delegate.send_to_phone_intent", {});
     return sendToPhone("");
@@ -8890,12 +8930,6 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (researchIntent) {
     logMac("delegate.research_intent", { query: textForLog(researchIntent.query) });
     return runResearch(researchIntent.query);
-  }
-
-  const amazonIntent = parseAmazonIntent(raw);
-  if (amazonIntent) {
-    logMac("delegate.amazon_intent", { mode: amazonIntent.mode, product: textForLog(amazonIntent.product || "") });
-    return runAmazonSearch(amazonIntent.product);
   }
 
   const wallpaperIntent = parseWallpaperIntent(raw);
@@ -9230,6 +9264,267 @@ ipcMain.on("braino-mac:set-mouse-passthrough", (_event, passthrough) => {
   dockWindow.setIgnoreMouseEvents(Boolean(passthrough), { forward: true });
 });
 
+// ── Notch tray backend: universal now-playing, media/system-volume controls,
+// calendar Join, dropped-file shelf actions, power + Bluetooth watchers. The
+// tray is the hover-expanded island in the renderer; everything here just
+// feeds or obeys it. ──
+
+async function readAppleMusicState() {
+  const script = `
+tell application "System Events"
+  set musicRunning to exists application process "Music"
+end tell
+if musicRunning then
+  tell application "Music"
+    set stateText to player state as text
+    set trackName to ""
+    set artistName to ""
+    set posText to ""
+    set durText to ""
+    try
+      set trackName to name of current track
+      set artistName to artist of current track
+      set durText to (duration of current track) as text
+      set posText to player position as text
+    end try
+    return stateText & linefeed & trackName & linefeed & artistName & linefeed & posText & linefeed & durText
+  end tell
+else
+  return "not running"
+end if`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 4000 });
+    const [state = "", name = "", artist = "", posText = "", durText = ""] = stdout.trim().split(/\r?\n/);
+    return {
+      ok: true,
+      state,
+      name,
+      artist,
+      positionSec: Number.isFinite(Number(posText)) ? Number(posText) : null,
+      durationSec: Number.isFinite(Number(durText)) && Number(durText) > 0 ? Number(durText) : null,
+    };
+  } catch (error) {
+    return { ok: false, error: error?.message || "Could not read Music state." };
+  }
+}
+
+// One poll, every playback source: Spotify (artwork + progress), Apple Music
+// (progress), the YouTube state the music watcher already resolved. Sent every
+// beat — the renderer owns change detection, and the tray wants live progress.
+let nowPlayingPollBusy = false;
+async function pollNowPlaying() {
+  if (nowPlayingPollBusy || !dockWindow || dockWindow.isDestroyed()) return;
+  nowPlayingPollBusy = true;
+  try {
+    let candidate = null;
+    const spotify = await readSpotifyMacState().catch(() => null);
+    if (spotify?.ok && spotify.name) {
+      candidate = {
+        source: "spotify",
+        track: spotify.name,
+        artist: spotify.artist || "",
+        playing: /playing/i.test(spotify.state || ""),
+        artworkUrl: spotify.artworkUrl || "",
+        positionSec: spotify.positionSec,
+        durationSec: spotify.durationSec,
+        canControl: true,
+      };
+    }
+    if (!candidate?.playing) {
+      const music = await readAppleMusicState().catch(() => null);
+      if (music?.ok && music.name) {
+        const musicCandidate = {
+          source: "music",
+          track: music.name,
+          artist: music.artist || "",
+          playing: /playing/i.test(music.state || ""),
+          artworkUrl: "",
+          positionSec: music.positionSec,
+          durationSec: music.durationSec,
+          canControl: true,
+        };
+        // A playing source always beats a paused one.
+        if (!candidate || musicCandidate.playing) candidate = musicCandidate;
+      }
+    }
+    if (!candidate?.playing && musicPlaying && musicSource === "youtube" && lastMusicTrack) {
+      candidate = {
+        source: "youtube",
+        track: lastMusicTrack,
+        artist: lastMusicArtist,
+        playing: true,
+        artworkUrl: "",
+        positionSec: null,
+        durationSec: null,
+        canControl: false,
+      };
+    }
+    sendToRenderer("braino-mac:nowplaying", candidate || { source: "", track: "", playing: false });
+  } finally {
+    nowPlayingPollBusy = false;
+  }
+}
+
+ipcMain.handle("braino-mac:media-control", async (_event, payload = {}) => {
+  const action = String(payload?.action || "").toLowerCase();
+  const source = String(payload?.source || "spotify").toLowerCase();
+  logMac("tray.media_control", { action, source });
+  if (!["toggle", "play", "pause", "next", "previous"].includes(action)) return { ok: false };
+  if (source === "music") {
+    const map = { toggle: "playpause", play: "play", pause: "pause", next: "next track", previous: "previous track" };
+    try {
+      await execFileP("/usr/bin/osascript", ["-e", `tell application "Music" to ${map[action]}`], { timeout: 5000 });
+      return { ok: true };
+    } catch (error) {
+      logMac("tray.media_control.music_failed", { error });
+      return { ok: false };
+    }
+  }
+  let resolved = action;
+  if (action === "toggle") {
+    const state = await readSpotifyMacState().catch(() => null);
+    resolved = state?.ok && /playing/i.test(state.state || "") ? "pause" : "play";
+  }
+  return controlSpotifyPlaybackOnMac(resolved);
+});
+
+ipcMain.handle("braino-mac:system-volume", async (_event, payload = {}) => {
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", "output volume of (get volume settings)"], { timeout: 3000 });
+    const current = Number(String(stdout).trim());
+    let target = Number.isFinite(Number(payload?.set)) ? Number(payload.set) : null;
+    if (target === null && Number.isFinite(Number(payload?.delta))) target = current + Number(payload.delta);
+    if (target === null) return { ok: true, volume: current };
+    target = Math.max(0, Math.min(100, Math.round(target)));
+    await execFileP("/usr/bin/osascript", ["-e", `set volume output volume ${target}`], { timeout: 3000 });
+    return { ok: true, volume: target };
+  } catch (error) {
+    logMac("tray.system_volume.failed", { error });
+    return { ok: false };
+  }
+});
+
+ipcMain.handle("braino-mac:calendar-join", async () => {
+  const joinUrl = calendarNext?.joinUrl || "";
+  if (!joinUrl) return { ok: false, say: "I do not see a call link on that event." };
+  logMac("tray.calendar_join", { title: calendarNext?.title || "", url: textForLog(joinUrl) });
+  await openChromeUrl(joinUrl);
+  // Give the call page a breath to load, then arm the recorder automatically —
+  // one click from notch to recorded meeting.
+  setTimeout(() => {
+    try { startMeetingRecording(calendarNext?.title || "meeting"); } catch (_) {}
+  }, 6000);
+  return { ok: true, say: `Joining ${calendarNext?.title || "the meeting"}. I will record and take notes.` };
+});
+
+ipcMain.handle("braino-mac:shelf-file", async (_event, payload = {}) => {
+  const filePath = String(payload?.path || "");
+  const action = String(payload?.action || "");
+  if (!filePath || !fs.existsSync(filePath)) return { ok: false, say: "That file is gone." };
+  logMac("tray.shelf_file", { action, path: textForLog(filePath) });
+  try {
+    if (action === "open") {
+      await execFileP("/usr/bin/open", [filePath], { timeout: 8000 });
+      return { ok: true };
+    }
+    if (action === "reveal") {
+      await execFileP("/usr/bin/open", ["-R", filePath], { timeout: 8000 });
+      return { ok: true };
+    }
+    if (action === "trash") {
+      await execFileP("/usr/bin/osascript", ["-e", `tell application "Finder" to delete POSIX file ${JSON.stringify(filePath)}`], { timeout: 8000 });
+      return { ok: true, say: "In the Trash." };
+    }
+  } catch (error) {
+    logMac("tray.shelf_file.failed", { action, error });
+  }
+  return { ok: false };
+});
+
+// Power watcher: percent + charging state. Events fire on plug/unplug and on
+// crossing the 20% / 10% lines while discharging, so the island can react.
+let lastPowerState = null;
+async function checkPowerState() {
+  try {
+    const { stdout } = await execFileP("/usr/bin/pmset", ["-g", "batt"], { timeout: 4000 });
+    const text = String(stdout || "");
+    const pctMatch = text.match(/(\d{1,3})%/);
+    const percent = pctMatch ? Number(pctMatch[1]) : null;
+    const onAc = /AC Power/i.test(text);
+    const charging = /;\s*charging/i.test(text);
+    let event = "";
+    if (lastPowerState) {
+      if (onAc && !lastPowerState.onAc) event = "plugged";
+      else if (!onAc && lastPowerState.onAc) event = "unplugged";
+      else if (!onAc && percent !== null && lastPowerState.percent !== null) {
+        if (percent <= 10 && lastPowerState.percent > 10) event = "critical";
+        else if (percent <= 20 && lastPowerState.percent > 20) event = "low";
+      }
+    }
+    const next = { percent, onAc, charging };
+    const changed = !lastPowerState
+      || lastPowerState.percent !== percent
+      || lastPowerState.onAc !== onAc
+      || lastPowerState.charging !== charging;
+    lastPowerState = next;
+    if (changed || event) {
+      if (event) logMac("tray.power", { ...next, event });
+      sendToRenderer("braino-mac:power", { ...next, event });
+    }
+  } catch (_) {
+    // Desktops without a battery land here — stay quiet.
+  }
+}
+
+// Bluetooth audio watcher: connected headphones/speakers with battery levels.
+// system_profiler is slow (~1-2s) so this runs sparsely and off the hot path.
+let btKnownNames = new Set();
+let btFirstScanDone = false;
+let btPollBusy = false;
+async function checkBtAudio() {
+  if (btPollBusy) return;
+  btPollBusy = true;
+  try {
+    const { stdout } = await execFileP("/usr/sbin/system_profiler", ["SPBluetoothDataType", "-json"], { timeout: 25000, maxBuffer: 4 * 1024 * 1024 });
+    const data = JSON.parse(String(stdout || "{}"));
+    const connected = data?.SPBluetoothDataType?.[0]?.device_connected || [];
+    const devices = [];
+    for (const entry of connected) {
+      for (const [name, props] of Object.entries(entry || {})) {
+        const minorType = String(props?.device_minorType || "");
+        const isAudio = /headphone|headset|speaker|earbud/i.test(minorType) || /airpods|buds|headphone|speaker/i.test(name);
+        if (!isAudio) continue;
+        const battRaw = String(props?.device_batteryLevelMain || props?.device_batteryLevel || "").replace("%", "");
+        const battery = Number.isFinite(Number(battRaw)) && battRaw !== "" ? Number(battRaw) : null;
+        devices.push({ name, minorType, battery });
+      }
+    }
+    const names = new Set(devices.map((d) => d.name));
+    let event = null;
+    if (btFirstScanDone) {
+      for (const d of devices) {
+        if (!btKnownNames.has(d.name)) { event = { type: "connected", name: d.name, battery: d.battery }; break; }
+      }
+      if (!event) {
+        for (const known of btKnownNames) {
+          if (!names.has(known)) { event = { type: "disconnected", name: known }; break; }
+        }
+      }
+    }
+    const changed = names.size !== btKnownNames.size || [...names].some((n) => !btKnownNames.has(n));
+    btKnownNames = names;
+    btFirstScanDone = true;
+    if (changed || event) {
+      if (event) logMac("tray.bt_audio", event);
+      sendToRenderer("braino-mac:bt-audio", { devices, event });
+    }
+  } catch (_) {
+    // No Bluetooth data — stay quiet.
+  } finally {
+    btPollBusy = false;
+  }
+}
+
 let personaBundleCache = { at: 0, data: null };
 
 ipcMain.handle("braino-mac:persona-bundle", async () => {
@@ -9312,6 +9607,13 @@ app.whenReady().then(() => {
   setTimeout(() => void startWhatsAppListener({ enable: loadWaListenerState() }), 6000);
   setTimeout(() => void checkCalendarNext(), 20000);
   setInterval(() => void checkCalendarNext(), 5 * 60 * 1000);
+  // Notch tray feeds: now-playing (live progress), power, Bluetooth audio.
+  setTimeout(() => void pollNowPlaying(), 9000);
+  setInterval(() => void pollNowPlaying(), 6000);
+  setTimeout(() => void checkPowerState(), 12000);
+  setInterval(() => void checkPowerState(), 30000);
+  setTimeout(() => void checkBtAudio(), 16000);
+  setInterval(() => void checkBtAudio(), 60 * 1000);
   const auth = authStatusPayload();
   logMac("app.ready", {
     appVersion: APP_VERSION,
