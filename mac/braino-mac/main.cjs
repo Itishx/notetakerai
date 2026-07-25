@@ -3024,12 +3024,28 @@ function parseMapsIntent(raw) {
   if (m) return { mode: "directions", destination: m[1].trim() };
   // show/find where X is on the map
   m = source.match(/\b(?:show me|find|where(?:'s| is)|locate|pull up)\b\s+(?:where\s+)?(.+?)(?:\s+is)?(?:\s+on (?:the|google)\s+maps?)?$/i);
-  if (m && /\bmaps?\b/i.test(source)) return { mode: "show", place: m[1].trim() };
-  if (/\bon (?:the|google)\s+maps?\b/i.test(source)) {
-    const place = source.replace(/.*\b(?:show me|find|where(?:'s| is)|locate|pull up|open)\b\s+/i, "").replace(/\s+on (?:the|google)\s+maps?.*$/i, "").trim();
-    if (place) return { mode: "show", place };
+  let place = m && /\bmaps?\b/i.test(source) ? m[1] : null;
+  if (!place && /\bon (?:the|google)\s+maps?\b/i.test(source)) {
+    place = source.replace(/.*\b(?:show me|find|where(?:'s| is)|locate|pull up|open)\b\s+/i, "");
   }
-  return null;
+  if (place == null) return null;
+  place = cleanMapPlace(place);
+  // Vague / filler asks ("show me anything on the map, dude") are NOT a real
+  // place — ask instead of searching the literal words.
+  if (!place || /^(?:some(?:thing|where)|any(?:thing|where)|a place|stuff|things)$/i.test(place)) {
+    return { mode: "ask" };
+  }
+  return { mode: "show", place };
+}
+
+function cleanMapPlace(value) {
+  return String(value || "")
+    .replace(/\bon (?:the|google)\s+maps?\b/gi, "")
+    .replace(/\bwhere\b|\bis\b/gi, " ")
+    .replace(/\b(?:dude|bro|man|buddy|please|for me|okay|ok|yeah|just)\b/gi, " ")
+    .replace(/[,]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // ── Send to phone: text the current tab (or a place) to the user's own
@@ -4361,26 +4377,32 @@ async function isSpotifyOnThisMac() {
 let lastTabsSnapshotKey = "";
 
 async function listAllChromeTabs(limitPerWindow = 12) {
+  // Iterate the tabs COLLECTION directly (a snapshot), not by index — a tab
+  // closing mid-scan (Amazon opening/redirecting a new tab) made "tab 6 of
+  // window 2" go invalid (-1719) and crashed the whole scan. Every access is
+  // now individually guarded so one bad tab can't kill the batch.
   const script = `
 tell application "Google Chrome"
   if (count of windows) = 0 then return ""
   set out to ""
   repeat with w in windows
-    set tabCount to count of tabs of w
-    set upper to tabCount
-    if upper > ${limitPerWindow} then set upper to ${limitPerWindow}
-    repeat with i from 1 to upper
-      set t to tab i of w
-      set tTitle to ""
-      set tURL to ""
-      try
-        set tTitle to title of t
-      end try
-      try
-        set tURL to URL of t
-      end try
-      set out to out & tTitle & "\t" & tURL & linefeed
-    end repeat
+    try
+      set theTabs to tabs of w
+      set n to 0
+      repeat with t in theTabs
+        set n to n + 1
+        if n > ${limitPerWindow} then exit repeat
+        set tTitle to ""
+        set tURL to ""
+        try
+          set tTitle to title of t
+        end try
+        try
+          set tURL to URL of t
+        end try
+        set out to out & tTitle & "\t" & tURL & linefeed
+      end repeat
+    end try
   end repeat
   return out
 end tell`;
@@ -8753,6 +8775,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   const mapsIntentEarly = parseMapsIntent(raw);
   if (mapsIntentEarly) {
     logMac("delegate.maps_intent", { mode: mapsIntentEarly.mode, dest: textForLog(mapsIntentEarly.destination || mapsIntentEarly.place || "") });
+    if (mapsIntentEarly.mode === "ask") return { ok: true, say: "Sure — which place should I pull up?" };
     return mapsIntentEarly.mode === "show" ? runMapsShow(mapsIntentEarly.place) : runMapsDirections(mapsIntentEarly);
   }
 
@@ -9440,6 +9463,36 @@ ipcMain.handle("braino-mac:shelf-file", async (_event, payload = {}) => {
   }
   return { ok: false };
 });
+
+// Cursor-zone watcher: the renderer cannot see the mouse while the window is
+// click-through mid-drag (macOS sends drag events, not mouseMoved), so the
+// MAIN process watches the real cursor. Inside the notch zone → tell the
+// renderer, which flips interactivity and opens the tray. This is what makes
+// hover-to-expand and drag-a-file-onto-the-notch both work.
+let notchZoneInside = false;
+let notchZoneExpanded = false;
+
+ipcMain.on("braino-mac:notch-zone-size", (_event, payload) => {
+  notchZoneExpanded = Boolean(payload?.expanded);
+});
+
+setInterval(() => {
+  if (!dockWindow || dockWindow.isDestroyed() || !dockWindow.isVisible()) return;
+  try {
+    const point = screen.getCursorScreenPoint();
+    const bounds = dockWindow.getBounds();
+    const centerX = bounds.x + bounds.width / 2;
+    const halfWidth = notchZoneExpanded ? 340 : 150;
+    const height = notchZoneExpanded ? 260 : 80;
+    const inside = Math.abs(point.x - centerX) <= halfWidth
+      && point.y >= bounds.y
+      && point.y <= bounds.y + height;
+    if (inside !== notchZoneInside) {
+      notchZoneInside = inside;
+      sendToRenderer("braino-mac:notch-zone", { inside });
+    }
+  } catch (_) {}
+}, 130);
 
 // Power watcher: percent + charging state. Events fire on plug/unplug and on
 // crossing the 20% / 10% lines while discharging, so the island can react.
