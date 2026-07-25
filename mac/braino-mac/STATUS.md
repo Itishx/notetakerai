@@ -70,6 +70,11 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 |---|---|---|
 | Look-and-greet boot | 🟡 | Notch appears → auth (green/red) → eyes open + wake chime → he SCANS the screen ("taking a look..."), realtime auto-connects, and he greets WITH an observation ("Hey Itish. Let me take a quick look. [what he sees]") → you can answer immediately → after ~9s he says "press Control twice anytime, I'll stop listening for now", hangs up the mic but STAYS AWAKE (eyes open, ambient running). Runs as `void runBootGreetingFlow()` so it never blocks the startup critical path (the lesson from the last time this broke) |
 
+## Gmail
+| Capability | Status | Notes |
+|---|---|---|
+| Reply to open thread ("reply to this email", "reply saying ...") | 🟡 | Ported the extension's __sbGmail locators into injected JS on the active Chrome tab: read thread (subject/sender/latest body) → generate reply via chat-about-notes → click Reply → fill contenteditable body → click Send. ~2-3s target (generate is the slow ~1.5s part; read/fill/send are instant injections). NEEDS "Allow JavaScript from Apple Events" (still off). Routes before the WhatsApp reply intent; excluded when "whatsapp" is said. FUTURE: vision fallback to pick the email when NOT already on the thread |
+
 ## Netflix
 | Capability | Status | Notes |
 |---|---|---|

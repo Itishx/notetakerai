@@ -2959,6 +2959,105 @@ async function requireTouchId(reason) {
 // ── Live captions: on-device partial STT while a realtime session runs, so
 // the user's words form on screen AS they speak. Display-only — OpenAI's
 // transcript stays authoritative for routing. ──
+// ── Gmail reply: read the open thread, draft a reply, send it — all via
+// injected JS on the active Chrome tab (needs "Allow JavaScript from Apple
+// Events"). Ported locators from the extension's __sbGmail* flow. ──
+async function chromeInjectJs(js) {
+  const script = `tell application "Google Chrome"
+  if (count of windows) = 0 then return "__nowin__"
+  try
+    return execute active tab of front window javascript "${js.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"
+  on error errMsg
+    if errMsg contains "turned off" then return "__jsoff__"
+    return "__err__"
+  end try
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });
+    return String(stdout || "").trim();
+  } catch (_) {
+    return "__err__";
+  }
+}
+
+const GMAIL_READ_JS = "(function(){var subj=(document.querySelector('h2.hP')||document.querySelector('[role=\\\"main\\\"] h2')||{}).innerText||'';var msgs=document.querySelectorAll('.ii.gt .a3s, div[role=\\\"listitem\\\"] .a3s, .adn .a3s');var last=msgs[msgs.length-1];var body=last?(last.innerText||last.textContent||''):'';var gd=document.querySelectorAll('.gD');var sender=gd.length?(gd[gd.length-1].getAttribute('name')||gd[gd.length-1].getAttribute('email')||''):'';return JSON.stringify({subject:subj.slice(0,300),sender:sender,body:body.slice(0,5000)});})()";
+
+const GMAIL_CLICK_REPLY_JS = "(function(){function v(e){if(!e)return false;var r=e.getBoundingClientRect();return r.width>0&&r.height>0;}var ex=document.querySelector('span.ams.bkH[role=\\\"link\\\"]');if(ex&&v(ex)){ex.click();return 'ok';}var c=Array.from(document.querySelectorAll('[role=\\\"button\\\"],span[role=\\\"link\\\"],span[role=\\\"button\\\"]'));var r=c.find(function(e){if(!v(e))return false;var t=((e.getAttribute('aria-label')||'')+' '+(e.getAttribute('data-tooltip')||'')+' '+(e.innerText||'')).trim();return /^reply$/i.test((e.innerText||'').trim())||/^reply\\b/i.test(e.getAttribute('aria-label')||'');});if(r){r.click();return 'ok';}return 'no_reply';})()";
+
+function gmailFillBodyJs(text) {
+  const b64 = Buffer.from(text, "utf8").toString("base64");
+  return `(function(){function v(e){if(!e)return false;var r=e.getBoundingClientRect();return r.width>0&&r.height>0;}var box=Array.from(document.querySelectorAll('div[role=\\"textbox\\"][aria-label*=\\"Body\\"], div.Am.Al.editable, div[g_editable=\\"true\\"]')).find(v);if(!box)return 'no_field';var txt=decodeURIComponent(escape(atob('${b64}')));box.focus();box.innerText=txt;box.dispatchEvent(new InputEvent('input',{bubbles:true}));return 'filled';})()`;
+}
+
+const GMAIL_SEND_JS = "(function(){function v(e){if(!e)return false;var r=e.getBoundingClientRect();return r.width>0&&r.height>0;}var s=document.querySelector('div[role=\\\"button\\\"][aria-label^=\\\"Send\\\"], div[role=\\\"button\\\"][data-tooltip^=\\\"Send\\\"]');if(!s){s=Array.from(document.querySelectorAll('div[role=\\\"button\\\"],button')).find(function(e){return v(e)&&/^send\\b/i.test((e.getAttribute('aria-label')||e.getAttribute('data-tooltip')||e.innerText||'').trim());});}if(s&&v(s)){s.click();return 'sent';}return 'no_send';})()";
+
+async function readGmailThread() {
+  const raw = await chromeInjectJs(GMAIL_READ_JS);
+  if (raw === "__jsoff__" || raw === "__nowin__" || raw === "__err__" || !raw) return { status: raw || "__err__" };
+  try { return { status: "ok", ...JSON.parse(raw) }; } catch (_) { return { status: "__parse__" }; }
+}
+
+async function replyToOpenGmail(userInstruction) {
+  const onGmail = /mail\.google\.com/.test(activeMacContext?.browserUrl || "");
+  if (!onGmail) {
+    return { ok: false, say: "Open the email you want me to reply to, then ask again." };
+  }
+  sendTaskProgress({ status: "thinking", text: "Reading the email" });
+  const thread = await readGmailThread();
+  if (thread.status === "__jsoff__") {
+    return { ok: false, say: "Chrome will not let me touch the page — turn on Allow JavaScript from Apple Events in View, Developer, then ask again." };
+  }
+  if (thread.status !== "ok" || !thread.body) {
+    return { ok: false, say: "I could not read the open email. Make sure a thread is open, not the inbox list." };
+  }
+  sendTaskProgress({ status: "thinking", text: "Writing the reply" });
+  const authToken = await getBrainoAuthToken();
+  const message = [
+    `Write a reply to this email from ${thread.sender || "the sender"}.`,
+    userInstruction ? `The user wants to say: ${userInstruction}` : "Write a natural, appropriate reply based on the email's content.",
+    "Return ONLY the reply body — no subject, no 'Hi'/'Dear' unless it fits, no signature block, no markdown, no preamble.",
+    "---",
+    `Subject: ${thread.subject}`,
+    `Email:\n${thread.body}`,
+  ].join("\n");
+  let reply = "";
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ notes: "", chatHistory: [], message, responseMedium: "text" }),
+    });
+    const data = await response.json().catch(() => ({}));
+    reply = String(data?.reply || "").trim();
+  } catch (error) {
+    logMac("gmail.reply.generate_failed", { error });
+  }
+  if (!reply) return { ok: false, say: "I read the email but the reply draft got stuck. Try once more." };
+
+  const clicked = await chromeInjectJs(GMAIL_CLICK_REPLY_JS);
+  if (clicked !== "ok") return { ok: false, say: "I drafted a reply but could not open the reply box on the page." };
+  await new Promise((r) => setTimeout(r, 550));
+  const filled = await chromeInjectJs(gmailFillBodyJs(reply));
+  if (filled !== "filled") return { ok: false, say: "I opened the reply but could not type into it." };
+  await new Promise((r) => setTimeout(r, 250));
+  const sent = await chromeInjectJs(GMAIL_SEND_JS);
+  logMac("gmail.reply", { sender: textForLog(thread.sender || ""), replyChars: reply.length, sent });
+  if (sent === "sent") return { ok: true, say: `Replied to ${thread.sender ? thread.sender.split(" ")[0] || thread.sender : "them"}.` };
+  return { ok: true, say: "Reply is written and ready in Gmail — just hit send, it would not click for me." };
+}
+
+function parseGmailReplyIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (!/\breply\b/i.test(source)) return null;
+  // Must be about an email, not a WhatsApp reply or the redundant folder etc.
+  const emailCtx = /\b(?:email|mail|gmail|message|thread|this)\b/i.test(source);
+  const onGmail = /mail\.google\.com/.test(activeMacContext?.browserUrl || "");
+  if (!emailCtx && !onGmail) return null;
+  if (/\bwhats\s*app\b/i.test(source)) return null;
+  const instruction = source.match(/\breply\b.*?\b(?:saying|with|that)\s+(.+)$/i)?.[1]?.trim() || "";
+  return { instruction };
+}
+
 // ── Wallpaper: random official macOS picture, or fetch an image by name and
 // set it. Reversible — the previous wallpaper is snapshotted first. ──
 const WALLPAPER_DIR = "/System/Library/Desktop Pictures";
@@ -8234,6 +8333,14 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (waListenerIntent) {
     logMac("delegate.whatsapp_listener_intent", { enable: waListenerIntent.enable });
     return waListenerIntent.enable ? startWhatsAppListener({ announce: true }) : stopWhatsAppListener();
+  }
+
+  // Gmail reply first — an email "reply" must beat the WhatsApp reply intent
+  // when we're actually on a mail thread.
+  const gmailReply = parseGmailReplyIntent(raw);
+  if (gmailReply) {
+    logMac("delegate.gmail_reply_intent", { hasInstruction: Boolean(gmailReply.instruction) });
+    return replyToOpenGmail(gmailReply.instruction);
   }
 
   const waReply = parseWhatsAppReplyIntent(raw);
