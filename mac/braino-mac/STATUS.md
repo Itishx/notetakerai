@@ -74,10 +74,10 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 |---|---|---|
 | Change wallpaper ("random wallpaper", "make spider man my wallpaper", "put it back") | 🟡 | Random = a real built-in from /System/Library/Desktop Pictures (verified set works live). Named subject = fetch from source.unsplash.com (free, no key, no Higgs cost) → save → set. Previous wallpaper snapshotted for restore (guards macOS "missing value" quirk). May need one-time Automation permission for System Events. Question guard: "what wallpaper is this" doesn't change it |
 
-## Boot flow (07-25 rewrite — "look and greet")
+## Boot flow (07-25 — FAST, no screen look)
 | Capability | Status | Notes |
 |---|---|---|
-| Look-and-greet boot | 🟡 | Notch appears → auth (green/red) → eyes open + wake chime → he SCANS the screen ("taking a look..."), realtime auto-connects, and he greets WITH an observation ("Hey Itish. Let me take a quick look. [what he sees]") → you can answer immediately → after ~9s he says "press Control twice anytime, I'll stop listening for now", hangs up the mic but STAYS AWAKE (eyes open, ambient running). Runs as `void runBootGreetingFlow()` so it never blocks the startup critical path (the lesson from the last time this broke) |
+| Fast greet boot | 🟡 | Notch → auth (green/red) → eyes open + wake chime → he immediately says "{name}, press Control twice whenever you want me" and STAYS PRESENT (eyes open, awake, mic OFF). The look-at-screen + auto-realtime + 9s wait REMOVED per user (too slow). Ctrl×2 is the one way into a session |
 
 ## Screen recording (07-25)
 | Capability | Status | Notes |

@@ -1310,34 +1310,16 @@ async function runNotchGreeting(authResult) {
 async function runBootGreetingFlow() {
   if (herMode) return;
   try {
+    // Fast, no screen look, no auto-session (that was slow — screenshot +
+    // vision + realtime spin-up). The instant his eyes open he just names the
+    // user and the one thing to know, then stays present (eyes open, awake).
     const auth = await window.brainoMac.authStatus().catch(() => null);
     const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
-    // Beat: eyes scan the screen while he takes a look.
-    nfSetThinking("taking a look...");
-    notchFace?.classList.add("scanning");
-    const observed = await window.brainoMac.ambientObserve?.().catch(() => null);
-    notchFace?.classList.remove("scanning");
-    nfSetThinking("");
-    lastEngagedAt = Date.now();
-    // Realtime up FIRST so the reply streams into a live session he's already
-    // listening on — you can answer his greeting immediately.
-    if (!realtimeActive && !realtimeConnecting) await startListening();
-    const hello = firstName ? `Hey ${firstName}.` : "Hey.";
-    const line = observed?.ok && observed.say
-      ? `${hello} Let me take a quick look. ${observed.say}`
-      : `${hello} Good to see you. I'm right here whenever you need me.`;
-    await speak(line);
-    // He offered the conversation; give a short window to reply, then hand
-    // back control: announce the hotkey and hang up the mic — but stay awake.
-    await wait(9000);
-    if (realtimeActive && !voiceTurnInFlight && !speaking && !processing) {
-      await speak("Anytime you want me, just press Control twice. I'll stop listening for now.");
-      stopRealtimeVoice();
-      lastEngagedAt = Date.now(); // still present — eyes stay open, ambient runs
-    }
+    lastEngagedAt = Date.now(); // present + awake, mic stays OFF
+    void speak(firstName
+      ? `${firstName}, press Control twice whenever you want me.`
+      : "Press Control twice whenever you want me.");
   } catch (error) {
-    notchFace?.classList.remove("scanning");
-    nfSetThinking("");
     logRenderer("boot.greeting.failed", { error: errorForLog(error) });
   }
 }
