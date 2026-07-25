@@ -106,6 +106,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
   },
   setLiveCaptions: (on) => ipcRenderer.send("braino-mac:live-captions", Boolean(on)),
   ambientObserve: () => ipcRenderer.invoke("braino-mac:ambient-observe"),
+  onMeeting: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:meeting", handler);
+    return () => ipcRenderer.removeListener("braino-mac:meeting", handler);
+  },
   onAmbientToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:ambient-toggle", handler);

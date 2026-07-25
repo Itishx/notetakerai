@@ -1819,6 +1819,14 @@ async function handlePendingMacWorkflow(raw) {
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
+  if (pending.type === "meeting" && pending.stage === "meeting_offer") {
+    clearPendingMacWorkflow();
+    if (/\b(?:yes|yeah|yep|sure|go|record|do it|please)\b/i.test(cleanPrompt(raw))) {
+      return startMeetingRecording(pending.data?.source || "meeting");
+    }
+    return { ok: true, say: "No recording then. I will sit this one out quietly." };
+  }
+
   if (pending.type === "xclip" && pending.stage === "xclip_confirm") {
     clearPendingMacWorkflow();
     if (/\b(?:yes|yeah|yep|ship|send|post|go|do it)\b/i.test(cleanPrompt(raw))) {
@@ -2943,6 +2951,164 @@ async function requireTouchId(reason) {
 // ── Live captions: on-device partial STT while a realtime session runs, so
 // the user's words form on screen AS they speak. Display-only — OpenAI's
 // transcript stays authoritative for routing. ──
+// ── Meeting recorder: detect the meeting, offer, record (on-device
+// transcription + periodic context screenshots), live notes every 2 min in a
+// glass panel, stop → summary synced to the dashboard. The overlay goes
+// content-protected while recording — INVISIBLE to screen shares (the
+// window never reaches the capture pipeline), fully visible to the user. ──
+let meetingState = null; // { startedAt, source, transcript:[{t,text}], notes:[], lastNoteIndex, shots:[], lastShotB64, noteTimer, shotTimer }
+let lastMeetingOfferAt = 0;
+
+function meetingDetectFromTabs(tabs) {
+  if (meetingState || Date.now() - lastMeetingOfferAt < 10 * 60 * 1000) return;
+  const meetTab = (tabs || []).find((tab) => /meet\.google\.com\/[a-z0-9-]{6,}/i.test(tab.url || ""));
+  if (!meetTab) return;
+  lastMeetingOfferAt = Date.now();
+  setPendingMacWorkflow({ type: "meeting", stage: "meeting_offer", data: { source: "Google Meet" } });
+  sendToRenderer("braino-mac:speak-line", { text: "Oh, going into a meeting. Want me to record it and take notes?" });
+  logMac("meeting.offer", { url: textForLog(meetTab.url || "") });
+}
+
+function startMeetingRecording(source) {
+  if (meetingState) return { ok: true, say: "Already recording. I have not missed a word." };
+  meetingState = {
+    startedAt: Date.now(),
+    source: source || "meeting",
+    transcript: [],
+    notes: [],
+    lastNoteIndex: 0,
+    shots: [],
+    lastShotB64: "",
+    noteTimer: setInterval(() => void meetingLiveNotes(), 2 * 60 * 1000),
+    shotTimer: setInterval(() => void meetingSnapshot(), 90 * 1000),
+  };
+  startLiveCaptions();
+  try { dockWindow?.setContentProtection(true); } catch (_) {}
+  sendToRenderer("braino-mac:meeting", { action: "start", source: meetingState.source, startedAt: meetingState.startedAt });
+  logMac("meeting.start", { source: textForLog(meetingState.source) });
+  void meetingSnapshot();
+  return { ok: true, say: `Recording. I am listening, taking notes, and this stays invisible if you share your screen.` };
+}
+
+async function meetingSnapshot() {
+  if (!meetingState) return;
+  const shot = await captureScreenBase64();
+  if (!shot.ok) return;
+  meetingState.lastShotB64 = shot.base64;
+  meetingState.shots.push(Date.now());
+  logMac("meeting.snapshot", { count: meetingState.shots.length });
+}
+
+function meetingTranscriptText(fromIndex = 0) {
+  if (!meetingState) return "";
+  return meetingState.transcript.slice(fromIndex)
+    .map((row) => `[${Math.round((row.t - meetingState.startedAt) / 60000)}m] ${row.text}`)
+    .join("\n");
+}
+
+async function meetingLiveNotes() {
+  if (!meetingState) return;
+  const fresh = meetingTranscriptText(meetingState.lastNoteIndex);
+  if (!fresh || fresh.length < 60) return;
+  const fromIndex = meetingState.transcript.length;
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return;
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({
+        notes: "",
+        chatHistory: [],
+        message: `Live meeting notes. Existing bullets:\n${meetingState.notes.join("\n") || "(none yet)"}\n\nNew transcript chunk:\n${fresh}\n\nReturn 1-3 NEW terse bullet points (each starting with "- ") capturing decisions, facts, or action items from the new chunk only. No preamble.`,
+        responseMedium: "text",
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    if (!reply) return;
+    const bullets = reply.split("\n").map((line) => line.trim()).filter((line) => line.startsWith("-")).slice(0, 3);
+    if (!bullets.length) return;
+    meetingState.notes.push(...bullets);
+    meetingState.lastNoteIndex = fromIndex;
+    sendToRenderer("braino-mac:meeting", { action: "notes", notes: meetingState.notes.slice(-14) });
+    logMac("meeting.live_notes", { bullets: bullets.length, totalNotes: meetingState.notes.length });
+  } catch (error) {
+    logMac("meeting.live_notes.failed", { error });
+  }
+}
+
+async function stopMeetingRecording() {
+  if (!meetingState) return { ok: false, say: "Nothing is being recorded right now." };
+  const state = meetingState;
+  meetingState = null;
+  clearInterval(state.noteTimer);
+  clearInterval(state.shotTimer);
+  try { dockWindow?.setContentProtection(false); } catch (_) {}
+  sendToRenderer("braino-mac:meeting", { action: "stop" });
+  const minutes = Math.max(1, Math.round((Date.now() - state.startedAt) / 60000));
+  const transcript = state.transcript.map((row) => `[${Math.round((row.t - state.startedAt) / 60000)}m] ${row.text}`).join("\n");
+  logMac("meeting.stop", { minutes, transcriptLines: state.transcript.length, notes: state.notes.length });
+  if (!transcript) return { ok: true, say: "Stopped. The meeting never produced a word I could hear, so there is nothing to save." };
+  sendTaskProgress({ status: "thinking", text: "Writing up the meeting" });
+  const authToken = await getBrainoAuthToken();
+  let summary = "";
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({
+        notes: "",
+        chatHistory: [],
+        message: `Summarize this ${minutes}-minute ${state.source} into crisp meeting notes with sections: Summary (2-3 sentences), Key points (bullets), Action items (bullets, or "None"). The screenshot shows the meeting screen for extra context.\n\nLive bullets so far:\n${state.notes.join("\n") || "(none)"}\n\nTranscript:\n${transcript.slice(0, 12000)}`,
+        visionMode: state.lastShotB64 ? "describe" : undefined,
+        imageBase64: state.lastShotB64 || undefined,
+        responseMedium: "text",
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    summary = String(data?.reply || "").trim();
+  } catch (error) {
+    logMac("meeting.summary.failed", { error });
+  }
+  const auth = authStatusPayload();
+  const title = `${state.source} — ${new Date(state.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} (${minutes} min)`;
+  const body = [summary || "(summary unavailable)", "", "— Full transcript —", transcript].join("\n");
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/notes`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${await getBrainoAuthToken()}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        user_id: auth.userId || undefined,
+        title: title.slice(0, 120),
+        structured_notes: body.slice(0, 60000),
+        use_case: "meeting",
+        source_title: state.source,
+      }),
+    });
+    if (!response.ok) throw new Error(`notes insert ${response.status}`);
+    logMac("meeting.synced", { title: textForLog(title), chars: body.length });
+    return { ok: true, say: `Done. ${minutes} minutes recorded, summarized, and synced to your dashboard.` };
+  } catch (error) {
+    logMac("meeting.sync.failed", { error });
+    return { ok: true, say: "Recorded and summarized, but the dashboard sync hiccuped. The notes are safe in my log." };
+  }
+}
+
+function parseMeetingIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (/\bstop\b.*\brecord/i.test(source) || /\brecord(?:ing)?\b.*\bstop\b/i.test(source)) return { action: "stop" };
+  if (/\brecord\b.*\b(?:this|the)\s+(?:call|meeting|meet)\b/i.test(source)
+    || /\bstart\s+recording\b/i.test(source)
+    || /\brecord\s+(?:it|this)$/i.test(source)) return { action: "start" };
+  return null;
+}
+
 // TCC lesson learned the hard way: a helper SPAWNED by Electron inherits
 // Electron's permission identity, and Electron's plist has no speech key —
 // instant kill. Launched via `open` as its own .app, the helper IS its own
@@ -2993,6 +3159,10 @@ function tailLiveCaptions() {
         const text = sep < 0 ? "" : trimmed.slice(sep + 1);
         if (kind === "caption" || kind === "caption-final") {
           sendToRenderer("braino-mac:live-caption", { text, final: kind === "caption-final" });
+          if (kind === "caption-final" && meetingState && text.trim()) {
+            meetingState.transcript.push({ t: Date.now(), text: text.trim() });
+            sendToRenderer("braino-mac:meeting", { action: "transcript", text: text.trim() });
+          }
         } else if (kind === "unavailable") {
           logMac("caption.helper.unavailable", { reason: textForLog(text) });
         } else if (kind === "caption-ready") {
@@ -3824,6 +3994,7 @@ async function checkAllTabsSnapshot() {
   if (key === lastTabsSnapshotKey) return;
   lastTabsSnapshotKey = key;
   logMac("tabs.snapshot", { count: tabs.length });
+  try { meetingDetectFromTabs(tabs); } catch (_) {}
   sendToRenderer("braino-mac:tabs-snapshot", { tabs });
 }
 
@@ -8299,6 +8470,14 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (isConsequenceQuestion) {
     logMac("delegate.question_not_command", { raw: textForLog(raw) });
     return runMacConversation(raw);
+  }
+
+  const meetingIntent = parseMeetingIntent(raw);
+  if (meetingIntent) {
+    logMac("delegate.meeting_intent", { action: meetingIntent.action });
+    return meetingIntent.action === "start"
+      ? startMeetingRecording(/\bcall\b/i.test(cleanPrompt(raw)) ? "call" : "meeting")
+      : stopMeetingRecording();
   }
 
   const ambientProbe = cleanPrompt(raw);

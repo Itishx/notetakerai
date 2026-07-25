@@ -631,6 +631,51 @@ async function runAmbientGlance() {
 
 window.setInterval(() => void runAmbientGlance(), 5000);
 
+// ── Meeting recorder panel ──
+const meetingPanel = document.getElementById("meeting-panel");
+let meetingStartedAt = 0;
+let meetingClockTimer = 0;
+
+function fmtMeetingClock(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+window.brainoMac.onMeeting?.((payload) => {
+  const action = payload?.action;
+  if (action === "start") {
+    meetingStartedAt = payload.startedAt || Date.now();
+    meetingPanel?.querySelector(".mp-title")?.replaceChildren(document.createTextNode(payload.source || "Recording"));
+    meetingPanel?.querySelector(".mp-notes")?.replaceChildren();
+    meetingPanel?.classList.add("on");
+    if (meetingPanel) meetingPanel.setAttribute("aria-hidden", "false");
+    window.clearInterval(meetingClockTimer);
+    meetingClockTimer = window.setInterval(() => {
+      const el = meetingPanel?.querySelector(".mp-time");
+      if (el) el.textContent = fmtMeetingClock(Date.now() - meetingStartedAt);
+    }, 1000);
+  } else if (action === "stop") {
+    meetingPanel?.classList.remove("on");
+    if (meetingPanel) meetingPanel.setAttribute("aria-hidden", "true");
+    window.clearInterval(meetingClockTimer);
+  } else if (action === "notes") {
+    const wrap = meetingPanel?.querySelector(".mp-notes");
+    if (wrap) {
+      wrap.replaceChildren();
+      for (const note of payload.notes || []) {
+        const div = document.createElement("div");
+        div.className = "mp-note";
+        div.textContent = String(note).replace(/^[-•]\s*/, "");
+        wrap.appendChild(div);
+      }
+      wrap.scrollTop = wrap.scrollHeight;
+    }
+  } else if (action === "transcript") {
+    const cap = meetingPanel?.querySelector(".mp-caption");
+    if (cap) cap.textContent = String(payload.text || "").slice(-140);
+  }
+});
+
 window.brainoMac.onAmbientToggle?.((payload) => {
   ambientEnabled = Boolean(payload?.enabled);
   logRenderer("ambient.toggle", { enabled: ambientEnabled });
@@ -2541,7 +2586,7 @@ function isLikelyMacActionTranscript(text) {
   if (!normalized) return false;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -3990,7 +4035,11 @@ let liveCapLastReviseAt = 0;
 
 window.brainoMac.onLiveCaption?.((payload) => {
   const text = String(payload?.text || "").trim();
-  if (!text || !realtimeActive || herMode) return;
+  // During a meeting the transcript is the whole point — let it flow even
+  // with realtime off. Otherwise captions only matter during a live session.
+  if (!text || herMode) return;
+  const meetingLive = meetingPanel?.classList.contains("on");
+  if (!meetingLive && !realtimeActive) return;
   // His own voice is NOT a caption: the on-device recognizer hears the
   // speakers too, so anything transcribed while Braino audio plays is him
   // hearing himself — drop it.
