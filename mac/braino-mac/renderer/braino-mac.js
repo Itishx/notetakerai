@@ -2934,6 +2934,7 @@ function handleRealtimeEvent(event) {
   if (event.type === "input_audio_buffer.speech_started") {
     markRealtimeActivity("speech_started", { schedule: false });
     startVoiceLatencyTurn("speech_started");
+    liveCapDisplayed = ""; // fresh turn, fresh caption slate
     rtUserTranscript = "";
     rtTranscriptFinal = false;
     clearRealtimeTranscriptFlush();
@@ -3984,11 +3985,31 @@ window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());
 window.brainoMac.onSummon?.(() => { void handleSummon(); });
 window.brainoMac.onSummonToggle?.(() => { void handleSummonToggle(); });
 window.brainoMac.onSummonHome?.(() => { void handleSummonHome(); });
+let liveCapDisplayed = "";
+let liveCapLastReviseAt = 0;
+
 window.brainoMac.onLiveCaption?.((payload) => {
   const text = String(payload?.text || "").trim();
   if (!text || !realtimeActive || herMode) return;
-  // Live partial: show it forming NOW. OpenAI's authoritative transcript
-  // overwrites when it lands; the live stream is display-only.
+  // His own voice is NOT a caption: the on-device recognizer hears the
+  // speakers too, so anything transcribed while Braino audio plays is him
+  // hearing himself — drop it.
+  if (speaking || currentSpeechAudio || realtimeStreamTts) return;
+  if (payload?.final) {
+    liveCapDisplayed = "";
+    return; // segment closed — OpenAI's authoritative transcript takes over
+  }
+  // Dampen the guess-flip-flop: appends show instantly; a mid-guess REVISION
+  // only lands if it's meaningfully longer or 600ms have passed — no more
+  // words visibly "autocorrecting" three times a second. The authoritative
+  // OpenAI transcript still overwrites everything at the end of the turn.
+  const grows = !liveCapDisplayed || text.toLowerCase().startsWith(liveCapDisplayed.toLowerCase());
+  if (!grows) {
+    const now = Date.now();
+    if (text.length <= liveCapDisplayed.length + 2 && now - liveCapLastReviseAt < 600) return;
+    liveCapLastReviseAt = now;
+  }
+  liveCapDisplayed = text;
   nfSetHeard(text);
   if (voiceLatencyTurn && !voiceLatencyTurn.captionFirstAt) {
     voiceLatencyTurn.captionFirstAt = performance.now();
