@@ -1827,6 +1827,14 @@ async function handlePendingMacWorkflow(raw) {
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
+  if (pending.type === "phone" && pending.stage === "phone_number") {
+    clearPendingMacWorkflow();
+    const number = String(raw || "").replace(/[^\d+]/g, "");
+    if (number.length < 7) return { ok: false, say: "That didn't look like a number. Try again — say send to phone." };
+    saveMyPhone(number);
+    return sendToPhone(pending.data?.content || "");
+  }
+
   if (pending.type === "meeting" && pending.stage === "meeting_offer") {
     clearPendingMacWorkflow();
     if (/\b(?:yes|yeah|yep|sure|go|record|do it|please)\b/i.test(cleanPrompt(raw))) {
@@ -2959,6 +2967,180 @@ async function requireTouchId(reason) {
 // ── Live captions: on-device partial STT while a realtime session runs, so
 // the user's words form on screen AS they speak. Display-only — OpenAI's
 // transcript stays authoritative for routing. ──
+// ── Google Maps: directions, distance, show-a-place. Deterministic URLs;
+// origin defaults to the user's current location so "navigate to X" just
+// works. Best-effort distance readout scraped after load. ──
+function mapsSearchUrl(q) { return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`; }
+function mapsDirUrl(dest, origin) {
+  const base = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+  return origin ? `${base}&origin=${encodeURIComponent(origin)}` : base;
+}
+
+const MAPS_DISTANCE_JS = "(function(){var el=document.querySelector('#section-directions-trip-0, div[aria-label*=\\\"min\\\"], .Fk3sm, .ivN21e');var t=document.body.innerText||'';var m=t.match(/([0-9.,]+\\s*(?:km|mi|miles|kilometers?))/i);var d=t.match(/([0-9]+\\s*(?:h|hr|hours?|min|minutes?)(?:\\s*[0-9]+\\s*min)?)/i);return JSON.stringify({dist:m?m[1]:'',dur:d?d[1]:''});})()";
+
+async function mapsScrapeDistance() {
+  await new Promise((r) => setTimeout(r, 3500));
+  const raw = await chromeInjectJs(MAPS_DISTANCE_JS);
+  if (raw === "__jsoff__" || raw === "__err__" || raw === "__nowin__" || !raw) return null;
+  try { return JSON.parse(raw); } catch (_) { return null; }
+}
+
+async function runMapsDirections({ destination, origin }) {
+  // "here" / "my location" = current location, which Maps fills when origin
+  // is omitted — don't pass the literal word.
+  if (origin && /^(?:here|my (?:location|place|home)|current location|where i am)$/i.test(origin.trim())) origin = "";
+  sendTaskProgress({ status: "thinking", text: `Mapping ${destination}` });
+  await openChromeUrl(mapsDirUrl(destination, origin));
+  const scraped = await mapsScrapeDistance();
+  logMac("maps.directions", { destination: textForLog(destination), origin: textForLog(origin || "current"), dist: scraped?.dist || "", dur: scraped?.dur || "" });
+  if (scraped?.dist) {
+    return { ok: true, say: `${origin ? `${origin} to ${destination}` : destination} is about ${scraped.dist}${scraped.dur ? `, roughly ${scraped.dur}` : ""}.` };
+  }
+  return { ok: true, say: `Directions to ${destination} are up${origin ? ` from ${origin}` : ""}.` };
+}
+
+async function runMapsShow(place) {
+  sendTaskProgress({ status: "thinking", text: `Finding ${place}` });
+  await openChromeUrl(mapsSearchUrl(place));
+  logMac("maps.show", { place: textForLog(place) });
+  return { ok: true, say: `Here's ${place} on the map.` };
+}
+
+function parseMapsIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (/^(?:what|which|whats|what'?s)\b/i.test(source) && !/\bdistance\b|\bhow far\b/i.test(source)) {
+    // "what's the distance" is fine; other questions aren't map commands.
+  }
+  // distance / how far — with explicit from/to
+  let m = source.match(/\b(?:distance|how far)\b.*?\bfrom\s+(.+?)\s+to\s+(.+)$/i);
+  if (m) return { mode: "directions", origin: m[1].trim(), destination: m[2].trim() };
+  m = source.match(/\bhow far\s+(?:is\s+)?(.+?)\s+from\s+(.+)$/i);
+  if (m) return { mode: "directions", origin: m[2].trim(), destination: m[1].trim() };
+  // directions/navigate from A to B
+  m = source.match(/\b(?:directions|navigate|route|drive|get)\b.*?\bfrom\s+(.+?)\s+to\s+(.+)$/i);
+  if (m) return { mode: "directions", origin: m[1].trim(), destination: m[2].trim() };
+  // navigate/directions to X (origin = current location)
+  m = source.match(/\b(?:navigate|directions|route|drive|take me)\b\s+(?:me\s+)?to\s+(.+)$/i);
+  if (m) return { mode: "directions", destination: m[1].trim() };
+  // show/find where X is on the map
+  m = source.match(/\b(?:show me|find|where(?:'s| is)|locate|pull up)\b\s+(?:where\s+)?(.+?)(?:\s+is)?(?:\s+on (?:the|google)\s+maps?)?$/i);
+  if (m && /\bmaps?\b/i.test(source)) return { mode: "show", place: m[1].trim() };
+  if (/\bon (?:the|google)\s+maps?\b/i.test(source)) {
+    const place = source.replace(/.*\b(?:show me|find|where(?:'s| is)|locate|pull up|open)\b\s+/i, "").replace(/\s+on (?:the|google)\s+maps?.*$/i, "").trim();
+    if (place) return { mode: "show", place };
+  }
+  return null;
+}
+
+// ── Send to phone: text the current tab (or a place) to the user's own
+// number via Messages. Number stored on first use. ──
+const PHONE_STATE_PATH = path.join(AUTH_STORE_DIR, "my-phone.json");
+function loadMyPhone() { try { return JSON.parse(fs.readFileSync(PHONE_STATE_PATH, "utf8"))?.number || ""; } catch (_) { return ""; } }
+function saveMyPhone(n) { try { fs.writeFileSync(PHONE_STATE_PATH, JSON.stringify({ number: n })); } catch (_) {} }
+
+async function sendToPhone(content) {
+  const number = loadMyPhone();
+  if (!number) {
+    setPendingMacWorkflow({ type: "phone", stage: "phone_number", data: { content } });
+    return { ok: true, say: "What's your phone number? I'll remember it and send things straight to your phone." };
+  }
+  const text = content || activeMacContext?.browserUrl || "";
+  if (!text) return { ok: false, say: "There's nothing to send — open a page or tell me what to send." };
+  try {
+    await execFileP("/usr/bin/osascript", ["-e",
+      `tell application "Messages" to send "${text.replace(/"/g, '\\"')}" to buddy "${number}" of (service 1 whose service type is iMessage)`,
+    ], { timeout: 8000 });
+    logMac("phone.sent", { chars: text.length });
+    return { ok: true, say: "Sent to your phone." };
+  } catch (error) {
+    logMac("phone.send.failed", { error });
+    return { ok: false, say: "I couldn't send it — check Messages is signed into iMessage." };
+  }
+}
+
+function parseSendToPhoneIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (/\bsend\s+(?:this|it|that|the (?:link|page|url))\s+to\s+(?:my\s+)?phone\b/i.test(source)
+    || /\b(?:send|push)\s+to\s+(?:my\s+)?phone\b/i.test(source)
+    || /\bon my phone\b.*\bsend\b/i.test(source)) return {};
+  return null;
+}
+
+// ── Multi-tab research: fire dedicated source tabs, read each, compare. ──
+const PAGE_TEXT_JS = "(function(){return (document.body&&document.body.innerText||'').replace(/\\s+/g,' ').slice(0,6000);})()";
+
+async function chromeOpenTabAndRead(url) {
+  await execFileP("/usr/bin/osascript", ["-e",
+    `tell application "Google Chrome" to tell front window to make new tab with properties {URL:"${url.replace(/"/g, '\\"')}"}`,
+  ], { timeout: 8000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 3800));
+  const raw = await chromeInjectJs(PAGE_TEXT_JS);
+  return raw && !/^__(?:jsoff|err|nowin)__$/.test(raw) ? raw : "";
+}
+
+async function runResearch(query) {
+  sendTaskProgress({ status: "thinking", text: `Firing tabs on ${query.slice(0, 30)}` });
+  const sources = [
+    `https://www.google.com/search?q=${encodeURIComponent(query + " review comparison")}`,
+    `https://www.google.com/search?q=${encodeURIComponent(query + " specs pros and cons")}`,
+    `https://www.youtube.com/results?search_query=${encodeURIComponent(query + " review")}`,
+  ];
+  const texts = [];
+  for (const url of sources) {
+    const text = await chromeOpenTabAndRead(url);
+    if (text) texts.push(text);
+    logMac("research.tab_read", { url: textForLog(url), chars: text.length });
+  }
+  if (!texts.length) {
+    return { ok: false, say: "I opened the tabs but Chrome won't let me read them — turn on Allow JavaScript from Apple Events in View, Developer." };
+  }
+  sendTaskProgress({ status: "thinking", text: "Comparing what I found" });
+  const authToken = await getBrainoAuthToken();
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ notes: "", chatHistory: [], message: `Based on these web pages, answer concisely for voice (under 70 words): "${query}". Give a clear recommendation with the key reason.\n\n${texts.join("\n---\n").slice(0, 11000)}`, responseMedium: "voice" }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    logMac("research.done", { query: textForLog(query), tabs: texts.length, replyChars: reply.length });
+    return { ok: true, say: reply || "I read a few sources but couldn't pull it together — try asking more specifically." };
+  } catch (error) {
+    logMac("research.failed", { error });
+    return { ok: false, say: "The comparison got stuck on the way back. Try once more." };
+  }
+}
+
+function parseResearchIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  const m = source.match(/\b(?:research|compare|difference between)\s+(.+)$/i);
+  if (!m) return null;
+  return { query: m[1].replace(/\bfor me\b/i, "").trim() };
+}
+
+// ── Amazon shopping: search, and lean on the universal clicker for the rest. ──
+async function runAmazonSearch(product) {
+  sendTaskProgress({ status: "thinking", text: `Amazon: ${product.slice(0, 30)}` });
+  await openChromeUrl(`https://www.amazon.in/s?k=${encodeURIComponent(product)}`);
+  logMac("amazon.search", { product: textForLog(product) });
+  return { ok: true, say: `Here are options for ${product}. Say click the first one, or the second, and I'll open it — then add to cart when you're ready.` };
+}
+
+function parseAmazonIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  const onAmazon = /amazon\.(?:in|com)/.test(activeMacContext?.browserUrl || "");
+  let m = source.match(/\b(?:show me options for|options for|search amazon for|find me|shop for)\s+(.+)$/i);
+  if (m) return { mode: "search", product: m[1].trim() };
+  m = source.match(/\bamazon\b.*\bfor\s+(.+)$/i);
+  if (m) return { mode: "search", product: m[1].trim() };
+  if (onAmazon) {
+    m = source.match(/\bsearch\s+for\s+(.+)$/i) || source.match(/\bshow me\s+(.+)$/i);
+    if (m) return { mode: "search", product: m[1].trim() };
+  }
+  return null;
+}
+
 // ── Gmail reply: read the open thread, draft a reply, send it — all via
 // injected JS on the active Chrome tab (needs "Allow JavaScript from Apple
 // Events"). Ported locators from the extension's __sbGmail* flow. ──
@@ -8675,6 +8857,29 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (isConsequenceQuestion) {
     logMac("delegate.question_not_command", { raw: textForLog(raw) });
     return runMacConversation(raw);
+  }
+
+  const mapsIntent = parseMapsIntent(raw);
+  if (mapsIntent) {
+    logMac("delegate.maps_intent", { mode: mapsIntent.mode, dest: textForLog(mapsIntent.destination || mapsIntent.place || "") });
+    return mapsIntent.mode === "show" ? runMapsShow(mapsIntent.place) : runMapsDirections(mapsIntent);
+  }
+
+  if (parseSendToPhoneIntent(raw)) {
+    logMac("delegate.send_to_phone_intent", {});
+    return sendToPhone("");
+  }
+
+  const researchIntent = parseResearchIntent(raw);
+  if (researchIntent) {
+    logMac("delegate.research_intent", { query: textForLog(researchIntent.query) });
+    return runResearch(researchIntent.query);
+  }
+
+  const amazonIntent = parseAmazonIntent(raw);
+  if (amazonIntent) {
+    logMac("delegate.amazon_intent", { mode: amazonIntent.mode, product: textForLog(amazonIntent.product || "") });
+    return runAmazonSearch(amazonIntent.product);
   }
 
   const wallpaperIntent = parseWallpaperIntent(raw);

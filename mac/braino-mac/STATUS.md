@@ -70,6 +70,16 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 |---|---|---|
 | Look-and-greet boot | 🟡 | Notch appears → auth (green/red) → eyes open + wake chime → he SCANS the screen ("taking a look..."), realtime auto-connects, and he greets WITH an observation ("Hey Itish. Let me take a quick look. [what he sees]") → you can answer immediately → after ~9s he says "press Control twice anytime, I'll stop listening for now", hangs up the mic but STAYS AWAKE (eyes open, ambient running). Runs as `void runBootGreetingFlow()` so it never blocks the startup critical path (the lesson from the last time this broke) |
 
+## Maps · Shopping · Research · Phone (07-25)
+| Capability | Status | Notes |
+|---|---|---|
+| Google Maps directions/distance ("distance from X to Y", "navigate to X") | 🟡 | Deterministic maps URLs (api=1); origin omitted = current location, "here"/"my location" stripped to that. Best-effort distance/duration scraped after load (needs JS-from-Apple-Events; without it, still opens directions). Verified parse across 7 phrasings |
+| Google Maps show place ("show me where X is on the map") | 🟡 | maps/search URL centers on it. Requires "maps" in the phrase so it doesn't grab generic "show me" |
+| Send to phone ("send this to my phone") | 🟡 | Texts the current tab URL to the user's own number via Messages/iMessage; number stored on first use (asks once). Needs Messages signed into iMessage |
+| Multi-tab research/compare ("research X", "compare X vs Y") | 🟡 | Fires 3 dedicated source tabs (Google review/specs + YouTube), reads each via injected JS, LLM-compares to one spoken recommendation. Needs JS-from-Apple-Events. Theatrics: real tabs open |
+| Amazon search ("show me options for X") | 🟡 | Opens amazon.in search; nth-listing click + add-to-cart lean on the universal clicker ("click the second one"). FUTURE: a guided shopping walk-through mode + the "fire research vs shop with you" fork |
+| Test harness: mac/braino-mac/test-skills.sh | ✅ | Live-tails the log into clean per-command cards (heard → said → OK/MISS + efficiency% + route). `test-skills.sh` (live) / `replay` (today) / `raw`. Every skill self-audits — no narration needed |
+
 ## Gmail
 | Capability | Status | Notes |
 |---|---|---|
