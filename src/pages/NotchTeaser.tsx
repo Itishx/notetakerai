@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import NotchFace, { setNotchStatus } from "@/components/NotchFace";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { analyzeTrack, snapToBeat, type BeatAnalysis } from "@/lib/beatSync";
+import "./home-os.css";
 import "./notch-teaser.css";
 
 /* ============================================================================
@@ -113,7 +114,7 @@ const MODE_WORDS = [
 // before "om" lands, not overlap it.
 const BOOM_PARTS = ["Bo", "om"];
 const BOOM_STARTS = [0, 253];
-const BOOM_DUR = 800;
+const BOOM_DUR = 600;   // was 800 — trimmed the hold AFTER "Boom" forms, not the "Bo"/"om" reveal itself (BOOM_STARTS untouched)
 
 // mode flicker schedule (fast, accelerating; the final punch-word holds)
 const MODE_DURS = MODE_WORDS.map((_, i) =>
@@ -129,9 +130,9 @@ const BOOT_LEN = 7700;    // verbatim boot beats; short hold after the greeting
 const WINK_START = 550;       // how long the fast draw-in takes before he winks
 const WINK_HOLD = 650;        // the wink itself, held
 const OUTRO_LINE_DUR = 900;   // the retracting perimeter line — faster than the boot's 2700ms
-const WINK_TAIL = WINK_START + WINK_HOLD + OUTRO_LINE_DUR + 550;   // + a beat of black
-const COWORK_HOLD = 550;  // readable hold after "Cooking" settles, before "Next"
-const ONEMORE_HOLD = 400; // "Oh, and one more thing." hold before Braino begins
+const WINK_TAIL = WINK_START + WINK_HOLD + OUTRO_LINE_DUR + 300;   // + a beat of black — trailing black-beat was 550, trimmed; WINK_START/WINK_HOLD/OUTRO_LINE_DUR (the actual wink choreography) untouched
+const COWORK_HOLD = 300;  // was 550 — readable hold after "Cooking"/"CoWork" settles, before the wink
+const ONEMORE_HOLD = 200; // was 400 — "Oh, and one more thing." hold before the mascot/Co begins
 // HYPE — right after the vision reveal, before the notch returns: quick
 // phrases in the same spot, building the pitch then trailing off into the
 // pivot — "He's smarter now. Fast/+er. Like crazy / fast. (0.5s hold)
@@ -147,8 +148,8 @@ const ONEMORE_HOLD = 400; // "Oh, and one more thing." hold before Braino begins
 // of the two, so the container's width never changes between them and "He's"
 // truly cannot shift, at any point. Plain stamp only, no bounce/slide.
 const HYPE_OPEN_ANCHOR = "He’s";
-const HYPE_OPEN_SWAP_AT = 480;              // "Smarter" holds this long before "Faster." replaces it
-const HYPE_OPEN_DUR = HYPE_OPEN_SWAP_AT + 700;   // settle time after "Faster." lands, before the scene moves on
+const HYPE_OPEN_SWAP_AT = 480;              // "Smarter" holds this long before "Faster." replaces it — UNCHANGED, this IS the swap animation timing
+const HYPE_OPEN_DUR = HYPE_OPEN_SWAP_AT + 700;   // reverted to +700 — the +400 trim made "Faster." feel rushed, not enough time to read it before the cut
 
 const HYPE_PHRASES = [["Like", "*crazy", "fast."], ["(0.5s)"], ["Because", "he", "can", "now"], ["wait..."], ["let's", "just", "ask", "him."]];
 // Slowed from 260 to 340 — closer to the intro's 360ms cadence (SW.open).
@@ -172,7 +173,7 @@ const HYPE_GAPS: number[] = []; HYPE_GAPS[0] = 500; HYPE_GAPS[1] = 90; HYPE_GAPS
 const READY_PHRASES = [["Ready?"], ["Don't", "Blink."]];
 const READY_SW = 280;
 // "Ready?" holds ~0.7s (matches the old READY_DUR feel) before "Don't" begins.
-const READY_GAPS: number[] = []; READY_GAPS[0] = 500; READY_GAPS[1] = 600;   // extra breathing room after "Don't Blink" lands, before the cut
+const READY_GAPS: number[] = []; READY_GAPS[0] = 500; READY_GAPS[1] = 350;   // was 600 — breathing room after "Don't Blink" lands, before the cut (READY_GAPS[0], the "Ready?" hold, untouched)
 // THE REAL notch lifecycle (verbatim to LID_SEQ in HomeOS.tsx), compressed
 // for the teaser's pace: listening (sonar + mouth-listen, no text — this IS
 // "let's just ask him") → captioning types what was heard ("What can you
@@ -183,7 +184,7 @@ const READY_GAPS: number[] = []; READY_GAPS[0] = 500; READY_GAPS[1] = 600;   // 
 const CUT_PRE_TEXT = "What can you do?";
 const CUT_TYPE_MS = 45;     // per-character typing speed — matches the boot greeting's typewriter (GREET_CAP)
 const CUT_LISTEN_DUR = 400; // listening — sonar + mouth-listen, no text; the "What can you do?" caption was kicking in too late, trimmed the pure-listen gap before it types
-const CUT_TYPE_DUR = CUT_PRE_TEXT.length * CUT_TYPE_MS + 300;   // captioning — types what was heard
+const CUT_TYPE_DUR = CUT_PRE_TEXT.length * CUT_TYPE_MS + 150;   // was +300 — captioning; the typing speed itself (CUT_PRE_TEXT.length * CUT_TYPE_MS) is untouched, only the hold after it finishes
 const CUT_WINK_DUR = 650;   // the closing wink, once the flicker finishes
 // cumulative phase-start offsets (ms from T.button)
 const CUT_LISTEN_AT = 0;
@@ -232,7 +233,7 @@ const THATSBRAINO_DUR = phraseSeq(THATSBRAINO_PHRASES, THATSBRAINO_SW, THATSBRAI
 
 const ONEMORE_DUR = phraseSeq(ONEMORE_PHRASES, 300).total + ONEMORE_HOLD;
 const WEARE_SW = 300;
-const WEARE_DUR = WEARE_WORDS.length * WEARE_SW + GAP + 300;   // "we" / "are", then a readable hold before the mascot begins
+const WEARE_DUR = WEARE_WORDS.length * WEARE_SW + GAP + 150;   // was +300 — "we" / "are" reveal speed (WEARE_SW/GAP) untouched, only the trailing hold before the mascot begins
 const COWORK_DUR = COWORK_WORK_SWAP_AT + COWORK_HOLD;   // "oking" lands, later replaced by "Work", then holds before the wink
 
 // SEE-YOUR-SCREEN runs sequentially in the SAME spot: plain text, no cutaway.
@@ -271,7 +272,7 @@ const buildTimeline = (H: number, snap?: (ms: number, down: boolean) => number) 
   const screen = S2(see + H * 0.22);                         // the look-down, brief
   const hype = S2(screen + screenTimes(SW.screen, H).total + H * 0.08);   // "He's [smarter/Faster.] → Like crazy / fast. (0.5s) Because he can now..."
   const ready = S2(hype + HYPE_OPEN_DUR + HYPE_DUR + H * 0.06);               // "Ready?" → "Don't Blink" fuses in → the notch winks
-  const button = S2(ready + READY_TOTAL + H * 0.06);   // "Ready?" → "Don't Blink." → straight into the cut: "What can you do?" → fast skills words → wink → holds
+  const button = S2(ready + READY_TOTAL + H * 0.06, true);   // SNAP: restores the 3rd documented beat-hit (was silently lost — comment above always said boot/match-cut/wink) — "What can you do?" lands on a downbeat
   const boom = S2(button + CUT_DUR + H * 0.2);                // his answer lands — "Boom", its own separate beat
   const tag = S2(boom + BOOM_DUR + H * 0.2);                  // straight from "Boom" into the tagline
   const thatsBraino = S2(tag + TAG_TOTAL + H * 0.3);   // "That's Braino" → "Notch" joins, frame inverts

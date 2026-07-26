@@ -211,7 +211,14 @@
 .nt-word { display: none; }
 .nt-word.in {
   display: inline-block;                  /* appears in place — position + SIZE untouched */
-  animation: ntWordIn .18s ease-out both;
+  /* was .18s ease-out — ease-out spends its energy gradually, which reads
+     soft/fading at rapid cadences (the 90ms skills flicker). A true stamp
+     hit snaps to peak brightness almost instantly and lets the afterglow
+     trail off — this expo-out curve (same family used for premium snappy
+     reveals) does that: ~90% of the decay resolves in the first third of
+     the duration, then a quick fade-out tail. Percussive, not soft. Still
+     zero motion/scale — only the timing curve changed. */
+  animation: ntWordIn .16s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 /* "+word" convention in sequence(): cancels the shared flex gap on THIS
    word's leading edge, pulling it flush against whatever came before it —
