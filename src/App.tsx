@@ -47,6 +47,7 @@ import BrainoLaunchShort from "./pages/BrainoLaunchShort.tsx";
 import Interns from "./pages/Interns.tsx";
 import Team from "./pages/Team.tsx";
 import Shankar from "./pages/Shankar.tsx";
+import NotchTeaser from "./pages/NotchTeaser.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -122,6 +123,7 @@ function AppShell({
         <Route path="/team/shankar" element={<Shankar />} />
         <Route path="/spiderman-brand-new-day" element={<SpiderManBrandNewDay />} />
         <Route path="/brand-new-day" element={<SpiderManBrandNewDay />} />
+        <Route path="/notch" element={<NotchTeaser />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
