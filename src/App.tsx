@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useState } from "react";
-import SplashScreen from "@/components/SplashScreen";
 import BrainoWalker from "@/components/BrainoWalker";
 import SpiderManBrandNewDay from "./pages/SpiderManBrandNewDayFast.tsx";
 import PreLaunch from "./pages/PreLaunch.tsx";
@@ -51,7 +50,6 @@ import NotchTeaser from "./pages/NotchTeaser.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
-const SPLASH_SKIP_PATHS = new Set(["/", "/spiderman-brand-new-day", "/brand-new-day"]);
 const normalizePath = (path: string) => (path.length > 1 ? path.replace(/\/+$/, "") : path);
 
 function LandingGate({ introDone, onIntroDone }: { introDone: boolean; onIntroDone: () => void }) {
@@ -59,13 +57,9 @@ function LandingGate({ introDone, onIntroDone }: { introDone: boolean; onIntroDo
 }
 
 function AppShell({
-  splashDone,
-  onSplashDone,
   homeIntroDone,
   onHomeIntroDone,
 }: {
-  splashDone: boolean;
-  onSplashDone: () => void;
   homeIntroDone: boolean;
   onHomeIntroDone: () => void;
 }) {
@@ -81,8 +75,7 @@ function AppShell({
 
   return (
     <>
-      {!splashDone && <SplashScreen onDone={onSplashDone} />}
-      <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainoWalker />}</div>
+      <div id="sb-brain-mascot-wrapper">{!hideMascot && <BrainoWalker />}</div>
       <Routes>
         <Route path="/" element={<LandingGate introDone={homeIntroDone} onIntroDone={onHomeIntroDone} />} />
         <Route path="/prelaunch" element={<PreLaunch />} />
@@ -132,10 +125,6 @@ function AppShell({
 }
 
 const App = () => {
-  const [splashDone, setSplashDone] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return SPLASH_SKIP_PATHS.has(normalizePath(window.location.pathname));
-  });
   const [homeIntroDone, setHomeIntroDone] = useState(false);
 
   return (
@@ -147,8 +136,6 @@ const App = () => {
           <Sonner />
           <BrowserRouter>
             <AppShell
-              splashDone={splashDone}
-              onSplashDone={() => setSplashDone(true)}
               homeIntroDone={homeIntroDone}
               onHomeIntroDone={() => setHomeIntroDone(true)}
             />
