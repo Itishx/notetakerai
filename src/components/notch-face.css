@@ -20,6 +20,19 @@
   z-index: 57;
   opacity: 0;
   transition: opacity 0.5s ease;
+  /* "on"/"home"/etc. are the app's own STATE class names, verbatim from the
+     native Mac app where nothing else on the page could ever share them.
+     On a real website they're bare, generic words — a totally unrelated
+     page's `.home { background: var(--paper); min-height: 100vh; ... }`
+     collided here once these went into one shared production CSS bundle,
+     painting a giant white box behind the notch. Reset every property that
+     kind of collision could plausibly leak in, so this component is inert
+     to whatever classes exist on the rest of the site, regardless of
+     bundle/cascade order. */
+  background: none;
+  min-height: 0;
+  color: initial;
+  font-family: inherit;
 }
 
 .nf-face.on {
