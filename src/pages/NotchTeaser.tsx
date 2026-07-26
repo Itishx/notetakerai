@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import NotchFace, { setNotchStatus } from "@/components/NotchFace";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { analyzeTrack, snapToBeat, type BeatAnalysis } from "@/lib/beatSync";
-import "./home-os.css";
 import "./notch-teaser.css";
 
 /* ============================================================================
