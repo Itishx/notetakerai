@@ -2278,6 +2278,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  // Voice Commands: incognito counterpart to openTab. Requires the user to have flipped
+  // "Allow in Incognito" for Braino in chrome://extensions — we can't grant that ourselves.
+  if (message.action === "openIncognitoTab") {
+    const url = String(message.url || "").trim();
+    if (!(url.startsWith("https://") || url.startsWith("http://"))) {
+      sendResponse({ ok: false });
+      return false;
+    }
+    chrome.extension.isAllowedIncognitoAccess((allowed) => {
+      if (!allowed) {
+        sendResponse({ ok: false, reason: "incognito-not-allowed" });
+        return;
+      }
+      chrome.windows.create({ url, incognito: true }, (win) => {
+        void chrome.runtime.lastError;
+        sendResponse({ ok: true, windowId: win?.id ?? null });
+      });
+    });
+    return true;
+  }
+
+  // Voice Commands: flip a mode on/off (deactivating any other active mode for this user), then
+  // refresh the local cache immediately so this device's notch reflects it without waiting a full
+  // poll cycle. Other devices pick it up on their next ~1min voiceModesPoll alarm.
+  if (message.action === "setVoiceModeActive") {
+    (async () => {
+      const modeId = String(message.modeId || "");
+      const active = Boolean(message.active);
+      if (!modeId) { sendResponse({ ok: false }); return; }
+      const result = await bgSetVoiceModeActive(modeId, active);
+      sendResponse(result);
+    })();
+    return true;
+  }
+
   // Design Delegate: open the design tool in a visible tab and TYPE a synthesized prompt into its
   // composer (we deliberately do NOT submit — the user reviews and hits enter). Retries while the
   // SPA loads; clipboard copy on the content side is the fallback if the composer never resolves.
@@ -2344,6 +2379,79 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         adapter: parsed?.adapter || null,
         intent: openable?.contentKind || parsed?.intent || null,
       });
+    })();
+    return true;
+  }
+  // Human Intelligence Layer: a fast reasoning pass content.js calls ONLY for commands that
+  // already look ambiguous (see __sbLooksAmbiguousForReasoning), or when it's checking whether a
+  // new message answers a clarifying question Braino just asked (message.pending is set). Never
+  // runs on every turn — this is the gate, not a replacement for the regular classifier.
+  if (message.action === "reasonAboutIntent") {
+    (async () => {
+      const promptText = String(message.promptText || "").trim();
+      if (!promptText) { sendResponse({ ambiguous: false }); return; }
+      try {
+        const sharedContext = bgBuildAgentConversationContext({ chatHistory: message.chatHistory || [] });
+        const pageContext = message.pageContext || {};
+        const pending = message.pending || null;
+
+        const systemPrompt = pending
+          ? [
+              "You are Braino's common-sense layer. Braino just asked the user a clarifying question because",
+              "his previous request was ambiguous. Decide whether the user's NEW message answers that question.",
+              "Return STRICT JSON only, no prose, no markdown:",
+              '{"bound_to_pending":true|false,"resolved_instruction":"one self-contained instruction combining the original goal with the answer"}',
+              "Rules:",
+              "- bound_to_pending=true only if the new message is plausibly an answer to THE QUESTION asked (a choice, a name, a yes/no, a clarification). If it reads like a brand-new, unrelated request, bound_to_pending=false.",
+              "- resolved_instruction must be a complete instruction a browser agent or search could act on directly — never leave a bare fragment like 'open tabs' with no object. Combine the ORIGINAL GOAL with the answer.",
+            ].join("\n")
+          : [
+              "You are Braino's common-sense layer, run BEFORE he acts on a command. A cheap filter already",
+              "flagged this command as possibly ambiguous. Decide: is there a genuine ambiguity here that a",
+              "thoughtful human assistant would pause and double-check, rather than guess?",
+              "Return STRICT JSON only, no prose, no markdown:",
+              '{"restated_goal":"what the user wants, in one plain sentence","ambiguous":true|false,"clarifying_question":"one short question, or empty string if not ambiguous"}',
+              "Rules:",
+              "- Use CURRENT PAGE and CHAT HISTORY to resolve vague references ('this', 'it', 'that video') BEFORE deciding if something is ambiguous — most of the time the page/context already makes the referent clear and this is NOT ambiguous.",
+              "- The kind of ambiguity worth asking about: a genuine fork in HOW to deliver the result (e.g. list it here vs. open tabs), or a named person/target that could plausibly mean more than one thing where guessing wrong would be embarrassing or wasteful (e.g. sending a message to the wrong contact).",
+              "- Do NOT flag something ambiguous just because it's short or casual. Default to ambiguous=false. Only flag it when a reasonable person would actually stop and ask.",
+              "- clarifying_question must be ONE short, natural question — not a list of options recited back.",
+            ].join("\n");
+
+        const userPromptLines = [
+          `MESSAGE: ${promptText}`,
+          pageContext.url ? `CURRENT PAGE: ${pageContext.url}${pageContext.title ? ` — ${pageContext.title}` : ""}` : null,
+          `CHAT HISTORY:\n${bgBuildAgentConversationText(sharedContext) || "None."}`,
+        ];
+        if (pending) {
+          userPromptLines.push(`ORIGINAL GOAL: ${pending.restatedGoal || pending.originalPromptText || ""}`);
+          userPromptLines.push(`QUESTION ASKED: ${pending.question || ""}`);
+        }
+        userPromptLines.push("Return the JSON now.");
+
+        const reply = await bgCallDelegateModel({
+          systemPrompt,
+          userPrompt: userPromptLines.filter(Boolean).join("\n\n"),
+          model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+        });
+        const parsed = bgExtractJsonObject(reply);
+
+        if (pending) {
+          sendResponse({
+            bound_to_pending: Boolean(parsed.bound_to_pending),
+            resolved_instruction: String(parsed.resolved_instruction || "").trim(),
+          });
+        } else {
+          sendResponse({
+            restated_goal: String(parsed.restated_goal || promptText).trim(),
+            ambiguous: Boolean(parsed.ambiguous) && Boolean(String(parsed.clarifying_question || "").trim()),
+            clarifying_question: String(parsed.clarifying_question || "").trim(),
+          });
+        }
+      } catch (error) {
+        console.warn("[Braino][HIL] reasonAboutIntent failed:", error?.message || error);
+        sendResponse(message.pending ? { bound_to_pending: false } : { ambiguous: false });
+      }
     })();
     return true;
   }
@@ -3846,6 +3954,7 @@ Rules:
 - Prefer {"type":"answer"} to finish informational tasks. Reserve {"type":"done"} for ACTION tasks (send / book / buy / save / submit) where the live page itself proves completion. Never loop trying to "prove" an informational task is done — answering IS done.
 - If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
 - For other high-risk final actions not clearly requested by the user, clarify before acting.
+- If the task names a specific person/contact to message, call, or email (WhatsApp, Gmail, LinkedIn, etc.) and the observed contact list shows NO exact match, or shows several plausible matches (e.g. "Prakhar" vs "Prakhar Brother" vs "Prakhar Office"), STOP and {"type":"clarify"} asking which one — never click the closest-looking name and guess. This applies to selecting the recipient itself, separate from the final send-confirmation rule above.
 - For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location", read the visible results once, and answer with the top options — do not keep re-searching.
 - Today is ${bgDelegateTodayText()}. ${geo ? bgUserContextLine(geo) : ""}
 - Use the user's LOCAL storefront for country-specific sites: ${geo?.countryCode && BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode] ? `Amazon = ${BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode]}` : "match the Amazon domain to the user's location"}. If you land on another country's storefront, navigate to the local one.
@@ -7913,6 +8022,7 @@ MINDSET: You are a browser robot. Every task is solved by executing and verifyin
 - If STEPS TAKEN SO FAR is empty → you have done NOTHING yet → start executing immediately.
 - Resolve ambiguous follow-ups like "find the best one" or "open it" using CHAT CONTEXT before planning.
 - Pure questions with no browser actions → {"type":"answer","message":"..."}
+- EXCEPTION to "resolve ambiguity silently": if the task names a specific person/contact to message, call, or email and the observed contact list shows no exact match or shows several plausible matches (e.g. "Prakhar" vs "Prakhar Brother"), that is NOT something to guess from chat context — {"type":"clarify","message":"..."} asking which one, before opening or typing into that chat.
 
 ACTIONS:
 {"type":"navigate","url":"https://...","description":"..."}
@@ -8692,6 +8802,101 @@ async function bgResolvePremiumStatus(options = {}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Voice Commands: "say this, open that" shortcuts configured on the dashboard, grouped into
+// voice-activatable Modes (each with a notch color). Cached into chrome.storage.local as
+// sbVoiceModes so content.js can match phrases synchronously, offline, without its own fetch —
+// same TTL-cache-piggyback shape as bgResolvePremiumStatus above. Hidden modes (dashboard-only
+// visibility) are fetched too — hiding a mode only hides it in the dashboard UI, voice still works.
+// ─────────────────────────────────────────────────────────────────────────────
+const BG_VOICE_MODES_CACHE_MS = 60 * 1000;
+
+async function bgFetchVoiceCommands(options = {}) {
+  const now = Date.now();
+  const data = await bgGetStorage(["authToken", "authRefreshToken", "authUserId", "sbVoiceModesCachedAt"]);
+
+  if (!options.forceRefresh && data.sbVoiceModesCachedAt && now - data.sbVoiceModesCachedAt < BG_VOICE_MODES_CACHE_MS) {
+    return { ok: true, source: "cache" };
+  }
+  if (!data.authUserId) return { ok: false, source: "missing-user" };
+
+  let token = data.authToken;
+  const fetchRows = (accessToken) => {
+    const headers = { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}` };
+    return Promise.all([
+      fetch(`${BG_SUPABASE_URL}/rest/v1/voice_modes?user_id=eq.${encodeURIComponent(data.authUserId)}&select=id,name,notch_color,is_active&order=position.asc`, { headers }),
+      fetch(`${BG_SUPABASE_URL}/rest/v1/voice_commands?user_id=eq.${encodeURIComponent(data.authUserId)}&select=id,mode_id,phrase,open_mode&order=position.asc`, { headers }),
+      fetch(`${BG_SUPABASE_URL}/rest/v1/voice_command_urls?select=id,command_id,url&order=position.asc`, { headers }),
+    ]);
+  };
+
+  try {
+    let [modesRes, commandsRes, urlsRes] = token ? await fetchRows(token) : [null, null, null];
+    if (!modesRes || modesRes.status === 401) {
+      token = data.authRefreshToken ? await bgRefreshAuthToken() : null;
+      [modesRes, commandsRes, urlsRes] = token ? await fetchRows(token) : [null, null, null];
+    }
+    if (!modesRes || !modesRes.ok || !commandsRes?.ok || !urlsRes?.ok) {
+      throw new Error(`Voice commands lookup failed: ${modesRes?.status || "no-token"}`);
+    }
+
+    const [modes, commands, urls] = await Promise.all([modesRes.json(), commandsRes.json(), urlsRes.json()]);
+    const urlsByCommand = new Map();
+    for (const u of urls) {
+      const list = urlsByCommand.get(u.command_id) || [];
+      list.push(u.url);
+      urlsByCommand.set(u.command_id, list);
+    }
+    const commandsByMode = new Map();
+    for (const c of commands) {
+      const list = commandsByMode.get(c.mode_id) || [];
+      list.push({ id: c.id, phrase: c.phrase, openMode: c.open_mode === "incognito" ? "incognito" : "tab", urls: urlsByCommand.get(c.id) || [] });
+      commandsByMode.set(c.mode_id, list);
+    }
+    const sbVoiceModes = modes.map((m) => ({
+      id: m.id,
+      name: m.name,
+      notchColor: m.notch_color || "#0A84FF",
+      isActive: m.is_active === true,
+      commands: commandsByMode.get(m.id) || [],
+    }));
+    await bgSetStorage({ sbVoiceModes, sbVoiceModesCachedAt: now });
+    return { ok: true, source: "profile" };
+  } catch (error) {
+    return { ok: false, source: "fallback", error: error?.message || String(error) };
+  }
+}
+
+async function bgSetVoiceModeActive(modeId, active) {
+  const data = await bgGetStorage(["authToken", "authRefreshToken", "authUserId"]);
+  if (!data.authUserId) return { ok: false, source: "missing-user" };
+  let token = data.authToken;
+  const doWrite = async (accessToken) => {
+    const headers = { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+    // Only one active mode per user (unique partial index) — deactivate the rest first.
+    if (active) {
+      await fetch(`${BG_SUPABASE_URL}/rest/v1/voice_modes?user_id=eq.${encodeURIComponent(data.authUserId)}&is_active=eq.true`, {
+        method: "PATCH", headers, body: JSON.stringify({ is_active: false }),
+      });
+    }
+    return fetch(`${BG_SUPABASE_URL}/rest/v1/voice_modes?id=eq.${encodeURIComponent(modeId)}`, {
+      method: "PATCH", headers, body: JSON.stringify({ is_active: active, updated_at: new Date().toISOString() }),
+    });
+  };
+  try {
+    let res = token ? await doWrite(token) : null;
+    if (!res || res.status === 401) {
+      token = data.authRefreshToken ? await bgRefreshAuthToken() : null;
+      res = token ? await doWrite(token) : null;
+    }
+    if (!res || !res.ok) throw new Error(`Mode update failed: ${res?.status || "no-token"}`);
+    await bgFetchVoiceCommands({ forceRefresh: true });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Free-tier usage gate (V1 two-tier launch). Premium/creator/admin resolve to
 // unlimited LOCALLY via bgResolvePremiumStatus (internal-email + is_premium, which
 // also reflects access_grants) and are NEVER metered — no network dependency, so
@@ -8893,15 +9098,18 @@ async function bgCheckCalendarReminders() {
 // Set up alarm for polling every minute (MV3 minimum is 1 minute)
 chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 1 });
 chrome.alarms.create("calendarReminders", { periodInMinutes: 1 });
+chrome.alarms.create("voiceModesPoll", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "remoteAgentPoll") bgPollRemoteCommands();
   if (alarm.name === "calendarReminders") bgCheckCalendarReminders();
+  if (alarm.name === "voiceModesPoll") bgFetchVoiceCommands();
 });
 // Delay startup connections — gives the service worker time to settle
 // and avoids flooding the Chrome error panel on a cold start with a flaky network
 setTimeout(() => {
   bgPollRemoteCommands();
   bgCheckCalendarReminders();
+  bgFetchVoiceCommands();
   bgStartRealtime();
 }, 2000);
 

@@ -376,6 +376,58 @@ body {
 }
 
 /* Busy (mission control) and music islands: modest stretch, ticker visible. */
+/* ── Thinking island (cowork tasks): the dynamic-island thinking flow. A
+   sticky task lights a soft coral breathing glow and a three-dot shimmer under
+   his eyes; the island is tappable (pointer-events on), and a tap expands it
+   caption-wide via .nf-think-open + .captioning to read the full step. Styled
+   to match the reference dynamic islands: pure-black pill, generous radius. ── */
+#notch-face.nf-thinking .nf-pill {
+  pointer-events: auto; cursor: pointer;
+  animation: nfThinkBreath 2.4s ease-in-out infinite;
+}
+@keyframes nfThinkBreath {
+  0%, 100% { box-shadow: 0 0 14px rgba(232, 120, 110, 0.18), 0 0 30px rgba(232, 120, 110, 0.08); }
+  50% { box-shadow: 0 0 26px rgba(232, 120, 110, 0.38), 0 0 52px rgba(243, 154, 66, 0.16); }
+}
+/* the three-dot "thinking" shimmer, tucked just under his eyes when idle-sized */
+#notch-face.nf-thinking:not(.nf-think-open) .nf-think-dots { display: flex; }
+#notch-face .nf-think-dots {
+  display: none; position: absolute; z-index: 4; left: 50%; bottom: 6px;
+  transform: translateX(-50%); gap: 4px; align-items: center;
+}
+#notch-face .nf-think-dots i {
+  width: 4px; height: 4px; border-radius: 50%; background: #F6A8A2;
+  box-shadow: 0 0 5px rgba(232, 120, 110, 0.8);
+  animation: nfThinkDot 1.1s ease-in-out infinite;
+}
+#notch-face .nf-think-dots i:nth-child(2) { animation-delay: 0.16s; }
+#notch-face .nf-think-dots i:nth-child(3) { animation-delay: 0.32s; }
+@keyframes nfThinkDot { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+/* the arrow hint: a small chevron on the right of the pill that says "there's
+   more here, hover me". It gently bobs to draw the eye, and rotates when open. */
+#notch-face.nf-think-hint .nf-think-arrow { display: block; }
+#notch-face .nf-think-arrow {
+  display: none; position: absolute; z-index: 5; right: 9px; top: 50%;
+  width: 7px; height: 7px; margin-top: -4px;
+  border-right: 1.6px solid rgba(246, 168, 162, 0.9);
+  border-bottom: 1.6px solid rgba(246, 168, 162, 0.9);
+  transform: rotate(45deg);
+  animation: nfArrowBob 1.6s ease-in-out infinite;
+}
+@keyframes nfArrowBob { 0%, 100% { transform: rotate(45deg) translate(0, 0); } 50% { transform: rotate(45deg) translate(2px, 2px); } }
+#notch-face.nf-think-open .nf-think-arrow { animation: none; transform: rotate(-135deg); top: auto; bottom: 8px; margin-top: 0; }
+
+/* expanded thinking: wide island, the full sentence reads in the left wing,
+   eyes stay centred (the .captioning geometry does the sideways stretch) */
+#notch-face.nf-think-open .nf-pill {
+  box-shadow: 0 0 30px rgba(232, 120, 110, 0.4), 0 0 60px rgba(243, 154, 66, 0.18);
+  animation: none;
+}
+/* while expanded the three dots hide (the sentence is the content now) */
+#notch-face.nf-think-open .nf-think-dots { display: none; }
+/* keep the whole island hoverable throughout a task, not just the pill */
+#notch-face.nf-thinking { pointer-events: auto; }
+
 #notch-face.busy .nf-pill {
   width: 250px;
   height: calc(var(--nf-notch-h) + 26px);
@@ -485,6 +537,81 @@ body {
   opacity: 0.7;
   background: rgba(210, 210, 210, 0.8);
   box-shadow: 0 0 3px rgba(210, 210, 210, 0.5);
+  animation: none;
+}
+
+/* The keynote shimmer: every ~90s while he's home and idle, a white-to-blue
+   light draws the outline of the island — the exact trace from the
+   trybraino.com reveal (same 190x55 r16 path, same gradient, same dash-draw).
+   The top run hides behind the physical housing; the sides and bottom arc
+   catch the light. Driven by the .nf-shining class from JS. */
+#notch-face .nf-shine {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--nf-notch-w, 190px);
+  height: calc(var(--nf-notch-h) + 22px);
+  overflow: visible;
+  z-index: 6;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+#notch-face .nf-shine path { stroke-linecap: round; }
+#notch-face .nf-shine-core { stroke-width: 2.2; }
+#notch-face .nf-shine-glow { stroke-width: 7; opacity: 0.7; filter: blur(5px); }
+#notch-face.nf-shining .nf-shine { opacity: 1; transition: opacity 0.25s ease; }
+#notch-face.nf-shining .nf-shine path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: nfShineDraw 1.6s cubic-bezier(0.3, 0.5, 0.3, 1) forwards;
+}
+@keyframes nfShineDraw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Boot variant: the "very slow line" — same draw, twice the patience. */
+#notch-face.nf-shine-slow .nf-shine path {
+  animation-duration: 2.4s;
+}
+
+/* The coral wave (from the site reveal, verbatim): a transparent band
+   travels across the black cover, left to right, and the coral brain that is
+   ALWAYS under the glass shows through the moving gap — his true colors. */
+#notch-face.nf-coral .nf-pill::after {
+  opacity: 1;
+  background: linear-gradient(90deg, #000 0 38%, rgba(0, 0, 0, 0) 46% 54%, #000 62% 100%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  animation: nfCoralWave 0.7s cubic-bezier(0.4, 0.1, 0.4, 1) 1 both;
+}
+
+@keyframes nfCoralWave {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+
+#notch-face.nf-coral .nf-folds { opacity: 1; }
+
+/* The wink (site reveal, verbatim): right eye dips closed for a beat while
+   the left stays open. The wink IS the greeting. */
+#notch-face.nf-wink #nf-eye-r {
+  animation: nfWink 0.6s ease-in-out 1;
+}
+
+@keyframes nfWink {
+  0%, 100% { transform: scaleY(1); }
+  35%, 65% { transform: scaleY(0.08); }
+}
+
+/* Cowork mode armed: steady amber dot — a third state, deliberately distinct
+   from bright-coral-pulsing (live cloud session) and dim-gray (wake word
+   armed on-device). He is watching the screen on an interval, not the mic. */
+#notch-face.cowork:not(.mic-live) .nf-privacy {
+  opacity: 0.85;
+  background: #F3C56B;
+  box-shadow: 0 0 5px rgba(243, 197, 107, 0.8);
   animation: none;
 }
 
@@ -1078,3 +1205,451 @@ body {
 /* Notch recording pill: a red dot + timer live in the notch ticker while a
    meeting records, so you can glance up and see it — and stop from there. */
 #notch-face.recording .nf-pill { box-shadow: 0 0 24px rgba(255, 92, 92, 0.5); }
+
+/* ══════════════════ Notch tray: the hover-expanded island ══════════════════
+   The notch is now touchable. Hover near it → the island springs open into a
+   black-glass tray: now playing with artwork + transport, calendar with Join,
+   timers, battery + headphones, quick actions, and a dropped-file shelf.
+   These rules live at the END of the file on purpose: .expanded must beat
+   every earlier state (.listen/.captioning/.busy/.music) at equal specificity. */
+
+/* The pill itself takes clicks (click = talk, scroll = volume) whenever the
+   window is interactive — the renderer only makes the window interactive when
+   the cursor is inside the notch zone, so the rest of the screen is untouched. */
+#notch-face .nf-pill { pointer-events: auto; cursor: pointer; }
+
+/* ── Second ticker slot: primary text left, compact secondary right — the
+   iPhone island's two-activity layout. .dual widens the pill a touch. ── */
+#nf-status-2 {
+  position: absolute;
+  z-index: 4;
+  right: 15px;
+  bottom: 6px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(243, 154, 66, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#nf-status-2.show { opacity: 1; }
+#notch-face.dual .nf-pill { min-width: 336px; }
+#notch-face.dual #nf-status {
+  text-align: left;
+  right: 110px;
+}
+
+/* ── Scroll-volume HUD: replaces the ticker for a beat while the wheel turns. ── */
+#notch-face .nf-volume {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 240, 235, 0.9);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+#notch-face.vol .nf-volume { opacity: 1; }
+#notch-face.vol #nf-status, #notch-face.vol #nf-status-2 { opacity: 0; }
+#notch-face .nf-vol-bar {
+  width: 88px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+#notch-face .nf-vol-bar i {
+  display: block;
+  height: 100%;
+  width: var(--nf-vol, 50%);
+  border-radius: 2px;
+  background: #fff;
+  transition: width 0.12s ease;
+}
+#notch-face .nf-vol-num {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  min-width: 20px;
+}
+
+/* ── Drag-a-file-at-him: the island opens its mouth. ── */
+#notch-face .nf-drop-hint {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 9px;
+  text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(243, 154, 66, 0.95);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+#notch-face.dropping .nf-drop-hint { opacity: 1; }
+#notch-face.dropping .nf-pill {
+  width: 360px;
+  height: calc(var(--nf-notch-h) + 62px);
+  border-radius: 0 0 26px 26px;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(243, 154, 66, 0.55),
+    0 0 34px rgba(243, 154, 66, 0.35);
+}
+
+/* ── The expanded island ── */
+#notch-face.expanded .nf-pill {
+  width: 620px;
+  height: calc(var(--nf-notch-h) + 134px);
+  border-radius: 0 0 30px 30px;
+  background: linear-gradient(180deg, #000 0%, #060505 40%, #0d0b0b 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.055),
+    0 22px 70px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(232, 120, 110, 0.14);
+}
+#notch-face.expanded.has-shelf .nf-pill {
+  height: calc(var(--nf-notch-h) + 178px);
+}
+/* Black glass stays black — no coral reveal underneath the tray. */
+#notch-face.expanded .nf-pill::after { opacity: 0; }
+/* Eyes stay up top, everything else theatric yields to the tray. */
+#notch-face.expanded .nf-mini { display: block; width: 78px; }
+#notch-face.expanded .nf-dancer,
+#notch-face.expanded .nf-viz { display: none; }
+#notch-face.expanded #nf-status,
+#notch-face.expanded #nf-status-2,
+#notch-face.expanded .nf-cap,
+#notch-face.expanded .nf-folds { opacity: 0; }
+
+#notch-face .nf-tray {
+  position: absolute;
+  z-index: 5;
+  left: 14px;
+  right: 14px;
+  top: calc(var(--nf-notch-h) + 32px);
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  opacity: 0;
+  transform: translateY(7px);
+  pointer-events: none;
+  transition: opacity 0.24s ease 0.14s, transform 0.34s cubic-bezier(0.34, 1.25, 0.4, 1) 0.1s;
+}
+#notch-face.expanded .nf-tray {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.nf-tray-main {
+  display: flex;
+  gap: 11px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Now playing card */
+.nf-np {
+  flex: 1.3;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 9px 12px;
+}
+.nf-np-art {
+  flex: none;
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  background-color: #241110;
+  background-image: linear-gradient(135deg, #2c1412, #4d201a);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 240, 235, 0.32);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.55);
+}
+.nf-np-art.has-art { background-image: var(--nf-art); }
+.nf-np-art.has-art svg { display: none; }
+.nf-np-meta { flex: 1; min-width: 0; }
+.nf-np-track {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 13.5px;
+  line-height: 1.25;
+  color: #F4E4DC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-np-artist {
+  margin-top: 2px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 235, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-np-bar {
+  margin-top: 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.11);
+  overflow: hidden;
+}
+.nf-np-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #E8786E, #F39A42);
+  transition: width 1s linear;
+  box-shadow: 0 0 calc(8px * var(--music-flash, 0)) rgba(232, 120, 110, 0.9);
+}
+.nf-np.no-bar .nf-np-bar { visibility: hidden; }
+.nf-np-ctl { flex: none; display: flex; align-items: center; gap: 2px; }
+.nf-np.no-ctl .nf-np-ctl { display: none; }
+.nf-ib {
+  width: 29px;
+  height: 29px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  color: rgba(255, 240, 235, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.08s ease;
+}
+.nf-ib svg { width: 14px; height: 14px; }
+.nf-ib:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
+.nf-ib:active { transform: scale(0.9); }
+.nf-play {
+  width: 33px;
+  height: 33px;
+  background: rgba(232, 120, 110, 0.16);
+  color: #F4A79E;
+}
+.nf-play:hover { background: rgba(232, 120, 110, 0.3); color: #fff; }
+.nf-play svg { width: 16px; height: 16px; }
+.nf-play .nf-ic-pause { display: none; }
+.nf-np.playing .nf-play .nf-ic-play { display: none; }
+.nf-np.playing .nf-play .nf-ic-pause { display: block; }
+
+/* Right column: calendar, timers, system line */
+.nf-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.nf-cal {
+  position: relative;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 8px 11px;
+  padding-right: 86px;
+}
+.nf-cal-when {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(243, 154, 66, 0.8);
+}
+.nf-cal-title {
+  margin-top: 2px;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 12px;
+  color: #F4E4DC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-join {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #54DE8A, #2FA45C);
+  color: #06130a;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.08s ease;
+}
+.nf-join:hover { filter: brightness(1.12); }
+.nf-join:active { transform: translateY(-50%) scale(0.94); }
+.nf-timerlist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  color: rgba(255, 240, 235, 0.75);
+}
+.nf-timerlist .nf-timer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 3px;
+}
+.nf-timer-row .t-count { color: #F4A79E; margin-left: auto; }
+.nf-timer-row button {
+  border: none;
+  background: none;
+  color: rgba(255, 240, 235, 0.4);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.nf-timer-row button:hover { color: #FF6B61; }
+.nf-sys {
+  display: flex;
+  gap: 14px;
+  padding: 0 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 240, 235, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.nf-sys .charging { color: #54DE8A; }
+.nf-sys .low { color: #FF6B61; }
+
+/* Dropped-file shelf */
+.nf-shelf {
+  display: flex;
+  gap: 7px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nf-chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(232, 120, 110, 0.09);
+  border: 1px solid rgba(232, 120, 110, 0.26);
+  border-radius: 11px;
+  padding: 5px 8px;
+}
+.nf-chip .c-name {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  color: #F4E4DC;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-chip button {
+  border: none;
+  background: none;
+  padding: 1px 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 235, 0.5);
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+.nf-chip button:hover { color: #fff; }
+.nf-chip button.c-x:hover { color: #FF6B61; }
+
+/* No physical notch (external display / older Mac): float as a full pill
+   instead of pretending to hug a housing that is not there. */
+#notch-face.no-notch .nf-pill { border-radius: 16px; }
+#notch-face.no-notch.expanded .nf-pill { border-radius: 26px; }
+#notch-face.no-notch.dropping .nf-pill { border-radius: 22px; }
+
+/* Click feedback: the island dips for a beat so a tap FEELS like a tap.
+   Keyframe on purpose — a transform transition here would override the
+   pill's width/height transition list. */
+#notch-face .nf-pill { transform-origin: top center; }
+#notch-face.nf-press .nf-pill { animation: nfPress 0.17s ease; }
+@keyframes nfPress {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(0.96); }
+}
+
+/* ══ Time suite: alarm ring state + tray time rows ══ */
+/* Ringing alarm: the island swells and pulses amber until tapped. */
+#notch-face.alarming .nf-pill {
+  width: 340px;
+  height: calc(var(--nf-notch-h) + 40px);
+  border-radius: 0 0 24px 24px;
+  animation: nfAlarmPulse 1.1s ease-in-out infinite;
+}
+@keyframes nfAlarmPulse {
+  0%, 100% { box-shadow: 0 0 16px rgba(255, 170, 60, 0.35), 0 0 40px rgba(255, 120, 60, 0.15); }
+  50% { box-shadow: 0 0 38px rgba(255, 170, 60, 0.85), 0 0 80px rgba(255, 120, 60, 0.4); }
+}
+#notch-face.alarming #nf-status { color: #FFC46B; }
+
+/* Tray time rows: kind glyph · label · right-aligned clock/countdown · controls */
+.nf-timer-row .t-kind { flex: none; font-size: 10px; }
+.nf-timer-row .t-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nf-timer-row .t-sw {
+  border: none;
+  background: none;
+  color: rgba(255, 240, 235, 0.55);
+  font-size: 9px;
+  cursor: pointer;
+  padding: 0 3px;
+}
+.nf-timer-row .t-sw:hover { color: #fff; }
+.nf-timer-row .t-x {
+  border: none;
+  background: none;
+  color: rgba(255, 240, 235, 0.4);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.nf-timer-row .t-x:hover { color: #FF6B61; }
+
+/* Voice Commands: while a mode runs, the notch wears that mode's color — a soft
+   halo around the pill, no reboot, just the tint for as long as the mode is on. */
+#notch-face.nf-voice-mode .nf-pill {
+  box-shadow:
+    0 0 0 1.5px var(--nf-mode-color, #0A84FF),
+    0 0 26px -2px var(--nf-mode-color, #0A84FF);
+  transition: box-shadow 0.5s ease;
+}

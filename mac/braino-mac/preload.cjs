@@ -39,6 +39,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:task-progress", handler);
     return () => ipcRenderer.removeListener("braino-mac:task-progress", handler);
   },
+  onVoiceMode: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:voice-mode", handler);
+    return () => ipcRenderer.removeListener("braino-mac:voice-mode", handler);
+  },
   onSpeechTranscript: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:speech-transcript", handler);
@@ -185,6 +190,18 @@ contextBridge.exposeInMainWorld("brainoMac", {
   },
   // ── Notch tray ──
   mediaControl: (payload) => ipcRenderer.invoke("braino-mac:media-control", payload),
+  timerCancel: (payload) => ipcRenderer.invoke("braino-mac:timer-cancel", payload),
+  stopwatchControl: (payload) => ipcRenderer.invoke("braino-mac:stopwatch-control", payload),
+  onStopwatch: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:stopwatch", handler);
+    return () => ipcRenderer.removeListener("braino-mac:stopwatch", handler);
+  },
+  onAlarmDismiss: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:alarm-dismiss", handler);
+    return () => ipcRenderer.removeListener("braino-mac:alarm-dismiss", handler);
+  },
   musicDuck: (payload) => ipcRenderer.invoke("braino-mac:music-duck", payload),
   systemVolume: (payload) => ipcRenderer.invoke("braino-mac:system-volume", payload),
   calendarJoin: () => ipcRenderer.invoke("braino-mac:calendar-join"),

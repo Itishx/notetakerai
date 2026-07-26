@@ -105,6 +105,32 @@ type BrainoMemory = {
   created_at: string;
 };
 
+type VoiceCommandUrl = {
+  id: string;
+  command_id: string;
+  url: string;
+  position: number;
+};
+
+type VoiceCommand = {
+  id: string;
+  mode_id: string;
+  phrase: string;
+  open_mode: "tab" | "incognito";
+  position: number;
+  urls: VoiceCommandUrl[];
+};
+
+type VoiceMode = {
+  id: string;
+  name: string;
+  notch_color: string;
+  is_active: boolean;
+  is_hidden: boolean;
+  position: number;
+  commands: VoiceCommand[];
+};
+
 type BrainoContactDraft = {
   id: string | null;
   name: string;
@@ -241,7 +267,7 @@ type XSessionSortKey =
   | "replies_received"
   | "total_views";
 
-type DashboardTab = "overview" | "notes" | "tasks" | "xAutomation" | "settings" | "memory" | "highlights";
+type DashboardTab = "overview" | "notes" | "tasks" | "xAutomation" | "settings" | "memory" | "highlights" | "voiceCommands";
 type NoteView = "list" | "grid";
 
 type ActivityPoint = {
@@ -262,6 +288,7 @@ function dashboardTabLabel(tab: DashboardTab) {
   if (tab === "tasks") return "Agent Tasks";
   if (tab === "xAutomation") return "X Automation";
   if (tab === "highlights") return "Highlights";
+  if (tab === "voiceCommands") return "Voice Commands";
   return tab.charAt(0).toUpperCase() + tab.slice(1);
 }
 
@@ -986,6 +1013,215 @@ function SidebarItem({
   );
 }
 
+function VoiceModeCard({
+  mode,
+  draggable,
+  onDragStart,
+  onDragEnd,
+  onRename,
+  onColorChange,
+  onDelete,
+  onHide,
+  hideLabel = "Hide",
+  onDeleteCommand,
+  onToggleOpenMode,
+  onAddUrl,
+  onDeleteUrl,
+  draft,
+  onDraftChange,
+  onAddCommand,
+}: {
+  mode: VoiceMode;
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onRename: (name: string) => void;
+  onColorChange: (color: string) => void;
+  onDelete: () => void;
+  onHide: () => void;
+  hideLabel?: string;
+  onDeleteCommand: (commandId: string) => void;
+  onToggleOpenMode: (commandId: string, openMode: "tab" | "incognito") => void;
+  onAddUrl: (commandId: string, url: string) => void;
+  onDeleteUrl: (commandId: string, urlId: string) => void;
+  draft: { phrase: string; url: string; openMode: "tab" | "incognito" };
+  onDraftChange: (draft: { phrase: string; url: string; openMode: "tab" | "incognito" }) => void;
+  onAddCommand: () => void;
+}) {
+  const [nameDraft, setNameDraft] = useState(mode.name);
+  const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
+
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-5"
+    >
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="cursor-grab select-none text-[var(--sb-ink-4)]" title="Drag to move">
+            ⠿
+          </span>
+          <span
+            className="h-3.5 w-3.5 flex-shrink-0 rounded-full border border-black/10"
+            style={{ backgroundColor: mode.notch_color }}
+          />
+          <input
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            onBlur={() => {
+              if (nameDraft.trim() && nameDraft !== mode.name) onRename(nameDraft.trim());
+            }}
+            style={serifStyle}
+            className="min-w-0 max-w-[220px] border-none bg-transparent text-[20px] leading-none tracking-[-0.02em] text-[var(--sb-ink)] outline-none"
+          />
+          {mode.is_active ? (
+            <Badge className="rounded-full border-none bg-[var(--sb-accent)] px-2.5 py-0.5 text-[9.5px] uppercase tracking-[0.08em] text-white">
+              Active
+            </Badge>
+          ) : null}
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[11px] text-[var(--sb-ink-3)]">
+            Notch color
+            <input
+              type="color"
+              value={mode.notch_color}
+              onChange={(event) => onColorChange(event.target.value)}
+              className="h-6 w-8 cursor-pointer rounded border border-[var(--sb-line)] bg-transparent p-0"
+            />
+          </label>
+          <Button type="button" variant="ghost" onClick={onHide} className="h-7 rounded-lg px-2 text-[11px] text-[var(--sb-ink-3)] hover:bg-[var(--sb-bg-2)]">
+            {hideLabel}
+          </Button>
+          <button type="button" onClick={onDelete} className="rounded-md p-1 text-[var(--sb-ink-4)] transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)]">
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {mode.commands.length === 0 ? (
+          <div className="rounded-[12px] border border-dashed border-[var(--sb-line-2)] px-4 py-3 text-[12.5px] text-[var(--sb-ink-4)]">
+            No commands in this mode yet.
+          </div>
+        ) : (
+          mode.commands.map((command) => (
+            <div key={command.id} className="group rounded-[12px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[13.5px] text-[var(--sb-ink)]">"{command.phrase}"</div>
+                <div className="flex items-center gap-2">
+                  <div className="flex overflow-hidden rounded-full border border-[var(--sb-line)]">
+                    <button
+                      type="button"
+                      onClick={() => onToggleOpenMode(command.id, "tab")}
+                      className={cn(
+                        "px-2.5 py-1 text-[10.5px]",
+                        command.open_mode === "tab" ? "bg-[var(--sb-ink)] text-[var(--sb-on-ink)]" : "bg-[var(--sb-panel)] text-[var(--sb-ink-3)]",
+                      )}
+                    >
+                      Tab
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onToggleOpenMode(command.id, "incognito")}
+                      className={cn(
+                        "px-2.5 py-1 text-[10.5px]",
+                        command.open_mode === "incognito" ? "bg-[var(--sb-ink)] text-[var(--sb-on-ink)]" : "bg-[var(--sb-panel)] text-[var(--sb-ink-3)]",
+                      )}
+                    >
+                      Incognito
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteCommand(command.id)}
+                    className="rounded-md p-1 text-[var(--sb-ink-4)] opacity-0 transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)] group-hover:opacity-100"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-2 space-y-1">
+                {command.urls.map((u) => (
+                  <div key={u.id} className="flex items-center justify-between gap-2 text-[12px] text-[var(--sb-ink-3)]">
+                    <span className="truncate">{u.url}</span>
+                    <button type="button" onClick={() => onDeleteUrl(command.id, u.id)} className="flex-shrink-0 text-[var(--sb-ink-4)] hover:text-[var(--sb-ink-2)]">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                {command.urls.length > 1 ? (
+                  <div style={monoStyle} className="text-[9.5px] uppercase tracking-[0.08em] text-[var(--sb-ink-4)]">
+                    Opens a random 1-{command.urls.length} of these each time
+                  </div>
+                ) : null}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <input
+                    value={urlDrafts[command.id] || ""}
+                    onChange={(event) => setUrlDrafts((prev) => ({ ...prev, [command.id]: event.target.value }))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        onAddUrl(command.id, urlDrafts[command.id] || "");
+                        setUrlDrafts((prev) => ({ ...prev, [command.id]: "" }));
+                      }
+                    }}
+                    placeholder="Add another URL for this command…"
+                    className="h-7 flex-1 rounded-md border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-2 text-[11.5px] text-[var(--sb-ink)] outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAddUrl(command.id, urlDrafts[command.id] || "");
+                      setUrlDrafts((prev) => ({ ...prev, [command.id]: "" }));
+                    }}
+                    className="h-7 flex-shrink-0 rounded-md border border-[var(--sb-line)] px-2 text-[11px] text-[var(--sb-ink-3)] hover:bg-[var(--sb-bg-2)]"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+
+        <div className="flex flex-wrap items-center gap-1.5 rounded-[12px] border border-dashed border-[var(--sb-line-2)] px-3 py-2.5">
+          <input
+            value={draft.phrase}
+            onChange={(event) => onDraftChange({ ...draft, phrase: event.target.value })}
+            placeholder='Phrase, e.g. "open my inbox"'
+            className="h-8 min-w-[160px] flex-1 rounded-md border border-[var(--sb-line)] bg-[var(--sb-panel)] px-2 text-[12px] text-[var(--sb-ink)] outline-none"
+          />
+          <input
+            value={draft.url}
+            onChange={(event) => onDraftChange({ ...draft, url: event.target.value })}
+            placeholder="https://…"
+            className="h-8 min-w-[160px] flex-1 rounded-md border border-[var(--sb-line)] bg-[var(--sb-panel)] px-2 text-[12px] text-[var(--sb-ink)] outline-none"
+          />
+          <select
+            value={draft.openMode}
+            onChange={(event) => onDraftChange({ ...draft, openMode: event.target.value as "tab" | "incognito" })}
+            className="h-8 rounded-md border border-[var(--sb-line)] bg-[var(--sb-panel)] px-2 text-[12px] text-[var(--sb-ink)]"
+          >
+            <option value="tab">Tab</option>
+            <option value="incognito">Incognito</option>
+          </select>
+          <Button
+            type="button"
+            onClick={onAddCommand}
+            disabled={!draft.phrase.trim() || !draft.url.trim()}
+            className="h-8 rounded-md bg-[var(--sb-accent)] px-3 text-[12px] text-white hover:bg-[var(--sb-accent-deep)]"
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add command
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MemoryAddForm({ userId, onAdded }: { userId: string; onAdded: (note: Note) => void }) {
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1116,6 +1352,14 @@ export default function Dashboard() {
   const [swearingEnabled, setSwearingEnabled] = useState(false);
   const [swearingSaving, setSwearingSaving] = useState(false);
   const [memoryToggleSaving, setMemoryToggleSaving] = useState(false);
+  // Voice Commands: modes (with notch color) each holding phrase -> URL(s) shortcuts.
+  const [voiceModes, setVoiceModes] = useState<VoiceMode[]>([]);
+  const [newModeName, setNewModeName] = useState("");
+  const [hiddenFolderUnlocked, setHiddenFolderUnlocked] = useState(false);
+  const [hiddenFolderUnlocking, setHiddenFolderUnlocking] = useState(false);
+  const [draggedModeId, setDraggedModeId] = useState<string | null>(null);
+  const [newCommandDraft, setNewCommandDraft] = useState<Record<string, { phrase: string; url: string; openMode: "tab" | "incognito" }>>({});
+  const [hiddenModesCredentialId, setHiddenModesCredentialId] = useState<string | null>(null);
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
   const [editingMemoryDraft, setEditingMemoryDraft] = useState("");
   const [contactDraft, setContactDraft] = useState<BrainoContactDraft>(emptyContactDraft());
@@ -1412,7 +1656,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, driveRes, calendarRes, contactsRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes, brainoMemoriesRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, calendarRes, contactsRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes, brainoMemoriesRes, voiceModesRes, voiceCommandsRes, voiceCommandUrlsRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -1444,7 +1688,7 @@ export default function Dashboard() {
           .maybeSingle(),
         supabase
           .from("profiles")
-          .select("overall_memory,memory_enabled,personality_settings")
+          .select("overall_memory,memory_enabled,personality_settings,hidden_modes_credential_id")
           .eq("user_id", user.id)
           .maybeSingle(),
         (supabase as any)
@@ -1484,6 +1728,20 @@ export default function Dashboard() {
           .order("salience", { ascending: false })
           .order("created_at", { ascending: false })
           .limit(300),
+        (supabase as any)
+          .from("voice_modes")
+          .select("id,name,notch_color,is_active,is_hidden,position")
+          .eq("user_id", user.id)
+          .order("position", { ascending: true }),
+        (supabase as any)
+          .from("voice_commands")
+          .select("id,mode_id,phrase,open_mode,position")
+          .eq("user_id", user.id)
+          .order("position", { ascending: true }),
+        (supabase as any)
+          .from("voice_command_urls")
+          .select("id,command_id,url,position")
+          .order("position", { ascending: true }),
       ]);
 
       if (notesRes.data) setNotes(notesRes.data as Note[]);
@@ -1497,6 +1755,27 @@ export default function Dashboard() {
       setOverallMemory(loadedOverallMemory);
       setOverallMemoryDraft(loadedOverallMemory);
       setBrainoMemories(((brainoMemoriesRes?.data as BrainoMemory[] | null) || []));
+      {
+        const rawModes = ((voiceModesRes?.data as Omit<VoiceMode, "commands">[] | null) || []);
+        const rawCommands = ((voiceCommandsRes?.data as Omit<VoiceCommand, "urls">[] | null) || []);
+        const rawUrls = ((voiceCommandUrlsRes?.data as VoiceCommandUrl[] | null) || []);
+        const urlsByCommand = new Map<string, VoiceCommandUrl[]>();
+        for (const u of rawUrls) {
+          const list = urlsByCommand.get(u.command_id) || [];
+          list.push(u);
+          urlsByCommand.set(u.command_id, list);
+        }
+        const commandsByMode = new Map<string, VoiceCommand[]>();
+        for (const c of rawCommands) {
+          const list = commandsByMode.get(c.mode_id) || [];
+          list.push({ ...c, urls: urlsByCommand.get(c.id) || [] });
+          commandsByMode.set(c.mode_id, list);
+        }
+        setVoiceModes(rawModes.map((m) => ({ ...m, commands: commandsByMode.get(m.id) || [] })));
+      }
+      setHiddenModesCredentialId(
+        (profileMemoryRes.data as { hidden_modes_credential_id?: string | null } | null)?.hidden_modes_credential_id || null,
+      );
       setMemoryEnabled((profileMemoryRes.data as { memory_enabled?: boolean } | null)?.memory_enabled !== false);
       setSwearingEnabled(((profileMemoryRes.data as { personality_settings?: { swearing?: boolean } } | null)?.personality_settings?.swearing) === true);
       setXConn((xConnRes as XConnection) || null);
@@ -2703,6 +2982,187 @@ export default function Dashboard() {
     await supabase.from("braino_memories").update({ content: next, source: "user", updated_at: new Date().toISOString() }).eq("id", id);
   };
 
+  // Voice Commands — create a new mode ("group"). Position = end of list.
+  const handleCreateVoiceMode = async () => {
+    if (!user) return;
+    const name = newModeName.trim();
+    if (!name) return;
+    setNewModeName("");
+    const position = voiceModes.length;
+    const { data, error } = await (supabase as any)
+      .from("voice_modes")
+      .insert({ user_id: user.id, name, position })
+      .select("id,name,notch_color,is_active,is_hidden,position")
+      .single();
+    if (error || !data) {
+      toast({ title: "Could not create mode", description: error?.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+    setVoiceModes((prev) => [...prev, { ...(data as Omit<VoiceMode, "commands">), commands: [] }]);
+  };
+
+  // Voice Commands — rename a mode inline.
+  const handleRenameVoiceMode = async (modeId: string, name: string) => {
+    setVoiceModes((prev) => prev.map((m) => (m.id === modeId ? { ...m, name } : m)));
+    await (supabase as any).from("voice_modes").update({ name, updated_at: new Date().toISOString() }).eq("id", modeId);
+  };
+
+  // Voice Commands — change a mode's notch boot-up color.
+  const handleChangeModeColor = async (modeId: string, notch_color: string) => {
+    setVoiceModes((prev) => prev.map((m) => (m.id === modeId ? { ...m, notch_color } : m)));
+    await (supabase as any).from("voice_modes").update({ notch_color, updated_at: new Date().toISOString() }).eq("id", modeId);
+  };
+
+  // Voice Commands — move a mode in/out of the hidden folder.
+  const handleToggleModeHidden = async (modeId: string, is_hidden: boolean) => {
+    setVoiceModes((prev) => prev.map((m) => (m.id === modeId ? { ...m, is_hidden } : m)));
+    await (supabase as any).from("voice_modes").update({ is_hidden, updated_at: new Date().toISOString() }).eq("id", modeId);
+  };
+
+  // Voice Commands — delete a mode (cascades to its commands + urls).
+  const handleDeleteVoiceMode = async (modeId: string) => {
+    setVoiceModes((prev) => prev.filter((m) => m.id !== modeId));
+    await (supabase as any).from("voice_modes").delete().eq("id", modeId);
+  };
+
+  // Voice Commands — add a command (phrase + first URL) to a mode.
+  const handleAddVoiceCommand = async (modeId: string) => {
+    if (!user) return;
+    const draft = newCommandDraft[modeId];
+    const phrase = draft?.phrase?.trim();
+    const url = draft?.url?.trim();
+    if (!phrase || !url) return;
+    const mode = voiceModes.find((m) => m.id === modeId);
+    const position = mode?.commands.length || 0;
+    const { data: cmdData, error: cmdError } = await (supabase as any)
+      .from("voice_commands")
+      .insert({ user_id: user.id, mode_id: modeId, phrase, open_mode: draft.openMode || "tab", position })
+      .select("id,mode_id,phrase,open_mode,position")
+      .single();
+    if (cmdError || !cmdData) {
+      toast({ title: "Could not add command", description: cmdError?.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+    const { data: urlData } = await (supabase as any)
+      .from("voice_command_urls")
+      .insert({ command_id: cmdData.id, url, position: 0 })
+      .select("id,command_id,url,position")
+      .single();
+    setNewCommandDraft((prev) => ({ ...prev, [modeId]: { phrase: "", url: "", openMode: "tab" } }));
+    setVoiceModes((prev) =>
+      prev.map((m) =>
+        m.id === modeId
+          ? { ...m, commands: [...m.commands, { ...(cmdData as Omit<VoiceCommand, "urls">), urls: urlData ? [urlData as VoiceCommandUrl] : [] }] }
+          : m,
+      ),
+    );
+  };
+
+  // Voice Commands — delete a command entirely.
+  const handleDeleteVoiceCommand = async (modeId: string, commandId: string) => {
+    setVoiceModes((prev) => prev.map((m) => (m.id === modeId ? { ...m, commands: m.commands.filter((c) => c.id !== commandId) } : m)));
+    await (supabase as any).from("voice_commands").delete().eq("id", commandId);
+  };
+
+  // Voice Commands — toggle a command's tab / incognito open mode.
+  const handleToggleCommandOpenMode = async (modeId: string, commandId: string, open_mode: "tab" | "incognito") => {
+    setVoiceModes((prev) =>
+      prev.map((m) => (m.id === modeId ? { ...m, commands: m.commands.map((c) => (c.id === commandId ? { ...c, open_mode } : c)) } : m)),
+    );
+    await (supabase as any).from("voice_commands").update({ open_mode, updated_at: new Date().toISOString() }).eq("id", commandId);
+  };
+
+  // Voice Commands — add another URL to a command; Braino opens a random subset (1..N) of these on trigger.
+  const handleAddCommandUrl = async (modeId: string, commandId: string, url: string) => {
+    const clean = url.trim();
+    if (!clean) return;
+    const mode = voiceModes.find((m) => m.id === modeId);
+    const command = mode?.commands.find((c) => c.id === commandId);
+    const position = command?.urls.length || 0;
+    const { data, error } = await (supabase as any)
+      .from("voice_command_urls")
+      .insert({ command_id: commandId, url: clean, position })
+      .select("id,command_id,url,position")
+      .single();
+    if (error || !data) return;
+    setVoiceModes((prev) =>
+      prev.map((m) =>
+        m.id === modeId
+          ? { ...m, commands: m.commands.map((c) => (c.id === commandId ? { ...c, urls: [...c.urls, data as VoiceCommandUrl] } : c)) }
+          : m,
+      ),
+    );
+  };
+
+  // Voice Commands — remove one URL from a command.
+  const handleDeleteCommandUrl = async (modeId: string, commandId: string, urlId: string) => {
+    setVoiceModes((prev) =>
+      prev.map((m) =>
+        m.id === modeId
+          ? { ...m, commands: m.commands.map((c) => (c.id === commandId ? { ...c, urls: c.urls.filter((u) => u.id !== urlId) } : c)) }
+          : m,
+      ),
+    );
+    await (supabase as any).from("voice_command_urls").delete().eq("id", urlId);
+  };
+
+  // Voice Commands — register this device's fingerprint/biometric as the hidden-folder key.
+  const handleRegisterHiddenModesFingerprint = async () => {
+    if (!user) return;
+    if (!window.PublicKeyCredential) {
+      toast({ title: "Not supported", description: "This browser/device doesn't support fingerprint unlock.", variant: "destructive" });
+      return;
+    }
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const userIdBytes = new TextEncoder().encode(user.id);
+      const credential = (await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: "Braino", id: window.location.hostname },
+          user: { id: userIdBytes, name: user.email || "braino-user", displayName: displayName || "Braino user" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+          timeout: 60000,
+        },
+      })) as PublicKeyCredential | null;
+      if (!credential) throw new Error("No credential returned");
+      const credentialId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      await supabase.from("profiles").update({ hidden_modes_credential_id: credentialId }).eq("user_id", user.id);
+      setHiddenModesCredentialId(credentialId);
+      setHiddenFolderUnlocked(true);
+      toast({ title: "Fingerprint set", description: "This device can now unlock your hidden modes." });
+    } catch (err) {
+      toast({ title: "Could not register fingerprint", description: (err as Error)?.message || "Please try again.", variant: "destructive" });
+    }
+  };
+
+  // Voice Commands — prompt the registered fingerprint/biometric to unlock the hidden folder for this session.
+  const handleUnlockHiddenFolder = async () => {
+    if (!hiddenModesCredentialId) return;
+    setHiddenFolderUnlocking(true);
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const padded = hiddenModesCredentialId.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((hiddenModesCredentialId.length + 3) % 4);
+      const rawId = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname,
+          allowCredentials: [{ id: rawId, type: "public-key" }],
+          userVerification: "required",
+          timeout: 60000,
+        },
+      });
+      if (!assertion) throw new Error("No assertion returned");
+      setHiddenFolderUnlocked(true);
+    } catch (err) {
+      toast({ title: "Unlock failed", description: (err as Error)?.message || "Fingerprint didn't match.", variant: "destructive" });
+    } finally {
+      setHiddenFolderUnlocking(false);
+    }
+  };
+
   const handleToggleAutoMode = async (field: "auto_posting_enabled" | "auto_reply_enabled", value: boolean) => {
     if (!user) return;
     setXAutoToggling(field === "auto_posting_enabled" ? "posting" : "reply");
@@ -3013,6 +3473,20 @@ export default function Dashboard() {
                 highlights.length > 0 ? (
                   <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "highlights" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
                     {highlights.length}
+                  </span>
+                ) : undefined
+              }
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              label="Voice Commands"
+              active={activeTab === "voiceCommands"}
+              onClick={() => setActiveTab("voiceCommands")}
+              icon={<Zap className="h-3.5 w-3.5" />}
+              badge={
+                voiceModes.length > 0 ? (
+                  <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "voiceCommands" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
+                    {voiceModes.length}
                   </span>
                 ) : undefined
               }
@@ -5904,6 +6378,193 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === "voiceCommands" && (
+              <div>
+                <div className="mb-6">
+                  <h2 style={serifStyle} className="text-[28px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
+                    Voice Commands
+                  </h2>
+                  <p className="mt-1.5 max-w-[620px] text-[13.5px] text-[var(--sb-ink-2)]">
+                    Group your shortcuts into modes. Say "Braino, start &lt;mode&gt;" to activate one — its commands go live and Braino's
+                    notch takes on its color. Say "Braino, stop &lt;mode&gt;" to switch it off. Each command opens the URL you configure
+                    directly, no searching, no thinking — and if you attach more than one URL, Braino opens a random subset of them each time.
+                  </p>
+                </div>
+
+                <div className="mb-5 flex items-center gap-2">
+                  <Input
+                    value={newModeName}
+                    onChange={(event) => setNewModeName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") handleCreateVoiceMode();
+                    }}
+                    placeholder="New mode name, e.g. Work"
+                    className="h-10 max-w-xs rounded-xl border-[var(--sb-line)] bg-[var(--sb-panel)] text-sm"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleCreateVoiceMode}
+                    disabled={!newModeName.trim()}
+                    className="h-10 rounded-xl bg-[var(--sb-accent)] px-4 text-[13px] text-white hover:bg-[var(--sb-accent-deep)]"
+                  >
+                    <Plus className="mr-1 h-4 w-4" /> New mode
+                  </Button>
+                </div>
+
+                {dataLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-24 rounded-[18px] bg-[var(--sb-bg-2)]" />
+                    ))}
+                  </div>
+                ) : (
+                  <div
+                    className="space-y-4"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (draggedModeId) handleToggleModeHidden(draggedModeId, false);
+                      setDraggedModeId(null);
+                    }}
+                  >
+                    {voiceModes.filter((m) => !m.is_hidden).length === 0 ? (
+                      <div className="flex flex-col items-center gap-3 rounded-[16px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-6 py-12 text-center">
+                        <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--sb-accent-soft)]">
+                          <Zap className="h-5 w-5 text-[var(--sb-accent-deep)]" />
+                        </div>
+                        <div>
+                          <div className="mb-1 text-sm font-medium text-[var(--sb-ink)]">No modes yet</div>
+                          <div className="max-w-[380px] text-[13px] text-[var(--sb-ink-3)]">
+                            Create a mode above, then add "say this, open that" commands to it.
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      voiceModes
+                        .filter((m) => !m.is_hidden)
+                        .map((mode) => (
+                          <VoiceModeCard
+                            key={mode.id}
+                            mode={mode}
+                            draggable
+                            onDragStart={() => setDraggedModeId(mode.id)}
+                            onDragEnd={() => setDraggedModeId(null)}
+                            onRename={(name) => handleRenameVoiceMode(mode.id, name)}
+                            onColorChange={(color) => handleChangeModeColor(mode.id, color)}
+                            onDelete={() => handleDeleteVoiceMode(mode.id)}
+                            onHide={() => handleToggleModeHidden(mode.id, true)}
+                            onDeleteCommand={(commandId) => handleDeleteVoiceCommand(mode.id, commandId)}
+                            onToggleOpenMode={(commandId, openMode) => handleToggleCommandOpenMode(mode.id, commandId, openMode)}
+                            onAddUrl={(commandId, url) => handleAddCommandUrl(mode.id, commandId, url)}
+                            onDeleteUrl={(commandId, urlId) => handleDeleteCommandUrl(mode.id, commandId, urlId)}
+                            draft={newCommandDraft[mode.id] || { phrase: "", url: "", openMode: "tab" }}
+                            onDraftChange={(draft) => setNewCommandDraft((prev) => ({ ...prev, [mode.id]: draft }))}
+                            onAddCommand={() => handleAddVoiceCommand(mode.id)}
+                          />
+                        ))
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-8">
+                  <div
+                    className={cn(
+                      "rounded-[18px] border border-dashed p-5 transition",
+                      draggedModeId
+                        ? "border-[var(--sb-accent)] bg-[var(--sb-accent-soft)]"
+                        : "border-[var(--sb-line-2)] bg-[var(--sb-panel-2)]",
+                    )}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (draggedModeId) handleToggleModeHidden(draggedModeId, true);
+                      setDraggedModeId(null);
+                    }}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <FolderOpen className="h-4 w-4 text-[var(--sb-ink-3)]" />
+                        <h3 style={serifStyle} className="text-[19px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
+                          Hidden modes
+                        </h3>
+                        <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-2.5 py-0.5 text-[9.5px] text-[var(--sb-ink-3)]">
+                          {voiceModes.filter((m) => m.is_hidden).length}
+                        </Badge>
+                      </div>
+                      {!hiddenModesCredentialId ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleRegisterHiddenModesFingerprint}
+                          className="h-8 rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 text-[12px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                        >
+                          Set up fingerprint unlock
+                        </Button>
+                      ) : !hiddenFolderUnlocked ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleUnlockHiddenFolder}
+                          disabled={hiddenFolderUnlocking}
+                          className="h-8 rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 text-[12px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                        >
+                          {hiddenFolderUnlocking ? "Waiting for fingerprint…" : "Unlock with fingerprint"}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setHiddenFolderUnlocked(false)}
+                          className="h-8 rounded-full px-3 text-[12px] text-[var(--sb-ink-3)] hover:bg-[var(--sb-bg-2)]"
+                        >
+                          Lock
+                        </Button>
+                      )}
+                    </div>
+
+                    <p className="mb-3 text-[12.5px] text-[var(--sb-ink-3)]">
+                      Drag a mode here to hide it from the list above. Reopening this folder requires your fingerprint / device
+                      biometric — visibility only, voice activation still works normally.
+                    </p>
+
+                    {!hiddenFolderUnlocked ? (
+                      <div className="rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-6 text-center text-[12.5px] text-[var(--sb-ink-4)]">
+                        {voiceModes.filter((m) => m.is_hidden).length} mode{voiceModes.filter((m) => m.is_hidden).length === 1 ? "" : "s"} locked
+                      </div>
+                    ) : voiceModes.filter((m) => m.is_hidden).length === 0 ? (
+                      <div className="rounded-[14px] border border-dashed border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-6 text-center text-[12.5px] text-[var(--sb-ink-4)]">
+                        Nothing hidden yet — drag a mode card into this folder.
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {voiceModes
+                          .filter((m) => m.is_hidden)
+                          .map((mode) => (
+                            <VoiceModeCard
+                              key={mode.id}
+                              mode={mode}
+                              draggable
+                              onDragStart={() => setDraggedModeId(mode.id)}
+                              onDragEnd={() => setDraggedModeId(null)}
+                              onRename={(name) => handleRenameVoiceMode(mode.id, name)}
+                              onColorChange={(color) => handleChangeModeColor(mode.id, color)}
+                              onDelete={() => handleDeleteVoiceMode(mode.id)}
+                              onHide={() => handleToggleModeHidden(mode.id, false)}
+                              hideLabel="Unhide"
+                              onDeleteCommand={(commandId) => handleDeleteVoiceCommand(mode.id, commandId)}
+                              onToggleOpenMode={(commandId, openMode) => handleToggleCommandOpenMode(mode.id, commandId, openMode)}
+                              onAddUrl={(commandId, url) => handleAddCommandUrl(mode.id, commandId, url)}
+                              onDeleteUrl={(commandId, urlId) => handleDeleteCommandUrl(mode.id, commandId, urlId)}
+                              draft={newCommandDraft[mode.id] || { phrase: "", url: "", openMode: "tab" }}
+                              onDraftChange={(draft) => setNewCommandDraft((prev) => ({ ...prev, [mode.id]: draft }))}
+                              onAddCommand={() => handleAddVoiceCommand(mode.id)}
+                            />
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

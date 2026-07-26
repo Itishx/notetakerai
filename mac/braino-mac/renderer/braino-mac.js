@@ -575,6 +575,9 @@ let nfXStats = null; // { followers, delta7d, at }
 // Transient system events (charger plugged, AirPods connected) briefly claim
 // a ticker slot, iPhone-island style. Set by the power/Bluetooth handlers.
 let nfTransient = { text: "", until: 0 };
+// Stopwatch mirror (main owns the state) + the currently RINGING alarm.
+let nfStopwatch = { on: false, running: false, accumMs: 0, startedAt: 0 };
+let nfAlarmRinging = null; // { label, until }
 
 function fmtCountdown(ms) {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -934,7 +937,7 @@ function updateNotchFace() {
   // Live activities, by urgency: timer → imminent calendar → unread messages
   // → now-playing. The notch carries only what persists.
   const now = Date.now();
-  const timer = nfTimers.filter((t) => t.endAt > now).sort((a, b) => a.endAt - b.endAt)[0];
+  const timer = nfTimers.filter((t) => t.endAt > now && t.kind !== "alarm").sort((a, b) => a.endAt - b.endAt)[0];
   const calImminent = nfCalendarNext
     && nfCalendarNext.startAt - now < 15 * 60 * 1000
     && nfCalendarNext.startAt > now - 60 * 1000
@@ -962,8 +965,20 @@ function updateNotchFace() {
   } else {
     if (meetingRecording) slots.push(`● REC ${fmtMeetingClock(Date.now() - meetingStartedAt)}`);
     else if (screenRecording) slots.push(`● SCREEN ${fmtMeetingClock(Date.now() - screenRecStartedAt)}`);
+    if (nfAlarmRinging && slots.length < 2) slots.push(`⏰ ${nfAlarmRinging.label} · tap to stop`);
     if (nfTransient.text && now < nfTransient.until && slots.length < 2) slots.push(nfTransient.text);
     if (timer && slots.length < 2) slots.push(`${timer.label} · ${fmtCountdown(timer.endAt - now)}`);
+    if (nfStopwatch.on && slots.length < 2) {
+      const swMs = nfStopwatch.accumMs + (nfStopwatch.running ? now - nfStopwatch.startedAt : 0);
+      slots.push(`⏱ ${fmtCountdown(swMs)}${nfStopwatch.running ? "" : " · paused"}`);
+    }
+    const alarmSoon = nfTimers
+      .filter((t) => t.kind === "alarm" && t.endAt > now && t.endAt - now < 60 * 60 * 1000)
+      .sort((a, b) => a.endAt - b.endAt)[0];
+    if (alarmSoon && slots.length < 2) {
+      const clock = new Date(alarmSoon.endAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
+      slots.push(`⏰ ${clock} · in ${Math.max(1, Math.ceil((alarmSoon.endAt - now) / 60000))}m`);
+    }
     if (calImminent && slots.length < 2) {
       const minutes = Math.max(1, Math.ceil((calImminent.startAt - now) / 60000));
       slots.push(`${calImminent.title} · in ${minutes} min`);
@@ -997,6 +1012,7 @@ function updateNotchFace() {
   const line = slots[0] || "";
   nfSetStatus2Text(slots[1] || "");
   notchFace.classList.toggle("dual", visible && slots.length > 1);
+  notchFace.classList.toggle("alarming", visible && Boolean(nfAlarmRinging));
   notchFace.classList.toggle("live", visible && live);
   notchFace.classList.toggle("music", visible && music);
   notchFace.classList.toggle("busy", visible && walkerHome && Boolean(nfThinkingText));
@@ -1039,7 +1055,7 @@ function nfSetStatus2Text(text) {
 }
 
 window.setInterval(() => {
-  if (nfTimers.length || nfCalendarNext || nfWaBadge.count || nfXStats) updateNotchFace();
+  if (nfTimers.length || nfCalendarNext || nfWaBadge.count || nfXStats || nfStopwatch.on || nfAlarmRinging) updateNotchFace();
   // Hard expiry: once both the panel window and the pulse window are done,
   // the stats object dies — nothing left to accidentally re-render forever.
   if (nfXStats && Date.now() > Math.max(nfXStats.panelUntil || 0, nfXStats.at + 90 * 1000)) {
@@ -2728,6 +2744,9 @@ function stopRecognition() {
 
 function activeMacContextLines() {
   const context = activeMacContext;
+  // He always knows the Mac's clock — "what time is it" in casual chat used
+  // to be answered blind, since only the delegate ever looked at a clock.
+  const timeLine = `Current local date and time on this Mac: ${new Date().toLocaleString([], { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })}.`;
   // Music awareness: this is ambient context for CASUAL conversation ("do you
   // hear this?", "who sings this", "turn it up") — the dedicated "what's
   // playing" voice intent already answers deterministically via Spotify
@@ -2748,10 +2767,11 @@ function activeMacContextLines() {
     ? `Other open browser tabs (not the active one): ${otherTabs.map((t) => t.title).join(" | ")}${allOpenTabs.length > otherTabs.length + 1 ? `, and more` : ""}. You can reference these if relevant, but you cannot see their contents, only titles/URLs.`
     : "";
   if (!context?.appName) {
-    return [musicLine, tabsLine, "Current Mac surface: unknown yet; answer generally unless the user asks for a concrete Mac action."].filter(Boolean);
+    return [timeLine, musicLine, tabsLine, "Current Mac surface: unknown yet; answer generally unless the user asks for a concrete Mac action."].filter(Boolean);
   }
   const title = context.browserTitle || context.windowTitle || "";
   return [
+    timeLine,
     `Current active Mac app: ${context.appName}.`,
     title ? `Current window/tab title: ${title}.` : "",
     context.browserUrl ? `Current browser URL: ${context.browserUrl}.` : "",
@@ -4430,11 +4450,23 @@ window.brainoMac.onTimers?.((payload) => {
   nfTimers = Array.isArray(payload?.timers) ? payload.timers : [];
   updateNotchFace();
 });
-window.brainoMac.onTimerFired?.(() => {
+window.brainoMac.onTimerFired?.((payload) => {
   notchFace?.classList.add("nf-flash");
   window.setTimeout(() => notchFace?.classList.remove("nf-flash"), 2600);
+  if (payload?.kind === "alarm") nfStartAlarmRing(String(payload.label || "alarm"));
   updateNotchFace();
 });
+window.brainoMac.onStopwatch?.((payload) => {
+  nfStopwatch = {
+    on: Boolean(payload?.on),
+    running: Boolean(payload?.running),
+    accumMs: Number(payload?.accumMs) || 0,
+    startedAt: Number(payload?.startedAt) || 0,
+  };
+  updateNotchFace();
+  nfRenderTimers();
+});
+window.brainoMac.onAlarmDismiss?.(() => nfStopAlarmRing("voice"));
 window.brainoMac.onCalendarNext?.((payload) => {
   nfCalendarNext = payload?.next || null;
   updateNotchFace();
@@ -4462,6 +4494,27 @@ window.brainoMac.onTaskProgress((progress) => {
     if (walkerHome && notchFaceEnabled && !herMode) nfSetThinking(progress.text);
     else setBubble(progress.text, 1200);
   }
+});
+// Voice Commands: a mode turning on/off retints the notch for as long as it runs, and flashes a
+// "<name> activated" caption that fades — no full reboot, just the color + the one beat.
+window.brainoMac.onVoiceMode((payload) => {
+  if (!notchFace) return;
+  if (payload.active) {
+    notchFace.style.setProperty("--nf-mode-color", payload.color || "#0A84FF");
+    notchFace.classList.add("nf-voice-mode");
+  } else {
+    notchFace.classList.remove("nf-voice-mode");
+    notchFace.style.removeProperty("--nf-mode-color");
+  }
+  const cap = notchFace.querySelector(".nf-cap-l");
+  if (!cap) return;
+  notchFace.classList.add("captioning");
+  cap.textContent = payload.active ? `${payload.name} activated` : `${payload.name || "Mode"} off`;
+  clearTimeout(notchFace.__nfModeCapTimer);
+  notchFace.__nfModeCapTimer = setTimeout(() => {
+    cap.textContent = "";
+    notchFace.classList.remove("captioning");
+  }, 1800);
 });
 window.brainoMac.onSpeechTranscript((speech) => {
   if (speech.status === "ready") {
@@ -4559,7 +4612,9 @@ let nfVolBusy = false;
 function nfPointInNotchZone(x, y) {
   if (!notchFace?.classList.contains("on") || herMode || !nfPill) return false;
   const rect = nfPill.getBoundingClientRect();
-  const pad = nfExpanded || nfDropDepth > 0 ? 26 : 18;
+  // Collapsed: the pill itself, nearly edge-to-edge — a padded zone was
+  // stealing clicks from Chrome tabs that sit beside/below the housing.
+  const pad = nfExpanded || nfDropDepth > 0 ? 26 : 4;
   return x >= rect.left - pad && x <= rect.right + pad && y <= rect.bottom + pad;
 }
 
@@ -4620,7 +4675,7 @@ window.brainoMac.onNotchZone?.((payload) => {
       nfExpandTimer = window.setTimeout(() => {
         nfExpandTimer = 0;
         if (nfZoneInsideMain) nfTrayExpand();
-      }, 170);
+      }, 340);
     }
   } else {
     window.clearTimeout(nfExpandTimer);
@@ -4648,6 +4703,10 @@ document.addEventListener("click", (event) => {
   if (event.target.closest(".nf-tray") || event.target.closest("button")) return;
   if (event.target.closest("#walker") || event.target.closest("#meeting-panel")) return;
   if (!nfPointInNotchZone(event.clientX, event.clientY)) return;
+  if (nfAlarmRinging) {
+    nfStopAlarmRing("tap");
+    return;
+  }
   if (nfExpanded && nfPill) {
     const rect = nfPill.getBoundingClientRect();
     const bandBottom = rect.top + (parseFloat(getComputedStyle(notchFace).getPropertyValue("--nf-notch-h")) || 33) + 34;
@@ -4784,30 +4843,127 @@ nfTrayEl?.querySelector(".nf-join")?.addEventListener("click", async () => {
   if (result?.say) void speak(result.say);
 });
 
-// ── Timers ──
+// ── Time section: alarms (clock time), timers (countdown), stopwatch row ──
 function nfRenderTimers() {
   const list = nfTrayEl?.querySelector(".nf-timerlist");
   if (!list) return;
   const now = Date.now();
-  const active = nfTimers.filter((t) => t.endAt > now).sort((a, b) => a.endAt - b.endAt).slice(0, 3);
-  list.hidden = active.length === 0;
-  list.replaceChildren(...active.map((t) => {
-    const row = document.createElement("div");
-    row.className = "nf-timer-row";
-    const label = document.createElement("span");
-    label.textContent = t.label;
-    const count = document.createElement("span");
-    count.className = "t-count";
-    count.textContent = fmtCountdown(t.endAt - now);
+  const rows = [];
+  const alarms = nfTimers.filter((t) => t.kind === "alarm" && t.endAt > now).sort((a, b) => a.endAt - b.endAt).slice(0, 3);
+  const timers = nfTimers.filter((t) => t.kind !== "alarm" && t.endAt > now).sort((a, b) => a.endAt - b.endAt).slice(0, 3);
+
+  const mkCancel = (id) => {
     const x = document.createElement("button");
-    x.title = "Clear reminders";
+    x.className = "t-x";
+    x.title = "Cancel";
     x.textContent = "✕";
     x.addEventListener("click", () => {
-      void window.brainoMac.delegate?.("cancel my reminders");
+      void window.brainoMac.timerCancel?.({ id });
     });
-    row.append(label, count, x);
+    return x;
+  };
+  const mkRow = (kindGlyph, labelText, rightText) => {
+    const row = document.createElement("div");
+    row.className = "nf-timer-row";
+    const kind = document.createElement("span");
+    kind.className = "t-kind";
+    kind.textContent = kindGlyph;
+    const label = document.createElement("span");
+    label.className = "t-label";
+    label.textContent = labelText;
+    const count = document.createElement("span");
+    count.className = "t-count";
+    count.textContent = rightText;
+    row.append(kind, label, count);
     return row;
-  }));
+  };
+
+  for (const a of alarms) {
+    const when = new Date(a.endAt);
+    const clock = when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
+    const row = mkRow("⏰", a.label === "alarm" ? clock : a.label, `${clock}${when.getDate() !== new Date().getDate() ? " ·tmrw" : ""}`);
+    row.append(mkCancel(a.id));
+    rows.push(row);
+  }
+  for (const t of timers) {
+    const row = mkRow("⏳", t.label, fmtCountdown(t.endAt - now));
+    row.append(mkCancel(t.id));
+    rows.push(row);
+  }
+  if (nfStopwatch.on) {
+    const swMs = nfStopwatch.accumMs + (nfStopwatch.running ? now - nfStopwatch.startedAt : 0);
+    const row = mkRow("⏱", nfStopwatch.running ? "stopwatch" : "stopwatch · paused", fmtCountdown(swMs));
+    const toggle = document.createElement("button");
+    toggle.className = "t-sw";
+    toggle.title = nfStopwatch.running ? "Pause" : "Resume";
+    toggle.textContent = nfStopwatch.running ? "❚❚" : "▶";
+    toggle.addEventListener("click", () => {
+      void window.brainoMac.stopwatchControl?.({ action: nfStopwatch.running ? "pause" : "resume" });
+    });
+    const reset = document.createElement("button");
+    reset.className = "t-sw";
+    reset.title = "Reset";
+    reset.textContent = "↺";
+    reset.addEventListener("click", () => {
+      void window.brainoMac.stopwatchControl?.({ action: "reset" });
+    });
+    row.append(toggle, reset);
+    rows.push(row);
+  }
+
+  list.hidden = rows.length === 0;
+  list.replaceChildren(...rows);
+}
+
+// ── Alarm ring: insistent chime + amber island until tapped/told to stop ──
+let nfAlarmRingTimer = 0;
+
+function nfPlayAlarmChime() {
+  try {
+    wakeAudioCtx = wakeAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = wakeAudioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const now = ctx.currentTime;
+    // Three quick rising notes, brighter and louder than the wake chime.
+    [{ f: 880, t: 0 }, { f: 1108.73, t: 0.14 }, { f: 1318.51, t: 0.28 }].forEach(({ f, t }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.42);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + t);
+      osc.stop(now + t + 0.46);
+    });
+  } catch (_) {}
+}
+
+function nfStartAlarmRing(label) {
+  nfAlarmRinging = { label: String(label || "alarm").slice(0, 24), until: Date.now() + 60 * 1000 };
+  logRenderer("alarm.ring.start", { label: nfAlarmRinging.label });
+  nfPlayAlarmChime();
+  window.clearInterval(nfAlarmRingTimer);
+  nfAlarmRingTimer = window.setInterval(() => {
+    if (!nfAlarmRinging || Date.now() > nfAlarmRinging.until) {
+      nfStopAlarmRing("timeout");
+      return;
+    }
+    // Don't chime over his own spoken announcement.
+    if (!speaking) nfPlayAlarmChime();
+  }, 1600);
+  updateNotchFace();
+  nfRenderTimers();
+}
+
+function nfStopAlarmRing(source) {
+  if (!nfAlarmRinging) return;
+  nfAlarmRinging = null;
+  window.clearInterval(nfAlarmRingTimer);
+  nfAlarmRingTimer = 0;
+  logRenderer("alarm.ring.stop", { source });
+  updateNotchFace();
 }
 
 // ── System line: battery + headphones ──

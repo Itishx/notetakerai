@@ -10,10 +10,59 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
+      access_grants: {
+        Row: {
+          created_at: string
+          email: string
+          granted_by: string | null
+          note: string | null
+          tier: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          granted_by?: string | null
+          note?: string | null
+          tier?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          granted_by?: string | null
+          note?: string | null
+          tier?: string
+        }
+        Relationships: []
+      }
       agent_commands: {
         Row: {
           created_at: string
@@ -44,42 +93,108 @@ export type Database = {
         }
         Relationships: []
       }
-      google_drive_connections: {
+      braino_contacts: {
         Row: {
-          access_token: string
           created_at: string
-          google_email: string | null
-          google_user_id: string | null
+          email: string | null
           id: string
-          refresh_token: string | null
-          scope: string | null
-          token_expires_at: string | null
+          name: string
+          name_key: string
+          nickname: string | null
+          nickname_key: string | null
+          phone: string | null
+          photo_url: string | null
           updated_at: string
-          user_identifier: string
+          user_id: string
         }
         Insert: {
-          access_token: string
           created_at?: string
-          google_email?: string | null
-          google_user_id?: string | null
+          email?: string | null
           id?: string
-          refresh_token?: string | null
-          scope?: string | null
-          token_expires_at?: string | null
+          name: string
+          name_key: string
+          nickname?: string | null
+          nickname_key?: string | null
+          phone?: string | null
+          photo_url?: string | null
           updated_at?: string
-          user_identifier: string
+          user_id: string
         }
         Update: {
-          access_token?: string
           created_at?: string
-          google_email?: string | null
-          google_user_id?: string | null
+          email?: string | null
           id?: string
-          refresh_token?: string | null
-          scope?: string | null
-          token_expires_at?: string | null
+          name?: string
+          name_key?: string
+          nickname?: string | null
+          nickname_key?: string | null
+          phone?: string | null
+          photo_url?: string | null
           updated_at?: string
-          user_identifier?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      braino_dev_pulse: {
+        Row: {
+          fetched_at: string
+          payload: Json
+          repo: string
+        }
+        Insert: {
+          fetched_at?: string
+          payload: Json
+          repo: string
+        }
+        Update: {
+          fetched_at?: string
+          payload?: Json
+          repo?: string
+        }
+        Relationships: []
+      }
+      braino_memories: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          dedup_key: string | null
+          id: string
+          last_used_at: string | null
+          salience: number
+          source: string
+          status: string
+          supersedes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          content: string
+          created_at?: string
+          dedup_key?: string | null
+          id?: string
+          last_used_at?: string | null
+          salience?: number
+          source?: string
+          status?: string
+          supersedes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          dedup_key?: string | null
+          id?: string
+          last_used_at?: string | null
+          salience?: number
+          source?: string
+          status?: string
+          supersedes?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -91,7 +206,7 @@ export type Database = {
           google_user_id: string | null
           id: string
           last_sync_at: string | null
-          primary_calendar_id: string | null
+          primary_calendar_id: string
           refresh_token: string | null
           scope: string | null
           sync_token: string | null
@@ -110,7 +225,7 @@ export type Database = {
           google_user_id?: string | null
           id?: string
           last_sync_at?: string | null
-          primary_calendar_id?: string | null
+          primary_calendar_id?: string
           refresh_token?: string | null
           scope?: string | null
           sync_token?: string | null
@@ -129,7 +244,7 @@ export type Database = {
           google_user_id?: string | null
           id?: string
           last_sync_at?: string | null
-          primary_calendar_id?: string | null
+          primary_calendar_id?: string
           refresh_token?: string | null
           scope?: string | null
           sync_token?: string | null
@@ -140,6 +255,75 @@ export type Database = {
           watch_expires_at?: string | null
           watch_resource_id?: string | null
           watch_token?: string | null
+        }
+        Relationships: []
+      }
+      google_calendar_reminder_announcements: {
+        Row: {
+          announced_at: string
+          created_at: string
+          event_id: string
+          event_start_at: string
+          id: string
+          reminder_key: string
+          user_identifier: string
+        }
+        Insert: {
+          announced_at?: string
+          created_at?: string
+          event_id: string
+          event_start_at: string
+          id?: string
+          reminder_key: string
+          user_identifier: string
+        }
+        Update: {
+          announced_at?: string
+          created_at?: string
+          event_id?: string
+          event_start_at?: string
+          id?: string
+          reminder_key?: string
+          user_identifier?: string
+        }
+        Relationships: []
+      }
+      google_drive_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string | null
+          google_email: string | null
+          id: string
+          refresh_token: string | null
+          scope: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_identifier: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at?: string | null
+          google_email?: string | null
+          id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string | null
+          google_email?: string | null
+          id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_identifier?: string
         }
         Relationships: []
       }
@@ -223,9 +407,12 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           display_name: string | null
+          hidden_modes_credential_id: string | null
           id: string
           is_premium: boolean
+          memory_enabled: boolean
           overall_memory: string
+          personality_settings: Json | null
           polar_customer_id: string | null
           updated_at: string
           user_id: string
@@ -234,9 +421,12 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          hidden_modes_credential_id?: string | null
           id?: string
           is_premium?: boolean
+          memory_enabled?: boolean
           overall_memory?: string
+          personality_settings?: Json | null
           polar_customer_id?: string | null
           updated_at?: string
           user_id: string
@@ -245,52 +435,13 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          hidden_modes_credential_id?: string | null
           id?: string
           is_premium?: boolean
+          memory_enabled?: boolean
           overall_memory?: string
+          personality_settings?: Json | null
           polar_customer_id?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      braino_contacts: {
-        Row: {
-          created_at: string
-          email: string | null
-          id: string
-          name: string
-          name_key: string
-          nickname: string | null
-          nickname_key: string | null
-          phone: string | null
-          photo_url: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          email?: string | null
-          id?: string
-          name: string
-          name_key: string
-          nickname?: string | null
-          nickname_key?: string | null
-          phone?: string | null
-          photo_url?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          email?: string | null
-          id?: string
-          name?: string
-          name_key?: string
-          nickname?: string | null
-          nickname_key?: string | null
-          phone?: string | null
-          photo_url?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -368,7 +519,7 @@ export type Database = {
           turn_index: number
           updated_at: string
           user_id: string
-          user_transcript: string | null
+          user_transcript: string
           voice_id: string | null
           voice_name: string | null
           voice_provider: string | null
@@ -408,7 +559,7 @@ export type Database = {
           turn_index?: number
           updated_at?: string
           user_id: string
-          user_transcript?: string | null
+          user_transcript?: string
           voice_id?: string | null
           voice_name?: string | null
           voice_provider?: string | null
@@ -448,7 +599,7 @@ export type Database = {
           turn_index?: number
           updated_at?: string
           user_id?: string
-          user_transcript?: string | null
+          user_transcript?: string
           voice_id?: string | null
           voice_name?: string | null
           voice_provider?: string | null
@@ -509,6 +660,7 @@ export type Database = {
           posted_at: string | null
           scheduled_at: string
           status: string
+          thread_mode: boolean
           updated_at: string
           user_id: string
           x_post_id: string | null
@@ -522,6 +674,7 @@ export type Database = {
           posted_at?: string | null
           scheduled_at: string
           status?: string
+          thread_mode?: boolean
           updated_at?: string
           user_id: string
           x_post_id?: string | null
@@ -535,6 +688,7 @@ export type Database = {
           posted_at?: string | null
           scheduled_at?: string
           status?: string
+          thread_mode?: boolean
           updated_at?: string
           user_id?: string
           x_post_id?: string | null
@@ -589,6 +743,63 @@ export type Database = {
         }
         Relationships: []
       }
+      team_signatures: {
+        Row: {
+          email: string
+          id: string
+          intern_id: string
+          signed_at: string
+          signed_name: string
+        }
+        Insert: {
+          email: string
+          id?: string
+          intern_id: string
+          signed_at?: string
+          signed_name: string
+        }
+        Update: {
+          email?: string
+          id?: string
+          intern_id?: string
+          signed_at?: string
+          signed_name?: string
+        }
+        Relationships: []
+      }
+      usage_counters: {
+        Row: {
+          chat_count: number
+          day: string
+          delegate_count: number
+          month: string
+          recording_seconds: number
+          updated_at: string
+          user_id: string
+          voice_seconds: number
+        }
+        Insert: {
+          chat_count?: number
+          day?: string
+          delegate_count?: number
+          month?: string
+          recording_seconds?: number
+          updated_at?: string
+          user_id: string
+          voice_seconds?: number
+        }
+        Update: {
+          chat_count?: number
+          day?: string
+          delegate_count?: number
+          month?: string
+          recording_seconds?: number
+          updated_at?: string
+          user_id?: string
+          voice_seconds?: number
+        }
+        Relationships: []
+      }
       user_watched_movies: {
         Row: {
           completed: boolean | null
@@ -628,22 +839,131 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_command_urls: {
+        Row: {
+          command_id: string
+          created_at: string
+          id: string
+          position: number
+          url: string
+        }
+        Insert: {
+          command_id: string
+          created_at?: string
+          id?: string
+          position?: number
+          url: string
+        }
+        Update: {
+          command_id?: string
+          created_at?: string
+          id?: string
+          position?: number
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_command_urls_command_id_fkey"
+            columns: ["command_id"]
+            isOneToOne: false
+            referencedRelation: "voice_commands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_commands: {
+        Row: {
+          created_at: string
+          id: string
+          mode_id: string
+          open_mode: string
+          phrase: string
+          position: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mode_id: string
+          open_mode?: string
+          phrase: string
+          position?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mode_id?: string
+          open_mode?: string
+          phrase?: string
+          position?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_commands_mode_id_fkey"
+            columns: ["mode_id"]
+            isOneToOne: false
+            referencedRelation: "voice_modes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_modes: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          is_hidden: boolean
+          name: string
+          notch_color: string
+          position: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_hidden?: boolean
+          name: string
+          notch_color?: string
+          position?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_hidden?: boolean
+          name?: string
+          notch_color?: string
+          position?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       waitlist: {
         Row: {
           context: string | null
-          created_at: string
+          created_at: string | null
           email: string
           id: string
         }
         Insert: {
           context?: string | null
-          created_at?: string
+          created_at?: string | null
           email: string
           id?: string
         }
         Update: {
           context?: string | null
-          created_at?: string
+          created_at?: string | null
           email?: string
           id?: string
         }
@@ -843,9 +1163,52 @@ export type Database = {
         }
         Relationships: []
       }
+      x_automation_stats: {
+        Row: {
+          created_at: string
+          id: string
+          last_run_duration_ms: number
+          last_run_finished_at: string | null
+          last_run_reply_count: number
+          last_run_started_at: string | null
+          total_replies: number
+          total_runs: number
+          total_runtime_ms: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_run_duration_ms?: number
+          last_run_finished_at?: string | null
+          last_run_reply_count?: number
+          last_run_started_at?: string | null
+          total_replies?: number
+          total_runs?: number
+          total_runtime_ms?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_run_duration_ms?: number
+          last_run_finished_at?: string | null
+          last_run_reply_count?: number
+          last_run_started_at?: string | null
+          total_replies?: number
+          total_runs?: number
+          total_runtime_ms?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       x_connections: {
         Row: {
           access_token: string
+          access_token_secret: string | null
           created_at: string
           display_name: string | null
           id: string
@@ -859,6 +1222,7 @@ export type Database = {
         }
         Insert: {
           access_token: string
+          access_token_secret?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
@@ -872,6 +1236,7 @@ export type Database = {
         }
         Update: {
           access_token?: string
+          access_token_secret?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
@@ -882,6 +1247,51 @@ export type Database = {
           user_identifier?: string
           username?: string | null
           x_user_id?: string | null
+        }
+        Relationships: []
+      }
+      x_follower_snapshots: {
+        Row: {
+          captured_on: string
+          created_at: string
+          followers_count: number
+          user_id: string
+        }
+        Insert: {
+          captured_on?: string
+          created_at?: string
+          followers_count: number
+          user_id: string
+        }
+        Update: {
+          captured_on?: string
+          created_at?: string
+          followers_count?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      x_oauth_request_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          oauth_token: string
+          oauth_token_secret: string
+          user_identifier: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          oauth_token: string
+          oauth_token_secret: string
+          user_identifier: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          oauth_token?: string
+          oauth_token_secret?: string
+          user_identifier?: string
         }
         Relationships: []
       }
@@ -903,6 +1313,39 @@ export type Database = {
           created_at?: string
           state?: string
           user_identifier?: string
+        }
+        Relationships: []
+      }
+      x_post_analytics: {
+        Row: {
+          bookmark_count: number
+          fetched_at: string
+          like_count: number
+          quote_count: number
+          reply_count: number
+          retweet_count: number
+          tweet_id: string
+          user_id: string
+        }
+        Insert: {
+          bookmark_count?: number
+          fetched_at?: string
+          like_count?: number
+          quote_count?: number
+          reply_count?: number
+          retweet_count?: number
+          tweet_id: string
+          user_id: string
+        }
+        Update: {
+          bookmark_count?: number
+          fetched_at?: string
+          like_count?: number
+          quote_count?: number
+          reply_count?: number
+          retweet_count?: number
+          tweet_id?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1040,6 +1483,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

@@ -2025,6 +2025,140 @@ async function openChromeUrl(url) {
   setTimeout(() => ensureDockWindowVisible("open-chrome-url"), 650);
 }
 
+// Incognito needs the Chrome binary directly — `open -a` swallows the flag.
+async function openChromeIncognitoUrl(url) {
+  await execFileP("open", ["-na", "Google Chrome", "--args", "--incognito", url]);
+  setTimeout(() => ensureDockWindowVisible("open-chrome-incognito"), 650);
+}
+
+// ── Voice Commands ───────────────────────────────────────────────────────────
+// Same feature as the Chrome extension's, sharing the same Supabase tables: user-defined Modes
+// (name + notch color) holding phrase→URL(s) commands. A mode is voice-activated by name; while
+// it runs, only its phrases match and the notch wears its color. Cached in memory here and
+// refreshed on a short TTL, mirroring how the extension caches into chrome.storage.local.
+const VOICE_MODES_TTL_MS = 60 * 1000;
+let voiceModesCache = { modes: [], fetchedAt: 0 };
+
+async function fetchVoiceModes(options = {}) {
+  const auth = authStatusPayload();
+  if (!auth.userId || !SUPABASE_URL || !SUPABASE_ANON_KEY) return voiceModesCache.modes;
+  if (!options.force && Date.now() - voiceModesCache.fetchedAt < VOICE_MODES_TTL_MS) return voiceModesCache.modes;
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return voiceModesCache.modes;
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const headers = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` };
+  try {
+    const [modesRes, commandsRes, urlsRes] = await Promise.all([
+      fetch(`${base}/rest/v1/voice_modes?user_id=eq.${encodeURIComponent(auth.userId)}&select=id,name,notch_color,is_active&order=position.asc`, { headers }),
+      fetch(`${base}/rest/v1/voice_commands?user_id=eq.${encodeURIComponent(auth.userId)}&select=id,mode_id,phrase,open_mode&order=position.asc`, { headers }),
+      fetch(`${base}/rest/v1/voice_command_urls?select=id,command_id,url&order=position.asc`, { headers }),
+    ]);
+    if (!modesRes.ok || !commandsRes.ok || !urlsRes.ok) throw new Error(`voice_modes ${modesRes.status}/${commandsRes.status}/${urlsRes.status}`);
+    const [modes, commands, urls] = await Promise.all([modesRes.json(), commandsRes.json(), urlsRes.json()]);
+    const urlsByCommand = new Map();
+    for (const u of urls) {
+      const list = urlsByCommand.get(u.command_id) || [];
+      list.push(u.url);
+      urlsByCommand.set(u.command_id, list);
+    }
+    const commandsByMode = new Map();
+    for (const c of commands) {
+      const list = commandsByMode.get(c.mode_id) || [];
+      list.push({ id: c.id, phrase: c.phrase, openMode: c.open_mode === "incognito" ? "incognito" : "tab", urls: urlsByCommand.get(c.id) || [] });
+      commandsByMode.set(c.mode_id, list);
+    }
+    voiceModesCache = {
+      fetchedAt: Date.now(),
+      modes: modes.map((m) => ({
+        id: m.id,
+        name: m.name,
+        notchColor: m.notch_color || "#0A84FF",
+        isActive: m.is_active === true,
+        commands: commandsByMode.get(m.id) || [],
+      })),
+    };
+    logMac("voice_modes.fetched", { count: voiceModesCache.modes.length });
+  } catch (error) {
+    logMac("voice_modes.fetch_failed", { error: String(error?.message || error) });
+  }
+  return voiceModesCache.modes;
+}
+
+async function setVoiceModeActive(modeId, active) {
+  const auth = authStatusPayload();
+  const authToken = await getBrainoAuthToken();
+  if (!auth.userId || !authToken || !SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const headers = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" };
+  try {
+    // Only one active mode per user (unique partial index) — clear the others first.
+    if (active) {
+      await fetch(`${base}/rest/v1/voice_modes?user_id=eq.${encodeURIComponent(auth.userId)}&is_active=eq.true`, {
+        method: "PATCH", headers, body: JSON.stringify({ is_active: false }),
+      });
+    }
+    const res = await fetch(`${base}/rest/v1/voice_modes?id=eq.${encodeURIComponent(modeId)}`, {
+      method: "PATCH", headers, body: JSON.stringify({ is_active: active, updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) throw new Error(`patch ${res.status}`);
+    voiceModesCache.modes = voiceModesCache.modes.map((m) => ({ ...m, isActive: active ? m.id === modeId : false }));
+    return true;
+  } catch (error) {
+    logMac("voice_modes.set_active_failed", { error: String(error?.message || error) });
+    return false;
+  }
+}
+
+function normalizeVoiceText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[.!?,]+$/, "")
+    .replace(/^(?:hey |hi |yo |ok |okay |braino[,!. ]+|can you |could you |would you |will you |please |kindly |i want you to |i'?d like you to |let'?s )+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectVoiceModeCommand(raw, modes) {
+  const t = normalizeVoiceText(raw);
+  if (!t || !modes.length) return null;
+  const m = t.match(/^(start|activate|turn on|enable|begin|switch on|stop|deactivate|turn off|disable|end|switch off|exit|quit)\s+(?:the\s+)?(.+?)(?:\s+mode)?$/);
+  if (!m) return null;
+  const action = /^(start|activate|turn on|enable|begin|switch on)$/.test(m[1]) ? "start" : "stop";
+  const target = m[2].trim().replace(/\s+mode$/, "");
+  if (!target) return null;
+  const mode = modes.find((mo) => normalizeVoiceText(mo.name).replace(/\s+mode$/, "") === target);
+  return mode ? { mode, action } : null;
+}
+
+function detectVoiceCommandPhrase(raw, modes) {
+  const mode = modes.find((m) => m.isActive);
+  if (!mode) return null;
+  const t = normalizeVoiceText(raw);
+  if (!t) return null;
+  for (const command of mode.commands || []) {
+    const phrase = normalizeVoiceText(command.phrase);
+    if (phrase && t === phrase) return { mode, command };
+  }
+  return null;
+}
+
+// Random 1..N of the command's URLs so a multi-link command varies run to run.
+function pickRandomUrls(urls) {
+  const list = (urls || []).filter(Boolean);
+  if (list.length <= 1) return list;
+  const shuffled = list.slice().sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 1 + Math.floor(Math.random() * list.length));
+}
+
+// The notch keeps the mode's color for as long as the mode runs; the renderer
+// flashes a "<name> activated" caption that fades, then shrinks back to compact.
+function sendVoiceModeState(mode) {
+  sendToRenderer("braino-mac:voice-mode", mode
+    ? { active: true, name: mode.name, color: mode.notchColor }
+    : { active: false });
+}
+
 async function openSpotifyReconnect(authToken) {
   if (!authToken || !SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
   try {
@@ -3209,7 +3343,10 @@ let waBadgeSender = "";
 let calendarNext = null;
 
 function broadcastTimers() {
-  sendToRenderer("braino-mac:timers", { timers: activeTimers.map(({ id, label, endAt }) => ({ id, label, endAt })) });
+  sendToRenderer("braino-mac:timers", {
+    timers: activeTimers.map(({ id, label, endAt, kind }) => ({ id, label, endAt, kind: kind || "timer" })),
+  });
+  persistTimers();
 }
 
 const NUMBER_WORDS = {
@@ -4410,6 +4547,54 @@ function parseTouchIdTestIntent(raw) {
     || /\btouch\s*id\b/i.test(source);
 }
 
+// ══ Time suite: timers, ALARMS (wall-clock, persisted across restarts),
+// STOPWATCH, time/date queries. The notch is the clock face for all of it. ══
+
+const TIMERS_STORE_PATH = path.join(AUTH_STORE_DIR, "timers.json");
+
+function persistTimers() {
+  try {
+    fs.writeFileSync(TIMERS_STORE_PATH, JSON.stringify(
+      activeTimers.map(({ id, label, endAt, kind }) => ({ id, label, endAt, kind: kind || "timer" })),
+    ));
+  } catch (_) {}
+}
+
+// Alarms must survive an app restart — re-arm everything still in the future.
+function restoreTimers() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(TIMERS_STORE_PATH, "utf8"));
+    const now = Date.now();
+    for (const t of Array.isArray(saved) ? saved : []) {
+      if (!t?.endAt || t.endAt <= now + 2000 || !t?.label) continue;
+      armTimer({ id: t.id || crypto.randomUUID(), label: String(t.label), endAt: Number(t.endAt), kind: t.kind === "alarm" ? "alarm" : "timer" });
+    }
+    if (activeTimers.length) logMac("timers.restored", { count: activeTimers.length });
+    broadcastTimers();
+  } catch (_) {}
+}
+
+let lastFiredAlarm = null; // { label, at } — snooze/dismiss window
+
+function fireTimer(timer) {
+  activeTimers = activeTimers.filter((t) => t.id !== timer.id);
+  broadcastTimers();
+  sendToRenderer("braino-mac:timer-fired", { id: timer.id, label: timer.label, kind: timer.kind || "timer" });
+  if (timer.kind === "alarm") {
+    lastFiredAlarm = { label: timer.label, at: Date.now() };
+    const clock = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    sendToRenderer("braino-mac:speak-line", { text: `It's ${clock}. ${timer.label && timer.label !== "alarm" ? `${timer.label}.` : "Alarm."} Say snooze or tap the notch to stop.` });
+  } else {
+    sendToRenderer("braino-mac:speak-line", { text: `Reminder. ${timer.label}.` });
+  }
+  logMac("timer.fired", { kind: timer.kind || "timer", label: textForLog(timer.label) });
+}
+
+function armTimer(timer) {
+  activeTimers.push(timer);
+  timer.handle = setTimeout(() => fireTimer(timer), Math.max(250, timer.endAt - Date.now()));
+}
+
 function parseReminderIntent(raw) {
   const source = cleanPrompt(String(raw || ""))
     .replace(/[?.!]+\s*$/, "")
@@ -4440,17 +4625,11 @@ function startReminder(seconds, label) {
   const clamped = Math.min(12 * 3600, Math.max(5, seconds));
   const timer = {
     id: crypto.randomUUID(),
+    kind: "timer",
     label: String(label || "timer").slice(0, 28),
     endAt: Date.now() + clamped * 1000,
   };
-  activeTimers.push(timer);
-  timer.handle = setTimeout(() => {
-    activeTimers = activeTimers.filter((t) => t.id !== timer.id);
-    broadcastTimers();
-    sendToRenderer("braino-mac:timer-fired", { id: timer.id, label: timer.label });
-    sendToRenderer("braino-mac:speak-line", { text: `Reminder. ${timer.label}.` });
-    logMac("reminder.fired", { label: textForLog(timer.label) });
-  }, clamped * 1000);
+  armTimer(timer);
   broadcastTimers();
   logMac("reminder.set", { label: textForLog(timer.label), seconds: clamped });
   const minutes = Math.round(clamped / 60);
@@ -4462,13 +4641,198 @@ function startReminder(seconds, label) {
   };
 }
 
-function cancelReminders() {
-  const count = activeTimers.length;
-  for (const timer of activeTimers) clearTimeout(timer.handle);
-  activeTimers = [];
+// ── Alarms: absolute wall-clock time ──
+// "7", "7:30", "7 30 pm", "7.30am"; noon/midnight normalized upstream.
+const CLOCK_RE = "(\\d{1,2})(?:[:. ](\\d{2}))?\\s*(a\\.?m\\.?|p\\.?m\\.?)?";
+
+function nextClockFire(hourRaw, minuteRaw, meridiem) {
+  let hour = Number(hourRaw);
+  const minute = Number(minuteRaw || 0);
+  if (!Number.isFinite(hour) || hour > 23 || minute > 59) return null;
+  const now = new Date();
+  const mk = (h) => {
+    const d = new Date(now);
+    d.setHours(h, minute, 0, 0);
+    if (d.getTime() <= now.getTime() + 5000) d.setDate(d.getDate() + 1);
+    return d;
+  };
+  if (meridiem) {
+    const pm = /p/i.test(meridiem);
+    if (hour === 12) hour = pm ? 12 : 0;
+    else if (pm) hour += 12;
+    return mk(hour);
+  }
+  if (hour === 0 || hour >= 13) return mk(hour);
+  // No am/pm spoken: the NEAREST future interpretation wins ("alarm at 7"
+  // said at 3pm means 7pm tonight, said at 10pm means 7am tomorrow).
+  const a = mk(hour % 12);
+  const b = mk((hour % 12) + 12);
+  return a.getTime() <= b.getTime() ? a : b;
+}
+
+function parseAlarmIntent(raw) {
+  const source = cleanPrompt(String(raw || ""))
+    .replace(/[?.!]+\s*$/, "")
+    .replace(/\bnoon\b/gi, "12:00 pm")
+    .replace(/\bmidnight\b/gi, "12:00 am")
+    .replace(/\bhalf\s+past\s+(\d{1,2})\b/gi, "$1:30");
+  if (/\bcancel\b.*\balarms?\b|\balarms?\b.*\bcancel\b/i.test(source)) return { cancel: true };
+  let m = source.match(new RegExp(`\\b(?:set\\s+)?(?:an?\\s+)?alarm\\s+(?:for|at)\\s+${CLOCK_RE}(?:\\s+(?:for|to|about|called)\\s+(.+))?$`, "i"));
+  if (m) {
+    const fire = nextClockFire(m[1], m[2], m[3]);
+    if (fire) return { fireAt: fire.getTime(), label: (m[4] || "alarm").trim() };
+  }
+  m = source.match(new RegExp(`\\bwake\\s+me(?:\\s+up)?\\s+at\\s+${CLOCK_RE}\\b`, "i"));
+  if (m) {
+    const fire = nextClockFire(m[1], m[2], m[3]);
+    if (fire) return { fireAt: fire.getTime(), label: "wake up" };
+  }
+  m = source.match(new RegExp(`\\bremind\\s+me\\s+at\\s+${CLOCK_RE}\\s+(?:to\\s+|about\\s+|that\\s+)?(.+)$`, "i"));
+  if (m) {
+    const fire = nextClockFire(m[1], m[2], m[3]);
+    if (fire) return { fireAt: fire.getTime(), label: m[4].trim() };
+  }
+  return null;
+}
+
+function startAlarm(fireAt, label) {
+  const timer = {
+    id: crypto.randomUUID(),
+    kind: "alarm",
+    label: String(label || "alarm").slice(0, 28),
+    endAt: fireAt,
+  };
+  armTimer(timer);
   broadcastTimers();
-  logMac("reminder.cancelled", { count });
-  return { ok: true, say: count ? "Cancelled. The notch is clear." : "There was nothing running." };
+  const when = new Date(fireAt);
+  const clock = when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const tomorrow = when.getDate() !== new Date().getDate();
+  logMac("alarm.set", { label: textForLog(timer.label), fireAt, clock });
+  return { ok: true, say: `Alarm set for ${clock}${tomorrow ? " tomorrow" : ""}${timer.label && timer.label !== "alarm" ? `, ${timer.label}` : ""}. It is on the notch.` };
+}
+
+// "snooze" / "stop the alarm": within the post-fire window they control the
+// RINGING alarm; otherwise "turn off the alarm" cancels the pending ones.
+function parseAlarmControlIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (/^snooze$|\bsnooze\b/i.test(source)) return { snooze: true };
+  if (/\b(?:stop|dismiss|turn off|shut (?:up|off)|silence|kill)\b.*\balarms?\b|\balarms?\s+off\b/i.test(source)) return { dismiss: true };
+  return null;
+}
+
+function handleAlarmControl(intent) {
+  const ringing = lastFiredAlarm && Date.now() - lastFiredAlarm.at < 2 * 60 * 1000;
+  if (intent.snooze) {
+    if (!lastFiredAlarm || Date.now() - lastFiredAlarm.at > 10 * 60 * 1000) {
+      return { ok: true, say: "Nothing to snooze right now." };
+    }
+    sendToRenderer("braino-mac:alarm-dismiss", {});
+    const result = startAlarm(Date.now() + 9 * 60 * 1000, lastFiredAlarm.label);
+    logMac("alarm.snoozed", { label: textForLog(lastFiredAlarm.label) });
+    return { ok: true, say: "Snoozed. Nine minutes." };
+  }
+  if (ringing) {
+    sendToRenderer("braino-mac:alarm-dismiss", {});
+    return { ok: true, say: "Alarm off." };
+  }
+  return cancelReminders("alarm");
+}
+
+// ── Stopwatch ──
+let stopwatch = null; // { running, startedAt, accumMs }
+
+function stopwatchElapsedMs() {
+  if (!stopwatch) return 0;
+  return stopwatch.accumMs + (stopwatch.running ? Date.now() - stopwatch.startedAt : 0);
+}
+
+function fmtStopwatch(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function spokenStopwatch(ms) {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  if (!m) return `${sec} second${sec === 1 ? "" : "s"}`;
+  return `${m} minute${m === 1 ? "" : "s"} ${sec} second${sec === 1 ? "" : "s"}`;
+}
+
+function broadcastStopwatch() {
+  sendToRenderer("braino-mac:stopwatch", stopwatch
+    ? { on: true, running: stopwatch.running, accumMs: stopwatch.accumMs, startedAt: stopwatch.startedAt }
+    : { on: false, running: false, accumMs: 0, startedAt: 0 });
+}
+
+function parseStopwatchIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (!/\bstop\s*watch\b/i.test(source)) return null;
+  if (/\brestart\b/i.test(source)) return { action: "restart" };
+  if (/\b(?:reset|clear|zero)\b/i.test(source)) return { action: "reset" };
+  if (/\b(?:pause|stop|hold|halt)\b/i.test(source)) return { action: "pause" };
+  if (/\b(?:resume|continue|unpause|keep going)\b/i.test(source)) return { action: "resume" };
+  if (/\b(?:what|how long|how much|where|reading|check|at)\b/i.test(source)) return { action: "read" };
+  return { action: "start" };
+}
+
+function handleStopwatch(intent) {
+  const action = intent?.action || "";
+  const elapsed = stopwatchElapsedMs();
+  if (action === "start" || action === "restart") {
+    stopwatch = { running: true, startedAt: Date.now(), accumMs: 0 };
+    broadcastStopwatch();
+    logMac("stopwatch", { action });
+    return { ok: true, say: action === "restart" ? "Stopwatch restarted from zero." : "Stopwatch running. It is counting in the notch." };
+  }
+  if (!stopwatch) return { ok: true, say: "No stopwatch running. Say start a stopwatch." };
+  if (action === "pause") {
+    if (stopwatch.running) stopwatch = { running: false, startedAt: 0, accumMs: elapsed };
+    broadcastStopwatch();
+    logMac("stopwatch", { action, elapsed });
+    return { ok: true, say: `Stopped at ${spokenStopwatch(elapsed)}.` };
+  }
+  if (action === "resume") {
+    if (!stopwatch.running) stopwatch = { running: true, startedAt: Date.now(), accumMs: stopwatch.accumMs };
+    broadcastStopwatch();
+    return { ok: true, say: "Stopwatch running again." };
+  }
+  if (action === "reset") {
+    stopwatch = null;
+    broadcastStopwatch();
+    logMac("stopwatch", { action });
+    return { ok: true, say: "Stopwatch cleared." };
+  }
+  return { ok: true, say: `${spokenStopwatch(elapsed)}${stopwatch.running ? ", still counting" : ", paused"}.` };
+}
+
+// ── "what time is it" / "what's the date" — he knows the Mac's clock ──
+function parseTimeQueryIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (/\bwhat\s+time\s+is\s+it\b|\bwhat(?:'s| is)\s+the\s+time\b|\bcurrent\s+time\b|\btime\s+right\s+now\b|\btell\s+me\s+the\s+time\b/i.test(source)) return { time: true };
+  if (/\bwhat(?:'s| is)\s+(?:the\s+|today'?s\s+)?date\b|\bwhat\s+day\s+is\s+(?:it|today)\b|\btoday'?s\s+date\b/i.test(source)) return { date: true };
+  return null;
+}
+
+function answerTimeQuery(intent) {
+  const now = new Date();
+  if (intent.time) {
+    return { ok: true, say: `It's ${now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.` };
+  }
+  return { ok: true, say: `It's ${now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}.` };
+}
+
+function cancelReminders(kind) {
+  const doomed = kind ? activeTimers.filter((t) => (t.kind || "timer") === kind) : activeTimers;
+  for (const timer of doomed) clearTimeout(timer.handle);
+  activeTimers = kind ? activeTimers.filter((t) => (t.kind || "timer") !== kind) : [];
+  broadcastTimers();
+  logMac("reminder.cancelled", { count: doomed.length, kind: kind || "all" });
+  const noun = kind === "alarm" ? "alarm" : "timer";
+  return { ok: true, say: doomed.length ? `Cancelled ${doomed.length === 1 ? `the ${noun}` : `${doomed.length} ${noun}s`}. The notch is clear.` : "There was nothing running." };
 }
 
 async function checkCalendarNext() {
@@ -8852,6 +9216,29 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   });
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
 
+  // Voice Commands — the user's OWN configured shortcuts beat every built-in intent below, and
+  // must run BEFORE classifyIntentLLM or the model just narrates instead of acting.
+  const voiceModes = await fetchVoiceModes();
+  const modeCmd = detectVoiceModeCommand(raw, voiceModes);
+  if (modeCmd) {
+    const starting = modeCmd.action === "start";
+    logMac("delegate.voice_mode_toggle", { mode: modeCmd.mode.name, starting });
+    voiceModesCache.modes = voiceModesCache.modes.map((m) => ({ ...m, isActive: starting ? m.id === modeCmd.mode.id : false }));
+    sendVoiceModeState(starting ? modeCmd.mode : null);
+    void setVoiceModeActive(modeCmd.mode.id, starting);
+    return { ok: true, say: starting ? `${modeCmd.mode.name} on.` : `${modeCmd.mode.name} off.` };
+  }
+  const voicePhrase = detectVoiceCommandPhrase(raw, voiceModes);
+  if (voicePhrase) {
+    const picked = pickRandomUrls(voicePhrase.command.urls);
+    logMac("delegate.voice_command", { mode: voicePhrase.mode.name, count: picked.length, openMode: voicePhrase.command.openMode });
+    for (const url of picked) {
+      if (voicePhrase.command.openMode === "incognito") await openChromeIncognitoUrl(url);
+      else await openChromeUrl(url);
+    }
+    return { ok: true, say: picked.length > 1 ? `Opening ${picked.length} links.` : "Opening it." };
+  }
+
   const pendingWorkflowResult = await handlePendingMacWorkflow(raw);
   if (pendingWorkflowResult) return pendingWorkflowResult;
 
@@ -8913,6 +9300,35 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     }
     if (granted === false) return { ok: true, say: "Not verified. Try again whenever." };
     return { ok: true, say: "Touch ID is not available on this Mac right now." };
+  }
+
+  const timeQuery = parseTimeQueryIntent(raw);
+  if (timeQuery) {
+    logMac("delegate.time_query", timeQuery);
+    return answerTimeQuery(timeQuery);
+  }
+
+  const stopwatchIntent = parseStopwatchIntent(raw);
+  if (stopwatchIntent) {
+    logMac("delegate.stopwatch_intent", { action: stopwatchIntent.action });
+    return handleStopwatch(stopwatchIntent);
+  }
+
+  const alarmControl = parseAlarmControlIntent(raw);
+  if (alarmControl) {
+    logMac("delegate.alarm_control", alarmControl);
+    return handleAlarmControl(alarmControl);
+  }
+
+  const alarmIntent = parseAlarmIntent(raw);
+  if (alarmIntent) {
+    logMac("delegate.alarm_intent", {
+      cancel: Boolean(alarmIntent.cancel),
+      fireAt: alarmIntent.fireAt || 0,
+      label: textForLog(alarmIntent.label || ""),
+    });
+    if (alarmIntent.cancel) return cancelReminders("alarm");
+    return startAlarm(alarmIntent.fireAt, alarmIntent.label);
   }
 
   const reminderIntent = parseReminderIntent(raw);
@@ -9885,6 +10301,21 @@ ipcMain.handle("braino-mac:music-duck", async (_event, payload = {}) => {
   }
 });
 
+ipcMain.handle("braino-mac:timer-cancel", (_event, payload = {}) => {
+  const id = String(payload?.id || "");
+  const timer = activeTimers.find((t) => t.id === id);
+  if (!timer) return { ok: false };
+  clearTimeout(timer.handle);
+  activeTimers = activeTimers.filter((t) => t.id !== id);
+  broadcastTimers();
+  logMac("timer.cancelled_from_tray", { kind: timer.kind || "timer", label: textForLog(timer.label) });
+  return { ok: true };
+});
+
+ipcMain.handle("braino-mac:stopwatch-control", (_event, payload = {}) => {
+  return handleStopwatch({ action: String(payload?.action || "read") });
+});
+
 ipcMain.handle("braino-mac:media-control", async (_event, payload = {}) => {
   const action = String(payload?.action || "").toLowerCase();
   const source = String(payload?.source || "spotify").toLowerCase();
@@ -9979,8 +10410,14 @@ setInterval(() => {
     const point = screen.getCursorScreenPoint();
     const bounds = dockWindow.getBounds();
     const centerX = bounds.x + bounds.width / 2;
-    const halfWidth = notchZoneExpanded ? 340 : 150;
-    const height = notchZoneExpanded ? 260 : 80;
+    // Collapsed zone hugs the PHYSICAL notch (measured housing), nothing
+    // more — a fat zone was eating clicks on Chrome's tab strip, which sits
+    // exactly in this band when the window is maximized. Only the open tray
+    // earns a generous halo.
+    const notchW = cachedNotchMetrics?.width || 190;
+    const notchH = cachedNotchMetrics?.height || 33;
+    const halfWidth = notchZoneExpanded ? 340 : notchW / 2 + 8;
+    const height = notchZoneExpanded ? 260 : notchH + 26;
     const inside = Math.abs(point.x - centerX) <= halfWidth
       && point.y >= bounds.y
       && point.y <= bounds.y + height;
@@ -10157,6 +10594,7 @@ app.whenReady().then(() => {
   setTimeout(() => void startWhatsAppListener({ enable: loadWaListenerState() }), 6000);
   setTimeout(() => void checkCalendarNext(), 20000);
   setInterval(() => void checkCalendarNext(), 5 * 60 * 1000);
+  restoreTimers();
   // Notch tray feeds: now-playing (live progress), power, Bluetooth audio.
   setTimeout(() => void pollNowPlaying(), 9000);
   setInterval(() => void pollNowPlaying(), 6000);
