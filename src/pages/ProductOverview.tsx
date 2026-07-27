@@ -4,6 +4,7 @@ import {
   MOMENT_ORDER,
   MOMENT_LABEL,
   MOMENT_CUES,
+  ORDERED_TRAITS,
   type Moment,
 } from "@/lib/emotional-engine-viz";
 import "../styles/apple.css";
@@ -28,10 +29,17 @@ const NET_ACCENTS: Partial<Record<Moment, [number, number, number]>> = {
   crisis: [217, 100, 91],
 };
 
+// The engine's actual feeling process, drawn: a message enters (left) → the
+// moment is DETECTED → the signal fans out diagonally to all twelve traits →
+// the 2-3 traits that lead on THIS moment light up and name themselves →
+// they converge back out to the right as the response. One phased pass per
+// moment, so what fires depends on what he feels.
+const MOMENT_START = 2600; // must match LiveEngine's interval
 function NeuralEngine({ moment }: { moment: Moment }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const momentRef = useRef(moment);
-  momentRef.current = moment;
+  const phaseStartRef = useRef(performance.now());
+  useEffect(() => { momentRef.current = moment; phaseStartRef.current = performance.now(); }, [moment]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -40,84 +48,97 @@ function NeuralEngine({ moment }: { moment: Moment }) {
     if (!ctx) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const LAYERS = [5, 6, 6, 6, 6, 5];
-    const W = 760, H = 460, PADX = 60, PADY = 40;
-    const colX = (i: number) => PADX + (i * (W - PADX * 2)) / (LAYERS.length - 1);
-    const nodeY = (c: number, j: number) => PADY + (j * (H - PADY * 2)) / (c - 1);
-    const nodes = LAYERS.map((c, i) => Array.from({ length: c }, (_, j) => ({ x: colX(i), y: nodeY(c, j) })));
-    const edges: { a: { x: number; y: number }; b: { x: number; y: number }; li: number }[] = [];
-    for (let i = 0; i < nodes.length - 1; i++)
-      for (const a of nodes[i]) for (const b of nodes[i + 1]) edges.push({ a, b, li: i });
-
-    // waves: each has a start time; a front travels 0 → (LAYERS-1) over `dur`.
-    const dur = 1500;
-    let waves: number[] = [0];
-    let raf = 0;
-    let lastSpawn = 0;
-    const t0 = performance.now();
+    const W = 860, H = 460;
+    const IN = { x: 66, y: H / 2 };
+    const DET = { x: 210, y: H / 2 };
+    const OUT = { x: 794, y: H / 2 };
+    // 12 traits in two columns of 6
+    const traitNodes = ORDERED_TRAITS.map((t, i) => {
+      const col = i < 6 ? 0 : 1;
+      const j = i % 6;
+      return { t, x: col === 0 ? 420 : 585, y: 52 + j * ((H - 104) / 5) };
+    });
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    function fit() {
+    const fit = () => {
       const rect = canvas!.getBoundingClientRect();
       canvas!.width = rect.width * dpr;
-      canvas!.height = (rect.width * (H / W)) * dpr;
-    }
+      canvas!.height = rect.width * (H / W) * dpr;
+    };
     fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(canvas);
+    const ro = new ResizeObserver(fit); ro.observe(canvas);
 
-    function draw(now: number) {
-      const t = now - t0;
+    const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, p: number) => ({ x: a.x + (b.x - a.x) * p, y: a.y + (b.y - a.y) * p });
+    let raf = 0;
+
+    const draw = (now: number) => {
       const sx = canvas!.width / W, sy = canvas!.height / H;
       ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
-      ctx!.save();
-      ctx!.scale(sx, sy);
-      const [r, g, b] = NET_ACCENTS[momentRef.current] || [217, 100, 91];
-      const acc = `${r},${g},${b}`;
+      ctx!.save(); ctx!.scale(sx, sy);
+      ctx!.font = "600 13px 'SF Pro Display', -apple-system, sans-serif";
+      ctx!.textBaseline = "middle";
 
-      if (!reduce) {
-        if (t - lastSpawn > 620) { waves.push(t); lastSpawn = t; }
-        waves = waves.filter((w) => t - w < dur + 400);
-      }
-      const fronts = reduce ? [] : waves.map((w) => ((t - w) / dur) * (LAYERS.length - 1));
+      const m = momentRef.current;
+      const [rr, gg, bb] = NET_ACCENTS[m] || [217, 100, 91];
+      const acc = `${rr},${gg},${bb}`;
+      const leadIdx = ORDERED_TRAITS.map((t, i) => (t.leadsOn.includes(m) ? i : -1)).filter((i) => i >= 0).slice(0, 3);
 
-      // edges
-      for (const e of edges) {
-        let act = 0;
-        for (const f of fronts) { const d = Math.abs(f - (e.li + 0.5)); if (d < 0.6) act = Math.max(act, 1 - d / 0.6); }
-        ctx!.strokeStyle = act > 0.02 ? `rgba(${acc},${0.15 + act * 0.7})` : "rgba(29,29,31,0.10)";
-        ctx!.lineWidth = act > 0.02 ? 0.8 + act * 1.4 : 0.7;
-        ctx!.beginPath(); ctx!.moveTo(e.a.x, e.a.y); ctx!.lineTo(e.b.x, e.b.y); ctx!.stroke();
-        // travelling pulse
-        for (const f of fronts) {
-          const p = f - e.li;
-          if (p > 0 && p < 1) {
-            const px = e.a.x + (e.b.x - e.a.x) * p, py = e.a.y + (e.b.y - e.a.y) * p;
-            ctx!.fillStyle = `rgba(${acc},0.85)`;
-            ctx!.beginPath(); ctx!.arc(px, py, 2, 0, Math.PI * 2); ctx!.fill();
-          }
-        }
-      }
+      // phase 0..1 through the moment (loops if it overruns)
+      const p = reduce ? 1 : Math.min(1, (now - phaseStartRef.current) / MOMENT_START);
+      // sub-phases: A in→det, B det→traits, C highlight, D leads→out
+      const pA = Math.min(1, p / 0.16);
+      const pB = Math.min(1, Math.max(0, (p - 0.16) / 0.34));
+      const pC = Math.min(1, Math.max(0, (p - 0.5) / 0.18));
+      const pD = Math.min(1, Math.max(0, (p - 0.7) / 0.3));
+
+      const faint = "rgba(29,29,31,0.12)";
+      const dot = (pt: { x: number; y: number }, r: number, a: number) => { ctx!.fillStyle = `rgba(${acc},${a})`; ctx!.beginPath(); ctx!.arc(pt.x, pt.y, r, 0, Math.PI * 2); ctx!.fill(); };
+      const line = (a: { x: number; y: number }, b: { x: number; y: number }, col: string, w: number) => { ctx!.strokeStyle = col; ctx!.lineWidth = w; ctx!.beginPath(); ctx!.moveTo(a.x, a.y); ctx!.lineTo(b.x, b.y); ctx!.stroke(); };
+      const node = (pt: { x: number; y: number }, glow: number, r = 7) => {
+        if (glow > 0.03) { ctx!.fillStyle = `rgba(${acc},${glow * 0.22})`; ctx!.beginPath(); ctx!.arc(pt.x, pt.y, r + 11, 0, Math.PI * 2); ctx!.fill(); }
+        ctx!.beginPath(); ctx!.arc(pt.x, pt.y, r, 0, Math.PI * 2); ctx!.fillStyle = "#fff"; ctx!.fill();
+        ctx!.lineWidth = 2; ctx!.strokeStyle = glow > 0.03 ? `rgba(${acc},${0.5 + glow * 0.5})` : "rgba(29,29,31,0.5)"; ctx!.stroke();
+      };
+
+      // fan edges det→traits (faint always; pulse during B)
+      traitNodes.forEach((tn) => { line(DET, tn, faint, 0.7); });
+      // converge edges leads→out (faint always)
+      leadIdx.forEach((i) => line(traitNodes[i], OUT, faint, 0.7));
+      // in→det edge
+      line(IN, DET, p > 0 ? `rgba(${acc},${0.2 + pA * 0.6})` : faint, 1.2);
+
+      // A: pulse in→det
+      if (pA > 0 && pA < 1) dot(lerp(IN, DET, pA), 3, 0.9);
+      // B: pulses det→each trait
+      if (pB > 0) traitNodes.forEach((tn) => { if (pB < 1) { line(DET, tn, `rgba(${acc},${0.15 + (1 - pB) * 0.5})`, 1); dot(lerp(DET, tn, pB), 2.4, 0.85); } });
+      // D: pulses leads→out
+      if (pD > 0) leadIdx.forEach((i) => { line(traitNodes[i], OUT, `rgba(${acc},${0.25 + pD * 0.55})`, 1.4); if (pD < 1) dot(lerp(traitNodes[i], OUT, pD), 3, 0.9); });
+
       // nodes
-      nodes.forEach((layer, li) => {
-        let glow = 0;
-        for (const f of fronts) { const d = Math.abs(f - li); if (d < 0.5) glow = Math.max(glow, 1 - d / 0.5); }
-        for (const n of layer) {
-          if (glow > 0.05) { ctx!.fillStyle = `rgba(${acc},${glow * 0.25})`; ctx!.beginPath(); ctx!.arc(n.x, n.y, 16, 0, Math.PI * 2); ctx!.fill(); }
-          ctx!.beginPath(); ctx!.arc(n.x, n.y, 7, 0, Math.PI * 2);
-          ctx!.fillStyle = "#fff"; ctx!.fill();
-          ctx!.strokeStyle = glow > 0.05 ? `rgba(${acc},${0.5 + glow * 0.5})` : "rgba(29,29,31,0.55)";
-          ctx!.lineWidth = 2; ctx!.stroke();
+      node(IN, pA);
+      node(DET, pA * (1 - pB) + pB * 0.4, 8);
+      traitNodes.forEach((tn, i) => {
+        const isLead = leadIdx.includes(i);
+        const glow = isLead ? pC : Math.max(0, pB - 0.3) * 0.4;
+        node(tn, glow);
+        if (isLead && pC > 0.15) {
+          ctx!.fillStyle = `rgba(${acc},${Math.min(1, pC)})`;
+          const label = tn.t.name;
+          const lx = tn.x < 500 ? tn.x - 14 : tn.x + 14;
+          ctx!.textAlign = tn.x < 500 ? "right" : "left";
+          ctx!.fillText(label, lx, tn.y);
         }
       });
+      node(OUT, pD, 9);
+
       ctx!.restore();
       raf = requestAnimationFrame(draw);
-    }
+    };
     raf = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
 
-  return <canvas ref={canvasRef} className="apple-net" role="img" aria-label="Braino's emotion engine, a neural network firing in real time" />;
+  return <canvas ref={canvasRef} className="apple-net" role="img" aria-label="Braino's emotion engine: a message becomes a moment, the moment lights the leading traits, and they converge into his response" />;
 }
 
 // Drives the moment cycle and the caption; the net reacts to whatever moment is current.
