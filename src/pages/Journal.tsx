@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import SiteFooter from "@/components/SiteFooter";
-import { NotchNav } from "./HomeOS";
+import IomiNotch from "@/components/IomiNotch";
 import "./home-os.css";
 import "./journal.css";
 
@@ -98,7 +98,7 @@ export default function Journal() {
 
   return (
     <div className="hos jr">
-      <NotchNav />
+      <IomiNotch />
       <header className="jr-head">
         <div className="jr-wrap">
           <div className="eyebrow">documentation · one article at a time</div>

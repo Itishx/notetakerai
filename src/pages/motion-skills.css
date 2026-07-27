@@ -1,0 +1,141 @@
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Medium.otf") format("opentype");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Semibold.otf") format("opentype");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Bold.otf") format("opentype");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+
+body.ms-page { background: #0B0B0C; }
+
+.ms-root {
+  min-height: 100vh; background: #0B0B0C; color: #F5EFE7;
+  font-family: "SF Pro Display", -apple-system, "Helvetica Neue", sans-serif;
+  padding: 64px 24px 100px;
+}
+
+.ms-header { max-width: 880px; margin: 0 auto 64px; }
+.ms-kicker {
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  color: #E8786E; font-weight: 600; margin-bottom: 14px;
+}
+.ms-header h1 {
+  font-size: clamp(32px, 5.2vw, 56px); font-weight: 700; letter-spacing: -.02em;
+  line-height: 1.05; margin: 0 0 18px;
+}
+.ms-sub { font-size: 16px; line-height: 1.6; color: rgba(245,239,231,.72); max-width: 700px; margin: 0 0 30px; }
+.ms-sub code { color: #F0A86B; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 14px; }
+
+.ms-toc { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+.ms-toc a {
+  font-size: 12.5px; color: rgba(245,239,231,.6); text-decoration: none;
+  border: 1px solid rgba(255,255,255,.14); border-radius: 999px; padding: 6px 12px;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+  white-space: nowrap;
+}
+.ms-toc a:hover { color: #F5EFE7; border-color: rgba(232,120,110,.5); background: rgba(232,120,110,.08); }
+
+.ms-sections { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
+.ms-section {
+  padding: 48px 0; border-top: 1px solid rgba(255,255,255,.09);
+  scroll-margin-top: 24px;
+}
+.ms-section:first-child { border-top: none; }
+
+.ms-section-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+.ms-section-head h2 { font-size: clamp(22px, 2.8vw, 30px); font-weight: 700; letter-spacing: -.01em; margin: 0; }
+.ms-tag {
+  font-size: 11px; letter-spacing: .04em; color: #F0A86B;
+  background: rgba(240,168,107,.12); border-radius: 6px; padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.ms-section-body { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+@media (max-width: 860px) { .ms-section-body { grid-template-columns: 1fr; } }
+
+.ms-text p { font-size: 14.5px; line-height: 1.65; color: rgba(245,239,231,.82); margin: 0 0 14px; }
+.ms-text p:last-of-type { margin-bottom: 18px; }
+
+.ms-code {
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+  border-radius: 10px; padding: 16px 18px; overflow-x: auto;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12.5px;
+  line-height: 1.6; color: #CFE0FF; white-space: pre;
+}
+
+/* ── demo tiles — deliberately generic, self-contained CSS so this page
+   never has to import the real teaser stylesheets (keeps it independent
+   of whatever those files evolve into). ── */
+.ms-demo { position: sticky; top: 24px; }
+.ms-frame {
+  position: relative; height: 200px; border-radius: 14px;
+  background: #000; border: 1px solid rgba(255,255,255,.1);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.ms-line {
+  display: flex; flex-wrap: nowrap; gap: 0 .22em; font-size: clamp(22px, 3vw, 32px);
+  font-weight: 600; letter-spacing: -.02em; color: #fff; white-space: nowrap;
+}
+.ms-word { display: none; }
+.ms-word.in {
+  display: inline-block;
+  animation: msWordIn .16s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes msWordIn {
+  0%   { opacity: 1; filter: brightness(2.2); text-shadow: 0 0 22px rgba(255,255,255,.9); }
+  100% { opacity: 1; filter: brightness(1); text-shadow: none; }
+}
+.ms-word.ms-fuse { display: inline-block; margin-left: -.2em; visibility: hidden; opacity: 0; }
+.ms-word.ms-fuse.in { visibility: visible; opacity: 1; }
+
+.ms-cutline.ms-cut { color: #0B0B0C; position: relative; z-index: 2; }
+.ms-cutline.ms-cut .ms-word.in { animation: none !important; }
+.ms-invert { position: absolute; inset: 0; background: #fff; opacity: 0; z-index: 1; pointer-events: none; }
+
+.ms-sb.ms-shimmer-play {
+  background-image: linear-gradient(100deg, #0B0B0C 30%, #FFFFFF 48%, #F0A86B 52%, #0B0B0C 70%);
+  background-size: 240% auto; -webkit-background-clip: text; background-clip: text;
+  color: transparent; animation: msGlitter 1s linear both;
+}
+@keyframes msGlitter { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+
+.ms-big.ms-line { transition: none; }
+.ms-big .ms-word.in { font-size: clamp(40px, 6vw, 64px); }
+
+.ms-staged { flex-direction: column; gap: 10px; }
+.ms-pill {
+  width: 160px; height: 40px; border-radius: 20px;
+  background: linear-gradient(135deg, #E8786E, #F0A86B);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; color: #1B0F0D;
+  text-transform: uppercase; transition: transform .3s ease;
+}
+.ms-pill.ms-awake { box-shadow: 0 0 24px rgba(232,120,110,.5); }
+.ms-pill.ms-dance { animation: msPillBob .4s ease-in-out infinite alternate; }
+@keyframes msPillBob { from { filter: brightness(1); } to { filter: brightness(1.25); } }
+
+.ms-note {
+  font-size: 13px; line-height: 1.6; color: rgba(245,239,231,.5);
+  border: 1px dashed rgba(255,255,255,.16); border-radius: 12px; padding: 20px;
+}
+.ms-note.ms-warn { color: #F0A86B; border-color: rgba(240,168,107,.35); background: rgba(240,168,107,.06); }
+
+.ms-footer {
+  max-width: 880px; margin: 60px auto 0; padding-top: 28px;
+  border-top: 1px solid rgba(255,255,255,.09);
+  font-size: 12.5px; color: rgba(245,239,231,.45); line-height: 1.6;
+}
+.ms-footer code { color: #F0A86B; font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-word.in, .ms-sb.ms-shimmer-play, .ms-pill.ms-dance { animation: none; }
+}

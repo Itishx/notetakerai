@@ -2,8 +2,9 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Download } from "lucide-react";
 import SiteFooter from "@/components/SiteFooter";
-import { RevealGate, NotchNav, LidNotchShow } from "./HomeOS";
+import { RevealGate, LidNotchShow } from "./HomeOS";
 import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
+import IomiNotch from "@/components/IomiNotch";
 import "./home-os.css";
 
 /* ============================================================================
@@ -22,7 +23,7 @@ export default function JarvisOS() {
 
   return (
     <div className="hos">
-      <NotchNav narrator />
+      <IomiNotch />
 
       {/* the notch first; the name after */}
       <RevealGate />

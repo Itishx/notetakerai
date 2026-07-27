@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { buildBrainoSystemPrompt, buildUserContextText } from "../../_shared/braino-prompt.ts";
+import type { ClassId } from "../../_shared/emotional-engine/types.ts";
 import {
   formatRealtimeCostSummaryForBraino,
   loadRealtimeCostSummaryForRequest,
@@ -401,6 +402,8 @@ serve(async (req) => {
       // entire Braino system prompt (no emotional engine, no base personality) — page/notes ride
       // along only as factual source material. See buildPersonaSystemPrompt.
       personaSystem,
+      // Which Braino class is answering (Saburi, Iomi, Telos…). See _shared/emotional-engine/classes.ts.
+      classId,
     } = await req.json();
     const requestAuthHeader = req.headers.get("Authorization");
 
@@ -546,6 +549,7 @@ ${notes || "(no notes yet)"}`
           // lead the reply, and apply the user's personality toggles.
           moment: detectMoment(typeof message === "string" ? message : "").moment,
           personalitySettings: userKnowledge?.personalitySettings ?? null,
+          classId: (["saburi", "iomi", "telos"].includes(classId) ? classId : undefined) as ClassId | undefined,
         });
 
     // Build messages array

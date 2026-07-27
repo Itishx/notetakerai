@@ -17,40 +17,41 @@ const namespacedWalker = (prefix: string) =>
 /* ============================================================================
    /aware — "Braino: Emotional Maturity". Twin of /notch: same rAF-driven
    deterministic render(t), same stamp-cut kinetic type engine (kinetic /
-   sequence / phraseSeq / fuse "+" / emphasis "*" / swap-stack), same font,
-   same 3-hits-only beat-snap rule — but its OWN track (she-needs-him.mp3,
-   157 BPM, "She Needs Him" by Her's), auto-analyzed and beat-matched at
-   runtime exactly like /notch does with its own track, just a different
-   file. Dark red / white palette (deep red base, white text, white match-cut
-   invert instead of black/white).
+   sequence / phraseSeq / fuse "+" / emphasis "*" / swap-stack / word chunking
+   — the "x2x2 formula" from /dontblink, see chunkWord() below), same font,
+   same 3-hits-only beat-snap rule — but its OWN track (one.mp3, played from
+   2:25 in), auto-analyzed and beat-matched at runtime exactly like /notch
+   does with its own track, just a different file. Dark red / white palette
+   (deep red base, white text, white match-cut invert instead of black/white)
+   — untouched, only the cut/chunk philosophy is imported from /dontblink.
 
-   Full script locked in through the closing card.
+   Ends right on the "Hu"+"man." match cut, then loops. Full script, full
+   words — no content is trimmed. Only the pace changed: no notch cutaway
+   scene anymore (was its own 2.9s beat, cut entirely), and every stamp
+   runs faster than it used to (SW ~220-260ms vs the original 280-400ms).
 
      1  open        "Most people have a problem with AI."
      2  complaint   "He's always" "validating."
      3  contrast    "But not" "Braino."
      4  why         "Here's why."
-     4b notchCut    real notch cutaway — listens, then types "he's overthinking
-                    this again" in its own caption wing, exactly like /notch's
-                    real lifecycle, and gets to play all the way out
      5  poet        "He was trained" -> MATCH CUT "Deliberately trained." ->
-                    "by a *poet." — the match cut is its own beat mid-sentence
-     6  delib       "To be the *most" "emotionally intelligent" "AI. Ever."
-     6b engine      "He does not sugarcoat." "Trained on you." "Reads what you
-                    don't say." "Calls you out." MATCH CUT -> "Gently." "Runs
-                    on his own" "*Emotional Engine."
-     7  proof       "Way beyond a chatbot." "Not "how can I assist you
-                    today."" "Just a guy." "In your notch." "Unbothered."
+                    "by a *poet.*" MATCH CUT — both beats of this line cut now
+     6  delib       "To be the *most*" -> MATCH CUT "emotionally intelligent"
+                    -> "AI. Ever."
+     6b engine      "He does not sugarcoat." MATCH CUT -> "Trained on you."
+                    "Reads what you don't say." -> "Calls you out." MATCH CUT
+                    -> "Gently." "Runs on his own" -> "*Emotional Engine."
+                    BIG Apple-style match cut, biggest text in the scene,
+                    one-shot shimmer
+     7  proof       "Way beyond a chatbot." "Not "how can I / assist you
+                    today."" "Just a guy." "In your notch." MATCH CUT
+                    "Unbothered."
      8  turn        "No "as an AI, I can't relate."" "He relates." "Because
-                    he's been" "*taught to."
+                    he's been" -> MATCH CUT "*taught* to."
      9  close       "His intelligence?" "Artificial." "His understanding" "of
-                    emotions?" "Hu" -> MATCH CUT -> "+man." (fused reveal)
-    10  black       a beat of pure black — the hard cut before the card
-    11  cta         "Braino." -> "More Human, Less AI." — the notch goes into
-                    real "music mode" here (same mechanic as the Mac app's
-                    now-playing notch): the walker mascot dances inside the
-                    pill, the box-shadow does its live hue/beat light show.
-                    Holds, then loops.
+                    emotions?" "Hu" -> MATCH CUT -> "+man." (fused reveal) —
+                    the film ends here, holds, loops. The notch comes back
+                    for this hold, and only this hold — nothing else uses it.
    Match-cut rule: the invert flip IS the effect — word-stamp/fade animation
    is suppressed on any line while its match-cut is active (.invert-flash
    .et-word.in { animation: none }), so the cut reads as one clean flip.
@@ -58,44 +59,86 @@ const namespacedWalker = (prefix: string) =>
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-const OPEN_PHRASES = [["Most", "people"], ["have", "a", "problem"], ["with", "AI."]];
-const OPEN_SW = 280;
+// ── Syllable chunking ("the x2x2 formula") — same engine as /dontblink's
+// IntroTeaser.tsx (copied verbatim, see that file for the full rationale):
+// long words split at their median letter into a "+"-fused pair so every
+// beat has something stamping in, instead of a whole word sitting static
+// on one frame. Flip CHUNK_WORDS to false to go back to whole words —
+// nothing else needs touching, every index derives from the map below.
+const CHUNK_WORDS = true;
+const CHUNK_MIN_LEN = 4;
+const CHUNK_SKIP = new Set([
+  "your", "yours", "that", "with", "from", "they", "them", "their", "there",
+  "have", "been", "were", "will", "just", "else", "what", "when", "than",
+  "then", "these", "those", "some", "such", "into", "onto", "over",
+  "only", "also", "both", "each", "same", "very", "much", "more", "most",
+]);
+function chunkWord(word: string): string[] {
+  if (!CHUNK_WORDS) return [word];
+  const marker = word.startsWith("+") || word.startsWith("*") ? word[0] : "";
+  if (marker === "*") return [word];
+  const m = word.slice(marker.length).match(/^([^A-Za-z0-9]*)([A-Za-z0-9’']+)(.*)$/);
+  if (!m) return [word];
+  const [, pre, core, post] = m;
+  if (core.length < CHUNK_MIN_LEN || CHUNK_SKIP.has(core.toLowerCase())) return [word];
+  const cut = Math.floor(core.length / 2);
+  return [`${marker}${pre}${core.slice(0, cut)}`, `+${core.slice(cut)}${post}`];
+}
+type Chunked = { words: string[]; wordToChunks: number[][]; chunkToWord: number[] };
+function chunkPhrase(words: string[]): Chunked {
+  const out: string[] = [];
+  const wordToChunks: number[][] = [];
+  const chunkToWord: number[] = [];
+  words.forEach((w, wi) => {
+    const idxs: number[] = [];
+    for (const c of chunkWord(w)) { idxs.push(out.length); chunkToWord.push(wi); out.push(c); }
+    wordToChunks.push(idxs);
+  });
+  return { words: out, wordToChunks, chunkToWord };
+}
+const chunkScript = (phrases: string[][]) => phrases.map(chunkPhrase);
+const chunkedWords = (cs: Chunked[]) => cs.map((c) => c.words);
+// last chunk index of an original word — what match-cut landings compare against
+const lastChunkOf = (c: Chunked, wordIdx: number) => c.wordToChunks[wordIdx][c.wordToChunks[wordIdx].length - 1];
+
+const OPEN_PHRASES = chunkedWords(chunkScript([["Most", "people"], ["have", "a", "problem"], ["with", "AI."]]));
+const OPEN_SW = 220;
 const OPEN_GAPS: number[] = [];
 
 // one line, holds — not split into two beats
-const COMPLAINT_PHRASES = [["He's", "always", "*validating."]];
-const COMPLAINT_SW = 280;
-const COMPLAINT_GAPS: number[] = []; COMPLAINT_GAPS[0] = 520;   // the hold
+const COMPLAINT_PHRASES = chunkedWords(chunkScript([["He's", "always", "*validating."]]));
+const COMPLAINT_SW = 220;
+const COMPLAINT_GAPS: number[] = []; COMPLAINT_GAPS[0] = 300;   // the hold
 
-const CONTRAST_PHRASES = [["But", "not"], ["Braino."]];
-const CONTRAST_SW = 320;
+const CONTRAST_PHRASES = chunkedWords(chunkScript([["But", "not"], ["Braino."]]));
+const CONTRAST_SW = 240;
 const CONTRAST_GAPS: number[] = [];
 
-const WHY_WORDS = ["Here's", "why."];
-const WHY_SW = 320;
+// chunked like every other line now — "Here's" -> "Her"+"+e's" — this line
+// was the one holdout still using whole words.
+const WHY_CHUNKS = chunkPhrase(["Here's", "why."]);
+const WHY_WORDS = WHY_CHUNKS.words;
+const WHY_SW = 240;
 
-// real notch cutaway, right after "Here's why" — listens, then types what
-// he's actually noticing, exactly like /notch's real captioning lifecycle
-const NOTCHCUT_CAPTION = "he's overthinking this again";
-const NOTCHCUT_LISTEN_DUR = 550;
-const NOTCHCUT_TYPE_MS = 45;
-const NOTCHCUT_TYPE_DUR = NOTCHCUT_CAPTION.length * NOTCHCUT_TYPE_MS;
-const NOTCHCUT_HOLD = 1100;   // let the caption breathe once fully typed, before cutting away — was clipping
-const NOTCHCUT_DUR = NOTCHCUT_LISTEN_DUR + NOTCHCUT_TYPE_DUR + NOTCHCUT_HOLD;
-
-const POET_PHRASES = [["He", "was", "trained"], ["Deliberately", "trained."], ["by", "a", "*poet."]];
-const POET_SW = 400;   // slower — everything after "Here's why" breathes
-const POET_GAPS: number[] = []; POET_GAPS[0] = 220; POET_GAPS[1] = 320;   // more room after the match cut before "by a poet." joins
+// full script restored — only the pace changed this round, not the words.
+// No notch cutaway scene anymore though (was its own 2.9s beat, cut
+// entirely per direction, separate from the word-count question).
+const POET_CHUNKS = chunkScript([["He", "was", "trained"], ["Deliberately", "trained."], ["by", "a", "*poet."]]);
+const POET_PHRASES = chunkedWords(POET_CHUNKS);
+const POET_SW = 260;
+const POET_GAPS: number[] = []; POET_GAPS[0] = 150; POET_GAPS[1] = 200;   // room after the match cut before "by a poet." joins
 
 // the pitch, right after the poet reveal — the emotional-engine claim in plain
 // words. Currently the film's ending: holds here, then loops.
-const DELIB_PHRASES = [["To", "be", "the", "*most"], ["emotionally", "intelligent"], ["AI.", "Ever."]];
-const DELIB_SW = 360;
-const DELIB_GAPS: number[] = []; DELIB_GAPS[0] = 340;   // extra breath before "emotionally intelligent" lands
+const DELIB_CHUNKS = chunkScript([["To", "be", "the", "*most"], ["emotionally", "intelligent"], ["AI.", "Ever."]]);
+const DELIB_PHRASES = chunkedWords(DELIB_CHUNKS);
+const DELIB_SW = 240;
+const DELIB_GAPS: number[] = []; DELIB_GAPS[0] = 200;   // extra breath before "emotionally intelligent" lands
 
 // the technical beat — plain, upfront, no sugar coating; MATCH CUT lands on
-// "Calls you out." right before "Gently." joins
-const ENGINE_PHRASES = [
+// "Calls you out." right before "Gently." joins, then "Emotional Engine."
+// lands its own BIG cut.
+const ENGINE_CHUNKS = chunkScript([
   ["He", "does", "not", "sugarcoat."],
   ["Trained", "on", "you."],
   ["Reads", "what", "you", "don't", "say."],
@@ -103,80 +146,59 @@ const ENGINE_PHRASES = [
   ["Gently."],
   ["Runs", "on", "his", "own"],
   ["*Emotional", "Engine."],
-];
-const ENGINE_SW = 300;
-const ENGINE_GAPS: number[] = []; ENGINE_GAPS[5] = 460;   // "Runs on his own" needs its own breath before "Emotional Engine." lands
+]);
+const ENGINE_PHRASES = chunkedWords(ENGINE_CHUNKS);
+const ENGINE_SW = 220;
+const ENGINE_GAPS: number[] = []; ENGINE_GAPS[5] = 260;   // breath before "Emotional Engine." lands its big reveal
 
 // he's not a chatbot — plain proof, back to normal flowing phrases (no
 // back-to-back match cuts). Just ONE match cut, on "Unbothered." landing —
 // plain invert flash, no size pop.
-const PROOF_PHRASES = [
+const PROOF_CHUNKS = chunkScript([
   ["Way", "beyond", "a", "chatbot."],
   ["Not", "“how", "can", "I"],
   ["assist", "you", "today.”"],
   ["Just", "a", "guy."],
   ["In", "your", "notch."],
   ["Unbothered."],
-];
-const PROOF_SW = 300;
+]);
+const PROOF_PHRASES = chunkedWords(PROOF_CHUNKS);
+const PROOF_SW = 220;
 const PROOF_GAPS: number[] = [];
 
 // the turn — he relates, because he's actually built to. Plain, no cuts —
-// the only match cut this close to the end is "Hu"+"man." in CLOSE_PHRASES.
-const TURN_PHRASES = [
+// the only other match cut this close to the end is "Hu"+"man." in CLOSE_PHRASES.
+const TURN_CHUNKS = chunkScript([
   ["No", "“as", "an", "AI,"],
   ["I", "can't", "relate.”"],
   ["He", "relates."],
   ["Because", "he's", "been"],
   ["*taught", "to."],
-];
-const TURN_SW = 300;
+]);
+const TURN_PHRASES = chunkedWords(TURN_CHUNKS);
+const TURN_SW = 220;
 const TURN_GAPS: number[] = [];
 
 // the close — artificial intelligence, human understanding. "Hu" + "+man."
 // fuses flush (the "+" convention) right as the match cut fires.
-const CLOSE_PHRASES = [
+const CLOSE_CHUNKS = chunkScript([
   ["His", "intelligence?"],
   ["Artificial."],
   ["His", "understanding"],
   ["of", "emotions?"],
   ["Hu", "+man."],
-];
-const CLOSE_SW = 340;
-const CLOSE_GAPS: number[] = []; CLOSE_GAPS[3] = 400;   // extra breath right before the reveal
+]);
+const CLOSE_PHRASES = chunkedWords(CLOSE_CHUNKS);
+const CLOSE_SW = 240;
+const CLOSE_GAPS: number[] = []; CLOSE_GAPS[3] = 260;   // extra breath right before the reveal
+// holds on "Hu"+"man." — the film ends here, then loops. The notch comes
+// back for this hold: dozing -> eyes open -> expands downward -> dances,
+// same 4-phase choreography /notch's own now-playing pill uses. Trimmed
+// from 3600 to fit the ~25s runtime target — still enough for a real beat.
+const CLOSE_HOLD = 1800;
+let CLOSE_DANCE_HZ = 120 / 60;   // fallback BPM guess — overwritten with the real analyzed BPM in applyBeats()
 
-// right after "Hu"+"man." lands — a rapid-fire aside. Two words at a time,
-// replacing in place (not accumulating on one line — a full 12-word
-// sentence at this font-size was running off the edges of the screen).
-const PROFANITY_PHRASES = [
-  ["(he", "also"],
-  ["says", "fuck,"],
-  ["behenchod,", "yeah"],
-  ["—", "no"],
-  ["filters,", "because"],
-  ["fuck", "them)"],
-];
-const PROFANITY_SW = 220;
-const PROFANITY_GAPS: number[] = [];
-
-// a beat of pure black — the hard cut before the closing card
-const BLACK_HOLD = 600;
-
-// closing card — the notch goes into real "music mode": the walker mascot
-// dances inside the pill (same rig, same rename-per-instance trick as every
-// other mascot use), the box-shadow runs its live hue/beat light show, both
-// driven by --music-flash / --music-hue exactly like content.js's own
-// now-playing notch. Keyed off elapsed scene time (not wall clock), so it
-// stays fully scrubbable like everything else in this film.
-// "More"/"Human,"/"Less"/"AI." each land as their own word now — 4 match
-// cuts punctuating the human/AI contrast the line is literally making.
-const CTA_PHRASES = [["Braino."], ["More"], ["Human,"], ["Less"], ["AI."]];
-const CTA_SW = 320;
-const CTA_GAPS: number[] = []; CTA_GAPS[0] = 500; CTA_GAPS[1] = 140; CTA_GAPS[2] = 140; CTA_GAPS[3] = 140;
-const CTA_DANCE_HZ = 157 / 60;   // synced to the track's own 157 BPM
-const CTA_HOLD = 2600;   // dancing hold before it loops
-
-const GAP = 260;
+const GAP = 140;
 
 const phraseSw = (sw: number | number[], i: number) =>
   Array.isArray(sw) ? (sw[i] ?? sw[sw.length - 1]) : sw;
@@ -200,8 +222,6 @@ const ENGINE_TOTAL = phraseSeq(ENGINE_PHRASES, ENGINE_SW, ENGINE_GAPS).total;
 const PROOF_TOTAL = phraseSeq(PROOF_PHRASES, PROOF_SW, PROOF_GAPS).total;
 const TURN_TOTAL = phraseSeq(TURN_PHRASES, TURN_SW, TURN_GAPS).total;
 const CLOSE_TOTAL = phraseSeq(CLOSE_PHRASES, CLOSE_SW, CLOSE_GAPS).total;
-const PROFANITY_TOTAL = phraseSeq(PROFANITY_PHRASES, PROFANITY_SW, PROFANITY_GAPS).total;
-const CTA_TOTAL = phraseSeq(CTA_PHRASES, CTA_SW, CTA_GAPS).total;
 
 // Build the timeline. Opening (open/complaint/contrast/why) keeps its tight,
 // fast-sync gaps — that's the part that landed well. Everything after
@@ -220,18 +240,18 @@ const buildTimeline = (H: number, snap?: (ms: number, down: boolean) => number) 
   const complaint = S2(open + OPEN_TOTAL + H * 0.1);
   const contrast = S2(complaint + COMPLAINT_TOTAL + H * 0.12);
   const why = S2(contrast + CONTRAST_TOTAL + H * 0.12);
-  const notchCut = S2(why + WHY_TOTAL + H * 0.12);
-  const poet = S2(notchCut + NOTCHCUT_DUR + H * 0.24);
+  const poet = S2(why + WHY_TOTAL + H * 0.24);
   const delib = S2(poet + POET_TOTAL + H * 0.24);
   const engine = S2(delib + DELIB_TOTAL + H * 0.24);
   const proof = S2(engine + ENGINE_TOTAL + H * 0.22);
   const turn = S2(proof + PROOF_TOTAL + H * 0.22);
   const close = S2(turn + TURN_TOTAL + H * 0.22);
-  const profanity = S2(close + CLOSE_TOTAL + H * 0.16);
-  const black = S2(profanity + PROFANITY_TOTAL + H * 0.14);
-  const cta = S2(black + BLACK_HOLD, true);                  // SNAP 1 — the closing card lands on a downbeat
-  const end = Math.round(cta + CTA_TOTAL + CTA_HOLD);
-  return { open, complaint, contrast, why, notchCut, poet, delib, engine, proof, turn, close, profanity, black, cta, end };
+  // the film ends right on the "Hu"+"man." match cut: hold on it, then loop.
+  // GAP is subtracted since it's appended after CLOSE_PHRASES' last phrase
+  // too (phraseSeq adds it unconditionally) — landTime is when "man." itself
+  // finishes stamping in, not the trailing padding after it.
+  const end = Math.round(close + (CLOSE_TOTAL - GAP) + CLOSE_HOLD);
+  return { open, complaint, contrast, why, poet, delib, engine, proof, turn, close, end };
 };
 
 const solveHold = (target: number) => {
@@ -239,12 +259,22 @@ const solveHold = (target: number) => {
   return clamp((target - e0) / ((e1 - e0) / 1000), 150, 6000);
 };
 
-// 41200 was set before the profanity beat + other additions this session —
-// actual content already runs ~50s even at the MINIMUM hold (H floor), so
-// the solver was pinned at its floor for the ENTIRE film, not just the end.
-// That's what made the last stretch (close → profanity → black → cta) read
-// as cramped/overlapping — there was no real breathing room anywhere.
-const TARGET_MS = 52500;
+// full script (every word) at the tightened pace (SW ~220-260ms, GAP 140ms,
+// no notch cutaway) naturally runs ~37.5s even at H's floor — that's the
+// real target now, not an arbitrary number, so the solver isn't fighting to
+// stretch OR compress it.
+const TARGET_MS = 37500;
+// new track (one.mp3) plays from 2:25 in, not from 0:00 — "t=0" in the film
+// is "2:25" in the mp3, everything (playback + beat/downbeat arrays) is
+// shifted by this amount, see applyBeats(). NOTE: one.mp3 is only 3:37.15
+// total, and the full film (open -> ... -> the "Hu"+"man." close) runs
+// ~56-67s depending on the solved hold — starting at 3:30 (or the originally
+// requested 3:47, which is PAST the file's end entirely) left only a few
+// seconds of real track, and the code hard-clamps the whole scrubber/timeline
+// to whatever's left in the file (see hardEnd below) — that's what chopped
+// the visible film down to "7 seconds". 2:25 leaves ~72s of tail, comfortably
+// past the film's own max length, so nothing gets truncated.
+const AUDIO_START_OFFSET_MS = 145000;
 const DEFAULT_H = solveHold(TARGET_MS);
 const DEFAULT_T = buildTimeline(DEFAULT_H);
 
@@ -274,12 +304,8 @@ export default function EmotionTeaser() {
     const proof = q(".et-proof");
     const turn = q(".et-turn");
     const close = q(".et-close");
-    const profanity = q(".et-profanity");
-    const black = q(".et-black");
-    const cta = q(".et-cta");
     const dancerHost = notch.querySelector<HTMLElement>(".nf-dancer");
     const invert = q(".et-invert");
-    const rings = q(".et-rings");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     let T = { ...DEFAULT_T };
@@ -291,8 +317,6 @@ export default function EmotionTeaser() {
     const proofStarts = phraseSeq(PROOF_PHRASES, PROOF_SW, PROOF_GAPS).starts;
     const turnStarts = phraseSeq(TURN_PHRASES, TURN_SW, TURN_GAPS).starts;
     const closeStarts = phraseSeq(CLOSE_PHRASES, CLOSE_SW, CLOSE_GAPS).starts;
-    const profanityStarts = phraseSeq(PROFANITY_PHRASES, PROFANITY_SW, PROFANITY_GAPS).starts;
-    const ctaStarts = phraseSeq(CTA_PHRASES, CTA_SW, CTA_GAPS).starts;
     const openStarts = phraseSeq(OPEN_PHRASES, OPEN_SW, OPEN_GAPS).starts;
     const complaintStarts = phraseSeq(COMPLAINT_PHRASES, COMPLAINT_SW, COMPLAINT_GAPS).starts;
     const contrastStarts = phraseSeq(CONTRAST_PHRASES, CONTRAST_SW, CONTRAST_GAPS).starts;
@@ -304,16 +328,14 @@ export default function EmotionTeaser() {
 
     // reset
     root.querySelectorAll<HTMLElement>(".et-word").forEach((w) => w.classList.remove("in"));
-    [openEl, complaint, contrast, why, poet, delib, engine, proof, turn, close, profanity, black, cta].forEach((el) => (el.style.opacity = "0"));
+    [openEl, complaint, contrast, why, poet, delib, engine, proof, turn, close].forEach((el) => (el.style.opacity = "0"));
     invert.style.opacity = "0";
-    rings.classList.remove("burst");
-    [poet, engine, close, proof, turn].forEach((el) => el.classList.remove("invert-flash"));
+    [poet, delib, engine, close, proof, turn].forEach((el) => el.classList.remove("invert-flash"));
     notchWrap.style.opacity = "0"; notch.className = "nf-face on home dozing"; setNotchStatus(notch, "");
-    notchWrap.style.transform = ""; cta.classList.remove("invert-flash");
-    notchWrap.classList.remove("et-dance-pos");
+    notchWrap.style.transform = ""; notchWrap.classList.remove("et-dance-pos");
     if (capEl) capEl.textContent = "";
 
-    if (reduced) { cta.style.opacity = "1"; root.querySelectorAll<HTMLElement>(".et-cta .et-word").forEach((w) => w.classList.add("in")); return; }
+    if (reduced) { close.style.opacity = "1"; root.querySelectorAll<HTMLElement>(".et-close .et-word").forEach((w) => w.classList.add("in")); return; }
 
     let raf = 0;
     let playing = true, manualT = 0, startWall = performance.now();
@@ -359,10 +381,7 @@ export default function EmotionTeaser() {
       kinetic(host, sceneStart + starts[idx], phraseSw(sw, idx), t);
     };
 
-    const burst = () => {
-      rings.classList.remove("burst"); void rings.offsetWidth; rings.classList.add("burst");
-    };
-    let firedDeliberately = false, firedCallsOut = false, firedMan = false;
+    let firedDeliberately = false, firedPoet = false, firedIntelligent = false, firedSugarcoat = false, firedEngine = false, firedCallsOut = false, firedTaught = false, firedMan = false;
     let lastNotchCls = "";
     let dancerParts: { ll: SVGElement | null; rl: SVGElement | null; la: SVGElement | null; ra: SVGElement | null; laB: SVGElement | null; raB: SVGElement | null } | null = null;
 
@@ -376,61 +395,63 @@ export default function EmotionTeaser() {
       contrast.style.opacity = String(ramp(t, T.contrast, T.contrast + 90) * (1 - ramp(t, T.why - 200, T.why - 60)));
       sequence(contrast, CONTRAST_PHRASES, contrastStarts, T.contrast, CONTRAST_SW, t);
 
-      why.style.opacity = String(ramp(t, T.why, T.why + 90) * (1 - ramp(t, T.notchCut - 200, T.notchCut - 60)));
+      why.style.opacity = String(ramp(t, T.why, T.why + 90) * (1 - ramp(t, T.poet - 200, T.poet - 60)));
       kinetic(why, T.why, WHY_SW, t);
-
-      // real notch cutaway — the ONLY notch appearance now: listens, then
-      // types what he's noticing, and gets to play all the way out (a longer
-      // fade-in/out window than before) before handing off to "He was trained".
-      {
-        const inNotchCut = t >= T.notchCut && t < T.poet;
-        const notchCutBt = inNotchCut ? t - T.notchCut : -1;
-        const notchOp = inNotchCut
-          ? ramp(t, T.notchCut, T.notchCut + 200) * (1 - ramp(t, T.poet - 350, T.poet - 120))
-          : 0;
-        notchWrap.style.opacity = String(notchOp);
-
-        if (inNotchCut) {
-          let cls: string, cap = "";
-          if (notchCutBt < NOTCHCUT_LISTEN_DUR) {
-            cls = "nf-face on home listen mic-live";
-          } else if (notchCutBt < NOTCHCUT_LISTEN_DUR + NOTCHCUT_TYPE_DUR) {
-            cls = "nf-face on home captioning mic-live";
-            const chars = clamp(Math.floor((notchCutBt - NOTCHCUT_LISTEN_DUR) / NOTCHCUT_TYPE_MS), 0, NOTCHCUT_CAPTION.length);
-            cap = NOTCHCUT_CAPTION.slice(0, chars);
-          } else {
-            cls = "nf-face on home captioning mic-live";
-            cap = NOTCHCUT_CAPTION;
-          }
-          if (cls !== lastNotchCls) { notch.className = cls; lastNotchCls = cls; setNotchStatus(notch, ""); }
-          if (capEl && capEl.textContent !== cap) capEl.textContent = cap;
-        } else if (t < T.notchCut) {
-          const cls = "nf-face on home dozing";
-          if (cls !== lastNotchCls) { notch.className = cls; lastNotchCls = cls; }
-        }
-      }
 
       poet.style.opacity = String(ramp(t, T.poet, T.poet + 90) * (1 - ramp(t, T.delib - 200, T.delib - 60)));
       sequence(poet, POET_PHRASES, poetStarts, T.poet, POET_SW, t);
       // "Deliberately trained." — its own match-cut once both words land,
       // self-bounded: seqIdx moves to phrase 2 ("by a poet.") right after,
-      // so this can never latch true past its own phrase.
-      const deliberatelyLanded = seqIdx.get(poet) === 1 && (kinCache.get(poet)?.last ?? -1) === 1;
-      poet.classList.toggle("invert-flash", deliberatelyLanded);
-      if (deliberatelyLanded && !firedDeliberately) { firedDeliberately = true; burst(); }
+      // so this can never latch true past its own phrase. Chunked, so "last
+      // chunk of the last word" is looked up via the map, not hardcoded.
+      const deliberatelyLanded = seqIdx.get(poet) === 1 && (kinCache.get(poet)?.last ?? -1) === lastChunkOf(POET_CHUNKS[1], 1);
+      // "by a *poet.*" — its own match cut too, last phrase in POET_PHRASES
+      // so bounded by t < T.delib same as every other trailing-phrase cut.
+      const poetLanded = t < T.delib && seqIdx.get(poet) === 2
+        && (kinCache.get(poet)?.last ?? -1) === lastChunkOf(POET_CHUNKS[2], 2);
+      poet.classList.toggle("invert-flash", deliberatelyLanded || poetLanded);
+      if (deliberatelyLanded && !firedDeliberately) { firedDeliberately = true; }
       if (!deliberatelyLanded) firedDeliberately = false;
+      if (poetLanded && !firedPoet) { firedPoet = true; }
+      if (!poetLanded) firedPoet = false;
 
       delib.style.opacity = String(ramp(t, T.delib, T.delib + 100) * (1 - ramp(t, T.engine - 220, T.engine - 60)));
       sequence(delib, DELIB_PHRASES, delibStarts, T.delib, DELIB_SW, t);
+      // "emotionally intelligent" — its own match-cut once both words land,
+      // self-bounded: seqIdx moves to phrase 2 ("AI. Ever.") right after.
+      const intelligentLanded = seqIdx.get(delib) === 1 && (kinCache.get(delib)?.last ?? -1) === lastChunkOf(DELIB_CHUNKS[1], 1);
+      delib.classList.toggle("invert-flash", intelligentLanded);
+      if (intelligentLanded && !firedIntelligent) { firedIntelligent = true; }
+      if (!intelligentLanded) firedIntelligent = false;
 
       engine.style.opacity = String(ramp(t, T.engine, T.engine + 100) * (1 - ramp(t, T.proof - 220, T.proof - 60)));
       sequence(engine, ENGINE_PHRASES, engineStarts, T.engine, ENGINE_SW, t);
+      // "sugarcoat." — its own match-cut once all 4 words land, self-bounded:
+      // seqIdx moves to phrase 1 ("Trained on you.") right after.
+      const sugarcoatLanded = seqIdx.get(engine) === 0 && (kinCache.get(engine)?.last ?? -1) === lastChunkOf(ENGINE_CHUNKS[0], 3);
+      if (sugarcoatLanded && !firedSugarcoat) { firedSugarcoat = true; }
+      if (!sugarcoatLanded) firedSugarcoat = false;
       // "Calls you out." — its own match-cut once all 3 words land,
       // self-bounded: seqIdx moves to phrase 4 ("Gently.") right after.
-      const callsOutLanded = seqIdx.get(engine) === 3 && (kinCache.get(engine)?.last ?? -1) === 2;
-      engine.classList.toggle("invert-flash", callsOutLanded);
-      if (callsOutLanded && !firedCallsOut) { firedCallsOut = true; burst(); }
+      const callsOutLanded = seqIdx.get(engine) === 3 && (kinCache.get(engine)?.last ?? -1) === lastChunkOf(ENGINE_CHUNKS[3], 2);
+      // "Emotional Engine." — the finale of this scene, Apple-style BIG
+      // reveal: "Engine." splits "Eng"+"+ine." same as every chunked word,
+      // but the match cut lands right as "+ine." completes, the whole line
+      // jumps to its biggest size, and "Engine." gets a one-shot shimmer.
+      // Last phrase in ENGINE_PHRASES — no next index to self-bound against,
+      // so bounded by t < T.proof same as every other trailing-phrase cut.
+      const engineBigLanded = t < T.proof && seqIdx.get(engine) === 6
+        && (kinCache.get(engine)?.last ?? -1) === lastChunkOf(ENGINE_CHUNKS[6], 1);
+      engine.classList.toggle("invert-flash", sugarcoatLanded || callsOutLanded || engineBigLanded);
+      engine.classList.toggle("et-engine-big", engineBigLanded);
+      if (callsOutLanded && !firedCallsOut) { firedCallsOut = true; }
       if (!callsOutLanded) firedCallsOut = false;
+      if (engineBigLanded && !firedEngine) {
+        firedEngine = true;
+        const spans = kinCache.get(engine)?.spans;
+        if (spans) { spans[1]?.classList.add("et-engine-shimmer"); spans[2]?.classList.add("et-engine-shimmer"); }
+      }
+      if (!engineBigLanded) firedEngine = false;
 
       proof.style.opacity = String(ramp(t, T.proof, T.proof + 100) * (1 - ramp(t, T.turn - 220, T.turn - 60)));
       sequence(proof, PROOF_PHRASES, proofStarts, T.proof, PROOF_SW, t);
@@ -438,64 +459,50 @@ export default function EmotionTeaser() {
       // flash, no size pop. Bounded by t < T.turn so it can't latch true
       // past this scene (same bug class manLanded below already hit once).
       const proofCutLanded = t < T.turn && seqIdx.get(proof) === PROOF_PHRASES.length - 1
-        && (kinCache.get(proof)?.last ?? -1) === 0;
+        && (kinCache.get(proof)?.last ?? -1) === lastChunkOf(PROOF_CHUNKS[PROOF_CHUNKS.length - 1], 0);
       proof.classList.toggle("invert-flash", proofCutLanded);
 
       turn.style.opacity = String(ramp(t, T.turn, T.turn + 100) * (1 - ramp(t, T.close - 220, T.close - 60)));
       sequence(turn, TURN_PHRASES, turnStarts, T.turn, TURN_SW, t);
+      // "*taught* to." — the turn's own match cut, last phrase in TURN_PHRASES
+      // so bounded by t < T.close same as every other trailing-phrase cut.
+      // "*taught*" already carries the shimmer emphasis (the "*" marker) —
+      // this adds the cut on top, right as "to." lands.
+      const taughtLanded = t < T.close && seqIdx.get(turn) === 4
+        && (kinCache.get(turn)?.last ?? -1) === lastChunkOf(TURN_CHUNKS[4], 1);
+      turn.classList.toggle("invert-flash", taughtLanded);
+      if (taughtLanded && !firedTaught) { firedTaught = true; }
+      if (!taughtLanded) firedTaught = false;
 
-      close.style.opacity = String(ramp(t, T.close, T.close + 100) * (1 - ramp(t, T.profanity - 180, T.profanity - 60)));
+      // close holds through the end of the film — no next scene to fade into.
+      close.style.opacity = String(ramp(t, T.close, T.close + 100));
       sequence(close, CLOSE_PHRASES, closeStarts, T.close, CLOSE_SW, t);
-      // "Hu" + "+man." — the fused reveal IS the match cut, once both parts land.
-      // Unlike "Deliberately trained."/"Calls you out.", "Hu"+"man." is
-      // CLOSE_PHRASES' LAST phrase — there's no next phrase to move seqIdx
-      // off idx 4, so without an explicit t-bound this stayed true forever
-      // once it fired, leaving the full-white .et-invert overlay stuck on
-      // top of every scene after it (the profanity line, black, even the
-      // closing card).
-      const manLanded = t < T.profanity && seqIdx.get(close) === 4 && (kinCache.get(close)?.last ?? -1) === 1;
+      // "Hu" + "+man." — the fused reveal IS the match cut, and the film
+      // ends right on it (see buildTimeline's `end`), so this is bounded by
+      // T.end same as every other latch-risk landing in this file.
+      const manLanded = t < T.end && seqIdx.get(close) === 4 && (kinCache.get(close)?.last ?? -1) === lastChunkOf(CLOSE_CHUNKS[4], 1);
       close.classList.toggle("invert-flash", manLanded);
-      if (manLanded && !firedMan) { firedMan = true; burst(); }
+      if (manLanded && !firedMan) { firedMan = true; }
       if (!manLanded) firedMan = false;
 
-      // rapid-fire aside right after "Human." — two words at a time,
-      // replacing in place so it never runs off the edges of the screen.
-      profanity.style.opacity = String(ramp(t, T.profanity, T.profanity + 60) * (1 - ramp(t, T.black - 100, T.black)));
-      sequence(profanity, PROFANITY_PHRASES, profanityStarts, T.profanity, PROFANITY_SW, t);
-
-      // a beat of pure black before the card
-      black.style.opacity = String(ramp(t, T.black - 40, T.black + 40) * (1 - ramp(t, T.cta - 80, T.cta)));
-
-      // closing card — "Braino." then "More"/"Human,"/"Less"/"AI." (each its
-      // own match cut), holds, loops. The notch goes into real music mode:
-      // appears dozing → eyes open → expands downward → dancer + light show.
-      cta.style.opacity = String(ramp(t, T.cta, T.cta + 140) * (1 - ramp(t, T.end - 260, T.end - 100)));
-      sequence(cta, CTA_PHRASES, ctaStarts, T.cta, CTA_SW, t);
-      const ctaIdx = seqIdx.get(cta) ?? -1;
-      const ctaLast = kinCache.get(cta)?.last ?? -1;
-      const moreLanded = ctaIdx === 1 && ctaLast === 0;
-      const humanLanded = ctaIdx === 2 && ctaLast === 0;
-      const lessLanded = ctaIdx === 3 && ctaLast === 0;
-      // "AI." is CTA_PHRASES' LAST phrase — idx clamps here forever once
-      // the scene moves on, so (unlike the other three) it can't be
-      // self-bounded by "does the next phrase exist" — bound it by an
-      // explicit short time window instead (same fix as manLanded/
-      // proofCutLanded above, applied up front this time).
-      const aiLandT = T.cta + ctaStarts[4] + CTA_SW;
-      const aiLanded = t >= aiLandT && t < aiLandT + 200;
-      cta.classList.toggle("invert-flash", moreLanded || humanLanded || lessLanded || aiLanded);
+      // the notch comes back right as "Hu"+"man." lands, for the hold before
+      // the loop: dozing -> eyes open -> expands downward -> dances. Same
+      // mechanic as the Mac app's now-playing notch (--music-flash /
+      // --music-hue), same rig-rename trick as every other mascot use.
       {
-        const inDance = t >= T.cta && t < T.end;
-        const danceOp = inDance ? ramp(t, T.cta, T.cta + 250) * (1 - ramp(t, T.end - 200, T.end)) : 0;
-        notchWrap.style.opacity = String(Math.max(Number(notchWrap.style.opacity) || 0, danceOp));
-        // during the dance, the notch was dead-centre same as the "Braino."/
-        // tagline text — directly overlapping it. Push it down, clear of the
-        // text, for this phase only (notchCut earlier stays centred).
+        const landT = T.end - CLOSE_HOLD;
+        const inDance = t >= landT && t < T.end;
+        const danceOp = inDance ? ramp(t, landT, landT + 250) * (1 - ramp(t, T.end - 200, T.end)) : 0;
+        // direct assignment, not Math.max-accumulated: the notch cutaway
+        // scene that used to also write this opacity is gone, so nothing
+        // else resets it — the old Math.max pattern left it pinned at ~1
+        // forever after the FIRST loop's dance played, showing the dancing
+        // notch stuck on screen through every scene of every replay after.
+        notchWrap.style.opacity = String(danceOp);
+        // pushed clear of the "Hu man." text it would otherwise sit under.
         notchWrap.classList.toggle("et-dance-pos", inDance);
         if (inDance) {
-          // four staged beats: dozing (small) → eyes open (awake) → expands
-          // downward → dancer fades in once fully expanded.
-          const dt0 = t - T.cta;
+          const dt0 = t - landT;
           const DOZE_DUR = 400, EYES_DUR = 400, EXPAND_DUR = 500;
           const eyesAt = DOZE_DUR, expandAt = DOZE_DUR + EYES_DUR, danceAt = DOZE_DUR + EYES_DUR + EXPAND_DUR;
           let cls: string, cap = "";
@@ -504,13 +511,13 @@ export default function EmotionTeaser() {
           else { cls = "nf-face on home music mic-live"; cap = ""; }
           if (cls !== lastNotchCls) {
             notch.className = cls; lastNotchCls = cls;
-            setNotchStatus(notch, dt0 >= danceAt ? "♪ she needs him · braino fm" : "");
+            setNotchStatus(notch, dt0 >= danceAt ? "♪ braino fm" : "");
             if (capEl) capEl.textContent = cap;
           }
           // scale grows from a small dozing pill up to full size across the
-          // expand window, anchored at the top (see .et-dance-pos) so it
-          // reads as growing DOWNWARD, not from its centre.
-          const growP = ramp(t, T.cta + expandAt, T.cta + danceAt);
+          // expand window, anchored at the top so it reads as growing
+          // DOWNWARD, not from its centre.
+          const growP = ramp(t, landT + expandAt, landT + danceAt);
           const scale = 0.62 + growP * (1.15 - 0.62);
           notchWrap.style.transform = `translate(-50%, 0) scale(${scale.toFixed(3)})`;
 
@@ -521,8 +528,8 @@ export default function EmotionTeaser() {
               const part = (id: string) => dancerHost.querySelector<SVGElement>(`#__etd_${id}__`) || null;
               dancerParts = { ll: part("ll"), rl: part("rl"), la: part("la"), ra: part("ra"), laB: part("la_bg"), raB: part("ra_bg") };
             }
-            const dt = (t - T.cta - danceAt) / 1000;
-            const beatV = (Math.sin(dt * 2 * Math.PI * CTA_DANCE_HZ) + 1) / 2;
+            const dt = (t - landT - danceAt) / 1000;
+            const beatV = (Math.sin(dt * 2 * Math.PI * CLOSE_DANCE_HZ) + 1) / 2;
             notch.style.setProperty("--music-flash", (beatV * beatV).toFixed(3));
             notch.style.setProperty("--music-hue", ((dt * 40) % 360).toFixed(0));
             const s = Math.sin(dt * 6.4);
@@ -537,13 +544,13 @@ export default function EmotionTeaser() {
             const svg = dancerHost?.firstElementChild as HTMLElement | null;
             if (svg) svg.style.transform = `rotate(${s * 9}deg)`;
           }
-        } else if (t < T.notchCut) {
+        } else {
           dancerParts = null;
         }
       }
 
-      invert.style.opacity = (deliberatelyLanded || callsOutLanded || proofCutLanded || manLanded
-        || moreLanded || humanLanded || lessLanded || aiLanded) ? "1" : "0";
+      invert.style.opacity = (deliberatelyLanded || poetLanded || intelligentLanded || sugarcoatLanded || callsOutLanded
+        || engineBigLanded || taughtLanded || proofCutLanded || manLanded) ? "1" : "0";
     };
 
     const controls = root.querySelector<HTMLElement>(".et-scrubber");
@@ -556,18 +563,18 @@ export default function EmotionTeaser() {
       playing = p;
       if (playBtn) playBtn.textContent = p ? "❚❚" : "▶";
       if (trackLoaded && audioEl) {
-        if (p) { audioEl.currentTime = manualT / 1000; audioEl.play().catch(() => {}); }
+        if (p) { audioEl.currentTime = (manualT + AUDIO_START_OFFSET_MS) / 1000; audioEl.play().catch(() => {}); }
         else audioEl.pause();
       } else if (p) startWall = performance.now() - manualT;
     };
-    const seek = (ms: number) => { manualT = clamp(ms, 0, T.end); if (trackLoaded && audioEl) audioEl.currentTime = manualT / 1000; };
+    const seek = (ms: number) => { manualT = clamp(ms, 0, T.end); if (trackLoaded && audioEl) audioEl.currentTime = (manualT + AUDIO_START_OFFSET_MS) / 1000; };
 
     const fmt = (ms: number) => `${(ms / 1000).toFixed(2)}s / ${(T.end / 1000).toFixed(1)}s`;
     let audioAnchor = 0, lastUi = 0;
     const loop = () => {
       if (playing) {
         if (trackLoaded && audioEl) {
-          const at = audioEl.currentTime * 1000;
+          const at = audioEl.currentTime * 1000 - AUDIO_START_OFFSET_MS;
           const wall = performance.now();
           if (audioAnchor === 0 || Math.abs(wall - audioAnchor - at) > 250) audioAnchor = wall - at;
           else audioAnchor += (wall - at - audioAnchor) * 0.06;
@@ -575,7 +582,7 @@ export default function EmotionTeaser() {
         } else {
           manualT = performance.now() - startWall;
         }
-        if (manualT >= T.end) { resetSceneCaches(); seek(0); if (trackLoaded && audioEl) { audioEl.currentTime = 0; audioEl.play().catch(() => {}); } else { startWall = performance.now(); } }
+        if (manualT >= T.end) { resetSceneCaches(); seek(0); if (trackLoaded && audioEl) { audioEl.currentTime = AUDIO_START_OFFSET_MS / 1000; audioEl.play().catch(() => {}); } else { startWall = performance.now(); } }
       }
       render(manualT);
       const now = performance.now();
@@ -633,13 +640,24 @@ export default function EmotionTeaser() {
     const onFsChange = () => { if (document.fullscreenElement === frame) { resetSceneCaches(); seek(0); setPlaying(true); } };
     document.addEventListener("fullscreenchange", onFsChange);
 
-    // fit the film to its own track (she-needs-him.mp3): the words keep their
-    // fast, accelerating cadence; H is solved so the film spans the track,
-    // and the snap point lands on the nearest beat / downbeat.
+    // fit the film to its own track: the words keep their fast, accelerating
+    // cadence; H is solved so the film spans the track, and the snap point
+    // lands on the nearest beat/downbeat. The track plays from
+    // AUDIO_START_OFFSET_MS onward (2:25 in) — beats/downbeats before that
+    // point are dropped and everything is shifted to be relative to that
+    // mark, so "t=0" in the film IS "2:25" in the mp3.
     const applyBeats = (a: BeatAnalysis) => {
-      const target = Math.min(TARGET_MS, a.durationMs - 200);
+      const shift = (arr: number[]) => arr.filter((ms) => ms >= AUDIO_START_OFFSET_MS).map((ms) => ms - AUDIO_START_OFFSET_MS);
+      const shifted: BeatAnalysis = {
+        ...a,
+        beats: shift(a.beats),
+        downbeats: shift(a.downbeats),
+        durationMs: a.durationMs - AUDIO_START_OFFSET_MS,
+      };
+      if (a.bpm && a.bpm > 0) CLOSE_DANCE_HZ = a.bpm / 60;
+      const target = Math.min(TARGET_MS, shifted.durationMs - 200);
       const snap = (ms: number, down: boolean) =>
-        snapToBeat(ms, down ? a.downbeats : a.beats, Math.max(0, ms - 350));
+        snapToBeat(ms, down ? shifted.downbeats : shifted.beats, Math.max(0, ms - 350));
       let goal = target;
       for (let i = 0; i < 3; i++) {
         holdMs = solveHold(goal);
@@ -648,7 +666,7 @@ export default function EmotionTeaser() {
         if (over <= 0) break;
         goal -= over;
       }
-      const hardEnd = Math.round(a.durationMs - 60);
+      const hardEnd = Math.round(shifted.durationMs - 60);
       if (T.end > hardEnd) T.end = hardEnd;
       if (slider) slider.max = String(T.end);
       trackLoaded = true;
@@ -657,7 +675,7 @@ export default function EmotionTeaser() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/she-needs-him.mp3");
+        const res = await fetch("/one.mp3");
         if (!res.ok) throw new Error(String(res.status));
         const buf = await res.arrayBuffer();
         const a = await analyzeTrack(buf, Date.now());
@@ -665,7 +683,7 @@ export default function EmotionTeaser() {
         applyBeats(a);
         seek(0); manualT = 0;
         if (audioEl) {
-          audioEl.src = "/she-needs-him.mp3"; audioEl.load(); audioEl.currentTime = 0;
+          audioEl.src = "/one.mp3"; audioEl.load(); audioEl.currentTime = AUDIO_START_OFFSET_MS / 1000;
           try { await audioEl.play(); playing = true; } catch { playing = false; }
         }
       } catch { /* film still plays on its own wall-clock, unsynced */ }
@@ -694,8 +712,13 @@ export default function EmotionTeaser() {
             <div className="et-open" />
             <div className="et-complaint" />
             <div className="et-contrast" />
-            <div className="et-why">{WHY_WORDS.map((w, i) => <span key={i} className="et-word">{w}</span>)}</div>
-            {/* real notch cutaway — listens, then types what he's noticing */}
+            <div className="et-why">{WHY_WORDS.map((w, i) => {
+              const fuse = w.startsWith("+"); const emph = w.startsWith("*");
+              const cls = fuse ? " nt-fuse" : emph ? " nt-emph" : "";
+              const text = fuse || emph ? w.slice(1) : w;
+              return <span key={i} className={`et-word${cls}`}>{text}</span>;
+            })}</div>
+            {/* the real notch — comes back once right at the very end, dancing through the closing hold */}
             <div className="et-notch">
               <NotchFace className="on home dozing" />
             </div>
@@ -706,11 +729,6 @@ export default function EmotionTeaser() {
             <div className="et-proof et-slow" />
             <div className="et-turn et-slow" />
             <div className="et-close et-slow" />
-            <div className="et-profanity" />
-            <div className="et-black" />
-            <div className="et-cta et-slow" />
-
-            <div className="et-rings"><i /><i /><i /></div>
 
             <div className="et-invert" />
           </div>

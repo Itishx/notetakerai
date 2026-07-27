@@ -15,30 +15,34 @@
 // The context (notes, page, movie, etc.) is added separately by braino-prompt.ts — this function
 // is ONLY personality.
 
-import type { Moment, PersonalitySettings, ResponseMedium, Trait } from "./types.ts";
-import { ORDERED_TRAITS, TRAIT_BY_ID } from "./manifest.ts";
+import type { ClassId, Moment, PersonalitySettings, ResponseMedium, Trait } from "./types.ts";
 import { MOMENT_EMPHASIS, MOMENT_LABEL } from "./moments.ts";
 import { DEFAULT_PERSONALITY_SETTINGS } from "./settings.ts";
+import { getClassManifest } from "./classes.ts";
 
 export type BuildEmotionalCoreOptions = {
   medium?: ResponseMedium;
   settings?: PersonalitySettings;
   moment?: Moment;
+  // Which Braino class is answering (Saburi, Iomi, Telos...). Defaults to the shared "braino"
+  // manifest, so every existing caller keeps behaving exactly as before. See classes.ts.
+  classId?: ClassId;
 };
 
 export function buildEmotionalCore(options: BuildEmotionalCoreOptions = {}): string {
   const medium: ResponseMedium = options.medium === "voice" ? "voice" : "text";
   const settings = options.settings || DEFAULT_PERSONALITY_SETTINGS;
   const moment: Moment = options.moment || "neutral";
+  const traits = getClassManifest(options.classId).traits;
 
-  const ordered = orderTraitsForMoment(moment);
+  const ordered = orderTraitsForMoment(moment, traits);
 
   const ctx = { medium, settings, moment };
   const renderedTraits = ordered
     .map((trait) => trait.body(ctx).trim())
     .filter(Boolean);
 
-  const steer = steeringLine(moment);
+  const steer = steeringLine(moment, traits);
   const parts = steer ? [steer, ...renderedTraits] : renderedTraits;
 
   return parts.join("\n\n");
@@ -46,31 +50,33 @@ export function buildEmotionalCore(options: BuildEmotionalCoreOptions = {}): str
 
 // Move the traits this moment wants to lead with to the front, preserving the manifest order
 // for everything else. Unknown/duplicate ids are ignored safely.
-function orderTraitsForMoment(moment: Moment): Trait[] {
+function orderTraitsForMoment(moment: Moment, traits: Trait[]): Trait[] {
   const leadIds = MOMENT_EMPHASIS[moment] || [];
-  if (leadIds.length === 0) return ORDERED_TRAITS;
+  const traitById = Object.fromEntries(traits.map((t) => [t.id, t]));
+  if (leadIds.length === 0) return traits;
 
   const seen = new Set<string>();
   const lead: Trait[] = [];
   for (const id of leadIds) {
-    const trait = TRAIT_BY_ID[id];
+    const trait = traitById[id];
     if (trait && !seen.has(id)) {
       lead.push(trait);
       seen.add(id);
     }
   }
-  const rest = ORDERED_TRAITS.filter((t) => !seen.has(t.id));
+  const rest = traits.filter((t) => !seen.has(t.id));
   return [...lead, ...rest];
 }
 
 // The single sentence that tells the model what to prioritize right now. This is the whole
 // "different responses use different traits" mechanism, in one legible line.
-function steeringLine(moment: Moment): string {
+function steeringLine(moment: Moment, traits: Trait[]): string {
   if (moment === "neutral") return "";
   const leadIds = MOMENT_EMPHASIS[moment] || [];
   if (leadIds.length === 0) return "";
+  const traitById = Object.fromEntries(traits.map((t) => [t.id, t]));
   const traitNames = leadIds
-    .map((id) => TRAIT_BY_ID[id]?.name?.split(/[—,]/)[0].trim().toLowerCase())
+    .map((id) => traitById[id]?.name?.split(/[—,]/)[0].trim().toLowerCase())
     .filter(Boolean)
     .join(", ");
   return `Right now the user is in ${MOMENT_LABEL[moment]} moment. Lead with ${traitNames}; let the rest of who you are stay present but recede. Attune to where they actually are before you respond.`;

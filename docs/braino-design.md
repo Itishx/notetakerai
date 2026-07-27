@@ -415,3 +415,33 @@ The notch carries voice state as colour, so it reads at a glance without text:
   am I in" stays readable even mid-sentence.
 
 Reduced motion gets the coral as a static ring, not a pulse.
+
+---
+
+## 13. Site nav — the IOMI notch (one shared component, site-wide)
+
+Every marketing page that has a notch nav (`/`, `/browser`, `/brainos`, `/jarvis`, `/journal`, `/journal/emotional-engine`) shares **one** component: `src/components/IomiNotch.tsx` + `src/components/iomi-notch.css`. This is a deliberate consolidation — HomeOS.tsx used to define its own elaborate boot-sequence eyes-notch (`NotchNav`, still in `HomeOS.tsx` but unused now) while `/brainos` had a second, different, simpler notch (`.bos-notch*` in `brainos.css`). The `/brainos` version — the "IOMI" identity — is now the canonical one; the HomeOS variant was retired from active use.
+
+**What it looks like.** A small black pill fixed to the top-center of the viewport, `210×34px` closed. The bar reads **IOMI** when closed, **BrainOS** when open (this swap is the whole personality of the component — closed, it's the product name; open, it's the OS). Two small blinking dots stand in for eyes. Clicking/tapping/Enter/Space toggles it open into a `min(660px, 100vw-32px) × 268px` dynamic-island panel (`cubic-bezier(0.32,0.72,0,1)`, 0.55s) holding a "Go anywhere" nav grid.
+
+**Where it lives.** `src/components/IomiNotch.tsx` (component + the shared `IOMI_NAV` default nav list) and `src/components/iomi-notch.css` (self-contained — its own `--iomi-ink`/`--iomi-ink-2`/`--iomi-ink-3`/`--iomi-line` vars scoped to `.iomi-notch-dock`, so it doesn't depend on whatever palette variables the host page happens to define, unlike the old `.bos-notch*` rules which read `--ink`/`--line` off `.bos`).
+
+**Usage.** `import IomiNotch from "@/components/IomiNotch"`, then `<IomiNotch />` (default nav) or `<IomiNotch nav={customList} />` to override the grid for a specific page. Every current usage renders the default `IOMI_NAV`: Welcome (`/`), Chat (`/chat`), IOMI (`/brainos`), Don't Blink (`/dontblink`), Blog (`/journal`), Dashboard (`/dashboard`).
+
+**Retired, not deleted:** `NotchNav`/`NN_ISLAND` in `HomeOS.tsx` and the `.bos-notch*` block that used to live in `brainos.css`. Left in place in case something still needs the old boot-sequence look, but nothing imports them anymore — new notch work should extend `IomiNotch`, not resurrect either of the old ones.
+
+**Animation reference.** The notch's own idle look (dozing → wink → awake) and the site's kinetic word-stamp typography are documented separately in the `/dontblink` teaser build (`src/pages/IntroTeaser.tsx` + `intro-teaser.css`) — that film is the canonical reference for both the notch boot sequence and the SF Pro Display "Don't Blink" kinetic-reveal type system (bold weights, `-.025em` tracking, brightness-flash word stamps). Reuse those exact values before inventing new motion for anything notch- or type-related.
+
+## 14. /Vig — Visual Emotional Engine (interactive, real logic not mockup)
+
+`src/pages/VisualEmotionalEngine.tsx` + `visual-emotional-engine.css`, on the shared `.bos` dark shell (`braino-classes.css`) with `IomiNotch`. Route `/Vig`.
+
+**What it is.** Not documentation of the emotional engine — a live diagram of it. A moment picker (`neutral`/`grief`/`heartbreak`/`venting`/`anxiety`/`celebration`/`conflict`/`banter`/`focused_task`/`building`/`crisis`) drives three animated steps: (1) the plain-English word cues that moment would trigger, (2) the twelve real traits reordering with a `leading`/`always`/`opt-in` badge state, (3) a terminal-styled preview of the assembled steering line + trait summaries.
+
+**Why it's "real."** `src/lib/emotional-engine-viz.ts` is a hand-mirrored copy of the actual backend data and algorithm — trait ids/names/summaries/`leadsOn` from `manifest.ts`, `MOMENT_EMPHASIS`/`MOMENT_LABEL` from `moments.ts`, and `orderTraitsForMoment()`/`steeringLine()` ported from `engine.ts`. It's a duplicate on purpose (the frontend can't import Deno edge-function code directly) — if the backend engine's trait set or moment logic changes, update this file to match or the visualization drifts from the truth it's showing.
+
+## 15. Braino classes fork point — `classId` (Saburi / Iomi / Telos)
+
+The three-class split (`/saburi`, `/iomi`, `/telos`) started as marketing pages sharing one backend personality. `supabase/functions/_shared/emotional-engine/classes.ts` is the fork point: `ClassId = "braino" | "saburi" | "iomi" | "telos"` (added in `types.ts`), a `CLASS_MANIFESTS` registry mapping each class to its own `Trait[]`, and `buildEmotionalCore({ classId })` / `buildBrainoSystemPrompt({ classId })` reading it. Every class today still points at the shared `ORDERED_TRAITS` — nothing has diverged yet, so this is scaffolding, not a behavior change. `classId` is optional everywhere and defaults to `"braino"`, so no existing caller needs to change.
+
+**Saburi is first in line.** Its manifest entry is marked with a `TODO(saburi-book)` comment: once the founder's companion-class book is read in full, distill it into Saburi-only trait prose (a new `traits/` set, not edits to the shared files) and swap `CLASS_MANIFESTS.saburi.traits` to point at it. Do not paste raw book pages into a system prompt — a system prompt should be a tight set of behavioral rules, not source material; the book informs the prose, it isn't the prose.

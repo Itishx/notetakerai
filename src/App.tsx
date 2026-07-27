@@ -19,14 +19,17 @@ const Home = lazy(() => import("./pages/Home.tsx"));
 const HomeOS = lazy(() => import("./pages/HomeOS.tsx"));
 const FounderLetter = lazy(() => import("./pages/FounderLetter.tsx"));
 const JarvisOS = lazy(() => import("./pages/JarvisOS.tsx"));
-const BrowserOS = lazy(() => import("./pages/BrowserOS.tsx"));
 const NotchTeaser = lazy(() => import("./pages/NotchTeaser.tsx"));
 const IntroTeaser = lazy(() => import("./pages/IntroTeaser.tsx"));
 const EmotionTeaser = lazy(() => import("./pages/EmotionTeaser.tsx"));
 const Letter = lazy(() => import("./pages/Letter.tsx"));
 const Journal = lazy(() => import("./pages/Journal.tsx"));
-const BrainOS = lazy(() => import("./pages/BrainOS.tsx"));
+const BrainoClasses = lazy(() => import("./pages/BrainoClasses.tsx"));
+const Saburi = lazy(() => import("./pages/Saburi.tsx"));
+const Iomi = lazy(() => import("./pages/Iomi.tsx"));
+const Telos = lazy(() => import("./pages/Telos.tsx"));
 const JournalEngine = lazy(() => import("./pages/JournalEngine.tsx"));
+const VisualEmotionalEngine = lazy(() => import("./pages/VisualEmotionalEngine.tsx"));
 const PreLaunch = lazy(() => import("./pages/PreLaunch.tsx"));
 const LaunchTeaser = lazy(() => import("./pages/LaunchTeaser.tsx"));
 const WaitlistDashboard = lazy(() => import("./pages/WaitlistDashboard.tsx"));
@@ -78,11 +81,12 @@ function LandingGate({
   onTourDone: () => void;
 }) {
   // The launch film no longer plays at "/" (user call: the gateway opens
-  // instantly). It remains previewable at /intro.
+  // instantly). It remains previewable at /intro. "/" is now the three-class
+  // hub (BrainoClasses) rather than HomeOS directly.
   void introDone;
   void onIntroDone;
   void tourDone;
-  return <HomeOS />;
+  return <BrainoClasses />;
 }
 
 function IntroPreviewRoute({ onIntroDone, onTourDone }: { onIntroDone: () => void; onTourDone: () => void }) {
@@ -150,14 +154,16 @@ function AppShell({
           <Route path="/home-new" element={<HomeOS />} />
           <Route path="/founder-letter" element={<FounderLetter />} />
           <Route path="/jarvis" element={<JarvisOS />} />
-          <Route path="/browser" element={<BrowserOS />} />
           <Route path="/notch-teaser" element={<NotchTeaser />} />
           <Route path="/dontblink" element={<IntroTeaser />} />
           <Route path="/aware" element={<EmotionTeaser />} />
           <Route path="/n" element={<Letter />} />
-          <Route path="/brainos" element={<BrainOS />} />
+          <Route path="/saburi" element={<Saburi />} />
+          <Route path="/iomi" element={<Iomi />} />
+          <Route path="/telos" element={<Telos />} />
           <Route path="/journal" element={<Journal />} />
           <Route path="/journal/emotional-engine" element={<JournalEngine />} />
+          <Route path="/Vig" element={<VisualEmotionalEngine />} />
           <Route path="/teaser" element={<LaunchTeaser />} />
           <Route path="/waitlist-admin" element={<WaitlistDashboard />} />
           <Route path="/use-cases" element={<UseCases />} />

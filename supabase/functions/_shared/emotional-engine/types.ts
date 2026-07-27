@@ -11,6 +11,11 @@
 
 export type ResponseMedium = "text" | "voice";
 
+// Which Braino CLASS is answering. Each class can carry its own trait set (and eventually its
+// own trait prose) instead of sharing one system prompt. "braino" is the original, undifferentiated
+// product; the other three are the split announced at launch. See classes.ts.
+export type ClassId = "braino" | "saburi" | "iomi" | "telos";
+
 // The emotional situation of the current message. "neutral" = nothing special detected.
 export type Moment =
   | "neutral"

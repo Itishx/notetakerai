@@ -7,6 +7,7 @@ import NotchFace, { setNotchStatus } from "@/components/NotchFace";
 import NotchReveal from "@/components/NotchReveal";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
+import IomiNotch from "@/components/IomiNotch";
 import "./home-os.css";
 
 /* ============================================================================
@@ -178,13 +179,13 @@ const HOME_LOG: { when: string; title: string; body: string; now?: boolean }[] =
 ];
 
 const NN_ISLAND = [
-  { to: "/", label: "Home", note: "the assistant" },
-  { to: "/brainos", label: "BrainOS", note: "IOMI" },
-  { to: "/browser", label: "Browser", note: "the extension" },
-  { to: "/jarvis", label: "Jarvis", note: "voice-first" },
+  { to: "/", label: "Welcome", note: "the assistant" },
+  { to: "/iomi", label: "Braino", note: "IOMI" },
+  { to: "/chat", label: "Chat", note: "the extension" },
+  { to: "/iomi", label: "IOMI", note: "voice-first" },
   { to: "/dontblink", label: "Don't Blink", note: "the film" },
   { to: "/journal", label: "Journal", note: "built in public" },
-  { to: "/founder-letter", label: "Letter", note: "why" },
+  { to: "/journal", label: "Blog", note: "why" },
 ];
 
 /* Shown only until he has been woken — the dare that makes the reveal land. */
@@ -406,9 +407,9 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
     <nav className={`notchnav${islandOpen ? " nn-open" : ""}`} ref={ref} aria-label="Primary">
       <div className="nn-row">
       <div className="nn-links l">
-        <Link to="/">Home</Link>
-        <Link to="/browser">Browser</Link>
-        <Link to="/jarvis">Jarvis</Link>
+        <Link to="/">Welcome</Link>
+        <Link to="/chat">Chat</Link>
+        <Link to="/iomi">IOMI</Link>
       </div>
       {/* his REAL eyes — verbatim nf-mini geometry from the app's notch.
           They are also the button: click the eyes, the island opens. */}
@@ -429,8 +430,8 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
         <ellipse className="nn-mouth" cx="60" cy="42" rx="4.6" ry="3.2" fill="#E8786E" />
       </svg>
       <div className="nn-links r">
-        <Link to="/founder-letter">Letter</Link>
-        <a href={EXTENSION_DOWNLOAD_URL} download>Install</a>
+        <Link to="/journal">Blog</Link>
+        <Link to="/changelog">What's Next</Link>
       </div>
       <span className="nn-cap" aria-live="polite" />
       </div>
@@ -466,7 +467,7 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
         <div className="nn-island-label">Go anywhere</div>
         <div className="nn-island-grid">
           {NN_ISLAND.map((n) => (
-            <Link key={n.to} to={n.to} className="nn-island-link" onClick={() => setIslandOpen(false)}>
+            <Link key={n.label} to={n.to} className="nn-island-link" onClick={() => setIslandOpen(false)}>
               {n.label}<span>{n.note}</span>
             </Link>
           ))}
@@ -862,7 +863,7 @@ export default function HomeOS() {
         </defs>
       </svg>
 
-      <NotchNav />
+      <IomiNotch />
 
       {/* ── hero ── */}
       <header className="hos-hero" id="top">

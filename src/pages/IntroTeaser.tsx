@@ -296,7 +296,7 @@ const BIGGER_SRC = [
   ["This", "is", "part", "of"],
   ["Ready?", "Lock", "in."],
   ["Braino", "+OS"],
-  ["(Version", "1)"],
+  ["I", "O", "M", "I"],   // matches the actual IOMI page — spaced letters, every one its own cut (see isIomiPhrase below)
   ["(Coming", "+Very", "+Fucking", "+Soon)"],   // flush, LetsFuckingGo energy — one word: (ComingVeryFuckingSoon)
 ];
 const BIGGER_CHUNKS = chunkScript(BIGGER_SRC);
@@ -306,7 +306,9 @@ const BIGGER_PHRASES = chunkedWords(BIGGER_CHUNKS);
 // each word gets a full beat. Everything else trends faster; this is the
 // one intentional contrast.
 const BIGGER_SW = 300;
-const BIGGER_GAPS: number[] = []; BIGGER_GAPS[0] = 450;   // "This is part of" dangles — held 1.5x too long, deliberately incomplete
+const BIGGER_GAPS: number[] = [];
+BIGGER_GAPS[0] = 450;   // "This is part of" dangles — held 1.5x too long, deliberately incomplete
+BIGGER_GAPS[3] = 1300;  // IOMI needs real time to hold at its big size + play the full shimmer sweep before the next line
 const GREET_CAP = "hey shawty";
 const MODE_WORDS = [
   "Browsing", "Coding", "Emailing", "Booking",
@@ -582,7 +584,7 @@ export default function IntroTeaser() {
     [notchWrap, bloom, intro, openLine, screen, hypeOpen, hype, ready, boom, tag, oneMore, bigger,
       act1El, dontBlinkEl, act2El, act3El, act4El, turnEl, deepBreathsEl].forEach((el) => (el.style.opacity = "0"));
     [hypeSwapA, hypeSwapB].forEach((el) => { el.style.visibility = "hidden"; el.style.opacity = "0"; });
-    glitch.style.opacity = "0"; bigger.classList.remove("invert-flash");
+    glitch.style.opacity = "0"; bigger.classList.remove("invert-flash", "it-iomi-reveal");
     blackBeatEl.style.opacity = "0"; itInvert.style.opacity = "0";
     screenGlow.style.opacity = "0"; screenGlow.classList.remove("it-listening");
     [dontBlinkEl, act1El, act2El, act3El, act4El, turnEl, deepBreathsEl, openLine].forEach((el) => el.classList.remove("invert-flash"));
@@ -595,7 +597,7 @@ export default function IntroTeaser() {
     if (reduced) { tag.style.opacity = "1"; root.querySelectorAll<HTMLElement>(".nt-tag .nt-word").forEach((w) => w.classList.add("in")); return; }
 
     let raf = 0, lastCls = "", lastMode = -1, lastStatus = "__";
-    let firedNotchShimmer = false, firedAskShimmer = false, firedDontBlink = false;
+    let firedNotchShimmer = false, firedAskShimmer = false, firedIomiShimmer = false, firedDontBlink = false;
     let audioAnchor = 0;
     let playing = true, manualT = 0, startWall = performance.now();
     const controls = root.querySelector<HTMLElement>(".nt-scrubber");
@@ -886,9 +888,25 @@ export default function IntroTeaser() {
       const biggerPhraseIdx = seqIdx.get(bigger) ?? -1;
       const biggerWordIdx = biggerChunkIdx >= 0 && biggerPhraseIdx >= 0
         ? (BIGGER_CHUNKS[biggerPhraseIdx]?.chunkToWord[biggerChunkIdx] ?? -1) : -1;
-      const biggerInv = t < T.wink && biggerWordIdx >= 0 && biggerWordIdx % 2 === 0;
+      // "IOMI" gets a cut on every single letter, not just every-other —
+      // this is the product reveal, it earns the extra cuts.
+      const isIomiPhrase = BIGGER_CHUNKS[biggerPhraseIdx]?.words.join("") === "IOMI";
+      const biggerInv = t < T.wink && biggerWordIdx >= 0 && (isIomiPhrase || biggerWordIdx % 2 === 0);
       bigger.classList.toggle("invert-flash", biggerInv);
       glitch.style.opacity = biggerInv ? "1" : "0";
+      // once the last letter of "IOMI" lands, it jumps to the biggest text
+      // in the film with a gradient fill + one-shot shimmer sweep — same
+      // convention as the BrainoNotch/"As k." shimmers, just the climax size.
+      const iomiAllLanded = t < T.wink && isIomiPhrase && biggerChunkIdx === (BIGGER_CHUNKS[biggerPhraseIdx]?.words.length ?? 0) - 1;
+      bigger.classList.toggle("it-iomi-reveal", iomiAllLanded);
+      if (iomiAllLanded && !firedIomiShimmer) {
+        firedIomiShimmer = true;
+        const spans = kinCache.get(bigger)?.spans ?? [];
+        spans.forEach((sp) => {
+          sp.classList.remove("it-iomi-shimmer"); void sp.offsetWidth; sp.classList.add("it-iomi-shimmer");
+        });
+      }
+      if (!iomiAllLanded) firedIomiShimmer = false;
       sequence(openLine, OPEN_PHRASES, openStarts, T.open, OPEN_SW, t);
       // RHYME MATCH — "Braino" (word idx 2, still inside "This is Braino")
       // lands in the identical position/size as Act 2's "Braino." (same

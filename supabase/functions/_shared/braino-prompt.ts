@@ -6,11 +6,11 @@
 import { buildEmotionalCore } from "./emotional-engine/engine.ts";
 import { buildLanguagePolicyBlock } from "./emotional-engine/language.ts";
 import { resolvePersonalitySettings } from "./emotional-engine/settings.ts";
-import type { Moment, PersonalitySettings } from "./emotional-engine/types.ts";
+import type { ClassId, Moment, PersonalitySettings } from "./emotional-engine/types.ts";
 import { MEMORY_CAPABILITY_NOTE } from "./memory-engine/render.ts";
 
 export type BrainoResponseMedium = "text" | "voice";
-export type { Moment, PersonalitySettings } from "./emotional-engine/types.ts";
+export type { ClassId, Moment, PersonalitySettings } from "./emotional-engine/types.ts";
 
 export type BrainoPageContext = {
   title?: string | null;
@@ -34,6 +34,7 @@ export type BuildBrainoSystemPromptOptions = {
   // Emotional Engine inputs:
   moment?: Moment;                          // the detected emotional moment (drives trait emphasis)
   personalitySettings?: Partial<PersonalitySettings> | null; // user toggles (dad jokes, pushback…)
+  classId?: ClassId;                        // which Braino class is answering (Saburi, Iomi, Telos…)
 };
 
 const BRAINO_PRODUCT_MEMORY = [
@@ -81,6 +82,7 @@ export function buildBrainoSystemPrompt(options: BuildBrainoSystemPromptOptions 
     medium: responseMedium,
     settings: resolvePersonalitySettings(options.personalitySettings),
     moment: options.moment || "neutral",
+    classId: options.classId,
   });
 
   // CONTEXT, operational instructions + the live data Braino can see this turn.

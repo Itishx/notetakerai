@@ -65,14 +65,18 @@
 .et-frame::after { top: 50%; left: 0; right: 0; height: 1px; }
 .et-stage { position: absolute; inset: 0; }
 
-/* ── kinetic type — one dead-centre line, one weight, one size, identical to /notch ── */
+/* ── kinetic type — one dead-centre line, one weight, one size, identical to /notch ──
+   wraps to a second line instead of clipping at the frame edge — longer
+   phrases (the full, untrimmed script) were overflowing past .et-frame's
+   `overflow:hidden` and getting cut off mid-word at the sides. */
 .et-open, .et-complaint, .et-contrast, .et-why, .et-poet, .et-delib,
 .et-engine, .et-proof, .et-turn, .et-close, .et-cta, .et-profanity {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
-  gap: 0 .2em; opacity: 0; color: #FFFFFF; text-align: center; white-space: nowrap;
-  font-weight: 600; letter-spacing: -.025em; line-height: 1; z-index: 2;
-  font-size: clamp(28px, 4.6vw, 58px);
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: .12em .2em; opacity: 0; color: #FFFFFF; text-align: center; white-space: normal;
+  width: 88%; max-width: 88%;
+  font-weight: 600; letter-spacing: -.025em; line-height: 1.12; z-index: 2;
+  font-size: clamp(26px, 4.4vw, 58px);
   will-change: opacity, transform;
   /* as each new word appends, the centered flex row re-widens and its own
      -50% transform recentres around it — without a transition that snaps
@@ -130,48 +134,41 @@
 /* #2B0808 (the page bg) reads as near-black on the white flash — a proper,
    visibly RED dark red instead, so the match-cut still feels like "dark red /
    white", not "black / white". */
-.et-poet.invert-flash, .et-engine.invert-flash, .et-close.invert-flash,
-.et-proof.invert-flash, .et-turn.invert-flash, .et-cta.invert-flash { color: #8B1A1A; z-index: 11; }
+.et-poet.invert-flash, .et-delib.invert-flash, .et-engine.invert-flash, .et-close.invert-flash,
+.et-proof.invert-flash, .et-turn.invert-flash { color: #8B1A1A; z-index: 11; }
 /* match-cut rule: the invert flip IS the effect — words involved in a
    match-cut just appear, no stamp/fade animation competing with it. */
 .invert-flash .et-word.in { animation: none !important; }
-
-/* "Braino." — the closing card, biggest mark in the film */
-/* same font-size as every other line now — no more oversized treatment */
-.et-cta { font-weight: 700; }
-
-
-/* rapid-fire aside right after "Human." lands — same machine-gun cadence as
-   /notch's skills flicker. Same style as every other line in the film now
-   (base kinetic-line rule above) — no more small/italic whisper treatment,
-   just faster stomps. */
-.et-profanity .et-word.in { animation: etWordIn .08s steps(1) both; }
-@media (prefers-reduced-motion: reduce) { .et-profanity .et-word.in { animation: none; } }
-
-/* a beat of pure black before the closing card */
-.et-black {
-  position: absolute; inset: 0; background: #000000; opacity: 0; z-index: 8; pointer-events: none;
+/* "*word" shimmer (nt-emph) is white/light-pink by default (see below) —
+   great on the normal dark-red background, INVISIBLE on the white invert
+   overlay. "*poet.", "*taught", and "*Emotional" all sit in the same phrase
+   as (or right next to) their scene's own match cut, so this was the actual
+   "wrong inversion" bug: those words were going ghost-white-on-white right
+   as the cut fired. Higher specificity than the base rule below, so it wins
+   whenever a "*word" shares a line with an active match cut. */
+.et-poet.invert-flash .et-word.nt-emph, .et-delib.invert-flash .et-word.nt-emph,
+.et-engine.invert-flash .et-word.nt-emph, .et-close.invert-flash .et-word.nt-emph,
+.et-proof.invert-flash .et-word.nt-emph, .et-turn.invert-flash .et-word.nt-emph {
+  background-image: linear-gradient(100deg, #4A0000 15%, #8B1A1A 42%, #E23B3B 55%, #4A0000 78%);
 }
 
-/* pulse-ring burst — concentric rings expanding out from centre, fired on
-   every match-cut */
-.et-rings {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 10px; height: 10px; z-index: 1; pointer-events: none;
+/* "Emotional Engine." — the scene's finale, Apple-style BIG reveal (same
+   convention /dontblink's IOMI cut uses): the whole line jumps to its
+   biggest size, and "Engine." (chunked "Eng"+"+ine.") gets a one-shot
+   shimmer sweep. Kept entirely within dark/saturated red tones — no white
+   or light-pink stops — because this cut happens ON TOP of the white
+   .et-invert overlay; a gradient that dips toward white was going invisible
+   against that white background mid-sweep, which read as a broken/wrong
+   inversion for the theme instead of a clean dark-red-on-white cut. */
+.et-engine.et-engine-big { font-size: clamp(64px, 10.5vw, 132px); }
+.et-engine.invert-flash .et-word.et-engine-shimmer {
+  background-image: linear-gradient(96deg, #4A0000 0%, #8B1A1A 30%, #E23B3B 50%, #8B1A1A 70%, #4A0000 100%);
+  background-size: 220% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent !important;
+  animation: etEngineSweep 1s ease-in-out both !important;
 }
-.et-rings i {
-  position: absolute; left: 50%; top: 50%; width: 10px; height: 10px;
-  margin: -5px 0 0 -5px; border-radius: 50%;
-  border: 2px solid #FFFFFF; opacity: 0;
-}
-.et-rings.burst i { animation: etRingBurst .85s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.et-rings.burst i:nth-child(2) { animation-delay: .09s; }
-.et-rings.burst i:nth-child(3) { animation-delay: .18s; }
-@keyframes etRingBurst {
-  0%   { opacity: .9; transform: scale(1); }
-  100% { opacity: 0; transform: scale(48); }
-}
-@media (prefers-reduced-motion: reduce) { .et-rings.burst i { animation: none; } }
+@keyframes etEngineSweep { 0% { background-position: 200% center; } 100% { background-position: -40% center; } }
+@media (prefers-reduced-motion: reduce) { .et-engine-shimmer { animation: none; background-position: 0% center; } }
 
 /* no floating mascot on the teaser stage */
 body.et-page #sb-brain-mascot-wrapper { display: none !important; }
@@ -200,12 +197,6 @@ body.et-page #sb-brain-mascot-wrapper { display: none !important; }
   transform-origin: top center;
   transition: transform .5s cubic-bezier(0.16, 1, 0.3, 1);
 }
-/* "he's overthinking this again" is longer than /notch's own captions —
-   wider pill + smaller, tighter type so it reads comfortably without
-   crowding, while staying well inside the frame at any viewport size. */
-.et-notch .nf-face.captioning .nf-pill { width: min(430px, 68vw) !important; }
-.et-notch .nf-face.captioning .nf-cap-l { font-size: 10px !important; letter-spacing: .03em; }
-
 @media (prefers-reduced-motion: reduce) { .et-word { opacity: 1; transform: none; filter: none; } }
 
 /* ── control bar — Netflix style: invisible until the pointer moves, then a

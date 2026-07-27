@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import SiteFooter from "@/components/SiteFooter";
-import { NotchNav } from "./HomeOS";
+import IomiNotch from "@/components/IomiNotch";
 import "./home-os.css";
 import "./journal.css";
 
@@ -27,7 +27,7 @@ const TRAITS: [string, string][] = [
 export default function JournalEngine() {
   return (
     <div className="hos jr">
-      <NotchNav />
+      <IomiNotch />
       <article className="jr-article">
         <header className="jr-art-head">
           <div className="eyebrow">the braino journal · documentation · july 2026</div>
