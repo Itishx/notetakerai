@@ -1,0 +1,186 @@
+/* ============================================================================
+   /brainos — BrainOS IOMI. Apple-keynote grammar: black canvas, SF Pro Display,
+   enormous tight-tracked type, one idea per viewport, everything else silent.
+
+   The rule that keeps it Apple and not a copy of Apple: nothing decorative.
+   No gradients except on the wordmark, no shadows, no borders that aren't
+   structural. Space does the work.
+   ============================================================================ */
+
+@font-face { font-family: "SF Pro Display"; src: url("/fonts/SF-Pro-Display-Medium.otf") format("opentype"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "SF Pro Display"; src: url("/fonts/SF-Pro-Display-Semibold.otf") format("opentype"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "SF Pro Display"; src: url("/fonts/SF-Pro-Display-Bold.otf") format("opentype"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "SF Pro Display"; src: url("/fonts/SF-Pro-Display-Heavy.otf") format("opentype"); font-weight: 800; font-display: swap; }
+@font-face { font-family: "SF Pro Display"; src: url("/fonts/SF-Pro-Display-Black.otf") format("opentype"); font-weight: 900; font-display: swap; }
+
+.bos {
+  --ink: #f5f5f7;
+  --ink-2: #a1a1a6;
+  --ink-3: #6e6e73;
+  --line: rgba(255, 255, 255, 0.11);
+  --bg: #000;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+.bos * { box-sizing: border-box; }
+.bos ::selection { background: #fff; color: #000; }
+
+.bos-wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+.bos-narrow { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------- The notch: real nav, expands like the dynamic island ---------- */
+.bos-notch-dock {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 90;
+  display: flex; justify-content: center;
+  pointer-events: none;
+}
+.bos-notch {
+  pointer-events: auto;
+  background: #000;
+  border-radius: 0 0 22px 22px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 20px 50px -20px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  width: 210px; height: 34px;
+  cursor: pointer;
+  transition: width 0.55s cubic-bezier(0.32, 0.72, 0, 1), height 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+              border-radius 0.55s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.bos-notch.open { width: min(660px, calc(100vw - 32px)); height: 268px; border-radius: 0 0 30px 30px; }
+
+.bos-notch-bar {
+  height: 34px; display: flex; align-items: center; justify-content: center; gap: 9px;
+  color: var(--ink-2); font-size: 12px; letter-spacing: 0.01em;
+}
+.bos-notch-eyes { display: flex; gap: 5px; }
+.bos-notch-eye {
+  width: 7px; height: 7px; border-radius: 50%; background: #f5f5f7;
+  animation: bosBlink 5.2s infinite;
+}
+.bos-notch-eye:nth-child(2) { animation-delay: 0.08s; }
+@keyframes bosBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+.bos-notch.open .bos-notch-eye { animation: none; }
+
+.bos-notch-panel {
+  opacity: 0; transform: translateY(-6px);
+  transition: opacity 0.3s ease 0.12s, transform 0.3s ease 0.12s;
+  padding: 4px 24px 24px;
+}
+.bos-notch.open .bos-notch-panel { opacity: 1; transform: none; }
+.bos-notch-label {
+  font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-3); padding: 6px 0 12px;
+}
+.bos-notch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 26px; }
+.bos-notch-link {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 11px 0; border-bottom: 1px solid var(--line);
+  color: var(--ink); text-decoration: none; font-size: 16px; font-weight: 500;
+  transition: color 0.15s ease, padding-left 0.15s ease;
+}
+.bos-notch-link:hover { color: #fff; padding-left: 5px; }
+.bos-notch-link span { font-size: 11.5px; color: var(--ink-3); font-weight: 400; }
+
+@media (max-width: 620px) {
+  .bos-notch.open { height: 380px; }
+  .bos-notch-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bos-notch, .bos-notch-panel { transition: none; }
+}
+
+/* ---------- Hero ---------- */
+.bos-hero {
+  min-height: 100svh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding: 120px 24px 80px;
+}
+.bos-blink {
+  font-size: clamp(13px, 1.6vw, 15px); font-weight: 600;
+  letter-spacing: 0.42em; text-transform: uppercase; color: var(--ink-3);
+  margin-bottom: 42px;
+  animation: bosFade 1s ease both;
+}
+.bos-wordmark {
+  font-weight: 900; letter-spacing: -0.045em; line-height: 0.86;
+  font-size: clamp(64px, 15vw, 210px);
+  background: linear-gradient(96deg, #ffffff 8%, #d8d8dd 34%, #8e8e93 58%, #f2f2f7 84%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: bosFade 1.1s ease 0.15s both;
+}
+.bos-version {
+  margin-top: 26px; font-size: clamp(20px, 3.4vw, 40px); font-weight: 600;
+  letter-spacing: 0.16em; color: var(--ink-2);
+  animation: bosFade 1.1s ease 0.3s both;
+}
+.bos-hero-dek {
+  margin: 34px auto 0; max-width: 620px;
+  font-size: clamp(17px, 2.1vw, 23px); font-weight: 500; line-height: 1.42; color: var(--ink-2);
+  animation: bosFade 1.1s ease 0.45s both;
+}
+@keyframes bosFade { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .bos [class^="bos-"] { animation: none !important; } }
+
+/* ---------- Sections ---------- */
+.bos-sec { padding: clamp(90px, 14vh, 170px) 0; }
+.bos-eyebrow {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 22px;
+}
+.bos-h2 {
+  font-weight: 700; letter-spacing: -0.032em; line-height: 1.04;
+  font-size: clamp(34px, 6vw, 76px); margin: 0;
+}
+.bos-h2 em { font-style: normal; color: var(--ink-3); }
+.bos-lede {
+  margin-top: 26px; font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.55; color: var(--ink-2); font-weight: 500; max-width: 660px;
+}
+.bos-rule { height: 1px; background: var(--line); border: 0; margin: 0; }
+
+/* ---------- Capability grid ---------- */
+.bos-caps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); margin-top: 58px; }
+.bos-cap { background: #000; padding: 34px 28px 40px; }
+.bos-cap h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.012em; margin: 0 0 14px; }
+.bos-cap ul { margin: 0; padding: 0; list-style: none; }
+.bos-cap li { font-size: 14.5px; line-height: 1.75; color: var(--ink-2); font-weight: 500; }
+@media (max-width: 900px) { .bos-caps { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 620px) { .bos-caps { grid-template-columns: 1fr; } }
+
+/* ---------- Big stat / statement rows ---------- */
+.bos-stat { text-align: center; padding: clamp(80px, 12vh, 150px) 0; }
+.bos-stat-v {
+  font-size: clamp(56px, 12vw, 150px); font-weight: 900; letter-spacing: -0.05em; line-height: 0.9;
+}
+.bos-stat-l { margin-top: 20px; font-size: clamp(15px, 1.8vw, 19px); color: var(--ink-2); font-weight: 500; }
+
+/* ---------- Quote / founder ---------- */
+.bos-quote {
+  font-size: clamp(26px, 4.4vw, 54px); font-weight: 600;
+  letter-spacing: -0.03em; line-height: 1.16; margin: 0;
+}
+.bos-attrib { margin-top: 30px; font-size: 14.5px; color: var(--ink-3); font-weight: 500; }
+
+/* ---------- CTA ---------- */
+.bos-cta { text-align: center; padding: clamp(100px, 16vh, 190px) 0 130px; }
+.bos-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  background: #f5f5f7; color: #000; text-decoration: none;
+  padding: 15px 30px; border-radius: 980px;
+  font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.bos-btn:hover { transform: translateY(-1px); background: #fff; }
+.bos-btn.ghost { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.24); }
+.bos-btn.ghost:hover { background: rgba(255,255,255,0.06); }
+.bos-cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 40px; }
+
+.bos-foot { padding: 40px 0 60px; text-align: center; color: var(--ink-3); font-size: 12.5px; }
+
+/* Mouse users shouldn't see a focus ring on the notch; keyboard users must.
+   :focus-visible keeps it accessible without the blue box after a click. */
+.bos-notch:focus { outline: none; }
+.bos-notch:focus-visible { outline: 2px solid #0a84ff; outline-offset: 3px; }

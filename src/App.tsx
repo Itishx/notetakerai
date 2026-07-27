@@ -25,6 +25,7 @@ const IntroTeaser = lazy(() => import("./pages/IntroTeaser.tsx"));
 const EmotionTeaser = lazy(() => import("./pages/EmotionTeaser.tsx"));
 const Letter = lazy(() => import("./pages/Letter.tsx"));
 const Journal = lazy(() => import("./pages/Journal.tsx"));
+const BrainOS = lazy(() => import("./pages/BrainOS.tsx"));
 const JournalEngine = lazy(() => import("./pages/JournalEngine.tsx"));
 const PreLaunch = lazy(() => import("./pages/PreLaunch.tsx"));
 const LaunchTeaser = lazy(() => import("./pages/LaunchTeaser.tsx"));
@@ -154,6 +155,7 @@ function AppShell({
           <Route path="/dontblink" element={<IntroTeaser />} />
           <Route path="/aware" element={<EmotionTeaser />} />
           <Route path="/n" element={<Letter />} />
+          <Route path="/brainos" element={<BrainOS />} />
           <Route path="/journal" element={<Journal />} />
           <Route path="/journal/emotional-engine" element={<JournalEngine />} />
           <Route path="/teaser" element={<LaunchTeaser />} />
