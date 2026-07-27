@@ -4,7 +4,6 @@ import {
   MOMENT_ORDER,
   MOMENT_LABEL,
   MOMENT_CUES,
-  orderTraitsForMoment,
   type Moment,
 } from "@/lib/emotional-engine-viz";
 import "../styles/apple.css";
@@ -17,9 +16,111 @@ import "../styles/apple.css";
    feels alive. Light mode; tokens on .apple make dark mode a later flip.
    ============================================================================ */
 
-// The emotion engine, alive: cycles through real moments, and Braino's twelve
-// traits reorder themselves in front of you — the exact routing logic from
-// engine.ts, auto-played so it reads as a mind reacting in real time.
+// The emotion engine as a LIVING neural network. A message arrives, and a
+// signal chains through the layers left-to-right — edges carry travelling
+// pulses, nodes fire as the wave reaches them (the "multi-chaining"). Overlapping
+// waves keep it perpetually thinking. The moment cycling above tints it, so the
+// same net you see reacts differently to grief than to banter.
+const NET_ACCENTS: Partial<Record<Moment, [number, number, number]>> = {
+  grief: [107, 82, 196], heartbreak: [217, 100, 91], venting: [184, 132, 42],
+  anxiety: [47, 111, 237], celebration: [58, 143, 95], conflict: [217, 100, 91],
+  banter: [58, 143, 95], focused_task: [47, 111, 237], building: [107, 82, 196],
+  crisis: [217, 100, 91],
+};
+
+function NeuralEngine({ moment }: { moment: Moment }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const momentRef = useRef(moment);
+  momentRef.current = moment;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const LAYERS = [5, 6, 6, 6, 6, 5];
+    const W = 760, H = 460, PADX = 60, PADY = 40;
+    const colX = (i: number) => PADX + (i * (W - PADX * 2)) / (LAYERS.length - 1);
+    const nodeY = (c: number, j: number) => PADY + (j * (H - PADY * 2)) / (c - 1);
+    const nodes = LAYERS.map((c, i) => Array.from({ length: c }, (_, j) => ({ x: colX(i), y: nodeY(c, j) })));
+    const edges: { a: { x: number; y: number }; b: { x: number; y: number }; li: number }[] = [];
+    for (let i = 0; i < nodes.length - 1; i++)
+      for (const a of nodes[i]) for (const b of nodes[i + 1]) edges.push({ a, b, li: i });
+
+    // waves: each has a start time; a front travels 0 → (LAYERS-1) over `dur`.
+    const dur = 1500;
+    let waves: number[] = [0];
+    let raf = 0;
+    let lastSpawn = 0;
+    const t0 = performance.now();
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    function fit() {
+      const rect = canvas!.getBoundingClientRect();
+      canvas!.width = rect.width * dpr;
+      canvas!.height = (rect.width * (H / W)) * dpr;
+    }
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(canvas);
+
+    function draw(now: number) {
+      const t = now - t0;
+      const sx = canvas!.width / W, sy = canvas!.height / H;
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+      ctx!.save();
+      ctx!.scale(sx, sy);
+      const [r, g, b] = NET_ACCENTS[momentRef.current] || [217, 100, 91];
+      const acc = `${r},${g},${b}`;
+
+      if (!reduce) {
+        if (t - lastSpawn > 620) { waves.push(t); lastSpawn = t; }
+        waves = waves.filter((w) => t - w < dur + 400);
+      }
+      const fronts = reduce ? [] : waves.map((w) => ((t - w) / dur) * (LAYERS.length - 1));
+
+      // edges
+      for (const e of edges) {
+        let act = 0;
+        for (const f of fronts) { const d = Math.abs(f - (e.li + 0.5)); if (d < 0.6) act = Math.max(act, 1 - d / 0.6); }
+        ctx!.strokeStyle = act > 0.02 ? `rgba(${acc},${0.15 + act * 0.7})` : "rgba(29,29,31,0.10)";
+        ctx!.lineWidth = act > 0.02 ? 0.8 + act * 1.4 : 0.7;
+        ctx!.beginPath(); ctx!.moveTo(e.a.x, e.a.y); ctx!.lineTo(e.b.x, e.b.y); ctx!.stroke();
+        // travelling pulse
+        for (const f of fronts) {
+          const p = f - e.li;
+          if (p > 0 && p < 1) {
+            const px = e.a.x + (e.b.x - e.a.x) * p, py = e.a.y + (e.b.y - e.a.y) * p;
+            ctx!.fillStyle = `rgba(${acc},0.85)`;
+            ctx!.beginPath(); ctx!.arc(px, py, 2, 0, Math.PI * 2); ctx!.fill();
+          }
+        }
+      }
+      // nodes
+      nodes.forEach((layer, li) => {
+        let glow = 0;
+        for (const f of fronts) { const d = Math.abs(f - li); if (d < 0.5) glow = Math.max(glow, 1 - d / 0.5); }
+        for (const n of layer) {
+          if (glow > 0.05) { ctx!.fillStyle = `rgba(${acc},${glow * 0.25})`; ctx!.beginPath(); ctx!.arc(n.x, n.y, 16, 0, Math.PI * 2); ctx!.fill(); }
+          ctx!.beginPath(); ctx!.arc(n.x, n.y, 7, 0, Math.PI * 2);
+          ctx!.fillStyle = "#fff"; ctx!.fill();
+          ctx!.strokeStyle = glow > 0.05 ? `rgba(${acc},${0.5 + glow * 0.5})` : "rgba(29,29,31,0.55)";
+          ctx!.lineWidth = 2; ctx!.stroke();
+        }
+      });
+      ctx!.restore();
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className="apple-net" role="img" aria-label="Braino's emotion engine, a neural network firing in real time" />;
+}
+
+// Drives the moment cycle and the caption; the net reacts to whatever moment is current.
 function LiveEngine() {
   const moments = MOMENT_ORDER.filter((m) => m !== "neutral");
   const [i, setI] = useState(0);
@@ -28,25 +129,14 @@ function LiveEngine() {
     return () => clearInterval(t);
   }, [moments.length]);
   const moment: Moment = moments[i];
-  const ordered = orderTraitsForMoment(moment);
   const cue = MOMENT_CUES[moment]?.[0] || "";
   return (
-    <div className="apple-engine" aria-hidden="true">
+    <div className="apple-engine-live" aria-hidden="true">
       <div className="apple-engine-thought">
         <span className="dot" />
         <span>{cue ? <>You say {cue} — he feels <b>{MOMENT_LABEL[moment].replace(/^an? /, "")}</b></> : "listening…"}</span>
       </div>
-      <div className="apple-engine-stack">
-        {ordered.slice(0, 6).map((t, r) => {
-          const leading = t.leadsOn.includes(moment) && r < 3;
-          return (
-            <div key={t.id} className={"apple-trait" + (leading ? " leading" : r > 3 ? " recede" : "")}>
-              <span className="rank">{r + 1}</span>
-              <span>{t.name}</span>
-            </div>
-          );
-        })}
-      </div>
+      <NeuralEngine moment={moment} />
     </div>
   );
 }

@@ -171,17 +171,9 @@
   max-width: var(--ap-maxw); margin: 0 auto;
 }
 
-/* ── Live emotion engine: the trait stack reordering itself in real time ── */
-.apple-engine {
-  position: relative; z-index: 2;
-  width: min(560px, 100%);
-  background: rgba(255,255,255,0.66);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--ap-hairline);
-  border-radius: 20px;
-  padding: 22px 22px 18px;
-  box-shadow: 0 20px 50px rgba(29,29,31,0.08);
-}
+/* ── Live emotion engine: a neural network firing in real time ── */
+.apple-engine-live { position: relative; z-index: 2; width: min(760px, 100%); }
+.apple-net { width: 100%; height: auto; display: block; }
 .apple-engine-thought {
   display: flex; align-items: center; gap: 10px;
   font-size: 14px; color: var(--ap-ink-soft); margin-bottom: 16px;
