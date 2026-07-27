@@ -79,10 +79,10 @@
   margin: 0 0 8px;
 }
 .apple-display {
-  font-size: clamp(44px, 9vw, 104px);
-  line-height: 1.03;
-  font-weight: 800;
-  letter-spacing: -0.025em;
+  font-size: clamp(42px, 8.4vw, 96px);
+  line-height: 1.05;
+  font-weight: 600; /* Apple's headline weight — semibold, never heavy/black */
+  letter-spacing: -0.022em;
   margin: 0;
   text-wrap: balance;
 }
@@ -142,8 +142,8 @@
   max-width: 800px; margin: clamp(40px, 7vw, 90px) auto;
   padding: 0 var(--ap-gutter);
   text-align: center;
-  font-size: clamp(28px, 4.5vw, 48px);
-  font-weight: 700; letter-spacing: -0.02em; line-height: 1.12;
+  font-size: clamp(26px, 4.2vw, 44px);
+  font-weight: 600; letter-spacing: -0.02em; line-height: 1.14;
   text-wrap: balance;
 }
 .apple-statement .tone { color: var(--ap-accent, var(--ap-coral)); }
@@ -170,6 +170,50 @@
   color: var(--ap-ink-soft); font-size: 12px; line-height: 1.5;
   max-width: var(--ap-maxw); margin: 0 auto;
 }
+
+/* ── Live emotion engine: the trait stack reordering itself in real time ── */
+.apple-engine {
+  position: relative; z-index: 2;
+  width: min(560px, 100%);
+  background: rgba(255,255,255,0.66);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--ap-hairline);
+  border-radius: 20px;
+  padding: 22px 22px 18px;
+  box-shadow: 0 20px 50px rgba(29,29,31,0.08);
+}
+.apple-engine-thought {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px; color: var(--ap-ink-soft); margin-bottom: 16px;
+  min-height: 22px;
+}
+.apple-engine-thought .dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--ap-accent);
+  animation: apPulse 1.4s ease-in-out infinite; flex-shrink: 0;
+}
+.apple-engine-thought b { color: var(--ap-ink); font-weight: 600; }
+@keyframes apPulse { 0%,100% { opacity: 0.4; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .apple-engine-thought .dot { animation: none; } }
+
+.apple-engine-stack { display: flex; flex-direction: column; gap: 6px; }
+.apple-trait {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 14px; border-radius: 11px;
+  background: rgba(29,29,31,0.035);
+  font-size: 14px; font-weight: 500; color: var(--ap-ink-soft);
+  transition: background 0.45s ease, color 0.45s ease, transform 0.45s cubic-bezier(0.22,1,0.36,1), opacity 0.45s ease;
+}
+.apple-trait .rank {
+  font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600;
+  color: var(--ap-ink-soft); opacity: 0.5; width: 16px; text-align: right;
+}
+.apple-trait.leading {
+  background: var(--ap-accent); color: #fff;
+  transform: translateX(2px) scale(1.015);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--ap-accent) 32%, transparent);
+}
+.apple-trait.leading .rank { color: rgba(255,255,255,0.8); opacity: 1; }
+.apple-trait.recede { opacity: 0.5; }
 
 /* Accent helpers — set --ap-accent + panel bg per section */
 .ac-coral  { --ap-accent: var(--ap-coral);  --ap-panel-bg: var(--ap-coral-panel); }

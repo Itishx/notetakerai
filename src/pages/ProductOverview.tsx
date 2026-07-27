@@ -1,41 +1,56 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  MOMENT_ORDER,
+  MOMENT_LABEL,
+  MOMENT_CUES,
+  orderTraitsForMoment,
+  type Moment,
+} from "@/lib/emotional-engine-viz";
 import "../styles/apple.css";
 
 /* ============================================================================
-   /product-overview — the reference implementation of the Apple product-page
-   design system for Braino. Giant two-tone SF Pro display headline, full-bleed
-   rounded colour feature panels with bold-lead paragraphs, the emotion-engine
-   "multi-chaining" network as the hero graphic, and an icon spec row. Light
-   mode; every colour is a token on .apple so dark mode is a later flip.
+   /product-overview — reference implementation of the Apple product-page
+   design system for Braino. Two-tone SF Pro display headlines (semibold, not
+   heavy), full-bleed rounded colour feature panels, the three classes, and a
+   LIVE emotion engine that auto-plays the real trait-reordering logic so it
+   feels alive. Light mode; tokens on .apple make dark mode a later flip.
    ============================================================================ */
 
-// The neural-net "multi-chaining" sticker, drawn as a live SVG so it's crisp
-// and theme-tintable — 6 layers, fully connected, the emotion engine as a mind.
-function NeuralNet({ stroke = "#1d1d1f" }: { stroke?: string }) {
-  const layers = [5, 6, 6, 6, 6, 5];
-  const w = 720, h = 520, padX = 70, padY = 40;
-  const colX = (i: number) => padX + (i * (w - padX * 2)) / (layers.length - 1);
-  const nodeY = (count: number, j: number) => padY + (j * (h - padY * 2)) / (count - 1);
-  const nodes = layers.map((c, i) => Array.from({ length: c }, (_, j) => ({ x: colX(i), y: nodeY(c, j) })));
-  const edges: { x1: number; y1: number; x2: number; y2: number; o: number }[] = [];
-  for (let i = 0; i < nodes.length - 1; i++)
-    for (const a of nodes[i])
-      for (const b of nodes[i + 1])
-        edges.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, o: 0.12 + ((a.y + b.x) % 5) * 0.1 });
+// The emotion engine, alive: cycles through real moments, and Braino's twelve
+// traits reorder themselves in front of you — the exact routing logic from
+// engine.ts, auto-played so it reads as a mind reacting in real time.
+function LiveEngine() {
+  const moments = MOMENT_ORDER.filter((m) => m !== "neutral");
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((n) => (n + 1) % moments.length), 2600);
+    return () => clearInterval(t);
+  }, [moments.length]);
+  const moment: Moment = moments[i];
+  const ordered = orderTraitsForMoment(moment);
+  const cue = MOMENT_CUES[moment]?.[0] || "";
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Braino's emotion engine as a neural network">
-      {edges.map((e, k) => (
-        <line key={k} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2} stroke={stroke} strokeWidth={0.9} opacity={e.o} />
-      ))}
-      {nodes.flat().map((n, k) => (
-        <circle key={k} cx={n.x} cy={n.y} r={9} fill="#fff" stroke={stroke} strokeWidth={2.4} />
-      ))}
-    </svg>
+    <div className="apple-engine" aria-hidden="true">
+      <div className="apple-engine-thought">
+        <span className="dot" />
+        <span>{cue ? <>You say {cue} — he feels <b>{MOMENT_LABEL[moment].replace(/^an? /, "")}</b></> : "listening…"}</span>
+      </div>
+      <div className="apple-engine-stack">
+        {ordered.slice(0, 6).map((t, r) => {
+          const leading = t.leadsOn.includes(moment) && r < 3;
+          return (
+            <div key={t.id} className={"apple-trait" + (leading ? " leading" : r > 3 ? " recede" : "")}>
+              <span className="rank">{r + 1}</span>
+              <span>{t.name}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
-// Small notch graphic for the first panel (eyes in a black island + caption).
 function NotchArt() {
   return (
     <svg viewBox="0 0 260 150" role="img" aria-label="Braino in the notch">
@@ -73,7 +88,7 @@ const ProductOverview = () => {
         <div className="apple-nav-inner">
           <span className="apple-nav-name">Braino</span>
           <div className="apple-nav-links">
-            <a href="#overview">Overview</a>
+            <a href="#what">What is Braino</a>
             <a href="#classes">Classes</a>
             <a href="#engine">Emotion Engine</a>
             <Link to="/premium" className="apple-cta">Get Braino</Link>
@@ -83,58 +98,76 @@ const ProductOverview = () => {
 
       <header className="apple-hero ac-coral" id="overview">
         <p className="apple-eyebrow">Braino</p>
-        <h1 className="apple-display">One brain.<br /><span className="tone">Every screen.</span></h1>
+        <h1 className="apple-display">Not an app.<br /><span className="tone">A someone.</span></h1>
         <p className="apple-subhead">
-          A companion that lives on your Mac — sees what you see, talks like a person,
-          and does the work with you. Not a chatbot in a tab. A presence.
+          Braino lives on your Mac. He sees your screen, talks in his own voice, and does the
+          work alongside you — a companion, not a chatbot in a tab.
         </p>
         <div className="apple-hero-links">
-          <a href="#engine">See how he thinks</a>
+          <a href="#what">What is Braino</a>
           <Link to="/premium">Get Braino</Link>
         </div>
       </header>
 
-      {/* Hero feature — the notch */}
-      <section className="apple-section ac-coral">
+      {/* What is Braino */}
+      <section className="apple-section ac-coral" id="what">
         <div className="apple-panel text-tr apple-reveal">
           <div className="apple-art"><NotchArt /></div>
           <div className="apple-copy">
-            <p><span className="lead">Always right there.</span> He lives in the notch —
-              a glance for what's playing, a word to start talking, gone when you don't need him.</p>
+            <p><span className="lead">So, what is Braino?</span> A presence that lives in your Mac's
+              notch. Glance up and he's there; say a word and he's listening; look away and he rests.</p>
           </div>
         </div>
       </section>
 
       <p className="apple-statement ac-coral">
-        He doesn't wait in a window.<br /><span className="tone">He lives on your screen.</span>
+        Every AI waits in a window.<br /><span className="tone">Braino lives on your screen.</span>
       </p>
 
-      {/* Classes — product variants, like iMac colours */}
+      {/* The three classes */}
       <section className="apple-section" id="classes">
+        <div className="apple-narrow" style={{ textAlign: "center", maxWidth: 720, margin: "0 auto 28px", padding: "0 var(--ap-gutter)" }}>
+          <h2 className="apple-statement" style={{ margin: "0 0 6px" }}>He comes in <span className="tone">three classes.</span></h2>
+          <p style={{ fontSize: 19, color: "var(--ap-ink-soft)", fontWeight: 500, margin: 0 }}>
+            One brain, three ways to live with you. Saburi first, then Iomi, then Telos.
+          </p>
+        </div>
+      </section>
+
+      <section className="apple-section">
         <div className="apple-duo">
-          <div className="apple-panel text-tl ac-green apple-reveal">
+          <div className="apple-panel text-tl ac-coral apple-reveal">
             <div className="apple-copy">
-              <p><span className="lead">Saburi.</span> The patient one. Reads the page you're on and
-                answers about what's literally in front of you.</p>
+              <p><span className="lead">Saburi.</span> The companion class. The one you talk to —
+                warm, present, and genuinely his own person. Launching first.</p>
             </div>
           </div>
-          <div className="apple-panel text-tl ac-blue apple-reveal">
+          <div className="apple-panel text-tl ac-green apple-reveal">
             <div className="apple-copy">
-              <p><span className="lead">Telos.</span> The doer. Say the outcome —
-                he drives the browser, the apps, the whole Mac to get there.</p>
+              <p><span className="lead">Iomi.</span> The OS class. On your Mac, in your browser,
+                in the notch — Braino as the layer over everything you do.</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Emotion engine — the neural net hero */}
+      <section className="apple-section">
+        <div className="apple-panel text-tl ac-blue apple-reveal" style={{ minHeight: "clamp(320px, 42vh, 460px)" }}>
+          <div className="apple-copy" style={{ maxWidth: "40ch" }}>
+            <p><span className="lead">Telos.</span> The agent class. Say the outcome and he does the
+              clicking — the browser, the apps, the whole Mac, on your behalf.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Emotion engine — LIVE */}
       <section className="apple-section ac-violet" id="engine">
         <div className="apple-panel center apple-reveal" style={{ background: "var(--ap-surface)" }}>
-          <div className="apple-art" style={{ opacity: 0.9 }}><NeuralNet stroke="#1d1d1f" /></div>
-          <div className="apple-copy center" style={{ maxWidth: "34ch", position: "relative" }}>
-            <p><span className="lead">A real personality, chained.</span> Dozens of trait modules
-              fire in sequence — so he sounds like someone who knows you, not a model completing a prompt.</p>
+          <div className="apple-copy center" style={{ maxWidth: "38ch", marginBottom: 26 }}>
+            <p><span className="lead">A real personality, reacting.</span> Twelve trait modules
+              reorder on every message — so he meets grief differently than banter. Watch it run.</p>
           </div>
+          <LiveEngine />
         </div>
       </section>
 
