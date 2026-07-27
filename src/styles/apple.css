@@ -235,6 +235,24 @@
 @keyframes iomiShimmer { to { background-position: -220% 0; } }
 @media (prefers-reduced-motion: reduce) { .cls-iomi { animation: none; } }
 
+/* ── Word-by-word reveal (Don't Blink feel): the sentence forms one word at
+   a time as it scrolls in. ── */
+.apple-wordreveal {
+  margin: 0; font-size: clamp(26px, 3.6vw, 44px);
+  font-weight: 600; letter-spacing: -0.02em; line-height: 1.26;
+  color: var(--ap-ink); text-wrap: balance;
+}
+.apple-wordreveal .tone { color: var(--ap-accent, var(--ap-coral)); }
+.apple-wordreveal .wr-word {
+  display: inline-block;
+  opacity: 0; transform: translateY(0.5em);
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.2,1,0.3,1);
+}
+.apple-wordreveal.go .wr-word { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .apple-wordreveal .wr-word { opacity: 1; transform: none; transition: none; }
+}
+
 /* ── Founder editorial quote: big SF Pro statement, colour lead-ins ── */
 .apple-quote {
   max-width: 900px; margin: clamp(56px, 9vw, 120px) auto;

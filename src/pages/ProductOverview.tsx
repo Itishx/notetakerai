@@ -155,6 +155,34 @@ function ClassesGallery() {
   );
 }
 
+// Word-by-word reveal — the Don't Blink typography feel: the sentence FORMS
+// one word at a time as it scrolls into view. Segments let a phrase carry the
+// accent colour. Respects reduced-motion (shows the whole line at once).
+type WordSeg = { text: string; tone?: boolean };
+function WordReveal({ segments, className }: { segments: WordSeg[]; className?: string }) {
+  const ref = useRef<HTMLQuoteElement>(null);
+  const [go, setGo] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setGo(true); io.disconnect(); } }, { threshold: 0.35 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  let wi = 0;
+  return (
+    <blockquote ref={ref} className={"apple-wordreveal" + (go ? " go" : "") + (className ? " " + className : "")}>
+      {segments.map((seg, si) => (
+        <span key={si} className={seg.tone ? "tone" : undefined}>
+          {seg.text.split(" ").map((w, k) => (
+            <span className="wr-word" key={k} style={{ transitionDelay: `${(wi++) * 55}ms` }}>{w}&nbsp;</span>
+          ))}
+        </span>
+      ))}
+    </blockquote>
+  );
+}
+
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -214,6 +242,21 @@ const ProductOverview = () => {
       {/* MacBook-screen notch boot */}
       <NotchBootHero />
 
+      {/* Why it exists — founder voice, right below the teaser */}
+      <section className="apple-editorial ac-coral apple-reveal" style={{ gridTemplateColumns: "1fr" }}>
+        <div className="ed-copy" style={{ maxWidth: 840 }}>
+          <p className="ed-eyebrow">Why it exists</p>
+          <WordReveal segments={[
+            { text: "I didn't want another chatbot in a tab. I wanted" },
+            { text: "someone who's actually there", tone: true },
+            { text: "— who sees your screen, remembers your day, and feels like a presence, not a product." },
+          ]} />
+          <cite style={{ display: "block", marginTop: 20, fontStyle: "normal", fontSize: 15, fontWeight: 500, color: "var(--ap-ink-soft)" }}>
+            Itish Pande · founder, Braino
+          </cite>
+        </div>
+      </section>
+
       {/* What is Braino — left copy, graphic right */}
       <section className="apple-editorial ac-coral" id="what">
         <div className="ed-copy apple-reveal">
@@ -235,6 +278,28 @@ const ProductOverview = () => {
         </div>
       </section>
 
+      {/* The bet — founder-voice editorial, graphic right */}
+      <section className="apple-editorial reverse ac-green apple-reveal">
+        <div className="ed-copy">
+          <p className="ed-eyebrow">The bet</p>
+          <h2 className="ed-h">Built by one person, <span className="tone">obsessively.</span></h2>
+          <p>No lab, no war chest, no fifty-person team. Just a brain in a notch who blinks, an
+            emotional engine nobody else bothered to build, and a founder who is not okay in
+            exactly the way this work requires.</p>
+          <Link className="ed-more" to="/n">Read the founder's letter</Link>
+        </div>
+        <div className="ed-art">
+          <svg viewBox="0 0 240 200" role="img" aria-label="One brain, many surfaces">
+            <circle cx="120" cy="100" r="26" fill="none" stroke="var(--ap-green)" strokeWidth="2.5" />
+            <circle cx="120" cy="100" r="9" fill="var(--ap-green)" />
+            {[0,1,2,3,4,5].map((k) => {
+              const a = (k / 6) * Math.PI * 2; const x = 120 + Math.cos(a) * 74; const y = 100 + Math.sin(a) * 62;
+              return <g key={k}><line x1="120" y1="100" x2={x} y2={y} stroke="var(--ap-green)" strokeWidth="1.2" opacity="0.4" /><circle cx={x} cy={y} r="10" fill="none" stroke="var(--ap-green)" strokeWidth="2" /></g>;
+            })}
+          </svg>
+        </div>
+      </section>
+
       {/* The three classes — horizontal-scroll gallery */}
       <ClassesGallery />
 
@@ -249,21 +314,6 @@ const ProductOverview = () => {
         </div>
         <div className="ed-art bare apple-reveal">
           <EmotionHeart />
-        </div>
-      </section>
-
-      {/* Founder editorial quote — left aligned */}
-      <section className="apple-editorial ac-coral apple-reveal" style={{ gridTemplateColumns: "1fr" }}>
-        <div className="ed-copy" style={{ maxWidth: 820 }}>
-          <p className="ed-eyebrow">Why it exists</p>
-          <blockquote style={{ margin: 0, fontSize: "clamp(24px,3.4vw,40px)", fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.28, color: "var(--ap-ink)" }}>
-            I didn't want another chatbot in a tab. I wanted <span className="tone">someone
-            who's actually there</span> — who sees your screen, remembers your day, and feels
-            like a presence, not a product.
-          </blockquote>
-          <cite style={{ display: "block", marginTop: 20, fontStyle: "normal", fontSize: 15, fontWeight: 500, color: "var(--ap-ink-soft)" }}>
-            Itish Pande · founder, Braino
-          </cite>
         </div>
       </section>
 
