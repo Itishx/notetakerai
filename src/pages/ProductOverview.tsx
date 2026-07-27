@@ -19,14 +19,79 @@ const ANCHORS = [
   { href: "#engine", label: "Emotion Engine" },
 ];
 
-// MacBook screen booting Braino's notch — eyes fade in, blink, "how you doing?"
+// The MacBook screen as a scripted stage: boot → greet → "Press Control" →
+// (you press) perimeter fires + he speaks → the Don't Blink teaser plays in
+// the frame. Audio only after the Control gesture (browsers block autoplay).
+type BootPhase = "boot" | "greet" | "prompt" | "activate" | "teaser";
 function NotchBootHero() {
+  const [phase, setPhase] = useState<BootPhase>("boot");
+  const phaseRef = useRef<BootPhase>("boot");
+  phaseRef.current = phase;
+
+  const say = (text: string) => {
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1; u.pitch = 1;
+      window.speechSynthesis?.cancel();
+      window.speechSynthesis?.speak(u);
+    } catch { /* speech unavailable */ }
+  };
+
+  const activate = () => {
+    if (phaseRef.current === "activate" || phaseRef.current === "teaser") return;
+    setPhase("activate");
+    say("I'll play my teaser for you.");
+    window.setTimeout(() => setPhase("teaser"), 2100);
+  };
+
+  useEffect(() => {
+    const t1 = window.setTimeout(() => setPhase("greet"), 1500);
+    const t2 = window.setTimeout(() => setPhase("prompt"), 3300);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "prompt") return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Control") { e.preventDefault(); activate(); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase]);
+
+  const caption =
+    phase === "greet" ? "Hey. How you doing?" :
+    phase === "activate" ? "I'll play my teaser for you." : "";
+  const booting = phase === "activate" || phase === "teaser";
+
   return (
     <div className="apple-boot">
-      <div className="apple-macscreen apple-reveal">
-        <div className="apple-boot-glow" />
-        <div className="apple-macnotch"><span className="eye" /><span className="eye" /></div>
-        <div className="apple-boot-caption">Hey. How you doing?</div>
+      <div
+        className={"apple-macscreen apple-reveal" + (booting ? " booting" : "")}
+        onClick={() => phase === "prompt" && activate()}
+        role={phase === "prompt" ? "button" : undefined}
+        aria-label={phase === "prompt" ? "Press Control, or click, to talk to Braino" : undefined}
+      >
+        <div className="apple-boot-perimeter" />
+        {phase !== "teaser" && (
+          <>
+            <div className={"apple-macnotch" + (phase === "boot" ? " waking" : "")}>
+              <span className="eye" /><span className="eye" />
+            </div>
+            {caption && <div className="apple-boot-caption">{caption}</div>}
+            {phase === "prompt" && (
+              <div className="apple-boot-prompt">
+                Press <kbd>Control</kbd> to talk to Braino
+              </div>
+            )}
+          </>
+        )}
+        {phase === "teaser" && (
+          <video
+            className="apple-boot-video"
+            src="/Braino_Final.MP4"
+            autoPlay playsInline controls
+            onEnded={() => setPhase("prompt")}
+          />
+        )}
       </div>
     </div>
   );
