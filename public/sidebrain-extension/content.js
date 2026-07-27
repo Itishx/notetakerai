@@ -17039,6 +17039,23 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  // MODE LOCK — while a Voice Command mode is running it owns the input. Only
+  // its own phrases, a mode question, and leaving the mode are entertained;
+  // everything else is refused instead of falling through to music / search /
+  // the agent, which is exactly how "play <something>" used to end up in
+  // Spotify mid-mode.
+  {
+    const __lockMode = __sbActiveVoiceMode();
+    if (__lockMode) {
+      __sbStopSpeech();
+      const line = `${__lockMode.name} is on. Say a command from it, or say stop ${__lockMode.name}.`;
+      if (fromVoice) { __sbNoteSpoken(line); await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+      else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+  }
+
   // Open-known-site shortcut — instant navigate instead of the ~10s agent loop (simple opens only).
   // Detect on the RAW text too (forced-Delegate mode can strip the "open" verb from promptText).
   const __openSite = __sbDetectOpenSite(text) || __sbDetectOpenSite(promptText);
@@ -20321,6 +20338,36 @@ async function __sbHandleVoiceModeQuery(q, ctx = {}) {
 }
 
 // Only the ACTIVE mode's phrases are live — a command belonging to an inactive mode never fires.
+// Speech-to-text rarely returns a configured phrase letter-perfect ("Play
+// Alanna" comes back as "play alana"), and demanding an exact match meant a
+// real command silently fell through to the music/agent routes. Compare on
+// letters only, and allow a small edit distance proportional to length.
+function __sbEditDistance(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m || !n) return Math.max(m, n);
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function __sbPhraseMatches(spoken, phrase) {
+  if (!spoken || !phrase) return false;
+  if (spoken === phrase) return true;
+  const a = spoken.replace(/[^a-z0-9]/g, "");
+  const b = phrase.replace(/[^a-z0-9]/g, "");
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // the phrase said inside a slightly longer utterance still counts
+  if (b.length >= 5 && (a.includes(b) || b.includes(a))) return true;
+  const tol = Math.max(1, Math.floor(b.length * 0.25));
+  return __sbEditDistance(a, b) <= tol;
+}
 function __sbDetectVoiceCommandPhrase(text) {
   const mode = __sbActiveVoiceMode();
   if (!mode) return null;
@@ -20328,7 +20375,7 @@ function __sbDetectVoiceCommandPhrase(text) {
   if (!t) return null;
   for (const command of mode.commands || []) {
     const phrase = __sbNormalizeVoiceText(command.phrase);
-    if (phrase && (t === phrase || t.replace(/\s+mode$/, "") === phrase)) return { mode, command };
+    if (__sbPhraseMatches(t, phrase) || __sbPhraseMatches(t.replace(/\s+mode$/, ""), phrase)) return { mode, command };
   }
   return null;
 }
@@ -20549,7 +20596,8 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   const __vmQuery = __sbDetectVoiceModeQuery(transcript) || __sbDetectVoiceModeQuery(promptText);
   const __vmCmd = __sbDetectVoiceModeCommand(transcript) || __sbDetectVoiceModeCommand(promptText);
   const __vmPhrase = __sbDetectVoiceCommandPhrase(transcript) || __sbDetectVoiceCommandPhrase(promptText);
-  if (__vmQuery || __vmCmd || __vmPhrase) {
+  const __vmLocked = typeof __sbActiveVoiceMode === "function" && __sbActiveVoiceMode();
+  if (__vmQuery || __vmCmd || __vmPhrase || __vmLocked) {
     __sbPatchRealtimeCostTurn({ routeIntent: __vmQuery ? "voice_mode_query" : __vmCmd ? "voice_mode_toggle" : "voice_command" });
     await __sbProcessPrompt(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;

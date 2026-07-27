@@ -2176,14 +2176,42 @@ function detectVoiceModeQuery(raw, modes) {
   return mode ? { kind: "is", mode } : null;
 }
 
+// Speech-to-text rarely returns a configured phrase letter-perfect — a real
+// transcript of "Play Alanna" came back as "Play Alana" and, with exact
+// matching, fell straight through to the Spotify route. Compare on letters
+// only and allow a small edit distance proportional to length.
+function editDistance(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m || !n) return Math.max(m, n);
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function phraseMatches(spoken, phrase) {
+  if (!spoken || !phrase) return false;
+  if (spoken === phrase) return true;
+  const a = spoken.replace(/[^a-z0-9]/g, "");
+  const b = phrase.replace(/[^a-z0-9]/g, "");
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (b.length >= 5 && (a.includes(b) || b.includes(a))) return true;
+  const tol = Math.max(1, Math.floor(b.length * 0.25));
+  return editDistance(a, b) <= tol;
+}
 function detectVoiceCommandPhrase(raw, modes) {
   const mode = modes.find((m) => m.isActive);
   if (!mode) return null;
   const t = normalizeVoiceText(raw);
   if (!t) return null;
   for (const command of mode.commands || []) {
-    const phrase = normalizeVoiceText(command.phrase);
-    if (phrase && t === phrase) return { mode, command };
+    if (phraseMatches(t, normalizeVoiceText(command.phrase))) return { mode, command };
   }
   return null;
 }
@@ -9319,6 +9347,21 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     await voiceWait(650);
     voiceStepClear();   // back to the compact arch, still wearing the mode colour
     return { ok: true, say: picked.length > 1 ? `Opening ${picked.length} links.` : "Opening it." };
+  }
+
+  // MODE LOCK — while a Voice Command mode runs it owns the input. Only its own
+  // phrases, a mode question, and leaving the mode get through; everything else
+  // is refused rather than falling through to Spotify / files / the agent,
+  // which is how "play <something>" used to land in Spotify mid-mode.
+  {
+    const lockMode = voiceModes.find((m) => m.isActive);
+    if (lockMode) {
+      logMac("delegate.voice_mode_locked", { mode: lockMode.name, raw: textForLog(raw) });
+      voiceStep(`${lockMode.name} only`);
+      await voiceWait(500);
+      voiceStepClear();
+      return { ok: true, say: `${lockMode.name} is on. Say one of its commands, or say stop ${lockMode.name}.` };
+    }
   }
 
   const pendingWorkflowResult = await handlePendingMacWorkflow(raw);
