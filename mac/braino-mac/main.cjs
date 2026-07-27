@@ -2198,6 +2198,19 @@ function pickRandomUrls(urls) {
 
 // The notch keeps the mode's color for as long as the mode runs; the renderer
 // flashes a "<name> activated" caption that fades, then shrinks back to compact.
+const voiceWait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The notch narrates a Voice Command the way it narrates everything else:
+// caption in the dynamic island, one short step at a time, then it settles
+// back to the compact arch wearing the mode's colour. sendTaskProgress is
+// already wired to nfSetThinking on the renderer side.
+function voiceStep(text) {
+  sendTaskProgress({ status: "thinking", text });
+}
+function voiceStepClear() {
+  sendToRenderer("braino-mac:task-progress", { status: "ready", clearNotch: true });
+}
+
 function sendVoiceModeState(mode) {
   sendToRenderer("braino-mac:voice-mode", mode
     ? { active: true, name: mode.name, color: mode.notchColor }
@@ -9282,19 +9295,29 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (modeCmd) {
     const starting = modeCmd.action === "start";
     logMac("delegate.voice_mode_toggle", { mode: modeCmd.mode.name, starting });
+    voiceStep(starting ? `Mode matched: ${modeCmd.mode.name}` : `Leaving ${modeCmd.mode.name}`);
+    await voiceWait(420);
     voiceModesCache.modes = voiceModesCache.modes.map((m) => ({ ...m, isActive: starting ? m.id === modeCmd.mode.id : false }));
+    // boot glow replays in the mode's colour, then the notch holds the tint
     sendVoiceModeState(starting ? modeCmd.mode : null);
     void setVoiceModeActive(modeCmd.mode.id, starting);
+    await voiceWait(900);
+    voiceStepClear();
     return { ok: true, say: starting ? `${modeCmd.mode.name} on.` : `${modeCmd.mode.name} off.` };
   }
   const voicePhrase = detectVoiceCommandPhrase(raw, voiceModes);
   if (voicePhrase) {
     const picked = pickRandomUrls(voicePhrase.command.urls);
     logMac("delegate.voice_command", { mode: voicePhrase.mode.name, count: picked.length, openMode: voicePhrase.command.openMode });
+    voiceStep("Command matched");
+    await voiceWait(380);
+    voiceStep(picked.length > 1 ? `Opening ${picked.length} links` : "Opening");
     for (const url of picked) {
       if (voicePhrase.command.openMode === "incognito") await openChromeIncognitoUrl(url);
       else await openChromeUrl(url);
     }
+    await voiceWait(650);
+    voiceStepClear();   // back to the compact arch, still wearing the mode colour
     return { ok: true, say: picked.length > 1 ? `Opening ${picked.length} links.` : "Opening it." };
   }
 

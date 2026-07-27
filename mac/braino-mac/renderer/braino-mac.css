@@ -698,9 +698,14 @@ body {
   box-shadow: 0 0 30px rgba(255, 92, 92, 0.75);
 }
 
+/* The boot pulse colour is a variable so a Voice Command mode can drive it:
+   default is the cool blue, a running mode swaps in whatever colour was
+   picked on the dashboard. */
+#notch-face { --nf-boot-color: 122, 162, 255; }
+
 @keyframes nfAuthPulse {
-  0%, 100% { box-shadow: 0 0 14px rgba(122, 162, 255, 0.35); }
-  50% { box-shadow: 0 0 30px rgba(122, 162, 255, 0.7); }
+  0%, 100% { box-shadow: 0 0 14px rgba(var(--nf-boot-color), 0.35); }
+  50% { box-shadow: 0 0 30px rgba(var(--nf-boot-color), 0.7); }
 }
 
 #nf-status {
@@ -1645,13 +1650,36 @@ body {
 }
 .nf-timer-row .t-x:hover { color: #FF6B61; }
 
-/* Voice Commands: while a mode runs, the notch wears that mode's color — a soft
-   halo around the pill, no reboot, just the tint for as long as the mode is on. */
+/* Voice Commands: while a mode runs the notch wears that mode's colour — the
+   tint holds for as long as the mode is on, so you can see at a glance which
+   mode you are in. */
 #notch-face.nf-voice-mode .nf-pill {
   box-shadow:
     0 0 0 1.5px var(--nf-mode-color, #0A84FF),
     0 0 26px -2px var(--nf-mode-color, #0A84FF);
   transition: box-shadow 0.5s ease;
+}
+
+/* Entering a mode REPLAYS the boot glow in that mode's colour — the island
+   extends and pulses exactly like the auth boot, then settles into the tint
+   above. Not a cold restart: the notch is already awake, this is just the
+   mode announcing itself. */
+#notch-face.nf-mode-boot .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  animation: nfModeBoot 1.15s cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+
+@keyframes nfModeBoot {
+  0%   { box-shadow: 0 0 0 0 rgba(var(--nf-boot-color), 0); }
+  25%  { box-shadow: 0 0 34px 6px rgba(var(--nf-boot-color), 0.85); }
+  60%  { box-shadow: 0 0 18px 2px rgba(var(--nf-boot-color), 0.45); }
+  100% { box-shadow: 0 0 26px -2px rgba(var(--nf-boot-color), 0.7); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-mode-boot .nf-pill { animation: none; }
 }
 
 /* Voice Command mode: the whole screen perimeter wears the mode's colour for

@@ -4498,6 +4498,9 @@ window.brainoMac.onAuthRequired(() => {
   setWave(true);
 });
 window.brainoMac.onTaskProgress((progress) => {
+  // explicit caption clear — lets a finished step settle the notch back to the
+  // compact arch immediately instead of waiting out the 6s auto-clear.
+  if (progress.clearNotch) { try { nfSetThinking(""); } catch (_) {} return; }
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
   if (progress.text) {
     if (walkerHome && notchFaceEnabled && !herMode) nfSetThinking(progress.text);
@@ -4506,16 +4509,36 @@ window.brainoMac.onTaskProgress((progress) => {
 });
 // Voice Commands: a mode turning on/off retints the notch for as long as it runs, and flashes a
 // "<name> activated" caption that fades — no full reboot, just the color + the one beat.
+// "#ff0000" / "#f00" -> "255, 0, 0" for the rgba() boot pulse.
+function hexToRgbTriplet(hex) {
+  const h = String(hex || "").trim().replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  if (!/^[0-9a-f]{6}$/i.test(full)) return null;
+  const n = parseInt(full, 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+}
+
 window.brainoMac.onVoiceMode((payload) => {
   activeVoiceMode = payload.active ? { name: payload.name, color: payload.color } : null;
   try { updateEdgeGlow(); } catch (_) {}
   if (!notchFace) return;
   if (payload.active) {
-    notchFace.style.setProperty("--nf-mode-color", payload.color || "#0A84FF");
+    const color = payload.color || "#0A84FF";
+    notchFace.style.setProperty("--nf-mode-color", color);
+    // The colour picked on the dashboard drives the boot glow itself, not just
+    // a static tint — entering the mode replays the boot animation in it.
+    const triplet = hexToRgbTriplet(color);
+    if (triplet) notchFace.style.setProperty("--nf-boot-color", triplet);
     notchFace.classList.add("nf-voice-mode");
+    notchFace.classList.remove("nf-mode-boot");
+    void notchFace.offsetWidth;            // restart the animation
+    notchFace.classList.add("nf-mode-boot");
+    clearTimeout(notchFace.__nfModeBootTimer);
+    notchFace.__nfModeBootTimer = setTimeout(() => notchFace.classList.remove("nf-mode-boot"), 1200);
   } else {
-    notchFace.classList.remove("nf-voice-mode");
+    notchFace.classList.remove("nf-voice-mode", "nf-mode-boot");
     notchFace.style.removeProperty("--nf-mode-color");
+    notchFace.style.removeProperty("--nf-boot-color");
   }
   const cap = notchFace.querySelector(".nf-cap-l");
   if (!cap) return;
