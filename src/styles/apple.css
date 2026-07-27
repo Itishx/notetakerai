@@ -171,6 +171,56 @@
   max-width: var(--ap-maxw); margin: 0 auto;
 }
 
+/* ── Pinned horizontal-scroll gallery (Apple "scroll sideways" section) ──
+   The section is tall; its inner pin sticks to the viewport while vertical
+   scroll is translated into horizontal movement of the card track. Big cards
+   run edge-to-edge so the next one always peeks in. */
+.apple-hscroll { position: relative; }
+.apple-hscroll-pin {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.apple-hscroll-head {
+  flex-shrink: 0; text-align: center;
+  padding: clamp(40px, 6vw, 76px) var(--ap-gutter) clamp(18px, 3vw, 28px);
+}
+.apple-hscroll-head h2 {
+  font-size: clamp(30px, 5vw, 56px); font-weight: 600;
+  letter-spacing: -0.02em; line-height: 1.08; margin: 0; text-wrap: balance;
+}
+.apple-hscroll-head h2 .tone { color: var(--ap-accent, var(--ap-coral)); }
+.apple-hscroll-head p { margin: 10px 0 0; font-size: clamp(16px,2vw,20px); color: var(--ap-ink-soft); font-weight: 500; }
+.apple-hscroll-viewport { flex: 1; display: flex; align-items: center; overflow: hidden; }
+.apple-hscroll-track {
+  display: flex; gap: clamp(16px, 2vw, 28px);
+  padding: 0 var(--ap-gutter); will-change: transform;
+}
+.apple-hcard {
+  flex: 0 0 auto;
+  width: clamp(300px, 40vw, 540px);
+  height: clamp(400px, 62vh, 640px);
+  border-radius: var(--ap-radius); overflow: hidden; position: relative;
+  display: grid; align-items: end;
+  padding: clamp(26px, 3vw, 44px);
+  background: var(--ap-panel-bg, var(--ap-coral-panel));
+}
+.apple-hcard .hc-tag {
+  position: absolute; top: clamp(22px,3vw,34px); left: clamp(26px,3vw,44px);
+  font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--ap-accent, var(--ap-coral));
+}
+.apple-hcard .hc-copy { max-width: 26ch; z-index: 2; }
+.apple-hcard .hc-name { font-size: clamp(28px,3.2vw,40px); font-weight: 600; letter-spacing: -0.02em; margin: 0 0 8px; }
+.apple-hcard .hc-copy p { font-size: clamp(16px,1.9vw,20px); font-weight: 500; line-height: 1.36; margin: 0; color: var(--ap-ink); }
+/* Small screens / no scroll-jack: plain swipeable snap row */
+@media (max-width: 760px), (prefers-reduced-motion: reduce) {
+  .apple-hscroll { height: auto !important; }
+  .apple-hscroll-pin { position: static; height: auto; }
+  .apple-hscroll-viewport { overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .apple-hscroll-track { transform: none !important; }
+  .apple-hcard { scroll-snap-align: center; }
+}
+
 /* ── Live emotion engine: a neural network firing in real time ── */
 .apple-engine-live { position: relative; z-index: 2; width: min(760px, 100%); }
 .apple-net { width: 100%; height: auto; display: block; }

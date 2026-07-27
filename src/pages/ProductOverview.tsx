@@ -155,6 +155,70 @@ function NotchArt() {
   );
 }
 
+// Pinned horizontal-scroll gallery: while the tall section passes the
+// viewport, vertical scroll is mapped to horizontal translation of the track.
+const CLASSES = [
+  { tag: "The companion class · first", name: "Saburi", accent: "ac-coral",
+    copy: "The one you talk to — warm, present, genuinely his own person. He listens, remembers, and keeps you company." },
+  { tag: "The OS class", name: "Iomi", accent: "ac-green",
+    copy: "Braino as the layer over everything — on your Mac, in your browser, in the notch. Always one glance away." },
+  { tag: "The agent class", name: "Telos", accent: "ac-blue",
+    copy: "Say the outcome and he does the clicking — the browser, the apps, the whole Mac, on your behalf." },
+];
+
+function ClassesGallery() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const section = sectionRef.current;
+    const track = trackRef.current;
+    if (!section || !track) return;
+    const mq = window.matchMedia("(max-width: 760px), (prefers-reduced-motion: reduce)");
+    // Height gives the scroll runway; ~1 viewport of scroll per card feels right.
+    section.style.height = mq.matches ? "" : `${CLASSES.length * 92 + 40}vh`;
+    let raf = 0;
+    const onScroll = () => {
+      if (mq.matches) { track.style.transform = ""; return; }
+      const rect = section.getBoundingClientRect();
+      const runway = section.offsetHeight - window.innerHeight;
+      const progress = Math.min(1, Math.max(0, -rect.top / runway));
+      const maxX = track.scrollWidth - window.innerWidth;
+      track.style.transform = `translateX(${-progress * Math.max(0, maxX)}px)`;
+    };
+    const loop = () => { onScroll(); };
+    window.addEventListener("scroll", loop, { passive: true });
+    window.addEventListener("resize", () => {
+      section.style.height = mq.matches ? "" : `${CLASSES.length * 92 + 40}vh`;
+      onScroll();
+    }, { passive: true });
+    onScroll();
+    return () => { window.removeEventListener("scroll", loop); cancelAnimationFrame(raf); };
+  }, []);
+  return (
+    <section className="apple-hscroll ac-coral" id="classes" ref={sectionRef}>
+      <div className="apple-hscroll-pin">
+        <div className="apple-hscroll-head">
+          <h2>He comes in <span className="tone">three classes.</span></h2>
+          <p>One brain, three ways to live with you.</p>
+        </div>
+        <div className="apple-hscroll-viewport">
+          <div className="apple-hscroll-track" ref={trackRef}>
+            {CLASSES.map((c) => (
+              <article className={"apple-hcard " + c.accent} key={c.name}>
+                <span className="hc-tag">{c.tag}</span>
+                <div className="hc-copy">
+                  <h3 className="hc-name">{c.name}</h3>
+                  <p>{c.copy}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -210,45 +274,8 @@ const ProductOverview = () => {
         </div>
       </section>
 
-      <p className="apple-statement ac-coral">
-        Every AI waits in a window.<br /><span className="tone">Braino lives on your screen.</span>
-      </p>
-
-      {/* The three classes */}
-      <section className="apple-section" id="classes">
-        <div className="apple-narrow" style={{ textAlign: "center", maxWidth: 720, margin: "0 auto 28px", padding: "0 var(--ap-gutter)" }}>
-          <h2 className="apple-statement" style={{ margin: "0 0 6px" }}>He comes in <span className="tone">three classes.</span></h2>
-          <p style={{ fontSize: 19, color: "var(--ap-ink-soft)", fontWeight: 500, margin: 0 }}>
-            One brain, three ways to live with you. Saburi first, then Iomi, then Telos.
-          </p>
-        </div>
-      </section>
-
-      <section className="apple-section">
-        <div className="apple-duo">
-          <div className="apple-panel text-tl ac-coral apple-reveal">
-            <div className="apple-copy">
-              <p><span className="lead">Saburi.</span> The companion class. The one you talk to —
-                warm, present, and genuinely his own person. Launching first.</p>
-            </div>
-          </div>
-          <div className="apple-panel text-tl ac-green apple-reveal">
-            <div className="apple-copy">
-              <p><span className="lead">Iomi.</span> The OS class. On your Mac, in your browser,
-                in the notch — Braino as the layer over everything you do.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="apple-section">
-        <div className="apple-panel text-tl ac-blue apple-reveal" style={{ minHeight: "clamp(320px, 42vh, 460px)" }}>
-          <div className="apple-copy" style={{ maxWidth: "40ch" }}>
-            <p><span className="lead">Telos.</span> The agent class. Say the outcome and he does the
-              clicking — the browser, the apps, the whole Mac, on your behalf.</p>
-          </div>
-        </div>
-      </section>
+      {/* The three classes — pinned horizontal-scroll gallery */}
+      <ClassesGallery />
 
       {/* Emotion engine — LIVE */}
       <section className="apple-section ac-violet" id="engine">
