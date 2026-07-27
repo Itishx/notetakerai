@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Download } from "lucide-react";
 import SiteFooter from "@/components/SiteFooter";
@@ -150,8 +150,34 @@ export function LidNotchShow() {
    his eyes (and talking mouth) in the middle, menu links in the wings. With
    narrator on, [data-narrate] sections dim the links and type into the left
    wing while the mouth runs — nav and narrator are ONE notch. ── */
+/* Every page gets the same notch, and clicking his EYES opens it into the
+   dynamic island — the same mechanic the Mac app uses. Rewritten here rather
+   than per-page so all six pages that already import NotchNav inherit it. */
+const NN_ISLAND = [
+  { to: "/", label: "Home", note: "the assistant" },
+  { to: "/brainos", label: "BrainOS", note: "IOMI" },
+  { to: "/browser", label: "Browser", note: "the extension" },
+  { to: "/jarvis", label: "Jarvis", note: "voice-first" },
+  { to: "/dontblink", label: "Don't Blink", note: "the film" },
+  { to: "/journal", label: "Journal", note: "built in public" },
+  { to: "/founder-letter", label: "Letter", note: "why" },
+  { to: "/dashboard", label: "Dashboard", note: "your controls" },
+];
+
 export function NotchNav({ narrator = false }: { narrator?: boolean }) {
   const ref = useRef<HTMLElement>(null);
+  const [islandOpen, setIslandOpen] = useState(false);
+
+  useEffect(() => {
+    if (!islandOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIslandOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setIslandOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [islandOpen]);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -302,14 +328,25 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
     };
   }, [narrator]);
   return (
-    <nav className="notchnav" ref={ref} aria-label="Primary">
+    <nav className={`notchnav${islandOpen ? " nn-open" : ""}`} ref={ref} aria-label="Primary">
+      <div className="nn-row">
       <div className="nn-links l">
         <Link to="/">Home</Link>
         <Link to="/browser">Browser</Link>
         <Link to="/jarvis">Jarvis</Link>
       </div>
-      {/* his REAL eyes — verbatim nf-mini geometry from the app's notch */}
-      <svg className="nn-face" viewBox="32 6 56 46" aria-hidden="true">
+      {/* his REAL eyes — verbatim nf-mini geometry from the app's notch.
+          They are also the button: click the eyes, the island opens. */}
+      <svg
+        className="nn-face"
+        viewBox="32 6 56 46"
+        role="button"
+        tabIndex={0}
+        aria-expanded={islandOpen}
+        aria-label={islandOpen ? "Close menu" : "Open menu"}
+        onClick={() => setIslandOpen((v) => !v)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIslandOpen((v) => !v); } }}
+      >
         <g className="ne nn-eye"><circle cx="49" cy="22" r="12" fill="#fff" /><circle className="np" cx="49" cy="22" r="6.2" fill="#1B1713" /><circle cx="51.3" cy="19.3" r="2" fill="#fff" /></g>
         <g className="ne nn-eye nn-eye-r"><circle cx="71" cy="22" r="12" fill="#fff" /><circle className="np" cx="71" cy="22" r="6.2" fill="#1B1713" /><circle cx="73.3" cy="19.3" r="2" fill="#fff" /></g>
         <path className="nn-lid" d="M 36 22 Q 49 28 62 22" fill="none" stroke="#F4E4DC" strokeWidth="2.6" strokeLinecap="round" />
@@ -321,6 +358,17 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
         <a href={EXTENSION_DOWNLOAD_URL} download>Install</a>
       </div>
       <span className="nn-cap" aria-live="polite" />
+      </div>
+      <div className="nn-island">
+        <div className="nn-island-label">Go anywhere</div>
+        <div className="nn-island-grid">
+          {NN_ISLAND.map((n) => (
+            <Link key={n.to} to={n.to} className="nn-island-link" onClick={() => setIslandOpen(false)}>
+              {n.label}<span>{n.note}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
     </nav>
   );
 }

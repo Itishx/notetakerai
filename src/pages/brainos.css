@@ -45,13 +45,13 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 20px 50px -20px rgba(0, 0, 0, 0.9);
   overflow: hidden;
   width: 210px; height: 34px;
-  cursor: pointer;
   transition: width 0.55s cubic-bezier(0.32, 0.72, 0, 1), height 0.55s cubic-bezier(0.32, 0.72, 0, 1),
               border-radius 0.55s cubic-bezier(0.32, 0.72, 0, 1);
 }
 .bos-notch.open { width: min(660px, calc(100vw - 32px)); height: 268px; border-radius: 0 0 30px 30px; }
 
 .bos-notch-bar {
+  cursor: pointer; user-select: none;
   height: 34px; display: flex; align-items: center; justify-content: center; gap: 9px;
   color: var(--ink-2); font-size: 12px; letter-spacing: 0.01em;
 }
@@ -182,5 +182,5 @@
 
 /* Mouse users shouldn't see a focus ring on the notch; keyboard users must.
    :focus-visible keeps it accessible without the blue box after a click. */
-.bos-notch:focus { outline: none; }
-.bos-notch:focus-visible { outline: 2px solid #0a84ff; outline-offset: 3px; }
+.bos-notch-bar:focus { outline: none; }
+.bos-notch-bar:focus-visible { outline: 2px solid #0a84ff; outline-offset: -2px; }

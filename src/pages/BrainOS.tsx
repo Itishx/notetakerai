@@ -109,21 +109,23 @@ function NotchNavIsland() {
 
   return (
     <div className="bos-notch-dock">
-      <div
-        ref={ref}
-        className={`bos-notch${open ? " open" : ""}`}
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        aria-label={open ? "Close menu" : "Open menu"}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); } }}
-      >
-        <div className="bos-notch-bar">
+      <div ref={ref} className={`bos-notch${open ? " open" : ""}`}>
+        {/* The BAR is the button, not the whole notch. When the notch is open the
+            panel fills it, so a toggle on the outer element is unreachable —
+            it opened once and then every further click landed on the panel. */}
+        <div
+          className="bos-notch-bar"
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          aria-label={open ? "Close menu" : "Open menu"}
+          onClick={() => setOpen((v) => !v)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); } }}
+        >
           <span className="bos-notch-eyes"><i className="bos-notch-eye" /><i className="bos-notch-eye" /></span>
           <span>{open ? "BrainOS" : "IOMI"}</span>
         </div>
-        <div className="bos-notch-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="bos-notch-panel">
           <div className="bos-notch-label">Go anywhere</div>
           <div className="bos-notch-grid">
             {NAV.map((n) => (

@@ -985,3 +985,63 @@ body.nn-booting .hos > :not(.notchnav) { opacity: 0; transform: translateY(18px)
   .nf-face.speak .nf-mouth-talk { animation: none; }
   .nf-face.nf-auth .nf-pill { animation: none; }
 }
+
+/* ── Notch island: the notch ITSELF expands ────────────────────────────────
+   Not a dropdown under the bar — the notch grows downward and the menu is
+   revealed inside its own box, the way the Mac dynamic island does it. The
+   bar keeps overflow:hidden so the content is uncovered by the growth. */
+.notchnav .nn-face { cursor: pointer; }
+.notchnav .nn-face:focus { outline: none; }
+.notchnav .nn-face:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; border-radius: 8px; }
+
+.notchnav {
+  flex-direction: column; align-items: stretch;
+  transition: padding-bottom .5s cubic-bezier(.32,.72,0,1), border-radius .5s cubic-bezier(.32,.72,0,1);
+}
+.nn-row { display: flex; align-items: center; gap: 14px; }
+/* The bar NEVER changes width or padding — widening it slid Home / Browser /
+   Jarvis sideways. The notch only grows DOWNWARD; the row stays put. */
+.notchnav.nn-open { border-radius: 0 0 28px 28px; padding-bottom: 372px; }
+
+/* revealed by the notch growing, not by sliding in over the page */
+/* Taken OUT OF FLOW on purpose: in flow, the link grid set the notch's
+   intrinsic width and slid Home / Browser / Jarvis sideways. Absolute means it
+   cannot influence the bar's width at all — the row never moves, and the notch
+   only grows downward (via padding-bottom) to uncover it. */
+.nn-island {
+  position: absolute; left: 18px; right: 18px; top: 52px;
+  opacity: 0; pointer-events: none;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  transition: opacity .3s ease .1s;
+}
+.notchnav.nn-open .nn-island { opacity: 1; pointer-events: auto; }
+
+.nn-island-label {
+  font-family: "SF Pro Display", ui-monospace, monospace;
+  font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: rgba(255,255,255,.34); padding-bottom: 8px;
+}
+.nn-island-grid { display: grid; grid-template-columns: 1fr; }
+.nn-island-link {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  min-width: 0; white-space: nowrap;
+  padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.08);
+  color: #f5f5f7; text-decoration: none; font-size: 15px; font-weight: 500;
+  transition: color .15s ease, padding-left .15s ease;
+}
+.nn-island-link:hover { color: #fff; padding-left: 4px; }
+.nn-island-link span { font-size: 10.5px; color: rgba(255,255,255,.36); font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 620px) { .nn-island-grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .notchnav, .nn-island { transition: none; } }
+
+/* Boot-up on expand: the perimeter lights the way it does when the notch wakes
+   in the app — a bright ring that settles back into the resting hairline. */
+.notchnav.nn-open { animation: nnBootRing 1.05s cubic-bezier(.16,1,.3,1) 1; }
+@keyframes nnBootRing {
+  0%   { box-shadow: 0 0 0 1px rgba(243,235,225,.1), 0 8px 26px rgba(0,0,0,.45); }
+  22%  { box-shadow: 0 0 0 1.6px rgba(207,224,255,.95), 0 0 34px 4px rgba(122,162,255,.5), 0 8px 26px rgba(0,0,0,.45); }
+  55%  { box-shadow: 0 0 0 1.4px rgba(240,168,107,.7), 0 0 22px 2px rgba(240,168,107,.28), 0 8px 26px rgba(0,0,0,.45); }
+  100% { box-shadow: 0 0 0 1px rgba(243,235,225,.1), 0 18px 44px rgba(0,0,0,.6); }
+}
+@media (prefers-reduced-motion: reduce) { .notchnav.nn-open { animation: none; } }
