@@ -792,6 +792,7 @@ function fmtMeetingClock(ms) {
 
 let meetingRecording = false;
 let screenRecording = false;
+let mediaAudioPlaying = false;
 let screenRecStartedAt = 0;
 let screenRecClockTimer = 0;
 
@@ -2049,6 +2050,16 @@ function shouldAcceptVoiceTranscript(text) {
     // Only his name or a stop/control command breaks through the recording.
     if (!voiceAddressesBraino(text) && !RECORDING_CONTROL_RE.test(text)) {
       logRenderer("voice.recording_ignored", { chars: stats.normalized.length });
+      return false;
+    }
+  }
+  // Tab/system audio bleeding into the mic while media plays used to make him
+  // "randomly listen". When media is playing and he is NOT mid-exchange with
+  // you, require him to be addressed or given a clear (3+ word) command — bare
+  // fragments picked off the speakers are dropped.
+  if (mediaAudioPlaying && !herMode && !voiceTurnInFlight && !hasPendingDelegateFollowup()) {
+    if (!voiceAddressesBraino(text) && stats.wordCount < 3) {
+      logRenderer("voice.media_bleed_ignored", { chars: stats.normalized.length });
       return false;
     }
   }
@@ -4435,6 +4446,7 @@ window.brainoMac.onMusicState?.((payload) => {
   lightShow.tempo = Number.isFinite(payload?.tempo) && payload.tempo > 40 && payload.tempo < 220 ? payload.tempo : null;
   lightShow.energy = Number.isFinite(payload?.energy) ? payload.energy : null;
   lightShow.valence = Number.isFinite(payload?.valence) ? payload.valence : null;
+  mediaAudioPlaying = Boolean(payload?.playing);
   setMusicMode(Boolean(payload?.playing));
 });
 window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());
