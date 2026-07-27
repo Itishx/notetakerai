@@ -210,8 +210,46 @@
   color: var(--ap-accent, var(--ap-coral));
 }
 .apple-hcard .hc-copy { max-width: 26ch; z-index: 2; }
-.apple-hcard .hc-name { font-size: clamp(28px,3.2vw,40px); font-weight: 600; letter-spacing: -0.02em; margin: 0 0 8px; }
+.apple-hcard .hc-name { font-size: clamp(34px,4vw,54px); font-weight: 600; letter-spacing: -0.02em; margin: 0 0 10px; line-height: 1; }
 .apple-hcard .hc-copy p { font-size: clamp(16px,1.9vw,20px); font-weight: 500; line-height: 1.36; margin: 0; color: var(--ap-ink); }
+
+/* Each class wears its own face — the name IS part of the identity. */
+.cls-saburi {                 /* Devanagari-flavoured Latin */
+  font-family: "Yatra One", "SF Pro Display", serif;
+  font-weight: 400 !important; letter-spacing: 0;
+  color: var(--ap-coral);
+}
+.cls-telos {                  /* robotic / Tesla */
+  font-family: "Orbitron", "SF Pro Display", sans-serif;
+  font-weight: 700 !important; letter-spacing: 0.04em; text-transform: uppercase;
+  font-size: clamp(28px,3.3vw,44px) !important;
+  color: var(--ap-blue);
+}
+.cls-iomi {                   /* golden shimmer, like the last seconds of Don't Blink */
+  background: linear-gradient(100deg, #a9791f 0%, #e8bf5a 22%, #fff4cf 42%, #e8bf5a 62%, #a9791f 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: iomiShimmer 3.4s linear infinite;
+}
+@keyframes iomiShimmer { to { background-position: -220% 0; } }
+@media (prefers-reduced-motion: reduce) { .cls-iomi { animation: none; } }
+
+/* ── Founder editorial quote: big SF Pro statement, colour lead-ins ── */
+.apple-quote {
+  max-width: 900px; margin: clamp(56px, 9vw, 120px) auto;
+  padding: 0 var(--ap-gutter); text-align: center;
+}
+.apple-quote blockquote {
+  margin: 0; font-size: clamp(26px, 3.6vw, 42px);
+  font-weight: 600; letter-spacing: -0.02em; line-height: 1.28;
+  color: var(--ap-ink); text-wrap: balance;
+}
+.apple-quote blockquote .tone { color: var(--ap-accent, var(--ap-coral)); }
+.apple-quote cite {
+  display: block; margin-top: 22px; font-style: normal;
+  font-size: 15px; font-weight: 500; color: var(--ap-ink-soft);
+}
 /* Small screens / no scroll-jack: plain swipeable snap row */
 @media (max-width: 760px), (prefers-reduced-motion: reduce) {
   .apple-hscroll { height: auto !important; }

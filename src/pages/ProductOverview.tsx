@@ -34,12 +34,10 @@ const NET_ACCENTS: Partial<Record<Moment, [number, number, number]>> = {
 // the 2-3 traits that lead on THIS moment light up and name themselves →
 // they converge back out to the right as the response. One phased pass per
 // moment, so what fires depends on what he feels.
-const MOMENT_START = 2600; // must match LiveEngine's interval
 function NeuralEngine({ moment }: { moment: Moment }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const momentRef = useRef(moment);
-  const phaseStartRef = useRef(performance.now());
-  useEffect(() => { momentRef.current = moment; phaseStartRef.current = performance.now(); }, [moment]);
+  momentRef.current = moment;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -48,16 +46,17 @@ function NeuralEngine({ moment }: { moment: Moment }) {
     if (!ctx) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const W = 860, H = 460;
-    const IN = { x: 66, y: H / 2 };
-    const DET = { x: 210, y: H / 2 };
-    const OUT = { x: 794, y: H / 2 };
-    // 12 traits in two columns of 6
-    const traitNodes = ORDERED_TRAITS.map((t, i) => {
-      const col = i < 6 ? 0 : 1;
-      const j = i % 6;
-      return { t, x: col === 0 ? 420 : 585, y: 52 + j * ((H - 104) / 5) };
+    const W = 560, H = 460, CX = W / 2, CY = H / 2 + 18, S = 15.5;
+    // Parametric heart. t: 0..2π. Canvas y is down, so negate the curve's y.
+    const heart = (t: number) => ({
+      x: CX + S * 16 * Math.pow(Math.sin(t), 3),
+      y: CY - S * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)),
     });
+    // 12 trait nodes evenly along the heart perimeter (ordered → the connecting
+    // line is one continuous stroke around the shape).
+    const N = ORDERED_TRAITS.length;
+    const nodes = ORDERED_TRAITS.map((t, i) => ({ t, ...heart((i / N) * Math.PI * 2) }));
+    const core = { x: CX, y: CY - S * 2.4 };
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const fit = () => {
@@ -67,69 +66,75 @@ function NeuralEngine({ moment }: { moment: Moment }) {
     };
     fit();
     const ro = new ResizeObserver(fit); ro.observe(canvas);
-
-    const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, p: number) => ({ x: a.x + (b.x - a.x) * p, y: a.y + (b.y - a.y) * p });
+    const t0 = performance.now();
     let raf = 0;
 
     const draw = (now: number) => {
+      const el = (now - t0) / 1000;
       const sx = canvas!.width / W, sy = canvas!.height / H;
       ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
       ctx!.save(); ctx!.scale(sx, sy);
-      ctx!.font = "600 13px 'SF Pro Display', -apple-system, sans-serif";
+      ctx!.font = "600 12px 'SF Pro Display', -apple-system, sans-serif";
       ctx!.textBaseline = "middle";
 
       const m = momentRef.current;
       const [rr, gg, bb] = NET_ACCENTS[m] || [217, 100, 91];
       const acc = `${rr},${gg},${bb}`;
-      const leadIdx = ORDERED_TRAITS.map((t, i) => (t.leadsOn.includes(m) ? i : -1)).filter((i) => i >= 0).slice(0, 3);
+      const leadSet = new Set(ORDERED_TRAITS.map((t, i) => (t.leadsOn.includes(m) ? i : -1)).filter((i) => i >= 0).slice(0, 3));
 
-      // phase 0..1 through the moment (loops if it overruns)
-      const p = reduce ? 1 : Math.min(1, (now - phaseStartRef.current) / MOMENT_START);
-      // sub-phases: A in→det, B det→traits, C highlight, D leads→out
-      const pA = Math.min(1, p / 0.16);
-      const pB = Math.min(1, Math.max(0, (p - 0.16) / 0.34));
-      const pC = Math.min(1, Math.max(0, (p - 0.5) / 0.18));
-      const pD = Math.min(1, Math.max(0, (p - 0.7) / 0.3));
+      // heartbeat scale (double-thump ~ once per 1.7s)
+      const beat = reduce ? 0 : (() => { const ph = (el % 1.7) / 1.7; const a = Math.exp(-Math.pow((ph - 0.0) * 6, 2)) + 0.6 * Math.exp(-Math.pow((ph - 0.18) * 6, 2)); return a; })();
 
-      const faint = "rgba(29,29,31,0.12)";
-      const dot = (pt: { x: number; y: number }, r: number, a: number) => { ctx!.fillStyle = `rgba(${acc},${a})`; ctx!.beginPath(); ctx!.arc(pt.x, pt.y, r, 0, Math.PI * 2); ctx!.fill(); };
-      const line = (a: { x: number; y: number }, b: { x: number; y: number }, col: string, w: number) => { ctx!.strokeStyle = col; ctx!.lineWidth = w; ctx!.beginPath(); ctx!.moveTo(a.x, a.y); ctx!.lineTo(b.x, b.y); ctx!.stroke(); };
-      const node = (pt: { x: number; y: number }, glow: number, r = 7) => {
-        if (glow > 0.03) { ctx!.fillStyle = `rgba(${acc},${glow * 0.22})`; ctx!.beginPath(); ctx!.arc(pt.x, pt.y, r + 11, 0, Math.PI * 2); ctx!.fill(); }
-        ctx!.beginPath(); ctx!.arc(pt.x, pt.y, r, 0, Math.PI * 2); ctx!.fillStyle = "#fff"; ctx!.fill();
-        ctx!.lineWidth = 2; ctx!.strokeStyle = glow > 0.03 ? `rgba(${acc},${0.5 + glow * 0.5})` : "rgba(29,29,31,0.5)"; ctx!.stroke();
-      };
+      // 1) the continuous heart outline (fine sampled path)
+      ctx!.beginPath();
+      for (let k = 0; k <= 240; k++) { const pt = heart((k / 240) * Math.PI * 2); k === 0 ? ctx!.moveTo(pt.x, pt.y) : ctx!.lineTo(pt.x, pt.y); }
+      ctx!.closePath();
+      ctx!.strokeStyle = "rgba(29,29,31,0.12)"; ctx!.lineWidth = 1; ctx!.stroke();
 
-      // fan edges det→traits (faint always; pulse during B)
-      traitNodes.forEach((tn) => { line(DET, tn, faint, 0.7); });
-      // converge edges leads→out (faint always)
-      leadIdx.forEach((i) => line(traitNodes[i], OUT, faint, 0.7));
-      // in→det edge
-      line(IN, DET, p > 0 ? `rgba(${acc},${0.2 + pA * 0.6})` : faint, 1.2);
+      // 2) the thinking pulse — one bright signal travelling continuously
+      // around the loop, node to node, with a glowing trail.
+      const speed = reduce ? 0 : 0.14; // laps per second
+      const head = (el * speed) % 1;
+      const trail = 0.12;
+      ctx!.lineCap = "round";
+      for (let s = 0; s < 1; s += 1 / 320) {
+        const d = ((head - s) + 1) % 1;
+        if (d > trail) continue;
+        const a = heart(s * Math.PI * 2), b = heart((s + 1 / 320) * Math.PI * 2);
+        const alpha = (1 - d / trail);
+        ctx!.strokeStyle = `rgba(${acc},${alpha * 0.95})`;
+        ctx!.lineWidth = 1 + alpha * 2.5;
+        ctx!.beginPath(); ctx!.moveTo(a.x, a.y); ctx!.lineTo(b.x, b.y); ctx!.stroke();
+      }
+      const hp = heart(head * Math.PI * 2);
+      ctx!.fillStyle = `rgba(${acc},0.95)`; ctx!.beginPath(); ctx!.arc(hp.x, hp.y, 3.2, 0, Math.PI * 2); ctx!.fill();
 
-      // A: pulse in→det
-      if (pA > 0 && pA < 1) dot(lerp(IN, DET, pA), 3, 0.9);
-      // B: pulses det→each trait
-      if (pB > 0) traitNodes.forEach((tn) => { if (pB < 1) { line(DET, tn, `rgba(${acc},${0.15 + (1 - pB) * 0.5})`, 1); dot(lerp(DET, tn, pB), 2.4, 0.85); } });
-      // D: pulses leads→out
-      if (pD > 0) leadIdx.forEach((i) => { line(traitNodes[i], OUT, `rgba(${acc},${0.25 + pD * 0.55})`, 1.4); if (pD < 1) dot(lerp(traitNodes[i], OUT, pD), 3, 0.9); });
-
-      // nodes
-      node(IN, pA);
-      node(DET, pA * (1 - pB) + pB * 0.4, 8);
-      traitNodes.forEach((tn, i) => {
-        const isLead = leadIdx.includes(i);
-        const glow = isLead ? pC : Math.max(0, pB - 0.3) * 0.4;
-        node(tn, glow);
-        if (isLead && pC > 0.15) {
-          ctx!.fillStyle = `rgba(${acc},${Math.min(1, pC)})`;
-          const label = tn.t.name;
-          const lx = tn.x < 500 ? tn.x - 14 : tn.x + 14;
-          ctx!.textAlign = tn.x < 500 ? "right" : "left";
-          ctx!.fillText(label, lx, tn.y);
+      // 3) nodes — light as the pulse passes; leading traits stay lit + named
+      nodes.forEach((n, i) => {
+        const nodeT = i / N;
+        const dPulse = Math.min(((head - nodeT) + 1) % 1, ((nodeT - head) + 1) % 1);
+        const passGlow = Math.max(0, 1 - dPulse / 0.09);
+        const isLead = leadSet.has(i);
+        const glow = Math.max(passGlow, isLead ? 0.6 + 0.4 * beat : 0);
+        if (glow > 0.04) { ctx!.fillStyle = `rgba(${acc},${glow * 0.24})`; ctx!.beginPath(); ctx!.arc(n.x, n.y, 6 + glow * 12, 0, Math.PI * 2); ctx!.fill(); }
+        ctx!.beginPath(); ctx!.arc(n.x, n.y, isLead ? 6.5 : 5, 0, Math.PI * 2);
+        ctx!.fillStyle = "#fff"; ctx!.fill();
+        ctx!.lineWidth = 2; ctx!.strokeStyle = glow > 0.04 ? `rgba(${acc},${0.55 + glow * 0.45})` : "rgba(29,29,31,0.45)"; ctx!.stroke();
+        if (isLead) {
+          // converging thread from leading trait to the core (the felt response)
+          ctx!.strokeStyle = `rgba(${acc},${0.18 + 0.25 * beat})`; ctx!.lineWidth = 1;
+          ctx!.beginPath(); ctx!.moveTo(n.x, n.y); ctx!.lineTo(core.x, core.y); ctx!.stroke();
+          ctx!.fillStyle = `rgba(${acc},0.95)`;
+          const left = n.x < CX;
+          ctx!.textAlign = left ? "right" : "left";
+          ctx!.fillText(n.t.name, n.x + (left ? -12 : 12), n.y);
         }
       });
-      node(OUT, pD, 9);
+
+      // 4) beating core = the response forming at the heart's centre
+      const cr = 8 + beat * 4;
+      ctx!.fillStyle = `rgba(${acc},${0.25 + beat * 0.5})`; ctx!.beginPath(); ctx!.arc(core.x, core.y, cr + 10, 0, Math.PI * 2); ctx!.fill();
+      ctx!.fillStyle = `rgba(${acc},0.95)`; ctx!.beginPath(); ctx!.arc(core.x, core.y, cr, 0, Math.PI * 2); ctx!.fill();
 
       ctx!.restore();
       raf = requestAnimationFrame(draw);
@@ -138,7 +143,7 @@ function NeuralEngine({ moment }: { moment: Moment }) {
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
 
-  return <canvas ref={canvasRef} className="apple-net" role="img" aria-label="Braino's emotion engine: a message becomes a moment, the moment lights the leading traits, and they converge into his response" />;
+  return <canvas ref={canvasRef} className="apple-net" role="img" aria-label="Braino's emotion engine as a beating heart: a signal flows continuously through his traits, the ones that lead on the moment light up, and converge into the core" />;
 }
 
 // Drives the moment cycle and the caption; the net reacts to whatever moment is current.
@@ -179,11 +184,11 @@ function NotchArt() {
 // Pinned horizontal-scroll gallery: while the tall section passes the
 // viewport, vertical scroll is mapped to horizontal translation of the track.
 const CLASSES = [
-  { tag: "The companion class · first", name: "Saburi", accent: "ac-coral",
+  { tag: "The companion class · first", name: "Saburi", accent: "ac-coral", face: "cls-saburi",
     copy: "The one you talk to — warm, present, genuinely his own person. He listens, remembers, and keeps you company." },
-  { tag: "The OS class", name: "Iomi", accent: "ac-green",
+  { tag: "The OS class", name: "Iomi", accent: "ac-amber", face: "cls-iomi",
     copy: "Braino as the layer over everything — on your Mac, in your browser, in the notch. Always one glance away." },
-  { tag: "The agent class", name: "Telos", accent: "ac-blue",
+  { tag: "The agent class", name: "Telos", accent: "ac-blue", face: "cls-telos",
     copy: "Say the outcome and he does the clicking — the browser, the apps, the whole Mac, on your behalf." },
 ];
 
@@ -228,7 +233,7 @@ function ClassesGallery() {
               <article className={"apple-hcard " + c.accent} key={c.name}>
                 <span className="hc-tag">{c.tag}</span>
                 <div className="hc-copy">
-                  <h3 className="hc-name">{c.name}</h3>
+                  <h3 className={"hc-name " + c.face}>{c.name}</h3>
                   <p>{c.copy}</p>
                 </div>
               </article>
@@ -312,6 +317,16 @@ const ProductOverview = () => {
       <p className="apple-statement ac-violet">
         Everything a person is,<br /><span className="tone">wired to react.</span>
       </p>
+
+      {/* Founder editorial quote — big SF Pro, the reason it exists */}
+      <section className="apple-quote ac-coral apple-reveal">
+        <blockquote>
+          I didn't want another chatbot in a tab. I wanted <span className="tone">someone
+          who's actually there</span> — who sees your screen, remembers your day, and feels
+          like a presence, not a product.
+        </blockquote>
+        <cite>Itish Pande · founder, Braino</cite>
+      </section>
 
       {/* Spec row */}
       <div className="apple-specs ac-coral">
