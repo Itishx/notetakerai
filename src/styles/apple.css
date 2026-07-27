@@ -1,0 +1,184 @@
+/* ============================================================================
+   Braino — Apple product-page design system.
+   The shared primitives every page composes: type scale, two-tone display
+   headlines, full-bleed rounded color feature panels, centred sub-nav, and
+   the icon spec row. Light mode first; every colour is a token on .apple so
+   dark mode is a single override block later. Scope everything under .apple
+   so it renders LIGHT regardless of the globally-dark site tokens.
+   ============================================================================ */
+
+.apple {
+  /* Neutrals chosen, not defaulted: a hair of warmth so white doesn't read as
+     clinical, near-black ink that isn't pure #000. */
+  --ap-bg: #fbfbfd;            /* Apple's off-white page */
+  --ap-surface: #ffffff;
+  --ap-ink: #1d1d1f;           /* Apple's near-black */
+  --ap-ink-soft: #6e6e73;      /* secondary copy */
+  --ap-hairline: #d2d2d7;
+  --ap-nav: rgba(251, 251, 253, 0.82);
+
+  /* Product accents — the iMac colour panels. Panel = soft tint, on = the
+     saturated keyword/graphic colour that sits on it. */
+  --ap-coral: #d9645b;  --ap-coral-panel: #fbeae8;
+  --ap-green: #3a8f5f;  --ap-green-panel: #e8f3ec;
+  --ap-blue:  #2f6fed;  --ap-blue-panel:  #e9f0fd;
+  --ap-amber: #b8842a;  --ap-amber-panel: #f6efe1;
+  --ap-violet:#6b52c4;  --ap-violet-panel:#efeafa;
+
+  --ap-radius: 28px;
+  --ap-maxw: 1024px;
+  --ap-gutter: clamp(20px, 5vw, 40px);
+
+  background: var(--ap-bg);
+  color: var(--ap-ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+}
+
+/* ── Sub-nav: the sticky product bar (name left, links centre-right, CTA) ── */
+.apple-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--ap-nav);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--ap-hairline);
+}
+.apple-nav-inner {
+  max-width: var(--ap-maxw); margin: 0 auto;
+  padding: 0 var(--ap-gutter);
+  height: 52px;
+  display: flex; align-items: center; gap: 28px;
+}
+.apple-nav-name { font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+.apple-nav-links { margin-left: auto; display: flex; align-items: center; gap: 28px; }
+.apple-nav-links a {
+  font-size: 13px; font-weight: 500; color: var(--ap-ink);
+  text-decoration: none; opacity: 0.86; transition: opacity 0.2s ease;
+}
+.apple-nav-links a:hover { opacity: 1; }
+.apple-cta {
+  font-size: 13px; font-weight: 500;
+  background: var(--ap-blue); color: #fff;
+  padding: 6px 15px; border-radius: 980px;
+  text-decoration: none; white-space: nowrap;
+  transition: filter 0.2s ease;
+}
+.apple-cta:hover { filter: brightness(1.08); }
+@media (max-width: 720px) { .apple-nav-links a:not(.apple-cta) { display: none; } }
+
+/* ── Type scale ── */
+.apple-hero {
+  text-align: center;
+  padding: clamp(56px, 9vw, 110px) var(--ap-gutter) clamp(28px, 5vw, 56px);
+}
+.apple-eyebrow {
+  font-size: clamp(19px, 2.4vw, 24px);
+  font-weight: 600; color: var(--ap-ink-soft);
+  margin: 0 0 8px;
+}
+.apple-display {
+  font-size: clamp(44px, 9vw, 104px);
+  line-height: 1.03;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin: 0;
+  text-wrap: balance;
+}
+.apple-display .tone { color: var(--ap-accent, var(--ap-coral)); }
+.apple-subhead {
+  font-size: clamp(19px, 2.6vw, 28px);
+  font-weight: 600; line-height: 1.28;
+  color: var(--ap-ink);
+  max-width: 720px; margin: 22px auto 0;
+  text-wrap: balance;
+}
+.apple-hero-links {
+  margin-top: 26px; display: flex; gap: 26px; justify-content: center; flex-wrap: wrap;
+}
+.apple-hero-links a {
+  font-size: 17px; color: var(--ap-blue); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.apple-hero-links a:hover { text-decoration: underline; }
+.apple-hero-links a::after { content: "›"; font-size: 19px; line-height: 1; }
+
+/* ── Feature: full-bleed rounded colour panel with a bold-lead paragraph ── */
+.apple-section { max-width: var(--ap-maxw); margin: 0 auto; padding: 12px var(--ap-gutter); }
+.apple-panel {
+  position: relative;
+  border-radius: var(--ap-radius);
+  background: var(--ap-panel-bg, var(--ap-coral-panel));
+  overflow: hidden;
+  min-height: clamp(420px, 60vh, 640px);
+  display: grid;
+  padding: clamp(32px, 5vw, 64px);
+}
+.apple-panel.text-tr { align-items: end; justify-items: end; text-align: left; }
+.apple-panel.text-tl { align-items: start; justify-items: start; }
+.apple-panel.center  { align-items: center; justify-items: center; text-align: center; }
+.apple-copy { max-width: 30ch; z-index: 2; }
+.apple-copy p {
+  font-size: clamp(20px, 2.4vw, 28px);
+  line-height: 1.32; font-weight: 600; margin: 0;
+  color: var(--ap-ink);
+}
+.apple-copy .lead { color: var(--ap-accent, var(--ap-coral)); }
+.apple-copy.on-color, .apple-copy.on-color p { color: #fff; }
+.apple-copy.on-color .lead { color: rgba(255,255,255,0.72); }
+
+/* the product graphic layer inside a panel */
+.apple-art { position: absolute; inset: 0; display: grid; place-items: center; z-index: 1; }
+.apple-art svg, .apple-art img { max-width: 78%; max-height: 78%; }
+
+/* two-up row of smaller panels */
+.apple-duo { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(12px, 1.5vw, 20px); }
+.apple-duo .apple-panel { min-height: clamp(360px, 48vh, 520px); }
+@media (max-width: 720px) { .apple-duo { grid-template-columns: 1fr; } }
+
+/* section-lead centred statement between panels */
+.apple-statement {
+  max-width: 800px; margin: clamp(40px, 7vw, 90px) auto;
+  padding: 0 var(--ap-gutter);
+  text-align: center;
+  font-size: clamp(28px, 4.5vw, 48px);
+  font-weight: 700; letter-spacing: -0.02em; line-height: 1.12;
+  text-wrap: balance;
+}
+.apple-statement .tone { color: var(--ap-accent, var(--ap-coral)); }
+
+/* ── Spec row: icon + coloured keyword + short label, three across ── */
+.apple-specs {
+  max-width: var(--ap-maxw); margin: clamp(40px, 6vw, 80px) auto;
+  padding: clamp(32px, 5vw, 56px) var(--ap-gutter);
+  border-top: 1px solid var(--ap-hairline);
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: clamp(24px, 4vw, 48px);
+}
+@media (max-width: 720px) { .apple-specs { grid-template-columns: 1fr; text-align: center; } }
+.apple-spec { display: flex; flex-direction: column; gap: 10px; }
+.apple-spec svg { width: 40px; height: 40px; color: var(--ap-accent, var(--ap-coral)); }
+@media (max-width: 720px) { .apple-spec svg { margin: 0 auto; } }
+.apple-spec p { margin: 0; font-size: clamp(18px, 2vw, 21px); font-weight: 600; line-height: 1.3; }
+.apple-spec .k { color: var(--ap-accent, var(--ap-coral)); }
+
+/* ── Footer strip ── */
+.apple-foot {
+  border-top: 1px solid var(--ap-hairline);
+  padding: 28px var(--ap-gutter);
+  color: var(--ap-ink-soft); font-size: 12px; line-height: 1.5;
+  max-width: var(--ap-maxw); margin: 0 auto;
+}
+
+/* Accent helpers — set --ap-accent + panel bg per section */
+.ac-coral  { --ap-accent: var(--ap-coral);  --ap-panel-bg: var(--ap-coral-panel); }
+.ac-green  { --ap-accent: var(--ap-green);  --ap-panel-bg: var(--ap-green-panel); }
+.ac-blue   { --ap-accent: var(--ap-blue);   --ap-panel-bg: var(--ap-blue-panel); }
+.ac-amber  { --ap-accent: var(--ap-amber);  --ap-panel-bg: var(--ap-amber-panel); }
+.ac-violet { --ap-accent: var(--ap-violet); --ap-panel-bg: var(--ap-violet-panel); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .apple-reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.22,1,0.36,1); }
+  .apple-reveal.in { opacity: 1; transform: none; }
+}
