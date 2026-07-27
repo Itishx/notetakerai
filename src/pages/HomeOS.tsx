@@ -308,7 +308,16 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
       return () => { window.removeEventListener("mousemove", onMove); el.classList.remove("nn-preboot"); };
     }
     el.classList.remove("nn-preboot");
-    if (!reduced) {
+    /* Boot ONCE per session. Every page renders its own <NotchNav/>, so a route
+       change unmounts and remounts this — which replayed the whole wake
+       sequence on every navigation and made the site feel like it was
+       reloading. The flag lives in sessionStorage so it still boots fresh in a
+       new tab, just not on every internal link. */
+    let alreadyBooted = false;
+    try { alreadyBooted = sessionStorage.getItem("sbNotchBooted") === "1"; } catch { /* private mode */ }
+    if (alreadyBooted) el.classList.add("booted-instant");
+    if (!reduced && !alreadyBooted) {
+      try { sessionStorage.setItem("sbNotchBooted", "1"); } catch { /* private mode */ }
       /* the WHOLE page waits: nav boots first, wink lands, wings spread,
          and only then does the rest of the site fade in */
       document.body.classList.add("nn-booting");
