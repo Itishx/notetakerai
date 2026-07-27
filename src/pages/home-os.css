@@ -1001,7 +1001,7 @@ body.nn-booting .hos > :not(.notchnav) { opacity: 0; transform: translateY(18px)
 .nn-row { display: flex; align-items: center; gap: 14px; }
 /* The bar NEVER changes width or padding — widening it slid Home / Browser /
    Jarvis sideways. The notch only grows DOWNWARD; the row stays put. */
-.notchnav.nn-open { border-radius: 0 0 28px 28px; padding-bottom: 210px; }
+.notchnav.nn-open { border-radius: 0 0 28px 28px; padding-bottom: 268px; }
 
 /* revealed by the notch growing, not by sliding in over the page */
 /* Taken OUT OF FLOW on purpose: in flow, the link grid set the notch's
@@ -1049,3 +1049,49 @@ body.nn-booting .hos > :not(.notchnav) { opacity: 0; transform: translateY(18px)
   100% { box-shadow: 0 0 0 1px rgba(243,235,225,.1), 0 18px 44px rgba(0,0,0,.6); }
 }
 @media (prefers-reduced-motion: reduce) { .notchnav.nn-open { animation: none; } }
+
+/* ── Live log on the homepage: a resume of ideas, not a changelog ─────────── */
+.hos-loglane .hl-log {
+  list-style: none; margin: 34px 0 0; padding: 0 0 0 26px;
+  border-left: 1px solid var(--sb-line, rgba(255,255,255,.14));
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+.hl-item { position: relative; padding: 0 0 32px; }
+.hl-item:last-child { padding-bottom: 0; }
+.hl-item::before {
+  content: ""; position: absolute; left: -31px; top: 6px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--sb-ink-4, #4E463E);
+}
+.hl-item.now::before {
+  background: var(--sb-accent, #E27D39);
+  box-shadow: 0 0 0 4px rgba(226,125,57,.18);
+}
+.hl-when {
+  display: flex; align-items: center; gap: 9px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--sb-ink-3, #8A8078); margin-bottom: 7px;
+}
+.hl-when b {
+  font-weight: 500; font-size: 9px; letter-spacing: .12em;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--sb-accent, #E27D39); color: #0A0A0A;
+}
+.hl-title { margin: 0 0 8px; font-size: 20px; line-height: 1.25; letter-spacing: -.01em; color: var(--sb-ink); }
+.hl-body { margin: 0; font-size: 15px; line-height: 1.6; color: var(--sb-ink-2); }
+@media (max-width: 620px) { .hos-loglane .hl-log { padding-left: 20px; } .hl-item::before { left: -25px; } }
+
+/* Dashboard sits apart from the page list — it is the user's own side of the
+   product, not another page to read. Full-width row under the grid. */
+.nn-island-dash {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 12px; padding: 11px 13px;
+  border-radius: 12px; text-decoration: none;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  transition: background .15s ease;
+}
+.nn-island-dash:hover { background: rgba(255, 255, 255, 0.095); }
+.nn-dash-l { font-size: 14px; font-weight: 600; color: #f5f5f7; }
+.nn-dash-n { font-size: 10.5px; color: rgba(255, 255, 255, 0.42); }

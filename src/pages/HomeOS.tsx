@@ -153,6 +153,30 @@ export function LidNotchShow() {
 /* Every page gets the same notch, and clicking his EYES opens it into the
    dynamic island — the same mechanic the Mac app uses. Rewritten here rather
    than per-page so all six pages that already import NotchNav inherit it. */
+/* The live log — moved here from the founder letter, because this is where it
+   deserves to be. A running resume of ideas, newest first. New entries go on
+   top; nothing gets deleted, because the wrong turns are the point. */
+const HOME_LOG: { when: string; title: string; body: string; now?: boolean }[] = [
+  { when: "July 2026", now: true, title: "BrainOS · IOMI",
+    body: "He stops being an app you open and becomes the layer you talk to, named the way an operating system names itself: the OS, then the release. IOMI is not an acronym I'm going to unpack. It means something to me, and it happens to look and sound exactly right." },
+  { when: "July 2026", title: "Hands-free is the actual goal",
+    body: "Not an assistant with a voice bolted on. An operating system you drive by speaking: say it, and watch it happen. Everything else on this list is in service of that one sentence." },
+  { when: "July 2026", title: "Still arguing with myself about the line",
+    body: "Speak, watch it happen. Just ask. Ask Braino. I have more than these and I haven't picked one, which I think is honest to admit in public." },
+  { when: "July 2026", title: "A vertical for widgets",
+    body: "If he's the layer, then things get to live on him. Widgets are the shape that takes: small, single-purpose, always present, and eventually not all written by me." },
+  { when: "July 2026", title: "The standard I'm holding this to",
+    body: "Apple's marketing, Apple's hype, Apple's quality, Apple's ecosystem. Not as a pose. Those are the products that made me love this stuff, and the only way I know to say thank you is to work at their level." },
+  { when: "June 2026", title: "Braino Co-work",
+    body: "He can already see the screen, so stop making him wait to be asked. Work the parallel track instead." },
+  { when: "May 2026", title: "The Mac app",
+    body: "He moves into the notch. Presence instead of software. This is the one that blew past what three months of extension work ever did." },
+  { when: "Feb 2026", title: "The Chrome extension",
+    body: "Three months, full polish, basically no users. It was the tuition, and I'd pay it again." },
+  { when: "Late 2025", title: "SideBrain",
+    body: "A sidebar that remembered things. Everything starts smaller than it ends." },
+];
+
 const NN_ISLAND = [
   { to: "/", label: "Home", note: "the assistant" },
   { to: "/brainos", label: "BrainOS", note: "IOMI" },
@@ -161,7 +185,6 @@ const NN_ISLAND = [
   { to: "/dontblink", label: "Don't Blink", note: "the film" },
   { to: "/journal", label: "Journal", note: "built in public" },
   { to: "/founder-letter", label: "Letter", note: "why" },
-  { to: "/dashboard", label: "Dashboard", note: "your controls" },
 ];
 
 export function NotchNav({ narrator = false }: { narrator?: boolean }) {
@@ -368,6 +391,12 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
             </Link>
           ))}
         </div>
+        {/* Dashboard is not a page like the others — it is YOUR side of the
+            product, so it gets its own row rather than a slot in the grid. */}
+        <Link to="/dashboard" className="nn-island-dash" onClick={() => setIslandOpen(false)}>
+          <span className="nn-dash-l">Dashboard</span>
+          <span className="nn-dash-n">your controls, memory and voice commands</span>
+        </Link>
       </div>
     </nav>
   );
@@ -783,88 +812,12 @@ export default function HomeOS() {
 
       </header>
 
-      {/* ── the site IS an FAQ: who he is, what he does, why he feels real ── */}
+      {/* the homepage is now three things: where to go next, the real FAQ, and
+          the live log — the running record of what he is becoming */}
       <section className="hos-faqx">
         <div className="sp-wrap">
           <div className="qa reveal">
             <div className="eyebrow">q1</div>
-            <h2 className="qa-q">Who is Braino<span className="fork-dot">?</span></h2>
-            <p className="qa-a">A little brain with a body and a voice. A personal assistant who lives on your screen instead of in a tab: he walks, blinks, sleeps in the notch, follows your cursor, remembers you, and talks back out loud. Not a chatbot you visit. A someone who's already there.</p>
-            <div className="sp-grid">
-              <div className="sp-col">
-                <MascotMoment kind="present" />
-                <h3>He's present.</h3>
-                <p>He has a body. He walks your pages, sleeps in your notch, watches your cursor. You don't open Braino. He's already there.</p>
-              </div>
-              <div className="sp-col">
-                <MascotMoment kind="memory" />
-                <h3>He remembers.</h3>
-                <p>Your name, your projects, the thing you said last week. Every chat starts warmer than the last, and you can read or wipe every note he keeps.</p>
-              </div>
-              <div className="sp-col">
-                <MascotMoment kind="speak" />
-                <h3>He speaks.</h3>
-                <p>A real voice, streamed, with moods of its own. Ask him to talk like anyone and he will, until you tell him to be himself again.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="qa reveal">
-            <div className="eyebrow">q2</div>
-            <h2 className="qa-q">What can he do<span className="fork-dot">?</span></h2>
-            <p className="qa-a">Depends on which body he's wearing.</p>
-            <div className="qa-split">
-              <div className="qa-side">
-                <BrowserBrainoGraphic />
-                <h3>In the browser <span>2025</span></h3>
-                <ul>
-                  <li>Reads and explains whatever page you're on</li>
-                  <li>Turns lectures and YouTube into Notion notes</li>
-                  <li>Sits in meetings, writes the recap</li>
-                  <li>Delegates the clicks, about a second a step</li>
-                </ul>
-                <Link to="/browser" className="qa-link">Enter the browser →</Link>
-              </div>
-              <div className="qa-side">
-                <MacNotchGraphic />
-                <h3>On the Mac <span>2026 · the end goal</span></h3>
-                <ul>
-                  <li>Runs the whole machine by voice, from the notch</li>
-                  <li>Organizes and finds files, deletes only with Touch ID</li>
-                  <li>DJs Spotify, opens apps, drafts mail</li>
-                  <li>Watches the screen in co-work and offers help</li>
-                </ul>
-                <Link to="/jarvis" className="qa-link">Enter Jarvis →</Link>
-              </div>
-            </div>
-            <p className="qa-kicker">The browser was the tuition. <strong>Jarvis was always the destination</strong> — him, running the whole machine.</p>
-          </div>
-        </div>
-
-        {/* ── THE point, full-bleed and loud ── */}
-        <div className="qa-emph reveal">
-          <div className="sp-wrap">
-            <div className="qa-emph-grid">
-              <div className="qa-emph-copy">
-                <div className="eyebrow">q3 · the whole point</div>
-                <h2 className="qa-q big">Why doesn't he feel<br />like an AI<span className="fork-dot">?</span></h2>
-                <p className="qa-a">Most assistants are a text box wearing a logo. Braino runs on a real emotional engine: twenty files of traits, moods and moments that fire on what's actually happening around him. The personality isn't a system prompt. It's behaviour — and the better it gets, the less he reads as an AI at all. <strong>People stop talking to a tool and start talking to a someone.</strong></p>
-                <p className="qa-cant-intro">And he does things the AIs can't:</p>
-                <div className="qa-cant">
-                  {["he dances the moonwalk", "he winks", "he blushes", "he DJs your Spotify", "he gets sleepy at 3am", "he waves hello", "he points at things", "he blooms flowers when he walks"].map((t, k) => (
-                    <span key={t}>{k > 0 && <i>·</i>}{t}</span>
-                  ))}
-                </div>
-                <Link to="/journal/emotional-engine" className="qa-link">Read the engine documentation →</Link>
-              </div>
-              <Q3DanceBraino />
-            </div>
-          </div>
-        </div>
-
-        <div className="sp-wrap">
-          <div className="qa reveal">
-            <div className="eyebrow">q4</div>
             <h2 className="qa-q">Where can I read more<span className="fork-dot">?</span></h2>
             <div className="qa-doors">
               <Link to="/founder-letter" className="ll-card">
@@ -883,7 +836,7 @@ export default function HomeOS() {
           </div>
 
           <div className="qa reveal">
-            <div className="eyebrow">q5 · fair things to ask</div>
+            <div className="eyebrow">q2 · fair things to ask</div>
             <h2 className="qa-q">The actual FAQ<span className="fork-dot">.</span></h2>
             <div className="qa-faq-split">
               <div className="qa-faq-segment">
@@ -928,6 +881,30 @@ export default function HomeOS() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── the live log: a resume of ideas, not a changelog ── */}
+      <section className="hos-faqx hos-loglane">
+        <div className="sp-wrap">
+          <div className="qa reveal">
+            <div className="eyebrow">q3 · the live log</div>
+            <h2 className="qa-q">Where is this going<span className="fork-dot">?</span></h2>
+            <p className="qa-a">
+              Not finished, and not supposed to be. This is the running record of what Braino is
+              becoming, written as it happens rather than cleaned up afterwards. It keeps updating.
+              Newest first.
+            </p>
+            <ol className="hl-log">
+              {HOME_LOG.map((e) => (
+                <li className={`hl-item${e.now ? " now" : ""}`} key={e.title}>
+                  <div className="hl-when">{e.when}{e.now ? <b>now</b> : null}</div>
+                  <h3 className="hl-title">{e.title}</h3>
+                  <p className="hl-body">{e.body}</p>
+                </li>
+              ))}
+            </ol>
           </div>
         </div>
       </section>
