@@ -1001,7 +1001,7 @@ body.nn-booting .hos > :not(.notchnav) { opacity: 0; transform: translateY(18px)
 .nn-row { display: flex; align-items: center; gap: 14px; }
 /* The bar NEVER changes width or padding — widening it slid Home / Browser /
    Jarvis sideways. The notch only grows DOWNWARD; the row stays put. */
-.notchnav.nn-open { border-radius: 0 0 28px 28px; padding-bottom: 372px; }
+.notchnav.nn-open { border-radius: 0 0 28px 28px; padding-bottom: 210px; }
 
 /* revealed by the notch growing, not by sliding in over the page */
 /* Taken OUT OF FLOW on purpose: in flow, the link grid set the notch's
@@ -1009,7 +1009,8 @@ body.nn-booting .hos > :not(.notchnav) { opacity: 0; transform: translateY(18px)
    cannot influence the bar's width at all — the row never moves, and the notch
    only grows downward (via padding-bottom) to uncover it. */
 .nn-island {
-  position: absolute; left: 18px; right: 18px; top: 52px;
+  position: absolute; left: 50%; transform: translateX(-50%); top: 52px;
+  width: min(560px, calc(100vw - 40px));
   opacity: 0; pointer-events: none;
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   transition: opacity .3s ease .1s;
@@ -1021,7 +1022,7 @@ body.nn-booting .hos > :not(.notchnav) { opacity: 0; transform: translateY(18px)
   font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase;
   color: rgba(255,255,255,.34); padding-bottom: 8px;
 }
-.nn-island-grid { display: grid; grid-template-columns: 1fr; }
+.nn-island-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
 .nn-island-link {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
   min-width: 0; white-space: nowrap;
